@@ -127,6 +127,6 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log("Codex UI Dev Server running at http://localhost:" + PORT);
+    console.log("Crish UI Dev Server running at http://localhost:" + PORT);
     console.log("API proxy: /api/* -> " + (loadConfig().api || {}).baseUrl);
 });

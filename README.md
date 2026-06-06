@@ -1,11 +1,11 @@
-# Conex
+# Crish
 
-**Conex** 是一个基于 Agent Runtime 的智能体工作台，提供完整的 Web UI 和 CLI 接口。
+**Crish** 是一个基于 Agent Runtime 的智能体工作台，提供完整的 Web UI 和 CLI 接口。
 
 ## 项目结构
 
 ```
-conex/
+crish/
 ├── apps/
 │   ├── agent-workbench/    # CLI 和桌面工作台
 │   │   ├── src/

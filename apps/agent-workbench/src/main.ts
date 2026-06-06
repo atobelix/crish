@@ -1,5 +1,5 @@
 import { appWindow } from '@tauri-apps/api/window';
-import { appState } from './core/app-state';
+import { appState, type ChatMessage, type ToolCall } from './core/app-state';
 import { tauriBridge } from './core/tauri-bridge';
 import { eventBus, Events } from './core/event-bus';
 
@@ -25,7 +25,7 @@ function createUI() {
             <span class="repl-titlebar-menu" data-menu="help"><i data-lucide="help-circle"></i>帮助</span>
           </nav>
         </div>
-        <div class="repl-titlebar-title">Conex Agent Workbench</div>
+        <div class="repl-titlebar-title">Crish Agent Workbench</div>
         <div class="repl-titlebar-right">
           <button class="repl-win-btn" id="win-min" title="最小化">
             <svg width="10" height="1" viewBox="0 0 10 1">
@@ -111,7 +111,7 @@ function createUI() {
             <!-- 聊天消息区域 -->
             <div class="repl-chat-messages-scroll-area" id="chat-messages">
               <div class="repl-chat-welcome">
-                <h2>欢迎使用 Conex Agent Workbench</h2>
+                <h2>欢迎使用 Crish Agent Workbench</h2>
                 <p>开始新对话，或从侧边栏选择历史会话</p>
               </div>
             </div>
@@ -309,27 +309,179 @@ function renderSessionsList(sessions: any[]) {
   });
 }
 
+// 设置工具审批闸口
+function setupToolApprovalHandlers() {
+  const approveBtn = document.getElementById('deck-btn-approve');
+  const denyBtn = document.getElementById('deck-btn-deny');
+  const deck = document.getElementById('tool-approval-deck');
+
+  approveBtn?.addEventListener('click', () => {
+    const pendingTool = appState.getState().pendingApproval;
+    if (pendingTool) {
+      // 发送批准响应
+      tauriBridge.approveToolCall(pendingTool.id);
+      appState.setPendingApproval(null);
+      deck?.classList.add('hidden');
+    }
+  });
+
+  denyBtn?.addEventListener('click', () => {
+    const pendingTool = appState.getState().pendingApproval;
+    if (pendingTool) {
+      // 发送拒绝响应
+      tauriBridge.denyToolCall(pendingTool.id);
+      appState.setPendingApproval(null);
+      deck?.classList.add('hidden');
+    }
+  });
+}
+
 // 设置后端事件监听
 function setupBackendListeners() {
+  let currentStreamingMessageId: string | null = null;
+  const messagesContainer = document.getElementById('chat-messages')!;
+
   // 监听运行事件
   tauriBridge.onRunEvent((event) => {
     console.log('Run event:', event);
 
-    // 处理助手消息
-    if (event.type === 'text') {
-      // TODO: 实现流式文本渲染
+    // 处理助手消息流式文本
+    if (event.type === 'text' || event.type === 'content_block_delta') {
+      const textContent = event.text || event.delta?.text || '';
+
+      if (!currentStreamingMessageId) {
+        // 创建新的助手消息
+        const assistantMsg = appState.addMessage({
+          role: 'assistant',
+          content: textContent,
+          streaming: true,
+        });
+        currentStreamingMessageId = assistantMsg.id;
+        renderMessage(assistantMsg);
+      } else {
+        // 更新现有消息
+        const currentMsg = appState
+          .getState()
+          .currentSession?.messages.find((m) => m.id === currentStreamingMessageId);
+
+        if (currentMsg) {
+          currentMsg.content += textContent;
+          appState.updateMessage(currentStreamingMessageId, {
+            content: currentMsg.content,
+          });
+
+          // 更新 DOM
+          const msgElement = messagesContainer.querySelector(
+            `[data-message-id="${currentStreamingMessageId}"]`
+          );
+          if (msgElement) {
+            const bubble = msgElement.querySelector('.repl-chat-msg-bubble');
+            if (bubble) {
+              bubble.textContent = currentMsg.content;
+            }
+          }
+        }
+      }
+
+      // 自动滚动到底部
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    // 处理工具调用
+    // 处理流式完成
+    if (event.type === 'message_stop' || event.type === 'stream_end') {
+      if (currentStreamingMessageId) {
+        appState.updateMessage(currentStreamingMessageId, { streaming: false });
+        currentStreamingMessageId = null;
+      }
+      appState.setState('isStreaming', false);
+    }
+
+    // 处理工具调用请求
     if (event.type === 'tool_use') {
-      // TODO: 显示工具审批闸口
+      const toolCall: ToolCall = {
+        id: event.id || `tool-${Date.now()}`,
+        name: event.name,
+        input: event.input,
+        status: 'pending',
+        timestamp: Date.now(),
+      };
+
+      // 添加到当前消息
+      if (currentStreamingMessageId) {
+        const currentMsg = appState
+          .getState()
+          .currentSession?.messages.find((m) => m.id === currentStreamingMessageId);
+
+        if (currentMsg) {
+          if (!currentMsg.toolCalls) {
+            currentMsg.toolCalls = [];
+          }
+          currentMsg.toolCalls.push(toolCall);
+        }
+      }
+
+      // 显示审批闸口
+      showToolApprovalDeck(toolCall);
+      appState.setPendingApproval(toolCall);
+    }
+
+    // 处理工具完成
+    if (event.type === 'tool_result') {
+      hideToolApprovalDeck();
+
+      // 更新工具状态
+      const currentSession = appState.getState().currentSession;
+      if (currentSession) {
+        currentSession.messages.forEach((msg) => {
+          msg.toolCalls?.forEach((tool) => {
+            if (tool.id === event.tool_use_id) {
+              tool.status = 'completed';
+              tool.output = event.content;
+            }
+          });
+        });
+      }
     }
   });
 
   // 监听快照事件
   tauriBridge.onSnapshot((event) => {
     console.log('Snapshot:', event);
+    // 可用于保存会话状态
   });
+
+  function renderMessage(message: ChatMessage) {
+    const welcome = messagesContainer.querySelector('.repl-chat-welcome');
+    if (welcome) welcome.remove();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `repl-chat-msg-row ${message.role}`;
+    msgDiv.dataset.messageId = message.id;
+    msgDiv.innerHTML = `
+      <div class="repl-chat-msg-bubble">${escapeHtml(message.content)}</div>
+    `;
+    messagesContainer.appendChild(msgDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+}
+
+// 显示工具审批闸口
+function showToolApprovalDeck(toolCall: ToolCall) {
+  const deck = document.getElementById('tool-approval-deck');
+  const metaEl = document.getElementById('tool-deck-meta');
+  const commandEl = document.getElementById('tool-deck-command');
+
+  if (deck && metaEl && commandEl) {
+    metaEl.textContent = `Tool: ${toolCall.name}`;
+    commandEl.textContent = JSON.stringify(toolCall.input, null, 2);
+    deck.classList.remove('hidden');
+  }
+}
+
+// 隐藏工具审批闸口
+function hideToolApprovalDeck() {
+  const deck = document.getElementById('tool-approval-deck');
+  deck?.classList.add('hidden');
 }
 
 // 工具函数
@@ -358,12 +510,13 @@ function init() {
   setupWindowControls();
   setupChat();
   setupSidebar();
+  setupToolApprovalHandlers();
   setupBackendListeners();
 
   // 创建默认会话
   appState.createSession('新对话');
 
-  console.log('✅ Conex Agent Workbench 已启动');
+  console.log('✅ Crish Agent Workbench 已启动');
 }
 
 // DOM 加载完成后初始化

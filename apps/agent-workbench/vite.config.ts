@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@chat-sync/agent-runtime": resolve(__dirname, "../../packages/agent-runtime/src/index.ts")
+      "@crish/agent-runtime": resolve(__dirname, "../../packages/agent-runtime/src/index.ts")
     }
   },
   server: {

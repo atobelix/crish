@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { AgentRuntime } from "@chat-sync/agent-runtime";
+import { AgentRuntime } from "@crish/agent-runtime";
 import {
   createBackgroundTaskContinuationDecision,
   finishBackgroundTask,

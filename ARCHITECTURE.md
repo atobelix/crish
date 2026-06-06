@@ -1,8 +1,8 @@
-# Conex 代码库架构分析
+# Crish 代码库架构分析
 
 ## 项目概览
 
-**Conex** 是一个基于 Agent Runtime 的智能体工作台，提供完整的命令行和 Web UI 界面。
+**Crish** 是一个基于 Agent Runtime 的智能体工作台，提供完整的命令行和 Web UI 界面。
 
 ```
 核心价值主张：

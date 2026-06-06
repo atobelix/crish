@@ -1,4 +1,4 @@
-import type { BackgroundCommandEvent, BackgroundCommandSnapshot } from "@chat-sync/agent-runtime";
+import type { BackgroundCommandEvent, BackgroundCommandSnapshot } from "@crish/agent-runtime";
 import {
   createBackgroundTaskContinuationDecision,
   finishBackgroundTask,

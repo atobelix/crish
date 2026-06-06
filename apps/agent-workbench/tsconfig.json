@@ -5,7 +5,7 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@chat-sync/agent-runtime": ["../../packages/agent-runtime/src/index.ts"]
+      "@crish/agent-runtime": ["../../packages/agent-runtime/src/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

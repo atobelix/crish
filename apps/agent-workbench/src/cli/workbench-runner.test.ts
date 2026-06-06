@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createScriptedProvider } from "@chat-sync/agent-runtime";
+import { createScriptedProvider } from "@crish/agent-runtime";
 import { createDefaultWorkbenchSettings } from "../shared/workbench-config";
 import { createWorkbenchRuntime } from "./runtime-factory";
 import { runWorkbenchTask } from "./workbench-runner";

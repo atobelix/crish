@@ -112,6 +112,30 @@ export class TauriBridge {
   }
 
   /**
+   * 批准工具调用
+   */
+  async approveToolCall(toolCallId: string): Promise<void> {
+    try {
+      await invoke('workbench_approve_tool', { toolCallId });
+    } catch (error) {
+      console.error('批准工具调用失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 拒绝工具调用
+   */
+  async denyToolCall(toolCallId: string): Promise<void> {
+    try {
+      await invoke('workbench_deny_tool', { toolCallId });
+    } catch (error) {
+      console.error('拒绝工具调用失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 清理所有事件监听器
    */
   cleanup() {

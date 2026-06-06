@@ -1,4 +1,4 @@
-# Conex 项目改进路线图
+# Crish 项目改进路线图
 
 ## 当前架构分析
 
@@ -323,7 +323,7 @@ class AgentWebSocketServer {
 
 ## 总结
 
-**Conex 的核心优势**:
+**Crish 的核心优势**:
 - ✅ 成熟的 Agent Runtime
 - ✅ 完整的 Web UI 原型
 - ✅ 清晰的架构分层
@@ -338,4 +338,4 @@ class AgentWebSocketServer {
 - 细粒度的工具调用审批
 - 优秀的代码差异查看体验
 
-按照这个路线图，Conex 可以在 3 个月内达到可用状态，6 个月内成为一个功能完整的 Agent 工作台平台。
+按照这个路线图，Crish 可以在 3 个月内达到可用状态，6 个月内成为一个功能完整的 Agent 工作台平台。

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentProvider } from "@chat-sync/agent-runtime";
+import type { AgentProvider } from "@crish/agent-runtime";
 import { createDefaultWorkbenchSettings } from "../shared/workbench-config";
 import { createWorkbenchRuntime, loadWorkbenchRuntimeSettings, refreshWorkbenchProviderModels, toProviderOptions } from "./runtime-factory";
 

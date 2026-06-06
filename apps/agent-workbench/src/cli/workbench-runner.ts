@@ -7,7 +7,7 @@ import type {
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
   ToolBatchResult
-} from "@chat-sync/agent-runtime";
+} from "@crish/agent-runtime";
 import { applyBackgroundCommandEventToWorkbench } from "../shared/background-command-bridge";
 import { applyDisclosureDiagnosticsToSnapshot, type WorkbenchCommandDiagnosticInput } from "../shared/disclosure-diagnostics";
 import { extractOutputReferencesFromMarkdown } from "../shared/output-references";

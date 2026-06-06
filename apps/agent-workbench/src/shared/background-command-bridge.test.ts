@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BackgroundCommandEvent, BackgroundCommandSnapshot } from "@chat-sync/agent-runtime";
+import type { BackgroundCommandEvent, BackgroundCommandSnapshot } from "@crish/agent-runtime";
 import { buildInitialTaskSnapshot } from "./workbench-contract";
 import { applyBackgroundCommandEventToWorkbench } from "./background-command-bridge";
 

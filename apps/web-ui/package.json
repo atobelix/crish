@@ -1,7 +1,7 @@
 {
-  "name": "codex-replicate-ui",
+  "name": "@crish/web-ui",
   "version": "1.0.0",
-  "description": "Codex Replicate UI - Mimo API Interactive Prototype",
+  "description": "Crish Web UI - Agent Workbench Interface",
   "private": true,
   "scripts": {
     "dev": "node server.js",

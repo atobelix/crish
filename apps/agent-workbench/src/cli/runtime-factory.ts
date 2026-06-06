@@ -15,7 +15,7 @@ import {
   type ContextSummaryRequest,
   type ContextSummarizer,
   type OpenAICompatibleProviderOptions
-} from "@chat-sync/agent-runtime";
+} from "@crish/agent-runtime";
 import {
   createDefaultWorkbenchSettings,
   createWorkbenchSettingsFromConfig,

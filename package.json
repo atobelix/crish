@@ -1,8 +1,8 @@
 {
-  "name": "conex",
+  "name": "crish",
   "version": "0.1.0",
   "private": true,
-  "description": "Conex - Agent Runtime Workbench with Web UI",
+  "description": "Crish - Agent Runtime Workbench with Web UI",
   "workspaces": [
     "apps/agent-workbench",
     "apps/web-ui",
@@ -10,11 +10,11 @@
     "packages/shared-types"
   ],
   "scripts": {
-    "dev:workbench": "npm --workspace @conex/agent-workbench run dev",
-    "dev:ui": "npm --workspace @conex/web-ui run dev",
-    "build:workbench": "npm --workspace @conex/agent-workbench run build",
-    "build:ui": "npm --workspace @conex/web-ui run build",
-    "cli": "npm --workspace @conex/agent-workbench run cli",
+    "dev:workbench": "npm --workspace @crish/agent-workbench run dev",
+    "dev:ui": "npm --workspace @crish/web-ui run dev",
+    "build:workbench": "npm --workspace @crish/agent-workbench run build",
+    "build:ui": "npm --workspace @crish/web-ui run build",
+    "cli": "npm --workspace @crish/agent-workbench run cli",
     "test": "vitest run"
   },
   "devDependencies": {

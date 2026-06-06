@@ -426,7 +426,7 @@ fn run_task_extra_args(request: &WorkbenchRunTaskRequest) -> Vec<String> {
 fn workbench_cli_npm_args(command: &str, cwd: &Path) -> Vec<String> {
     vec![
         "--workspace".to_string(),
-        "@chat-sync/agent-workbench".to_string(),
+        "@crish/agent-workbench".to_string(),
         "run".to_string(),
         "cli".to_string(),
         "--".to_string(),
