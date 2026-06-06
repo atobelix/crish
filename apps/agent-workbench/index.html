@@ -1,12 +1,33 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>项目工作台</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conex Agent Workbench</title>
+    <!-- 引入完整样式 -->
+    <link rel="stylesheet" href="./src/styles.css">
+    <link rel="stylesheet" href="./src/ui/base.css">
+    <link rel="stylesheet" href="./src/ui/layout.css">
+    <link rel="stylesheet" href="./src/ui/chat.css">
+    <link rel="stylesheet" href="./src/ui/settings.css">
+    <link rel="stylesheet" href="./src/ui/subagents.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="app"></div>
+    <!-- 加载 UI 模块 -->
+    <script type="module" src="/src/ui/theme.js"></script>
+    <script type="module" src="/src/ui/splitters.js"></script>
+    <script type="module" src="/src/ui/collapsers.js"></script>
+    <script type="module" src="/src/ui/hoverreveal.js"></script>
+    <script type="module" src="/src/ui/chat.js"></script>
+    <script type="module" src="/src/ui/subagents.js"></script>
+    <!-- 主入口 -->
+    <script type="module" src="/src/main.ts"></script>
+</body>
 </html>

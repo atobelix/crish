@@ -1,11 +1,11 @@
-html,
-body,
-#root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-}
+/* 
+   ==========================================================================
+   CODEX WEB INTERFACE MASTER STYLESHEET (PRODUCTION MODULAR LOADING)
+   ========================================================================== 
+*/
 
-body {
-  background: #fff;
-}
+@import url('css/base.css');
+@import url('css/layout.css');
+@import url('css/chat.css');
+@import url('css/subagents.css');
+@import url('css/settings.css');

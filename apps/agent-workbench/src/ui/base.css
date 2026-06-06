@@ -1,0 +1,302 @@
+/* 
+   ==========================================================================
+   CODEX BASE DESIGN SYSTEM (Resets, Tokens, Scrollbars, Toast)
+   ========================================================================== 
+*/
+
+:root {
+    /* 1. Core Surfaces & Backgrounds */
+    --bg-window: #131317;       /* Windows Tauri borderless base (Neutral Charcoal) */
+    --bg-card: #0b0b0d;         /* Center core container (Deep Pitch Black Card) */
+    --bg-input: #17171c;        /* Floating input block background */
+    --bg-popup: rgba(26, 26, 32, 0.82); /* Glassmorphic card overlay */
+    --bg-modal: rgba(19, 19, 23, 0.96); /* Frosted Pop-up Settings Modal */
+    --bg-sidebar-active: rgba(255, 255, 255, 0.04);
+    --bg-sidebar-hover: rgba(255, 255, 255, 0.03);
+    
+    /* 2. Border Semantic Tokens */
+    --border-card: rgba(255, 255, 255, 0.04);
+    --border-highlight: rgba(255, 255, 255, 0.08);
+    --border-divider: rgba(255, 255, 255, 0.03);
+    
+    /* 3. Text Typography Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #d4d4d8;
+    --text-muted: #a1a1aa;
+    --text-dim: #71717a;
+    --text-dark: #52525b;
+    
+    /* 4. Highlight Semantic Colors */
+    --orange-primary: #ea580c;  /* Full Privileges warning orange */
+    --orange-bg: rgba(234, 88, 12, 0.06);
+    --orange-border: rgba(234, 88, 12, 0.2);
+    
+    --blue-vscode: #007acc;
+    --blue-accent: #339cff;
+    --blue-accent-bg: rgba(51, 156, 255, 0.1);
+    --blue-border: rgba(51, 156, 255, 0.2);
+    
+    /* 5. Shadows and Overlays */
+    --shadow-premium: 0 30px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    --shadow-popup: 0 10px 40px rgba(0, 0, 0, 0.5);
+    --backdrop-blur-overlay: rgba(0, 0, 0, 0.72);
+
+    /* 6. Typography Font Stacks */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-outfit: 'Outfit', 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    
+    /* 7. Borders & Radius */
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 6px;
+    
+    /* 8. Human Factors Transitions */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-fluid: cubic-bezier(0.25, 1, 0.5, 1);
+
+    /* 9. Dynamic Layout Variables */
+    --sidebar-width: 250px;
+    --right-sidebar-width: 320px;
+
+    /* 10. Status Semantic Colors */
+    --color-success: #10b981;
+    --color-success-bg: rgba(16, 185, 129, 0.08);
+    --color-error: #ef4444;
+    --color-error-bg: rgba(239, 68, 68, 0.08);
+    --color-warning: #d97706;
+    --color-warning-bg: rgba(217, 119, 6, 0.08);
+
+    /* 11. Z-Index Scale */
+    --z-base: 1;
+    --z-sidebar: 10;
+    --z-resizer: 20;
+    --z-popover: 100;
+    --z-subagent: 180;
+    --z-dropdown: 200;
+    --z-floating: 220;
+    --z-modal-backdrop: 990;
+    --z-modal: 1000;
+    --z-toast-bar: 1005;
+    --z-toast-stack: 1010;
+    --z-float-window: 1998;
+    --z-float-title: 1999;
+    --z-float-content: 2000;
+    --z-toast: 10000;
+}
+
+html[data-theme="light"] {
+    /* 1. Core Surfaces & Backgrounds */
+    --bg-window: #f4f4f7;       /* Soft light gray backdrop base */
+    --bg-card: #ffffff;         /* Pure crisp white center panel card */
+    --bg-input: #f0f1f5;        /* Soft gray floating text inputs */
+    --bg-popup: rgba(255, 255, 255, 0.85); /* Acrylic frosted glass overlay */
+    --bg-modal: rgba(255, 255, 255, 0.96); /* Frosted Pop-up Settings Modal */
+    --bg-sidebar-active: rgba(0, 0, 0, 0.05);
+    --bg-sidebar-hover: rgba(0, 0, 0, 0.03);
+    
+    /* 2. Border Semantic Tokens */
+    --border-card: rgba(0, 0, 0, 0.06);
+    --border-highlight: rgba(0, 0, 0, 0.1);
+    --border-divider: rgba(0, 0, 0, 0.04);
+    
+    /* 3. Text Typography Colors */
+    --text-primary: #18181b;    /* High contrast charcoal black */
+    --text-secondary: #3f3f46;  /* Soft gray for subheadings */
+    --text-muted: #71717a;      /* Medium gray for descriptions */
+    --text-dim: #9a9a9f;        /* Lighter gray for helper text */
+    --text-dark: #b8b8be;       /* Dim gray for borders and chevrons */
+    
+    /* 4. Highlight Semantic Colors */
+    --orange-primary: #ea580c;  
+    --orange-bg: rgba(234, 88, 12, 0.05);
+    --orange-border: rgba(234, 88, 12, 0.15);
+    
+    --blue-vscode: #0284c7;
+    --blue-accent: #0284c7;
+    --blue-accent-bg: rgba(2, 132, 199, 0.08);
+    --blue-border: rgba(2, 132, 199, 0.15);
+    
+    /* 5. Shadows and Overlays */
+    --shadow-premium: 0 30px 80px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    --shadow-popup: 0 10px 40px rgba(0, 0, 0, 0.08);
+    --backdrop-blur-overlay: rgba(255, 255, 255, 0.6);
+}
+
+/* Global Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+*:focus-visible {
+    outline: 2px solid var(--blue-accent, #339CFF);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Enforce Organic Vector Rounded Caps for all SVGs */
+svg, svg *, svg line, svg rect, svg path, svg circle, svg polygon, svg polyline {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+svg.lucide,
+svg.lucide *,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) path,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) line,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) rect,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) circle,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) polygon,
+svg:not(.repl-win-btn svg):not(.repl-placeholder-icon svg) polyline {
+    stroke-width: 2.3px;
+}
+
+svg.lucide rect,
+svg rect {
+    rx: 3.2px;
+    ry: 3.2px;
+}
+
+.repl-win-btn svg rect {
+    rx: 2.2px;
+    ry: 2.2px;
+    stroke-width: 1.5px;
+}
+
+.repl-win-btn svg line,
+.repl-win-btn svg path {
+    stroke-width: 1.5px;
+}
+
+body {
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-window);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    user-select: none;
+}
+
+/* Modern Minimalist Scrollbar Stacks */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.16);
+}
+
+/* Custom Toast Dialog Popups */
+.repl-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background-color: rgba(26, 26, 32, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: var(--z-toast);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+}
+
+.repl-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+html[data-theme="light"] .repl-toast {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: #18181b;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* High Contrast Absolute Fold Buttons Under Daytime Mode */
+html[data-theme="light"] .repl-sub-btn {
+    color: #4b5563;
+}
+
+html[data-theme="light"] .repl-sub-btn:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+    animation: spin 1s linear infinite;
+}
+
+@media (max-width: 768px) {
+    .repl-sidebar {
+        width: 48px;
+        min-width: 48px;
+    }
+    .repl-sidebar .repl-sidebar-nav-item span:not(.repl-sidebar-nav-icon),
+    .repl-sidebar .repl-sidebar-direct-item,
+    .repl-sidebar .repl-sidebar-bottom-section,
+    .repl-sidebar .repl-sidebar-section-title,
+    .repl-sidebar .repl-sidebar-profile-info,
+    .repl-sidebar .repl-sidebar-profile-settings-icon {
+        display: none;
+    }
+    .repl-sidebar .repl-sidebar-profile-trigger {
+        justify-content: center;
+    }
+    .repl-sidebar .repl-sidebar-nav-item {
+        justify-content: center;
+    }
+    .repl-settings-full-panel .repl-settings-sidebar {
+        width: 48px;
+        min-width: 48px;
+    }
+    .repl-settings-full-panel .repl-settings-sidebar .repl-settings-nav-item span {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .repl-sidebar {
+        display: none;
+    }
+    .repl-titlebar-center {
+        display: none;
+    }
+    .repl-input-actions-left {
+        flex-wrap: wrap;
+    }
+}
