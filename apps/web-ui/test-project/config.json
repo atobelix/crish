@@ -1,0 +1,6 @@
+{
+  "port": 8080,
+  "host": "localhost",
+  "version": "1.0.0",
+  "debug": false
+}

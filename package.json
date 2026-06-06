@@ -1,0 +1,25 @@
+{
+  "name": "conex",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Conex - Agent Runtime Workbench with Web UI",
+  "workspaces": [
+    "apps/agent-workbench",
+    "apps/web-ui",
+    "packages/agent-runtime",
+    "packages/shared-types"
+  ],
+  "scripts": {
+    "dev:workbench": "npm --workspace @conex/agent-workbench run dev",
+    "dev:ui": "npm --workspace @conex/web-ui run dev",
+    "build:workbench": "npm --workspace @conex/agent-workbench run build",
+    "build:ui": "npm --workspace @conex/web-ui run build",
+    "cli": "npm --workspace @conex/agent-workbench run cli",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

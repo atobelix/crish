@@ -1,0 +1,1071 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  AgentRuntime,
+  createTextMessage,
+  InMemorySessionStore,
+  nowIso,
+  SessionRecorder,
+  type AgentEvent,
+  type AgentProvider,
+  type AgentTool,
+  type ContextCompressionRecord,
+  type JsonObject
+} from ".";
+
+function terminalTool(name: string): AgentTool {
+  return {
+    name,
+    label: name,
+    description: `Run ${name}`,
+    category: "terminal",
+    concurrency: "parallel",
+    isReadOnly: () => true,
+    summarize(input: JsonObject) {
+      return String(input.command ?? name);
+    },
+    async execute(input, context) {
+      context.emit({ text: `running ${input.command}` });
+      return { text: `ok:${input.command}` };
+    }
+  };
+}
+
+describe("AgentRuntime", () => {
+  it("keeps assistant text and tool calls in source order while batching parallel tools", async () => {
+    let requestCount = 0;
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        requestCount += 1;
+        if (requestCount === 1) {
+          yield { type: "text-delta", text: "I will inspect first.\n" };
+          yield { type: "tool-call", id: "call_one", toolName: "shell", input: { command: "pwd" } };
+          yield { type: "tool-call", id: "call_two", toolName: "shell", input: { command: "git status --short" } };
+          yield { type: "stop", reason: "tool-call" };
+          return;
+        }
+        yield { type: "text-delta", text: "Inspection complete." };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_test",
+      cwd: "C:/repo",
+      provider,
+      tools: [terminalTool("shell")],
+      sessionStore: store
+    });
+
+    const events = [];
+    for await (const event of runtime.run("check repo")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("tool-batch-start");
+    const batch = events.find((event) => event.type === "tool-batch-start");
+    expect(batch).toMatchObject({
+      type: "tool-batch-start",
+      summary: "2 terminal"
+    });
+    expect(store.entries.some((entry) => entry.type === "message" && entry.message.role === "tool")).toBe(true);
+    expect(requestCount).toBe(2);
+  });
+
+  it("turns ask decisions into approval requests before executing tools", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "danger", toolName: "write", input: { path: "a.txt" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "write",
+      label: "write",
+      description: "write file",
+      category: "filesystem",
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: (input) => `write ${input.path}`,
+      async execute() {
+        return { text: "written" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_approval",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1,
+      permissionPolicy: { decide: () => ({ behavior: "ask" }) },
+      approvalHandler: { requestApproval: async () => ({ behavior: "deny", reason: "not now" }) }
+    });
+
+    const events = [];
+    for await (const event of runtime.run("write file")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("approval-requested");
+    expect(events.map((event) => event.type)).toContain("approval-resolved");
+  });
+
+  it("returns a tool-result error instead of executing invalid tool input", async () => {
+    let executed = false;
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "bad_input", toolName: "write", input: { __parseError: "Unexpected token", mode: "bad" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "write",
+      label: "write",
+      description: "write file",
+      category: "filesystem",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          mode: { type: "string", enum: ["create", "overwrite"] }
+        },
+        required: ["path"]
+      },
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: () => "write file",
+      async execute() {
+        executed = true;
+        return { text: "written" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_invalid_input",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("write file")) {
+      events.push(event);
+    }
+
+    expect(executed).toBe(false);
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.isError).toBe(true);
+    expect(toolEnd?.result.output.text).toContain("Tool input validation failed");
+    expect(toolEnd?.result.output.text).toContain("missing required field: path");
+  });
+
+  it("steers malformed long write_file arguments toward chunked edit calls", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield {
+          type: "tool-call",
+          id: "bad_write",
+          toolName: "write_file",
+          input: {
+            __rawArguments: '{"path":"reports/evidence-ledger.json","content":"very long',
+            __parseError: "Unterminated string in JSON at position 56"
+          }
+        };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "write_file",
+      label: "write file",
+      description: "write file",
+      category: "filesystem",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" }
+        },
+        required: ["path", "content"]
+      },
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: () => "write file",
+      async execute() {
+        return { text: "written" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_bad_write",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("write file")) {
+      events.push(event);
+    }
+
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.output.text).toContain("do not retry write_file");
+    expect(toolEnd?.result.output.text).toContain("edit");
+    expect(toolEnd?.result.output.text).toContain("insert_tail");
+    expect(toolEnd?.result.output.text).toContain("Raw argument preview");
+  });
+
+  it("repairs provider tool-call inputs before validation and execution", async () => {
+    let executedInput: JsonObject | undefined;
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield {
+          type: "tool-call",
+          id: "write_aliases",
+          toolName: "write",
+          input: { file_path: "index.html", text: "<main>ok</main>" }
+        };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "write",
+      label: "write",
+      description: "write file",
+      category: "filesystem",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" }
+        },
+        required: ["path", "content"]
+      },
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: (input) => `write ${input.path}`,
+      async execute(input) {
+        executedInput = input;
+        return { text: "written" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_repaired_input",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("write file")) {
+      events.push(event);
+    }
+
+    expect(executedInput).toEqual({ path: "index.html", content: "<main>ok</main>" });
+    expect(events.map((event) => event.type)).toContain("tool-input-repaired");
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.isError).toBe(false);
+  });
+
+  it("does not let tool summary failures abort the turn before validation can report bad input", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "bad_read", toolName: "read_file", input: {} };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "read_file",
+      label: "read file",
+      description: "read file",
+      category: "filesystem",
+      concurrency: "parallel",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" }
+        },
+        required: ["path"]
+      },
+      isReadOnly: () => true,
+      summarize() {
+        throw new Error("path must be a non-empty string");
+      },
+      async execute() {
+        return { text: "should not execute" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_bad_summary",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("read file")) {
+      events.push(event);
+    }
+
+    const batch = events.find((event): event is Extract<AgentEvent, { type: "tool-batch-start" }> => event.type === "tool-batch-start");
+    expect(batch?.calls[0]?.summary).toContain("invalid input");
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.isError).toBe(true);
+    expect(toolEnd?.result.output.text).toContain("missing required field: path");
+  });
+
+  it("forwards provider diagnostics as runtime events without adding assistant blocks", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield {
+          type: "provider-diagnostic",
+          diagnostic: {
+            phase: "request-start",
+            providerId: "scripted",
+            endpoint: "chat-completions"
+          }
+        };
+        yield { type: "text-delta", text: "你好" };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_diag",
+      cwd: "C:/repo",
+      provider,
+      sessionStore: store
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("测试诊断")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("provider-diagnostic");
+    const assistantEntry = store.entries.find((entry) => entry.type === "message" && entry.message.role === "assistant");
+    expect(assistantEntry?.type === "message" ? assistantEntry.message.blocks : []).toEqual([{ type: "text", text: "你好" }]);
+  });
+
+  it("yields assistant deltas before the provider stream finishes", async () => {
+    const provider: AgentProvider = {
+      id: "slow-scripted",
+      async *stream() {
+        await sleep(20);
+        yield { type: "text-delta", text: "first" };
+        await sleep(220);
+        yield { type: "text-delta", text: "second" };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_stream_live",
+      cwd: "C:/repo",
+      provider
+    });
+    const startedAt = Date.now();
+    const iterator = runtime.run("stream");
+    let firstDeltaMs = -1;
+
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) break;
+      if (next.value.type === "message-delta" && next.value.block.type === "text") {
+        firstDeltaMs = Date.now() - startedAt;
+        runtime.abort("test complete");
+        await iterator.return([]);
+        break;
+      }
+    }
+
+    expect(firstDeltaMs).toBeGreaterThanOrEqual(15);
+    expect(firstDeltaMs).toBeLessThan(180);
+  });
+
+  it("yields tool progress before the tool completes", async () => {
+    const provider: AgentProvider = {
+      id: "tool-progress-scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "call_slow", toolName: "slow_tool", input: { value: "x" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "slow_tool",
+      label: "slow",
+      description: "slow tool",
+      category: "terminal",
+      concurrency: "parallel",
+      isReadOnly: () => true,
+      summarize: () => "slow tool",
+      async execute(_input, context) {
+        await sleep(20);
+        context.emit({ text: "halfway" });
+        await sleep(220);
+        return { text: "done" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_tool_progress_live",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+    const startedAt = Date.now();
+    const iterator = runtime.run("run slow tool");
+    let updateMs = -1;
+    let toolEndMs = -1;
+
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) break;
+      if (next.value.type === "tool-update") {
+        updateMs = Date.now() - startedAt;
+      }
+      if (next.value.type === "tool-end") {
+        toolEndMs = Date.now() - startedAt;
+        await iterator.return([]);
+        break;
+      }
+    }
+
+    expect(updateMs).toBeGreaterThanOrEqual(15);
+    expect(updateMs).toBeLessThan(180);
+    expect(toolEndMs).toBeGreaterThanOrEqual(220);
+  });
+
+  it("resumes model context from session entries without duplicating old transcript entries", async () => {
+    const store = new InMemorySessionStore();
+    const recorder = new SessionRecorder(store);
+    await store.open({
+      type: "session",
+      id: "s_resume",
+      cwd: "C:/repo",
+      createdAt: nowIso(),
+      version: 1
+    });
+    const oldUser = createTextMessage("user", "旧问题");
+    const oldAssistant = createTextMessage("assistant", "旧回答");
+    const keptUser = createTextMessage("user", "压缩前保留的问题");
+    await recorder.recordMessage(oldUser);
+    await recorder.recordMessage(oldAssistant);
+    await recorder.recordMessage(keptUser);
+    const record: ContextCompressionRecord = {
+      id: "compact_resume",
+      trigger: "auto",
+      summary: "旧问题已经处理，继续当前任务。",
+      firstKeptMessageId: keptUser.id,
+      compressedMessageIds: [oldUser.id, oldAssistant.id],
+      keptMessageIds: [keptUser.id],
+      tokensBefore: 200,
+      tokensAfter: 40,
+      createdAt: nowIso()
+    };
+    await recorder.recordCompaction(record);
+
+    let providerMessages: Array<{ role: string; text: string }> = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        providerMessages = request.messages.map((message) => ({
+          role: message.role,
+          text: message.blocks.filter((block) => block.type === "text").map((block) => block.text).join("")
+        }));
+        yield { type: "text-delta", text: "已恢复" };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+
+    const entriesBefore = store.entries.length;
+    const runtime = new AgentRuntime({
+      sessionId: "s_resume",
+      cwd: "C:/repo",
+      provider,
+      sessionStore: store,
+      resumeSession: true
+    });
+
+    for await (const _event of runtime.run("继续处理")) {
+      // drain
+    }
+
+    expect(providerMessages.map((message) => message.role)).toEqual(["user", "user", "user"]);
+    expect(providerMessages[0]?.text).toContain("<context_checkpoint>");
+    expect(providerMessages[0]?.text).toContain("旧问题已经处理");
+    expect(providerMessages[1]?.text).toBe("压缩前保留的问题");
+    expect(providerMessages[2]?.text).toBe("继续处理");
+    const oldUserOccurrences = store.entries.filter((entry) => entry.type === "message" && entry.message.id === oldUser.id);
+    expect(oldUserOccurrences).toHaveLength(1);
+    expect(store.entries.length).toBeGreaterThan(entriesBefore);
+  });
+
+  it("records checkpoint artifacts from tool output as session checkpoints and runtime events", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "call_checkpoint", toolName: "write_file", input: { path: "a.txt" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "write_file",
+      label: "write",
+      description: "write with checkpoint",
+      category: "filesystem",
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: () => "write a.txt",
+      async execute() {
+        return {
+          text: "written",
+          artifacts: [
+            {
+              kind: "file",
+              title: "Checkpoint: before write",
+              uri: "C:/repo/.agent-runtime/snapshots/session/checkpoints/cp/checkpoint.json",
+              metadata: {
+                checkpointId: "cp_1",
+                label: "before write",
+                manifestPath: "C:/repo/.agent-runtime/snapshots/session/checkpoints/cp/checkpoint.json",
+                files: 1
+              }
+            }
+          ]
+        };
+      }
+    };
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_checkpoint",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      sessionStore: store,
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("write")) {
+      events.push(event);
+    }
+
+    const checkpointEvent = events.find((event): event is Extract<AgentEvent, { type: "checkpoint-created" }> => event.type === "checkpoint-created");
+    expect(checkpointEvent?.checkpoint).toMatchObject({
+      id: "cp_1",
+      kind: "workspace-checkpoint",
+      label: "before write",
+      toolCallId: "call_checkpoint",
+      toolName: "write_file"
+    });
+    const sessionCheckpoint = store.entries.find((entry) => entry.type === "checkpoint");
+    expect(sessionCheckpoint?.type === "checkpoint" ? sessionCheckpoint.metadata : undefined).toMatchObject({
+      id: "cp_1",
+      kind: "workspace-checkpoint"
+    });
+  });
+
+  it("emits checkpoint restore events from restore tool results", async () => {
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        yield { type: "tool-call", id: "call_restore", toolName: "restore_workspace_checkpoint", input: { checkpointPath: "checkpoint.json" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const tool: AgentTool = {
+      name: "restore_workspace_checkpoint",
+      label: "restore",
+      description: "restore checkpoint",
+      category: "filesystem",
+      concurrency: "exclusive",
+      isReadOnly: () => false,
+      summarize: () => "restore checkpoint",
+      async execute() {
+        return {
+          text: "restored",
+          json: {
+            checkpointId: "cp_1",
+            restored: ["a.txt"],
+            deleted: ["b.txt"],
+            skipped: ["large.bin: file-too-large"]
+          }
+        };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_restore",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      maxTurns: 1
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("restore")) {
+      events.push(event);
+    }
+
+    const restoreEvent = events.find((event): event is Extract<AgentEvent, { type: "checkpoint-restored" }> => event.type === "checkpoint-restored");
+    expect(restoreEvent?.restore).toMatchObject({
+      checkpointId: "cp_1",
+      toolCallId: "call_restore",
+      restored: ["a.txt"],
+      deleted: ["b.txt"],
+      skipped: ["large.bin: file-too-large"]
+    });
+  });
+
+  it("sends budgeted tool output to the provider while preserving raw tool output in events and storage", async () => {
+    let requestCount = 0;
+    let secondRequestMessages: Array<{ role: string; toolOutput?: string }> = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        requestCount += 1;
+        if (requestCount === 1) {
+          yield { type: "tool-call", id: "call_long_context", toolName: "shell", input: { command: "long-output" } };
+          yield { type: "stop", reason: "tool-call" };
+          return;
+        }
+        secondRequestMessages = request.messages.map((message) => ({
+          role: message.role,
+          toolOutput: message.blocks
+            .filter((block) => block.type === "tool-result")
+            .map((block) => (block.type === "tool-result" ? block.output.text : undefined))
+            .filter((value): value is string => Boolean(value))
+            .join("\n")
+        }));
+        yield { type: "text-delta", text: "continued" };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const longOutput = "0123456789".repeat(20);
+    const tool: AgentTool = {
+      name: "shell",
+      label: "shell",
+      description: "shell",
+      category: "terminal",
+      concurrency: "parallel",
+      isReadOnly: () => true,
+      summarize: (input) => String(input.command),
+      async execute() {
+        return { text: longOutput, json: { exitCode: 0 } };
+      }
+    };
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_projected_context",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      sessionStore: store,
+      maxTurns: 2,
+      toolOutputBudget: {
+        inlineChars: 40,
+        headRatio: 0.5
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("run long command")) {
+      events.push(event);
+    }
+
+    const providerToolOutput = secondRequestMessages.find((message) => message.role === "tool")?.toolOutput ?? "";
+    expect(providerToolOutput).toContain("characters omitted");
+    expect(providerToolOutput).not.toBe(longOutput);
+
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.output.text).toBe(longOutput);
+    const storedTool = store.entries.find((entry) => entry.type === "message" && entry.message.role === "tool");
+    expect(storedTool?.type === "message" ? storedTool.message.blocks[0] : undefined).toMatchObject({
+      type: "tool-result",
+      output: { text: longOutput }
+    });
+  });
+
+  it("materializes very large tool output into a local artifact before storing the tool result", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-runtime-artifacts-"));
+    try {
+      const provider: AgentProvider = {
+        id: "scripted",
+        async *stream() {
+          yield { type: "tool-call", id: "call_large", toolName: "shell", input: { command: "large-output" } };
+          yield { type: "stop", reason: "tool-call" };
+        }
+      };
+      const longOutput = "0123456789".repeat(20);
+      const tool: AgentTool = {
+        name: "shell",
+        label: "shell",
+        description: "shell",
+        category: "terminal",
+        concurrency: "parallel",
+        isReadOnly: () => true,
+        summarize: (input) => String(input.command),
+        async execute() {
+          return { text: longOutput };
+        }
+      };
+      const store = new InMemorySessionStore();
+      const runtime = new AgentRuntime({
+        sessionId: "s_artifact",
+        cwd: "C:/repo",
+        provider,
+        tools: [tool],
+        sessionStore: store,
+        maxTurns: 1,
+        toolOutputBudget: {
+          artifactChars: 80,
+          artifactDir: artifactRoot,
+          inlineChars: 40
+        }
+      });
+
+      const events: AgentEvent[] = [];
+      for await (const event of runtime.run("run large command")) {
+        events.push(event);
+      }
+
+      const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+      expect(toolEnd?.result.output.text).toContain("Full tool output saved to artifact");
+      expect(toolEnd?.result.output.text).not.toBe(longOutput);
+      const artifactPath = toolEnd?.result.output.artifacts?.find((artifact) => artifact.metadata?.artifactKind === "tool-output")?.uri;
+      expect(artifactPath).toBeTruthy();
+      await expect(readFile(String(artifactPath), "utf8")).resolves.toBe(longOutput);
+
+      const storedTool = store.entries.find((entry) => entry.type === "message" && entry.message.role === "tool");
+      const storedOutput = storedTool?.type === "message" ? storedTool.message.blocks[0] : undefined;
+      expect(storedOutput).toMatchObject({
+        type: "tool-result",
+        output: {
+          artifacts: [expect.objectContaining({ uri: artifactPath })]
+        }
+      });
+    } finally {
+      await rm(artifactRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("compresses context between tool rounds while preserving raw tool-end output", async () => {
+    let requestCount = 0;
+    const requests: JsonObject[] = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        requestCount += 1;
+        requests.push({
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            text: message.blocks.filter((block) => block.type === "text").map((block) => block.text).join("")
+          }))
+        });
+        if (requestCount === 1) {
+          yield { type: "tool-call", id: "call_long", toolName: "shell", input: { command: "long-output" } };
+          yield { type: "stop", reason: "tool-call" };
+          return;
+        }
+        yield { type: "text-delta", text: "continued" };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const longOutput = "x".repeat(120);
+    const tool: AgentTool = {
+      name: "shell",
+      label: "shell",
+      description: "shell",
+      category: "terminal",
+      concurrency: "parallel",
+      isReadOnly: () => true,
+      summarize: (input) => String(input.command),
+      async execute() {
+        return { text: longOutput, json: { exitCode: 0 } };
+      }
+    };
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_compress",
+      cwd: "C:/repo",
+      provider,
+      tools: [tool],
+      sessionStore: store,
+      initialMessages: [
+        {
+          id: "old_user",
+          role: "user",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          blocks: [{ type: "text", text: "old request ".repeat(80) }]
+        },
+        {
+          id: "old_assistant",
+          role: "assistant",
+          createdAt: "2026-01-01T00:00:01.000Z",
+          blocks: [{ type: "text", text: "old answer ".repeat(80) }]
+        }
+      ],
+      maxTurns: 2,
+      contextCompression: {
+        contextWindowTokens: 64,
+        thresholdTokens: 1,
+        targetRecentTokens: 1,
+        minRecentMessages: 1,
+        minMessagesToCompress: 1,
+        summarizer: {
+          async summarize() {
+            return "Earlier turn ran long-output successfully.";
+          }
+        }
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("run a long command")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("context-compression-start");
+    expect(events.map((event) => event.type)).toContain("context-compression-end");
+    expect(store.entries.some((entry) => entry.type === "compaction")).toBe(true);
+    const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
+    expect(toolEnd?.result.output.text).toBe(longOutput);
+    const storedTool = store.entries.find((entry) => entry.type === "message" && entry.message.role === "tool");
+    expect(storedTool?.type === "message" ? storedTool.message.blocks[0] : undefined).toMatchObject({
+      type: "tool-result",
+      output: { text: longOutput }
+    });
+    expect(JSON.stringify(requests[1])).toContain("<context_checkpoint>");
+  });
+
+  it("injects runtime steering for repeated tool failures, then pauses for intervention if unrecovered", async () => {
+    let requestCount = 0;
+    const requests: JsonObject[] = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        requestCount += 1;
+        requests.push({
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            text: message.blocks.filter((block) => block.type === "text").map((block) => block.text).join("")
+          }))
+        });
+        yield { type: "tool-call", id: `fail_a_${requestCount}`, toolName: "fail", input: { value: "a" } };
+        yield { type: "tool-call", id: `fail_b_${requestCount}`, toolName: "fail", input: { value: "b" } };
+        yield { type: "stop", reason: "tool-call" };
+      }
+    };
+    const failingTool: AgentTool = {
+      name: "fail",
+      label: "fail",
+      description: "always fail",
+      category: "filesystem",
+      concurrency: "parallel",
+      isReadOnly: () => true,
+      summarize: () => "fail",
+      async execute() {
+        throw new Error("boom");
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_recovery",
+      cwd: "C:/repo",
+      provider,
+      tools: [failingTool],
+      maxTurns: 4,
+      recovery: {
+        maxConsecutiveToolErrors: 2,
+        maxSteeringMessages: 1
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("trigger failures")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("runtime-steering");
+    expect(events.map((event) => event.type)).toContain("runtime-intervention-required");
+    expect(JSON.stringify(requests[1])).toContain("Runtime steering: recent tool calls failed repeatedly.");
+    expect(requestCount).toBe(2);
+  });
+
+  it("treats repeated non-zero terminal exit codes as recoverable tool failures", async () => {
+    let requestCount = 0;
+    const requests: JsonObject[] = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        requestCount += 1;
+        requests.push({
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            text: message.blocks.filter((block) => block.type === "text").map((block) => block.text).join("")
+          }))
+        });
+        if (requestCount <= 2) {
+          yield { type: "tool-call", id: `shell_fail_${requestCount}`, toolName: "shell", input: { command: "bad-command" } };
+          yield { type: "stop", reason: "tool-call" };
+          return;
+        }
+        yield { type: "text-delta", text: "Recovered after checking the failed command." };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const shellTool: AgentTool = {
+      name: "shell",
+      label: "shell",
+      description: "shell",
+      category: "terminal",
+      concurrency: "parallel",
+      isReadOnly: () => true,
+      summarize: (input) => String(input.command),
+      async execute() {
+        return {
+          text: "Exit code: 1\nstderr: command not found",
+          json: { exitCode: 1, stderr: "command not found" }
+        };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_exit_code_recovery",
+      cwd: "C:/repo",
+      provider,
+      tools: [shellTool],
+      maxTurns: 4,
+      recovery: {
+        maxConsecutiveToolErrors: 2,
+        maxSteeringMessages: 1
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("run the check")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("runtime-steering");
+    expect(JSON.stringify(requests[2])).toContain("Runtime steering: recent tool calls failed repeatedly.");
+    expect(requestCount).toBe(3);
+  });
+
+  it("steers once when the provider returns an empty assistant turn", async () => {
+    let requestCount = 0;
+    const requests: JsonObject[] = [];
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream(request) {
+        requestCount += 1;
+        requests.push({
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            text: message.blocks.filter((block) => block.type === "text").map((block) => block.text).join("")
+          }))
+        });
+        if (requestCount === 1) {
+          yield { type: "stop", reason: "stop" };
+          return;
+        }
+        yield { type: "text-delta", text: "Recovered after steering." };
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_empty",
+      cwd: "C:/repo",
+      provider,
+      maxTurns: 3,
+      recovery: {
+        maxSteeringMessages: 1
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("do the work")) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toContain("runtime-steering");
+    expect(JSON.stringify(requests[1])).toContain("previous assistant turn produced no visible text");
+    expect(requestCount).toBe(2);
+  });
+
+  it("pauses instead of repeatedly steering unrecovered empty assistant turns", async () => {
+    let requestCount = 0;
+    const provider: AgentProvider = {
+      id: "scripted",
+      async *stream() {
+        requestCount += 1;
+        yield { type: "stop", reason: "stop" };
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_empty_loop",
+      cwd: "C:/repo",
+      provider,
+      maxTurns: 5,
+      recovery: {
+        maxSteeringMessages: 1
+      }
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("do the work")) {
+      events.push(event);
+    }
+
+    const eventTypes = events.map((event) => event.type);
+    expect(eventTypes.filter((type) => type === "runtime-steering")).toHaveLength(1);
+    expect(eventTypes).toContain("runtime-intervention-required");
+    expect(requestCount).toBe(2);
+  });
+
+  it("records provider startup failures as runtime errors without appending assistant messages", async () => {
+    const store = new InMemorySessionStore();
+    const provider: AgentProvider = {
+      id: "failing-provider",
+      async *stream() {
+        throw new Error("upstream unavailable");
+      }
+    };
+    const runtime = new AgentRuntime({
+      sessionId: "s_provider_failure",
+      cwd: "C:/repo",
+      provider,
+      sessionStore: store
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of runtime.run("do the work")) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "runtime-error",
+        error: "upstream unavailable"
+      })
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "agent-end",
+      reason: "error",
+      error: "upstream unavailable"
+    });
+    expect(store.entries.filter((entry) => entry.type === "message").map((entry) => (entry.type === "message" ? entry.message.role : ""))).toEqual(["user"]);
+  });
+});
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

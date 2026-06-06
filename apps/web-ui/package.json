@@ -1,0 +1,10 @@
+{
+  "name": "codex-replicate-ui",
+  "version": "1.0.0",
+  "description": "Codex Replicate UI - Mimo API Interactive Prototype",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  }
+}
