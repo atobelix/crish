@@ -17,15 +17,17 @@
         "height": 880,
         "minWidth": 1040,
         "minHeight": 720,
-        "resizable": true
+        "resizable": true,
+        "decorations": false
       }
-    ]
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:* https:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'"
+    }
   },
   "bundle": {
     "active": false,
     "targets": "all",
-    "icon": [
-      "../../desktop/src-tauri/icons/icon.ico"
-    ]
+    "icon": ["icons/icon.ico"]
   }
 }
