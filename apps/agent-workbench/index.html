@@ -1,16 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crish Agent Workbench</title>
-    <!-- 引入完整样式 -->
+    <!-- Design Token System (must load first) -->
+    <link rel="stylesheet" href="./src/styles/tokens.css">
+    <!-- Compatibility alias layer -->
     <link rel="stylesheet" href="./src/styles.css">
-    <link rel="stylesheet" href="./src/ui/base.css">
-    <link rel="stylesheet" href="./src/ui/layout.css">
-    <link rel="stylesheet" href="./src/ui/chat.css">
-    <link rel="stylesheet" href="./src/ui/settings.css">
-    <link rel="stylesheet" href="./src/ui/subagents.css">
+    <!-- Component styles -->
+    <link rel="stylesheet" href="./src/styles/base.css">
+    <link rel="stylesheet" href="./src/styles/shell.css">
+    <link rel="stylesheet" href="./src/styles/sidebar.css">
+    <link rel="stylesheet" href="./src/styles/tree.css">
+    <link rel="stylesheet" href="./src/styles/right-sidebar.css">
+    <link rel="stylesheet" href="./src/styles/panels.css">
+    <link rel="stylesheet" href="./src/styles/overlay.css">
+    <link rel="stylesheet" href="./src/styles/chat.css">
+    <link rel="stylesheet" href="./src/styles/markdown.css">
+    <link rel="stylesheet" href="./src/styles/subagents.css">
+    <link rel="stylesheet" href="./src/styles/settings.css">
+    <!-- Light theme overrides (must load last to override dark defaults) -->
+    <link rel="stylesheet" href="./src/styles/light-theme.css">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,14 +31,7 @@
 </head>
 <body>
     <div id="app"></div>
-    <!-- 加载 UI 模块 -->
-    <script type="module" src="/src/ui/theme.js"></script>
-    <script type="module" src="/src/ui/splitters.js"></script>
-    <script type="module" src="/src/ui/collapsers.js"></script>
-    <script type="module" src="/src/ui/hoverreveal.js"></script>
-    <script type="module" src="/src/ui/chat.js"></script>
-    <script type="module" src="/src/ui/subagents.js"></script>
-    <!-- 主入口 -->
-    <script type="module" src="/src/main.ts"></script>
+    <!-- 主入口（Preact 应用） -->
+    <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

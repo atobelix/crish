@@ -1,0 +1,201 @@
+/*
+ * ==========================================================================
+ * BASE — Global Reset, Typography, Scrollbar, Toast, Utilities
+ * ==========================================================================
+ * All design tokens are defined in tokens.css.
+ * This file contains only resets, global element styles, and utilities.
+ * No hardcoded values (except 0 and 1). All values reference tokens.
+ * ==========================================================================
+ */
+
+
+/* ==========================================================================
+   Global Reset
+   ========================================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+*:focus-visible {
+    outline: var(--space-0_5) solid var(--color-accent);
+    outline-offset: var(--space-0_5);
+    border-radius: var(--radius-md);
+}
+
+
+/* ==========================================================================
+   SVG Defaults (Scoped to app-internal elements)
+   ========================================================================== */
+
+.repl-titlebar svg, .repl-titlebar svg *,
+.repl-sidebar svg, .repl-sidebar svg *,
+.repl-chat-messages-scroll-area svg, .repl-chat-messages-scroll-area svg *,
+.repl-input-box-wrap svg, .repl-input-box-wrap svg *,
+.repl-card-subheader svg, .repl-card-subheader svg * {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+svg.lucide,
+svg.lucide * {
+    stroke-width: 2.3px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.repl-titlebar svg:not(.repl-win-btn svg),
+.repl-sidebar svg,
+.repl-chat-messages-scroll-area svg,
+.repl-input-box-wrap svg,
+.repl-card-subheader svg {
+    stroke-width: 2.3px;
+}
+
+svg.lucide rect,
+svg.repl-icon rect {
+    rx: 3.2px;
+    ry: 3.2px;
+}
+
+.repl-win-btn svg rect {
+    rx: 2.2px;
+    ry: 2.2px;
+    stroke-width: 1.5px;
+}
+
+.repl-win-btn svg line,
+.repl-win-btn svg path {
+    stroke-width: 1.5px;
+}
+
+
+/* ==========================================================================
+   Root Element
+   ========================================================================== */
+
+body, #app {
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--color-bg-root);
+    color: var(--color-text-secondary);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    user-select: none;
+}
+
+
+/* ==========================================================================
+   Scrollbar
+   ========================================================================== */
+
+::-webkit-scrollbar {
+    width: var(--space-1);
+    height: var(--space-1);
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-scrollbar-thumb-hover);
+}
+
+
+/* ==========================================================================
+   Toast Notification
+   ========================================================================== */
+
+.repl-toast {
+    position: fixed;
+    bottom: var(--space-12);
+    left: 50%;
+    transform: translateX(-50%) translateY(var(--space-10));
+    background-color: var(--color-bg-popup);
+    backdrop-filter: blur(var(--space-5));
+    border: var(--space-0_5) solid var(--color-border-subtle);
+    color: var(--color-text-primary);
+    padding: var(--space-5) var(--space-9);
+    border-radius: var(--radius-2xl);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
+    box-shadow: var(--shadow-md);
+    z-index: var(--z-toast);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform var(--duration-slowest) var(--ease-spring), opacity var(--duration-slowest) ease;
+}
+
+.repl-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+    animation: spin 1s linear infinite;
+}
+
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .repl-sidebar {
+        width: var(--space-12);
+        min-width: var(--space-12);
+    }
+    .repl-sidebar .repl-sidebar-nav-item span:not(.repl-sidebar-nav-icon),
+    .repl-sidebar .repl-sidebar-direct-item,
+    .repl-sidebar .repl-sidebar-bottom-section,
+    .repl-sidebar .repl-sidebar-section-title,
+    .repl-sidebar .repl-sidebar-profile-info,
+    .repl-sidebar .repl-sidebar-profile-settings-icon {
+        display: none;
+    }
+    .repl-sidebar .repl-sidebar-profile-trigger {
+        justify-content: center;
+    }
+    .repl-sidebar .repl-sidebar-nav-item {
+        justify-content: center;
+    }
+    .repl-settings-full-panel .repl-settings-sidebar {
+        width: var(--space-12);
+        min-width: var(--space-12);
+    }
+    .repl-settings-full-panel .repl-settings-sidebar .repl-settings-nav-item span {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .repl-sidebar {
+        display: none;
+    }
+    .repl-titlebar-center {
+        display: none;
+    }
+    .repl-input-actions-left {
+        flex-wrap: wrap;
+    }
+}

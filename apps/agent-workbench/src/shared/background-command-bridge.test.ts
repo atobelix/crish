@@ -139,6 +139,8 @@ function commandTask(overrides: Partial<BackgroundCommandSnapshot> = {}): Backgr
     exitCode: undefined,
     signal: undefined,
     timedOut: false,
+    cancelled: false,
+    terminationDiagnostics: [],
     truncated: false,
     outputPreview: "",
     stdoutPreview: "",

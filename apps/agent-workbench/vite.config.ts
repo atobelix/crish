@@ -1,12 +1,15 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import preact from "@preact/preset-vite";
 import { resolve } from "node:path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [preact()],
   resolve: {
     alias: {
-      "@crish/agent-runtime": resolve(__dirname, "../../packages/agent-runtime/src/index.ts")
+      "@crish/agent-runtime": resolve(__dirname, "../../packages/agent-runtime/src/index.ts"),
+      "react": "preact/compat",
+      "react-dom": "preact/compat",
+      "react/jsx-runtime": "preact/jsx-runtime"
     }
   },
   server: {

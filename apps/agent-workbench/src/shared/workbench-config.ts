@@ -1,3 +1,4 @@
+import { CRISH_DEFAULT_PROVIDER_CONFIG } from "@crish/shared-types";
 import { createDefaultLongRunPolicy, type WorkbenchLongRunPolicy } from "./workbench-contract";
 
 export type WorkbenchProviderEndpoint = "auto" | "responses" | "chat-completions";
@@ -38,6 +39,7 @@ export interface WorkbenchModelProfile {
   autoCompactAtTokens: number;
   reserveOutputTokens: number;
   maxOutputTokens: number;
+  systemPromptOverhead: number;
   defaultTopP: number;
   defaultTemperature?: number;
   supportsTools: boolean;
@@ -148,18 +150,20 @@ export const BUILTIN_WORKBENCH_MODEL_PROFILES: WorkbenchModelProfile[] = [
 ];
 
 export function createDefaultWorkbenchSettings(): WorkbenchRuntimeSettings {
-  const model = findModelProfile("mimo-v2.5") ?? createMimoProfile("mimo-v2.5", "mimo-v2.5");
+  const model =
+    findModelProfile(CRISH_DEFAULT_PROVIDER_CONFIG.model) ??
+    createMimoProfile(CRISH_DEFAULT_PROVIDER_CONFIG.model, CRISH_DEFAULT_PROVIDER_CONFIG.model);
   return {
     provider: {
       id: "flowbit-mimo",
-      baseUrl: "https://api.flowbit.me",
-      endpoint: "auto",
+      baseUrl: CRISH_DEFAULT_PROVIDER_CONFIG.baseUrl,
+      endpoint: CRISH_DEFAULT_PROVIDER_CONFIG.endpoint,
       authHeader: "authorization",
-      apiKeyEnv: "FLOWBIT_API_KEY",
+      apiKeyEnv: CRISH_DEFAULT_PROVIDER_CONFIG.apiKeyEnv,
       maxTokensField: "max_output_tokens",
       reasoningEffort: "auto",
       reasoningEffortFormat: "auto",
-      stream: true,
+      stream: CRISH_DEFAULT_PROVIDER_CONFIG.stream,
       diagnostics: true,
       transport: "auto",
       model,
@@ -310,6 +314,7 @@ export function profileFromRemoteModel(model: WorkbenchRemoteModel, fallbackVend
     autoCompactAtTokens,
     reserveOutputTokens: Math.min(maxOutputTokens, 32_000),
     maxOutputTokens,
+    systemPromptOverhead: 8_000,
     defaultTopP: 0.95,
     defaultTemperature: vendor === "mimo" ? 1 : undefined,
     supportsTools: true,
@@ -329,6 +334,7 @@ function createMimoProfile(id: string, displayName: string): WorkbenchModelProfi
     autoCompactAtTokens: 180_000,
     reserveOutputTokens: 32_000,
     maxOutputTokens: 128_000,
+    systemPromptOverhead: 8_000,
     defaultTopP: 0.95,
     defaultTemperature: 1,
     supportsTools: true,
@@ -358,6 +364,7 @@ function normalizeConfiguredModelProfile(config: WorkbenchModelProfileConfig): W
     autoCompactAtTokens: config.autoCompactAtTokens ?? base.autoCompactAtTokens,
     reserveOutputTokens: config.reserveOutputTokens ?? base.reserveOutputTokens,
     maxOutputTokens: config.maxOutputTokens ?? base.maxOutputTokens,
+    systemPromptOverhead: config.systemPromptOverhead ?? base.systemPromptOverhead,
     defaultTopP: config.defaultTopP ?? base.defaultTopP,
     supportsTools: config.supportsTools ?? base.supportsTools,
     supportsStreaming: config.supportsStreaming ?? base.supportsStreaming,
@@ -472,6 +479,7 @@ function createOpenAiProfile(id: string, displayName: string, overrides: Partial
     autoCompactAtTokens: 144_000,
     reserveOutputTokens: 32_000,
     maxOutputTokens: 32_000,
+    systemPromptOverhead: 8_000,
     defaultTopP: 1,
     supportsTools: true,
     supportsStreaming: true,

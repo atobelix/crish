@@ -1,0 +1,1005 @@
+/* ==========================================================================
+   PANELS — Task Panel, Performance Panel, Diff View, Status Cards
+   Design Token Architecture
+   ========================================================================== */
+
+
+/* ==========================================================================
+   TASK PANEL — Section Badge
+   ========================================================================== */
+
+.repl-task-section-badge {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    margin-left: auto;
+    padding: 0 var(--space-2);
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-sm);
+}
+
+.repl-task-section-body {
+    padding-left: var(--space-8);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Plan Items
+   ========================================================================== */
+
+.repl-task-plan-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+}
+
+.repl-task-plan-item.doing { color: var(--color-accent); }
+.repl-task-plan-item.done { color: var(--color-success); }
+.repl-task-plan-item.blocked { color: var(--color-error); }
+
+.repl-task-plan-indicator {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: var(--space-6);
+    height: var(--space-6);
+    align-items: center;
+    justify-content: center;
+    margin-top: var(--space-0_5);
+}
+
+.repl-task-plan-title {
+    flex: 1;
+    line-height: var(--line-height-normal);
+}
+
+.repl-task-plan-note {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    margin-left: var(--space-2);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Accept Items
+   ========================================================================== */
+
+.repl-task-accept-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+}
+
+.repl-task-accept-item.passed { color: var(--color-success); }
+
+.repl-task-accept-indicator {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: var(--space-6);
+    height: var(--space-6);
+    align-items: center;
+    justify-content: center;
+}
+
+.repl-task-accept-title {
+    flex: 1;
+}
+
+.repl-task-accept-required {
+    font-size: var(--font-size-md);
+    color: var(--color-error);
+    padding: 0 var(--space-1_5);
+    border-radius: var(--radius-xs);
+    background: var(--color-error-bg);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Evidence Items
+   ========================================================================== */
+
+.repl-task-evidence-item {
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.repl-task-evidence-kind {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    padding: 0 var(--space-1_5);
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-hover);
+    flex-shrink: 0;
+}
+
+.repl-task-evidence-title {
+    flex: 1;
+}
+
+.repl-task-evidence-detail {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Change Items
+   ========================================================================== */
+
+.repl-task-change-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.repl-task-change-item:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-sm);
+}
+
+.repl-task-change-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.repl-task-change-path {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repl-task-change-stats {
+    display: inline-flex;
+    gap: var(--space-2);
+    font-size: var(--font-size-md);
+    flex-shrink: 0;
+}
+
+.repl-task-change-add {
+    color: var(--color-success);
+}
+
+.repl-task-change-del {
+    color: var(--color-error);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Background Task Items
+   ========================================================================== */
+
+.repl-task-bg-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+}
+
+.repl-task-bg-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.repl-task-bg-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.repl-task-bg-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repl-task-bg-state {
+    font-size: var(--font-size-md);
+    padding: 0 var(--space-1_5);
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+}
+
+.repl-task-bg-state.running { color: var(--color-accent); background: var(--color-accent-bg); }
+.repl-task-bg-state.succeeded { color: var(--color-success); background: var(--color-success-bg); }
+.repl-task-bg-state.failed { color: var(--color-error); background: var(--color-error-bg); }
+.repl-task-bg-state.completed { color: var(--color-success); background: var(--color-success-bg); }
+.repl-task-bg-state.cancelled { color: var(--color-text-dim); background: var(--color-bg-hover); }
+.repl-task-bg-state.queued { color: var(--color-warning); background: var(--color-warning-bg); }
+
+.repl-task-bg-actions {
+    display: flex;
+    gap: var(--space-2);
+    padding-left: var(--space-10);
+}
+
+.repl-task-bg-btn {
+    font-size: var(--font-size-md);
+    padding: var(--space-0_5) var(--space-3);
+    border: var(--space-0_5) solid var(--color-border-divider);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-dim);
+    cursor: pointer;
+}
+
+.repl-task-bg-btn:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-dim);
+}
+
+.repl-task-bg-btn.danger {
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.repl-task-bg-btn.danger:hover {
+    background: var(--color-error);
+    color: var(--color-text-on-accent);
+}
+
+.repl-task-bg-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.repl-task-bg-output {
+    margin-left: var(--space-10);
+    margin-top: var(--space-1);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.repl-task-bg-output-pre {
+    font-size: var(--font-size-md);
+    font-family: var(--font-mono);
+    background: var(--color-bg-hover);
+    border: var(--space-0_5) solid var(--color-border-divider);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    margin: 0;
+    max-height: calc(var(--space-12) * 8);
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--color-text-secondary);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Next Action
+   ========================================================================== */
+
+.repl-task-next-action {
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    line-height: var(--line-height-normal);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Progress Bar
+   ========================================================================== */
+
+.repl-task-progress-bar-wrap {
+    margin-bottom: var(--space-4);
+}
+
+.repl-task-progress-label {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    margin-bottom: var(--space-1_5);
+}
+
+.repl-task-progress-track {
+    height: var(--space-2);
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+}
+
+.repl-task-progress-fill {
+    height: 100%;
+    background: var(--color-accent);
+    border-radius: var(--radius-xs);
+    transition: width var(--duration-slowest) ease;
+}
+
+.repl-task-progress-fill.complete {
+    background: var(--color-success);
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Plan Dot
+   ========================================================================== */
+
+.repl-task-plan-dot {
+    width: var(--space-4);
+    height: var(--space-4);
+    border-radius: 50%;
+    border: var(--space-0_5) solid var(--color-text-dim);
+    display: inline-block;
+}
+
+
+/* ==========================================================================
+   TASK PANEL — Token Budget
+   ========================================================================== */
+
+.repl-task-badge-error {
+    color: var(--color-error);
+}
+
+.repl-task-badge-warn {
+    color: var(--color-warning);
+}
+
+.repl-task-token-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+.repl-task-token-detail {
+    display: flex;
+    gap: var(--space-6);
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    margin-top: var(--space-2);
+}
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Run History
+   ========================================================================== */
+
+.repl-perf-run {
+    padding: var(--space-2) 0;
+    margin-bottom: var(--space-2);
+    border-bottom: var(--space-0_5) solid var(--color-border-divider);
+}
+
+.repl-perf-run:last-child {
+    border-bottom: none;
+}
+
+.repl-perf-run-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+}
+
+.repl-perf-run-detail {
+    display: flex;
+    gap: var(--space-6);
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Memory Bar
+   ========================================================================== */
+
+.repl-perf-mem-bar {
+    margin-bottom: var(--space-3);
+}
+
+.repl-perf-mem-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    margin-bottom: var(--space-1);
+}
+
+.repl-perf-mem-track {
+    height: var(--space-1_5);
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+}
+
+.repl-perf-mem-fill {
+    height: 100%;
+    border-radius: var(--radius-xs);
+    transition: width var(--duration-slowest) ease;
+}
+
+.repl-perf-mem-fill.normal { background: var(--color-accent); }
+.repl-perf-mem-fill.warn { background: var(--color-warning); }
+.repl-perf-mem-fill.danger { background: var(--color-error); }
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Timestamp & Header
+   ========================================================================== */
+
+.repl-perf-timestamp {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    text-align: center;
+    padding: var(--space-4);
+}
+
+.repl-perf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.repl-perf-subtitle {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Diagnostic
+   ========================================================================== */
+
+.repl-perf-diagnostic {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1_5);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3_5) var(--space-4_5);
+    border-radius: var(--radius-lg);
+    color: var(--color-warning);
+    background: var(--color-warning-bg);
+    font-size: var(--font-size-md);
+    line-height: var(--line-height-snug);
+}
+
+.repl-perf-diagnostic small {
+    color: var(--color-text-dim);
+    word-break: break-word;
+}
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Metric Grid
+   ========================================================================== */
+
+.repl-perf-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.repl-perf-metric {
+    min-width: 0;
+    padding: var(--space-3_5) var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-hover);
+}
+
+.repl-perf-metric.good {
+    background: var(--color-success-bg);
+}
+
+.repl-perf-metric.warn {
+    background: var(--color-warning-bg);
+}
+
+.repl-perf-metric.danger {
+    background: var(--color-error-bg);
+}
+
+.repl-perf-metric-label,
+.repl-perf-metric-detail {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+.repl-perf-metric-value {
+    display: block;
+    margin: var(--space-1) 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    line-height: var(--line-height-tight);
+}
+
+.repl-perf-metric.good .repl-perf-metric-value,
+.repl-perf-badge-good {
+    color: var(--color-success);
+}
+
+.repl-perf-metric.warn .repl-perf-metric-value,
+.repl-perf-badge-warn {
+    color: var(--color-warning);
+}
+
+.repl-perf-metric.danger .repl-perf-metric-value,
+.repl-perf-badge-danger,
+.repl-perf-danger-text {
+    color: var(--color-error);
+}
+
+
+/* ==========================================================================
+   PERFORMANCE PANEL — Tool List
+   ========================================================================== */
+
+.repl-perf-tool-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-top: var(--space-3_5);
+}
+
+.repl-perf-tool-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: var(--space-10);
+    padding: var(--space-1_5) 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+}
+
+.repl-perf-tool-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+}
+
+
+/* ==========================================================================
+   RIGHT SIDEBAR — Status Cards
+   ========================================================================== */
+
+.repl-rs-status-card {
+    background-color: var(--color-bg-hover);
+    border: var(--space-0_5) solid var(--color-border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.repl-rs-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--font-size-base);
+}
+
+.repl-rs-label {
+    color: var(--color-text-dim);
+}
+
+.repl-rs-value {
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+.repl-rs-value.accent-blue {
+    color: var(--color-accent);
+}
+
+.repl-rs-value.accent-orange {
+    color: var(--color-orange);
+}
+
+
+/* ==========================================================================
+   RIGHT SIDEBAR — Info Item Rows
+   ========================================================================== */
+
+.repl-rs-info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-5);
+    padding: var(--space-4) var(--space-6);
+    background-color: var(--color-overlay-subtle);
+    border: var(--space-0_5) solid var(--color-border-card);
+    border-radius: var(--radius-xl);
+}
+
+.repl-rs-info-icon {
+    display: flex;
+    align-items: center;
+    color: var(--color-text-dim);
+    margin-top: var(--space-1);
+}
+
+.repl-rs-info-icon svg {
+    width: var(--space-7);
+    height: var(--space-7);
+}
+
+.repl-rs-info-texts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.repl-rs-info-title {
+    font-size: var(--font-size-base);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.repl-rs-info-desc {
+    font-size: var(--font-size-md);
+    color: var(--color-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* ==========================================================================
+   RIGHT SIDEBAR — Option Rows (Toggles)
+   ========================================================================== */
+
+.repl-rs-option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    padding: var(--space-3) 0;
+}
+
+.repl-rs-option-label {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-normal);
+}
+
+
+/* ==========================================================================
+   RIGHT SIDEBAR — Title & Close Button
+   ========================================================================== */
+
+.repl-right-sidebar-title {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.repl-right-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--space-10);
+    height: var(--space-10);
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    transition: all var(--duration-slow) var(--ease-fluid);
+}
+
+.repl-right-sidebar-close:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-overlay-medium);
+}
+
+.repl-right-sidebar-close svg {
+    width: var(--space-7);
+    height: var(--space-7);
+}
+
+
+/* ==========================================================================
+   RIGHT SIDEBAR — Multi-Panel View Toggle
+   ========================================================================== */
+
+.repl-rs-view-panel {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.repl-rs-view-panel.active {
+    display: flex;
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Scroll Container
+   ========================================================================== */
+
+.repl-review-scroll-container::-webkit-scrollbar {
+    width: var(--space-3);
+}
+
+.repl-review-scroll-container::-webkit-scrollbar-thumb {
+    background-color: var(--color-overlay-heavy);
+    border-radius: var(--radius-sm);
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — File Card
+   ========================================================================== */
+
+.repl-diff-file-card {
+    background-color: var(--color-bg-hover);
+    border: var(--space-0_5) solid var(--color-overlay-medium);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: var(--space-2);
+}
+
+.repl-diff-file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-6);
+    background-color: var(--color-bg-hover);
+    border-bottom: var(--space-0_5) solid var(--color-overlay-light);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--duration-normal) ease;
+}
+
+.repl-diff-file-header:hover {
+    background-color: var(--color-overlay-light);
+}
+
+.repl-diff-file-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.repl-diff-file-name {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+}
+
+.repl-diff-file-path {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-dim);
+    margin-left: var(--space-2);
+}
+
+.repl-diff-file-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.repl-diff-chevron {
+    color: var(--color-text-dim);
+    display: flex;
+    align-items: center;
+    margin-left: var(--space-1);
+    transition: transform var(--duration-slow) ease;
+}
+
+.repl-diff-file-card.collapsed .repl-diff-chevron {
+    transform: rotate(-90deg);
+}
+
+.diff-add-count {
+    color: var(--color-success);
+}
+
+.diff-remove-count {
+    color: var(--color-error);
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Code Block
+   ========================================================================== */
+
+.repl-diff-code-block {
+    padding: var(--space-3) var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-md);
+    line-height: var(--line-height-relaxed);
+    background-color: var(--color-bg-input);
+    overflow-x: auto;
+    max-height: calc(var(--space-12) * 25);
+    opacity: 1;
+    transition: max-height var(--duration-slowest) ease, opacity var(--duration-slow) ease, padding var(--duration-slowest) ease;
+}
+
+.repl-diff-file-card.collapsed .repl-diff-code-block {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+}
+
+.repl-diff-code-block pre {
+    margin: 0;
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Revert Button
+   ========================================================================== */
+
+.repl-diff-revert-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--space-10);
+    height: var(--space-10);
+    border-radius: var(--radius-lg);
+    border: none;
+    background: transparent;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    transition: all var(--duration-normal) ease;
+    margin-left: var(--space-2);
+}
+
+.repl-diff-revert-btn:hover {
+    background-color: var(--color-error-bg);
+    color: var(--color-error);
+}
+
+.repl-diff-revert-btn svg {
+    width: var(--space-6);
+    height: var(--space-6);
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Inline Add/Remove Highlights
+   ========================================================================== */
+
+.code-diff-add {
+    display: block;
+    background-color: var(--color-success-bg);
+    color: var(--color-success-text);
+    border-left: var(--space-1) solid var(--color-success);
+    padding-left: var(--space-3);
+    margin: 0 calc(var(--space-6) * -1);
+}
+
+.code-diff-remove {
+    display: block;
+    background-color: var(--color-error-bg);
+    color: var(--color-error-text);
+    border-left: var(--space-1) solid var(--color-error);
+    padding-left: var(--space-3);
+    margin: 0 calc(var(--space-6) * -1);
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Code Comment Popup
+   ========================================================================== */
+
+.repl-code-comment-popup {
+    position: absolute;
+    z-index: var(--z-popover);
+    background-color: var(--color-bg-popup);
+    border: var(--space-0_5) solid var(--color-border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: calc(var(--space-12) * 10);
+    max-width: calc(var(--space-12) * 13);
+}
+
+.repl-code-comment-popup textarea {
+    width: 100%;
+    min-height: var(--space-20);
+    max-height: calc(var(--space-12) * 4);
+    background: var(--color-overlay-medium);
+    border: var(--space-0_5) solid var(--color-border-card);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-md);
+    font-family: var(--font-mono);
+    padding: var(--space-3) var(--space-4);
+    resize: vertical;
+    outline: none;
+}
+
+.repl-code-comment-popup textarea:focus {
+    border-color: var(--color-border-highlight);
+}
+
+.repl-code-comment-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+}
+
+.repl-code-comment-popup-actions button {
+    font-size: var(--font-size-md);
+    padding: var(--space-1_5) var(--space-5);
+    border-radius: var(--radius-md);
+    border: var(--space-0_5) solid var(--color-border-card);
+    cursor: pointer;
+    transition: all var(--duration-normal) ease;
+}
+
+.repl-comment-cancel-btn {
+    background: transparent;
+    color: var(--color-text-dim);
+}
+
+.repl-comment-cancel-btn:hover {
+    background: var(--color-overlay-medium);
+}
+
+.repl-comment-submit-btn {
+    background: var(--color-accent);
+    color: var(--color-text-primary);
+    border-color: var(--color-accent);
+}
+
+.repl-comment-submit-btn:hover {
+    opacity: 0.85;
+}
+
+
+/* ==========================================================================
+   DIFF VIEW — Inline Comment Marker
+   ========================================================================== */
+
+.repl-diff-inline-comment {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-accent-bg);
+    border-left: var(--space-1) solid var(--color-accent);
+    margin: var(--space-1) calc(var(--space-6) * -1);
+}
+
+
+/* ==========================================================================
+   UTILITY — Chevron Flip
+   ========================================================================== */
+
+.repl-chevron-flip {
+    transform: rotate(180deg);
+    display: inline-flex;
+}

@@ -5,19 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "tauri": "tauri",
     "cli": "node ../../node_modules/vite-node/vite-node.mjs --config vite.config.ts src/cli/main.ts",
-    "cli:check": "tsc --noEmit"
+    "cli:check": "tsc --noEmit && npm run command-registry:check",
+    "command-registry:check": "vitest run src/core/tauri-command-registry.test.ts src/shared/chinese-text-regression.test.ts"
   },
   "dependencies": {
     "@crish/agent-runtime": "file:../../packages/agent-runtime",
+    "@crish/shared-types": "file:../../packages/shared-types",
     "@tauri-apps/api": "^2.8.0",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.2.0",
+    "preact": "^10.29.2",
+    "preact-iso": "^2.12.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.10.5",
     "@tauri-apps/cli": "^2.8.4",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.6.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

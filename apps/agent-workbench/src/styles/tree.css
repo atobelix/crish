@@ -1,0 +1,400 @@
+/*
+ * ==========================================================================
+ * TREE — Panel Resizers, Folding Deck, Right Sidebar Tabs, Explorer
+ * ==========================================================================
+ * All design tokens are defined in tokens.css.
+ * No hardcoded values (except 0 and 1). All values reference tokens.
+ * ==========================================================================
+ */
+
+
+/* ==========================================================================
+   Panel Resize Splitters (Vertical)
+   ========================================================================== */
+
+.repl-resizer {
+    position: relative;
+    width: var(--space-0_5);
+    z-index: var(--z-resizer);
+    cursor: col-resize;
+    background-color: var(--color-border-divider);
+    transition: background-color var(--duration-fast) ease, width var(--duration-fast) ease;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+.repl-resizer:hover,
+.repl-resizer.dragging {
+    background-color: var(--color-accent);
+    width: var(--space-1);
+    box-shadow: 0 0 var(--space-3) var(--color-accent-ring);
+}
+
+.repl-resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--space-2) * -1);
+    right: calc(var(--space-2) * -1);
+    cursor: col-resize;
+    z-index: var(--z-sidebar);
+}
+
+.repl-sidebar.hide-sidebar + .repl-resizer-left {
+    display: none;
+}
+
+#main-workspace-shell:has(.repl-right-sidebar.hide-panel) .repl-resizer-right {
+    display: none;
+}
+
+body.dragging-active .repl-sidebar,
+body.dragging-active .repl-right-sidebar,
+body.dragging-active .repl-main-panel-container,
+body.dragging-active .repl-settings-full-panel,
+body.dragging-active .repl-card-subheader {
+    transition: none;
+}
+
+
+/* ==========================================================================
+   Absolutely Positioned Folding Deck
+   ========================================================================== */
+
+.absolute-nav-group {
+    position: absolute;
+    top: var(--space-3_5);
+    left: var(--space-6);
+    z-index: var(--z-modal-backdrop);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.repl-sub-left,
+.repl-sub-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.repl-sub-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--space-6);
+    height: var(--space-6);
+    border-radius: 50%;
+    color: var(--color-text-dim);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+.repl-sub-btn svg {
+    width: var(--font-size-sm);
+    height: var(--font-size-sm);
+    stroke-width: var(--space-1);
+}
+
+.repl-sub-btn:hover {
+    color: var(--color-text-secondary);
+    background-color: var(--color-overlay-medium);
+}
+
+.repl-sub-btn:active {
+    transform: scale(0.92);
+}
+
+.repl-sidebar.hide-sidebar ~ #main-workspace .repl-card-subheader {
+    padding-left: calc(var(--space-6) * 11.5);
+}
+
+
+/* ==========================================================================
+   Horizontal Resizer (Sidebar Projects / Conversations)
+   ========================================================================== */
+
+.repl-sidebar-h-resizer {
+    height: var(--space-2_5);
+    cursor: row-resize;
+    background: transparent;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.repl-sidebar-h-resizer::after {
+    content: '';
+    width: 40%;
+    height: var(--space-1);
+    border-radius: var(--space-0_5);
+    background-color: var(--color-border-divider);
+    transition: background-color var(--duration-fast) ease;
+}
+
+.repl-sidebar-h-resizer:hover::after,
+.repl-sidebar-h-resizer.dragging::after {
+    background-color: var(--color-accent);
+}
+
+
+/* ==========================================================================
+   Sidebar Folder Header (Multi-root)
+   ========================================================================== */
+
+.repl-sidebar-folder-header {
+    position: relative;
+}
+
+.repl-sidebar-folder-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    padding: var(--space-1_5);
+    border-radius: var(--radius-sm);
+    line-height: 0;
+    margin-left: auto;
+    opacity: 0;
+    transition: all var(--duration-instant) ease;
+}
+
+.repl-sidebar-folder-close:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+}
+
+.repl-sidebar-folder-header:hover .repl-sidebar-folder-close {
+    opacity: 1;
+}
+
+
+/* ==========================================================================
+   Right Sidebar Tab Bar & Content
+   ========================================================================== */
+
+.repl-rs-tab-bar {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 0 var(--space-2);
+    gap: var(--space-1);
+    position: relative;
+    z-index: 1;
+}
+
+.repl-rs-tab-list {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: var(--space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.repl-rs-tab-list::-webkit-scrollbar {
+    display: none;
+}
+
+.repl-rs-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.repl-rs-tab-content-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+
+/* ==========================================================================
+   Explorer Tab
+   ========================================================================== */
+
+.repl-rs-explorer-tree-panel {
+    min-height: calc(var(--space-12) * 5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.repl-rs-explorer-tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: none;
+    flex-shrink: 0;
+}
+
+.repl-rs-explorer-tree-title {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-dim);
+    text-transform: uppercase;
+    letter-spacing: var(--space-0_5);
+}
+
+.repl-rs-explorer-tree-body {
+    flex: 1;
+    overflow: auto;
+}
+
+.repl-rs-explorer-preview-panel {
+    flex: 1;
+    min-height: calc(var(--space-12) * 4);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.repl-rs-explorer-preview-body {
+    flex: 1;
+    overflow: auto;
+}
+
+
+/* ==========================================================================
+   Overview Tab
+   ========================================================================== */
+
+.repl-rs-overview {
+    padding: var(--space-6);
+    gap: var(--space-6);
+}
+
+.repl-rs-text-center {
+    text-align: center;
+}
+
+
+/* ==========================================================================
+   Tab Buttons
+   ========================================================================== */
+
+.repl-rs-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2_5) var(--space-4);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-snug);
+    color: var(--color-text-dim);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--duration-instant), color var(--duration-instant);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.repl-rs-tab-btn.active {
+    color: var(--color-accent);
+    background: var(--color-accent-bg);
+}
+
+.repl-rs-tab-btn:hover:not(.active) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-secondary);
+}
+
+.repl-rs-tab-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.repl-rs-tab-label {
+    display: inline-block;
+}
+
+.repl-rs-tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--font-size-sm);
+    height: var(--font-size-sm);
+    border-radius: var(--radius-xs);
+    margin-left: var(--space-1);
+    opacity: 0.5;
+    transition: all var(--duration-instant) ease;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.repl-rs-tab-close:hover {
+    opacity: 1;
+    background-color: var(--color-overlay-heavy);
+    color: var(--color-error);
+}
+
+.repl-rs-tab-close svg {
+    width: var(--font-size-sm);
+    height: var(--font-size-sm);
+}
+
+.repl-rs-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    padding: var(--space-2) var(--space-3);
+    flex-shrink: 0;
+    line-height: 0;
+    transition: color var(--duration-fast) ease;
+    border-radius: var(--radius-md);
+}
+
+.repl-rs-close-btn:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+}
+
+
+/* ==========================================================================
+   Horizontal Resizer (Explorer Split Panels)
+   ========================================================================== */
+
+.repl-rs-h-resizer {
+    height: var(--space-2_5);
+    cursor: row-resize;
+    background: transparent;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.repl-rs-h-resizer::after {
+    content: '';
+    width: 40%;
+    height: var(--space-1);
+    border-radius: var(--space-0_5);
+    background-color: var(--color-border-divider);
+    transition: background-color var(--duration-fast) ease;
+}
+
+.repl-rs-h-resizer:hover::after,
+.repl-rs-h-resizer.dragging::after {
+    background-color: var(--color-accent);
+}

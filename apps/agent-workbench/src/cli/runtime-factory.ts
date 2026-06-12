@@ -6,14 +6,13 @@ import {
   createContextStateTools,
   createLocalWorkspaceTools,
   createPermissionPolicy,
+  createProductRuntimeDefaults,
   InMemoryContextState,
   JsonlSessionStore,
   OpenAICompatibleProvider,
   listOpenAICompatibleModels,
   type AgentRuntimeOptions,
   type AgentProvider,
-  type ContextSummaryRequest,
-  type ContextSummarizer,
   type OpenAICompatibleProviderOptions
 } from "@crish/agent-runtime";
 import {
@@ -103,34 +102,14 @@ export async function createWorkbenchRuntime(options: WorkbenchRuntimeFactoryOpt
     resumeSession: options.resumeSession,
     maxTurns: options.maxTurns ?? budgetProfile.maxTurns,
     permissionPolicy: createPermissionPolicy({ mode: "project" }),
-    contextCompression: {
-      enabled: true,
+    ...createProductRuntimeDefaults({
+      cwd,
       contextWindowTokens: settings.provider.model.contextWindowTokens,
       thresholdTokens: settings.provider.model.autoCompactAtTokens,
-      targetRecentTokens: Math.min(64_000, Math.floor(settings.provider.model.preferredWorkingTokens * 0.35)),
-      minRecentMessages: 8,
-      maxSummaryTokens: 8_000,
-      summarizer: new ExtractiveContextSummarizer(),
+      preferredWorkingTokens: settings.provider.model.preferredWorkingTokens,
       contextState,
-      toolOutputBudget: {
-        inlineChars: 8_000,
-        headRatio: 0.55,
-        artifactChars: 200_000,
-        artifactDir: resolve(cwd, ".codex", "agent-artifacts")
-      }
-    },
-    toolOutputBudget: {
-      inlineChars: 8_000,
-      headRatio: 0.55,
-      artifactChars: 200_000,
       artifactDir: resolve(cwd, ".codex", "agent-artifacts")
-    },
-    recovery: {
-      enabled: true,
-      maxConsecutiveToolErrors: 2,
-      maxRepeatedToolCalls: 3,
-      maxSteeringMessages: 1
-    }
+    })
   };
 
   return {
@@ -275,46 +254,4 @@ function resolveRelativeProviderPaths(
 function resolveOptionalPath(path: string | undefined, baseDir: string): string | undefined {
   if (!path) return undefined;
   return isAbsolute(path) ? path : resolve(baseDir, path);
-}
-
-class ExtractiveContextSummarizer implements ContextSummarizer {
-  async summarize(request: ContextSummaryRequest): Promise<string> {
-    const parts = [
-      "上下文检查点",
-      "",
-      "已完成：",
-      ...listOrFallback(request.completedTaskSummaries.slice(-12), "- 暂无完成项"),
-      "",
-      "待处理：",
-      ...listOrFallback(request.pendingTasks.slice(-12), "- 暂无待处理项"),
-      "",
-      "近期事件：",
-      ...listOrFallback(request.sessionEvents.slice(-16), "- 暂无事件"),
-      "",
-      "关键文件：",
-      ...listOrFallback(request.fileSnapshotHints.slice(-12), "- 暂无文件锚点"),
-      "",
-      "成功命令：",
-      ...listOrFallback(request.recentSuccessfulCommands.slice(-8), "- 暂无成功命令"),
-      "",
-      "失败诊断：",
-      ...listOrFallback(request.recentFailedDiagnostics.slice(-8), "- 暂无失败诊断"),
-      "",
-      "历史摘要：",
-      trimForSummary(request.previousSummary ?? request.serializedConversation, 12_000)
-    ];
-    return trimForSummary(parts.join("\n"), Math.max(4_000, request.maxSummaryTokens * 4));
-  }
-}
-
-function listOrFallback(items: string[], fallback: string): string[] {
-  return items.length > 0 ? items : [fallback];
-}
-
-function trimForSummary(text: string, maxChars: number): string {
-  const normalized = text.trim();
-  if (normalized.length <= maxChars) return normalized;
-  const headChars = Math.floor(maxChars * 0.58);
-  const tailChars = maxChars - headChars;
-  return `${normalized.slice(0, headChars)}\n\n[中间省略 ${normalized.length - maxChars} 字]\n\n${normalized.slice(-tailChars)}`;
 }

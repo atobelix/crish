@@ -93,4 +93,12 @@ export const Events = {
   // 系统相关
   ERROR: 'system:error',
   NOTIFICATION: 'system:notification',
+
+  // 资源管理器相关
+  EXPLORER_OPEN_FILE: 'explorer:open-file',
+  EXPLORER_LOCATE_FILE: 'explorer:locate-file',
+
+  // 标签相关
+  TAB_OPEN: 'tab:open',
+  TAB_CLOSE: 'tab:close',
 } as const;

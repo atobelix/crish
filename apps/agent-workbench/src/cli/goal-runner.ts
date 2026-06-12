@@ -1,7 +1,11 @@
-import { assessTask, createContinuationDecision } from "../shared/task-controller";
 import { calculateCompletion, type WorkbenchContinuationDecision, type WorkbenchRunEvent, type WorkbenchTaskSnapshot } from "../shared/workbench-contract";
 import { runWorkbenchTask, type WorkbenchRunnerBudgetOptions, type WorkbenchRunnerOptions, type WorkbenchRunnerYield } from "./workbench-runner";
 import type { WorkbenchRuntimeFactoryResult } from "./runtime-factory";
+import {
+  SnapshotAwareGoalStrategy,
+  type SnapshotAwareRoundContext
+} from "./snapshot-aware-goal-strategy";
+import type { GoalContinuationDecision } from "@crish/agent-orchestrator";
 
 export type WorkbenchGoalRunTask = (options: WorkbenchRunnerOptions) => AsyncIterable<WorkbenchRunnerYield>;
 const DEFAULT_GOAL_BACKGROUND_DRAIN_TIMEOUT_MS = 15 * 60_000;
@@ -52,22 +56,42 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
   const providerRateLimitBackoffMs = Math.max(0, Math.floor(options.providerRateLimitBackoffMs ?? DEFAULT_PROVIDER_RATE_LIMIT_BACKOFF_MS));
   let snapshot = options.initialSnapshot ? sanitizeInitialGoalSnapshot(options.initialSnapshot) : undefined;
   const visibleGoal = options.visibleGoal?.trim() || snapshot?.userGoal.trim() || options.prompt.trim();
+
+  // 创建策略实例（整个 goal 循环共享），用于决策、签名和 prompt 构建
+  const strategy = new SnapshotAwareGoalStrategy({
+    visibleGoal,
+    snapshotResolver: ({ roundContext }) => {
+      const ctx = roundContext as SnapshotAwareRoundContext | undefined;
+      return ctx?.latestSnapshot;
+    }
+  });
+
+  // 初始 prompt：从快照恢复时使用策略的审计 prompt 构建能力
   const initialPrompt = snapshot
-    ? buildGoalAuditPrompt({
-        snapshot: normalizeVisibleGoal(snapshot, visibleGoal),
-        visibleGoal,
+    ? (strategy.buildNextRoundPrompt({
         decision: {
           action: "continue",
           reason: "从保存的任务快照恢复；旧完成标记只能作为参考，必须重新读取实际文件、事件日志和验收证据后再判断是否完成",
           prompt: options.prompt.trim() || "continue"
         },
         roundIndex: -1,
-        events: []
-    })
+        goalState: {
+          status: "running", maxRounds, maxStalledRounds: 2,
+          currentRound: -1, completedRounds: 0, stalledRounds: 0
+        },
+        events: [],
+        roundContext: { latestSnapshot: normalizeVisibleGoal(snapshot, visibleGoal) } as SnapshotAwareRoundContext
+      }) ?? (options.prompt.trim() || visibleGoal))
     : options.prompt.trim() || visibleGoal;
   const rounds: WorkbenchGoalRound[] = [];
   let currentPrompt = initialPrompt;
-  let previousSignature = snapshot ? progressSignature(snapshot) : "";
+  let previousSignature = snapshot
+    ? strategy.computeProgressSignature({
+        decision: { action: "continue", reason: "" },
+        events: [],
+        roundContext: { latestSnapshot: snapshot } as SnapshotAwareRoundContext
+      })
+    : "";
   let stalledRounds = 0;
   let productiveRounds = 0;
   let consecutiveTransientProviderErrors = 0;
@@ -168,22 +192,61 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
         stoppedReason: "error"
       };
     }
+
+    // -- Strategy-based assessment (replaces inline continuation logic) --
     const resumeDecision = continuationFromResumeEvent(events);
-    const auditedDecision = snapshot ? createContinuationDecision(snapshot) : pauseDecision("本轮没有生成任务快照");
-    let decision =
-      resumeDecision && auditedDecision.action === "continue"
-        ? { ...resumeDecision, prompt: resumeDecision.prompt }
-        : auditedDecision;
-    if (snapshot?.tokenBudget?.reached) {
-      decision = pauseDecision("单次任务 token 预算已用完，需要用户确认是否继续");
-    }
-    decision = decorateGoalContinuationDecision({
-      decision,
-      snapshot,
+    const strategy = new SnapshotAwareGoalStrategy({
       visibleGoal,
-      roundIndex: index,
-      events
+      snapshotResolver: ({ roundContext }) => {
+        const ctx = roundContext as SnapshotAwareRoundContext | undefined;
+        return ctx?.latestSnapshot;
+      }
     });
+
+    const goalDecision = strategy.assessRound({
+      run: { status: "running" } as any,
+      session: { id: "", cwd: options.cwd, createdAt: "", updatedAt: "", status: "open" },
+      roundIndex: index,
+      prompt: currentPrompt,
+      events: [],
+      roundContext: {
+        latestSnapshot: snapshot,
+        workbenchResumeDecision: resumeDecision
+          ? mapToGoalDecision(resumeDecision)
+          : undefined
+      } as SnapshotAwareRoundContext
+    });
+
+    // Map orchestrator decision back to workbench format
+    const decision = mapToWorkbenchDecision(goalDecision);
+
+    // Enrich the continuation prompt with audit context
+    if (decision.action === "continue" && decision.prompt && snapshot) {
+      // 当 resume 事件覆盖了 continue 决策时，使用 resume prompt 作为"原始续跑指令"
+      const promptForAudit = resumeDecision?.prompt ?? decision.prompt;
+      const enrichedPrompt = strategy.buildNextRoundPrompt({
+        decision: {
+          ...goalDecision,
+          prompt: promptForAudit
+        },
+        roundIndex: index,
+        goalState: {
+          status: "running",
+          maxRounds,
+          maxStalledRounds,
+          currentRound: index,
+          completedRounds: productiveRounds,
+          stalledRounds
+        },
+        events: [],
+        roundContext: {
+          latestSnapshot: snapshot,
+          workbenchEvents: events
+        } as SnapshotAwareRoundContext
+      });
+      decision.prompt = enrichedPrompt ?? decision.prompt;
+    }
+
     const round = { index, prompt: currentPrompt, events, snapshot, decision };
     rounds.push(round);
     await options.onRoundEnd?.(round);
@@ -196,12 +259,17 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
       return { rounds, snapshot, decision, stoppedReason: "pause" };
     }
 
-    const signature = snapshot ? progressSignature(snapshot) : "";
+    // -- Stall detection using strategy's progress signature --
+    const signature = strategy.computeProgressSignature({
+      decision: goalDecision,
+      events: [],
+      roundContext: { latestSnapshot: snapshot } as SnapshotAwareRoundContext
+    });
     stalledRounds = signature === previousSignature ? stalledRounds + 1 : 0;
     previousSignature = signature;
     if (stalledRounds >= maxStalledRounds) {
-      decision = pauseDecision(`连续 ${stalledRounds + 1} 轮没有新的进度或证据，已暂停自动续跑`);
-      return { rounds, snapshot, decision, stoppedReason: "stalled" };
+      const stalledDecision = pauseDecision(`连续 ${stalledRounds + 1} 轮没有新的进度或证据，已暂停自动续跑`);
+      return { rounds, snapshot, decision: stalledDecision, stoppedReason: "stalled" };
     }
 
     currentPrompt = decision.prompt;
@@ -234,7 +302,7 @@ function sanitizeInitialGoalSnapshot(snapshot: WorkbenchTaskSnapshot): Workbench
   const plan = restored.plan.map((item, index) => ({
     ...item,
     state: index === 0 ? ("doing" as const) : ("todo" as const),
-    note: item.note ? `恢复后重新审计：${trimForPrompt(item.note, 180)}` : "恢复后需要重新审计"
+    note: item.note ? `恢复后重新审计：${trimText(item.note, 180)}` : "恢复后需要重新审计"
   }));
   const acceptance = restored.acceptance.map((item) =>
     item.required
@@ -272,19 +340,6 @@ function looksFinalOrOvertrusted(snapshot: WorkbenchTaskSnapshot): boolean {
   );
 }
 
-function progressSignature(snapshot: WorkbenchTaskSnapshot): string {
-  return JSON.stringify({
-    state: snapshot.state,
-    completionPercent: snapshot.completionPercent,
-    plan: snapshot.plan.map((item) => [item.id, item.state, item.note ?? ""]),
-    acceptance: snapshot.acceptance.map((item) => [item.id, item.passed, item.evidenceIds.join(",")]),
-    evidenceCount: snapshot.evidence.length,
-    changeCount: snapshot.changes.length,
-    confirmationCount: snapshot.confirmations.length,
-    backgroundTasks: snapshot.backgroundTasks.map((item) => [item.id, item.state, item.heartbeatCount, item.exitCode ?? ""])
-  });
-}
-
 function continuationFromResumeEvent(events: WorkbenchRunEvent[]): WorkbenchContinuationDecision | undefined {
   for (const event of [...events].reverse()) {
     if (event.type !== "resume-requested") continue;
@@ -310,110 +365,22 @@ function continuationFromPayload(payload: unknown): WorkbenchContinuationDecisio
   };
 }
 
-function decorateGoalContinuationDecision(input: {
-  decision: WorkbenchContinuationDecision;
-  snapshot?: WorkbenchTaskSnapshot;
-  visibleGoal: string;
-  roundIndex: number;
-  events: WorkbenchRunEvent[];
-}): WorkbenchContinuationDecision {
-  if (input.decision.action !== "continue" || !input.decision.prompt || !input.snapshot) return input.decision;
+/** 将 WorkbenchContinuationDecision 映射为 GoalContinuationDecision（供策略使用） */
+function mapToGoalDecision(decision: WorkbenchContinuationDecision): GoalContinuationDecision {
   return {
-    ...input.decision,
-    prompt: buildGoalAuditPrompt({
-      snapshot: input.snapshot,
-      visibleGoal: input.visibleGoal,
-      decision: input.decision,
-      roundIndex: input.roundIndex,
-      events: input.events
-    })
+    action: decision.action === "pause" ? "block" : decision.action,
+    reason: decision.reason,
+    ...(decision.prompt ? { prompt: decision.prompt } : {})
   };
 }
 
-function buildGoalAuditPrompt(input: {
-  snapshot: WorkbenchTaskSnapshot;
-  visibleGoal: string;
-  decision: WorkbenchContinuationDecision;
-  roundIndex: number;
-  events: WorkbenchRunEvent[];
-}): string {
-  const assessment = assessTask(input.snapshot);
-  return [
-    "自动续跑审计：",
-    `轮次：${input.roundIndex + 1}`,
-    `当前目标：${trimForPrompt(input.visibleGoal, 3_000)}`,
-    `续跑原因：${input.decision.reason}`,
-    `当前完成度：${assessment.completionPercent}%`,
-    "",
-    "已完成计划：",
-    ...listOrFallback(
-      input.snapshot.plan.filter((item) => item.state === "done").map((item) => `- ${trimForPrompt(item.title, 240)}`),
-      "- 暂无已完成计划"
-    ),
-    "",
-    "未完成计划：",
-    ...listOrFallback(
-      assessment.activePlanItems.map((item) => `- ${trimForPrompt(item.title, 240)}${item.note ? `：${trimForPrompt(item.note, 240)}` : ""}`),
-      "- 暂无未完成计划"
-    ),
-    "",
-    "未完成验收：",
-    ...listOrFallback(assessment.missingAcceptance.map((item) => `- ${trimForPrompt(item.title, 240)}`), "- 暂无未完成验收"),
-    "",
-    "缺少证据的验收：",
-    ...listOrFallback(assessment.acceptedWithoutEvidence.map((item) => `- ${trimForPrompt(item.title, 240)}`), "- 暂无缺证验收"),
-    "",
-    "最近证据：",
-    ...listOrFallback(
-      input.snapshot.evidence.slice(-6).map((item) => `- ${trimForPrompt(item.title, 240)}${item.detail ? `：${trimForPrompt(item.detail, 600)}` : ""}`),
-      "- 暂无证据"
-    ),
-    "",
-    "最近变更：",
-    ...listOrFallback(
-      input.snapshot.changes.slice(-6).map((item) => `- ${item.path} +${item.additions} -${item.deletions} ${item.state}`),
-      "- 暂无变更"
-    ),
-    "",
-    "回退建议：",
-    ...rollbackAdviceLines(input.snapshot),
-    "",
-    "后台任务：",
-    ...listOrFallback(
-      input.snapshot.backgroundTasks
-        .slice(-6)
-        .map((item) => `- ${trimForPrompt(item.title, 240)}：${item.state}${item.exitCode === undefined ? "" : `，exit=${item.exitCode ?? "null"}`}`),
-      "- 暂无后台任务"
-    ),
-    "",
-    "披露问题：",
-    ...listOrFallback(
-      input.snapshot.disclosureIssues.slice(-6).map((item) => `- ${trimForPrompt(item.title, 240)}：${trimForPrompt(item.suggestion, 360)}`),
-      "- 暂无披露问题"
-    ),
-    "",
-    "本轮事件摘要：",
-    ...listOrFallback(input.events.slice(-6).map((item) => `- ${item.type}：${trimForPrompt(item.message, 500)}`), "- 暂无事件"),
-    "",
-    "下一轮执行要求：",
-    "- 先检查未完成验收和缺少证据的验收，再决定下一步。",
-    "- 不要扩大任务范围，不要重复已经有证据支持的工作。",
-    "- 如果需要证明质量，优先运行检查命令、读取关键文件或补充证据。",
-    "- 如果目标已经完成，必须把计划、验收和证据更新到可审计状态后再结束。",
-    "- 如果遇到阻塞或需要用户判断，暂停并说明原因。",
-    "",
-    "原始续跑指令：",
-    trimForPrompt(input.decision.prompt, 4_000)
-  ].join("\n");
-}
-
-function rollbackAdviceLines(snapshot: WorkbenchTaskSnapshot): string[] {
-  if (snapshot.changes.length === 0) return ["- 暂无需要回退的变更"];
-  return snapshot.changes.slice(-8).map((item) => {
-    const checkpoint = item.checkpointId ? `可通过 checkpoint ${item.checkpointId} 回退` : "缺少 checkpoint，继续修改前应先补充检查点或重新读取确认";
-    const review = item.state === "checked" ? "已检查" : item.state === "needs-review" ? "需要复查" : "仍是草稿";
-    return `- ${item.path}：${checkpoint}，${review}`;
-  });
+/** 将 GoalContinuationDecision 映射回 WorkbenchContinuationDecision（供 workbench 消费） */
+function mapToWorkbenchDecision(decision: GoalContinuationDecision): WorkbenchContinuationDecision {
+  return {
+    action: decision.action === "block" ? "pause" : decision.action,
+    reason: decision.reason,
+    ...(decision.prompt ? { prompt: decision.prompt } : {})
+  };
 }
 
 function providerRateLimitReasonFromEvents(events: WorkbenchRunEvent[]): string | undefined {
@@ -476,20 +443,10 @@ function trimRunErrorReason(reason: string): string {
   return normalized.length <= 500 ? normalized : `${normalized.slice(0, 500)}...`;
 }
 
-function trimForPrompt(text: string | undefined, maxChars: number): string {
-  const normalized = (text ?? "").replace(/\r\n/g, "\n").trim();
+function trimText(text: string | undefined, maxChars: number): string {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
-  if (looksLikeGatewayChallenge(normalized)) {
-    return `[gateway-challenge] Cloudflare managed challenge HTML omitted (${normalized.length} chars).`;
-  }
-  if (normalized.length <= maxChars) return normalized;
-  const headChars = Math.max(1, Math.floor(maxChars * 0.62));
-  const tailChars = Math.max(1, maxChars - headChars);
-  return `${normalized.slice(0, headChars)}\n[中间省略 ${normalized.length - maxChars} 字符]\n${normalized.slice(-tailChars)}`;
-}
-
-function looksLikeGatewayChallenge(text: string): boolean {
-  return /cloudflare|just a moment|cf_chl|challenge-platform|Enable JavaScript and cookies/i.test(text);
+  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars)}...`;
 }
 
 function delay(ms: number): Promise<void> {
@@ -501,10 +458,6 @@ function pauseDecision(reason: string): WorkbenchContinuationDecision {
     action: "pause",
     reason
   };
-}
-
-function listOrFallback(items: string[], fallback: string): string[] {
-  return items.length > 0 ? items : [fallback];
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {
