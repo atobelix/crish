@@ -1,21 +1,29 @@
 import { budgetTextForContext, stringifyToolOutput, type ToolOutputBudgetOptions } from "./tool-output-budget";
+import { createStructuredSummary, structuredSummaryCacheKey } from "./structured-summary";
 import type {
   AgentMessage,
   AgentMessageBlock,
-  ContextCompressionOptions,
+  ContextCompressionCacheBoundaryMetadata,
+  ContextCompressionHandoffMetadata,
+  ContextCompressionPolicyMetadata,
+  ContextCompressionReason,
   ContextCompressionRecord,
   ContextCompressionTrigger,
-  ContextStateSnapshot,
   JsonObject,
-  ProviderUsage,
   TextBlock,
   ToolCallBlock,
   ToolResultBlock
+} from "@crish/shared-types";
+import type {
+  ContextCompressionRuntimeOptions,
+  ContextStateSnapshot,
+  ProviderUsage
 } from "./types";
 import { createId, nowIso } from "./session";
 
 export interface ContextCompressionResult {
   record: ContextCompressionRecord;
+  summaryMessage: AgentMessage;
   messages: AgentMessage[];
 }
 
@@ -28,6 +36,10 @@ export interface ContextTokenEstimate {
 
 export interface ContextCompressionDecision {
   shouldCompress: boolean;
+  trigger: ContextCompressionTrigger;
+  reason: ContextCompressionReason;
+  policy: ContextCompressionPolicyMetadata;
+  handoffIntent: boolean;
   tokensBefore: number;
   thresholdTokens: number;
 }
@@ -44,32 +56,29 @@ const DEFAULT_MIN_MESSAGES_TO_COMPRESS = 4;
 const DEFAULT_MAX_SUMMARY_TOKENS = 4_000;
 
 export class ContextCompressor {
-  constructor(private readonly options: ContextCompressionOptions) {}
+  constructor(private readonly options: ContextCompressionRuntimeOptions) {}
 
-  shouldCompress(messages: AgentMessage[], trigger: ContextCompressionTrigger = "auto"): ContextCompressionDecision {
+  shouldCompress(messages: AgentMessage[], trigger: ContextCompressionTrigger = "threshold"): ContextCompressionDecision {
     const tokensBefore = estimateContextTokens(messages).tokens;
     const thresholdTokens = this.thresholdTokens();
     const hasEnoughMessages =
       messages.length > this.minRecentMessages() &&
       messages.length >= (this.options.minMessagesToCompress ?? DEFAULT_MIN_MESSAGES_TO_COMPRESS) + 1;
-    return {
-      shouldCompress: hasEnoughMessages && (trigger !== "auto" || tokensBefore >= thresholdTokens),
-      tokensBefore,
-      thresholdTokens
-    };
+    return createCompressionDecision(trigger, tokensBefore, thresholdTokens, hasEnoughMessages);
   }
 
-  async maybeCompress(messages: AgentMessage[], trigger: ContextCompressionTrigger = "auto"): Promise<ContextCompressionResult | null> {
+  async maybeCompress(messages: AgentMessage[], trigger: ContextCompressionTrigger = "threshold"): Promise<ContextCompressionResult | null> {
     if (messages.length === 0) return null;
     const decision = this.shouldCompress(messages, trigger);
     if (!decision.shouldCompress) return null;
-    return this.compress(messages, trigger, decision.tokensBefore);
+    return this.compress(messages, trigger, decision.tokensBefore, decision);
   }
 
   async compress(
     messages: AgentMessage[],
     trigger: ContextCompressionTrigger = "manual",
-    tokensBefore = estimateContextTokens(messages).tokens
+    tokensBefore = estimateContextTokens(messages).tokens,
+    decision = createCompressionDecision(trigger, tokensBefore, this.thresholdTokens(), true)
   ): Promise<ContextCompressionResult | null> {
     const firstKeptIndex = findFirstKeptMessageIndex(messages, this.targetRecentTokens(), this.minRecentMessages());
     const compressed = messages.slice(0, firstKeptIndex);
@@ -86,6 +95,9 @@ export class ContextCompressor {
     });
     const summary = await this.options.summarizer.summarize({
       trigger,
+      reason: decision.reason,
+      policy: decision.policy,
+      handoffIntent: decision.handoffIntent,
       serializedConversation,
       previousSummary: state.previousCompressionSummary,
       recentSuccessfulCommands: commandFacts.successful,
@@ -96,32 +108,81 @@ export class ContextCompressor {
       fileSnapshotHints: state.fileSnapshotHints,
       maxSummaryTokens: this.options.maxSummaryTokens ?? DEFAULT_MAX_SUMMARY_TOKENS
     });
+    const tokensAfter = estimateContextTokens([createCompressionSummaryMessage(summary), ...kept]).tokens;
+    const structuredSummary = createStructuredSummary({
+      kind: "context-compression",
+      goal: lastUserMessageText(messages) ?? undefined,
+      progress: [summary, ...state.completedTaskSummaries],
+      nextSteps: state.pendingTasks,
+      criticalContext: [
+        ...state.sessionEvents,
+        ...state.fileSnapshotHints,
+        ...commandFacts.successful,
+        ...commandFacts.failed
+      ],
+      readFiles: readFilesFromSnapshotHints(state.fileSnapshotHints),
+      modifiedFiles: modifiedFilesFromSnapshotHints(state.fileSnapshotHints),
+      risks: commandFacts.failed,
+      sourceIds: messages.map((message) => message.id)
+    });
+    const cacheBoundary = createCompressionCacheBoundary({
+      reason: decision.reason,
+      structuredSummary,
+      compressed,
+      kept
+    });
+    const handoff = createHandoffMetadata({
+      trigger,
+      reason: decision.reason,
+      policy: decision.policy,
+      summary,
+      messages,
+      compressed,
+      kept,
+      tokensBefore,
+      tokensAfter,
+      thresholdTokens: decision.thresholdTokens,
+      state,
+      commandFacts
+    });
 
     const record: ContextCompressionRecord = {
       id: createId("compact"),
       trigger,
+      reason: decision.reason,
+      policy: decision.policy,
       summary,
       firstKeptMessageId: kept[0]?.id,
       compressedMessageIds: compressed.map((message) => message.id),
       keptMessageIds: kept.map((message) => message.id),
       tokensBefore,
-      tokensAfter: estimateContextTokens([createCompressionSummaryMessage(summary), ...kept]).tokens,
+      tokensAfter,
+      thresholdTokens: decision.thresholdTokens,
       createdAt: nowIso(),
+      handoff,
+      cacheBoundary,
       details: compactJson({
+        policy: decision.policy,
+        handoffIntent: decision.handoffIntent,
         recentSuccessfulCommands: commandFacts.successful,
         recentFailedDiagnostics: commandFacts.failed,
         completedTaskSummaries: state.completedTaskSummaries,
         pendingTasks: state.pendingTasks,
         sessionEvents: state.sessionEvents,
-        fileSnapshotHints: state.fileSnapshotHints
+        fileSnapshotHints: state.fileSnapshotHints,
+        structuredSummary: structuredSummary as unknown as JsonObject,
+        structuredSummaryCacheKey: cacheBoundary.structuredSummaryCacheKey,
+        cacheBoundary: cacheBoundary as unknown as JsonObject
       })
     };
 
     await this.options.contextState?.recordCompression?.(record);
+    const summaryMessage = createCompressionSummaryMessage(summary, record);
 
     return {
       record,
-      messages: [createCompressionSummaryMessage(summary, record), ...kept]
+      summaryMessage,
+      messages: [summaryMessage, ...kept]
     };
   }
 
@@ -153,16 +214,172 @@ export function createCompressionSummaryMessage(summary: string, record?: Contex
       kind: "context-compression-summary",
       compactionId: record?.id,
       trigger: record?.trigger,
+      reason: record?.reason,
+      policy: record?.policy,
+      handoff: record?.handoff,
       tokensBefore: record?.tokensBefore,
-      tokensAfter: record?.tokensAfter
+      tokensAfter: record?.tokensAfter,
+      thresholdTokens: record?.thresholdTokens,
+      cacheBoundary: record?.cacheBoundary
     })
   };
 }
 
-export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEstimate {
-  let usageInfo: { usage: ProviderUsage; index: number } | undefined;
+function createCompressionCacheBoundary(input: {
+  reason: ContextCompressionReason;
+  structuredSummary: ReturnType<typeof createStructuredSummary>;
+  compressed: AgentMessage[];
+  kept: AgentMessage[];
+}): ContextCompressionCacheBoundaryMetadata {
+  const stablePrefixHash = input.structuredSummary.stableHash;
+  const compressedMessageIds = input.compressed.map((message) => message.id);
+  const keptMessageIds = input.kept.map((message) => message.id);
+  return compactJson({
+    kind: "context-compression-cache-boundary",
+    version: 1,
+    stablePrefixHash,
+    cacheKey: `context-compression:v1:${stablePrefixHash}`,
+    structuredSummaryCacheKey: structuredSummaryCacheKey(input.structuredSummary),
+    structuredSummaryStableHash: input.structuredSummary.stableHash,
+    invalidates: ["prompt-stable-prefix", "message-history", "usage-baseline", "volatile-context"],
+    invalidationReason: input.reason,
+    compressedMessageIds,
+    keptMessageIds,
+    firstKeptMessageId: input.kept[0]?.id
+  }) as unknown as ContextCompressionCacheBoundaryMetadata;
+}
+
+function createCompressionDecision(
+  trigger: ContextCompressionTrigger,
+  tokensBefore: number,
+  thresholdTokens: number,
+  hasEnoughMessages: boolean
+): ContextCompressionDecision {
+  const reason = reasonForTrigger(trigger);
+  const thresholdExceeded = tokensBefore >= thresholdTokens;
+  const thresholdGated = isThresholdGatedTrigger(trigger);
+  const policy: ContextCompressionPolicyMetadata = {
+    tier: tierForReason(reason),
+    action: actionForReason(reason),
+    forced: !thresholdGated,
+    thresholdExceeded,
+    providerRetry: false
+  };
+  return {
+    shouldCompress: hasEnoughMessages && (!thresholdGated || thresholdExceeded),
+    trigger,
+    reason,
+    policy,
+    handoffIntent: policy.action === "promote-handoff",
+    tokensBefore,
+    thresholdTokens
+  };
+}
+
+function reasonForTrigger(trigger: ContextCompressionTrigger): ContextCompressionReason {
+  if (trigger === "auto" || trigger === "preflight") return "threshold";
+  return trigger;
+}
+
+function isThresholdGatedTrigger(trigger: ContextCompressionTrigger): boolean {
+  return trigger === "auto" || trigger === "threshold";
+}
+
+function tierForReason(reason: ContextCompressionReason): ContextCompressionPolicyMetadata["tier"] {
+  if (reason === "manual") return "manual";
+  if (reason === "overflow" || reason === "incomplete") return "recovery";
+  if (reason === "idle") return "background";
+  if (reason === "handoff") return "handoff";
+  return "proactive";
+}
+
+function actionForReason(reason: ContextCompressionReason): ContextCompressionPolicyMetadata["action"] {
+  if (reason === "overflow" || reason === "incomplete" || reason === "handoff") return "promote-handoff";
+  return "compact";
+}
+
+function createHandoffMetadata(input: {
+  trigger: ContextCompressionTrigger;
+  reason: ContextCompressionReason;
+  policy: ContextCompressionPolicyMetadata;
+  summary: string;
+  messages: AgentMessage[];
+  compressed: AgentMessage[];
+  kept: AgentMessage[];
+  tokensBefore: number;
+  tokensAfter: number;
+  thresholdTokens: number;
+  state: ContextStateSnapshot;
+  commandFacts: { successful: string[]; failed: string[] };
+}): ContextCompressionHandoffMetadata {
+  return {
+    trigger: input.trigger,
+    reason: input.reason,
+    tier: input.policy.tier,
+    action: input.policy.action,
+    providerRetry: input.policy.providerRetry,
+    summary: input.summary,
+    compressedMessageCount: input.compressed.length,
+    keptMessageCount: input.kept.length,
+    tokensBefore: input.tokensBefore,
+    tokensAfter: input.tokensAfter,
+    thresholdTokens: input.thresholdTokens,
+    ...(input.kept[0]?.id ? { firstKeptMessageId: input.kept[0].id } : {}),
+    ...(input.messages.at(-1)?.id ? { lastMessageId: input.messages.at(-1)!.id } : {}),
+    ...lastUserMessageMetadata(input.messages),
+    completedTaskSummaries: input.state.completedTaskSummaries,
+    pendingTasks: input.state.pendingTasks,
+    sessionEvents: input.state.sessionEvents,
+    fileSnapshotHints: input.state.fileSnapshotHints,
+    recentSuccessfulCommands: input.commandFacts.successful,
+    recentFailedDiagnostics: input.commandFacts.failed
+  };
+}
+
+function lastUserMessageMetadata(messages: AgentMessage[]): { lastUserMessageId?: string } {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
+    if (message.role === "user") return { lastUserMessageId: message.id };
+  }
+  return {};
+}
+
+function lastUserMessageText(messages: AgentMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    if (message.role !== "user") continue;
+    const text = textFromBlocks(message.blocks).trim();
+    return text.length > 0 ? text : message.id;
+  }
+  return undefined;
+}
+
+function readFilesFromSnapshotHints(hints: string[]): string[] {
+  return filePathsFromSnapshotHints(hints, (hint) => !/\b(?:checkpoint|edit|write|mutation|modified|restore)\b/i.test(hint));
+}
+
+function modifiedFilesFromSnapshotHints(hints: string[]): string[] {
+  return filePathsFromSnapshotHints(hints, (hint) => /\b(?:checkpoint|edit|write|mutation|modified|restore)\b/i.test(hint));
+}
+
+function filePathsFromSnapshotHints(hints: string[], predicate: (hint: string) => boolean): string[] {
+  const paths = new Set<string>();
+  for (const hint of hints) {
+    if (!predicate(hint)) continue;
+    const path = hint.split(":")[0]?.trim();
+    if (path) paths.add(path.replace(/\\/g, "/"));
+  }
+  return [...paths].sort();
+}
+
+export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEstimate {
+  const latestCompressionSummary = findLatestCompressionSummary(messages);
+  let usageInfo: { usage: ProviderUsage; index: number } | undefined;
+  for (let index = messages.length - 1; index > latestCompressionSummary.index; index--) {
+    const message = messages[index]!;
+    if (latestCompressionSummary.createdAtMs !== undefined && messageCreatedAtMs(message) <= latestCompressionSummary.createdAtMs) {
+      continue;
+    }
     const usage = providerUsageFromMessage(message);
     if (usage?.totalTokens !== undefined) {
       usageInfo = { usage, index };
@@ -183,6 +400,20 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEst
     trailingTokens,
     lastUsageMessageIndex: usageInfo.index
   };
+}
+
+function findLatestCompressionSummary(messages: AgentMessage[]): { index: number; createdAtMs?: number } {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.metadata?.kind === "context-compression-summary") {
+      return { index, createdAtMs: messageCreatedAtMs(messages[index]!) };
+    }
+  }
+  return { index: -1 };
+}
+
+function messageCreatedAtMs(message: AgentMessage): number {
+  const value = Date.parse(message.createdAt);
+  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
 export function estimateMessageTokens(message: AgentMessage): number {
@@ -317,7 +548,7 @@ function thoughtFromBlocks(blocks: AgentMessageBlock[]): string {
     .join("");
 }
 
-async function resolveContextState(reader: ContextCompressionOptions["contextState"]): Promise<ContextStateSnapshot> {
+async function resolveContextState(reader: ContextCompressionRuntimeOptions["contextState"]): Promise<ContextStateSnapshot> {
   if (!reader) {
     return {
       completedTaskSummaries: [],

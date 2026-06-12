@@ -4,18 +4,21 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { errorMessage } from "@crish/shared-utils";
 import type {
   AgentMessage,
-  AgentProvider,
-  AgentProviderRequest,
-  AgentTool,
   JsonObject,
   JsonValue,
   ProviderDiagnostic,
   ProviderErrorKind,
-  ProviderUsage,
-  ProviderStreamEvent,
   ToolOutput
+} from "@crish/shared-types";
+import type {
+  AgentProvider,
+  AgentProviderRequest,
+  AgentTool,
+  ProviderUsage,
+  ProviderStreamEvent
 } from "./types";
 
 export interface OpenAICompatibleProviderOptions {
@@ -40,6 +43,7 @@ export interface OpenAICompatibleProviderOptions {
   firstByteTimeoutMs?: number;
   streamIdleTimeoutMs?: number;
   diagnostics?: boolean | OpenAICompatibleDiagnosticsOptions;
+  systemPromptWireMode?: SystemPromptWireMode;
   headers?: Record<string, string>;
   retry?: OpenAICompatibleRetryOptions;
   transport?: OpenAICompatibleTransport;
@@ -89,6 +93,7 @@ export interface OpenAICompatibleProviderConfig {
   firstByteTimeoutMs?: number;
   streamIdleTimeoutMs?: number;
   diagnostics?: boolean | OpenAICompatibleDiagnosticsOptions;
+  systemPromptWireMode?: SystemPromptWireMode;
   headers?: Record<string, string>;
   retry?: OpenAICompatibleRetryOptions;
   transport?: OpenAICompatibleTransport;
@@ -106,6 +111,7 @@ export type OpenAICompatibleReasoningContentMode = "omit" | "include" | "require
 export type OpenAICompatibleReasoningEffort = "off" | "auto" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type OpenAICompatibleReasoningEffortFormat = "auto" | "responses" | "chat-completions" | "none";
 export type OpenAICompatibleToolChoice = "auto" | "none" | "required" | { type: "function"; name: string };
+export type SystemPromptWireMode = "native-system-role" | "user-prefix";
 
 export interface OpenAICompatibleProviderConfigLoadOptions {
   env?: Record<string, string | undefined>;
@@ -219,6 +225,8 @@ export class OpenAICompatibleProvider implements AgentProvider {
   readonly id: string;
   private readonly baseUrl: string;
   private readonly fetchImpl?: typeof fetch;
+  // Wire mode 检测结果在每个 stream() 调用中独立跟踪，不跨 run 缓存
+  // @deprecated 使用 stream() 局部 `wireModeCache` Map 替代
 
   constructor(private readonly options: OpenAICompatibleProviderOptions) {
     this.id = options.id ?? "openai-compatible";
@@ -233,126 +241,47 @@ export class OpenAICompatibleProvider implements AgentProvider {
     const retry = normalizeRetryOptions(this.options.retry);
     const startedAt = Date.now();
     const endpoints = this.resolvedEndpoints();
+    // 每个 stream() 调用独立跟踪 wire mode，不跨 run 共享
+    const wireModeCache = new Map<ResolvedOpenAICompatibleEndpoint, SystemPromptWireMode>();
 
     for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex++) {
       const endpoint = endpoints[endpointIndex]!;
       const url = `${this.baseUrl}${this.requestPath(endpoint)}`;
       for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
-        const attemptStartedAt = Date.now();
-        yield* this.diagnostic({
-          phase: "request-start",
-          endpoint,
-          url,
-          attempt,
-          maxAttempts: retry.maxAttempts,
-          elapsedMs: attemptStartedAt - startedAt,
-          configuredModel: this.options.model
-        });
-
-        let fetchResult: ProviderFetchResult;
-        let response: Response;
-        try {
-          fetchResult = await this.fetchOnce(request, url, endpoint);
-          for (const diagnostic of fetchResult.diagnostics ?? []) {
-            yield* this.diagnostic({
-              ...diagnostic,
-              endpoint,
-              url,
-              attempt,
-              maxAttempts: retry.maxAttempts
-            });
-          }
-          response = fetchResult.response;
-        } catch (cause) {
-          const reason = errorMessage(cause);
-          const error = classifyTransportProviderError(reason);
-          const retryable = attempt < retry.maxAttempts && error.retryable && withinRetryBudget(startedAt, retry.totalBudgetMs);
+        let wireMode = wireModeCache.get(endpoint) ?? this.defaultSystemPromptWireMode();
+        let retriedSystemPromptCompatibility = false;
+        while (true) {
+          const attemptStartedAt = Date.now();
           yield* this.diagnostic({
-            phase: "request-error",
+            phase: "request-start",
             endpoint,
             url,
             attempt,
             maxAttempts: retry.maxAttempts,
-            elapsedMs: Date.now() - attemptStartedAt,
-            retryable,
-            errorKind: error.kind,
-            reason
+            elapsedMs: attemptStartedAt - startedAt,
+            configuredModel: this.options.model,
+            reason: wireMode === "user-prefix" ? "system-prompt-user-prefix" : undefined,
+            ...requestDiagnosticFields(request, wireMode, this.options.stream !== false)
           });
-          if (!retryable) throw cause;
-          yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, reason, undefined, undefined, error.kind);
-          await delay(retryDelayMs(retry, attempt), request.signal);
-          continue;
-        }
 
-        yield* this.diagnostic({
-          phase: "response-start",
-          endpoint,
-          url,
-          attempt,
-          maxAttempts: retry.maxAttempts,
-          elapsedMs: Date.now() - attemptStartedAt,
-          status: response.status,
-          statusText: response.statusText,
-          headers: this.diagnosticHeaders(response)
-        });
-
-        if (!response.ok) {
-          const error = await readError(response);
-          const providerError = classifyHttpProviderError(response, error);
-          const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-          if (this.shouldFallbackEndpoint(endpoint, endpointIndex, endpoints, providerError.kind, response.status, error)) {
-            yield* this.diagnostic({
-              phase: "endpoint-fallback",
-              endpoint,
-              url,
-              attempt,
-              maxAttempts: retry.maxAttempts,
-              elapsedMs: Date.now() - attemptStartedAt,
-              status: response.status,
-              statusText: response.statusText,
-              retryable: true,
-              errorKind: providerError.kind,
-              reason: trimDiagnosticReason(error)
-            });
-            break;
-          }
-          const retryable = attempt < retry.maxAttempts && providerError.retryable && withinRetryBudget(startedAt, retry.totalBudgetMs);
-          yield* this.diagnostic({
-            phase: "request-error",
-            endpoint,
-            url,
-            attempt,
-            maxAttempts: retry.maxAttempts,
-            elapsedMs: Date.now() - attemptStartedAt,
-            status: response.status,
-            statusText: response.statusText,
-            retryable,
-            errorKind: providerError.kind,
-            retryAfterMs,
-            reason: trimDiagnosticReason(error)
-          });
-          if (!retryable) throw new Error(formatProviderError(error, providerError.kind));
-          yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, error, response.status, response.statusText, providerError.kind, retryAfterMs);
-          await delay(retryAfterMs ?? retryDelayMs(retry, attempt), request.signal);
-          continue;
-        }
-
-        const contentType = response.headers.get("content-type") ?? "";
-        if (this.options.stream !== false && contentType.includes("text/event-stream")) {
-          let emittedModelEvent = false;
+          let fetchResult: ProviderFetchResult;
+          let response: Response;
           try {
-            const stream =
-              endpoint === "responses"
-                ? parseResponsesStreamingResponse(response, this.sseDiagnostics(endpoint, url, attempt, retry.maxAttempts))
-                : parseChatCompletionsStreamingResponse(response, this.sseDiagnostics(endpoint, url, attempt, retry.maxAttempts));
-            for await (const event of stream) {
-              if (event.type !== "provider-diagnostic") emittedModelEvent = true;
-              yield event;
+            fetchResult = await this.fetchOnce(request, url, endpoint, wireMode);
+            for (const diagnostic of fetchResult.diagnostics ?? []) {
+              yield* this.diagnostic({
+                ...diagnostic,
+                endpoint,
+                url,
+                attempt,
+                maxAttempts: retry.maxAttempts
+              });
             }
-            return;
+            response = fetchResult.response;
           } catch (cause) {
             const reason = errorMessage(cause);
-            const retryable = !emittedModelEvent && attempt < retry.maxAttempts && withinRetryBudget(startedAt, retry.totalBudgetMs);
+            const error = classifyTransportProviderError(reason);
+            const retryable = attempt < retry.maxAttempts && error.retryable && withinRetryBudget(startedAt, retry.totalBudgetMs);
             yield* this.diagnostic({
               phase: "request-error",
               endpoint,
@@ -361,23 +290,216 @@ export class OpenAICompatibleProvider implements AgentProvider {
               maxAttempts: retry.maxAttempts,
               elapsedMs: Date.now() - attemptStartedAt,
               retryable,
+              errorKind: error.kind,
               reason
             });
-            if (emittedModelEvent) {
-              yield { type: "stop", reason: "error", error: reason };
-              return;
-            }
             if (!retryable) throw cause;
-            yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, reason);
+            yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, reason, undefined, undefined, error.kind);
             await delay(retryDelayMs(retry, attempt), request.signal);
+            break;
+          }
+
+          yield* this.diagnostic({
+            phase: "response-start",
+            endpoint,
+            url,
+            attempt,
+            maxAttempts: retry.maxAttempts,
+            elapsedMs: Date.now() - attemptStartedAt,
+            status: response.status,
+            statusText: response.statusText,
+            headers: this.diagnosticHeaders(response)
+          });
+
+          if (!response.ok) {
+            const error = await readError(response);
+            const providerError = classifyHttpProviderError(response, error);
+            const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+            if (this.shouldRetryWithSystemPromptUserPrefix(request, wireMode, retriedSystemPromptCompatibility, response.status, error)) {
+              wireMode = "user-prefix";
+              retriedSystemPromptCompatibility = true;
+              wireModeCache.set(endpoint, wireMode);
+              yield* this.diagnostic({
+                phase: "request-error",
+                endpoint,
+                url,
+                attempt,
+                maxAttempts: retry.maxAttempts,
+                elapsedMs: Date.now() - attemptStartedAt,
+                status: response.status,
+                statusText: response.statusText,
+                retryable: true,
+                errorKind: providerError.kind,
+                reason: "Provider rejected system-role messages; retrying this endpoint with the system prompt as a stable user-prefix instruction."
+              });
+              continue;
+            }
+            if (this.shouldFallbackEndpoint(endpoint, endpointIndex, endpoints, providerError.kind, response.status, error)) {
+              yield* this.diagnostic({
+                phase: "endpoint-fallback",
+                endpoint,
+                url,
+                attempt,
+                maxAttempts: retry.maxAttempts,
+                elapsedMs: Date.now() - attemptStartedAt,
+                status: response.status,
+                statusText: response.statusText,
+                retryable: true,
+                errorKind: providerError.kind,
+                reason: trimDiagnosticReason(error)
+              });
+              attempt = retry.maxAttempts;
+              break;
+            }
+            const retryable = attempt < retry.maxAttempts && providerError.retryable && withinRetryBudget(startedAt, retry.totalBudgetMs);
+            yield* this.diagnostic({
+              phase: "request-error",
+              endpoint,
+              url,
+              attempt,
+              maxAttempts: retry.maxAttempts,
+              elapsedMs: Date.now() - attemptStartedAt,
+              status: response.status,
+              statusText: response.statusText,
+              retryable,
+              errorKind: providerError.kind,
+              retryAfterMs,
+              reason: trimDiagnosticReason(error)
+            });
+            if (!retryable) throw new Error(formatProviderError(error, providerError.kind));
+            yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, error, response.status, response.statusText, providerError.kind, retryAfterMs);
+            await delay(retryAfterMs ?? retryDelayMs(retry, attempt), request.signal);
+            break;
+          }
+
+          const contentType = response.headers.get("content-type") ?? "";
+          const streamRequested = this.options.stream !== false;
+          if (streamRequested && contentType.includes("text/event-stream")) {
+            let emittedModelEvent = false;
+            let retrySystemPromptCompatibilityAfterStreamError = false;
+            try {
+              const stream =
+                endpoint === "responses"
+                  ? parseResponsesStreamingResponse(response, this.sseDiagnostics(endpoint, url, attempt, retry.maxAttempts), request.signal)
+                  : parseChatCompletionsStreamingResponse(response, this.sseDiagnostics(endpoint, url, attempt, retry.maxAttempts), request.signal);
+              for await (const event of stream) {
+                if (
+                  event.type === "stop" &&
+                  event.reason === "error" &&
+                  !emittedModelEvent &&
+                  this.shouldRetryWithSystemPromptUserPrefix(
+                    request,
+                    wireMode,
+                    retriedSystemPromptCompatibility,
+                    response.status >= 400 ? response.status : 400,
+                    event.error ?? ""
+                  )
+                ) {
+                  wireMode = "user-prefix";
+                  retriedSystemPromptCompatibility = true;
+                  retrySystemPromptCompatibilityAfterStreamError = true;
+                  wireModeCache.set(endpoint, wireMode);
+                  yield* this.diagnostic({
+                    phase: "request-error",
+                    endpoint,
+                    url,
+                    attempt,
+                    maxAttempts: retry.maxAttempts,
+                    elapsedMs: Date.now() - attemptStartedAt,
+                    status: response.status,
+                    statusText: response.statusText,
+                    retryable: true,
+                    errorKind: "schema",
+                    reason: "Provider emitted a streaming system-role rejection; retrying this endpoint with the system prompt as a stable user-prefix instruction.",
+                    ...requestDiagnosticFields(request, "native-system-role", streamRequested)
+                  });
+                  break;
+                }
+                if (event.type !== "provider-diagnostic") emittedModelEvent = true;
+                yield event;
+              }
+              if (retrySystemPromptCompatibilityAfterStreamError) continue;
+              return;
+            } catch (cause) {
+              const reason = errorMessage(cause);
+              const error = classifyStreamProviderError(reason, cause);
+              const retryable =
+                !request.signal.aborted &&
+                !emittedModelEvent &&
+                error.retryable &&
+                attempt < retry.maxAttempts &&
+                withinRetryBudget(startedAt, retry.totalBudgetMs);
+              yield* this.diagnostic({
+                phase: "request-error",
+                endpoint,
+                url,
+                attempt,
+                maxAttempts: retry.maxAttempts,
+                elapsedMs: Date.now() - attemptStartedAt,
+                retryable,
+                errorKind: error.kind,
+                reason
+              });
+              if (emittedModelEvent) {
+                yield { type: "stop", reason: "error", error: formatProviderError(reason, error.kind) };
+                return;
+              }
+              if (!retryable) throw cause;
+              yield* this.retryDiagnostic(endpoint, url, attempt, retry.maxAttempts, reason, undefined, undefined, error.kind);
+              await delay(retryDelayMs(retry, attempt), request.signal);
+              break;
+            }
+          }
+
+          if (streamRequested) {
+            const streamFallbackReason = `Provider returned ${contentType || "unknown content type"} for a streaming request; parsing the response as non-streaming JSON.`;
+            yield* this.diagnostic({
+              phase: "transport-fallback",
+              endpoint,
+              url,
+              attempt,
+              maxAttempts: retry.maxAttempts,
+              elapsedMs: Date.now() - attemptStartedAt,
+              retryable: false,
+              errorKind: "invalid-stream",
+              reason: streamFallbackReason
+            });
+          }
+
+          const body = (await response.json()) as JsonObject;
+          const bodyError = providerBodyError(body);
+          if (
+            this.shouldRetryWithSystemPromptUserPrefix(
+              request,
+              wireMode,
+              retriedSystemPromptCompatibility,
+              response.status >= 400 ? response.status : 400,
+              bodyError ?? ""
+            )
+          ) {
+            wireMode = "user-prefix";
+            retriedSystemPromptCompatibility = true;
+            wireModeCache.set(endpoint, wireMode);
+            yield* this.diagnostic({
+              phase: "request-error",
+              endpoint,
+              url,
+              attempt,
+              maxAttempts: retry.maxAttempts,
+              elapsedMs: Date.now() - attemptStartedAt,
+              status: response.status,
+              statusText: response.statusText,
+              retryable: true,
+              errorKind: "schema",
+              reason: "Provider returned a JSON system-role rejection; retrying this endpoint with the system prompt as a stable user-prefix instruction.",
+              ...requestDiagnosticFields(request, "native-system-role", streamRequested)
+            });
             continue;
           }
+          yield* this.modelMismatchDiagnostic(endpoint, url, attempt, retry.maxAttempts, body);
+          yield* (endpoint === "responses" ? parseResponsesJsonResponse(body) : parseChatCompletionsJsonResponse(body));
+          return;
         }
-
-        const body = (await response.json()) as JsonObject;
-        yield* this.modelMismatchDiagnostic(endpoint, url, attempt, retry.maxAttempts, body);
-        yield* (endpoint === "responses" ? parseResponsesJsonResponse(body) : parseChatCompletionsJsonResponse(body));
-        return;
       }
     }
   }
@@ -407,11 +529,11 @@ export class OpenAICompatibleProvider implements AgentProvider {
     };
   }
 
-  private buildRequestBody(request: AgentProviderRequest, endpoint: ResolvedOpenAICompatibleEndpoint): JsonObject {
-    return endpoint === "responses" ? this.buildResponsesRequestBody(request) : this.buildChatCompletionsRequestBody(request);
+  private buildRequestBody(request: AgentProviderRequest, endpoint: ResolvedOpenAICompatibleEndpoint, wireMode: SystemPromptWireMode): JsonObject {
+    return endpoint === "responses" ? this.buildResponsesRequestBody(request, wireMode) : this.buildChatCompletionsRequestBody(request, wireMode);
   }
 
-  private buildChatCompletionsRequestBody(request: AgentProviderRequest): JsonObject {
+  private buildChatCompletionsRequestBody(request: AgentProviderRequest, wireMode: SystemPromptWireMode): JsonObject {
     return compactObject({
       model: this.options.model,
       stream: this.options.stream !== false,
@@ -419,14 +541,14 @@ export class OpenAICompatibleProvider implements AgentProvider {
       top_p: this.options.topP,
       ...maxTokensObject(this.chatMaxTokensField(), this.options.maxTokens),
       ...reasoningEffortObject("chat-completions", this.options.model, this.options.reasoningEffort, this.options.reasoningEffortFormat),
-      messages: toChatMessages(request.systemPrompt, request.messages, this.options.reasoningContent ?? "omit"),
+      messages: toChatMessages(request.systemPrompt, request.messages, this.options.reasoningContent ?? "omit", wireMode),
       tools: request.tools.length > 0 ? request.tools.map(toOpenAITool) : undefined,
       tool_choice: request.tools.length > 0 ? toChatToolChoice(this.options.toolChoice ?? "auto") : undefined,
       stream_options: this.options.stream !== false ? { include_usage: true } : undefined
     });
   }
 
-  private buildResponsesRequestBody(request: AgentProviderRequest): JsonObject {
+  private buildResponsesRequestBody(request: AgentProviderRequest, wireMode: SystemPromptWireMode): JsonObject {
     return compactObject({
       model: this.options.model,
       stream: this.options.stream !== false,
@@ -434,7 +556,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
       top_p: this.options.topP,
       max_output_tokens: this.options.maxTokens,
       ...reasoningEffortObject("responses", this.options.model, this.options.reasoningEffort, this.options.reasoningEffortFormat),
-      input: toResponsesInput(request.systemPrompt, request.messages),
+      input: toResponsesInput(request.systemPrompt, request.messages, wireMode),
       tools: request.tools.length > 0 ? request.tools.map(toResponsesTool) : undefined,
       tool_choice: request.tools.length > 0 ? toResponsesToolChoice(this.options.toolChoice ?? "auto") : undefined
     });
@@ -444,11 +566,16 @@ export class OpenAICompatibleProvider implements AgentProvider {
     return endpoint === "responses" ? "/responses" : "/chat/completions";
   }
 
-  private async fetchOnce(request: AgentProviderRequest, url: string, endpoint: ResolvedOpenAICompatibleEndpoint): Promise<ProviderFetchResult> {
+  private async fetchOnce(
+    request: AgentProviderRequest,
+    url: string,
+    endpoint: ResolvedOpenAICompatibleEndpoint,
+    wireMode: SystemPromptWireMode
+  ): Promise<ProviderFetchResult> {
     const httpRequest: ProviderHttpRequest = {
       method: "POST",
       headers: this.buildHeaders(),
-      body: JSON.stringify(this.buildRequestBody(request, endpoint)),
+      body: JSON.stringify(this.buildRequestBody(request, endpoint, wireMode)),
       timeoutMs: this.options.requestTimeoutMs
     };
     const transport = this.options.transport ?? "fetch";
@@ -460,7 +587,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
     }
 
     try {
-      const fetchImpl = this.fetchImpl;
+      const fetchImpl = this.fetchImpl ?? (typeof globalThis !== "undefined" && typeof globalThis.fetch === "function" ? globalThis.fetch : undefined);
       if (!fetchImpl) {
         return {
           response: await this.fetchWithRustReqwest(url, httpRequest, request.signal),
@@ -502,7 +629,9 @@ export class OpenAICompatibleProvider implements AgentProvider {
       if (transport !== "auto" || request.signal.aborted) throw cause;
       const reason = errorMessage(cause);
       const response = await this.fetchWithRustReqwest(url, httpRequest, request.signal).catch((fallbackCause) => {
-        throw new Error(`Fetch transport failed: ${reason}; Rust reqwest fallback failed: ${errorMessage(fallbackCause)}`);
+        const fallbackMsg = errorMessage(fallbackCause);
+        const hint = fallbackMsg.includes("agent-provider-http") ? " (提示: 请运行 cargo build -p agent-provider-http 构建传输层)" : "";
+        throw new Error(`Fetch transport failed: ${reason}; Rust reqwest fallback failed: ${fallbackMsg}${hint}`);
       });
       return {
         response,
@@ -655,6 +784,22 @@ export class OpenAICompatibleProvider implements AgentProvider {
     if (errorKind !== "endpoint-unavailable") return false;
     return isResponsesEndpointUnavailable(status, error);
   }
+
+  private shouldRetryWithSystemPromptUserPrefix(
+    request: AgentProviderRequest,
+    wireMode: SystemPromptWireMode,
+    alreadyRetried: boolean,
+    status: number,
+    error: string
+  ): boolean {
+    if (alreadyRetried || wireMode !== "native-system-role") return false;
+    if (!hasSystemRoleWireContent(request)) return false;
+    return isSystemRoleUnsupported(status, error);
+  }
+
+  private defaultSystemPromptWireMode(): SystemPromptWireMode {
+    return this.options.systemPromptWireMode ?? "native-system-role";
+  }
 }
 
 export async function loadOpenAICompatibleProviderConfig(
@@ -771,6 +916,7 @@ function parseProviderConfig(input: unknown, filePath: string): OpenAICompatible
     firstByteTimeoutMs: optionalPositiveInteger(provider.firstByteTimeoutMs, `${filePath}: provider.firstByteTimeoutMs`),
     streamIdleTimeoutMs: optionalPositiveInteger(provider.streamIdleTimeoutMs, `${filePath}: provider.streamIdleTimeoutMs`),
     diagnostics: optionalDiagnostics(provider.diagnostics, `${filePath}: provider.diagnostics`),
+    systemPromptWireMode: optionalSystemPromptWireMode(provider.systemPromptWireMode, `${filePath}: provider.systemPromptWireMode`),
     headers: optionalStringRecord(provider.headers, `${filePath}: provider.headers`),
     retry: optionalRetryOptions(provider.retry, `${filePath}: provider.retry`),
     transport: optionalTransport(provider.transport, `${filePath}: provider.transport`),
@@ -818,11 +964,16 @@ function resolveModelsUrl(options: { baseUrl: string; modelsUrl?: string; models
 function toChatMessages(
   systemPrompt: string | undefined,
   messages: AgentMessage[],
-  reasoningContentMode: OpenAICompatibleReasoningContentMode
+  reasoningContentMode: OpenAICompatibleReasoningContentMode,
+  wireMode: SystemPromptWireMode = "native-system-role"
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   if (systemPrompt?.trim()) {
-    result.push({ role: "system", content: systemPrompt });
+    result.push(
+      wireMode === "user-prefix"
+        ? { role: "user", content: systemPromptAsUserPrefix(systemPrompt) }
+        : { role: "system", content: systemPrompt }
+    );
   }
 
   for (const message of messages) {
@@ -863,6 +1014,20 @@ function toChatMessages(
         content: content || null,
         ...reasoning,
         ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+      });
+      continue;
+    }
+
+    if (message.role === "system") {
+      result.push({
+        role: wireMode === "user-prefix" ? "user" : "system",
+        content:
+          wireMode === "user-prefix"
+            ? systemPromptAsUserPrefix(textContent(message))
+            : message.blocks
+                .filter((block) => block.type === "text")
+                .map((block) => block.text)
+                .join("")
       });
       continue;
     }
@@ -912,10 +1077,18 @@ function toOpenAITool(tool: AgentTool): JsonObject {
   };
 }
 
-function toResponsesInput(systemPrompt: string | undefined, messages: AgentMessage[]): JsonObject[] {
+function toResponsesInput(
+  systemPrompt: string | undefined,
+  messages: AgentMessage[],
+  wireMode: SystemPromptWireMode = "native-system-role"
+): JsonObject[] {
   const result: JsonObject[] = [];
   if (systemPrompt?.trim()) {
-    result.push({ type: "message", role: "system", content: systemPrompt.trim() });
+    result.push({
+      type: "message",
+      role: wireMode === "user-prefix" ? "user" : "system",
+      content: wireMode === "user-prefix" ? systemPromptAsUserPrefix(systemPrompt) : systemPrompt.trim()
+    });
   }
 
   for (const message of messages) {
@@ -934,7 +1107,11 @@ function toResponsesInput(systemPrompt: string | undefined, messages: AgentMessa
 
     const content = textContent(message);
     if (content) {
-      result.push({ type: "message", role: message.role, content });
+      result.push({
+        type: "message",
+        role: message.role === "system" && wireMode === "user-prefix" ? "user" : message.role,
+        content: message.role === "system" && wireMode === "user-prefix" ? systemPromptAsUserPrefix(content) : content
+      });
     }
 
     if (message.role === "assistant") {
@@ -987,6 +1164,12 @@ function toResponsesToolChoice(choice: OpenAICompatibleToolChoice): JsonValue {
 }
 
 async function* parseChatCompletionsJsonResponse(body: JsonObject): AsyncIterable<ProviderStreamEvent> {
+  const error = providerBodyError(body);
+  if (error) {
+    yield { type: "stop", reason: "error", error };
+    return;
+  }
+
   const choice = Array.isArray(body.choices) ? (body.choices[0] as Record<string, unknown> | undefined) : undefined;
   const message = choice?.message && typeof choice.message === "object" ? (choice.message as Record<string, unknown>) : undefined;
   if (!message) {
@@ -1016,7 +1199,8 @@ async function* parseChatCompletionsJsonResponse(body: JsonObject): AsyncIterabl
 
 async function* parseChatCompletionsStreamingResponse(
   response: Response,
-  diagnostics?: SseDiagnosticsOptions
+  diagnostics?: SseDiagnosticsOptions,
+  signal?: AbortSignal
 ): AsyncIterable<ProviderStreamEvent> {
   if (!response.body) {
     yield { type: "stop", reason: "error", error: "Streaming response body is empty" };
@@ -1028,7 +1212,7 @@ async function* parseChatCompletionsStreamingResponse(
   let usage: ProviderUsage | undefined;
   let modelMismatchReported = false;
 
-  for await (const payload of readSseJson(response.body, diagnostics)) {
+  for await (const payload of readSseJson(response.body, diagnostics, signal)) {
     if (isSseReadDiagnostic(payload)) {
       yield { type: "provider-diagnostic", diagnostic: payload.diagnostic };
       continue;
@@ -1039,6 +1223,11 @@ async function* parseChatCompletionsStreamingResponse(
         modelMismatchReported = true;
         yield modelMismatch;
       }
+    }
+    const payloadError = providerBodyError(payload);
+    if (payloadError) {
+      yield { type: "stop", reason: "error", error: payloadError, usage };
+      return;
     }
     usage = parseUsage(payload.usage) ?? usage;
     const choice = Array.isArray(payload.choices) ? (payload.choices[0] as Record<string, unknown> | undefined) : undefined;
@@ -1090,7 +1279,11 @@ async function* parseResponsesJsonResponse(body: JsonObject): AsyncIterable<Prov
   }) as unknown as Extract<ProviderStreamEvent, { type: "stop" }>;
 }
 
-async function* parseResponsesStreamingResponse(response: Response, diagnostics?: SseDiagnosticsOptions): AsyncIterable<ProviderStreamEvent> {
+async function* parseResponsesStreamingResponse(
+  response: Response,
+  diagnostics?: SseDiagnosticsOptions,
+  signal?: AbortSignal
+): AsyncIterable<ProviderStreamEvent> {
   if (!response.body) {
     yield { type: "stop", reason: "error", error: "Streaming response body is empty" };
     return;
@@ -1103,10 +1296,9 @@ async function* parseResponsesStreamingResponse(response: Response, diagnostics?
   let finalError: string | undefined;
   let sawToolCall = false;
   let sawTerminal = false;
-  let producedContent = false;
   let modelMismatchReported = false;
 
-  for await (const payload of readSseJson(response.body, diagnostics)) {
+  for await (const payload of readSseJson(response.body, diagnostics, signal)) {
     if (isSseReadDiagnostic(payload)) {
       yield { type: "provider-diagnostic", diagnostic: payload.diagnostic };
       continue;
@@ -1132,13 +1324,11 @@ async function* parseResponsesStreamingResponse(response: Response, diagnostics?
     }
 
     if (type === "response.output_text.delta" && typeof payload.delta === "string" && payload.delta.length > 0) {
-      producedContent = true;
       yield { type: "text-delta", text: payload.delta };
       continue;
     }
 
     if (isResponsesThoughtDelta(type) && typeof payload.delta === "string" && payload.delta.length > 0) {
-      producedContent = true;
       yield { type: "thought-delta", text: payload.delta, redacted: true };
       continue;
     }
@@ -1150,7 +1340,6 @@ async function* parseResponsesStreamingResponse(response: Response, diagnostics?
         const event = call && (call.argumentsDone || call.argumentsText.trim()) ? emitResponseToolCall(call, emitted) : undefined;
         if (event) {
           sawToolCall = true;
-          producedContent = true;
           yield event;
         }
       }
@@ -1168,7 +1357,6 @@ async function* parseResponsesStreamingResponse(response: Response, diagnostics?
       const event = emitResponseToolCall(call, emitted);
       if (event) {
         sawToolCall = true;
-        producedContent = true;
         yield event;
       }
       continue;
@@ -1190,18 +1378,17 @@ async function* parseResponsesStreamingResponse(response: Response, diagnostics?
     const event = emitResponseToolCall(call, emitted);
     if (event) {
       sawToolCall = true;
-      producedContent = true;
       yield event;
     }
   }
 
-  if (!sawTerminal && !producedContent) {
-    yield {
+  if (!sawTerminal) {
+    yield compactObject({
       type: "stop",
       reason: "error",
-      error: "Responses stream ended without a terminal response event",
+      error: formatProviderError("Responses stream ended without a terminal response event", "invalid-stream"),
       usage
-    };
+    }) as unknown as Extract<ProviderStreamEvent, { type: "stop" }>;
     return;
   }
 
@@ -1347,7 +1534,21 @@ function responseError(body: Record<string, unknown> | undefined): string | unde
   return stringField(error?.message) ?? stringField(body?.error);
 }
 
-async function* readSseJson(body: ReadableStream<Uint8Array>, diagnostics?: SseDiagnosticsOptions): AsyncIterable<JsonObject | SseReadDiagnostic> {
+function providerBodyError(body: Record<string, unknown> | undefined): string | undefined {
+  const error = responseError(body);
+  return (
+    error ??
+    stringField(body?.message) ??
+    stringField(body?.error_description) ??
+    stringField(body?.code)
+  );
+}
+
+async function* readSseJson(
+  body: ReadableStream<Uint8Array>,
+  diagnostics?: SseDiagnosticsOptions,
+  signal?: AbortSignal
+): AsyncIterable<JsonObject | SseReadDiagnostic> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -1355,15 +1556,20 @@ async function* readSseJson(body: ReadableStream<Uint8Array>, diagnostics?: SseD
   let chunks = 0;
   let bytes = 0;
   let emittedFirstByte = false;
+  let completed = false;
 
   try {
     while (true) {
       const { done, value } = await readStreamChunk(
         reader,
         emittedFirstByte ? diagnostics?.streamIdleTimeoutMs : diagnostics?.firstByteTimeoutMs,
-        emittedFirstByte ? "stream idle" : "streaming first byte"
+        emittedFirstByte ? "stream idle" : "streaming first byte",
+        signal
       );
-      if (done) break;
+      if (done) {
+        completed = true;
+        break;
+      }
       chunks += 1;
       bytes += value.byteLength;
       if (!emittedFirstByte) {
@@ -1393,6 +1599,7 @@ async function* readSseJson(body: ReadableStream<Uint8Array>, diagnostics?: SseD
         buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === "\r" ? 4 : 2));
         const parsed = parseSseFrame(frame);
         if (parsed === "[DONE]") {
+          completed = true;
           yield* sseStreamEndDiagnostic(diagnostics, startedAt, chunks, bytes);
           return;
         }
@@ -1401,13 +1608,19 @@ async function* readSseJson(body: ReadableStream<Uint8Array>, diagnostics?: SseD
       }
     }
   } finally {
+    if (!completed) {
+      await reader.cancel(createSseAbortError(signal)).catch(() => undefined);
+    }
     reader.releaseLock();
   }
 
-  const parsed = parseSseFrame(buffer);
-  if (parsed && parsed !== "[DONE]") {
-    yield parsed;
+  if (buffer.trim().length > 0) {
+    const parsed = parseSseFrame(buffer);
+    if (parsed && parsed !== "[DONE]") {
+      yield parsed;
+    }
   }
+  completed = true;
   yield* sseStreamEndDiagnostic(diagnostics, startedAt, chunks, bytes);
 }
 
@@ -1437,34 +1650,64 @@ function* sseStreamEndDiagnostic(
 function readStreamChunk(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   timeoutMs: number | undefined,
-  timeoutLabel: string
+  timeoutLabel: string,
+  signal?: AbortSignal
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (!timeoutMs) return reader.read();
+  if (signal?.aborted) {
+    const error = createSseAbortError(signal);
+    void reader.cancel(error);
+    return Promise.reject(error);
+  }
+  if (!timeoutMs && !signal) return reader.read();
   return new Promise((resolveRead, reject) => {
     let settled = false;
-    const timeout = setTimeout(() => {
-      const error = new Error(`${timeoutLabel} timed out after ${timeoutMs}ms`);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let abortFromSignal: (() => void) | undefined;
+    const cleanup = (): void => {
+      if (timeout !== undefined) clearTimeout(timeout);
+      if (abortFromSignal) signal?.removeEventListener("abort", abortFromSignal);
+    };
+    const rejectAfterCancel = (error: Error): void => {
       if (settled) return;
       settled = true;
-      void reader.cancel(error).finally(() => {
-        reject(error);
-      });
-    }, timeoutMs);
+      cleanup();
+      void reader.cancel(error).finally(() => reject(error));
+    };
+    abortFromSignal = (): void => {
+      rejectAfterCancel(createSseAbortError(signal));
+    };
+    if (timeoutMs) {
+      timeout = setTimeout(() => {
+        rejectAfterCancel(new Error(`${timeoutLabel} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    }
+    signal?.addEventListener("abort", abortFromSignal, { once: true });
+    if (signal?.aborted) {
+      abortFromSignal();
+      return;
+    }
     reader.read().then(
       (result) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        cleanup();
         resolveRead(result);
       },
       (error) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        cleanup();
         reject(error);
       }
     );
   });
+}
+
+function createSseAbortError(signal: AbortSignal | undefined): Error {
+  const reason = signal?.aborted ? signal.reason : undefined;
+  if (reason instanceof Error) return reason;
+  if (typeof reason === "string" && reason.length > 0) return new Error(reason);
+  return new Error(signal?.aborted ? "aborted" : "stream consumer cancelled");
 }
 
 function isSseReadDiagnostic(value: JsonObject | SseReadDiagnostic): value is SseReadDiagnostic {
@@ -1705,6 +1948,7 @@ async function fetchWithRustReqwestProcess(
     let headerBuffer = Buffer.alloc(0);
     let stderrBuffer = Buffer.alloc(0);
     let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let stdoutPaused = false;
 
     const cleanupAbort = (): void => {
       signal.removeEventListener("abort", abortFromRequest);
@@ -1725,6 +1969,25 @@ async function fetchWithRustReqwestProcess(
       if (bodyController && !bodyClosed) {
         bodyClosed = true;
         bodyController.close();
+      }
+    };
+    const pauseStdoutForBackpressure = (): void => {
+      if (!stdoutPaused) {
+        child.stdout.pause();
+        stdoutPaused = true;
+      }
+    };
+    const resumeStdout = (): void => {
+      if (stdoutPaused && !bodyClosed) {
+        child.stdout.resume();
+        stdoutPaused = false;
+      }
+    };
+    const enqueueBodyChunk = (chunk: Buffer | Uint8Array): void => {
+      if (!bodyController || bodyClosed || chunk.byteLength === 0) return;
+      bodyController.enqueue(new Uint8Array(chunk));
+      if ((bodyController.desiredSize ?? 1) <= 0) {
+        pauseStdoutForBackpressure();
       }
     };
     const abortFromRequest = (): void => {
@@ -1774,12 +2037,15 @@ async function fetchWithRustReqwestProcess(
         const body = new ReadableStream<Uint8Array>({
           start(controller) {
             bodyController = controller;
-            if (rest.byteLength > 0) {
-              controller.enqueue(new Uint8Array(rest));
-            }
+            enqueueBodyChunk(rest);
             if (stdoutEnded) closeBody();
           },
+          pull() {
+            resumeStdout();
+          },
           cancel() {
+            cleanupAbort();
+            bodyClosed = true;
             if (!child.killed) child.kill();
           }
         });
@@ -1794,9 +2060,7 @@ async function fetchWithRustReqwestProcess(
         return;
       }
 
-      if (bodyController && !bodyClosed) {
-        bodyController.enqueue(new Uint8Array(chunk));
-      }
+      enqueueBodyChunk(chunk);
     });
 
     child.stdout.on("end", () => {
@@ -1896,7 +2160,21 @@ interface ProviderErrorClassification {
 }
 
 function classifyTransportProviderError(reason: string): ProviderErrorClassification {
-  if (/aborted|abort/i.test(reason)) return { kind: "network", retryable: false };
+  if (/aborted|abort|cancelled|canceled/i.test(reason)) return { kind: "cancelled", retryable: false };
+  return { kind: "network", retryable: true };
+}
+
+function classifyStreamProviderError(reason: string, cause: unknown): ProviderErrorClassification {
+  const code = cause instanceof Error ? cause.name : "";
+  if (/aborted|abort|cancelled|canceled/i.test(`${reason} ${code}`)) {
+    return { kind: "cancelled", retryable: false };
+  }
+  if (/timeout|timed out/i.test(`${reason} ${code}`)) {
+    return { kind: "timeout", retryable: true };
+  }
+  if (/invalid|json|parse|terminal response event|event-stream|sse/i.test(reason)) {
+    return { kind: "invalid-stream", retryable: false };
+  }
   return { kind: "network", retryable: true };
 }
 
@@ -1923,6 +2201,75 @@ function isResponsesEndpointUnavailable(status: number, error: string): boolean 
     return /\bresponses?\b/i.test(error) && /\b(unknown|unsupported|invalid|not found|not_found)\b/i.test(error);
   }
   return false;
+}
+
+function isSystemRoleUnsupported(status: number, error: string): boolean {
+  if (status < 400 || status >= 500) return false;
+  return /system\s+messages?\s+are\s+not\s+allowed|system\s+role\s+(is\s+)?(not\s+)?(allowed|supported)|role[^"'`]*system[^"'`]*(not\s+allowed|unsupported|invalid)/i.test(
+    error
+  );
+}
+
+function hasSystemRoleWireContent(request: AgentProviderRequest): boolean {
+  return Boolean(request.systemPrompt?.trim()) || request.messages.some((message) => message.role === "system" && textContent(message).trim().length > 0);
+}
+
+function requestDiagnosticFields(
+  request: AgentProviderRequest,
+  wireMode: SystemPromptWireMode,
+  streamRequested: boolean
+): Pick<
+  ProviderDiagnostic,
+  | "streamRequested"
+  | "systemPromptWireMode"
+  | "hasSystemRole"
+  | "systemPromptPresent"
+  | "systemMessageCount"
+  | "rewrittenSystemMessageCount"
+  | "messageCount"
+  | "toolCount"
+  | "messageRoleCounts"
+> {
+  const roleCounts = {
+    system: 0,
+    user: 0,
+    assistant: 0,
+    tool: 0
+  };
+  let systemMessageCount = request.systemPrompt?.trim() ? 1 : 0;
+  for (const message of request.messages) {
+    roleCounts[message.role] += 1;
+    if (message.role === "system" && textContent(message).trim().length > 0) {
+      systemMessageCount += 1;
+    }
+  }
+
+  return compactObject({
+    streamRequested,
+    systemPromptWireMode: wireMode,
+    hasSystemRole: systemMessageCount > 0,
+    systemPromptPresent: Boolean(request.systemPrompt?.trim()),
+    systemMessageCount,
+    rewrittenSystemMessageCount: wireMode === "user-prefix" ? systemMessageCount : 0,
+    messageCount: request.messages.length,
+    toolCount: request.tools.length,
+    messageRoleCounts: roleCounts
+  }) as Pick<
+    ProviderDiagnostic,
+    | "streamRequested"
+    | "systemPromptWireMode"
+    | "hasSystemRole"
+    | "systemPromptPresent"
+    | "systemMessageCount"
+    | "rewrittenSystemMessageCount"
+    | "messageCount"
+    | "toolCount"
+    | "messageRoleCounts"
+  >;
+}
+
+function systemPromptAsUserPrefix(systemPrompt: string): string {
+  return `System instructions for this run:\n\n${systemPrompt.trim()}`;
 }
 
 function looksLikeGatewayChallenge(response: Response, error: string): boolean {
@@ -1981,10 +2328,6 @@ function withinRetryBudget(startedAt: number, totalBudgetMs: number): boolean {
   return Date.now() - startedAt < totalBudgetMs;
 }
 
-function errorMessage(cause: unknown): string {
-  if (cause instanceof Error) return cause.message;
-  return String(cause);
-}
 
 function objectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -2019,6 +2362,14 @@ function optionalTransport(value: unknown, label: string): OpenAICompatibleTrans
   const normalized = requiredString(value, label).toLowerCase().replace(/_/g, "-");
   if (normalized === "fetch" || normalized === "rust-reqwest" || normalized === "auto") return normalized;
   throw new Error(`${label} must be "fetch", "rust-reqwest", or "auto"`);
+}
+
+function optionalSystemPromptWireMode(value: unknown, label: string): SystemPromptWireMode | undefined {
+  if (value === undefined) return undefined;
+  const normalized = requiredString(value, label).toLowerCase().replace(/_/g, "-").replace(/\//g, "-");
+  if (normalized === "native" || normalized === "native-system-role" || normalized === "system") return "native-system-role";
+  if (normalized === "user-prefix" || normalized === "user" || normalized === "prefix") return "user-prefix";
+  throw new Error(`${label} must be "native-system-role" or "user-prefix"`);
 }
 
 function optionalAuthHeader(value: unknown, label: string): OpenAICompatibleAuthHeader | undefined {

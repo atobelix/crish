@@ -1,9 +1,10 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
-import type { AgentTool, JsonObject, JsonValue } from "./types";
+import type { JsonObject, JsonValue } from "@crish/shared-types";
+import type { AgentTool } from "./types";
 
 export type MemoryScope = "session" | "project" | "user";
 
@@ -27,10 +28,12 @@ export interface MemorySearchOptions {
 export interface MemoryStore {
   remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry>;
   search(options?: MemorySearchOptions): Promise<MemoryEntry[]>;
+  delete?(memoryId: string): Promise<boolean>;
 }
 
 export class InMemoryMemoryStore implements MemoryStore {
   private readonly entries: MemoryEntry[] = [];
+  private readonly deletedIds = new Set<string>();
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
     const now = nowIso();
@@ -45,11 +48,20 @@ export class InMemoryMemoryStore implements MemoryStore {
   }
 
   async search(options: MemorySearchOptions = {}): Promise<MemoryEntry[]> {
-    return filterMemories(this.entries, options);
+    return filterMemories(this.entries.filter((entry) => !this.deletedIds.has(entry.id)), options);
+  }
+
+  async delete(memoryId: string): Promise<boolean> {
+    const exists = this.entries.some((entry) => entry.id === memoryId && !this.deletedIds.has(entry.id));
+    if (!exists) return false;
+    this.deletedIds.add(memoryId);
+    return true;
   }
 }
 
 export class JsonlMemoryStore implements MemoryStore {
+  private appendQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly filePath: string) {}
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
@@ -61,7 +73,7 @@ export class JsonlMemoryStore implements MemoryStore {
       updatedAt: now
     };
     await mkdir(dirname(this.filePath), { recursive: true });
-    await appendFile(this.filePath, `${JSON.stringify(saved)}\n`, "utf8");
+    await this.enqueueAppend(JSON.stringify(saved));
     return saved;
   }
 
@@ -70,22 +82,103 @@ export class JsonlMemoryStore implements MemoryStore {
     return filterMemories(entries, options);
   }
 
+  async delete(memoryId: string): Promise<boolean> {
+    const id = requireString({ memoryId }, "memoryId");
+    const entries = await this.readEntries();
+    if (!entries.some((entry) => entry.id === id)) {
+      return false;
+    }
+    await mkdir(dirname(this.filePath), { recursive: true });
+    await this.enqueueAppend(JSON.stringify({ type: "delete", memoryId: id, deletedAt: nowIso() }));
+    return true;
+  }
+
   private async readEntries(): Promise<MemoryEntry[]> {
     const bytes = await readFile(this.filePath).catch(() => null);
     if (!bytes) return [];
     const decoded = decodeTextBuffer(bytes);
     if (decoded.encoding === "binary") return [];
-    return decoded.text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .flatMap((line) => {
-        try {
-          return [JSON.parse(line) as MemoryEntry];
-        } catch {
-          return [];
+    const entries = new Map<string, MemoryEntry>();
+    const deletedIds = new Set<string>();
+    for (const line of decoded.text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const record = JSON.parse(trimmed) as unknown;
+        if (isMemoryDeleteRecord(record)) {
+          deletedIds.add(record.memoryId);
+          entries.delete(record.memoryId);
+          continue;
         }
-      });
+        const entry = normalizeMemoryEntry(record);
+        if (!deletedIds.has(entry.id)) {
+          entries.set(entry.id, entry);
+        }
+      } catch {
+        continue;
+      }
+    }
+    return [...entries.values()];
+  }
+
+  private async enqueueAppend(line: string): Promise<void> {
+    const appendTask = this.appendQueue.then(() => appendJsonLine(this.filePath, line));
+    this.appendQueue = appendTask.catch(() => undefined);
+    await appendTask;
+  }
+}
+
+interface MemoryDeleteRecord {
+  type: "delete";
+  memoryId: string;
+  deletedAt: string;
+}
+
+function isMemoryDeleteRecord(value: unknown): value is MemoryDeleteRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.type === "delete" && typeof record.memoryId === "string" && record.memoryId.length > 0;
+}
+
+function normalizeMemoryEntry(value: unknown): MemoryEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("memory entry must be an object");
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    id: requireString(record as JsonObject, "id"),
+    scope: memoryScope(record.scope as JsonValue | undefined),
+    content: requireString(record as JsonObject, "content"),
+    tags: stringArray(record.tags as JsonValue | undefined),
+    createdAt: requireString(record as JsonObject, "createdAt"),
+    updatedAt: requireString(record as JsonObject, "updatedAt"),
+    ...(record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+      ? { metadata: record.metadata as JsonObject }
+      : {})
+  };
+}
+
+async function appendJsonLine(path: string, line: string): Promise<void> {
+  const handle = await open(path, "a");
+  try {
+    await handle.writeFile(`${line}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await fsyncDirectory(dirname(path));
+}
+
+async function fsyncDirectory(path: string): Promise<void> {
+  try {
+    const handle = await open(path, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Directory fsync is best-effort on Windows and some filesystems.
   }
 }
 

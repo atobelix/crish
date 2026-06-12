@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
-import type { ToolArtifact } from "./types";
+import type { ToolArtifact } from "@crish/shared-types";
 
 export interface WorkspaceSnapshotOptions {
   enabled?: boolean;

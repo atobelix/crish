@@ -1,12 +1,18 @@
 import { budgetToolOutputForContext } from "./tool-output-budget";
-import type { AgentMessage, AgentMessageBlock, ToolOutputBudgetRuntimeOptions, ToolResultBlock } from "./types";
+import { externalizeToolOutputBlobs, type BlobExternalizationOptions } from "./blob-externalization";
+import type { SecretRedactor } from "./secrets-obfuscation";
+import type { AgentMessage, AgentMessageBlock, ToolResultBlock } from "@crish/shared-types";
+import type { ToolOutputBudgetRuntimeOptions } from "./types";
 
 export interface ContextProjectionOptions {
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
+  blobExternalization?: false | BlobExternalizationOptions;
+  secretRedactor?: SecretRedactor;
 }
 
 export function projectMessagesForProvider(messages: AgentMessage[], options: ContextProjectionOptions = {}): AgentMessage[] {
-  return messages.map((message) => projectMessageForProvider(message, options));
+  const projected = messages.map((message) => projectMessageForProvider(message, options));
+  return options.secretRedactor ? options.secretRedactor.redactMessages(projected).value : projected;
 }
 
 function projectMessageForProvider(message: AgentMessage, options: ContextProjectionOptions): AgentMessage {
@@ -26,7 +32,11 @@ function projectBlockForProvider(block: AgentMessageBlock, options: ContextProje
 }
 
 function projectToolResultForProvider(block: ToolResultBlock, options: ContextProjectionOptions): ToolResultBlock {
-  const output = budgetToolOutputForContext(block.output, {
+  const externalized =
+    options.blobExternalization === false || options.blobExternalization === undefined
+      ? block.output
+      : externalizeToolOutputBlobs(block.output, options.blobExternalization).value;
+  const output = budgetToolOutputForContext(externalized, {
     ...options.toolOutputBudget,
     toolName: block.toolName
   });

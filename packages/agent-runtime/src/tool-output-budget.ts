@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue, ToolOutput } from "./types";
+import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 
 export interface ToolOutputBudgetOptions {
   inlineChars?: number;

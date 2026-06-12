@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
-import type { JsonObject, ToolArtifact } from "./types";
+import type { JsonObject, ToolArtifact } from "@crish/shared-types";
 
 export interface WorkspaceCheckpointOptions {
   workspaceRoot: string;

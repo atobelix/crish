@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { decodeTextBuffer } from "./encoding";
+import { errorMessage } from "@crish/shared-utils";
 
 export interface AgentSkill {
   name: string;
@@ -10,6 +11,10 @@ export interface AgentSkill {
   baseDir: string;
   content: string;
   disableModelInvocation: boolean;
+  scope?: "global" | "project" | "workspace";
+  activation?: "enabled" | "recommended" | "disabled";
+  appliesTo?: string[];
+  tags?: string[];
 }
 
 export interface LoadSkillsResult {
@@ -19,8 +24,20 @@ export interface LoadSkillsResult {
 
 export interface SkillDiagnostic {
   severity: "warning";
+  code:
+    | "skill-directory-unreadable"
+    | "skill-file-unreadable"
+    | "skill-file-not-file"
+    | "skill-file-too-large"
+    | "skill-file-binary"
+    | "skill-name-invalid"
+    | "skill-description-invalid";
   path: string;
   message: string;
+}
+
+export interface LoadSkillsOptions {
+  maxSkillBytes?: number;
 }
 
 interface ParsedFrontmatter {
@@ -28,9 +45,13 @@ interface ParsedFrontmatter {
   body: string;
 }
 
-export async function loadSkillsFromDirectory(dir: string): Promise<LoadSkillsResult> {
+const DEFAULT_MAX_SKILL_BYTES = 512 * 1024;
+const MAX_SKILL_NAME_LENGTH = 64;
+const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
+
+export async function loadSkillsFromDirectory(dir: string, options: LoadSkillsOptions = {}): Promise<LoadSkillsResult> {
   const result: LoadSkillsResult = { skills: [], diagnostics: [] };
-  await loadSkillsInto(dir, result, true);
+  await loadSkillsInto(dir, result, true, normalizeLoadSkillsOptions(options));
   return result;
 }
 
@@ -39,16 +60,22 @@ export function formatSkillInvocation(skill: AgentSkill, userInstruction?: strin
   return userInstruction ? `${block}\n\n${userInstruction}` : block;
 }
 
-async function loadSkillsInto(dir: string, result: LoadSkillsResult, includeRootMarkdown: boolean): Promise<void> {
+async function loadSkillsInto(
+  dir: string,
+  result: LoadSkillsResult,
+  includeRootMarkdown: boolean,
+  options: Required<LoadSkillsOptions>
+): Promise<void> {
   let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true, encoding: "utf8" });
-  } catch {
+  } catch (error) {
+    result.diagnostics.push(warning("skill-directory-unreadable", dir, `Failed to read skill directory: ${errorMessage(error)}`));
     return;
   }
 
   if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
-    const skill = await loadSkillFile(join(dir, "SKILL.md"));
+    const skill = await loadSkillFile(join(dir, "SKILL.md"), result, options);
     if (skill) {
       result.skills.push(skill);
     }
@@ -61,11 +88,11 @@ async function loadSkillsInto(dir: string, result: LoadSkillsResult, includeRoot
     }
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await loadSkillsInto(fullPath, result, false);
+      await loadSkillsInto(fullPath, result, false, options);
       continue;
     }
     if (includeRootMarkdown && entry.isFile() && entry.name.endsWith(".md")) {
-      const skill = await loadSkillFile(fullPath);
+      const skill = await loadSkillFile(fullPath, result, options);
       if (skill) {
         result.skills.push(skill);
       }
@@ -73,19 +100,26 @@ async function loadSkillsInto(dir: string, result: LoadSkillsResult, includeRoot
   }
 }
 
-async function loadSkillFile(filePath: string): Promise<AgentSkill | null> {
+async function loadSkillFile(filePath: string, result: LoadSkillsResult, options: Required<LoadSkillsOptions>): Promise<AgentSkill | null> {
   let content: string;
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) {
+      result.diagnostics.push(warning("skill-file-not-file", filePath, "Skill path is not a file."));
+      return null;
+    }
+    if (fileStat.size > options.maxSkillBytes) {
+      result.diagnostics.push(warning("skill-file-too-large", filePath, `Skill file exceeds ${options.maxSkillBytes} bytes.`));
       return null;
     }
     const decoded = decodeTextBuffer(await readFile(filePath));
     if (decoded.encoding === "binary") {
+      result.diagnostics.push(warning("skill-file-binary", filePath, "Skill file is binary."));
       return null;
     }
     content = decoded.text;
-  } catch {
+  } catch (error) {
+    result.diagnostics.push(warning("skill-file-unreadable", filePath, `Failed to read skill file: ${errorMessage(error)}`));
     return null;
   }
 
@@ -94,13 +128,25 @@ async function loadSkillFile(filePath: string): Promise<AgentSkill | null> {
   const fallbackName = basename(baseDir).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   const name = String(parsed.data.name || fallbackName);
   const description = String(parsed.data.description || firstMarkdownSentence(parsed.body) || name);
+  for (const message of validateSkillName(name)) {
+    result.diagnostics.push(warning("skill-name-invalid", filePath, message));
+  }
+  for (const message of validateSkillDescription(description)) {
+    result.diagnostics.push(warning("skill-description-invalid", filePath, message));
+  }
   return {
     name,
     description,
     filePath,
     baseDir,
     content: parsed.body.trim(),
-    disableModelInvocation: parsed.data["disable-model-invocation"] === true
+    disableModelInvocation: parsed.data["disable-model-invocation"] === true,
+    ...(skillScope(parsed.data.scope) !== undefined ? { scope: skillScope(parsed.data.scope) } : {}),
+    ...(skillActivation(parsed.data.activation) !== undefined ? { activation: skillActivation(parsed.data.activation) } : {}),
+    ...(stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo).length > 0
+      ? { appliesTo: stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo) }
+      : {}),
+    ...(stringList(parsed.data.tags).length > 0 ? { tags: stringList(parsed.data.tags) } : {})
   };
 }
 
@@ -134,3 +180,62 @@ function firstMarkdownSentence(content: string): string | undefined {
     .find((item) => item && !item.startsWith("#"));
   return line?.slice(0, 160);
 }
+
+function validateSkillName(name: string): string[] {
+  const errors: string[] = [];
+  if (name.length > MAX_SKILL_NAME_LENGTH) {
+    errors.push(`Skill name exceeds ${MAX_SKILL_NAME_LENGTH} characters.`);
+  }
+  if (!/^[a-z0-9-]+$/.test(name)) {
+    errors.push("Skill name must use lowercase letters, numbers, and hyphens only.");
+  }
+  if (name.startsWith("-") || name.endsWith("-")) {
+    errors.push("Skill name must not start or end with a hyphen.");
+  }
+  if (name.includes("--")) {
+    errors.push("Skill name must not contain consecutive hyphens.");
+  }
+  return errors;
+}
+
+function validateSkillDescription(description: string): string[] {
+  if (!description.trim()) {
+    return ["Skill description is required."];
+  }
+  if (description.length > MAX_SKILL_DESCRIPTION_LENGTH) {
+    return [`Skill description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters.`];
+  }
+  return [];
+}
+
+function skillScope(value: string | boolean | undefined): AgentSkill["scope"] | undefined {
+  return value === "global" || value === "project" || value === "workspace" ? value : undefined;
+}
+
+function skillActivation(value: string | boolean | undefined): AgentSkill["activation"] | undefined {
+  return value === "enabled" || value === "recommended" || value === "disabled" ? value : undefined;
+}
+
+function stringList(value: string | boolean | undefined): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeLoadSkillsOptions(options: LoadSkillsOptions): Required<LoadSkillsOptions> {
+  return {
+    maxSkillBytes: positiveInteger(options.maxSkillBytes, DEFAULT_MAX_SKILL_BYTES)
+  };
+}
+
+function positiveInteger(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function warning(code: SkillDiagnostic["code"], path: string, message: string): SkillDiagnostic {
+  return { severity: "warning", code, path, message };
+}
+
+

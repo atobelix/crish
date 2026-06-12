@@ -1,10 +1,22 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { basename, resolve, sep } from "node:path";
-import { classifyTerminalCommand, getHardlineCommandBlock } from "./permissions";
+import { classifyTerminalCommand, getHardlineCommandBlock } from "./permission/command-classification";
+import {
+  BoundedProcessOutput,
+  createGuardedProcessEnv,
+  defaultProcessShell,
+  formatProcessPreview,
+  normalizeProcessGuard,
+  terminateChild,
+  type ProcessGuardOptions,
+  type ProcessShell,
+  type ProcessTerminationDiagnostic
+} from "./process-lifecycle";
 import { defineTool } from "./tools";
-import type { AgentTool, JsonObject, JsonValue, ToolOutput } from "./types";
+import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
+import type { AgentTool } from "./types";
 
 export type BackgroundCommandState = "running" | "succeeded" | "failed" | "cancelled" | "timed-out";
 
@@ -25,15 +37,9 @@ export interface BackgroundCommandManagerOptions {
   guard?: BackgroundCommandGuardOptions | false;
 }
 
-export interface BackgroundCommandShell {
-  command: string;
-  args(command: string): string[];
-}
+export type BackgroundCommandShell = ProcessShell;
 
-export interface BackgroundCommandGuardOptions {
-  scrubEnvironment?: boolean;
-  killProcessTree?: boolean;
-}
+export type BackgroundCommandGuardOptions = ProcessGuardOptions;
 
 export interface BackgroundCommandSnapshot {
   id: string;
@@ -49,12 +55,14 @@ export interface BackgroundCommandSnapshot {
   exitCode?: number | null;
   signal?: string | null;
   timedOut: boolean;
+  cancelled: boolean;
   truncated: boolean;
   outputPreview: string;
   stdoutPreview: string;
   stderrPreview: string;
   stdoutBytes: number;
   stderrBytes: number;
+  terminationDiagnostics: ProcessTerminationDiagnostic[];
   error?: string;
 }
 
@@ -76,12 +84,13 @@ interface BackgroundCommandRecord {
   finishedAt?: number;
   timeoutMs: number;
   child?: ChildProcess;
-  stdout: BoundedBuffer;
-  stderr: BoundedBuffer;
+  stdout: BoundedProcessOutput;
+  stderr: BoundedProcessOutput;
   exitCode?: number | null;
   signal?: string | null;
   timedOut: boolean;
   cancelRequested: boolean;
+  terminationDiagnostics: ProcessTerminationDiagnostic[];
   error?: string;
   timeout?: ReturnType<typeof setTimeout>;
   heartbeat?: ReturnType<typeof setInterval>;
@@ -114,10 +123,11 @@ export class BackgroundCommandManager {
       startedAt: now,
       updatedAt: now,
       timeoutMs,
-      stdout: new BoundedBuffer(maxOutputBytes),
-      stderr: new BoundedBuffer(maxOutputBytes),
+      stdout: new BoundedProcessOutput(maxOutputBytes),
+      stderr: new BoundedProcessOutput(maxOutputBytes),
       timedOut: false,
-      cancelRequested: false
+      cancelRequested: false,
+      terminationDiagnostics: []
     };
     this.tasks.set(record.id, record);
 
@@ -147,7 +157,7 @@ export class BackgroundCommandManager {
       if (isTerminalState(record.state)) return;
       record.timedOut = true;
       record.updatedAt = Date.now();
-      terminateChild(child, this.guard());
+      record.terminationDiagnostics.push(...terminateChild(child, this.guard()));
     }, timeoutMs);
     record.heartbeat = setInterval(() => {
       if (isTerminalState(record.state)) return;
@@ -190,10 +200,7 @@ export class BackgroundCommandManager {
     record.cancelRequested = true;
     record.updatedAt = Date.now();
     if (record.child) {
-      terminateChild(record.child, this.guard());
-    }
-    if (process.platform === "win32") {
-      sleepSync(150);
+      record.terminationDiagnostics.push(...terminateChild(record.child, this.guard()));
     }
     this.finish(record, { state: "cancelled", exitCode: null, signal: "cancelled" });
     return this.toSnapshot(record);
@@ -262,12 +269,14 @@ export class BackgroundCommandManager {
       exitCode: record.exitCode,
       signal: record.signal,
       timedOut: record.timedOut,
+      cancelled: record.cancelRequested,
       truncated: record.stdout.truncated || record.stderr.truncated,
-      outputPreview: formatCommandPreview(stdoutPreview, stderrPreview),
+      outputPreview: formatProcessPreview(stdoutPreview, stderrPreview),
       stdoutPreview,
       stderrPreview,
       stdoutBytes: record.stdout.totalBytes,
       stderrBytes: record.stderr.totalBytes,
+      terminationDiagnostics: record.terminationDiagnostics,
       ...(record.error ? { error: record.error } : {})
     };
   }
@@ -279,11 +288,11 @@ export class BackgroundCommandManager {
   }
 
   private shell(): BackgroundCommandShell {
-    return this.options.shell ?? defaultShell();
+    return this.options.shell ?? defaultProcessShell();
   }
 
   private guard(): Required<BackgroundCommandGuardOptions> {
-    return normalizeGuard(this.options.guard);
+    return normalizeProcessGuard(this.options.guard);
   }
 }
 
@@ -410,164 +419,6 @@ function formatBackgroundCommandLine(task: BackgroundCommandSnapshot): string {
   return `${task.id} ${task.state}${exit} ${(task.durationMs ?? 0) / 1000}s ${task.command}`;
 }
 
-function formatCommandPreview(stdout: string, stderr: string): string {
-  return [
-    stdout.trimEnd() ? `stdout:\n${stdout.trimEnd()}` : "",
-    stderr.trimEnd() ? `stderr:\n${stderr.trimEnd()}` : ""
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-class BoundedBuffer {
-  private readonly headLimit: number;
-  private readonly tailLimit: number;
-  private head = Buffer.alloc(0);
-  private tail = Buffer.alloc(0);
-  private full = Buffer.alloc(0);
-  totalBytes = 0;
-  truncated = false;
-
-  constructor(private readonly maxBytes: number) {
-    this.headLimit = Math.max(512, Math.floor(maxBytes * 0.55));
-    this.tailLimit = Math.max(512, maxBytes - this.headLimit);
-  }
-
-  append(chunk: Buffer): void {
-    this.totalBytes += chunk.byteLength;
-    if (!this.truncated) {
-      const next = Buffer.concat([this.full, chunk]);
-      if (next.byteLength <= this.maxBytes) {
-        this.full = next;
-        return;
-      }
-      this.truncated = true;
-      this.head = next.subarray(0, this.headLimit);
-      this.tail = next.subarray(-this.tailLimit);
-      this.full = Buffer.alloc(0);
-      return;
-    }
-    this.tail = Buffer.concat([this.tail, chunk]).subarray(-this.tailLimit);
-  }
-
-  toText(): string {
-    if (!this.truncated) return this.full.toString("utf8");
-    const omitted = Math.max(0, this.totalBytes - this.head.byteLength - this.tail.byteLength);
-    return `${this.head.toString("utf8")}\n\n[output omitted: ${omitted} bytes]\n\n${this.tail.toString("utf8")}`;
-  }
-}
-
-function normalizeGuard(guard: BackgroundCommandGuardOptions | false | undefined): Required<BackgroundCommandGuardOptions> {
-  if (guard === false) {
-    return {
-      scrubEnvironment: false,
-      killProcessTree: false
-    };
-  }
-  return {
-    scrubEnvironment: guard?.scrubEnvironment ?? true,
-    killProcessTree: guard?.killProcessTree ?? true
-  };
-}
-
-function createGuardedProcessEnv(): NodeJS.ProcessEnv {
-  const guarded: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (isSensitiveEnvName(key)) continue;
-    guarded[key] = value;
-  }
-  guarded.PYTHONUTF8 = "1";
-  guarded.PYTHONIOENCODING = "utf-8";
-  return guarded;
-}
-
-function isSensitiveEnvName(name: string): boolean {
-  return /(^|_)(token|secret|password|credential|api[_-]?key|auth|cookie|session)(_|\b)/i.test(name);
-}
-
-function terminateChild(child: ChildProcess, guard: Required<BackgroundCommandGuardOptions>): void {
-  if (!guard.killProcessTree) {
-    child.kill();
-    return;
-  }
-  terminateProcessTree(child);
-}
-
-function terminateProcessTree(child: ChildProcess): void {
-  if (!child.pid) {
-    child.kill();
-    return;
-  }
-  if (process.platform === "win32") {
-    terminateWindowsProcessTree(child.pid);
-    const result = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-      timeout: 5_000
-    });
-    if (result.error) child.kill();
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    child.kill();
-  }
-}
-
-function terminateWindowsProcessTree(rootPid: number): void {
-  const script = [
-    "$ErrorActionPreference = 'SilentlyContinue'",
-    `$root = ${rootPid}`,
-    "$items = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId",
-    "$ids = New-Object 'System.Collections.Generic.HashSet[int]'",
-    "[void]$ids.Add([int]$root)",
-    "do {",
-    "  $added = $false",
-    "  foreach ($p in $items) {",
-    "    if ($ids.Contains([int]$p.ParentProcessId) -and -not $ids.Contains([int]$p.ProcessId)) {",
-    "      [void]$ids.Add([int]$p.ProcessId)",
-    "      $added = $true",
-    "    }",
-    "  }",
-    "} while ($added)",
-    "$ids | Sort-Object -Descending | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
-  ].join("; ");
-  spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
-    stdio: "ignore",
-    windowsHide: true,
-    timeout: 5_000
-  });
-}
-
-function defaultShell(): BackgroundCommandShell {
-  if (process.platform === "win32") {
-    const prelude = [
-      "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "$env:PYTHONUTF8='1'",
-      "$env:PYTHONIOENCODING='utf-8'"
-    ].join("; ");
-    return {
-      command: "powershell.exe",
-      args: (command) => [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        `${prelude}; $global:LASTEXITCODE=$null; & { ${command} }; $success=$?; $exitCode=$LASTEXITCODE; if ($exitCode -ne $null -and $exitCode -ne 0) { exit $exitCode }; if (-not $success) { exit 1 }`
-      ]
-    };
-  }
-  return {
-    command: "bash",
-    args: (command) => ["-lc", command]
-  };
-}
-
 function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string {
   const root = resolve(workspaceRoot);
   const candidate = resolve(root, inputPath);
@@ -615,10 +466,4 @@ function createBackgroundCommandId(): string {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function sleepSync(milliseconds: number): void {
-  const buffer = new SharedArrayBuffer(4);
-  const view = new Int32Array(buffer);
-  Atomics.wait(view, 0, 0, Math.max(0, milliseconds));
 }

@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import type { AgentEvent, AgentMessage, AgentProvider, AgentProviderRequest, ProviderStreamEvent } from "./types";
+import type { AgentEvent, AgentMessage } from "@crish/shared-types";
+import type { AgentProvider, AgentProviderRequest, ProviderStreamEvent } from "./types";
 import type { AgentRuntime } from "./runtime";
 
 export type ScriptedProviderStep =
@@ -189,7 +190,7 @@ export async function runRuntimeWithProbe(
     if (event.type === "tool-start") {
       toolCallsByName[event.call.toolName] = (toolCallsByName[event.call.toolName] ?? 0) + 1;
     }
-    if (event.type === "agent-end" && event.error) errors.push(event.error);
+    if (event.type === "agent-end" && event.error && event.reason !== "aborted") errors.push(event.error);
     if (event.type === "runtime-error") errors.push(event.error);
     if (event.type === "tool-end" && event.result.isError) errors.push(event.result.output.text ?? event.result.toolName);
     updateReport(report, {

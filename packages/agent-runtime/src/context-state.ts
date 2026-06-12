@@ -1,14 +1,16 @@
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
 import type {
-  AgentTool,
   ContextCompressionRecord,
-  ContextStateReader,
-  ContextStateSnapshot,
   JsonObject,
   JsonValue,
   RuntimeCheckpointRecord,
   ToolExecutionContext
+} from "@crish/shared-types";
+import type {
+  AgentTool,
+  ContextStateReader,
+  ContextStateSnapshot
 } from "./types";
 
 export interface ContextTask {
