@@ -1,11 +1,11 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build outputs
 dist/
 build/
 *.tsbuildinfo
+target-tauri-dev/
 
 # Tauri
 **/target/
@@ -40,3 +40,43 @@ coverage/
 
 # Reference materials
 reference/
+
+# Agent runtime data
+.agent-runtime/
+.codex-tool-scratch/
+
+# Rust build artifacts
+target-tauri-smoke/
+target-tauri-dev/
+**/target/
+
+# Dev artifacts
+tail
+timeout
+tsc-errors.txt
+tsc-errors2.txt
+code-tree.txt
+
+# Planning documents (keep only ARCHITECTURE.md)
+0613-0055-plan.md
+new.md
+suggestions.md
+suggestions-v2.md
+history.txt
+ARCHITECTURE-IMPROVEMENT.md
+CORE-ARCHITECTURE-IMPROVEMENT.md
+IMPROVEMENT-PLAN.md
+DEVELOPMENT_LOG.md
+FRONTEND-DESIGN-PLAN.md
+
+# Agent workbench planning
+apps/agent-workbench/AGENT-COORDINATION.md
+apps/agent-workbench/FRONTEND-DESIGN-PLAN.md
+apps/agent-workbench/IMPROVEMENT-PLAN.md
+apps/agent-workbench/REFACTOR_PLAN.md
+
+# Rust lock file (managed by Cargo)
+Cargo.lock
+
+# Tauri generated schemas
+apps/agent-workbench/src-tauri/gen/
