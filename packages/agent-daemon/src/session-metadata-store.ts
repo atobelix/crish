@@ -1,0 +1,404 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import type { JsonObject, JsonValue } from "@crish/shared-types";
+import type { SessionAction } from "@crish/shared-types";
+import { isRecord, errorMessage, fsyncPath, fsyncDirectoryPath, isNodeError, clone, compactJsonObject, isJsonObject } from "@crish/shared-utils";
+
+export const SESSION_METADATA_STORE_VERSION = 1;
+
+export interface SessionMetadataRecord {
+  sessionId: string;
+  title?: string;
+  pinned: boolean;
+  archived: boolean;
+  deleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  source: SessionMetadataSource;
+}
+
+export interface SessionMetadataSource {
+  actionId: string;
+  actionKind: SessionAction["kind"];
+  requestedAt: string;
+  requestedBy: SessionAction["requestedBy"];
+  idempotencyKey?: string;
+  metadata?: JsonObject;
+}
+
+export interface SessionMetadataStoreState {
+  version: typeof SESSION_METADATA_STORE_VERSION;
+  sessions: SessionMetadataRecord[];
+}
+
+export interface SessionMetadataMutationResult {
+  record: SessionMetadataRecord;
+  changed: boolean;
+}
+
+export type SessionMetadataPatch =
+  | { kind: "pin"; pinned: boolean }
+  | { kind: "rename"; title: string }
+  | { kind: "archive"; archived: boolean }
+  | { kind: "delete"; deleted: true };
+
+export class SessionMetadataStoreError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly filePath?: string,
+    readonly issues: string[] = []
+  ) {
+    super(message);
+    this.name = "SessionMetadataStoreError";
+  }
+}
+
+export class SessionMetadataStoreReadError extends SessionMetadataStoreError {
+  constructor(filePath: string, message: string, issues: string[] = []) {
+    super(message, "SESSION_METADATA_STORE_READ_FAILED", filePath, issues);
+    this.name = "SessionMetadataStoreReadError";
+  }
+}
+
+export class SessionMetadataStoreWriteError extends SessionMetadataStoreError {
+  constructor(filePath: string, cause: unknown) {
+    super(
+      `Failed to write session metadata store ${filePath}: ${errorMessage(cause)}`,
+      "SESSION_METADATA_STORE_WRITE_FAILED",
+      filePath
+    );
+    this.name = "SessionMetadataStoreWriteError";
+  }
+}
+
+export class FileSessionMetadataStore {
+  private state?: SessionMetadataStoreState;
+  private pending: Promise<void> = Promise.resolve();
+
+  constructor(
+    readonly filePath: string,
+    private readonly options: { fsync?: boolean; fsyncDirectory?: boolean | "best-effort" } = {}
+  ) {}
+
+  async list(): Promise<SessionMetadataRecord[]> {
+    const state = await this.readState();
+    return cloneState(state).sessions.sort(compareRecords);
+  }
+
+  async get(sessionId: string): Promise<SessionMetadataRecord | undefined> {
+    const state = await this.readState();
+    const record = state.sessions.find((item) => item.sessionId === sessionId);
+    return record ? clone(record) : undefined;
+  }
+
+  async applyAction(
+    action: SessionAction,
+    patch: SessionMetadataPatch,
+    now: Date = new Date()
+  ): Promise<SessionMetadataMutationResult> {
+    return this.mutate((state) => {
+      const timestamp = now.toISOString();
+      const index = state.sessions.findIndex((record) => record.sessionId === action.sessionId);
+      const previous = index === -1 ? undefined : state.sessions[index]!;
+      const source = sourceFromAction(action);
+      const current: SessionMetadataRecord =
+        previous ??
+        {
+          sessionId: action.sessionId,
+          pinned: false,
+          archived: false,
+          deleted: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          source,
+        };
+
+      const updated = applyPatch(current, patch, timestamp, source);
+      assertSessionMetadataRecord(updated, "$.session");
+      if (index === -1) {
+        state.sessions.push(updated);
+      } else {
+        state.sessions[index] = updated;
+      }
+
+      return {
+        record: clone(updated),
+        changed: !previous || !recordsEqual(previous, updated),
+      };
+    });
+  }
+
+  private async readState(): Promise<SessionMetadataStoreState> {
+    await this.pending;
+    return this.load();
+  }
+
+  private async mutate<T>(operation: (state: SessionMetadataStoreState) => T): Promise<T> {
+    const next = this.pending.then(async () => {
+      const current = await this.load();
+      const nextState = cloneState(current);
+      const result = operation(nextState);
+      await this.writeState(nextState);
+      this.state = nextState;
+      return result;
+    });
+
+    this.pending = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
+  }
+
+  private async load(): Promise<SessionMetadataStoreState> {
+    if (this.state) return this.state;
+
+    let text: string;
+    try {
+      text = await readFile(this.filePath, "utf8");
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        this.state = emptyState();
+        return this.state;
+      }
+      throw new SessionMetadataStoreReadError(
+        this.filePath,
+        `Failed to read session metadata store ${this.filePath}: ${errorMessage(error)}`
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      throw new SessionMetadataStoreReadError(
+        this.filePath,
+        `Session metadata store ${this.filePath} is not valid JSON: ${errorMessage(error)}`
+      );
+    }
+
+    const issues = validateSessionMetadataStoreState(parsed);
+    if (issues.length > 0) {
+      throw new SessionMetadataStoreReadError(
+        this.filePath,
+        `Session metadata store ${this.filePath} has invalid data`,
+        issues
+      );
+    }
+
+    this.state = clone(parsed as SessionMetadataStoreState);
+    return this.state;
+  }
+
+  private async writeState(state: SessionMetadataStoreState): Promise<void> {
+    const tmpPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(dirname(this.filePath), { recursive: true });
+      await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      if (this.options.fsync !== false) {
+        fsyncPath(tmpPath, "r+");
+      }
+      await rename(tmpPath, this.filePath);
+      if (this.options.fsync !== false && this.options.fsyncDirectory !== false) {
+        const dirFsyncMode = this.options.fsyncDirectory === true ? "strict" : "best-effort";
+        fsyncDirectoryPath(dirname(this.filePath), dirFsyncMode);
+      }
+    } catch (error) {
+      await rm(tmpPath, { force: true }).catch(() => undefined);
+      throw new SessionMetadataStoreWriteError(this.filePath, error);
+    }
+  }
+}
+
+export function validateSessionMetadataStoreState(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) {
+    return ["$: Expected object"];
+  }
+
+  rejectUnknownFields(value, ["version", "sessions"], "$", issues);
+  if (value.version !== SESSION_METADATA_STORE_VERSION) {
+    issues.push(`$.version: Expected ${SESSION_METADATA_STORE_VERSION}`);
+  }
+  if (!Array.isArray(value.sessions)) {
+    issues.push("$.sessions: Expected array");
+  } else {
+    const ids = new Set<string>();
+    value.sessions.forEach((record, index) => {
+      validateSessionMetadataRecord(record, `$.sessions[${index}]`, issues);
+      if (!isRecord(record) || typeof record.sessionId !== "string") return;
+      if (ids.has(record.sessionId)) {
+        issues.push(`$.sessions: Duplicate session id ${record.sessionId}`);
+      }
+      ids.add(record.sessionId);
+    });
+  }
+
+  return issues;
+}
+
+function validateSessionMetadataRecord(value: unknown, path: string, issues: string[]): void {
+  if (!isRecord(value)) {
+    issues.push(`${path}: Expected object`);
+    return;
+  }
+
+  rejectUnknownFields(value, ["sessionId", "title", "pinned", "archived", "deleted", "createdAt", "updatedAt", "source"], path, issues);
+  requiredString(value, "sessionId", `${path}.sessionId`, issues);
+  if ("title" in value && typeof value.title !== "string") {
+    issues.push(`${path}.title: Expected string`);
+  }
+  requiredBoolean(value, "pinned", `${path}.pinned`, issues);
+  requiredBoolean(value, "archived", `${path}.archived`, issues);
+  requiredBoolean(value, "deleted", `${path}.deleted`, issues);
+  requiredString(value, "createdAt", `${path}.createdAt`, issues);
+  requiredString(value, "updatedAt", `${path}.updatedAt`, issues);
+  validateSource(value.source, `${path}.source`, issues);
+}
+
+function assertSessionMetadataRecord(value: SessionMetadataRecord, path: string): void {
+  const issues: string[] = [];
+  validateSessionMetadataRecord(value, path, issues);
+  if (issues.length > 0) {
+    throw new SessionMetadataStoreError(
+      `Invalid session metadata record: ${issues.join("; ")}`,
+      "SESSION_METADATA_STORE_VALIDATION_FAILED",
+      undefined,
+      issues
+    );
+  }
+}
+
+function validateSource(value: unknown, path: string, issues: string[]): void {
+  if (!isRecord(value)) {
+    issues.push(`${path}: Expected object`);
+    return;
+  }
+
+  rejectUnknownFields(value, ["actionId", "actionKind", "requestedAt", "requestedBy", "idempotencyKey", "metadata"], path, issues);
+  requiredString(value, "actionId", `${path}.actionId`, issues);
+  requiredString(value, "actionKind", `${path}.actionKind`, issues);
+  requiredString(value, "requestedAt", `${path}.requestedAt`, issues);
+  requiredString(value, "requestedBy", `${path}.requestedBy`, issues);
+  if ("idempotencyKey" in value && typeof value.idempotencyKey !== "string") {
+    issues.push(`${path}.idempotencyKey: Expected string`);
+  }
+  if ("metadata" in value && !isJsonObject(value.metadata)) {
+    issues.push(`${path}.metadata: Expected JSON object`);
+  }
+}
+
+function applyPatch(
+  current: SessionMetadataRecord,
+  patch: SessionMetadataPatch,
+  updatedAt: string,
+  source: SessionMetadataSource
+): SessionMetadataRecord {
+  const next: SessionMetadataRecord = {
+    ...current,
+    updatedAt,
+    source,
+  };
+
+  if (patch.kind === "pin") {
+    next.pinned = patch.pinned;
+  } else if (patch.kind === "rename") {
+    next.title = patch.title;
+  } else if (patch.kind === "archive") {
+    next.archived = patch.archived;
+  } else {
+    next.deleted = true;
+  }
+
+  return next;
+}
+
+function sourceFromAction(action: SessionAction): SessionMetadataSource {
+  const metadata = compactJsonObject({
+    consistency: action.consistency,
+    ...(action.kind === "fork"
+      ? {
+          fromEventId: action.fromEventId,
+          fromMessageId: action.fromMessageId,
+          targetSessionId: action.targetSessionId,
+        }
+      : {}),
+    ...(action.kind === "open" ? { target: action.target, paneId: action.paneId } : {}),
+  });
+  return {
+    actionId: action.actionId,
+    actionKind: action.kind,
+    requestedAt: action.requestedAt,
+    requestedBy: action.requestedBy,
+    ...(action.idempotencyKey !== undefined ? { idempotencyKey: action.idempotencyKey } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
+}
+
+function emptyState(): SessionMetadataStoreState {
+  return {
+    version: SESSION_METADATA_STORE_VERSION,
+    sessions: [],
+  };
+}
+
+function compareRecords(left: SessionMetadataRecord, right: SessionMetadataRecord): number {
+  return left.sessionId.localeCompare(right.sessionId);
+}
+
+function recordsEqual(left: SessionMetadataRecord, right: SessionMetadataRecord): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function rejectUnknownFields(
+  input: Record<string, unknown>,
+  allowed: readonly string[],
+  path: string,
+  issues: string[]
+): void {
+  for (const key of Object.keys(input)) {
+    if (!allowed.includes(key)) {
+      issues.push(`${path}.${key}: Unexpected field`);
+    }
+  }
+}
+
+function requiredString(
+  input: Record<string, unknown>,
+  key: string,
+  path: string,
+  issues: string[]
+): void {
+  if (!(key in input)) {
+    issues.push(`${path}: Required field is missing`);
+    return;
+  }
+  if (typeof input[key] !== "string" || input[key].length === 0) {
+    issues.push(`${path}: Expected non-empty string`);
+  }
+}
+
+function requiredBoolean(
+  input: Record<string, unknown>,
+  key: string,
+  path: string,
+  issues: string[]
+): void {
+  if (!(key in input)) {
+    issues.push(`${path}: Required field is missing`);
+    return;
+  }
+  if (typeof input[key] !== "boolean") {
+    issues.push(`${path}: Expected boolean`);
+  }
+}
+
+
+
+function cloneState(state: SessionMetadataStoreState): SessionMetadataStoreState {
+  return clone(state);
+}
+
+
