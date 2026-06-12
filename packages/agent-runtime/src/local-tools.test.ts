@@ -1,9 +1,13 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  createApplyWorkspaceEditsTool,
   createEditTool,
+  GitCliVersioningService,
   createListDirectoryTool,
   createLocalWorkspaceTools,
   createReadTool,
@@ -12,11 +16,14 @@ import {
   createRestoreWorkspaceCheckpointTool,
   createSearchFilesTool,
   createTerminalCommandTool,
+  WorkspaceMutationCoordinator,
   createWorkspaceCheckpointTool,
   createWriteFileTool
 } from ".";
 import { encodeTextBuffer } from "./encoding";
-import type { ToolExecutionContext } from "./types";
+import type { ToolExecutionContext } from "@crish/shared-types";
+
+const execFileAsync = promisify(execFile);
 
 let workspaceRoot = "";
 
@@ -28,13 +35,14 @@ afterEach(async () => {
   await rm(workspaceRoot, { recursive: true, force: true });
 });
 
-function context(): ToolExecutionContext {
+function context(overrides: Partial<ToolExecutionContext> = {}): ToolExecutionContext {
   return {
     toolCallId: "call",
     sessionId: "session",
     cwd: workspaceRoot,
     signal: new AbortController().signal,
-    emit: () => undefined
+    emit: () => undefined,
+    ...overrides
   };
 }
 
@@ -47,6 +55,19 @@ async function waitForBackgroundTaskState(tool: ReturnType<typeof createTerminal
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Timed out waiting for background command ${taskId} to reach ${state}`);
+}
+
+async function git(args: string[]): Promise<void> {
+  await execFileAsync("git", args, { cwd: workspaceRoot });
+}
+
+async function initGitRepo(): Promise<void> {
+  await git(["init"]);
+  await git(["config", "user.name", "Conex Test"]);
+  await git(["config", "user.email", "conex-test@example.test"]);
+  await writeFile(join(workspaceRoot, "base.txt"), "base", "utf8");
+  await git(["add", "base.txt"]);
+  await git(["commit", "-m", "initial"]);
 }
 
 describe("local workspace tools", () => {
@@ -65,6 +86,51 @@ describe("local workspace tools", () => {
 
     expect(output.text).toContain("Exit code: 7");
     expect(output.json).toMatchObject({ exitCode: 7 });
+  });
+
+  it("returns typed foreground timeout state with termination diagnostics", async () => {
+    const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 100 });
+    const output = await tool.execute({ command: 'node -e "setTimeout(() => {}, 30000)"' }, context());
+    const json = output.json as {
+      timedOut?: boolean;
+      cancelled?: boolean;
+      exitCode?: number | null;
+      signal?: string | null;
+      terminationDiagnostics?: Array<{ strategy?: string; ok?: boolean }>;
+    };
+
+    expect(output.text).toContain("Timed out: true");
+    expect(json.timedOut).toBe(true);
+    expect(json.cancelled).toBe(false);
+    expect(json.exitCode ?? json.signal).not.toBeUndefined();
+    expect(json.terminationDiagnostics?.length).toBeGreaterThan(0);
+    expect(json.terminationDiagnostics?.[0]).toMatchObject({ ok: expect.any(Boolean) });
+  }, 10_000);
+
+  it("returns typed foreground cancellation state", async () => {
+    const abortController = new AbortController();
+    const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000 });
+    const running = tool.execute({ command: 'node -e "setTimeout(() => {}, 30000)"' }, context({ signal: abortController.signal }));
+
+    setTimeout(() => abortController.abort(), 100);
+    const output = await running;
+    const json = output.json as { timedOut?: boolean; cancelled?: boolean; terminationDiagnostics?: unknown[] };
+
+    expect(output.text).toContain("Cancelled: true");
+    expect(json).toMatchObject({ timedOut: false, cancelled: true });
+    expect(json.terminationDiagnostics?.length).toBeGreaterThan(0);
+  }, 10_000);
+
+  it("spills large foreground output into a bounded preview with byte metadata", async () => {
+    const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000, maxOutputBytes: 1_500 });
+    const output = await tool.execute({ command: 'node -e "process.stdout.write(\'a\'.repeat(8000))"' }, context());
+    const json = output.json as { stdout?: string; stdoutBytes?: number; truncated?: boolean; outputPreview?: string };
+
+    expect(json.truncated).toBe(true);
+    expect(json.stdoutBytes).toBe(8000);
+    expect(json.stdout?.length).toBeLessThan(3000);
+    expect(json.stdout).toContain("[output omitted:");
+    expect(json.outputPreview).toContain("[output omitted:");
   });
 
   it("runs common chained commands through the default shell wrapper", async () => {
@@ -131,6 +197,79 @@ describe("local workspace tools", () => {
     expect(cancelled).toMatchObject({ state: "cancelled" });
   }, 15_000);
 
+  it("does not lock read-only shell commands even when a workspace lease is active", async () => {
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const active = await mutationCoordinator.acquire({ scope: { type: "workspace" } });
+    expect(active.ok).toBe(true);
+    const tool = createTerminalCommandTool({ workspaceRoot, mutationCoordinator, defaultTimeoutMs: 10_000 });
+
+    try {
+      const output = await tool.execute({ command: "pwd" }, context());
+      expect(output.text).toContain("Exit code: 0");
+    } finally {
+      if (active.ok) mutationCoordinator.release(active.lease.token);
+    }
+  });
+
+  it("wraps foreground mutating shell commands in a workspace lease and releases on failure", async () => {
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const observedLeases = [] as ReturnType<WorkspaceMutationCoordinator["listLeases"]>;
+    const tool = createTerminalCommandTool({
+      workspaceRoot,
+      mutationCoordinator,
+      defaultTimeoutMs: 10_000,
+      preMutationCheckpoint: {
+        onFailure: "throw",
+        hook: () => {
+          observedLeases.push(...mutationCoordinator.listLeases());
+          throw new Error("checkpoint hook failed");
+        }
+      }
+    });
+
+    await expect(tool.execute({ command: "echo hi > shell-lease.txt" }, context())).rejects.toThrow("checkpoint hook failed");
+    expect(observedLeases).toHaveLength(1);
+    expect(observedLeases[0]).toMatchObject({
+      owner: {
+        sessionId: "session",
+        toolCallId: "call",
+        toolName: "shell_command",
+        cwd: workspaceRoot
+      },
+      scope: { type: "workspace" }
+    });
+    expect(observedLeases[0]?.owner?.targetSummary).toContain("echo hi > shell-lease.txt");
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+  });
+
+  it("does not leak leases for background shell start, list, get, or cancel", async () => {
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const tool = createTerminalCommandTool({
+      workspaceRoot,
+      mutationCoordinator,
+      defaultTimeoutMs: 10_000,
+      backgroundDefaultTimeoutMs: 10_000
+    });
+
+    const started = await tool.execute(
+      { command: 'node -e "setTimeout(() => {}, 30000)" > bg-leased.txt', backgroundAction: "start" },
+      context()
+    );
+    const taskId = (started.json as { id: string }).id;
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+
+    await tool.execute({ backgroundAction: "list" }, context());
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+
+    await tool.execute({ backgroundAction: "get", taskId }, context());
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+
+    await tool.execute({ backgroundAction: "cancel", taskId }, context());
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+    await waitForBackgroundTaskState(tool, taskId, "cancelled");
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+  }, 15_000);
+
   it("reads, writes, lists, and searches files inside the workspace", async () => {
     const write = createWriteFileTool({ workspaceRoot });
     const read = createReadFileTool({ workspaceRoot });
@@ -177,7 +316,25 @@ describe("local workspace tools", () => {
     });
   });
 
-  it("applies line-anchored edits through the unified edit tool", async () => {
+  it("records read snapshots with an injected mutation coordinator without acquiring leases", async () => {
+    await mkdir(join(workspaceRoot, "notes"), { recursive: true });
+    await writeFile(join(workspaceRoot, "notes", "a.txt"), "one\ntwo", "utf8");
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const read = createReadTool({ workspaceRoot, mutationCoordinator });
+    const readFileTool = createReadFileTool({ workspaceRoot, mutationCoordinator });
+
+    const unified = await read.execute({ path: "notes/a.txt" }, context());
+    const compatibility = await readFileTool.execute({ path: "notes/a.txt" }, context());
+    const unifiedTag = (unified.json as { snapshotTag?: string }).snapshotTag;
+    const compatibilityTag = (compatibility.json as { snapshotTag?: string }).snapshotTag;
+
+    expect(unifiedTag).toMatch(/^[0-9a-f]{12}$/);
+    expect(compatibilityTag).toBe(unifiedTag);
+    expect(mutationCoordinator.latestReadSnapshot("session", "notes/a.txt")).toBe(unifiedTag);
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+  });
+
+  it("applies numbered line edits through the unified edit tool", async () => {
     await writeFile(join(workspaceRoot, "tracked.txt"), "one\ntwo\nthree\nfour", "utf8");
     const read = createReadTool({ workspaceRoot });
     const edit = createEditTool({ workspaceRoot });
@@ -214,44 +371,85 @@ describe("local workspace tools", () => {
     });
   });
 
-  it("applies hashline-anchored edits from read output", async () => {
-    await writeFile(join(workspaceRoot, "hashline.txt"), "one\ntwo\nthree", "utf8");
-    const read = createReadTool({ workspaceRoot });
-    const edit = createEditTool({ workspaceRoot });
-    const readOutput = await read.execute({ path: "hashline.txt", format: "hashline" }, context());
-    const anchor = readOutput.text?.match(/\b2:[0-9a-f]{4}\b/)?.[0];
+  it("wraps explicit legacy write_file factory in a file mutation lease with owner metadata", async () => {
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const observedLeases = [] as ReturnType<WorkspaceMutationCoordinator["listLeases"]>;
+    const write = createWriteFileTool({
+      workspaceRoot,
+      mutationCoordinator,
+      preMutationCheckpoint: {
+        hook: () => {
+          observedLeases.push(...mutationCoordinator.listLeases());
+          return { status: "skipped", reason: "test" };
+        }
+      }
+    });
 
-    expect(anchor).toBeTruthy();
-    expect(readOutput.text).toContain(`${anchor} | two`);
-    const lineAnchor = anchor!;
+    await write.execute({ path: "leased.txt", content: "leased" }, context());
 
-    const output = await edit.execute(
-      {
-        path: "hashline.txt",
-        edits: [{ op: "replace", anchor: lineAnchor, content: "two edited" }]
+    expect(observedLeases).toHaveLength(1);
+    expect(observedLeases[0]).toMatchObject({
+      owner: {
+        sessionId: "session",
+        toolCallId: "call",
+        toolName: "write_file",
+        cwd: workspaceRoot,
+        targetSummary: "leased.txt"
       },
-      context()
-    );
-
-    await expect(readFile(join(workspaceRoot, "hashline.txt"), "utf8")).resolves.toBe("one\ntwo edited\nthree");
-    expect(output.text).toContain("2 | two edited");
-    expect((output.json as { resultPreview?: { text?: string } }).resultPreview?.text).toContain("2 | two edited");
+      scope: { type: "files" }
+    });
+    expect(observedLeases[0]?.scope.type === "files" ? observedLeases[0].scope.paths[0] : "").toContain("leased.txt");
+    expect(mutationCoordinator.listLeases()).toEqual([]);
   });
 
-  it("rejects stale hashline anchors with nearby current anchors", async () => {
-    await writeFile(join(workspaceRoot, "stale-anchor.txt"), "one\ntwo\nthree", "utf8");
+  it("releases file mutation leases when guarded edits throw", async () => {
+    await writeFile(join(workspaceRoot, "leased-edit.txt"), "before", "utf8");
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const edit = createEditTool({
+      workspaceRoot,
+      mutationCoordinator,
+      preMutationCheckpoint: {
+        onFailure: "throw",
+        hook: () => {
+          expect(mutationCoordinator.listLeases()).toHaveLength(1);
+          throw new Error("checkpoint hook failed");
+        }
+      }
+    });
+
+    await expect(edit.execute({ path: "leased-edit.txt", content: "after" }, context())).rejects.toThrow("checkpoint hook failed");
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+    await expect(readFile(join(workspaceRoot, "leased-edit.txt"), "utf8")).resolves.toBe("before");
+  });
+
+  it("does not expose removed read formats or edit anchor fields", async () => {
+    await writeFile(join(workspaceRoot, "legacy-format.txt"), "one\ntwo\nthree", "utf8");
     const read = createReadTool({ workspaceRoot });
     const edit = createEditTool({ workspaceRoot });
-    const readOutput = await read.execute({ path: "stale-anchor.txt", format: "hashline" }, context());
-    const anchor = readOutput.text?.match(/\b2:[0-9a-f]{4}\b/)?.[0];
-    expect(anchor).toBeTruthy();
-    const lineAnchor = anchor!;
+    const removedFormat = "hash" + "line";
+    const readSchema = read.inputSchema as { properties: { format?: { enum?: string[] } } };
+    const editSchema = edit.inputSchema as { properties: { edits?: { items?: { properties?: Record<string, unknown> } } } };
+    const readFormatSchema = readSchema.properties.format ?? {};
+    const editItemProperties = editSchema.properties.edits?.items?.properties ?? {};
 
-    await writeFile(join(workspaceRoot, "stale-anchor.txt"), "one\ntwo changed\nthree", "utf8");
+    expect(readFormatSchema.enum).toEqual(["numbered", "plain"]);
+    expect(readFormatSchema.enum).not.toContain(removedFormat);
+    expect(editItemProperties).not.toHaveProperty("anchor");
+    expect(editItemProperties).not.toHaveProperty("endAnchor");
+
+    const readOutput = await read.execute({ path: "legacy-format.txt", format: removedFormat }, context());
+    expect(readOutput.text).toContain("2 | two");
+    expect(readOutput.text).not.toMatch(/\b2:[0-9a-f]{4}\b/);
+  });
+
+  it("rejects removed edit anchor fields without changing the file", async () => {
+    await writeFile(join(workspaceRoot, "removed-anchor.txt"), "one\ntwo\nthree", "utf8");
+    const edit = createEditTool({ workspaceRoot });
 
     await expect(
-      edit.execute({ path: "stale-anchor.txt", edits: [{ op: "replace", anchor: lineAnchor, content: "two edited" }] }, context())
-    ).rejects.toThrow(/Stale line anchor/);
+      edit.execute({ path: "removed-anchor.txt", edits: [{ op: "replace", anchor: "2:abcd", content: "two edited" }] }, context())
+    ).rejects.toThrow(/anchor fields are no longer supported/);
+    await expect(readFile(join(workspaceRoot, "removed-anchor.txt"), "utf8")).resolves.toBe("one\ntwo\nthree");
   });
 
   it("returns actual result previews after full file writes", async () => {
@@ -341,6 +539,159 @@ describe("local workspace tools", () => {
     ).rejects.toThrow(/Stale snapshotTag/);
   });
 
+  it("rejects batch workspace edits with stale coordinator snapshots", async () => {
+    await writeFile(join(workspaceRoot, "a.txt"), "alpha", "utf8");
+    await writeFile(join(workspaceRoot, "b.txt"), "bravo", "utf8");
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const read = createReadTool({ workspaceRoot, mutationCoordinator });
+    const applyEdits = createApplyWorkspaceEditsTool({ workspaceRoot, mutationCoordinator });
+
+    await read.execute({ path: "a.txt" }, context());
+    await writeFile(join(workspaceRoot, "a.txt"), "external", "utf8");
+
+    await expect(
+      applyEdits.execute(
+        {
+          files: [
+            { path: "a.txt", content: "alpha edited" },
+            { path: "b.txt", edits: [{ op: "replace", line: 1, content: "bravo edited" }] }
+          ]
+        },
+        context()
+      )
+    ).rejects.toThrow(/Stale snapshotTag/);
+    await expect(readFile(join(workspaceRoot, "a.txt"), "utf8")).resolves.toBe("external");
+    await expect(readFile(join(workspaceRoot, "b.txt"), "utf8")).resolves.toBe("bravo");
+  });
+
+  it("rolls back partial batch workspace edits after an apply-time failure", async () => {
+    await writeFile(join(workspaceRoot, "a.txt"), "alpha", "utf8");
+    await writeFile(join(workspaceRoot, "b.txt"), "bravo", "utf8");
+    let checkpointHookCalled = false;
+    const applyEdits = createApplyWorkspaceEditsTool({
+      workspaceRoot,
+      preMutationCheckpoint: {
+        hook: async () => {
+          checkpointHookCalled = true;
+          await rm(join(workspaceRoot, "b.txt"), { force: true });
+          await mkdir(join(workspaceRoot, "b.txt"));
+          return { status: "skipped", reason: "test-induced-apply-failure" };
+        }
+      }
+    });
+
+    const output = await applyEdits.execute(
+      {
+        files: [
+          { path: "a.txt", content: "alpha edited" },
+          { path: "b.txt", content: "bravo edited" }
+        ]
+      },
+      context()
+    );
+    const outputJson = output.json as {
+      ok?: boolean;
+      reason?: string;
+      rollback?: { restored?: string[]; deleted?: string[]; failed?: unknown[] };
+    };
+
+    expect(checkpointHookCalled).toBe(true);
+    expect(outputJson).toMatchObject({
+      ok: false,
+      reason: "apply-failed",
+      rollback: {
+        restored: ["a.txt", "b.txt"],
+        deleted: [],
+        failed: []
+      }
+    });
+    await expect(readFile(join(workspaceRoot, "a.txt"), "utf8")).resolves.toBe("alpha");
+    await expect(readFile(join(workspaceRoot, "b.txt"), "utf8")).resolves.toBe("bravo");
+  });
+
+  it("adds automatic git checkpoint metadata for batch workspace edits", async () => {
+    await initGitRepo();
+    const applyEdits = createApplyWorkspaceEditsTool({ workspaceRoot });
+
+    const output = await applyEdits.execute(
+      {
+        files: [
+          { path: "base.txt", content: "base changed" },
+          { path: "created.txt", content: "created" }
+        ]
+      },
+      context()
+    );
+    const outputJson = output.json as {
+      ok?: boolean;
+      preMutationCheckpoint?: {
+        status?: string;
+        checkpoint?: { id?: string; refName?: string; toolCall?: { toolName?: string; targetSummary?: string } };
+      };
+    };
+    const checkpoint = outputJson.preMutationCheckpoint?.checkpoint;
+
+    expect(outputJson.ok).toBe(true);
+    expect(outputJson.preMutationCheckpoint?.status).toBe("created");
+    expect(checkpoint?.id).toBeTruthy();
+    expect(checkpoint?.refName).toContain("refs/");
+    expect(checkpoint?.toolCall).toMatchObject({
+      toolName: "apply_workspace_edits",
+      targetSummary: expect.stringContaining("base.txt")
+    });
+
+    await new GitCliVersioningService().restoreCheckpoint({
+      cwd: workspaceRoot,
+      checkpoint: checkpoint!.id!,
+      cleanUntracked: true
+    });
+    await expect(readFile(join(workspaceRoot, "base.txt"), "utf8")).resolves.toBe("base");
+    await expect(readFile(join(workspaceRoot, "created.txt"), "utf8")).rejects.toThrow();
+  }, 30_000);
+
+  it("wraps batch workspace edits in one multi-file mutation lease", async () => {
+    await writeFile(join(workspaceRoot, "a.txt"), "alpha", "utf8");
+    await writeFile(join(workspaceRoot, "b.txt"), "bravo", "utf8");
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const observedLeases = [] as ReturnType<WorkspaceMutationCoordinator["listLeases"]>;
+    const applyEdits = createApplyWorkspaceEditsTool({
+      workspaceRoot,
+      mutationCoordinator,
+      preMutationCheckpoint: {
+        hook: () => {
+          observedLeases.push(...mutationCoordinator.listLeases());
+          return { status: "skipped", reason: "test" };
+        }
+      }
+    });
+
+    await applyEdits.execute(
+      {
+        files: [
+          { path: "a.txt", content: "alpha edited" },
+          { path: "b.txt", edits: [{ op: "replace", line: 1, content: "bravo edited" }] }
+        ]
+      },
+      context()
+    );
+
+    expect(observedLeases).toHaveLength(1);
+    expect(observedLeases[0]).toMatchObject({
+      owner: {
+        sessionId: "session",
+        toolCallId: "call",
+        toolName: "apply_workspace_edits",
+        cwd: workspaceRoot,
+        targetSummary: expect.stringContaining("2 files")
+      },
+      scope: { type: "files" }
+    });
+    const leasePaths = observedLeases[0]?.scope.type === "files" ? observedLeases[0].scope.paths.join("\n") : "";
+    expect(leasePaths).toContain("a.txt");
+    expect(leasePaths).toContain("b.txt");
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+  });
+
   it("preserves existing utf-16 file encoding when editing text", async () => {
     const filePath = join(workspaceRoot, "utf16-edit.txt");
     await writeFile(filePath, encodeTextBuffer("before\nline", "utf-16le"));
@@ -364,16 +715,33 @@ describe("local workspace tools", () => {
     });
   });
 
-  it("registers unified read and edit tools alongside compatibility tools", () => {
+  it("registers only unified product file tools by default", () => {
     const names = createLocalWorkspaceTools({ workspaceRoot }).map((tool) => tool.name);
 
+    expect(names).toContain("shell_command");
     expect(names).toContain("read");
     expect(names).toContain("edit");
-    expect(names).toContain("read_file");
-    expect(names).toContain("write_file");
+    expect(names).toContain("apply_workspace_edits");
+    expect(names).toContain("list_directory");
+    expect(names).toContain("search_files");
+    expect(names).toContain("restore_file_snapshot");
+    expect(names).toContain("create_workspace_checkpoint");
+    expect(names).toContain("restore_workspace_checkpoint");
+    expect(names).not.toContain("read_file");
+    expect(names).not.toContain("write_file");
   });
 
-  it("rejects paths outside the workspace", async () => {
+  it("keeps read_file and write_file available as explicit legacy factories", () => {
+    const read = createReadFileTool({ workspaceRoot });
+    const write = createWriteFileTool({ workspaceRoot });
+
+    expect(read.name).toBe("read_file");
+    expect(read.description).toContain("Explicit legacy read_file factory");
+    expect(write.name).toBe("write_file");
+    expect(write.description).toContain("Explicit legacy write_file factory");
+  });
+
+  it("rejects paths outside the workspace through the explicit legacy read_file factory", async () => {
     const read = createReadFileTool({ workspaceRoot });
     await writeFile(join(workspaceRoot, "safe.txt"), "safe", "utf8");
 
@@ -412,19 +780,52 @@ describe("local workspace tools", () => {
     await expect(readFile(join(workspaceRoot, "new.txt"), "utf8")).rejects.toThrow();
   });
 
-  it("adds an automatic checkpoint when write_file creates a new file", async () => {
+  it("uses a workspace mutation lease for workspace checkpoint restore and releases aborted waiters", async () => {
+    await writeFile(join(workspaceRoot, "tracked.txt"), "before", "utf8");
+    const checkpoint = createWorkspaceCheckpointTool({ workspaceRoot });
+    const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
+    const restore = createRestoreWorkspaceCheckpointTool({ workspaceRoot, mutationCoordinator });
+    const checkpointOutput = await checkpoint.execute({ label: "before changes", files: ["tracked.txt"] }, context());
+    const checkpointPath = (checkpointOutput.json as { manifestPath?: string }).manifestPath ?? "";
+    await writeFile(join(workspaceRoot, "tracked.txt"), "after", "utf8");
+    const activeFileLease = await mutationCoordinator.acquire({ scope: { type: "files", paths: ["tracked.txt"] } });
+    expect(activeFileLease.ok).toBe(true);
+    const abortController = new AbortController();
+
+    const restoring = restore.execute({ checkpointPath }, context({ signal: abortController.signal }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    abortController.abort();
+
+    await expect(restoring).rejects.toThrow(/aborted/);
+    expect(mutationCoordinator.listLeases()).toHaveLength(1);
+    if (activeFileLease.ok) mutationCoordinator.release(activeFileLease.lease.token);
+    expect(mutationCoordinator.listLeases()).toEqual([]);
+    await expect(readFile(join(workspaceRoot, "tracked.txt"), "utf8")).resolves.toBe("after");
+  });
+
+  it("adds an automatic git checkpoint when explicit legacy write_file creates a new file in a repo", async () => {
+    await initGitRepo();
     const write = createWriteFileTool({ workspaceRoot });
-    const restore = createRestoreWorkspaceCheckpointTool({ workspaceRoot });
 
     const output = await write.execute({ path: "created.txt", content: "new" }, context());
-    const outputJson = output.json as { checkpoint?: { manifestPath?: string } | null };
-    const checkpoint = outputJson.checkpoint;
-    const checkpointPath = checkpoint?.manifestPath ?? "";
-    expect(checkpointPath).toContain("checkpoint.json");
+    const outputJson = output.json as {
+      preMutationCheckpoint?: {
+        status?: string;
+        checkpoint?: { id?: string; refName?: string };
+      };
+    };
+    const checkpoint = outputJson.preMutationCheckpoint?.checkpoint;
+    expect(outputJson.preMutationCheckpoint?.status).toBe("created");
+    expect(checkpoint?.id).toBeTruthy();
+    expect(checkpoint?.refName).toContain("refs/");
 
-    await restore.execute({ checkpointPath }, context());
+    await new GitCliVersioningService().restoreCheckpoint({
+      cwd: workspaceRoot,
+      checkpoint: checkpoint!.id!,
+      cleanUntracked: true
+    });
     await expect(readFile(join(workspaceRoot, "created.txt"), "utf8")).rejects.toThrow();
-  });
+  }, 30_000);
 
   it("preserves existing utf-16 file encoding when writing text", async () => {
     const filePath = join(workspaceRoot, "utf16.txt");

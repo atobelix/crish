@@ -1,83 +1,33 @@
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-export type JsonObject = { [key: string]: JsonValue };
+import type {
+  JsonObject, JsonValue, AgentMessage, AgentMessageBlock,
+  ToolDefinition, ToolCategory, ToolConcurrency,
+  ToolExecutionContext, ToolOutput, ToolArtifact, ToolProgressUpdate,
+  PermissionRequest, PermissionDecision, ApprovalHandler,
+  ProviderDiagnostic, ProviderErrorKind,
+  ToolBatchCall, ToolBatchResult, ToolBatchFailurePolicy,
+  RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord,
+  ContextCompressionTrigger, ContextCompressionReason,
+  ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionPolicyAction,
+  ContextCompressionRecord, AgentEvent,
+} from "@crish/shared-types";
+import type { PromptAssemblyContextBlock, PromptAssemblyMetadata } from "./prompt-assembly";
+import type { WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 
-export type AgentRole = "system" | "user" | "assistant" | "tool";
+// types.ts 不再重导出核心类型。请从 @crish/shared-types 直接导入。
 
-export interface TextBlock {
-  type: "text";
-  text: string;
-}
+export type AgentRole = import("@crish/shared-types").AgentMessage["role"];
 
-export interface ThoughtBlock {
-  type: "thought";
-  text: string;
-  redacted?: boolean;
-}
-
-export interface ToolCallBlock {
-  type: "tool-call";
-  id: string;
-  toolName: string;
-  input: JsonObject;
-}
-
-export interface ToolResultBlock {
-  type: "tool-result";
-  toolCallId: string;
-  toolName: string;
-  output: ToolOutput;
-  isError: boolean;
-}
-
-export type AgentMessageBlock = TextBlock | ThoughtBlock | ToolCallBlock | ToolResultBlock;
-
-export interface AgentMessage {
-  id: string;
-  role: AgentRole;
-  createdAt: string;
-  blocks: AgentMessageBlock[];
-  metadata?: JsonObject;
-}
-
-export interface ToolOutput {
-  text?: string;
-  json?: JsonValue;
-  artifacts?: ToolArtifact[];
-}
-
-export interface ToolArtifact {
-  kind: "file" | "diff" | "image" | "link" | "log";
-  title: string;
-  uri?: string;
-  text?: string;
-  metadata?: JsonObject;
-}
-
-export type ToolConcurrency = "parallel" | "sequential" | "exclusive";
-export type ToolCategory = "terminal" | "filesystem" | "network" | "mcp" | "skill" | "agent" | "internal";
-
-export interface ToolExecutionContext {
-  toolCallId: string;
-  sessionId: string;
-  cwd: string;
-  signal: AbortSignal;
-  emit(update: ToolProgressUpdate): void;
-}
-
-export interface ToolProgressUpdate {
-  text?: string;
-  json?: JsonValue;
-  metadata?: JsonObject;
-}
-
+// ─── 运行时持有的扩展工具接口（后续步骤将删除，统一使用 ToolDefinition） ─────
 export interface AgentTool {
   name: string;
   label: string;
   description: string;
   category: ToolCategory;
   inputSchema?: JsonObject;
+  inputAliases?: Record<string, string[]>;
   concurrency: ToolConcurrency;
+  allowParallel?: boolean;
+  fatalOnError?: boolean;
   isReadOnly(input: JsonObject): boolean;
   summarize(input: JsonObject): string;
   execute(input: JsonObject, context: ToolExecutionContext): Promise<ToolOutput>;
@@ -106,74 +56,6 @@ export interface ProviderUsage {
   reasoningTokens?: number;
 }
 
-export type ProviderErrorKind =
-  | "network"
-  | "gateway-challenge"
-  | "rate-limit"
-  | "auth"
-  | "quota"
-  | "endpoint-unavailable"
-  | "schema"
-  | "server"
-  | "unknown";
-
-export interface ProviderDiagnostic {
-  phase:
-    | "request-start"
-    | "response-start"
-    | "sse-first-byte"
-    | "retry"
-    | "request-error"
-    | "stream-end"
-    | "endpoint-fallback"
-    | "transport-fallback"
-    | "model-selected"
-    | "model-mismatch";
-  providerId?: string;
-  endpoint?: string;
-  url?: string;
-  attempt?: number;
-  maxAttempts?: number;
-  elapsedMs?: number;
-  status?: number;
-  statusText?: string;
-  retryable?: boolean;
-  reason?: string;
-  errorKind?: ProviderErrorKind;
-  retryAfterMs?: number;
-  chunks?: number;
-  bytes?: number;
-  headers?: Record<string, string>;
-  configuredModel?: string;
-  actualModel?: string;
-  modelMismatch?: boolean;
-}
-
-export type RuntimeCheckpointKind = "workspace-checkpoint" | "file-snapshot";
-
-export interface RuntimeCheckpointRecord {
-  id: string;
-  kind: RuntimeCheckpointKind;
-  label: string;
-  toolCallId: string;
-  toolName: string;
-  artifactUri?: string;
-  manifestPath?: string;
-  snapshotPath?: string;
-  sourcePath?: string;
-  metadata?: JsonObject;
-}
-
-export interface RuntimeCheckpointRestoreRecord {
-  checkpointId: string;
-  toolCallId: string;
-  toolName: string;
-  restored: string[];
-  deleted: string[];
-  skipped: string[];
-  metadata?: JsonObject;
-}
-
 export interface AgentProvider {
   id: string;
   stream(request: AgentProviderRequest): AsyncIterable<ProviderStreamEvent>;
@@ -186,109 +68,86 @@ export interface AgentProviderRequest {
   messages: AgentMessage[];
   tools: AgentTool[];
   signal: AbortSignal;
+  promptAssembly?: PromptAssemblyMetadata;
 }
 
-export type PermissionBehavior = "allow" | "deny" | "ask";
+export type RuntimeRecoveryReason = "tool-errors" | "tool-loop" | "empty-response";
+export type RuntimeInterventionChoice = "rollback" | "pause" | "user-instruction";
 
-export interface PermissionRequest {
+export interface ToolExecutionRuntimeOptions {
+  timeoutMs?: number;
+  parallelFailurePolicy?: ToolBatchFailurePolicy;
+}
+
+export interface RuntimePermissionRequest {
   id: string;
   sessionId: string;
   cwd: string;
   tool: AgentTool;
   input: JsonObject;
   summary: string;
-}
-
-export interface PermissionDecision {
-  behavior: PermissionBehavior;
-  reason?: string;
   metadata?: JsonObject;
 }
 
-export interface PermissionPolicy {
-  decide(request: PermissionRequest): Promise<PermissionDecision> | PermissionDecision;
-  recordDecision?(request: PermissionRequest, decision: PermissionDecision): void;
-}
-
-export interface ApprovalHandler {
-  requestApproval(request: PermissionRequest): Promise<PermissionDecision>;
-}
-
-export type RuntimeRecoveryReason = "tool-errors" | "tool-loop" | "empty-response";
-export type RuntimeInterventionChoice = "rollback" | "pause" | "user-instruction";
-
-export type AgentEvent =
-  | { type: "agent-start"; sessionId: string; timestamp: string }
-  | { type: "agent-end"; sessionId: string; timestamp: string; reason: "stop" | "max-turns" | "aborted" | "error"; error?: string }
-  | { type: "turn-start"; sessionId: string; turnIndex: number; timestamp: string }
-  | { type: "turn-end"; sessionId: string; turnIndex: number; timestamp: string; toolCallCount: number }
-  | { type: "context-compression-start"; sessionId: string; timestamp: string; reason: ContextCompressionTrigger; tokensBefore: number }
-  | {
-      type: "context-compression-end";
-      sessionId: string;
-      timestamp: string;
-      result?: ContextCompressionRecord;
-      aborted: boolean;
-      error?: string;
-    }
-  | { type: "runtime-steering"; sessionId: string; timestamp: string; reason: RuntimeRecoveryReason; message: AgentMessage }
-  | {
-      type: "runtime-intervention-required";
-      sessionId: string;
-      timestamp: string;
-      reason: RuntimeRecoveryReason;
-      choices: RuntimeInterventionChoice[];
-      message: string;
-    }
-  | { type: "checkpoint-created"; sessionId: string; timestamp: string; checkpoint: RuntimeCheckpointRecord }
-  | { type: "checkpoint-restored"; sessionId: string; timestamp: string; restore: RuntimeCheckpointRestoreRecord }
-  | { type: "provider-diagnostic"; sessionId: string; timestamp: string; diagnostic: ProviderDiagnostic }
-  | { type: "tool-input-repaired"; sessionId: string; timestamp: string; toolCallId: string; toolName: string; notes: string[] }
-  | { type: "message-start"; sessionId: string; message: AgentMessage }
-  | { type: "message-delta"; sessionId: string; messageId: string; block: AgentMessageBlock }
-  | { type: "message-end"; sessionId: string; message: AgentMessage }
-  | { type: "tool-batch-start"; sessionId: string; batchId: string; timestamp: string; summary: string; calls: ToolBatchCall[] }
-  | { type: "tool-batch-end"; sessionId: string; batchId: string; timestamp: string; calls: ToolBatchResult[] }
-  | { type: "tool-start"; sessionId: string; batchId: string; call: ToolBatchCall; timestamp: string }
-  | { type: "tool-update"; sessionId: string; batchId: string; toolCallId: string; update: ToolProgressUpdate; timestamp: string }
-  | { type: "tool-end"; sessionId: string; batchId: string; result: ToolBatchResult; timestamp: string }
-  | { type: "approval-requested"; sessionId: string; request: PermissionRequest; timestamp: string }
-  | { type: "approval-resolved"; sessionId: string; requestId: string; decision: PermissionDecision; timestamp: string }
-  | { type: "runtime-error"; sessionId: string; timestamp: string; error: string };
-
-export interface ToolBatchCall {
-  id: string;
-  toolName: string;
-  summary: string;
-  input: JsonObject;
-  category: ToolCategory;
-  concurrency: ToolConcurrency;
-}
-
-export interface ToolBatchResult {
-  id: string;
-  toolName: string;
-  output: ToolOutput;
-  isError: boolean;
-  durationMs: number;
+export interface RuntimePermissionPolicy {
+  decide(request: RuntimePermissionRequest): Promise<PermissionDecision> | PermissionDecision;
+  recordDecision?(request: RuntimePermissionRequest, decision: PermissionDecision): void;
 }
 
 export interface AgentRuntimeOptions {
   sessionId?: string;
   cwd: string;
+  /**
+   * 可选回调：运行时在 preparing-turn 阶段调用此回调，从事件存储拉取待处理输入。
+   * 取代编排层主动的 injectSteerInput。
+   */
+  readPendingInputs?: (runId: string) => Promise<AgentMessage[]>;
   systemPrompt?: string;
+  promptContext?: AgentRuntimePromptContext;
   initialMessages?: AgentMessage[];
   provider: AgentProvider;
   tools?: AgentTool[];
   toolSources?: ToolSource[];
-  permissionPolicy?: PermissionPolicy;
+  permissionPolicy?: RuntimePermissionPolicy;
   approvalHandler?: ApprovalHandler;
-  sessionStore?: SessionStore;
+  sessionStore?: SessionPersistenceStore;
+  sessionMessageStore?: SessionMessageStoreOptions;
   resumeSession?: boolean;
   maxTurns?: number;
   contextCompression?: ContextCompressionRuntimeOptions;
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
   recovery?: AgentRecoveryRuntimeOptions;
+  toolExecution?: ToolExecutionRuntimeOptions;
+  secrets?: false | AgentRuntimeSecretsOptions;
+  workspaceMutationCoordinator?: WorkspaceMutationCoordinator;
+  subagentDepth?: number;
+  connectionManager?: import("./provider-transport/connection-manager").ConnectionManager;
+  tokenTracker?: import("./provider-transport/token-tracker").TokenTracker;
+  extensionRegistry?: import("./hooks/extension-registry").ExtensionRegistry;
+}
+
+export interface AgentRuntimePromptContext {
+  stableContext?: PromptAssemblyContextBlock[];
+  volatileContext?: PromptAssemblyContextBlock[];
+  metadata?: JsonObject;
+}
+
+export interface AgentRuntimeSecretsOptions {
+  enabled?: boolean;
+  redactor?: import("./secrets-obfuscation").SecretRedactor;
+  env?: Record<string, string | undefined>;
+  registerProcessEnv?: boolean;
+  registerDefaultPatterns?: boolean;
+  apiKeyEnv?: string;
+  patterns?: string[];
+  ignorePatterns?: string[];
+  autoDetect?: boolean;
+  excludeKeys?: string[];
+  excludePatterns?: string[];
+  maskLength?: number;
+  maskChar?: string;
+  dryRun?: boolean;
+  onRedact?: (key: string) => void;
 }
 
 export interface AgentRecoveryRuntimeOptions {
@@ -298,10 +157,15 @@ export interface AgentRecoveryRuntimeOptions {
   maxSteeringMessages?: number;
 }
 
-export interface SessionStore {
+export interface SessionPersistenceStore {
   open(session: SessionHeader): Promise<void>;
   append(entry: SessionEntry): Promise<void>;
   readAll?(): Promise<SessionEntry[]>;
+}
+
+export interface SessionMessageStoreOptions {
+  maxShardMessages?: number;
+  enableBranching?: boolean;
 }
 
 export interface SessionHeader {
@@ -341,28 +205,19 @@ export type SessionEntry =
       parentId: string | null;
       timestamp: string;
       record: ContextCompressionRecord;
+    }
+  | {
+      type: "leaf-pointer";
+      id: string;
+      parentId: string | null;
+      timestamp: string;
+      targetLeafId: string | null;
+      reason?: string;
+      metadata?: JsonObject;
     };
 
-export type ContextCompressionTrigger = "auto" | "manual" | "preflight" | "overflow";
-
-export interface ContextCompressionRecord {
-  id: string;
-  trigger: ContextCompressionTrigger;
-  summary: string;
-  firstKeptMessageId?: string;
-  compressedMessageIds: string[];
-  keptMessageIds: string[];
-  tokensBefore: number;
-  tokensAfter: number;
-  createdAt: string;
-  details?: JsonObject;
-}
-
-export interface ContextCompressionRuntimeOptions extends ContextCompressionOptions {
+export interface ContextCompressionRuntimeOptions {
   enabled?: boolean;
-}
-
-export interface ContextCompressionOptions {
   contextWindowTokens: number;
   thresholdRatio?: number;
   thresholdTokens?: number;
@@ -389,6 +244,9 @@ export interface ContextSummarizer {
 
 export interface ContextSummaryRequest {
   trigger: ContextCompressionTrigger;
+  reason: ContextCompressionReason;
+  policy: ContextCompressionPolicyMetadata;
+  handoffIntent: boolean;
   serializedConversation: string;
   previousSummary?: string;
   recentSuccessfulCommands: string[];
@@ -412,4 +270,20 @@ export interface ContextStateReader {
   snapshotForCompression(): Promise<ContextStateSnapshot> | ContextStateSnapshot;
   recordCompression?(record: ContextCompressionRecord): Promise<void> | void;
   recordCheckpoint?(checkpoint: RuntimeCheckpointRecord): Promise<void> | void;
+}
+
+export type AgentEndReason = "stop" | "max-turns" | "aborted" | "error";
+
+export interface ProviderResponse {
+  finishReason: "stop" | "tool-call" | "length" | "error";
+  text: string;
+  thought?: string;
+  toolCalls: Array<{
+    id: string;
+    toolName: string;
+    input: JsonObject;
+  }>;
+  diagnostics: ProviderDiagnostic[];
+  usage?: ProviderUsage;
+  error?: string;
 }

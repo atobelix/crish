@@ -1,13 +1,16 @@
 import type {
-  AgentTool,
   JsonObject,
   JsonValue,
   PermissionDecision,
-  PermissionPolicy,
   PermissionRequest,
   ToolCategory,
   ToolConcurrency,
-  ToolOutput,
+  ToolOutput
+} from "@crish/shared-types";
+import type {
+  AgentTool,
+  RuntimePermissionRequest,
+  RuntimePermissionPolicy,
   ToolSource
 } from "./types";
 
@@ -216,7 +219,8 @@ function applyFieldAliases(tool: AgentTool, input: JsonObject): string[] {
   const notes: string[] = [];
   for (const key of Object.keys(properties)) {
     if (key in input) continue;
-    const aliases = FIELD_ALIASES[key] ?? [];
+    // 工具注册的别名优先于全局默认别名
+    const aliases = tool.inputAliases?.[key] ?? FIELD_ALIASES[key] ?? [];
     for (const alias of aliases) {
       if (!(alias in input)) continue;
       input[key] = input[alias]!;
@@ -342,7 +346,8 @@ function hasSchemaRelevantField(tool: AgentTool, input: Record<string, unknown>)
   if (!properties) return false;
   for (const key of Object.keys(properties)) {
     if (key in input) return true;
-    for (const alias of FIELD_ALIASES[key] ?? []) {
+    const aliases = tool.inputAliases?.[key] ?? FIELD_ALIASES[key] ?? [];
+    for (const alias of aliases) {
       if (alias in input) return true;
     }
   }
@@ -424,15 +429,15 @@ export class ToolRegistry implements ToolSource {
   }
 }
 
-export const allowAllPermissionPolicy: PermissionPolicy = {
-  decide(): PermissionDecision {
+export const allowAllPermissionPolicy: RuntimePermissionPolicy = {
+  decide(_request: RuntimePermissionRequest): PermissionDecision {
     return { behavior: "allow" };
   }
 };
 
-export function denyAllPermissionPolicy(reason = "Tool execution denied"): PermissionPolicy {
+export function denyAllPermissionPolicy(reason = "Tool execution denied"): RuntimePermissionPolicy {
   return {
-    decide(): PermissionDecision {
+    decide(_request: RuntimePermissionRequest): PermissionDecision {
       return { behavior: "deny", reason };
     }
   };
@@ -441,11 +446,11 @@ export function denyAllPermissionPolicy(reason = "Tool execution denied"): Permi
 export function askForMutatingToolsPolicy(options?: {
   allowReadOnly?: boolean;
   mutatingDecision?: PermissionDecision;
-}): PermissionPolicy {
+}): RuntimePermissionPolicy {
   const allowReadOnly = options?.allowReadOnly ?? true;
   const mutatingDecision = options?.mutatingDecision ?? { behavior: "ask", reason: "Mutating tool requires approval" };
   return {
-    decide(request: PermissionRequest): PermissionDecision {
+    decide(request: RuntimePermissionRequest): PermissionDecision {
       if (allowReadOnly && request.tool.isReadOnly(request.input)) {
         return { behavior: "allow" };
       }

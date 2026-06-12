@@ -1,7 +1,6 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import {
   checkpointRestoreResultToOutput,
@@ -11,15 +10,68 @@ import {
 } from "./checkpoints";
 import { BackgroundCommandManager, type BackgroundCommandSnapshot } from "./background-command";
 import { decodeTextBuffer, encodeTextBuffer, isWritableTextEncoding, type WritableTextFileEncoding } from "./encoding";
-import { classifyTerminalCommand, getHardlineCommandBlock } from "./permissions";
+import {
+  GitCliVersioningService,
+  type GitCheckpoint,
+  type GitCheckpointStrategy,
+  type GitVersioningService
+} from "./git-versioning";
+import { classifyTerminalCommand, getHardlineCommandBlock } from "./permission/command-classification";
+import {
+  defaultProcessShell,
+  normalizeProcessGuard,
+  runProcessCommand,
+  type ProcessGuardOptions,
+  type ProcessRunResult,
+  type ProcessShell
+} from "./process-lifecycle";
 import { createFileSnapshot, restoreFileSnapshot, type WorkspaceSnapshotOptions } from "./snapshots";
 import { defineTool } from "./tools";
-import type { AgentTool, JsonObject, JsonValue, ToolArtifact, ToolExecutionContext, ToolOutput } from "./types";
+import type { JsonObject, JsonValue, ToolArtifact, ToolExecutionContext, ToolOutput } from "@crish/shared-types";
+import type { AgentTool } from "./types";
+import type { LeaseScope, MutationLeaseOwner, WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 
 export interface LocalToolOptions {
   workspaceRoot: string;
   snapshot?: WorkspaceSnapshotOptions | false;
+  preMutationCheckpoint?: LocalPreMutationCheckpointOptions | LocalPreMutationCheckpointHook | false;
+  mutationCoordinator?: WorkspaceMutationCoordinator;
 }
+
+export interface LocalPreMutationCheckpointOptions {
+  enabled?: boolean;
+  service?: GitVersioningService;
+  strategy?: GitCheckpointStrategy;
+  includeUntracked?: boolean;
+  refNamespace?: string;
+  onFailure?: "continue" | "throw";
+  hook?: LocalPreMutationCheckpointHook;
+}
+
+export interface LocalPreMutationCheckpointRequest {
+  workspaceRoot: string;
+  cwd: string;
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  targetSummary: string;
+  input: JsonObject;
+}
+
+export interface LocalPreMutationCheckpointResult {
+  status: "created" | "skipped" | "failed";
+  checkpoint?: GitCheckpoint;
+  reason?: string;
+  error?: string;
+  metadata?: JsonObject;
+  artifacts?: ToolArtifact[];
+}
+
+type NormalizedPreMutationCheckpointResult = LocalPreMutationCheckpointResult;
+
+export type LocalPreMutationCheckpointHook = (
+  request: LocalPreMutationCheckpointRequest
+) => Promise<LocalPreMutationCheckpointResult | null | undefined> | LocalPreMutationCheckpointResult | null | undefined;
 
 export interface TerminalToolOptions extends LocalToolOptions {
   name?: string;
@@ -32,17 +84,12 @@ export interface TerminalToolOptions extends LocalToolOptions {
   guard?: LocalExecutionGuardOptions | false;
 }
 
-export interface TerminalShell {
-  command: string;
-  args(command: string): string[];
-}
+export type TerminalShell = ProcessShell;
 
-export interface LocalExecutionGuardOptions {
-  scrubEnvironment?: boolean;
-  killProcessTree?: boolean;
-}
+export type LocalExecutionGuardOptions = ProcessGuardOptions;
 
 export function createTerminalCommandTool(options: TerminalToolOptions): AgentTool {
+  const toolName = options.name ?? "shell_command";
   const defaultTimeoutMs = options.defaultTimeoutMs ?? 60_000;
   const maxOutputBytes = options.maxOutputBytes ?? 200_000;
   const backgroundManager =
@@ -56,7 +103,7 @@ export function createTerminalCommandTool(options: TerminalToolOptions): AgentTo
       guard: options.guard
     });
   return defineTool({
-    name: options.name ?? "shell_command",
+    name: toolName,
     label: "Terminal command",
     description: "Run a local terminal command in the current project workspace. Use background mode for long-running commands.",
     category: "terminal",
@@ -106,32 +153,88 @@ export function createTerminalCommandTool(options: TerminalToolOptions): AgentTo
         };
       }
       if (action === "cancel") {
-        return backgroundCommandToolOutput("Background command cancellation requested", backgroundManager.cancel(requireString(input, "taskId")));
+        const taskId = requireString(input, "taskId");
+        return withLocalMutationLease(
+          options,
+          context,
+          {
+            scope: { type: "workspace" },
+            toolName,
+            cwd: options.workspaceRoot,
+            targetSummary: `cancel background command ${taskId}`
+          },
+          () => backgroundCommandToolOutput("Background command cancellation requested", backgroundManager.cancel(taskId))
+        );
       }
 
       const command = requireString(input, "command");
       const cwd = resolveWorkspacePath(options.workspaceRoot, stringField(input, "cwd") ?? ".");
       const timeoutMs = Math.max(1, numberField(input, "timeoutMs") ?? defaultTimeoutMs);
       const commandMaxOutputBytes = Math.max(1, numberField(input, "maxOutputBytes") ?? maxOutputBytes);
-      if (action === "start") {
-        const task = await backgroundManager.start({
-          command,
-          cwd: stringField(input, "cwd") ?? ".",
-          timeoutMs: numberField(input, "timeoutMs"),
+      const targetSummary = summarizeTerminalTarget(options.workspaceRoot, cwd, command);
+      const runCommand = async (): Promise<ToolOutput> => {
+        if (action === "start") {
+          const hardline = getHardlineCommandBlock(command);
+          if (hardline) {
+            throw new Error(hardline.reason);
+          }
+          const mutationCheckpoint = shouldCheckpointTerminalCommand(command)
+            ? await createPreMutationCheckpoint(options, {
+                workspaceRoot: options.workspaceRoot,
+                cwd,
+                sessionId: context.sessionId,
+                toolCallId: context.toolCallId,
+                toolName,
+                targetSummary,
+                input
+              })
+            : null;
+          const task = await backgroundManager.start({
+            command,
+            cwd: stringField(input, "cwd") ?? ".",
+            timeoutMs: numberField(input, "timeoutMs"),
+            maxOutputBytes: commandMaxOutputBytes,
+            heartbeatIntervalMs: numberField(input, "heartbeatIntervalMs")
+          });
+          return withPreMutationCheckpointOutput(backgroundCommandToolOutput("Background command started", task), mutationCheckpoint);
+        }
+        context.emit({ text: `Running ${command}` });
+        return runTerminalCommand(command, {
+          cwd,
+          timeoutMs,
           maxOutputBytes: commandMaxOutputBytes,
-          heartbeatIntervalMs: numberField(input, "heartbeatIntervalMs")
+          signal: context.signal,
+          shell: options.shell ?? defaultShell(),
+          guard: normalizeProcessGuard(options.guard),
+          preMutationCheckpoint: shouldCheckpointTerminalCommand(command)
+            ? () =>
+                createPreMutationCheckpoint(options, {
+                  workspaceRoot: options.workspaceRoot,
+                  cwd,
+                  sessionId: context.sessionId,
+                  toolCallId: context.toolCallId,
+                  toolName,
+                  targetSummary,
+                  input
+                })
+            : undefined
         });
-        return backgroundCommandToolOutput("Background command started", task);
+      };
+
+      if (classifyTerminalCommand(command).risk === "read") {
+        return runCommand();
       }
-      context.emit({ text: `Running ${command}` });
-      return runTerminalCommand(command, {
-        cwd,
-        timeoutMs,
-        maxOutputBytes: commandMaxOutputBytes,
-        signal: context.signal,
-        shell: options.shell ?? defaultShell(),
-        guard: normalizeGuard(options.guard)
-      });
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "workspace" },
+          toolName,
+          cwd,
+          targetSummary
+        },
+        runCommand
+      );
     }
   });
 }
@@ -140,8 +243,8 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
   const maxBytes = options.maxBytes ?? 256_000;
   return defineTool({
     name: options.name ?? "read_file",
-    label: "Read file",
-    description: "Read a UTF-8 text file from the workspace.",
+    label: "Legacy read file",
+    description: "Explicit legacy read_file factory for tests and migration scripts. Product runtimes should use the unified read tool.",
     category: "filesystem",
     concurrency: "parallel",
     inputSchema: {
@@ -157,7 +260,7 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
     summarize(input) {
       return `read ${stringField(input, "path") ?? "<missing path>"}`;
     },
-    async execute(input) {
+    async execute(input, context) {
       const filePath = resolveWorkspacePath(options.workspaceRoot, requireString(input, "path"));
       const limit = Math.max(1, numberField(input, "maxBytes") ?? maxBytes);
       const bytes = await readFile(filePath);
@@ -167,6 +270,8 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
       }
       const truncated = bytes.byteLength > limit;
       const text = truncated ? decoded.text.slice(0, limit) : decoded.text;
+      const snapshotTag = computeSnapshotTag(bytes);
+      recordReadSnapshot(options, context, filePath, snapshotTag);
       return {
         text,
         json: {
@@ -174,6 +279,7 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
           bytes: bytes.byteLength,
           encoding: decoded.encoding,
           hasBom: decoded.hasBom,
+          snapshotTag,
           truncated
         }
       };
@@ -202,8 +308,8 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
         numbered: { type: "boolean" },
         format: {
           type: "string",
-          enum: ["numbered", "plain", "hashline"],
-          description: "Output format. Use hashline when you plan to edit with line anchors."
+          enum: ["numbered", "plain"],
+          description: "Output format for text reads."
         }
       },
       required: ["path"],
@@ -213,7 +319,7 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
     summarize(input) {
       return `read ${stringField(input, "path") ?? "<missing path>"}`;
     },
-    async execute(input) {
+    async execute(input, context) {
       const selector = parseReadPathSelector(requireString(input, "path"));
       const explicitStartLine = numberField(input, "startLine");
       const explicitEndLine = numberField(input, "endLine");
@@ -258,6 +364,7 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
       const truncated = selectedText.length > limit;
       const snapshotTag = computeSnapshotTag(bytes);
       const relativePath = displayPath(options.workspaceRoot, targetPath);
+      recordReadSnapshot(options, context, targetPath, snapshotTag);
       const header = [
         `path: ${relativePath}`,
         `snapshotTag: ${snapshotTag}`,
@@ -396,11 +503,12 @@ export function createSearchFilesTool(
 }
 
 export function createWriteFileTool(options: LocalToolOptions & { name?: string }): AgentTool {
+  const toolName = options.name ?? "write_file";
   return defineTool({
-    name: options.name ?? "write_file",
-    label: "Write file",
+    name: toolName,
+    label: "Legacy write file",
     description:
-      "Write a short UTF-8 text file inside the workspace, creating parent directories as needed. For long files or generated reports, prefer edit with small insert_tail chunks.",
+      "Explicit legacy write_file factory for tests and migration scripts. Product runtimes should use edit or apply_workspace_edits; for long files, use small edit insert_tail chunks.",
     category: "filesystem",
     concurrency: "exclusive",
     inputSchema: {
@@ -420,70 +528,80 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
     async execute(input, context) {
       const filePath = resolveWorkspacePath(options.workspaceRoot, requireString(input, "path"));
       const relativePath = displayPath(options.workspaceRoot, filePath);
-      const fileStat = await stat(filePath).catch(() => null);
-      const newFileCheckpoint = fileStat?.isFile() || options.snapshot === false
-        ? null
-        : await createWorkspaceCheckpoint({
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "files", paths: [filePath] },
+          toolName,
+          cwd: options.workspaceRoot,
+          targetSummary: relativePath
+        },
+        async () => {
+          const mutationCheckpoint = await createPreMutationCheckpoint(options, {
             workspaceRoot: options.workspaceRoot,
-            archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+            cwd: options.workspaceRoot,
             sessionId: context.sessionId,
-            label: `before creating ${relativePath}`,
-            files: [relativePath],
-            maxFileBytes: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.maxFileBytes : undefined
+            toolCallId: context.toolCallId,
+            toolName,
+            targetSummary: relativePath,
+            input
           });
-      const snapshot = await createFileSnapshot({
-        workspaceRoot: options.workspaceRoot,
-        filePath,
-        sessionId: context.sessionId,
-        toolCallId: context.toolCallId,
-        options: options.snapshot
-      });
-      await mkdir(dirname(filePath), { recursive: true });
-      const content = requireString(input, "content");
-      const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
-      await writeFile(filePath, encodeTextBuffer(content, encoding));
-      const afterBytes = await readFile(filePath);
-      const afterDecoded = decodeTextBuffer(afterBytes);
-      const newSnapshotTag = computeSnapshotTag(afterBytes);
-      const resultPreview = createEditResultPreview("", afterDecoded.text, true);
-      return {
-        text: [
-          `Wrote ${displayPath(options.workspaceRoot, filePath)} (${content.length} chars)`,
-          `Encoding: ${encoding}`,
-          `Snapshot tag: ${newSnapshotTag}`,
-          resultPreview.summary,
-          resultPreview.text
-        ].join("\n"),
-        artifacts: [snapshot, newFileCheckpoint ? checkpointToArtifact(newFileCheckpoint) : null].filter(
-          (artifact): artifact is ToolArtifact => artifact !== null
-        ),
-        json: {
-          path: displayPath(options.workspaceRoot, filePath),
-          encoding,
-          chars: content.length,
-          charsAfter: afterDecoded.text.length,
-          newSnapshotTag,
-          resultPreview: {
-            mode: resultPreview.mode,
-            summary: resultPreview.summary,
-            text: resultPreview.text,
-            startLine: resultPreview.startLine,
-            endLine: resultPreview.endLine,
-            totalLines: resultPreview.totalLines,
-            truncated: resultPreview.truncated,
-            omittedLines: resultPreview.omittedLines
-          },
-          snapshot: snapshot?.metadata ?? null,
-          checkpoint: newFileCheckpoint ? checkpointToArtifact(newFileCheckpoint).metadata ?? null : null
+          const snapshot = await createFileSnapshot({
+            workspaceRoot: options.workspaceRoot,
+            filePath,
+            sessionId: context.sessionId,
+            toolCallId: context.toolCallId,
+            options: options.snapshot
+          });
+          await mkdir(dirname(filePath), { recursive: true });
+          const content = requireString(input, "content");
+          const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
+          await writeFile(filePath, encodeTextBuffer(content, encoding));
+          const afterBytes = await readFile(filePath);
+          const afterDecoded = decodeTextBuffer(afterBytes);
+          const newSnapshotTag = computeSnapshotTag(afterBytes);
+          const resultPreview = createEditResultPreview("", afterDecoded.text, true);
+          return withPreMutationCheckpointOutput({
+            text: [
+              `Wrote ${displayPath(options.workspaceRoot, filePath)} (${content.length} chars)`,
+              `Encoding: ${encoding}`,
+              `Snapshot tag: ${newSnapshotTag}`,
+              resultPreview.summary,
+              resultPreview.text
+            ].join("\n"),
+            artifacts: [snapshot].filter(
+              (artifact): artifact is ToolArtifact => artifact !== null
+            ),
+            json: {
+              path: displayPath(options.workspaceRoot, filePath),
+              encoding,
+              chars: content.length,
+              charsAfter: afterDecoded.text.length,
+              newSnapshotTag,
+              resultPreview: {
+                mode: resultPreview.mode,
+                summary: resultPreview.summary,
+                text: resultPreview.text,
+                startLine: resultPreview.startLine,
+                endLine: resultPreview.endLine,
+                totalLines: resultPreview.totalLines,
+                truncated: resultPreview.truncated,
+                omittedLines: resultPreview.omittedLines
+              },
+              snapshot: snapshot?.metadata ?? null
+            }
+          }, mutationCheckpoint);
         }
-      };
+      );
     }
   });
 }
 
 export function createEditTool(options: LocalToolOptions & { name?: string }): AgentTool {
+  const toolName = options.name ?? "edit";
   return defineTool({
-    name: options.name ?? "edit",
+    name: toolName,
     label: "Edit",
     description:
       "Apply safe workspace edits with optional snapshotTag stale-read checks. Prefer small line edits or insert_tail chunks; use full content only for short files.",
@@ -507,14 +625,6 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
               startLine: { type: "number" },
               endLine: { type: "number" },
               line: { type: "number" },
-              anchor: {
-                type: "string",
-                description: "Optional LINE:HASH anchor from read format=hashline. If stale, the edit is rejected."
-              },
-              endAnchor: {
-                type: "string",
-                description: "Optional range end LINE:HASH anchor from read format=hashline."
-              },
               content: { type: "string" }
             },
             required: ["op"],
@@ -533,6 +643,16 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
     async execute(input, context) {
       const filePath = resolveWorkspacePath(options.workspaceRoot, requireString(input, "path"));
       const relativePath = displayPath(options.workspaceRoot, filePath);
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "files", paths: [filePath] },
+          toolName,
+          cwd: options.workspaceRoot,
+          targetSummary: relativePath
+        },
+        async () => {
       const fileStat = await stat(filePath).catch(() => null);
       if (fileStat && !fileStat.isFile()) {
         throw new Error(`Edit target must be a file or missing file: ${relativePath}`);
@@ -565,7 +685,7 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
       }
 
       const beforeText = beforeDecoded?.text ?? "";
-      const preparedEdits = fullContent !== undefined ? edits : prepareLineEditOperations(beforeText, edits, relativePath);
+      const preparedEdits = edits;
       const afterText = fullContent !== undefined ? fullContent : applyLineEditOperations(beforeText, preparedEdits);
       if (fileStat && beforeText === afterText) {
         return {
@@ -578,17 +698,15 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
         };
       }
 
-      const newFileCheckpoint =
-        fileStat || options.snapshot === false
-          ? null
-          : await createWorkspaceCheckpoint({
-              workspaceRoot: options.workspaceRoot,
-              archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
-              sessionId: context.sessionId,
-              label: `before creating ${relativePath}`,
-              files: [relativePath],
-              maxFileBytes: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.maxFileBytes : undefined
-            });
+      const mutationCheckpoint = await createPreMutationCheckpoint(options, {
+        workspaceRoot: options.workspaceRoot,
+        cwd: options.workspaceRoot,
+        sessionId: context.sessionId,
+        toolCallId: context.toolCallId,
+        toolName,
+        targetSummary: summarizeEditTarget(relativePath, fullContent, preparedEdits),
+        input
+      });
       const snapshot = await createFileSnapshot({
         workspaceRoot: options.workspaceRoot,
         filePath,
@@ -614,7 +732,7 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
         }
       };
 
-      return {
+      return withPreMutationCheckpointOutput({
         text: [
           `Edited ${relativePath}`,
           `Encoding: ${encoding}`,
@@ -624,7 +742,7 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
           `Diff preview:`,
           diffPreview
         ].join("\n"),
-        artifacts: [snapshot, newFileCheckpoint ? checkpointToArtifact(newFileCheckpoint) : null, diffArtifact].filter(
+        artifacts: [snapshot, diffArtifact].filter(
           (artifact): artifact is ToolArtifact => artifact !== null
         ),
         json: {
@@ -636,7 +754,6 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
           snapshotTag: currentSnapshotTag ?? null,
           newSnapshotTag,
           snapshot: snapshot?.metadata ?? null,
-          checkpoint: newFileCheckpoint ? checkpointToArtifact(newFileCheckpoint).metadata ?? null : null,
           resultPreview: {
             mode: resultPreview.mode,
             summary: resultPreview.summary,
@@ -649,7 +766,165 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
           },
           diffPreview
         } as JsonObject
-      };
+      }, mutationCheckpoint);
+        }
+      );
+    }
+  });
+}
+
+export function createApplyWorkspaceEditsTool(options: LocalToolOptions & { name?: string }): AgentTool {
+  const toolName = options.name ?? "apply_workspace_edits";
+  return defineTool({
+    name: toolName,
+    label: "Apply workspace edits",
+    description:
+      "Apply a validated multi-file text edit transaction with snapshotTag checks, one mutation lease, and a Git checkpoint before changes.",
+    category: "filesystem",
+    concurrency: "exclusive",
+    inputSchema: {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              snapshotTag: {
+                type: "string",
+                description: "Snapshot tag returned by read. If omitted, the latest recorded read snapshot for this session is used when available."
+              },
+              content: { type: "string", description: "Full replacement content for this file." },
+              edits: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    op: { type: "string", enum: ["replace", "insert_before", "insert_after", "insert_head", "insert_tail", "delete"] },
+                    startLine: { type: "number" },
+                    endLine: { type: "number" },
+                    line: { type: "number" },
+                    content: { type: "string" }
+                  },
+                  required: ["op"],
+                  additionalProperties: false
+                }
+              },
+              encoding: { type: "string", enum: ["utf-8", "utf-8-bom", "utf-16le", "utf-16be"] }
+            },
+            required: ["path"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["files"],
+      additionalProperties: false
+    },
+    isReadOnly: () => false,
+    summarize(input) {
+      const files = workspaceEditFileInputs(input);
+      return `apply workspace edits to ${files.length} file${files.length === 1 ? "" : "s"}`;
+    },
+    async execute(input, context) {
+      const files = parseWorkspaceEditFileRequests(options.workspaceRoot, input);
+      const targetSummary = summarizeWorkspaceEditTargets(files);
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "files", paths: files.map((file) => file.filePath) },
+          toolName,
+          cwd: options.workspaceRoot,
+          targetSummary
+        },
+        async () => {
+          const prepared = await prepareWorkspaceEditFiles(options, context, files);
+          const changed = prepared.filter((file) => file.changed);
+          if (changed.length === 0) {
+            return {
+              text: `No workspace edit changes for ${prepared.length} file(s)`,
+              json: {
+                ok: true,
+                changed: false,
+                fileCount: prepared.length,
+                changedFileCount: 0,
+                files: prepared.map(preparedWorkspaceEditFileToJson) as unknown as JsonValue
+              } as JsonObject
+            };
+          }
+
+          const mutationCheckpoint = await createPreMutationCheckpoint(options, {
+            workspaceRoot: options.workspaceRoot,
+            cwd: options.workspaceRoot,
+            sessionId: context.sessionId,
+            toolCallId: context.toolCallId,
+            toolName,
+            targetSummary,
+            input
+          });
+
+          const applied = await applyPreparedWorkspaceEditFiles(changed);
+          if (!applied.ok) {
+            return withPreMutationCheckpointOutput(
+              {
+                text: [
+                  `Workspace edit transaction failed and rollback was attempted.`,
+                  `Failed path: ${applied.failedPath ?? "unknown"}`,
+                  `Error: ${applied.error}`,
+                  `Rollback restored: ${applied.rollback.restored.length}`,
+                  `Rollback deleted: ${applied.rollback.deleted.length}`,
+                  `Rollback failures: ${applied.rollback.failed.length}`
+                ].join("\n"),
+                json: {
+                  ok: false,
+                  changed: false,
+                  reason: "apply-failed",
+                  error: applied.error,
+                  failedPath: applied.failedPath ?? null,
+                  fileCount: prepared.length,
+                  changedFileCount: changed.length,
+                  files: prepared.map(preparedWorkspaceEditFileToJson) as unknown as JsonValue,
+                  rollback: applied.rollback as unknown as JsonValue
+                } as JsonObject
+              },
+              mutationCheckpoint
+            );
+          }
+
+          for (const file of applied.files) {
+            recordReadSnapshot(options, context, file.filePath, file.newSnapshotTag);
+          }
+
+          const diffArtifacts = changed.map((file): ToolArtifact => ({
+            kind: "diff",
+            title: `Diff: ${file.relativePath}`,
+            text: createUnifiedDiffPreview(file.beforeText, file.afterText),
+            metadata: {
+              artifactKind: "workspace-edit-diff-preview",
+              path: file.relativePath
+            }
+          }));
+
+          return withPreMutationCheckpointOutput(
+            {
+              text: [
+                `Applied workspace edits to ${changed.length} of ${prepared.length} file(s)`,
+                ...applied.files.map((file) => `${file.relativePath}: ${file.charsBefore} -> ${file.charsAfter} chars, snapshotTag ${file.newSnapshotTag}`)
+              ].join("\n"),
+              artifacts: diffArtifacts,
+              json: {
+                ok: true,
+                changed: true,
+                fileCount: prepared.length,
+                changedFileCount: changed.length,
+                files: workspaceEditResultFilesJson(prepared, applied.files)
+              } as JsonObject
+            },
+            mutationCheckpoint
+          );
+        }
+      );
     }
   });
 }
@@ -674,18 +949,32 @@ export function createRestoreFileSnapshotTool(options: LocalToolOptions & { name
     summarize(input) {
       return `restore ${requireString(input, "targetPath")}`;
     },
-    async execute(input) {
-      const artifact = await restoreFileSnapshot({
-        workspaceRoot: options.workspaceRoot,
-        archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
-        snapshotPath: requireString(input, "snapshotPath"),
-        targetPath: requireString(input, "targetPath")
-      });
-      return {
-        text: `Restored ${requireString(input, "targetPath")}`,
-        artifacts: [artifact],
-        json: artifact.metadata ?? {}
-      };
+    async execute(input, context) {
+      const targetPath = requireString(input, "targetPath");
+      const filePath = resolveWorkspacePath(options.workspaceRoot, targetPath);
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "files", paths: [filePath] },
+          toolName: options.name ?? "restore_file_snapshot",
+          cwd: options.workspaceRoot,
+          targetSummary: targetPath
+        },
+        async () => {
+          const artifact = await restoreFileSnapshot({
+            workspaceRoot: options.workspaceRoot,
+            archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+            snapshotPath: requireString(input, "snapshotPath"),
+            targetPath
+          });
+          return {
+            text: `Restored ${targetPath}`,
+            artifacts: [artifact],
+            json: artifact.metadata ?? {}
+          };
+        }
+      );
     }
   });
 }
@@ -752,21 +1041,35 @@ export function createRestoreWorkspaceCheckpointTool(options: LocalToolOptions &
     summarize(input) {
       return `restore checkpoint ${requireString(input, "checkpointPath")}`;
     },
-    async execute(input) {
-      const result = await restoreWorkspaceCheckpoint({
-        workspaceRoot: options.workspaceRoot,
-        archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
-        checkpointPath: requireString(input, "checkpointPath")
-      });
-      return {
-        text: [
-          `Restored checkpoint ${result.checkpointId}`,
-          `Restored files: ${result.restored.length}`,
-          `Deleted new files: ${result.deleted.length}`,
-          `Skipped files: ${result.skipped.length}`
-        ].join("\n"),
-        json: checkpointRestoreResultToOutput(result)
-      };
+    async execute(input, context) {
+      const checkpointPath = requireString(input, "checkpointPath");
+      const toolName = options.name ?? "restore_workspace_checkpoint";
+      return withLocalMutationLease(
+        options,
+        context,
+        {
+          scope: { type: "workspace" },
+          toolName,
+          cwd: options.workspaceRoot,
+          targetSummary: checkpointPath
+        },
+        async () => {
+          const result = await restoreWorkspaceCheckpoint({
+            workspaceRoot: options.workspaceRoot,
+            archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+            checkpointPath
+          });
+          return {
+            text: [
+              `Restored checkpoint ${result.checkpointId}`,
+              `Restored files: ${result.restored.length}`,
+              `Deleted new files: ${result.deleted.length}`,
+              `Skipped files: ${result.skipped.length}`
+            ].join("\n"),
+            json: checkpointRestoreResultToOutput(result)
+          };
+        }
+      );
     }
   });
 }
@@ -776,14 +1079,332 @@ export function createLocalWorkspaceTools(options: TerminalToolOptions): AgentTo
     createTerminalCommandTool(options),
     createReadTool(options),
     createEditTool(options),
-    createReadFileTool(options),
+    createApplyWorkspaceEditsTool(options),
     createListDirectoryTool(options),
     createSearchFilesTool(options),
-    createWriteFileTool(options),
     createRestoreFileSnapshotTool(options),
     createWorkspaceCheckpointTool(options),
     createRestoreWorkspaceCheckpointTool(options)
   ];
+}
+
+interface WorkspaceEditFileRequest {
+  input: JsonObject;
+  filePath: string;
+  relativePath: string;
+  fullContent?: string;
+  edits: EditOperation[];
+  encoding?: string;
+}
+
+type WorkspaceEditSnapshotTagSource = "input" | "latest-read" | "none";
+
+interface PreparedWorkspaceEditFile extends WorkspaceEditFileRequest {
+  existed: boolean;
+  beforeBytes: Buffer | null;
+  beforeText: string;
+  afterText: string;
+  changed: boolean;
+  writeEncoding: WritableTextFileEncoding;
+  snapshotTag: string | null;
+  requestedSnapshotTag: string | null;
+  snapshotTagSource: WorkspaceEditSnapshotTagSource;
+}
+
+interface AppliedWorkspaceEditFile extends PreparedWorkspaceEditFile {
+  newSnapshotTag: string;
+  charsBefore: number;
+  charsAfter: number;
+}
+
+interface WorkspaceEditRollbackState {
+  filePath: string;
+  relativePath: string;
+  existed: boolean;
+  bytes: Buffer | null;
+}
+
+interface WorkspaceEditRollbackSummary {
+  restored: string[];
+  deleted: string[];
+  failed: Array<{ path: string; error: string }>;
+}
+
+type ApplyPreparedWorkspaceEditFilesResult =
+  | { ok: true; files: AppliedWorkspaceEditFile[] }
+  | {
+      ok: false;
+      error: string;
+      failedPath?: string;
+      rollback: WorkspaceEditRollbackSummary;
+    };
+
+function workspaceEditFileInputs(input: JsonObject): JsonObject[] {
+  const value = input.files;
+  if (!Array.isArray(value)) {
+    throw new Error("files must be an array of workspace edit file objects");
+  }
+  if (value.length === 0) {
+    throw new Error("files must contain at least one workspace edit");
+  }
+  return value.map((item, index) => {
+    if (!isJsonObject(item)) {
+      throw new Error(`files[${index}] must be an object`);
+    }
+    return item;
+  });
+}
+
+function parseWorkspaceEditFileRequests(workspaceRoot: string, input: JsonObject): WorkspaceEditFileRequest[] {
+  const files = workspaceEditFileInputs(input);
+  const seen = new Map<string, string>();
+  return files.map((fileInput, index) => {
+    const filePath = resolveWorkspacePath(workspaceRoot, requireString(fileInput, "path"));
+    const relativePath = displayPath(workspaceRoot, filePath);
+    const normalizedPath = normalizeForCompare(filePath);
+    const previous = seen.get(normalizedPath);
+    if (previous) {
+      throw new Error(`Duplicate workspace edit target: ${previous} and ${relativePath}`);
+    }
+    seen.set(normalizedPath, relativePath);
+
+    const fullContent = stringField(fileInput, "content");
+    const edits = editOperationsField(fileInput, "edits");
+    if (fullContent !== undefined && edits.length > 0) {
+      throw new Error(`files[${index}] accepts either content or edits, not both`);
+    }
+    if (fullContent === undefined && edits.length === 0) {
+      throw new Error(`files[${index}] requires content for a full write or at least one line edit`);
+    }
+    return {
+      input: fileInput,
+      filePath,
+      relativePath,
+      fullContent,
+      edits,
+      encoding: stringField(fileInput, "encoding")
+    };
+  });
+}
+
+async function prepareWorkspaceEditFiles(
+  options: LocalToolOptions,
+  context: ToolExecutionContext,
+  files: WorkspaceEditFileRequest[]
+): Promise<PreparedWorkspaceEditFile[]> {
+  const prepared: PreparedWorkspaceEditFile[] = [];
+  for (const file of files) {
+    const fileStat = await stat(file.filePath).catch(() => null);
+    if (fileStat && !fileStat.isFile()) {
+      throw new Error(`Workspace edit target must be a file or missing file: ${file.relativePath}`);
+    }
+    if (!fileStat && file.edits.length > 0 && !file.edits.every(isBoundaryInsertOperation)) {
+      throw new Error(
+        `Cannot apply line edits to a missing file: ${file.relativePath}. Use content, insert_head, or insert_tail to create it.`
+      );
+    }
+
+    const beforeBytes = fileStat ? await readFile(file.filePath) : null;
+    const beforeDecoded = beforeBytes ? decodeTextBuffer(beforeBytes) : null;
+    if (beforeDecoded?.encoding === "binary") {
+      throw new Error(`File is binary and cannot be edited as text: ${file.relativePath}`);
+    }
+
+    const snapshotTag = beforeBytes ? computeSnapshotTag(beforeBytes) : null;
+    const inputSnapshotTag = stringField(file.input, "snapshotTag");
+    const latestReadSnapshotTag = inputSnapshotTag ? undefined : options.mutationCoordinator?.latestReadSnapshot(context.sessionId, file.filePath);
+    const requestedSnapshotTag = inputSnapshotTag ?? latestReadSnapshotTag ?? null;
+    const snapshotTagSource: WorkspaceEditSnapshotTagSource = inputSnapshotTag ? "input" : latestReadSnapshotTag ? "latest-read" : "none";
+    if (requestedSnapshotTag && snapshotTag !== requestedSnapshotTag) {
+      throw new Error(
+        `Stale snapshotTag for ${file.relativePath}: expected ${requestedSnapshotTag}, current ${snapshotTag ?? "missing"}. Re-read with read before editing.`
+      );
+    }
+
+    const beforeText = beforeDecoded?.text ?? "";
+    const afterText = file.fullContent !== undefined ? file.fullContent : applyLineEditOperations(beforeText, file.edits);
+    const changed = beforeText !== afterText;
+    const writeEncoding = changed
+      ? await resolveWriteEncoding(file.filePath, file.encoding)
+      : beforeDecoded && isWritableTextEncoding(beforeDecoded.encoding)
+        ? beforeDecoded.encoding
+        : "utf-8";
+    prepared.push({
+      ...file,
+      existed: !!fileStat,
+      beforeBytes,
+      beforeText,
+      afterText,
+      changed,
+      writeEncoding,
+      snapshotTag,
+      requestedSnapshotTag,
+      snapshotTagSource
+    });
+  }
+  return prepared;
+}
+
+async function applyPreparedWorkspaceEditFiles(files: PreparedWorkspaceEditFile[]): Promise<ApplyPreparedWorkspaceEditFilesResult> {
+  const rollbackStates = files.map(workspaceEditRollbackState);
+  const applied: AppliedWorkspaceEditFile[] = [];
+  let activeFile: PreparedWorkspaceEditFile | undefined;
+
+  try {
+    for (const file of files) {
+      activeFile = file;
+      await writeBytesAtomically(file.filePath, encodeTextBuffer(file.afterText, file.writeEncoding));
+      const afterBytes = await readFile(file.filePath);
+      const afterDecoded = decodeTextBuffer(afterBytes);
+      applied.push({
+        ...file,
+        newSnapshotTag: computeSnapshotTag(afterBytes),
+        charsBefore: file.beforeText.length,
+        charsAfter: afterDecoded.text.length
+      });
+    }
+    return { ok: true, files: applied };
+  } catch (error) {
+    const rollback = await rollbackWorkspaceEditFiles(rollbackStates);
+    return {
+      ok: false,
+      error: errorToString(error),
+      failedPath: activeFile?.relativePath,
+      rollback
+    };
+  }
+}
+
+function workspaceEditRollbackState(file: PreparedWorkspaceEditFile): WorkspaceEditRollbackState {
+  return {
+    filePath: file.filePath,
+    relativePath: file.relativePath,
+    existed: file.existed,
+    bytes: file.beforeBytes ? Buffer.from(file.beforeBytes) : null
+  };
+}
+
+async function rollbackWorkspaceEditFiles(states: WorkspaceEditRollbackState[]): Promise<WorkspaceEditRollbackSummary> {
+  const summary: WorkspaceEditRollbackSummary = { restored: [], deleted: [], failed: [] };
+  for (const state of states) {
+    try {
+      if (state.existed) {
+        if (!state.bytes) {
+          throw new Error("Rollback state is missing original bytes");
+        }
+        await mkdir(dirname(state.filePath), { recursive: true });
+        await rm(state.filePath, { recursive: true, force: true }).catch(() => undefined);
+        await writeBytesAtomically(state.filePath, state.bytes);
+        summary.restored.push(state.relativePath);
+      } else {
+        await rm(state.filePath, { recursive: true, force: true });
+        summary.deleted.push(state.relativePath);
+      }
+    } catch (error) {
+      summary.failed.push({ path: state.relativePath, error: errorToString(error) });
+    }
+  }
+  return summary;
+}
+
+async function writeBytesAtomically(filePath: string, bytes: Buffer): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  const tempPath = resolve(
+    dirname(filePath),
+    `.${basename(filePath)}.${process.pid}.${Date.now()}.${Math.floor(Math.random() * 1_000_000_000)}.tmp`
+  );
+  await writeFile(tempPath, bytes);
+  try {
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+function summarizeWorkspaceEditTargets(files: WorkspaceEditFileRequest[]): string {
+  const paths = files.map((file) => file.relativePath);
+  const preview = paths.slice(0, 5).join(", ");
+  return `${files.length} file${files.length === 1 ? "" : "s"}: ${preview}${paths.length > 5 ? ", ..." : ""}`;
+}
+
+function preparedWorkspaceEditFileToJson(file: PreparedWorkspaceEditFile): JsonObject {
+  return {
+    path: file.relativePath,
+    changed: file.changed,
+    existed: file.existed,
+    operationCount: file.fullContent !== undefined ? 1 : file.edits.length,
+    snapshotTag: file.snapshotTag,
+    requestedSnapshotTag: file.requestedSnapshotTag,
+    snapshotTagSource: file.snapshotTagSource,
+    encoding: file.writeEncoding,
+    charsBefore: file.beforeText.length,
+    charsAfter: file.afterText.length
+  };
+}
+
+function appliedWorkspaceEditFileToJson(file: AppliedWorkspaceEditFile): JsonObject {
+  return {
+    ...preparedWorkspaceEditFileToJson(file),
+    newSnapshotTag: file.newSnapshotTag,
+    charsBefore: file.charsBefore,
+    charsAfter: file.charsAfter
+  };
+}
+
+function workspaceEditResultFilesJson(prepared: PreparedWorkspaceEditFile[], applied: AppliedWorkspaceEditFile[]): JsonValue {
+  const appliedByPath = new Map(applied.map((file) => [normalizeForCompare(file.filePath), file]));
+  return prepared.map((file) => {
+    const appliedFile = appliedByPath.get(normalizeForCompare(file.filePath));
+    return appliedFile ? appliedWorkspaceEditFileToJson(appliedFile) : preparedWorkspaceEditFileToJson(file);
+  }) as unknown as JsonValue;
+}
+
+interface LocalMutationLeaseRequest {
+  scope: LeaseScope;
+  toolName: string;
+  cwd: string;
+  targetSummary: string;
+}
+
+async function withLocalMutationLease<TResult>(
+  options: LocalToolOptions,
+  context: ToolExecutionContext,
+  request: LocalMutationLeaseRequest,
+  operation: () => Promise<TResult> | TResult
+): Promise<TResult> {
+  const coordinator = options.mutationCoordinator;
+  if (!coordinator) {
+    return operation();
+  }
+  return coordinator.withLease(
+    {
+      scope: request.scope,
+      owner: localMutationLeaseOwner(context, request),
+      wait: true,
+      signal: context.signal
+    },
+    () => operation()
+  );
+}
+
+function localMutationLeaseOwner(context: ToolExecutionContext, request: LocalMutationLeaseRequest): MutationLeaseOwner {
+  return {
+    sessionId: context.sessionId,
+    toolCallId: context.toolCallId,
+    toolName: request.toolName,
+    cwd: request.cwd,
+    targetSummary: request.targetSummary
+  };
+}
+
+function recordReadSnapshot(
+  options: LocalToolOptions,
+  context: ToolExecutionContext,
+  path: string,
+  snapshotTag: string
+): void {
+  options.mutationCoordinator?.recordReadSnapshot(context.sessionId, path, snapshotTag);
 }
 
 async function runTerminalCommand(
@@ -795,6 +1416,7 @@ async function runTerminalCommand(
     signal: AbortSignal;
     shell: TerminalShell;
     guard: Required<LocalExecutionGuardOptions>;
+    preMutationCheckpoint?: () => Promise<NormalizedPreMutationCheckpointResult | null>;
   }
 ): Promise<ToolOutput> {
   await access(options.cwd, constants.R_OK);
@@ -802,161 +1424,274 @@ async function runTerminalCommand(
   if (hardline) {
     throw new Error(hardline.reason);
   }
-  const startedAt = Date.now();
-  const child = spawn(options.shell.command, options.shell.args(command), {
-    cwd: options.cwd,
-    detached: process.platform !== "win32",
-    env: options.guard.scrubEnvironment ? createGuardedProcessEnv() : process.env,
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
+  const mutationCheckpoint = options.preMutationCheckpoint ? await options.preMutationCheckpoint() : null;
+  const result = await runProcessCommand(command, options);
+  const text = formatCommandResult(result);
 
-  let stdout = Buffer.alloc(0);
-  let stderr = Buffer.alloc(0);
-  let truncated = false;
-  let timedOut = false;
-
-  const append = (kind: "stdout" | "stderr", chunk: Buffer): void => {
-    const current = kind === "stdout" ? stdout : stderr;
-    const next = Buffer.concat([current, chunk]);
-    if (next.byteLength > options.maxOutputBytes) {
-      truncated = true;
-      const sliced = next.subarray(0, options.maxOutputBytes);
-      if (kind === "stdout") stdout = sliced;
-      else stderr = sliced;
-      return;
-    }
-    if (kind === "stdout") stdout = next;
-    else stderr = next;
-  };
-
-  child.stdout.on("data", (chunk: Buffer) => append("stdout", chunk));
-  child.stderr.on("data", (chunk: Buffer) => append("stderr", chunk));
-
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    terminateChild(child, options.guard);
-  }, options.timeoutMs);
-  const abort = (): void => {
-    terminateChild(child, options.guard);
-  };
-  options.signal.addEventListener("abort", abort, { once: true });
-
-  const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, reject) => {
-    child.on("error", reject);
-    child.on("exit", (code, signal) => resolveExit({ code, signal }));
-  }).finally(() => {
-    clearTimeout(timeout);
-    options.signal.removeEventListener("abort", abort);
-  });
-
-  const durationMs = Date.now() - startedAt;
-  const stdoutText = stdout.toString("utf8");
-  const stderrText = stderr.toString("utf8");
-  const text = formatCommandResult({
-    exitCode: exit.code,
-    signal: exit.signal,
-    durationMs,
-    stdout: stdoutText,
-    stderr: stderrText,
-    timedOut,
-    truncated
-  });
-
-  return {
+  return withPreMutationCheckpointOutput({
     text,
     json: {
       command,
       cwd: options.cwd,
-      exitCode: exit.code,
-      signal: exit.signal,
-      durationMs,
-      stdout: stdoutText,
-      stderr: stderrText,
-      timedOut,
-      truncated,
+      exitCode: result.exitCode,
+      signal: result.signal,
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      stdoutBytes: result.stdoutBytes,
+      stderrBytes: result.stderrBytes,
+      timedOut: result.timedOut,
+      cancelled: result.cancelled,
+      truncated: result.truncated,
+      outputPreview: result.outputPreview,
+      terminationDiagnostics: result.terminationDiagnostics as unknown as JsonValue,
       guard: {
         environmentScrubbed: options.guard.scrubEnvironment,
         processTreeKill: options.guard.killProcessTree,
         windowsNativeGuard: process.platform === "win32"
       }
     }
+  }, mutationCheckpoint);
+}
+
+function shouldCheckpointTerminalCommand(command: string): boolean {
+  const classification = classifyTerminalCommand(command);
+  if (classification.risk === "write" || classification.risk === "destructive") return true;
+  if (classification.risk !== "network") return false;
+  return /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(install|add|remove|update|audit\s+fix)\b/i.test(command) ||
+    /\b(pip|uv)\s+(install|sync|add|remove)\b/i.test(command) ||
+    />{1,2}/.test(command);
+}
+
+async function createPreMutationCheckpoint(
+  options: LocalToolOptions,
+  request: LocalPreMutationCheckpointRequest
+): Promise<NormalizedPreMutationCheckpointResult | null> {
+  if (options.preMutationCheckpoint === false) return null;
+
+  const checkpointOptions =
+    typeof options.preMutationCheckpoint === "function"
+      ? { hook: options.preMutationCheckpoint }
+      : options.preMutationCheckpoint ?? {};
+  if (checkpointOptions.enabled === false) return null;
+
+  try {
+    const result = checkpointOptions.hook
+      ? await checkpointOptions.hook(request)
+      : await createGitPreMutationCheckpoint(checkpointOptions, request);
+    const normalized = normalizePreMutationCheckpointResult(result);
+    if (normalized?.status === "failed" && checkpointOptions.onFailure === "throw") {
+      throw new Error(normalized.error ?? normalized.reason ?? "Pre-mutation checkpoint failed");
+    }
+    return normalized;
+  } catch (error) {
+    if (checkpointOptions.onFailure === "throw") throw error;
+    const message = errorToString(error);
+    return {
+      status: "failed",
+      reason: "checkpoint-failed",
+      error: message,
+      metadata: {
+        diagnostic: `Pre-mutation Git checkpoint failed: ${message}`,
+        toolName: request.toolName,
+        targetSummary: request.targetSummary
+      }
+    };
+  }
+}
+
+async function createGitPreMutationCheckpoint(
+  options: LocalPreMutationCheckpointOptions,
+  request: LocalPreMutationCheckpointRequest
+): Promise<NormalizedPreMutationCheckpointResult> {
+  const service = options.service ?? new GitCliVersioningService();
+  const detected = await service.detectRepository({ cwd: request.cwd });
+  if (detected.found === false) {
+    return {
+      status: "skipped",
+      reason: "not-a-git-repository",
+      metadata: {
+        cwd: detected.cwd,
+        diagnostic: `Pre-mutation Git checkpoint skipped: ${detected.reason}`
+      }
+    };
+  }
+
+  const strategy = options.strategy ?? "snapshot";
+  if (strategy === "snapshot" && !detected.head) {
+    return {
+      status: "skipped",
+      reason: "repository-has-no-head",
+      metadata: {
+        repositoryRoot: detected.root,
+        diagnostic: "Pre-mutation Git checkpoint skipped: repository has no HEAD commit"
+      }
+    };
+  }
+
+  const checkpoint = await service.createCheckpoint({
+    cwd: detected.root,
+    label: `Before ${request.toolName}: ${request.targetSummary}`,
+    strategy,
+    includeUntracked: options.includeUntracked ?? true,
+    refNamespace: options.refNamespace,
+    toolCall: {
+      id: request.toolCallId,
+      toolName: request.toolName,
+      sessionId: request.sessionId,
+      targetSummary: request.targetSummary
+    }
+  });
+
+  return {
+    status: "created",
+    checkpoint,
+    artifacts: [gitCheckpointToArtifact(checkpoint)],
+    metadata: {
+      diagnostic: `Pre-mutation Git checkpoint created: ${checkpoint.id}`,
+      repositoryRoot: checkpoint.repositoryRoot,
+      refName: checkpoint.refName,
+      strategy: checkpoint.strategy
+    }
   };
 }
 
-function normalizeGuard(guard: LocalExecutionGuardOptions | false | undefined): Required<LocalExecutionGuardOptions> {
-  if (guard === false) {
+function normalizePreMutationCheckpointResult(
+  result: LocalPreMutationCheckpointResult | null | undefined
+): NormalizedPreMutationCheckpointResult | null {
+  return result ?? null;
+}
+
+function summarizeTerminalTarget(workspaceRoot: string, cwd: string, command: string): string {
+  const location = displayPath(workspaceRoot, cwd);
+  return `${location}: ${truncateForMetadata(command, 140)}`;
+}
+
+function summarizeEditTarget(relativePath: string, fullContent: string | undefined, edits: EditOperation[]): string {
+  if (fullContent !== undefined) return `${relativePath} full write (${fullContent.length} chars)`;
+  const operations = edits.map((edit) => edit.op).join(", ");
+  return `${relativePath} ${edits.length} edit${edits.length === 1 ? "" : "s"}${operations ? ` (${operations})` : ""}`;
+}
+
+function withPreMutationCheckpointOutput(
+  output: ToolOutput,
+  checkpoint: NormalizedPreMutationCheckpointResult | null | undefined
+): ToolOutput {
+  if (!checkpoint) return output;
+  const checkpointArtifacts = checkpoint.artifacts ?? (checkpoint.checkpoint ? [gitCheckpointToArtifact(checkpoint.checkpoint)] : []);
+  return {
+    ...output,
+    text: [formatPreMutationCheckpointLine(checkpoint), output.text].filter(Boolean).join("\n"),
+    artifacts: [...(output.artifacts ?? []), ...checkpointArtifacts],
+    json: mergePreMutationCheckpointJson(output.json, checkpoint)
+  };
+}
+
+function mergePreMutationCheckpointJson(
+  json: JsonValue | undefined,
+  checkpoint: NormalizedPreMutationCheckpointResult
+): JsonObject {
+  const checkpointJson = preMutationCheckpointToJson(checkpoint);
+  if (isJsonObject(json)) {
     return {
-      scrubEnvironment: false,
-      killProcessTree: false
+      ...json,
+      preMutationCheckpoint: checkpointJson
     };
   }
   return {
-    scrubEnvironment: guard?.scrubEnvironment ?? true,
-    killProcessTree: guard?.killProcessTree ?? true
+    result: json ?? null,
+    preMutationCheckpoint: checkpointJson
   };
 }
 
-function createGuardedProcessEnv(): NodeJS.ProcessEnv {
-  const guarded: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (isSensitiveEnvName(key)) continue;
-    guarded[key] = value;
-  }
-  guarded.PYTHONUTF8 = "1";
-  guarded.PYTHONIOENCODING = "utf-8";
-  return guarded;
+function preMutationCheckpointToJson(checkpoint: NormalizedPreMutationCheckpointResult): JsonObject {
+  const json: JsonObject = {
+    status: checkpoint.status
+  };
+  if (checkpoint.reason) json.reason = checkpoint.reason;
+  if (checkpoint.error) json.error = checkpoint.error;
+  if (checkpoint.metadata) json.metadata = checkpoint.metadata;
+  if (checkpoint.checkpoint) json.checkpoint = gitCheckpointToJson(checkpoint.checkpoint);
+  return json;
 }
 
-function isSensitiveEnvName(name: string): boolean {
-  return /(^|_)(token|secret|password|credential|api[_-]?key|auth|cookie|session)(_|\b)/i.test(name);
+function gitCheckpointToArtifact(checkpoint: GitCheckpoint): ToolArtifact {
+  return {
+    kind: "log",
+    title: `Git checkpoint: ${checkpoint.label}`,
+    uri: checkpoint.refName,
+    text: `Git checkpoint ${checkpoint.id} at ${checkpoint.refName}`,
+    metadata: {
+      artifactKind: "git-checkpoint",
+      checkpointId: checkpoint.id,
+      label: checkpoint.label,
+      refName: checkpoint.refName,
+      commit: checkpoint.commit,
+      strategy: checkpoint.strategy,
+      repositoryRoot: checkpoint.repositoryRoot,
+      includeUntracked: checkpoint.includeUntracked
+    }
+  };
 }
 
-function terminateChild(child: ChildProcess, guard: Required<LocalExecutionGuardOptions>): void {
-  if (!guard.killProcessTree) {
-    child.kill();
-    return;
+function gitCheckpointToJson(checkpoint: GitCheckpoint): JsonObject {
+  const json: JsonObject = {
+    id: checkpoint.id,
+    label: checkpoint.label,
+    strategy: checkpoint.strategy,
+    refName: checkpoint.refName,
+    commit: checkpoint.commit,
+    baseCommit: checkpoint.baseCommit,
+    createdAt: checkpoint.createdAt,
+    repositoryRoot: checkpoint.repositoryRoot,
+    includeUntracked: checkpoint.includeUntracked
+  };
+  if (checkpoint.toolCall) {
+    json.toolCall = {
+      id: checkpoint.toolCall.id ?? null,
+      toolName: checkpoint.toolCall.toolName ?? null,
+      actor: checkpoint.toolCall.actor ?? null,
+      sessionId: checkpoint.toolCall.sessionId ?? null,
+      targetSummary: checkpoint.toolCall.targetSummary ?? null
+    };
   }
-  terminateProcessTree(child);
+  return json;
 }
 
-function terminateProcessTree(child: ChildProcess): void {
-  if (!child.pid) {
-    child.kill();
-    return;
+function formatPreMutationCheckpointLine(checkpoint: NormalizedPreMutationCheckpointResult): string {
+  if (checkpoint.status === "created" && checkpoint.checkpoint) {
+    return `Pre-mutation Git checkpoint: ${checkpoint.checkpoint.id} (${checkpoint.checkpoint.strategy}, ${checkpoint.checkpoint.refName})`;
   }
-  if (process.platform === "win32") {
-    const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true
-    });
-    killer.on("error", () => child.kill());
-    return;
+  if (checkpoint.status === "failed") {
+    return `Pre-mutation Git checkpoint failed: ${checkpoint.error ?? checkpoint.reason ?? "unknown error"}`;
   }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    child.kill();
-  }
+  return `Pre-mutation Git checkpoint skipped: ${checkpoint.reason ?? "skipped"}`;
 }
 
-function formatCommandResult(result: {
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-  durationMs: number;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  truncated: boolean;
-}): string {
+function truncateForMetadata(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 1))}...`;
+}
+
+function errorToString(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isJsonObject(value: JsonValue | undefined): value is JsonObject {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatCommandResult(result: ProcessRunResult): string {
   const output = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter(Boolean).join("\n");
   return [
     `Exit code: ${result.exitCode ?? "null"}`,
     `Wall time: ${(result.durationMs / 1000).toFixed(1)} seconds`,
     ...(result.signal ? [`Signal: ${result.signal}`] : []),
     ...(result.timedOut ? ["Timed out: true"] : []),
+    ...(result.cancelled ? ["Cancelled: true"] : []),
     ...(result.truncated ? ["Output truncated: true"] : []),
+    ...(result.terminationDiagnostics.length > 0 ? ["Termination diagnostics: present"] : []),
     "Output:",
     output
   ].join("\n");
@@ -988,80 +1723,7 @@ function shouldSkip(name: string): boolean {
 }
 
 function defaultShell(): TerminalShell {
-  if (process.platform === "win32") {
-    const prelude = [
-      "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "$env:PYTHONUTF8='1'",
-      "$env:PYTHONIOENCODING='utf-8'"
-    ].join("; ");
-    return {
-      command: "powershell.exe",
-      args: (command) => [
-        "-NoLogo",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        `${prelude}; $global:LASTEXITCODE=$null; & { ${normalizePowerShellCommand(command)} }; $success=$?; $exitCode=$LASTEXITCODE; if ($exitCode -ne $null -and $exitCode -ne 0) { exit $exitCode }; if (-not $success) { exit 1 }`
-      ]
-    };
-  }
-  return {
-    command: "bash",
-    args: (command) => ["-lc", command]
-  };
-}
-
-function normalizePowerShellCommand(command: string): string {
-  const segments = splitPowerShellAndOperators(command);
-  if (segments.length <= 1) return command;
-  return segments
-    .map((segment, index) =>
-      index === 0
-        ? segment
-        : `if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; if (-not $?) { exit 1 }; ${segment}`
-    )
-    .join("; ");
-}
-
-function splitPowerShellAndOperators(command: string): string[] {
-  const segments: string[] = [];
-  let current = "";
-  let quote: "'" | "\"" | null = null;
-  let escaped = false;
-
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index]!;
-    const next = command[index + 1];
-    if (quote) {
-      current += char;
-      if (escaped) {
-        escaped = false;
-      } else if (quote === "\"" && char === "`") {
-        escaped = true;
-      } else if (char === quote) {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === "'" || char === "\"") {
-      quote = char;
-      current += char;
-      continue;
-    }
-    if (char === "&" && next === "&") {
-      segments.push(current.trim());
-      current = "";
-      index += 1;
-      continue;
-    }
-    current += char;
-  }
-
-  segments.push(current.trim());
-  return segments.filter((segment) => segment.length > 0);
+  return defaultProcessShell();
 }
 
 function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -1128,30 +1790,17 @@ function formatNumberedLines(lines: string[], startLine: number): string {
   return lines.map((line, index) => `${String(startLine + index).padStart(width, " ")} | ${line}`).join("\n");
 }
 
-type ReadLineFormat = "numbered" | "plain" | "hashline";
+type ReadLineFormat = "numbered" | "plain";
 
 function readLineFormat(input: JsonObject): ReadLineFormat {
   const value = stringField(input, "format");
-  if (value === "numbered" || value === "plain" || value === "hashline") return value;
+  if (value === "numbered" || value === "plain") return value;
   return booleanField(input, "numbered") === false ? "plain" : "numbered";
 }
 
 function formatReadLines(lines: string[], startLine: number, format: ReadLineFormat): string {
   if (format === "plain") return lines.join("\n");
-  if (format === "hashline") return formatHashlineLines(lines, startLine);
   return formatNumberedLines(lines, startLine);
-}
-
-function formatHashlineLines(lines: string[], startLine: number): string {
-  return lines.map((line, index) => `${formatLineAnchor(startLine + index, line)} | ${line}`).join("\n");
-}
-
-function formatLineAnchor(line: number, text: string): string {
-  return `${line}:${computeLineHash(text)}`;
-}
-
-function computeLineHash(text: string, length = 4): string {
-  return createHash("sha256").update(text).digest("hex").slice(0, Math.max(2, Math.min(12, length)));
 }
 
 interface EditOperation {
@@ -1159,8 +1808,6 @@ interface EditOperation {
   startLine?: number;
   endLine?: number;
   line?: number;
-  anchor?: string;
-  endAnchor?: string;
   content?: string;
 }
 
@@ -1172,6 +1819,9 @@ function editOperationsField(input: JsonObject, key: string): EditOperation[] {
       throw new Error(`${key}[${index}] must be an object`);
     }
     const operation = item as Record<string, JsonValue>;
+    if (operation.anchor !== undefined || operation.endAnchor !== undefined) {
+      throw new Error(`${key}[${index}] anchor fields are no longer supported. Use startLine, endLine, or line with snapshotTag from read.`);
+    }
     const op = operation.op;
     if (op !== "replace" && op !== "insert_before" && op !== "insert_after" && op !== "insert_head" && op !== "insert_tail" && op !== "delete") {
       throw new Error(`${key}[${index}].op must be replace, insert_before, insert_after, insert_head, insert_tail, or delete`);
@@ -1185,8 +1835,6 @@ function editOperationsField(input: JsonObject, key: string): EditOperation[] {
       startLine: optionalLineNumber(operation.startLine, `${key}[${index}].startLine`),
       endLine: optionalLineNumber(operation.endLine, `${key}[${index}].endLine`),
       line: optionalLineNumber(operation.line, `${key}[${index}].line`),
-      anchor: optionalString(operation.anchor, `${key}[${index}].anchor`),
-      endAnchor: optionalString(operation.endAnchor, `${key}[${index}].endAnchor`),
       content: typeof content === "string" ? content : undefined
     };
   });
@@ -1198,94 +1846,6 @@ function optionalLineNumber(value: JsonValue | undefined, label: string): number
     throw new Error(`${label} must be a positive integer`);
   }
   return value;
-}
-
-function optionalString(value: JsonValue | undefined, label: string): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} must be a non-empty string`);
-  }
-  return value.trim();
-}
-
-function prepareLineEditOperations(text: string, operations: EditOperation[], relativePath: string): EditOperation[] {
-  if (!operations.some((operation) => operation.anchor || operation.endAnchor)) return operations;
-  const lines = splitTextLines(text);
-  return operations.map((operation, index) => resolveAnchoredEditOperation(lines, operation, index, relativePath));
-}
-
-function resolveAnchoredEditOperation(
-  lines: string[],
-  operation: EditOperation,
-  index: number,
-  relativePath: string
-): EditOperation {
-  const startLine = operation.anchor ? resolveLineAnchor(lines, operation.anchor, `edits[${index}].anchor`, relativePath) : undefined;
-  const endLine = operation.endAnchor ? resolveLineAnchor(lines, operation.endAnchor, `edits[${index}].endAnchor`, relativePath) : undefined;
-  const next: EditOperation = { ...operation };
-
-  if (startLine !== undefined) {
-    if (operation.op === "insert_before" || operation.op === "insert_after") {
-      next.line = assertCompatibleLine(operation.line ?? operation.startLine, startLine, `edits[${index}].line`);
-    } else if (operation.op === "replace" || operation.op === "delete") {
-      next.startLine = assertCompatibleLine(operation.startLine ?? operation.line, startLine, `edits[${index}].startLine`);
-      const resolvedEndLine = endLine ?? assertCompatibleLine(operation.endLine, startLine, `edits[${index}].endLine`);
-      if (resolvedEndLine < startLine) {
-        throw new Error(`edits[${index}].endAnchor must not resolve before anchor`);
-      }
-      next.endLine = resolvedEndLine;
-    } else {
-      throw new Error(`edits[${index}].anchor is only valid for replace, delete, insert_before, or insert_after`);
-    }
-  } else if (endLine !== undefined) {
-    throw new Error(`edits[${index}].endAnchor requires anchor`);
-  }
-
-  return next;
-}
-
-function assertCompatibleLine(explicitLine: number | undefined, anchorLine: number, label: string): number {
-  if (explicitLine !== undefined && explicitLine !== anchorLine) {
-    throw new Error(`${label} conflicts with anchor line ${anchorLine}`);
-  }
-  return anchorLine;
-}
-
-function resolveLineAnchor(lines: string[], rawAnchor: string, label: string, relativePath: string): number {
-  const anchor = parseLineAnchor(rawAnchor, label);
-  if (anchor.line < 1 || anchor.line > lines.length) {
-    throw new Error(`Stale line anchor for ${relativePath}: ${rawAnchor}. Re-read with read format=hashline before editing.`);
-  }
-  const currentText = lines[anchor.line - 1] ?? "";
-  const currentHash = computeLineHash(currentText, anchor.hash.length);
-  if (currentHash !== anchor.hash) {
-    throw new Error(
-      [
-        `Stale line anchor for ${relativePath}: expected ${anchor.line}:${anchor.hash}, current ${anchor.line}:${currentHash}.`,
-        "Re-read with read format=hashline before editing.",
-        "Nearby current anchors:",
-        formatAnchorContext(lines, anchor.line)
-      ].join("\n")
-    );
-  }
-  return anchor.line;
-}
-
-function parseLineAnchor(rawAnchor: string, label: string): { line: number; hash: string } {
-  const match = rawAnchor.match(/(?:^|\b)(\d+):([0-9a-fA-F]{2,12})(?:\b|$)/);
-  if (!match) {
-    throw new Error(`${label} must contain a LINE:HASH anchor from read format=hashline`);
-  }
-  return {
-    line: Number(match[1]),
-    hash: match[2]!.toLowerCase()
-  };
-}
-
-function formatAnchorContext(lines: string[], line: number): string {
-  const startLine = Math.max(1, line - 2);
-  const endLine = Math.min(lines.length, line + 2);
-  return formatHashlineLines(lines.slice(startLine - 1, endLine), startLine);
 }
 
 function applyLineEditOperations(text: string, operations: EditOperation[]): string {
