@@ -1,341 +1,106 @@
-# Crish 项目改进路线图
+# Crish 项目架构与路线图
 
-## 当前架构分析
+## 架构概览
 
-### 核心组件现状
+Crish 采用 **daemon + Tauri 桌面端** 架构，分为 8 层：
 
-#### 1. Agent Runtime (packages/agent-runtime) ✅
-**规模**: ~15,782 行代码  
-**成熟度**: 🟢 高 - 核心功能完整
+| 层级 | 名称 | 职责 | 状态 |
+|------|------|------|------|
+| L0 | Global State Verification | 全局状态一致性验证 | 完成 |
+| L1 | Provider Transport | LLM API 传输层 | 完成 |
+| L2 | Runtime Core | 运行时核心引擎 | 完成 |
+| L3 | Orchestrator | 编排层 | 完成 |
+| L4 | Daemon | 守护进程 (Rust sidecar) | 完成 |
+| L5 | Tauri Backend | Rust 原生桥接 | 完成 |
+| L6 | Frontend | Preact 前端 | 完成 |
+| L7 | Cross-Cutting | 横切关注点 | 进行中 |
 
-**核心模块**:
-- `runtime.ts` - 主运行时引擎
-- `permissions.ts` - 权限管理系统
-- `tools.ts` / `local-tools.ts` - 工具系统
-- `encoding.ts` - 中文编码保护
-- `context-compression.ts` - 上下文压缩
-- `snapshots.ts` - 会话快照
-- `subagents.ts` - 子智能体管理
-- `background-command.ts` - 后台命令执行
-- `tool-output-budget.ts` - 工具输出预算控制
+### 核心组件
 
-**优势**:
-- 完整的 OpenAI 兼容 API 调用
-- 细粒度权限控制
-- 自动上下文压缩和快照恢复
-- 支持多智能体协作
+#### Agent Runtime (`packages/agent-runtime`)
+运行时核心引擎，负责：
+- 消息循环与流式对话
+- 工具调用执行（并行/串行）
+- 上下文压缩与结构化摘要
+- 权限策略决定
+- 子智能体递归管理
+- 会话快照与恢复
+- 断连重连与流恢复
 
-#### 2. Agent Workbench (apps/agent-workbench) ⚠️
-**规模**: ~4,900 行代码  
-**成熟度**: 🟡 中 - CLI 功能完整，GUI 待开发
+#### Daemon Sidecar (`apps/agent-workbench/src-tauri/src/sidecar.rs`)
+Rust 守护进程，管理 Node.js 运行时生命周期：
+- 运行时进程发现（node/bun/npx/tsx）
+- 指数退避重连
+- HTTP 通信诊断
+- 结构化日志和错误报告
 
-**核心模块**:
-- `cli/main.ts` - CLI 入口
-- `cli/goal-runner.ts` - 目标驱动执行
-- `cli/workbench-runner.ts` - 工作台运行器
-- `shared/task-controller.ts` - 任务控制器
-- `shared/background-command-bridge.ts` - 后台命令桥接
-
-**现状**:
-- CLI 模式功能完整
-- Tauri 桌面端存在但未充分利用
-- 缺少与 Web UI 的集成
-
-#### 3. Web UI (apps/web-ui) 🆕
-**规模**: 前端原型  
-**成熟度**: 🟡 中 - UI 完整，后端待接入
-
-**已实现功能**:
-- 完整的聊天界面（类 Codex 风格）
-- 工具调用审批界面（极简卡片式）
-- 子智能体管理（pill + 浮动/侧边栏）
-- 代码差异查看器（内嵌 diff）
-- 设置面板（主题、权限、API、快捷键等）
-- 响应式布局
-
-**待完成**:
-- 与 Agent Runtime 的 WebSocket 连接
-- 实时消息流处理
-- 工具调用审批后端逻辑
-- 会话持久化
+#### Agent Workbench (`apps/agent-workbench/src`)
+Preact + Tauri 桌面应用：
+- 完整聊天界面（流式渲染、工具调用卡片、文件编辑摘要）
+- 面板布局系统（对话/项目/审批/工具/产物/诊断/计划/设置）
+- 消息管道（事件投影、结构化渲染）
+- 全局状态管理（AppState）
+- 子智能体可视化管理
+- 上下文压缩可视化（CompactionSummaryCard）
 
 ---
 
-## 短期改进计划 (1-2 个月)
+## 近期规划
 
-### Phase 1: UI 后端集成 🔥 优先级最高
+### 测试基础设施
+- [ ] `message-pipeline.ts` 核心流程测试
+- [ ] `runtime-event-projector.ts` 事件投影测试
+- [ ] `stream-recovery.ts` 流恢复测试
+- [ ] `sidecar.rs` daemon 发现和重连测试
 
-#### 1.1 WebSocket 服务器 (1 周)
-- [ ] 在 `apps/web-ui` 创建 Express + WebSocket 服务器
-- [ ] 实现 `/api/chat` WebSocket 端点
-- [ ] 连接 Agent Runtime，转发消息流
-- [ ] 实现工具调用审批的双向通信
+### 运行时增强
+- [ ] 上下文层级化压缩（L7.6）
+- [ ] 模型甜点区集成（systemPromptOverhead 融入压缩决策）
+- [ ] 压缩与子智能体任务分配统一（走同一 `createStructuredSummary`）
 
-**技术栈**: `ws` 或 `socket.io`
-
-**输出**:
-```typescript
-// apps/web-ui/server/websocket.ts
-class AgentWebSocketServer {
-  handleConnection(ws: WebSocket) {
-    const runtime = new AgentRuntime({ ... });
-    // 转发 UI 消息到 runtime
-    // 转发 runtime 事件到 UI
-  }
-}
-```
-
-#### 1.2 前端状态管理 (3 天)
-- [ ] 重构 `app.js` 为模块化结构
-- [ ] 实现 WebSocket 客户端管理器
-- [ ] 实现消息流处理（流式渲染）
-- [ ] 实现工具调用审批状态同步
-
-**目标**: 实现真实的消息发送和接收
-
-#### 1.3 工具审批流程 (5 天)
-- [ ] 实现工具审批闸口的后端逻辑
-- [ ] 支持修改参数后重新提交
-- [ ] 支持批量审批
-- [ ] 实现审批日志记录
-
-**关键**: 将 UI 中的 `tool-approval-deck` 与 `PermissionPolicy` 连接
-
-#### 1.4 会话持久化 (3 天)
-- [ ] 实现会话列表 API (`/api/sessions`)
-- [ ] 实现会话内容保存（SQLite 或 JSON）
-- [ ] 侧边栏会话树与后端同步
-- [ ] 实现会话导出功能
+### 前端增强
+- [ ] 离线消息队列恢复
+- [ ] Code 模式文件编辑器集成
+- [ ] Plan 模式计划文档渲染
 
 ---
 
-### Phase 2: 子智能体可视化 (1-2 周)
+## 中期规划
 
-#### 2.1 子智能体 UI 集成
-- [ ] 将 `subagents.ts` 的事件映射到 UI
-- [ ] 实现子智能体实时状态更新（pill 状态点）
-- [ ] 实现子智能体悬浮窗（独立聊天视图）
-- [ ] 实现子智能体侧边栏面板
+### 高级工具
+- [ ] MCP 服务器生命周期管理 UI
+- [ ] 工具调用策略配置面板
+- [ ] 批量审批增强
 
-**关键功能**:
-- 父智能体和子智能体的消息流隔离
-- 子智能体的工具调用独立审批
-- 子智能体的资源使用监控
-
-#### 2.2 多智能体协作
-- [ ] 实现智能体间消息传递可视化
-- [ ] 实现智能体任务分配界面
-- [ ] 实现智能体执行流程图
+### 协作功能
+- [ ] 配置导入/导出
+- [ ] 会话模板系统
 
 ---
 
-### Phase 3: 性能优化 (1 周)
+## 长期愿景
 
-#### 3.1 上下文压缩可视化
-- [ ] 在 UI 中显示当前 token 使用量
-- [ ] 压缩触发时的通知
-- [ ] 可调节的压缩策略（设置面板）
-
-#### 3.2 工具输出预算控制
-- [ ] 在 UI 中显示工具输出大小
-- [ ] 大输出的截断和"展开全部"按钮
-- [ ] 工具输出的懒加载
-
-#### 3.3 快照系统
-- [ ] 实现会话快照的保存/恢复 UI
-- [ ] 快照列表和预览
-- [ ] 快照对比功能
-
----
-
-## 中期改进计划 (3-6 个月)
-
-### Phase 4: 高级功能
-
-#### 4.1 代码编辑器集成
-- [ ] 集成 Monaco Editor
-- [ ] 实现文件树浏览器
-- [ ] 实现 diff 查看的内联编辑
-- [ ] 实现代码搜索
-
-#### 4.2 技能系统 (Skills)
-- [ ] 将 `skills.ts` 导出为独立模块
-- [ ] 实现技能市场（本地技能库）
-- [ ] 技能的可视化管理界面
-- [ ] 自定义技能编辑器
-
-#### 4.3 插件系统
-- [ ] 定义插件 API 规范
-- [ ] 实现插件加载器
-- [ ] 示例插件：GitHub 集成、Jira 集成
-- [ ] 插件市场 UI
-
-#### 4.4 自动化工作流
-- [ ] 实现 workflow 定义格式（YAML）
-- [ ] workflow 编辑器（可视化拖拽）
-- [ ] workflow 执行引擎
-- [ ] workflow 模板库
-
-#### 4.5 远程协作
-- [ ] 多用户会话共享
-- [ ] 实时协作编辑
-- [ ] 消息同步和冲突解决
-
----
-
-### Phase 5: 桌面端增强
-
-#### 5.1 Tauri 桌面应用
-- [ ] 将 Web UI 打包为 Tauri 应用
-- [ ] 实现原生系统集成（文件选择器、通知等）
-- [ ] 实现本地 Agent Runtime 进程管理
-- [ ] 实现桌面端快捷键
-
-#### 5.2 系统托盘和全局快捷键
-- [ ] 系统托盘菜单
-- [ ] 全局唤醒快捷键（如 Ctrl+Shift+Space）
-- [ ] 快速输入窗口（类似 Spotlight）
-
----
-
-## 长期愿景 (6-12 个月)
-
-### Phase 6: 企业级功能
-
-#### 6.1 团队协作
-- [ ] 用户和团队管理
-- [ ] 角色和权限系统
+### 企业级功能
+- [ ] 多语言运行时支持（Deno, Bun full）
+- [ ] 沙箱隔离执行
 - [ ] 审计日志
-- [ ] 会话共享和权限控制
 
-#### 6.2 云端同步
-- [ ] 会话云端存储
-- [ ] 跨设备同步
-- [ ] 云端技能库
-
-#### 6.3 高级安全
-- [ ] 沙箱隔离（Docker/VM）
-- [ ] 敏感数据检测和脱敏
-- [ ] 安全策略模板
-- [ ] 合规性报告（GDPR、SOC2）
-
-#### 6.4 企业部署
-- [ ] Docker 部署方案
-- [ ] Kubernetes 支持
-- [ ] 私有化部署文档
-- [ ] SSO 集成（SAML、OAuth）
+### 扩展生态
+- [ ] 插件系统
+- [ ] 自定义技能注册
+- [ ] 远程 Provider 代理
 
 ---
 
-## 技术债务清理
+## 技术选型
 
-### 立即处理
-1. **移除旧的聊天同步代码** ✅ 已在新项目中移除
-   - 删除 `apps/desktop` 中的旧代码
-   - 删除 `crates/sync-core`、`crates/storage`
-
-2. **统一命名规范**
-   - 从 `@chat-sync/*` 改为 `@conex/*` ✅ 已完成
-   - 统一变量命名风格
-
-3. **移除未使用的依赖**
-   - 清理 `package.json` 中的冗余依赖
-   - 清理 Rust `Cargo.toml` 中的旧依赖
-
-### 持续优化
-1. **测试覆盖率**
-   - 当前覆盖率: ~40% (估算)
-   - 目标: 80%+ 核心功能覆盖
-
-2. **文档完善**
-   - API 文档（JSDoc/TSDoc）
-   - 架构设计文档
-   - 开发者指南
-
-3. **性能优化**
-   - 工具输出的流式处理
-   - 大文件读取的分块加载
-   - 上下文压缩的增量算法
-
----
-
-## 建议的开发顺序
-
-### 第一优先级（立即开始）
-1. **WebSocket 服务器** - 让 UI 能真正发送和接收消息
-2. **工具审批流程** - 核心安全特性
-3. **会话持久化** - 基础数据管理
-
-### 第二优先级（1-2 周后）
-4. **子智能体可视化** - 差异化特性
-5. **代码编辑器集成** - 提升开发体验
-
-### 第三优先级（1 个月后）
-6. **技能系统** - 扩展性
-7. **桌面端优化** - 用户体验
-
----
-
-## 技术选型建议
-
-### 后端
-- **Runtime**: Node.js 20+ (保持现状)
-- **WebSocket**: `ws` (轻量) 或 `socket.io` (功能丰富)
-- **数据库**: SQLite (本地) + PostgreSQL (云端可选)
-- **API**: Express + tRPC (类型安全)
-
-### 前端
-- **框架**: 保持原生 JavaScript（当前）或迁移到 React/Vue（长期）
-- **状态管理**: Zustand 或 Pinia (轻量)
-- **编辑器**: Monaco Editor (VS Code 同款)
-- **图表**: D3.js (智能体流程图)
-
-### 桌面端
-- **框架**: Tauri 2.x (保持现状)
-- **原生功能**: Tauri Plugin System
-
-### DevOps
-- **构建**: Vite (快速)
-- **测试**: Vitest (保持现状)
-- **CI/CD**: GitHub Actions
-- **发布**: Electron Builder (桌面端) + Docker (服务端)
-
----
-
-## 关键指标
-
-### 用户体验
-- 首次响应时间 < 500ms
-- 消息流式渲染延迟 < 100ms
-- UI 操作响应 < 16ms (60fps)
-
-### 性能
-- 支持 100+ 会话历史
-- 单会话支持 10,000+ 消息
-- 内存占用 < 500MB (空闲)
-
-### 可靠性
-- 会话恢复成功率 > 99%
-- 工具调用成功率 > 95%
-- 崩溃率 < 0.1%
-
----
-
-## 总结
-
-**Crish 的核心优势**:
-- ✅ 成熟的 Agent Runtime
-- ✅ 完整的 Web UI 原型
-- ✅ 清晰的架构分层
-
-**最紧急的任务**:
-1. 连接 UI 和 Runtime（WebSocket）
-2. 实现工具审批流程
-3. 完善会话管理
-
-**差异化特性**:
-- 可视化的子智能体管理
-- 细粒度的工具调用审批
-- 优秀的代码差异查看体验
-
-按照这个路线图，Crish 可以在 3 个月内达到可用状态，6 个月内成为一个功能完整的 Agent 工作台平台。
+| 领域 | 技术 |
+|------|------|
+| 前端框架 | Preact (JSX) |
+| 桌面壳 | Tauri v2 |
+| 后端桥接 | Rust (Tauri commands) |
+| 守护进程 | Rust sidecar |
+| 运行时 | Node.js (TypeScript) |
+| LLM 协议 | OpenAI 兼容 API |
+| 状态管理 | AppState + event bus |
+| 消息格式 | TypeScript interfaces |

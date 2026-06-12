@@ -5,6 +5,7 @@ import {
   OpenAICompatibleProvider,
   createLocalWorkspaceTools,
   createPermissionPolicy,
+  createWriteFileTool,
   loadOpenAICompatibleProviderConfig,
   runRuntimeStageSuite
 } from "../src/index";
@@ -585,11 +586,15 @@ const suite = await runRuntimeStageSuite({
 });
 
 function createUiGenerationTools() {
-  return createLocalWorkspaceTools({
+  const options = {
     workspaceRoot: repoRoot,
     defaultTimeoutMs: 30_000,
     maxOutputBytes: 12_000
-  }).filter((tool) => tool.name !== "restore_file_snapshot" && tool.name !== "restore_workspace_checkpoint");
+  };
+  return [
+    ...createLocalWorkspaceTools(options),
+    createWriteFileTool(options)
+  ].filter((tool) => tool.name !== "restore_file_snapshot" && tool.name !== "restore_workspace_checkpoint");
 }
 
 const finalPath = join(outputRoot, "runtime-report.json");

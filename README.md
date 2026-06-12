@@ -1,127 +1,85 @@
 # Crish
 
-**Crish** 是一个基于 Agent Runtime 的智能体工作台，提供完整的 Web UI 和 CLI 接口。
+Crish is a product-grade local agent Workbench built around one backend execution path:
 
-## 项目结构
-
-```
-crish/
-├── apps/
-│   ├── agent-workbench/    # CLI 和桌面工作台
-│   │   ├── src/
-│   │   │   ├── cli/        # 命令行入口、goal-run、运行记录
-│   │   │   └── shared/     # task-controller、runtime bridge
-│   │   └── src-tauri/      # Tauri 桌面端（可选）
-│   └── web-ui/             # Web 前端界面（replicate_ui）
-├── packages/
-│   ├── agent-runtime/      # 核心 runtime（~15,782 行）
-│   │   ├── runtime.ts      # 模型调用、工具调用
-│   │   ├── permissions.ts  # 权限管理
-│   │   ├── encoding.ts     # 编码保护
-│   │   ├── snapshots.ts    # 快照系统
-│   │   ├── context-compression.ts  # 上下文压缩
-│   │   ├── tool-output-budget.ts   # 工具输出预算
-│   │   ├── background-command.ts   # 后台命令
-│   │   └── subagents.ts    # 子智能体
-│   └── shared-types/       # 共享类型定义
-└── package.json
+```text
+Workbench / Tauri -> agent-daemon -> AgentOrchestrator -> AgentRuntime
 ```
 
-## 核心功能
+The project is moving away from prototype UI and CLI-only flows. New product work should land on the daemon-backed path first, with the Workbench consuming daemon snapshots, events, diagnostics, approvals, plans, workflows, and provider status as the source of truth.
 
-### Agent Runtime (packages/agent-runtime)
-- **模型调用**: OpenAI 兼容的 API 调用
-- **工具系统**: 文件读写、命令执行、浏览器控制
-- **权限管理**: 细粒度的安全控制
-- **编码保护**: 中文编码自动检测和保护
-- **上下文压缩**: 自动压缩历史消息
-- **快照系统**: 会话状态快照和恢复
-- **子智能体**: 多智能体协作
+## Current Product Path
 
-### Agent Workbench (apps/agent-workbench)
-- **CLI 工具**: 命令行交互界面
-- **Goal Runner**: 目标驱动的任务执行
-- **Task Controller**: 任务调度和管理
-- **Runtime Bridge**: 运行时桥接层
+- `apps/agent-workbench`: the supported desktop Workbench and Tauri host.
+- `packages/agent-daemon`: the long-running backend service for sessions, runs, workflows, provider configuration, metrics, plan documents, approvals, and capability snapshots.
+- `packages/agent-orchestrator`: the run/session lifecycle core, including durable events, restart recovery, goal runs, and conversation rewind planning.
+- `packages/agent-runtime`: the model/tool execution kernel, including tools, permissions, context compression, prompt assembly, checkpoints, metrics, MCP/LSP foundations, and workspace mutation coordination.
 
-### Web UI (apps/web-ui)
-- **聊天界面**: 类似 Codex 的对话界面
-- **工具审批**: 可视化的工具调用审批
-- **子智能体管理**: 可视化管理多个智能体
-- **代码差异查看**: 内嵌 diff 查看器
-- **设置面板**: 完整的配置界面
+## Legacy Surfaces
 
-## 快速开始
+- `apps/web-ui` is a frozen prototype kept only as historical reference. It is not the supported product path.
+- `apps/agent-workbench/src/ui` is legacy CLI/dev reference material only. The Tauri product build should use `src/styles` and Preact components, not root `src/ui` assets.
+- Legacy CLI helpers may remain for development or debugging, but they should not define user-facing product behavior.
+- Unsupported or experimental Workbench features must report typed diagnostics instead of returning silent empty data.
 
-### 安装依赖
+## Architecture Principles
+
+- Keep one execution path. Do not add parallel runtime, provider, session, or UI state sources.
+- Treat sessions, runs, events, plans, approvals, artifacts, checkpoints, and rewind boundaries as backend product concepts.
+- Prefer append-only durable logs, typed status snapshots, and replayable projections over frontend-only state reconstruction.
+- Use Git as the workspace versioning substrate while Crish owns user-facing checkpoint, restore, diff, and rewind policy.
+- Keep provider setup simple for users: account-center backed usage should be the default path, direct API keys should remain an advanced path, and secrets must stay redacted.
+- Keep prompt assembly cache-friendly: stable rules, skills, project progress, tool schemas, and summaries should precede volatile user turns and tool outputs.
+
+## Development Commands
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 开发模式
+Run the Workbench frontend:
 
-启动 Web UI：
 ```bash
-npm run dev:ui
+npm run dev:workbench
 ```
 
-启动 CLI 工作台：
+Run the daemon in development:
+
 ```bash
-npm run cli
+npm run daemon
 ```
 
-### 构建
+Run the legacy CLI diagnostic path explicitly:
 
-构建 Web UI：
 ```bash
-npm run build:ui
+npm run dev:cli
 ```
 
-构建工作台：
+Run type checks:
+
+```bash
+npm run check:core
+```
+
+Run core tests:
+
+```bash
+npm run test:core
+```
+
+Build the Workbench:
+
 ```bash
 npm run build:workbench
 ```
 
-## 技术栈
+## Engineering Notes
 
-- **Runtime**: Node.js + TypeScript
-- **UI**: HTML/CSS/JavaScript (原生)
-- **Desktop**: Tauri + Rust (可选)
-- **Testing**: Vitest
-
-## 架构设计
-
-### 分层架构
-
-```
-┌─────────────────────────────────────┐
-│         UI Layer (Web/CLI)          │
-│   apps/web-ui + apps/agent-workbench│
-├─────────────────────────────────────┤
-│       Controller Layer              │
-│  task-controller, runtime-bridge    │
-├─────────────────────────────────────┤
-│       Agent Runtime Layer           │
-│  packages/agent-runtime             │
-├─────────────────────────────────────┤
-│       Provider Layer                │
-│  OpenAI Compatible API              │
-└─────────────────────────────────────┘
-```
-
-### 核心概念
-
-1. **Session**: 会话管理，包含消息历史和上下文
-2. **Runtime**: 运行时环境，负责模型调用和工具执行
-3. **Permission Policy**: 权限策略，控制工具调用权限
-4. **Tool**: 工具定义，包含文件操作、命令执行等
-5. **Snapshot**: 快照机制，用于状态保存和恢复
-6. **Compression**: 上下文压缩，优化 token 使用
-
-## 后续改进方向
-
-见 `ROADMAP.md`
+- Use `DEVELOPMENT_LOG.md` as the living architecture and progress log.
+- Read reference projects for ideas only; do not copy their code or create duplicate compatibility lanes.
+- When editing files that contain Chinese text, use the local `chinese-encoding-guard` workflow and verify after writing.
 
 ## License
 
