@@ -1,0 +1,3 @@
+export const DEFAULT_MAX_TURNS = 16;
+export const DEFAULT_TOOL_EXECUTION_TIMEOUT_MS = 10 * 60_000;
+export const DEFAULT_STEERING_BUDGET = 3;
