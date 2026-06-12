@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMemoryTools, InMemoryMemoryStore, JsonlMemoryStore } from ".";
-import type { ToolExecutionContext } from "./types";
+import type { ToolExecutionContext } from "@crish/shared-types";
 
 let workspaceRoot = "";
 
@@ -33,6 +33,19 @@ describe("memory stores and tools", () => {
 
     await expect(store.search({ query: "pnpm" })).resolves.toMatchObject([{ scope: "project" }]);
     await expect(store.search({ scope: "user" })).resolves.toMatchObject([{ content: "User prefers concise answers" }]);
+  });
+
+  it("persists JSONL memory deletion as an append-only tombstone", async () => {
+    const filePath = join(workspaceRoot, "memory.jsonl");
+    const store = new JsonlMemoryStore(filePath);
+    const saved = await store.remember({ scope: "project", content: "Remove stale preference", tags: ["cleanup"] });
+
+    await expect(store.delete(saved.id)).resolves.toBe(true);
+    await expect(store.search({ query: "stale" })).resolves.toEqual([]);
+
+    const reopened = new JsonlMemoryStore(filePath);
+    await expect(reopened.search({ query: "stale" })).resolves.toEqual([]);
+    await expect(reopened.delete(saved.id)).resolves.toBe(false);
   });
 
   it("exposes remember and search tools", async () => {

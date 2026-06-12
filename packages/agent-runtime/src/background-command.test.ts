@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BackgroundCommandManager, createBackgroundCommandTools } from "./background-command";
-import type { ToolExecutionContext } from "./types";
+import type { ToolExecutionContext } from "@crish/shared-types";
 
 let workspaceRoot = "";
 
@@ -67,6 +67,47 @@ describe("background command manager", () => {
     });
   });
 
+  it("marks timed-out background commands with lifecycle metadata and diagnostics", async () => {
+    const manager = new BackgroundCommandManager({
+      workspaceRoot,
+      defaultTimeoutMs: 100
+    });
+
+    const started = await manager.start({ command: 'node -e "setTimeout(() => {}, 30000)"' });
+    const finished = await manager.waitForTask(started.id, 5_000);
+
+    expect(finished).toMatchObject({
+      id: started.id,
+      state: "timed-out",
+      timedOut: true,
+      cancelled: false
+    });
+    expect(finished.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(finished.finishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(finished.terminationDiagnostics.length).toBeGreaterThan(0);
+    expect(finished.terminationDiagnostics[0]).toMatchObject({ ok: expect.any(Boolean) });
+  }, 10_000);
+
+  it("keeps background output bounded while preserving byte counts", async () => {
+    const manager = new BackgroundCommandManager({
+      workspaceRoot,
+      defaultTimeoutMs: 5_000,
+      maxOutputBytes: 1_500
+    });
+
+    const started = await manager.start({ command: 'node -e "process.stdout.write(\'b\'.repeat(9000))"' });
+    const finished = await manager.waitForTask(started.id, 5_000);
+
+    expect(finished).toMatchObject({
+      state: "succeeded",
+      truncated: true,
+      stdoutBytes: 9000
+    });
+    expect(finished.stdoutPreview.length).toBeLessThan(3000);
+    expect(finished.stdoutPreview).toContain("[output omitted:");
+    expect(finished.outputPreview).toContain("[output omitted:");
+  });
+
   it("emits heartbeat events for silent long-running commands", async () => {
     const events: string[] = [];
     const manager = new BackgroundCommandManager({
@@ -108,7 +149,14 @@ describe("background command manager", () => {
     expect(getOutput.text).toContain(taskId);
     expect(listOutput.text).toContain(taskId);
     expect(cancelOutput.text).toContain(taskId);
-    expect(cancelled.state).toBe("cancelled");
+    expect(cancelled).toMatchObject({
+      state: "cancelled",
+      cancelled: true,
+      timedOut: false,
+      exitCode: null,
+      signal: "cancelled"
+    });
+    expect(cancelled.terminationDiagnostics.length).toBeGreaterThan(0);
   }, 15_000);
 
   it("blocks hardline commands below the approval layer", async () => {

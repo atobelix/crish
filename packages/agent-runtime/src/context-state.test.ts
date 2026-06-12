@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryContextState } from "./context-state";
-import type { ContextCompressionRecord } from "./types";
+import type { ContextCompressionRecord } from "@crish/shared-types";
 
 function compressionRecord(id: string, summary: string): ContextCompressionRecord {
   return {

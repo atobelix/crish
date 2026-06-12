@@ -27,6 +27,15 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   return items;
 }
 
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for test condition");
+}
+
 describe("OpenAICompatibleProvider", () => {
   it("parses non-streaming text and tool calls", async () => {
     const fetchMock: typeof fetch = async () =>
@@ -83,6 +92,59 @@ describe("OpenAICompatibleProvider", () => {
     ]);
   });
 
+  it("normalizes cached prompt tokens from OpenAI-compatible usage details", async () => {
+    const fetchMock: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: "ok" },
+              finish_reason: "stop"
+            }
+          ],
+          usage: {
+            prompt_tokens: 128,
+            completion_tokens: 16,
+            total_tokens: 144,
+            prompt_tokens_details: {
+              cached_tokens: 96
+            }
+          }
+        }),
+        { headers: { "content-type": "application/json" } }
+      );
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me",
+      apiKey: "test-key",
+      model: "mimo-test",
+      endpoint: "chat-completions",
+      stream: false,
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(events.at(-1)).toEqual({
+      type: "stop",
+      reason: "stop",
+      usage: {
+        promptTokens: 128,
+        completionTokens: 16,
+        totalTokens: 144,
+        cacheReadTokens: 96
+      }
+    });
+  });
+
   it("parses streaming content and fragmented tool arguments", async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
@@ -126,6 +188,98 @@ describe("OpenAICompatibleProvider", () => {
       { type: "tool-call", id: "call_1", toolName: "shell_command", input: { command: "pwd" } },
       { type: "stop", reason: "tool-call" }
     ]);
+  });
+
+  it("cancels the SSE body when the provider stream consumer stops early", async () => {
+    const encoder = new TextEncoder();
+    let cancelReason: unknown;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'));
+      },
+      cancel(reason) {
+        cancelReason = reason;
+      }
+    });
+    const fetchMock: typeof fetch = async () => new Response(body, { headers: { "content-type": "text/event-stream" } });
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/v1",
+      apiKey: "test-key",
+      model: "mimo-test",
+      endpoint: "chat-completions",
+      fetch: fetchMock
+    });
+
+    const iterator = provider
+      .stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+      [Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { type: "text-delta", text: "hello" }
+    });
+    await iterator.return?.(undefined);
+
+    expect(cancelReason).toBeInstanceOf(Error);
+    expect((cancelReason as Error).message).toBe("stream consumer cancelled");
+  });
+
+  it("aborts pending SSE reads without retrying the request", async () => {
+    const abortController = new AbortController();
+    let fetchCalls = 0;
+    let cancelReason: unknown;
+    const body = new ReadableStream<Uint8Array>({
+      cancel(reason) {
+        cancelReason = reason;
+      }
+    });
+    const fetchMock: typeof fetch = async () => {
+      fetchCalls += 1;
+      return new Response(body, { headers: { "content-type": "text/event-stream" } });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/v1",
+      apiKey: "test-key",
+      model: "mimo-test",
+      endpoint: "chat-completions",
+      diagnostics: true,
+      retry: { maxAttempts: 2, initialDelayMs: 1 },
+      fetch: fetchMock
+    });
+    const events: unknown[] = [];
+    const task = (async () => {
+      for await (const event of provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("user", "wait")],
+        tools: [],
+        signal: abortController.signal
+      })) {
+        events.push(event);
+      }
+    })();
+
+    await waitFor(() =>
+      events.some(
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          (event as { type?: unknown }).type === "provider-diagnostic" &&
+          ((event as { diagnostic?: { phase?: unknown } }).diagnostic?.phase === "response-start")
+      )
+    );
+    abortController.abort(new Error("user cancelled stream"));
+
+    await expect(task).rejects.toThrow("user cancelled stream");
+    expect(fetchCalls).toBe(1);
+    expect(cancelReason).toBeInstanceOf(Error);
+    expect((cancelReason as Error).message).toBe("user cancelled stream");
   });
 
   it("can emit provider diagnostics for streaming requests without mixing them into assistant content", async () => {
@@ -337,6 +491,409 @@ describe("OpenAICompatibleProvider", () => {
       { type: "text-delta", text: "ok" },
       { type: "stop", reason: "stop" }
     ]);
+  });
+
+  it("keeps Responses streaming path and retries with a user-prefix when a provider rejects system messages", async () => {
+    const urls: string[] = [];
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (input, init) => {
+      urls.push(String(input));
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (urls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "System messages are not allowed" } }), {
+          status: 400,
+          statusText: "Bad Request",
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(
+        JSON.stringify({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] }),
+        { headers: { "content-type": "application/json" } }
+      );
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "auto",
+      stream: false,
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        systemPrompt: "Keep the stable project rules.",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(urls).toEqual(["https://api.flowbit.me/v1/responses", "https://api.flowbit.me/v1/responses"]);
+    expect(bodies[0].input).toEqual([
+      { type: "message", role: "system", content: "Keep the stable project rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(bodies[1].input).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: "System instructions for this run:\n\nKeep the stable project rules."
+      },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(events).toEqual([
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses" }) }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 400 }) }),
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({ phase: "request-error", endpoint: "responses", status: 400, retryable: true, errorKind: "schema" })
+      }),
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses", reason: "system-prompt-user-prefix" })
+      }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 200 }) }),
+      { type: "text-delta", text: "ok" },
+      { type: "stop", reason: "stop" }
+    ]);
+  });
+
+  it("retries provider-wrapper 4xx system-role rejections with a user-prefix", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "System messages are not allowed" } }), {
+          status: 403,
+          statusText: "Forbidden",
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(
+        JSON.stringify({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] }),
+        { headers: { "content-type": "application/json" } }
+      );
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "responses",
+      stream: false,
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        systemPrompt: "Keep stable rules.",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(bodies[0].input).toEqual([
+      { type: "message", role: "system", content: "Keep stable rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(bodies[1].input).toEqual([
+      { type: "message", role: "user", content: "System instructions for this run:\n\nKeep stable rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(events).toEqual([
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses" }) }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 403 }) }),
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({ phase: "request-error", endpoint: "responses", status: 403, retryable: true })
+      }),
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses", reason: "system-prompt-user-prefix" })
+      }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 200 }) }),
+      { type: "text-delta", text: "ok" },
+      { type: "stop", reason: "stop" }
+    ]);
+  });
+
+  it("also rewrites prior system-role history when a provider rejects system messages", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "System messages are not allowed" } }), {
+          status: 400,
+          statusText: "Bad Request",
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "continued" }, finish_reason: "stop" }] }), {
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "chat-completions",
+      stream: false,
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("system", "Task finished."), createTextMessage("user", "continue")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(bodies[0].messages).toEqual([
+      { role: "system", content: "Task finished." },
+      { role: "user", content: "continue" }
+    ]);
+    expect(bodies[1].messages).toEqual([
+      { role: "user", content: "System instructions for this run:\n\nTask finished." },
+      { role: "user", content: "continue" }
+    ]);
+    expect(events.at(-2)).toEqual({ type: "text-delta", text: "continued" });
+    expect(events.at(-1)).toEqual({ type: "stop", reason: "stop" });
+  });
+
+  it("retries streaming Responses error frames with a user-prefix when a provider rejects system messages", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) {
+        return new Response('data: {"type":"error","message":"System messages are not allowed"}\n\n', {
+          headers: { "content-type": "text/event-stream" }
+        });
+      }
+      return new Response(
+        [
+          'data: {"type":"response.output_text.delta","delta":"ok"}',
+          'data: {"type":"response.completed","response":{"status":"completed"}}',
+          ""
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "responses",
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        systemPrompt: "Keep the stable project rules.",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(bodies[0].input).toEqual([
+      { type: "message", role: "system", content: "Keep the stable project rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(bodies[1].input).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: "System instructions for this run:\n\nKeep the stable project rules."
+      },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "provider-diagnostic",
+          diagnostic: expect.objectContaining({
+            phase: "request-start",
+            endpoint: "responses",
+            streamRequested: true,
+            systemPromptWireMode: "native-system-role",
+            hasSystemRole: true,
+            systemMessageCount: 1,
+            rewrittenSystemMessageCount: 0,
+            messageRoleCounts: { system: 0, user: 1, assistant: 0, tool: 0 }
+          })
+        }),
+        expect.objectContaining({
+          type: "provider-diagnostic",
+          diagnostic: expect.objectContaining({
+            phase: "request-error",
+            endpoint: "responses",
+            retryable: true,
+            errorKind: "schema",
+            systemPromptWireMode: "native-system-role"
+          })
+        }),
+        expect.objectContaining({
+          type: "provider-diagnostic",
+          diagnostic: expect.objectContaining({
+            phase: "request-start",
+            endpoint: "responses",
+            reason: "system-prompt-user-prefix",
+            systemPromptWireMode: "user-prefix",
+            rewrittenSystemMessageCount: 1
+          })
+        }),
+        { type: "text-delta", text: "ok" },
+        { type: "stop", reason: "stop" }
+      ])
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "stop", reason: "error" })
+    );
+  });
+
+  it("retries 200 JSON error bodies with a user-prefix when a provider rejects system messages", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "System messages are not allowed" } }), {
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(
+        JSON.stringify({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] }),
+        { headers: { "content-type": "application/json" } }
+      );
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "responses",
+      stream: false,
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        systemPrompt: "Keep stable rules.",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(bodies[0].input).toEqual([
+      { type: "message", role: "system", content: "Keep stable rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(bodies[1].input).toEqual([
+      { type: "message", role: "user", content: "System instructions for this run:\n\nKeep stable rules." },
+      { type: "message", role: "user", content: "hello" }
+    ]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "provider-diagnostic",
+          diagnostic: expect.objectContaining({
+            phase: "request-error",
+            endpoint: "responses",
+            status: 200,
+            retryable: true,
+            errorKind: "schema"
+          })
+        }),
+        { type: "text-delta", text: "ok" },
+        { type: "stop", reason: "stop" }
+      ])
+    );
+  });
+
+  it("retries Chat Completions SSE error frames with a user-prefix when a provider rejects system messages", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (bodies.length === 1) {
+        return new Response('data: {"error":{"message":"System messages are not allowed"}}\n\n', {
+          headers: { "content-type": "text/event-stream" }
+        });
+      }
+      return new Response(
+        [
+          'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}',
+          "data: [DONE]",
+          ""
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me/",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "chat-completions",
+      diagnostics: true,
+      retry: { maxAttempts: 1 },
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("system", "Task finished."), createTextMessage("user", "continue")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(bodies[0].messages).toEqual([
+      { role: "system", content: "Task finished." },
+      { role: "user", content: "continue" }
+    ]);
+    expect(bodies[1].messages).toEqual([
+      { role: "user", content: "System instructions for this run:\n\nTask finished." },
+      { role: "user", content: "continue" }
+    ]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "provider-diagnostic",
+          diagnostic: expect.objectContaining({
+            phase: "request-error",
+            endpoint: "chat-completions",
+            retryable: true,
+            errorKind: "schema"
+          })
+        }),
+        { type: "text-delta", text: "ok" },
+        { type: "stop", reason: "stop" }
+      ])
+    );
   });
 
   it("does not retry or endpoint-fallback a Cloudflare managed challenge", async () => {
@@ -590,12 +1147,12 @@ describe("OpenAICompatibleProvider", () => {
       {
         type: "stop",
         reason: "error",
-        error: "Responses stream ended without a terminal response event"
+        error: "[invalid-stream] Responses stream ended without a terminal response event"
       }
     ]);
   });
 
-  it("keeps usable partial Responses API text when a stream closes before the terminal event", async () => {
+  it("marks partial Responses API text as interrupted when a stream closes before the terminal event", async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -624,7 +1181,7 @@ describe("OpenAICompatibleProvider", () => {
 
     expect(events).toEqual([
       { type: "text-delta", text: "partial" },
-      { type: "stop", reason: "stop" }
+      { type: "stop", reason: "error", error: "[invalid-stream] Responses stream ended without a terminal response event" }
     ]);
   });
 
@@ -660,7 +1217,94 @@ describe("OpenAICompatibleProvider", () => {
 
     expect(events).toEqual([
       { type: "text-delta", text: "partial" },
-      { type: "stop", reason: "error", error: "stream idle timed out after 5ms" }
+      { type: "stop", reason: "error", error: "[timeout] stream idle timed out after 5ms" }
+    ]);
+  });
+
+  it("reports streaming fallback when a stream=true request returns JSON", async () => {
+    let requestBody: Record<string, unknown> = {};
+    const fetchMock: typeof fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "json-ok" }] }] }), {
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "responses",
+      diagnostics: true,
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(requestBody).toMatchObject({ stream: true });
+    expect(events).toEqual([
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses" }) }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 200 }) }),
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({
+          phase: "transport-fallback",
+          endpoint: "responses",
+          errorKind: "invalid-stream",
+          retryable: false
+        })
+      }),
+      { type: "text-delta", text: "json-ok" },
+      { type: "stop", reason: "stop" }
+    ]);
+  });
+
+  it("surfaces malformed SSE frames as typed invalid-stream errors after partial output", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: {bad json}\n\n"));
+        controller.close();
+      }
+    });
+    const fetchMock: typeof fetch = async () => new Response(body, { headers: { "content-type": "text/event-stream" } });
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.flowbit.me",
+      apiKey: "test-key",
+      model: "mimo-v2.5",
+      endpoint: "chat-completions",
+      diagnostics: true,
+      fetch: fetchMock
+    });
+
+    const events = await collect(
+      provider.stream({
+        sessionId: "s",
+        cwd: "C:/repo",
+        messages: [createTextMessage("user", "hello")],
+        tools: [],
+        signal: new AbortController().signal
+      })
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "chat-completions" }) }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "chat-completions", status: 200 }) }),
+      expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "sse-first-byte" }) }),
+      { type: "text-delta", text: "partial" },
+      expect.objectContaining({
+        type: "provider-diagnostic",
+        diagnostic: expect.objectContaining({ phase: "request-error", errorKind: "invalid-stream", retryable: false })
+      }),
+      { type: "stop", reason: "error", error: expect.stringMatching(/^\[invalid-stream\]/) }
     ]);
   });
 

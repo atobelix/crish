@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState } from ".";
-import type { ToolExecutionContext, ToolProgressUpdate } from "./types";
+import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState, ProjectProgressLedger } from ".";
+import type { AgentProviderRequest } from "./types";
+import type { ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";
 
 describe("subagent tool", () => {
   it("runs a child runtime and emits progress", async () => {
@@ -29,6 +30,94 @@ describe("subagent tool", () => {
     });
     expect(updates.some((update) => update.text?.includes("Sub-agent started"))).toBe(true);
     expect(updates.some((update) => update.text?.includes("Sub-agent finished"))).toBe(true);
+  });
+
+  it("sends stable context as system prompt and volatile task card as user input", async () => {
+    let capturedRequest: AgentProviderRequest | undefined;
+    const state = new InMemoryContextState();
+    state.recordEvent("parent inspected daemon lifecycle");
+    state.addTask("pending provider cleanup", "task_config");
+    const tool = createSubagentTool({
+      cwd: "C:/repo",
+      systemPrompt: "Base product rules.",
+      contextState: state,
+      provider: createScriptedProvider([
+        (request) => {
+          capturedRequest = request;
+          return [{ type: "text-delta", text: "child result" }, { type: "stop", reason: "stop" }];
+        }
+      ])
+    });
+    const context: ToolExecutionContext = {
+      toolCallId: "call",
+      sessionId: "parent",
+      cwd: "C:/repo",
+      signal: new AbortController().signal,
+      emit: () => undefined
+    };
+
+    const output = await tool.execute(
+      { prompt: "do volatile work", description: "child task", mode: "implement" },
+      context
+    );
+
+    expect(capturedRequest?.systemPrompt).toContain("<subagent_context stable_prefix=\"true\"");
+    expect(capturedRequest?.systemPrompt).toContain("Base product rules.");
+    expect(capturedRequest?.systemPrompt).toContain("parent inspected daemon lifecycle");
+    expect(capturedRequest?.messages.at(-1)?.blocks).toMatchObject([
+      {
+        type: "text",
+        text: expect.stringContaining("<subagent_task_card volatile=\"true\"")
+      }
+    ]);
+    expect(capturedRequest?.messages.at(-1)?.blocks).toMatchObject([
+      {
+        type: "text",
+        text: expect.stringContaining("do volatile work")
+      }
+    ]);
+    expect(String((output.json as Record<string, unknown>).contextPack)).not.toBe("");
+  });
+
+  it("can render shared project progress from a ledger into the stable sub-agent prefix", async () => {
+    let capturedRequest: AgentProviderRequest | undefined;
+    const ledger = new ProjectProgressLedger({ now: () => "2026-06-08T00:00:00.000Z" });
+    ledger.addStablePrinciple({ text: "Single product backend path only." });
+    ledger.upsertProgressItem({
+      title: "Subagent context pack",
+      status: "completed",
+      summary: "Stable prefix and volatile task cards are split."
+    });
+    ledger.recordSubagentTask({
+      id: "task_review",
+      agentId: "worker-a",
+      title: "Review daemon lifecycle",
+      status: "completed"
+    });
+    const tool = createSubagentTool({
+      cwd: "C:/repo",
+      projectProgressLedger: ledger,
+      provider: createScriptedProvider([
+        (request) => {
+          capturedRequest = request;
+          return [{ type: "text-delta", text: "ok" }, { type: "stop", reason: "stop" }];
+        }
+      ])
+    });
+    const context: ToolExecutionContext = {
+      toolCallId: "call",
+      sessionId: "parent",
+      cwd: "C:/repo",
+      signal: new AbortController().signal,
+      emit: () => undefined
+    };
+
+    await tool.execute({ prompt: "continue implementation", mode: "implement" }, context);
+
+    expect(capturedRequest?.systemPrompt).toContain("Shared Project Progress");
+    expect(capturedRequest?.systemPrompt).toContain("Principle: Single product backend path only.");
+    expect(capturedRequest?.systemPrompt).toContain("Progress[completed]: Subagent context pack");
+    expect(capturedRequest?.systemPrompt).toContain("Task[completed]: worker-a/task_review");
   });
 
   it("returns structured status, progress timeline, and task handoff state", async () => {
