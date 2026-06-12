@@ -78,5 +78,15 @@ apps/agent-workbench/REFACTOR_PLAN.md
 # Rust lock file (managed by Cargo)
 Cargo.lock
 
+# Documentation
+docs/
+
+# Rust HTTP provider (separate crate)
+packages/agent-provider-http/target/
+
+# Tauri dev artifacts
+target-tauri-dev/
+target-tauri-smoke/
+
 # Tauri generated schemas
 apps/agent-workbench/src-tauri/gen/
