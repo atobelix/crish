@@ -38,8 +38,13 @@ coverage/
 *.tmp
 *.temp
 
-# Reference materials
-reference/
+# Reference materials (keep ui-replica for design tracking)
+reference/*
+!reference/ui-replica/
+!reference/ui-replica/**
+reference/ui-replica/node_modules/
+reference/ui-replica/dist/
+reference/ui-replica/package-lock.json
 
 # Agent runtime data
 .agent-runtime/

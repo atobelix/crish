@@ -5,6 +5,7 @@ import { tauriBridge, type McpServerRecord, type MemoryRecord } from '../../core
 import { isBackendNotWiredResult } from '../../core/tauri-command-registry';
 import { eventBus } from '../../core/event-bus';
 import { warnBridgeDiagnostic, isCommandUsable } from './shared';
+import { showToast } from '../ToastContainer';
 import {
   IconChevronDown, IconChevronRight, IconRefresh, IconSpinner, IconSend, IconTrash,
 } from '../icons';
@@ -69,7 +70,7 @@ export function McpSubTab() {
       await tauriBridge.startMcpServer(serverId);
       await loadServers();
     } catch (error) {
-      console.error('启动 MCP 服务器失败:', error);
+      showToast('启动 MCP 服务器失败', 'error', 4500);
     } finally {
       setOperating(prev => ({ ...prev, [serverId]: false }));
     }
@@ -81,7 +82,7 @@ export function McpSubTab() {
       await tauriBridge.stopMcpServer(serverId);
       await loadServers();
     } catch (error) {
-      console.error('停止 MCP 服务器失败:', error);
+      showToast('停止 MCP 服务器失败', 'error', 4500);
     } finally {
       setOperating(prev => ({ ...prev, [serverId]: false }));
     }
@@ -175,7 +176,7 @@ function SubagentsSubTab() {
       await tauriBridge.sendToSubagent(agentId, message);
       setSendInput(prev => ({ ...prev, [agentId]: '' }));
     } catch (error) {
-      console.error('发送消息到子 Agent 失败:', error);
+      showToast('发送消息到子 Agent 失败', 'error', 4500);
     } finally {
       setSending(prev => ({ ...prev, [agentId]: false }));
     }
@@ -276,7 +277,7 @@ export function MemorySubTab() {
       await tauriBridge.deleteMemory(memoryId);
       setMemories(prev => prev.filter(m => m.id !== memoryId));
     } catch (error) {
-      console.error('删除记忆失败:', error);
+      showToast('删除记忆失败', 'error', 4500);
     }
   }
 

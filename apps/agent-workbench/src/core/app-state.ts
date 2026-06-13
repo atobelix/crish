@@ -249,6 +249,7 @@ import {
   type RuntimeProjectionToolCall,
 } from './runtime-event-projector';
 import { isBridgeDiagnostic } from './bridge-utils';
+import { showToast } from '../components/ToastContainer';
 
 export interface ChatMessage {
   id: string;
@@ -466,8 +467,6 @@ export interface AppStateData {
   /** 预览中"被拖窗口的新面板 id"，渲染为空位（真实窗口浮动跟手） */
   previewGhostPanelId: string | null;
   subAgents: SubAgent[];
-  settingsOpen: boolean;
-  settingsTab: string;
   apiKey: string;
   model: string;
   providerConfig: WorkbenchProviderConfigSnapshot;
@@ -730,8 +729,6 @@ export class AppState {
     panelLayoutPreview: null,
     previewGhostPanelId: null,
     subAgents: [],
-    settingsOpen: false,
-    settingsTab: 'general',
     apiKey: '',
     model: '',
     providerConfig: {
@@ -1395,7 +1392,7 @@ export class AppState {
       const { tauriBridge } = await import('./tauri-bridge');
       await tauriBridge.cancelRun(runId);
     } catch (error) {
-      console.error('取消运行失败:', error);
+      showToast('取消运行失败', 'error', 4500);
     }
     this.finishRun(runId, 'cancelled');
   }
@@ -2071,7 +2068,7 @@ export class AppState {
           await this.refreshDaemonSessionDetail(sessionId, { activate: true });
         } catch (e) {
           this.patchDaemonBrowser({ error: e instanceof Error ? e.message : String(e) });
-          console.error("Failed to load session events on switch:", e);
+          showToast('加载会话事件失败: ' + (e instanceof Error ? e.message : String(e)), 'error');
         }
       }
     }
@@ -3071,8 +3068,19 @@ export class AppState {
       const layout = this.buildMoveLayout(this.state.panelLayout, tabId, targetPanelId, newPanelId);
       return layout ? { layout, ghostPanelId: null } : null;
     }
-    const direction: 'vertical' | 'horizontal' = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
-    const before = zone === 'top' || zone === 'left';
+    let direction: 'vertical' | 'horizontal' = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
+    let before = zone === 'top' || zone === 'left';
+
+    // Responsive guard: if horizontal split would overcrowd, fallback to vertical
+    if (direction === 'horizontal') {
+      const parentGroup = this.findParentGroup(this.state.panelLayout, targetPanelId);
+      const horizontalSiblings = parentGroup?.direction === 'horizontal' ? parentGroup.children.length : 1;
+      if (horizontalSiblings >= 3) {
+        direction = 'vertical';
+        before = zone === 'top' || zone === 'left'; // keep original before semantics
+      }
+    }
+
     if (targetPanelId === sourcePanelId) {
       const layout = this.buildSplitLayout(this.state.panelLayout, sourcePanelId, tabId, direction, before, newPanelId, newGroupId);
       return layout ? { layout, ghostPanelId: newPanelId } : null;
@@ -3117,7 +3125,14 @@ export class AppState {
   }
 
   splitPanel(sourcePanelId: string, tabId: string, direction: 'vertical' | 'horizontal', before = false): void {
-    const layout = this.buildSplitLayout(this.state.panelLayout, sourcePanelId, tabId, direction, before, `panel-${Date.now()}`, `group-${Date.now()}`);
+    // Responsive guard: if horizontal split would overcrowd, fallback to vertical
+    let actualDirection = direction;
+    if (direction === 'horizontal') {
+      const parentGroup = this.findParentGroup(this.state.panelLayout, sourcePanelId);
+      const horizontalSiblings = parentGroup?.direction === 'horizontal' ? parentGroup.children.length : 1;
+      if (horizontalSiblings >= 3) actualDirection = 'vertical';
+    }
+    const layout = this.buildSplitLayout(this.state.panelLayout, sourcePanelId, tabId, actualDirection, before, `panel-${Date.now()}`, `group-${Date.now()}`);
     if (layout) this.setPanelLayout(layout);
   }
 

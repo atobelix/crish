@@ -18,6 +18,7 @@ import {
   type RuntimeProjectionToolCall,
 } from '../core/runtime-event-projector';
 import { MarkdownRenderer, CodeBlockCopyButton, ActionLinkHandler } from './MarkdownRenderer';
+import { showToast } from './ToastContainer';
 import AskCard from './AskCard';
 import { ToolApprovalDeck } from './chat/ApprovalDeck';
 import { ThinkingBlock } from './chat/ThinkingBlock';
@@ -148,17 +149,12 @@ async function refreshDaemonSnapshotAfterTerminalEvent(
       lastSnapshotStatus = response.snapshot.status;
       if (TERMINAL_DAEMON_STATUSES.has(response.snapshot.status)) return;
     } catch (error) {
-      console.error('Refresh daemon run snapshot failed:', error);
+      showToast('Refresh daemon run snapshot failed', 'error', 4500);
       break;
     }
   }
 
   if (lastSnapshotStatus && !TERMINAL_DAEMON_STATUSES.has(lastSnapshotStatus)) {
-    console.warn('Daemon snapshot did not settle after terminal event; keeping daemon-owned status.', {
-      runId,
-      snapshotStatus: lastSnapshotStatus,
-      fallbackStatus,
-    });
     return;
   }
 
@@ -698,17 +694,17 @@ function ChatPanel({ onToggleRightSidebar, sessionId }: { onToggleRightSidebar?:
 
       // ---- Provider 诊断 ----
       if (eventType === 'provider-diagnostic') {
-        console.log('[provider-diagnostic]', event);
+        /* diagnostic handled silently */
       }
 
       // ---- 工具批次开始 ----
       if (eventType === 'tool-batch-start') {
-        console.log('[tool-batch-start]', event);
+        /* batch start handled silently */
       }
 
       // ---- 工具批次结束 ----
       if (eventType === 'tool-batch-end') {
-        console.log('[tool-batch-end]', event);
+        /* batch end handled silently */
       }
 
       // ---- Agent 启动 ----
@@ -720,12 +716,12 @@ function ChatPanel({ onToggleRightSidebar, sessionId }: { onToggleRightSidebar?:
 
       // ---- 回合开始 ----
       if (eventType === 'turn-start') {
-        console.log('[turn-start]', event);
+        /* turn start handled silently */
       }
 
       // ---- 工具输入修复 ----
       if (eventType === 'tool-input-repaired') {
-        console.log('[tool-input-repaired]', event);
+        /* input repair handled silently */
       }
 
       // ---- 交互式提问（消费 BE-16 ask-requested / ask-resolved） ----
@@ -837,7 +833,7 @@ function ChatPanel({ onToggleRightSidebar, sessionId }: { onToggleRightSidebar?:
 
       await tauriBridge.runTask(request);
     } catch (error) {
-      console.error('发送消息失败:', error);
+      showToast('发送消息失败', 'error', 4500);
       // 清除超时定时器
       if (runId) {
         const timeout = startupTimeoutRef.current.get(runId);
@@ -888,7 +884,7 @@ function ChatPanel({ onToggleRightSidebar, sessionId }: { onToggleRightSidebar?:
           const runId = currentSessionRunId;
           if (runId) {
             void tauriBridge.cancelRun(runId)
-              .catch(error => console.error('Cancel run failed:', error))
+              .catch(error => { showToast('取消运行失败: ' + (error instanceof Error ? error.message : String(error)), 'error'); })
               .finally(() => {
                 void refreshDaemonSnapshotAfterTerminalEvent(runId, 'cancelled');
               });

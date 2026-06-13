@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { appState, type TaskSnapshot, type PlanItem, type AcceptanceItem, type EvidenceItem, type ChangeItem, type BackgroundTaskInfo, type TokenBudgetInfo } from '../core/app-state';
 import { tauriBridge } from '../core/tauri-bridge';
 import { isBackendNotWiredResult } from '../core/tauri-command-registry';
+import { showToast } from './ToastContainer';
 import {
   IconCheck,
   IconChevronRight,
@@ -195,7 +196,7 @@ function BackgroundTasksList({ items }: { items: BackgroundTaskInfo[] }) {
     try {
       await tauriBridge.cancelBackgroundTask(taskId);
     } catch (error) {
-      console.error('取消后台任务失败:', error);
+      showToast('取消后台任务失败', 'error', 4500);
     } finally {
       setCancellingTask(null);
     }
@@ -316,7 +317,7 @@ export default function TaskSnapshotPanel() {
           appState.applyDaemonTaskSnapshot(response.snapshot);
         }
       } catch (error) {
-        console.error('Refresh daemon task snapshot failed:', error);
+        showToast('Refresh daemon task snapshot failed', 'error', 4500);
       } finally {
         if (!disposed) setLoading(false);
       }

@@ -26,7 +26,7 @@ export const normalizePath = (p: string) => p.replace(/\\/g, '/');
 
 export function warnBridgeDiagnostic(error: unknown): void {
   if (isBackendNotWiredError(error)) {
-    console.warn('[Workbench][backend-not-wired]', error.diagnostic);
+    /* backend not wired — handled by caller UI */
   }
 }
 

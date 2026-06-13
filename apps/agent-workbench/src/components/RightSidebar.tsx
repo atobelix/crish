@@ -63,8 +63,31 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
   const newGroupId = `group-drag-${Date.now()}`;
   let dragging = false;
   let ghost: HTMLDivElement | null = null;
-  let rects: Array<{ id: string; r: DOMRect }> = [];
+  let snapLine: HTMLDivElement | null = null;
+  let rects: Array<{ id: string; r: DOMRect; el: HTMLElement }> = [];
   let lastKey = '';
+
+  const clearSnap = () => {
+    if (snapLine) { snapLine.remove(); snapLine = null; }
+  };
+
+  const showSnap = (r: DOMRect, zone: 'top' | 'bottom' | 'left' | 'right') => {
+    clearSnap();
+    snapLine = document.createElement('div');
+    snapLine.className = 'repl-rs-snap-line';
+    if (zone === 'left' || zone === 'right') {
+      snapLine.classList.add('vertical');
+      snapLine.style.left = `${zone === 'left' ? r.left : r.right}px`;
+      snapLine.style.top = `${r.top}px`;
+      snapLine.style.height = `${r.height}px`;
+    } else {
+      snapLine.classList.add('horizontal');
+      snapLine.style.left = `${r.left}px`;
+      snapLine.style.top = `${zone === 'top' ? r.top : r.bottom}px`;
+      snapLine.style.width = `${r.width}px`;
+    }
+    document.body.appendChild(snapLine);
+  };
 
   const onMove = (ev: MouseEvent) => {
     if (!dragging) {
@@ -73,7 +96,7 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
       document.body.style.cursor = 'grabbing';
       document.body.style.userSelect = 'none';
       rects = (Array.from(document.querySelectorAll('.repl-rs-tab-panel[data-panel-id]')) as HTMLElement[])
-        .map(el => ({ id: el.dataset.panelId as string, r: el.getBoundingClientRect() }));
+        .map(el => ({ id: el.dataset.panelId as string, r: el.getBoundingClientRect(), el }));
       ghost = (sourcePanelEl ? sourcePanelEl.cloneNode(true) : document.createElement('div')) as HTMLDivElement;
       ghost.classList.add('repl-rs-window-ghost');
       if (sourcePanelEl) {
@@ -89,7 +112,7 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
       ghost.style.top = `${ev.clientY + 14}px`;
     }
     const hit = rects.find(({ r }) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom);
-    if (!hit) { if (lastKey) { lastKey = ''; appState.clearDragPreview(); } return; }
+    if (!hit) { if (lastKey) { lastKey = ''; appState.clearDragPreview(); clearSnap(); } return; }
     const r = hit.r;
     const fx = (ev.clientX - r.left) / r.width;
     const fy = (ev.clientY - r.top) / r.height;
@@ -102,13 +125,15 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
         .reduce((a, b) => (dist[b] < dist[a] ? b : a), 'left');
     }
     if (hit.id === sourcePanelId && (sourceTabCount <= 1 || zone === 'center')) {
-      if (lastKey) { lastKey = ''; appState.clearDragPreview(); }
+      if (lastKey) { lastKey = ''; appState.clearDragPreview(); clearSnap(); }
       return;
     }
     const key = `${hit.id}:${zone}`;
     if (key !== lastKey) {
       lastKey = key;
       appState.setDragPreview(sourcePanelId, tabId, hit.id, zone, newPanelId, newGroupId);
+      if (zone !== 'center') showSnap(r, zone);
+      else clearSnap();
     }
   };
 
@@ -118,6 +143,7 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     if (ghost) ghost.remove();
+    clearSnap();
     if (dragging && lastKey) {
       suppressTabClick = true;
       setTimeout(() => { suppressTabClick = false; }, 0);
@@ -321,13 +347,26 @@ function PanelRenderer({ node, tabs, ghostPanelId }: { node: PanelNode; tabs: Ri
 
 function TabPanelRenderer({ panel, tabs, ghostPanelId }: { panel: TabPanel; tabs: RightSidebarTab[]; ghostPanelId?: string | null }) {
   const activeTab = tabs.find(t => t.id === panel.activeTabId) ?? tabs.find(t => t.id === panel.tabIds[0]);
+  const [closedUndo, setClosedUndo] = useState<{ tabType: RightSidebarTabType; label: string; timer: number } | null>(null);
 
   function handleTabClick(tabId: string) {
     appState.switchRightTab(tabId);
   }
 
   function handleTabClose(tabId: string) {
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab) return;
     appState.closeRightTab(tabId);
+    if (closedUndo) window.clearTimeout(closedUndo.timer);
+    const timer = window.setTimeout(() => setClosedUndo(null), 5000);
+    setClosedUndo({ tabType: tab.type, label: tab.label, timer });
+  }
+
+  function handleUndoClose() {
+    if (!closedUndo) return;
+    window.clearTimeout(closedUndo.timer);
+    appState.openRightTab(closedUndo.tabType, closedUndo.label, panel.id);
+    setClosedUndo(null);
   }
 
   function handleAddTab(type: RightSidebarTabType) {
@@ -351,6 +390,12 @@ function TabPanelRenderer({ panel, tabs, ghostPanelId }: { panel: TabPanel; tabs
         onTabClose={handleTabClose}
         onAddTab={handleAddTab}
       />
+      {closedUndo && (
+        <div class="repl-rs-tab-undo">
+          <span>已关闭 "{closedUndo.label}"</span>
+          <button class="repl-rs-tab-undo-btn" onClick={handleUndoClose}>撤销</button>
+        </div>
+      )}
       <div class="repl-rs-tab-content">
         {activeTab ? (
           <TabContent tab={activeTab} />

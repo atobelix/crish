@@ -18,7 +18,7 @@
     z-index: var(--z-resizer);
     cursor: col-resize;
     background-color: var(--color-border-divider);
-    transition: background-color var(--duration-fast) ease, width var(--duration-fast) ease;
+    transition: background-color var(--duration-fast) var(--ease-default), width var(--duration-fast) var(--ease-default);
     flex-shrink: 0;
     align-self: stretch;
 }
@@ -90,7 +90,7 @@ body.dragging-active .repl-card-subheader {
     background: transparent;
     border: none;
     cursor: pointer;
-    transition: all var(--duration-fast) ease;
+    transition: all var(--duration-fast) var(--ease-default);
     flex-shrink: 0;
 }
 
@@ -135,7 +135,7 @@ body.dragging-active .repl-card-subheader {
     height: var(--space-1);
     border-radius: var(--space-0_5);
     background-color: var(--color-border-divider);
-    transition: background-color var(--duration-fast) ease;
+    transition: background-color var(--duration-fast) var(--ease-default);
 }
 
 .repl-sidebar-h-resizer:hover::after,
@@ -165,7 +165,7 @@ body.dragging-active .repl-card-subheader {
     line-height: 0;
     margin-left: auto;
     opacity: 0;
-    transition: all var(--duration-instant) ease;
+    transition: all var(--duration-instant) var(--ease-default);
 }
 
 .repl-sidebar-folder-close:hover {
@@ -333,7 +333,7 @@ body.dragging-active .repl-card-subheader {
     border-radius: var(--radius-xs);
     margin-left: var(--space-1);
     opacity: 0.5;
-    transition: all var(--duration-instant) ease;
+    transition: all var(--duration-instant) var(--ease-default);
     cursor: pointer;
     line-height: 0;
 }
@@ -360,7 +360,7 @@ body.dragging-active .repl-card-subheader {
     padding: var(--space-2) var(--space-3);
     flex-shrink: 0;
     line-height: 0;
-    transition: color var(--duration-fast) ease;
+    transition: color var(--duration-fast) var(--ease-default);
     border-radius: var(--radius-md);
 }
 
@@ -391,7 +391,7 @@ body.dragging-active .repl-card-subheader {
     height: var(--space-1);
     border-radius: var(--space-0_5);
     background-color: var(--color-border-divider);
-    transition: background-color var(--duration-fast) ease;
+    transition: background-color var(--duration-fast) var(--ease-default);
 }
 
 .repl-rs-h-resizer:hover::after,

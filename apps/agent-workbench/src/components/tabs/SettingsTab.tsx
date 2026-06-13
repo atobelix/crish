@@ -2,13 +2,29 @@ import { useState, useEffect } from 'preact/hooks';
 import type { JSX } from 'preact';
 import { appState } from '../../core/app-state';
 import { eventBus } from '../../core/event-bus';
-import type { ToolsSubTab } from './ToolsTab';
+import ProviderSettingsPanel from '../ProviderSettingsPanel';
+import { McpSubTab, MemorySubTab } from './ToolsTab';
 import {
   IconPalette, IconMoon, IconSun, IconBot, IconChat, IconShield, IconCheck, IconZap,
+  IconSettings, IconKey, IconUser, IconTerminal,
 } from '../icons';
 
+type SettingsSubTab = 'general' | 'provider' | 'mcp' | 'memory' | 'skills' | 'account' | 'appearance' | 'permissions' | 'usage';
+
+const SUB_TAB_NAV: { id: SettingsSubTab; label: string; icon: () => JSX.Element }[] = [
+  { id: 'general', label: '通用', icon: () => <IconSettings /> },
+  { id: 'provider', label: '模型', icon: () => <IconKey /> },
+  { id: 'mcp', label: 'MCP', icon: () => <IconTerminal /> },
+  { id: 'memory', label: '记忆', icon: () => <IconUser /> },
+  { id: 'skills', label: '技能', icon: () => <IconSettings /> },
+  { id: 'account', label: '账户', icon: () => <IconUser /> },
+  { id: 'appearance', label: '外观', icon: () => <IconPalette /> },
+  { id: 'permissions', label: '权限', icon: () => <IconShield /> },
+  { id: 'usage', label: '用量', icon: () => <IconZap /> },
+];
+
 export default function SettingsTab() {
-  const [subTab, setSubTab] = useState<'appearance' | 'permissions' | 'usage'>('appearance');
+  const [subTab, setSubTab] = useState<SettingsSubTab>('general');
   const [theme, setTheme] = useState(appState.getState().theme);
   const [permissionMode, setPermissionMode] = useState(appState.getState().permissionMode);
   const [workMode, setWorkMode] = useState(appState.workMode);
@@ -81,16 +97,91 @@ export default function SettingsTab() {
   return (
     <div class="repl-rs-tab-content-inner">
       <div class="repl-rs-sub-tabs">
-        <button class={`repl-rs-sub-tab ${subTab === 'appearance' ? 'active' : ''}`} onClick={() => setSubTab('appearance')}>
-          <IconPalette /> 外观
-        </button>
-        <button class={`repl-rs-sub-tab ${subTab === 'permissions' ? 'active' : ''}`} onClick={() => setSubTab('permissions')}>
-          <IconShield /> 权限
-        </button>
-        <button class={`repl-rs-sub-tab ${subTab === 'usage' ? 'active' : ''}`} onClick={() => setSubTab('usage')}>
-          <IconZap /> 用量
-        </button>
+        {SUB_TAB_NAV.map((nav) => (
+          <button
+            key={nav.id}
+            class={`repl-rs-sub-tab ${subTab === nav.id ? 'active' : ''}`}
+            onClick={() => setSubTab(nav.id)}
+            title={nav.label}
+          >
+            {nav.icon()} {nav.label}
+          </button>
+        ))}
       </div>
+
+      {subTab === 'general' && (
+        <div class="repl-rs-settings-list">
+          <div class="repl-rs-settings-section">
+            <div class="repl-rs-settings-section-title">工作模式</div>
+            <div class="repl-rs-setting-row">
+              <div class="repl-rs-setting-row-label">模式</div>
+              <div class="repl-rs-setting-row-control">
+                <button class={`repl-rs-setting-option ${workMode === 'agent' ? 'active' : ''}`} onClick={() => handleWorkModeChange('agent')}>
+                  <IconBot /> Agent
+                </button>
+                <button class={`repl-rs-setting-option ${workMode === 'chat' ? 'active' : ''}`} onClick={() => handleWorkModeChange('chat')}>
+                  <IconChat /> Chat
+                </button>
+              </div>
+            </div>
+            <div class="repl-rs-setting-desc">Agent 模式可执行工具与文件操作；Chat 模式仅对话。</div>
+          </div>
+          <div class="repl-rs-settings-section">
+            <div class="repl-rs-settings-section-title">数据</div>
+            <div class="repl-rs-setting-row">
+              <div class="repl-rs-setting-row-label">导出对话</div>
+              <div class="repl-rs-setting-row-control">
+                <button class="repl-rs-setting-option" onClick={handleExportSessions}>导出 JSON</button>
+              </div>
+            </div>
+            <div class="repl-rs-setting-row">
+              <div class="repl-rs-setting-row-label">本地缓存</div>
+              <div class="repl-rs-setting-row-control">
+                <button class="repl-rs-setting-option" onClick={handleClearCache}>清除并重载</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'provider' && <ProviderSettingsPanel />}
+
+      {subTab === 'mcp' && <McpSubTab />}
+
+      {subTab === 'memory' && <MemorySubTab />}
+
+      {subTab === 'skills' && (
+        <div class="repl-rs-settings-list">
+          <div class="repl-rs-settings-section">
+            <div class="repl-rs-settings-section-title">技能</div>
+            <div class="repl-rs-setting-row">
+              <span class="repl-rs-setting-value">技能管理待接入（list_skills / set_skill_activation）</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'account' && (
+        <div class="repl-rs-settings-list">
+          <div class="repl-rs-settings-section">
+            <div class="repl-rs-settings-section-title">账户</div>
+            <div class="repl-rs-setting-row">
+              <div class="repl-rs-setting-row-label">凭据</div>
+              <div class="repl-rs-setting-row-control">
+                <span class="repl-rs-setting-value">在「模型」中配置 API 密钥或账户中心</span>
+              </div>
+            </div>
+          </div>
+          <div class="repl-rs-settings-section">
+            <div class="repl-rs-settings-section-title">账单与用量</div>
+            <div class="repl-rs-setting-row">
+              <div class="repl-rs-setting-row-control">
+                <span class="repl-rs-setting-value">账户中心 / 账单明细尚未接入</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {subTab === 'appearance' && (
         <div class="repl-rs-settings-list">
@@ -132,39 +223,11 @@ export default function SettingsTab() {
               </div>
             </div>
             <div class="repl-rs-setting-row">
-              <div class="repl-rs-setting-row-label">记忆</div>
-              <div class="repl-rs-setting-row-control">
-                <button class="repl-rs-setting-option" onClick={() => handleOpenToolsSubTab('memory')}>查看</button>
-              </div>
-            </div>
-            <div class="repl-rs-setting-row">
-              <div class="repl-rs-setting-row-label">MCP 服务</div>
-              <div class="repl-rs-setting-row-control">
-                <button class="repl-rs-setting-option" onClick={() => handleOpenToolsSubTab('mcp')}>管理</button>
-              </div>
-            </div>
-            <div class="repl-rs-setting-row">
               <div class="repl-rs-setting-row-label">规则</div>
               <div class="repl-rs-setting-row-control">
                 <button class="repl-rs-setting-option" onClick={() => setRulesViewOpen(!rulesViewOpen)}>
                   {rulesViewOpen ? '收起' : '查看'}
                 </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="repl-rs-settings-section">
-            <div class="repl-rs-settings-section-title">数据</div>
-            <div class="repl-rs-setting-row">
-              <div class="repl-rs-setting-row-label">导出对话</div>
-              <div class="repl-rs-setting-row-control">
-                <button class="repl-rs-setting-option" onClick={handleExportSessions}>导出</button>
-              </div>
-            </div>
-            <div class="repl-rs-setting-row">
-              <div class="repl-rs-setting-row-label">清除缓存</div>
-              <div class="repl-rs-setting-row-control">
-                <button class="repl-rs-setting-option" onClick={handleClearCache}>清除</button>
               </div>
             </div>
           </div>

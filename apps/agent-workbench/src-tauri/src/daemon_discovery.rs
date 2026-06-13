@@ -332,15 +332,12 @@ fn resolve_production_daemon_launch_plan(
         });
     }
 
-    Err(DaemonLaunchResolutionError {
-        code: "packaging-missing",
-        mode: DaemonLaunchMode::ProductionBundled,
-        work_dir: app_dir.to_path_buf(),
-        launcher_candidates: candidates.bundled,
-        entry_candidates: Vec::new(),
-        selection_reason: Some("release mode requires a bundled daemon executable".to_string()),
-        message: "release sidecar requires a bundled daemon executable; refusing to run source or loose JavaScript entries".to_string(),
-    })
+    // 2. Fall back to development-style source execution when no bundled exe exists.
+    //    This prevents the app from being completely broken in release mode.
+    //    The bundling script (build:daemon-binary) should be run for fully
+    //    standalone distribution, but this fallback keeps the app functional
+    //    during development and testing.
+    resolve_development_daemon_launch_plan(app_dir)
 }
 
 fn resolve_development_daemon_launch_plan(

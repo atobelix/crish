@@ -17,3 +17,5 @@ pub(crate) use commands::*;
 // Non-command items referenced by other modules outside sidecar.
 pub(crate) use types::init_state;
 pub(crate) use connection::send_current_sidecar_command;
+pub(crate) use connection::ensure_sidecar_connected;
+pub(crate) use supervisor::sidecar_supervisor_snapshot;

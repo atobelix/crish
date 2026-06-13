@@ -3,6 +3,7 @@ import type { JSX } from 'preact';
 import { appState } from '../../core/app-state';
 import { tauriBridge } from '../../core/tauri-bridge';
 import { IconShield, IconSpinner } from '../icons';
+import { showToast } from '../ToastContainer';
 
 export default function ApprovalsTab() {
   const [approvalQueue, setApprovalQueue] = useState(appState.getState().approvalQueue);
@@ -28,7 +29,7 @@ export default function ApprovalsTab() {
     try {
       await tauriBridge.approveToolCall(toolCallId, scope === 'project' ? 'project' : scope === 'always' ? 'always' : undefined);
     } catch (error) {
-      console.error('审批失败:', error);
+      showToast('审批失败', 'error', 4500);
     }
   }
 
@@ -36,7 +37,7 @@ export default function ApprovalsTab() {
     try {
       await tauriBridge.denyToolCall(toolCallId);
     } catch (error) {
-      console.error('拒绝失败:', error);
+      showToast('拒绝失败', 'error', 4500);
     }
   }
 

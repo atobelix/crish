@@ -5,9 +5,11 @@ import { eventBus, Events } from '../core/event-bus';
 import TitleBar from './TitleBar';
 import Sidebar from './Sidebar';
 import RightSidebar from './RightSidebar';
-import SettingsPanel from './SettingsModal';
 import { CommandPalette } from './CommandPalette';
+import { GlobalSearch } from './GlobalSearch';
 import { ToastContainer } from './ToastContainer';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { IconPlus, IconFolder, IconPanelRight, IconSettings, IconMoon, IconSun } from './icons';
 
 export default function App() {
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(
@@ -16,19 +18,20 @@ export default function App() {
   const [rightSidebarVisible, setRightSidebarVisible] = useState(
     appState.getState().rightSidebarVisible
   );
-  const [settingsOpen, setSettingsOpen] = useState(appState.getState().settingsOpen);
 
   // Left sidebar overlay state (when collapsed, hover reveals as overlay)
   const [leftOverlay, setLeftOverlay] = useState(false);
+
+  // Workspace context menu
+  const [workspaceCtxMenu, setWorkspaceCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const hoverEnterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const u1 = appState.subscribe('rightSidebarVisible', setRightSidebarVisible);
-    const u2 = appState.subscribe('settingsOpen', setSettingsOpen);
     const u3 = appState.subscribe('leftSidebarVisible', setLeftSidebarVisible);
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u3(); };
   }, []);
 
   useEffect(() => {
@@ -148,36 +151,46 @@ export default function App() {
     const u2 = appState.subscribe('currentSession', maybeCreateDefaultSession);
     const timer = window.setTimeout(maybeCreateDefaultSession, 0);
 
-    // Global keyboard shortcuts
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        appState.createSession();
-        eventBus.emit(Events.SESSION_CREATED);
-      }
-      if (e.ctrlKey && e.key === 'o') {
-        e.preventDefault();
+    // Global keyboard shortcuts registry
+    const GLOBAL_SHORTCUTS = [
+      { key: 'n', ctrl: true, handler: () => { appState.createSession(); eventBus.emit(Events.SESSION_CREATED); }, desc: '新建对话' },
+      { key: 'o', ctrl: true, handler: () => {
         tauriBridge.selectFolder().then(folder => {
           if (folder) {
             appState.addOpenedFolder(folder);
             appState.setState('workingDirectory', folder);
-            // workMode 由 currentSession.projectId 决定，创建项目会话切换到 agent 模式
             const projectSessions = appState.getProjectSessions(folder);
-            if (projectSessions.length > 0) {
-              appState.switchSession(projectSessions[0].id);
-            } else {
-              appState.createSession('新对话', folder);
-            }
+            if (projectSessions.length > 0) appState.switchSession(projectSessions[0].id);
+            else appState.createSession('新对话', folder);
           }
         });
-      }
-      if (e.ctrlKey && e.key === 'b') {
+      }, desc: '打开文件夹' },
+      { key: 'b', ctrl: true, handler: () => appState.setState('rightSidebarVisible', !appState.getState().rightSidebarVisible), desc: '切换右侧面板' },
+      { key: ',', ctrl: true, handler: () => appState.openRightTab('settings'), desc: '打开设置' },
+      { key: 't', ctrl: true, shift: true, handler: () => {
+        const next = appState.getState().theme === 'dark' ? 'light' : 'dark';
+        appState.setState('theme', next);
+        document.documentElement.setAttribute('data-theme', next);
+      }, desc: '切换主题' },
+    ];
+
+    const isEditingElement = (el: Element | null) => {
+      if (!el) return false;
+      const tag = el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditingElement(document.activeElement) && !e.ctrlKey && !e.metaKey) return;
+      const shortcut = GLOBAL_SHORTCUTS.find(s =>
+        s.key.toLowerCase() === e.key.toLowerCase() &&
+        !!s.ctrl === (e.ctrlKey || e.metaKey) &&
+        !!s.shift === e.shiftKey &&
+        !e.altKey
+      );
+      if (shortcut) {
         e.preventDefault();
-        appState.setState('rightSidebarVisible', !appState.getState().rightSidebarVisible);
-      }
-      if (e.ctrlKey && e.key === ',') {
-        e.preventDefault();
-        appState.setState('settingsOpen', true);
+        shortcut.handler();
       }
     };
 
@@ -196,9 +209,29 @@ export default function App() {
     leftOverlay && !leftSidebarVisible ? 'overlay-reveal' : '',
   ].filter(Boolean).join(' ');
 
+  const workspaceCtxItems: ContextMenuItem[] = [
+    { id: 'new-chat', label: '新建对话', icon: () => <IconPlus />, shortcut: 'Ctrl+N', action: () => { appState.createSession(); eventBus.emit(Events.SESSION_CREATED); } },
+    { id: '---', label: '', action: () => {} },
+    { id: 'open-folder', label: '打开文件夹', icon: () => <IconFolder />, shortcut: 'Ctrl+O', action: () => { tauriBridge.selectFolder().then(folder => { if (folder) { appState.addOpenedFolder(folder); appState.setState('workingDirectory', folder); const projectSessions = appState.getProjectSessions(folder); if (projectSessions.length > 0) appState.switchSession(projectSessions[0].id); else appState.createSession('新对话', folder); } }); } },
+    { id: 'toggle-right', label: '切换右侧面板', icon: () => <IconPanelRight />, shortcut: 'Ctrl+B', action: () => appState.setState('rightSidebarVisible', !appState.getState().rightSidebarVisible) },
+    { id: '---2', label: '', action: () => {} },
+    { id: 'open-settings', label: '打开设置', icon: () => <IconSettings />, shortcut: 'Ctrl+,', action: () => appState.openRightTab('settings') },
+    { id: 'toggle-theme', label: '切换主题', icon: () => appState.getState().theme === 'dark' ? <IconSun /> : <IconMoon />, action: () => { const next = appState.getState().theme === 'dark' ? 'light' : 'dark'; appState.setState('theme', next); document.documentElement.setAttribute('data-theme', next); } },
+  ];
+
+  const handleWorkspaceContextMenu = (e: MouseEvent) => {
+    // Only show on right-click over empty workspace areas, not on interactive elements
+    const target = e.target as HTMLElement;
+    const interactive = target.closest('button, input, textarea, [contenteditable], .repl-chat-msg, .repl-context-menu, .repl-cmd-palette-overlay');
+    if (interactive) return;
+    e.preventDefault();
+    setWorkspaceCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
   return (
     <div class="repl-window-root">
       <CommandPalette />
+      <GlobalSearch />
       <ToastContainer />
       <TitleBar onToggleRightSidebar={toggleRightSidebar} onToggleLeftSidebar={toggleLeftSidebar} />
       <main class="repl-workspace-container">
@@ -209,12 +242,10 @@ export default function App() {
           <Sidebar />
         </div>
         <div class="repl-resizer repl-resizer-left" id="resizer-left"></div>
-        <div id="main-workspace" onClick={onMainPanelClick}>
+        <div id="main-workspace" onClick={onMainPanelClick} onContextMenu={handleWorkspaceContextMenu}>
           <RightSidebar />
         </div>
       </main>
-      {/* 设置：全屏覆盖（全局，不再嵌在主消息流里） */}
-      {settingsOpen && <SettingsPanel />}
       {/* Left edge hover trigger - only visible when sidebar is collapsed */}
       {!leftSidebarVisible && !leftOverlay && (
         <div
@@ -225,6 +256,14 @@ export default function App() {
       )}
       {leftOverlay && !leftSidebarVisible && (
         <div class="repl-edge-glow active" />
+      )}
+      {workspaceCtxMenu && (
+        <ContextMenu
+          items={workspaceCtxItems}
+          x={workspaceCtxMenu.x}
+          y={workspaceCtxMenu.y}
+          onClose={() => setWorkspaceCtxMenu(null)}
+        />
       )}
     </div>
   );

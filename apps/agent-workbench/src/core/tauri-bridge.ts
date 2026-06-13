@@ -84,6 +84,7 @@ import type {
   WorkbenchMetricsQueryResult,
 } from '../shared/workbench-contract';
 import type { CheckpointRecord, ChangedFile } from './app-state';
+import { showToast } from '../components/ToastContainer';
 
 /** 检测是否在 Tauri 环境中运行 */
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -316,7 +317,7 @@ export class TauriBridge {
     this.runSessions.set(prepared.runId, prepared.sessionId);
 
     if (!isTauri) {
-      console.warn('[Bridge] 非 Tauri 环境，无法运行任务');
+      showToast('非 Tauri 环境，无法运行任务', 'warning', 4500);
       return { runId: prepared.runId, sessionId: prepared.sessionId };
     }
     try {
@@ -341,7 +342,7 @@ export class TauriBridge {
       this.runSessions.set(runId, prepared.sessionId);
       return { runId, sessionId: prepared.sessionId };
     } catch (error) {
-      console.error('运行任务失败:', error);
+      showToast('运行任务失败', 'error', 4500);
       throw error;
     }
   }
@@ -352,10 +353,9 @@ export class TauriBridge {
   async cancelRun(runId: string): Promise<void> {
     if (!isTauri) return;
     try {
-      const result = await invoke('workbench_cancel_run', { runId });
-      console.log('任务已取消:', result);
+      await invoke('workbench_cancel_run', { runId });
     } catch (error) {
-      console.error('取消任务失败:', error);
+      showToast('取消任务失败', 'error', 4500);
       throw error;
     }
   }
@@ -371,7 +371,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_cancel_background_task', { taskId });
     } catch (error) {
-      console.error('取消后台任务失败:', error);
+      showToast('取消后台任务失败', 'error', 4500);
       throw error;
     }
   }
@@ -387,9 +387,8 @@ export class TauriBridge {
     try {
       return await invoke<string>('workbench_get_background_task_output', { taskId });
     } catch (error) {
+      showToast('获取后台任务输出失败', 'error', 4500);
       return this.backendDiagnosticText('workbench_get_background_task_output', error);
-      console.error('获取后台任务输出失败:', error);
-      return '';
     }
   }
 
@@ -404,9 +403,8 @@ export class TauriBridge {
     try {
       return await invoke<WorkbenchBackgroundTask[]>('workbench_list_background_tasks');
     } catch (error) {
+      showToast('列出后台任务失败', 'error', 4500);
       return this.backendDiagnosticArray<WorkbenchBackgroundTask>('workbench_list_background_tasks', error);
-      console.error('列出后台任务失败:', error);
-      return [];
     }
   }
 
@@ -435,7 +433,7 @@ export class TauriBridge {
         runId: a.runId ?? undefined,
       })));
     } catch (error) {
-      console.error('列出 artifacts 失败:', error);
+      showToast('列出 artifacts 失败', 'error', 4500);
       return this.backendDiagnosticArray<ArtifactRecord>('workbench_list_artifacts', error);
     }
   }
@@ -448,9 +446,8 @@ export class TauriBridge {
     try {
       return await invoke<string>('workbench_get_artifact_content', { artifactUri });
     } catch (error) {
+      showToast('获取 artifact 内容失败', 'error', 4500);
       return this.backendDiagnosticText('workbench_get_artifact_content', error);
-      console.error('获取 artifact 内容失败:', error);
-      return '';
     }
   }
 
@@ -477,7 +474,7 @@ export class TauriBridge {
         startedAt: s.startedAt ?? undefined,
       })));
     } catch (error) {
-      console.error('列出 MCP 服务器失败:', error);
+      showToast('列出 MCP 服务器失败', 'error', 4500);
       return this.backendDiagnosticArray<McpServerRecord>('workbench_list_mcp_servers', error);
     }
   }
@@ -490,7 +487,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_start_mcp_server', { serverId });
     } catch (error) {
-      console.error('启动 MCP 服务器失败:', error);
+      showToast('启动 MCP 服务器失败', 'error', 4500);
       throw error;
     }
   }
@@ -503,7 +500,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_stop_mcp_server', { serverId });
     } catch (error) {
-      console.error('停止 MCP 服务器失败:', error);
+      showToast('停止 MCP 服务器失败', 'error', 4500);
       throw error;
     }
   }
@@ -529,7 +526,7 @@ export class TauriBridge {
         createdAt: typeof m.createdAt === 'number' ? m.createdAt : typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : Date.now(),
       })));
     } catch (error) {
-      console.error('列出记忆失败:', error);
+      showToast('列出记忆失败', 'error', 4500);
       return this.backendDiagnosticArray<MemoryRecord>('workbench_list_memories', error);
     }
   }
@@ -542,7 +539,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_delete_memory', { memoryId });
     } catch (error) {
-      console.error('删除记忆失败:', error);
+      showToast('删除记忆失败', 'error', 4500);
       throw error;
     }
   }
@@ -564,7 +561,7 @@ export class TauriBridge {
         sessionId: context?.sessionId,
       });
     } catch (error) {
-      console.error('回答提问失败:', error);
+      showToast('回答提问失败', 'error', 4500);
       throw error;
     }
   }
@@ -585,7 +582,7 @@ export class TauriBridge {
         conflicted: typeof result?.conflicted === 'number' ? result.conflicted : undefined,
       };
     } catch (error) {
-      console.error('Git 状态查询失败:', error);
+      showToast('Git 状态查询失败', 'error', 4500);
       return { found: false, files: [] };
     }
   }
@@ -604,7 +601,7 @@ export class TauriBridge {
         files: Array.isArray(result?.files) ? result.files : undefined,
       };
     } catch (error) {
-      console.error('Git diff 查询失败:', error);
+      showToast('Git diff 查询失败', 'error', 4500);
       return {};
     }
   }
@@ -642,7 +639,7 @@ export class TauriBridge {
     try {
       return this.normalizeWorkbenchStatus(await invoke<Record<string, unknown>>('workbench_status'));
     } catch (error) {
-      console.error('获取状态失败:', error);
+      showToast('获取状态失败', 'error', 4500);
       throw error;
     }
   }
@@ -657,7 +654,7 @@ export class TauriBridge {
     try {
       return await invoke<DaemonRunSnapshotResponse>('workbench_get_run_snapshot', { runId });
     } catch (error) {
-      console.error('Get daemon run snapshot failed:', error);
+      showToast('Get daemon run snapshot failed', 'error', 4500);
       throw error;
     }
   }
@@ -667,7 +664,7 @@ export class TauriBridge {
       const response = await this.getRunSnapshot({ runId });
       return response?.snapshot ? projectDaemonTaskSnapshotToWorkbench(response.snapshot) : null;
     } catch (error) {
-      console.error('Get daemon task snapshot failed:', error);
+      showToast('Get daemon task snapshot failed', 'error', 4500);
       return null;
     }
   }
@@ -689,7 +686,7 @@ export class TauriBridge {
         ...(Array.isArray(result.summaries) ? { summaries: result.summaries } : {}),
       };
     } catch (error) {
-      console.error('List sessions failed:', error);
+      showToast('List sessions failed', 'error', 4500);
       return this.backendDiagnosticArray<DaemonSessionRecord>('workbench_list_sessions', error);
     }
   }
@@ -735,7 +732,7 @@ export class TauriBridge {
     try {
       return await invoke<HostOpenResult>('workbench_open_host_target', { openerId, target });
     } catch (error) {
-      console.error('Open host target failed:', error);
+      showToast('Open host target failed', 'error', 4500);
       throw error;
     }
   }
@@ -752,7 +749,7 @@ export class TauriBridge {
       });
       return runs;
     } catch (error) {
-      console.error('List runs failed:', error);
+      showToast('List runs failed', 'error', 4500);
       throw error;
     }
   }
@@ -854,7 +851,7 @@ export class TauriBridge {
     try {
       return await invoke<DaemonSessionEventsResponse>('workbench_read_session_events', params);
     } catch (error) {
-      console.error('Read session events failed:', error);
+      showToast('Read session events failed', 'error', 4500);
       throw error;
     }
   }
@@ -883,7 +880,7 @@ export class TauriBridge {
       const request: Record<string, unknown> = { ...params };
       return await invoke<DaemonRunEventsResponse>('workbench_read_run_events', request);
     } catch (error) {
-      console.error('Read run events failed:', error);
+      showToast('Read run events failed', 'error', 4500);
       throw error;
     }
   }
@@ -921,7 +918,7 @@ export class TauriBridge {
       this.runSessions.set(resolvedRunId, resolvedSessionId);
       return { runId: resolvedRunId, sessionId: resolvedSessionId };
     } catch (error) {
-      console.error('Goal 模式运行失败:', error);
+      showToast('Goal 模式运行失败', 'error', 4500);
       throw error;
     }
   }
@@ -946,7 +943,7 @@ export class TauriBridge {
     try {
       return await invoke('workbench_performance_snapshot');
     } catch (error) {
-      console.error('获取性能快照失败:', error);
+      showToast('获取性能快照失败', 'error', 4500);
       return null;
     }
   }
@@ -972,7 +969,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_restart_daemon');
     } catch (error) {
-      console.error('重启 Daemon 失败:', error);
+      showToast('重启 Daemon 失败', 'error', 4500);
       throw error;
     }
   }
@@ -985,7 +982,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_stop_daemon');
     } catch (error) {
-      console.error('停止 Daemon 失败:', error);
+      showToast('停止 Daemon 失败', 'error', 4500);
       throw error;
     }
   }
@@ -1038,7 +1035,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_approve_tool', { toolCallId, scope });
     } catch (error) {
-      console.error('批准工具调用失败:', error);
+      showToast('批准工具调用失败', 'error', 4500);
       throw error;
     }
   }
@@ -1052,7 +1049,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_deny_tool', { toolCallId });
     } catch (error) {
-      console.error('拒绝工具调用失败:', error);
+      showToast('拒绝工具调用失败', 'error', 4500);
       throw error;
     }
   }
@@ -1066,7 +1063,7 @@ export class TauriBridge {
       const result = await invoke<{ path: string | null }>('select_folder');
       return result.path;
     } catch (error) {
-      console.error('选择文件夹失败:', error);
+      showToast('选择文件夹失败', 'error', 4500);
       return null;
     }
   }
@@ -1092,7 +1089,7 @@ export class TauriBridge {
         credentialMode: 'direct',
       });
     } catch (error) {
-      console.error('保存 API 配置失败:', error);
+      showToast('保存 API 配置失败', 'error', 4500);
       throw error;
     }
   }
@@ -1130,7 +1127,7 @@ export class TauriBridge {
         stream: update.stream,
       });
     } catch (error) {
-      console.error('更新守护进程配置失败:', error);
+      showToast('更新守护进程配置失败', 'error', 4500);
       throw error;
     }
   }
@@ -1143,7 +1140,7 @@ export class TauriBridge {
     try {
       return this.normalizeWorkbenchStatus(await invoke<Record<string, unknown>>('workbench_status'));
     } catch (error) {
-      console.error('获取守护进程状态失败:', error);
+      showToast('获取守护进程状态失败', 'error', 4500);
       throw error;
     }
   }
@@ -1165,7 +1162,7 @@ export class TauriBridge {
         apiKey: typeof result.apiKey === 'string' ? result.apiKey : '',
       };
     } catch (error) {
-      console.error('获取 API 配置失败:', error);
+      showToast('获取 API 配置失败', 'error', 4500);
       throw error;
     }
   }
@@ -1197,9 +1194,8 @@ export class TauriBridge {
         'Invalid provider model list response: missing data array.'
       );
     } catch (error) {
+      showToast('获取模型列表失败', 'error', 4500);
       return this.backendDiagnosticArray<string>('provider_model_list', error);
-      console.error('获取模型列表失败:', error);
-      return [];
     }
   }
 
@@ -1211,7 +1207,7 @@ export class TauriBridge {
     try {
       return await invoke('list_directory', { path });
     } catch (error) {
-      console.error('列出目录失败:', error);
+      showToast('列出目录失败', 'error', 4500);
       throw error;
     }
   }
@@ -1224,7 +1220,7 @@ export class TauriBridge {
     try {
       return await invoke('read_file_content', { path, maxLines });
     } catch (error) {
-      console.error('读取文件内容失败:', error);
+      showToast('读取文件内容失败', 'error', 4500);
       throw error;
     }
   }
@@ -1234,7 +1230,7 @@ export class TauriBridge {
     try {
       await invoke('open_file_in_folder', { filePath });
     } catch (error) {
-      console.error('在文件管理器中打开失败:', error);
+      showToast('在文件管理器中打开失败', 'error', 4500);
       throw error;
     }
   }
@@ -1244,7 +1240,7 @@ export class TauriBridge {
     try {
       await invoke('open_file_with_default_app', { filePath });
     } catch (error) {
-      console.error('用默认应用打开失败:', error);
+      showToast('用默认应用打开失败', 'error', 4500);
       throw error;
     }
   }
@@ -1282,7 +1278,7 @@ export class TauriBridge {
         restoredAt: c.restoredAt ?? undefined,
       })));
     } catch (error) {
-      console.error('列出 Checkpoint 失败:', error);
+      showToast('列出 Checkpoint 失败', 'error', 4500);
       return this.backendDiagnosticArray<CheckpointRecord>('workbench_list_checkpoints', error);
     }
   }
@@ -1308,7 +1304,7 @@ export class TauriBridge {
         removedLines: f.removedLines ?? f.deletions ?? 0,
       })));
     } catch (error) {
-      console.error('获取 Checkpoint Diff 失败:', error);
+      showToast('获取 Checkpoint Diff 失败', 'error', 4500);
       return this.backendDiagnosticArray<ChangedFile>('workbench_get_checkpoint_diff', error);
     }
   }
@@ -1322,7 +1318,7 @@ export class TauriBridge {
       const result = await invoke<Record<string, unknown>>('workbench_restore_checkpoint', { checkpointId });
       return (result as any)?.ok === true;
     } catch (error) {
-      console.error('恢复 Checkpoint 失败:', error);
+      showToast('恢复 Checkpoint 失败', 'error', 4500);
       return this.backendDiagnosticResult('workbench_restore_checkpoint', error);
     }
   }
@@ -1394,7 +1390,7 @@ export class TauriBridge {
     try {
       await invoke('workbench_send_to_subagent', { subagentRunId, message });
     } catch (error) {
-      console.error('发送消息到子 Agent 失败:', error);
+      showToast('发送消息到子 Agent 失败', 'error', 4500);
       throw error;
     }
   }
@@ -1411,7 +1407,7 @@ export class TauriBridge {
       return await invoke<Record<string, unknown>>('workbench_get_subagent_status', { subagentRunId });
     } catch (error) {
       return this.backendDiagnosticResult('workbench_get_subagent_status', error);
-      console.error('获取子 Agent 状态失败:', error);
+      showToast('获取子 Agent 状态失败', 'error', 4500);
       return null;
     }
   }
@@ -1431,7 +1427,7 @@ export class TauriBridge {
       }
       return this.backendOkArray('workbench_list_mutation_leases', result);
     } catch (error) {
-      console.error('获取文件锁列表失败:', error);
+      showToast('获取文件锁列表失败', 'error', 4500);
       return this.backendDiagnosticArray<MutationLeaseRecord>('workbench_list_mutation_leases', error);
     }
   }
@@ -1578,7 +1574,7 @@ export class TauriBridge {
     if (reportedBackendDiagnosticKeys.has(key)) return;
     reportedBackendDiagnosticKeys.add(key);
     backendDiagnostics.push(diagnostic);
-    console.warn(`[Bridge][${diagnostic.code}]`, diagnostic);
+    /* backend diagnostic recorded silently */
   }
 
   private recordBridgeViewStatus(command: string, value: unknown): void {

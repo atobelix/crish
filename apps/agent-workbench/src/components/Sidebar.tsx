@@ -3,6 +3,7 @@ import { appState, type Session } from '../core/app-state';
 import { tauriBridge } from '../core/tauri-bridge';
 import { eventBus, Events } from '../core/event-bus';
 import { showToast } from './ToastContainer';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { isBridgeDiagnostic } from '../core/bridge-utils';
 import {
   WORKBENCH_SESSION_ACTION_PROTOCOL_VERSION,
@@ -445,7 +446,14 @@ export default function Sidebar() {
             return (
               <>
                 {filteredSessions.length === 0 && (
-                  <div class="repl-sidebar-empty">{searchQuery ? '无匹配结果' : '暂无对话'}</div>
+                  <div class="repl-sidebar-empty">
+                    <div class="repl-sidebar-empty-text">{searchQuery ? '无匹配结果' : '暂无对话'}</div>
+                    {!searchQuery && (
+                      <button class="repl-sidebar-empty-btn" onClick={() => { appState.createSession(); eventBus.emit(Events.SESSION_CREATED); }}>
+                        <IconPlus /> 新建对话
+                      </button>
+                    )}
+                  </div>
                 )}
                 {filteredSessions.map(session => renderSessionRow(session))}
               </>
@@ -473,7 +481,7 @@ export default function Sidebar() {
                 <IconFolder /><span>打开文件夹</span>
               </div>
               <div class="repl-sidebar-menu-divider" />
-              <div class="repl-sidebar-menu-item" onClick={() => { appState.setState('settingsOpen', true); setProfileMenuOpen(false); }}>
+              <div class="repl-sidebar-menu-item" onClick={() => { appState.openRightTab('settings'); setProfileMenuOpen(false); }}>
                 <IconSettings /><span>设置</span>
               </div>
               <div class="repl-sidebar-menu-item" onClick={() => { handleThemeChange(theme === 'dark' ? 'light' : 'dark'); setProfileMenuOpen(false); }}>
@@ -487,61 +495,33 @@ export default function Sidebar() {
 
       {/* ===== Project Context Menu ===== */}
       {projectMenu && (
-        <div
-          class="repl-context-menu repl-project-context-menu"
-          style={{
-            position: 'fixed',
-            left: `${projectMenu.x}px`,
-            top: `${projectMenu.y}px`,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div class="repl-context-menu-item" onClick={() => void handleOpenProjectInFileManager(projectMenu.folder)}>
-            <IconExternalLink /> 打开文件夹
-          </div>
-          <div class="repl-context-menu-item" onClick={() => void handleChangeProjectFolder(projectMenu.folder)}>
-            <IconFolderOpen /> 更换文件夹
-          </div>
-          <div class="repl-context-menu-divider" />
-          <div class="repl-context-menu-item danger" onClick={() => handleRemoveProject(projectMenu.folder)}>
-            <IconTrash /> 移除项目
-          </div>
-        </div>
+        <ContextMenu
+          x={projectMenu.x}
+          y={projectMenu.y}
+          onClose={() => setProjectMenu(null)}
+          items={[
+            { id: 'open-folder', label: '打开文件夹', icon: IconExternalLink, action: () => void handleOpenProjectInFileManager(projectMenu.folder) },
+            { id: 'change-folder', label: '更换文件夹', icon: IconFolderOpen, action: () => void handleChangeProjectFolder(projectMenu.folder) },
+            { id: 'remove', label: '移除项目', icon: IconTrash, danger: true, action: () => handleRemoveProject(projectMenu.folder) },
+          ]}
+        />
       )}
 
       {/* ===== Session Context Menu ===== */}
       {contextMenu && contextSession && (
-        <div
-          class="repl-context-menu"
-          style={{
-            position: 'fixed',
-            left: `${contextMenu.x}px`,
-            top: `${contextMenu.y}px`,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div class="repl-context-menu-item" onClick={() => void handleTogglePinSession(contextSession)}>
-            <IconPin /> <span>{sessionPinned(contextSession) ? '取消置顶' : '置顶'}</span>
-          </div>
-          <div class="repl-context-menu-item" onClick={() => handleRenameSession(contextMenu.sessionId)}>
-            <IconEdit /> <span>重命名</span>
-          </div>
-          <div class="repl-context-menu-item" onClick={() => void handleToggleArchiveSession(contextSession)}>
-            <IconArchive /> <span>{sessionArchived(contextSession) ? '取消归档' : '归档'}</span>
-          </div>
-          <div class="repl-context-menu-item" onClick={() => { const s = appState.getState().sessions.find(x => x.id === contextMenu.sessionId); setContextMenu(null); appState.openSessionInSplit(contextMenu.sessionId, s?.title || '对话'); }}>
-            <IconExternalLink /> <span>分屏打开</span>
-          </div>
-          <div class="repl-context-menu-divider" />
-          <div class="repl-context-menu-item danger" onClick={() => void handleDeleteSession(contextMenu.sessionId)}>
-            <IconTrash /> <span>删除</span>
-          </div>
-          {pendingSessionActions[contextMenu.sessionId] && (
-            <div class="repl-context-menu-item disabled">
-              <span>处理中...</span>
-            </div>
-          )}
-        </div>
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { id: 'pin', label: sessionPinned(contextSession) ? '取消置顶' : '置顶', icon: IconPin, action: () => void handleTogglePinSession(contextSession) },
+            { id: 'rename', label: '重命名', icon: IconEdit, action: () => handleRenameSession(contextMenu.sessionId) },
+            { id: 'archive', label: sessionArchived(contextSession) ? '取消归档' : '归档', icon: IconArchive, action: () => void handleToggleArchiveSession(contextSession) },
+            { id: 'split', label: '分屏打开', icon: IconExternalLink, action: () => { const s = appState.getState().sessions.find(x => x.id === contextMenu.sessionId); setContextMenu(null); appState.openSessionInSplit(contextMenu.sessionId, s?.title || '对话'); } },
+            { id: 'delete', label: '删除', icon: IconTrash, danger: true, action: () => void handleDeleteSession(contextMenu.sessionId) },
+            ...(pendingSessionActions[contextMenu.sessionId] ? [{ id: 'pending', label: '处理中...', disabled: true, action: () => {} }] as ContextMenuItem[] : []),
+          ]}
+        />
       )}
     </aside>
   );

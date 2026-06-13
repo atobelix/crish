@@ -120,7 +120,7 @@ export default function TitleBar({ onToggleRightSidebar: _onToggleRightSidebar, 
                 <span>会员</span><span class="repl-titlebar-user-meta">免费版</span>
               </div>
               <div class="repl-titlebar-user-divider" />
-              <button class="repl-titlebar-user-item" onClick={() => { setUserMenuOpen(false); appState.setState('settingsOpen', true); }}>
+              <button class="repl-titlebar-user-item" onClick={() => { setUserMenuOpen(false); appState.openRightTab('settings'); }}>
                 <IconSettings />
                 <span>设置</span>
               </button>
@@ -130,7 +130,7 @@ export default function TitleBar({ onToggleRightSidebar: _onToggleRightSidebar, 
 
         <button
           class="repl-titlebar-btn"
-          onClick={() => appState.setState('settingsOpen', true)}
+          onClick={() => appState.openRightTab('settings')}
           title="设置"
         >
           <IconSettings />

@@ -1,5 +1,14 @@
-import { CRISH_DEFAULT_PROVIDER_CONFIG } from "@crish/shared-types";
 import { createDefaultLongRunPolicy, type WorkbenchLongRunPolicy } from "./workbench-contract";
+
+const CRISH_DEFAULT_PROVIDER_CONFIG = {
+  providerId: "flowbit-mimo",
+  baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+  model: "mimo-v2.5",
+  endpoint: "chat-completions" as const,
+  stream: true,
+  credentialMode: "auto" as const,
+  apiKeyEnv: "MIMO_API_KEY",
+};
 
 export type WorkbenchProviderEndpoint = "auto" | "responses" | "chat-completions";
 export type WorkbenchProviderTransport = "fetch" | "rust-reqwest" | "auto";

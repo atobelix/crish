@@ -23,7 +23,7 @@
     z-index: var(--z-modal-backdrop);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--duration-slower) cubic-bezier(0.25, 1, 0.5, 1);
+    transition: opacity var(--duration-slower) var(--ease-fluid);
 }
 
 .repl-modal-backdrop.show {
@@ -185,7 +185,7 @@
 
 .repl-settings-content::-webkit-scrollbar-thumb {
     background-color: var(--color-overlay-light);
-    border-radius: 99px;
+    border-radius: var(--radius-full);
 }
 
 .repl-settings-content::-webkit-scrollbar-thumb:hover {
@@ -392,7 +392,7 @@
 .repl-link {
     color: var(--color-accent);
     text-decoration: none;
-    transition: color var(--duration-fast) ease;
+    transition: color var(--duration-fast) var(--ease-default);
 }
 
 .repl-link:hover {
@@ -432,7 +432,7 @@
     right: 0;
     bottom: 0;
     background-color: var(--color-bg-input);
-    border-radius: 99px;
+    border-radius: var(--radius-full);
     transition: background-color var(--duration-normal) var(--ease-fluid);
 }
 
@@ -587,7 +587,7 @@
     color: var(--color-text-secondary);
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: background-color var(--duration-fast) ease;
+    transition: background-color var(--duration-fast) var(--ease-default);
     white-space: nowrap;
 }
 
@@ -698,7 +698,7 @@
     font-size: var(--font-size-md);
     color: var(--color-text-dim);
     cursor: pointer;
-    transition: color var(--duration-fast) ease;
+    transition: color var(--duration-fast) var(--ease-default);
 }
 
 .repl-text-link-action:hover {
@@ -754,7 +754,7 @@
     width: 100%;
     height: var(--space-1_5);
     background-color: var(--color-bg-root);
-    border-radius: 99px;
+    border-radius: var(--radius-full);
     outline: none;
     margin: var(--space-4) 0 var(--space-2) 0;
 }
@@ -855,7 +855,7 @@
     font-size: var(--font-size-md);
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: all var(--duration-fast) ease;
+    transition: all var(--duration-fast) var(--ease-default);
 }
 
 .repl-bubble-item:hover {
@@ -904,7 +904,7 @@
     overflow: hidden;
     background: var(--color-overlay-backdrop);
     padding: 4vh 5vw;
-    animation: repl-settings-fade var(--duration-fast) ease;
+    animation: repl-settings-fade var(--duration-fast) var(--ease-default);
 }
 
 .repl-settings-shell {
@@ -1232,15 +1232,15 @@
     line-height: var(--line-height-normal);
     color: var(--color-text-primary);
     background: var(--color-bg-input);
-    border: var(--space-0_5) solid var(--color-border-card);
-    border-radius: var(--radius-sm);
+    border: none;
+    border-radius: var(--radius-md);
     outline: none;
-    transition: border-color var(--duration-fast);
+    transition: box-shadow var(--duration-fast) var(--ease-default);
     box-sizing: border-box;
 }
 
 .repl-settings-input:focus {
-    border-color: var(--color-accent);
+    box-shadow: var(--shadow-focus);
 }
 
 
@@ -1287,7 +1287,7 @@
     border: var(--space-0_5) solid var(--color-border-card);
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--duration-fast) ease;
+    transition: all var(--duration-fast) var(--ease-default);
     flex: 1;
     justify-content: center;
 }
@@ -1320,7 +1320,7 @@
     border: var(--space-0_5) solid var(--color-border-card);
     background: var(--color-bg-input);
     cursor: pointer;
-    transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+    transition: border-color var(--duration-fast) var(--ease-default), background var(--duration-fast) var(--ease-default);
 }
 
 .repl-provider-mode-card.active {
@@ -1465,7 +1465,7 @@
     color: var(--color-text-dim);
     cursor: pointer;
     flex-shrink: 0;
-    transition: background var(--duration-instant) ease;
+    transition: background var(--duration-instant) var(--ease-default);
 }
 
 .repl-provider-refresh-btn:hover:not(:disabled) {
@@ -1503,7 +1503,7 @@
     border: none;
     border-radius: var(--radius-xs);
     cursor: pointer;
-    transition: opacity var(--duration-fast) ease;
+    transition: opacity var(--duration-fast) var(--ease-default);
 }
 
 .repl-provider-primary-btn:hover {
@@ -1623,7 +1623,7 @@
     width: 100%;
     font-size: var(--font-size-md);
     color: var(--color-text-secondary);
-    transition: background var(--duration-instant) ease;
+    transition: background var(--duration-instant) var(--ease-default);
 }
 
 .repl-sb-row:hover {

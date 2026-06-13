@@ -11,6 +11,7 @@ import { tauriBridge } from '../../core/tauri-bridge';
 import { reduceChatMessages } from '../../core/message-pipeline';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { IconBot, IconMaximize, IconX, IconSend } from '../icons';
+import { showToast } from '../ToastContainer';
 
 function SubagentPill({ agent, onClick }: { agent: SubAgent; onClick: () => void }) {
   return (
@@ -41,7 +42,7 @@ function SubagentModal({ agent, onClose }: { agent: SubAgent; onClose: () => voi
     try {
       await tauriBridge.sendToSubagent(agent.id, content);
     } catch (error) {
-      console.error('发送消息到子 Agent 失败:', error);
+      showToast('发送消息到子 Agent 失败', 'error', 4500);
     } finally {
       setSending(false);
     }

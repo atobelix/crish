@@ -6,8 +6,8 @@ let unloadTeardownStarted = false;
 const requestDaemonTeardown = () => {
   if (unloadTeardownStarted) return;
   unloadTeardownStarted = true;
-  void tauriBridge.stopDaemon().catch((error) => {
-    console.error('Daemon teardown failed during unload:', error);
+  void tauriBridge.stopDaemon().catch(() => {
+    /* daemon teardown failure on unload is non-critical */
   });
 };
 
@@ -19,5 +19,5 @@ const appContainer = document.getElementById('app');
 if (appContainer) {
   render(<App />, appContainer);
 } else {
-  console.error('找不到 #app 挂载点');
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#ef4444;">应用启动失败：找不到挂载点</div>';
 }

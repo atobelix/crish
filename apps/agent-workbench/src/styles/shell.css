@@ -96,7 +96,7 @@
 
 .repl-titlebar-conn-dot {
     flex-shrink: 0;
-    transition: color var(--duration-slowest) ease, filter var(--duration-slowest) ease;
+    transition: color var(--duration-slowest) var(--ease-default), filter var(--duration-slowest) var(--ease-default);
 }
 
 .repl-titlebar-conn-dot.connected {

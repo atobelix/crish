@@ -12,6 +12,7 @@ import { createDefaultWorkbenchSettings } from '../../shared/workbench-config';
 import { ToolApprovalDeck } from './ApprovalDeck';
 import { AskDeck, PendingInputDeck } from './AskDeck';
 import { truncatePath } from '../utils';
+import { showToast } from '../ToastContainer';
 import {
   IconFolder,
   IconChat,
@@ -54,6 +55,22 @@ export function ChatInput({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+
+  const PLACEHOLDERS = [
+    '描述任务或提出问题...',
+    '试着说：帮我分析这段代码',
+    '试着说：生成一个 React 组件',
+    '试着说：解释这个报错原因',
+    '试着说：优化这段代码性能',
+  ];
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  useEffect(() => {
+    if (disabled || text) return;
+    const timer = window.setInterval(() => {
+      setPlaceholderIndex(i => (i + 1) % PLACEHOLDERS.length);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [disabled, text]);
 
   useEffect(() => {
     const u1 = appState.subscribe('permissionMode', setPermissionMode);
@@ -318,7 +335,7 @@ export function ChatInput({
         // workMode 由 currentSession.projectId 决定，setCurrentSessionWorkspace 已更新 projectId
       }
     } catch (e) {
-      console.error('打开文件夹失败:', e);
+      showToast('打开文件夹失败', 'error', 4500);
     }
   };
 
@@ -439,7 +456,7 @@ export function ChatInput({
             ref={textareaRef}
             class="repl-input-textarea"
             id="chat-input"
-            placeholder={disabled ? '输入后将排队发送，也可以用 / 命令调整当前会话...' : '描述任务或提出问题...'}
+            placeholder={disabled ? '输入后将排队发送，也可以用 / 命令调整当前会话...' : PLACEHOLDERS[placeholderIndex]}
             rows={1}
             value={text}
             onInput={(e: Event) => {

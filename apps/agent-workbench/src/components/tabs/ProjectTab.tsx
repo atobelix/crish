@@ -8,6 +8,7 @@ import hljs from 'highlight.js';
 import FileTree from '../FileTree';
 import { formatFileSize } from '../utils';
 import { normalizePath, warnBridgeDiagnostic, StatusBadge, escapeHtml } from './shared';
+import { showToast } from '../ToastContainer';
 import {
   IconFolder, IconFolderPlus, IconFilePlus, IconFileCode,
   IconChevronDown, IconChevronRight, IconX, IconPlus,
@@ -149,7 +150,7 @@ export default function ProjectTab() {
       setDiffFiles(prev => ({ ...prev, [cpId]: files }));
       setExpandedCpId(cpId);
     } catch (error) {
-      console.error('获取 Checkpoint Diff 失败:', error);
+      showToast('获取 Checkpoint Diff 失败', 'error', 4500);
     } finally {
       setLoadingDiff(prev => ({ ...prev, [cpId]: false }));
     }
@@ -168,7 +169,7 @@ export default function ProjectTab() {
         appState.markCheckpointRestored(cpId);
       }
     } catch (error) {
-      console.error('恢复 Checkpoint 失败:', error);
+      showToast('恢复 Checkpoint 失败', 'error', 4500);
     } finally {
       setRestoring(null);
     }
@@ -185,7 +186,7 @@ export default function ProjectTab() {
         }
       }
     } catch (error) {
-      console.error('选择文件夹失败:', error);
+      showToast('选择文件夹失败', 'error', 4500);
     }
   }
 

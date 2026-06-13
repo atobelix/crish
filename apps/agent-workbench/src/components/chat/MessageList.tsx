@@ -26,7 +26,9 @@ import {
   updateChatMessage,
   truncateChatMessages,
 } from '../../core/message-pipeline';
+import { showToast } from '../ToastContainer';
 import {
+  IconCopy,
   IconFolder,
   IconTerminal,
   IconFileCode,
@@ -36,12 +38,12 @@ import {
   IconSpinner,
   IconInfo,
   IconCheck,
-  IconCopy,
   IconEdit,
   IconTrash,
   IconX,
   IconRevert,
   IconMoreVertical,
+  IconBot,
 } from '../icons';
 
 interface ToolCallGroup {
@@ -429,7 +431,7 @@ export function MessageList({
     try {
       await navigator.clipboard.writeText(text);
     } catch (e) {
-      console.error('复制失败:', e);
+      showToast('复制失败', 'error', 4500);
     }
   };
 
@@ -500,7 +502,9 @@ export function MessageList({
     return (
       <div class="repl-chat-messages-scroll-area" id="chat-messages" ref={containerRef}>
         <div class="repl-chat-empty">
-          <p class="repl-chat-empty-hint">输入问题，AI 助手为你解答</p>
+          <div class="repl-chat-empty-icon"><IconBot /></div>
+          <p class="repl-chat-empty-hint">有什么可以帮你的？</p>
+          <p class="repl-chat-empty-sub">输入问题，AI 助手将为你解答</p>
         </div>
       </div>
     );

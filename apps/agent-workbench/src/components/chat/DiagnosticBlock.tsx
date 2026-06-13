@@ -20,7 +20,7 @@ export function DiagnosticBlock({ content, title = '后台或传输错误' }: { 
       setStatus('success');
       showToast('后台服务已重新启动！', 'success');
     } catch (e: unknown) {
-      console.error(e);
+      showToast('操作失败', 'error', 4500);
       setStatus('failed');
       setErrorMessage((e as Error)?.message || String(e));
     } finally {

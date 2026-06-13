@@ -10,6 +10,43 @@ interface CommandItem {
   action: () => void;
 }
 
+const RECENT_COMMANDS_KEY = 'crish:recent-commands';
+const MAX_RECENT_COMMANDS = 6;
+const COMMON_COMMAND_IDS = ['new-chat', 'toggle-theme', 'open-project', 'toggle-left-sidebar', 'open-settings'];
+
+function getRecentCommandIds(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_COMMANDS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function fuzzyScore(query: string, text: string): number {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let qi = 0, ti = 0, score = 0, consecutive = 0;
+  while (qi < q.length && ti < t.length) {
+    if (q[qi] === t[ti]) {
+      score += 1 + consecutive;
+      consecutive++;
+      qi++;
+    } else {
+      consecutive = 0;
+    }
+    ti++;
+  }
+  return qi === q.length ? score : 0;
+}
+
+function recordRecentCommand(cmdId: string) {
+  try {
+    const recent = getRecentCommandIds();
+    const next = [cmdId, ...recent.filter(id => id !== cmdId)].slice(0, MAX_RECENT_COMMANDS);
+    localStorage.setItem(RECENT_COMMANDS_KEY, JSON.stringify(next));
+  } catch { /* ignore */ }
+}
+
 function getCommands(): CommandItem[] {
   const state = appState.getState();
   return [
@@ -25,7 +62,6 @@ function getCommands(): CommandItem[] {
       }
     }},
     { id: 'toggle-mode', label: '切换 Chat/Code 模式', category: '模式', action: () => {
-      // workMode 由 currentSession.projectId 决定，切换模式需要切换会话
       const currentWorkMode = appState.workMode;
       if (currentWorkMode === 'agent') {
         const chatSessions = appState.getState().sessions.filter(s => s.projectId === null);
@@ -52,7 +88,7 @@ function getCommands(): CommandItem[] {
     { id: 'toggle-right-sidebar', label: '切换右侧面板', category: '视图', action: () => {
       appState.setState('rightSidebarVisible', !state.rightSidebarVisible);
     }},
-    { id: 'open-settings', label: '打开设置', category: '设置', action: () => appState.setState('settingsOpen', true) },
+    { id: 'open-settings', label: '打开设置', category: '设置', action: () => appState.openRightTab('settings') },
     { id: 'clear-chat', label: '清空当前对话', category: '对话', action: () => {
       const session = appState.getState().currentSession;
       if (session) appState.clearSessionMessages(session.id);
@@ -64,7 +100,7 @@ function getCommands(): CommandItem[] {
     { id: 'open-tools', label: '打开工具面板', category: '视图', action: () => appState.openRightTab('tools') },
     { id: 'open-sessions', label: '打开会话列表', category: '视图', action: () => appState.openRightTab('sessions') },
     { id: 'open-artifacts', label: '打开产物面板', category: '视图', action: () => appState.openRightTab('artifacts') },
-    { id: 'open-settings', label: '打开设置面板', category: '视图', action: () => appState.openRightTab('settings') },
+    { id: 'open-settings-tab', label: '打开设置面板', category: '视图', action: () => appState.openRightTab('settings') },
   ];
 }
 
@@ -72,15 +108,31 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commands = getCommands();
+  const allRecentIds = recentIds.length > 0 ? recentIds : COMMON_COMMAND_IDS;
+
   const filtered = query
-    ? commands.filter(c =>
-        c.label.toLowerCase().includes(query.toLowerCase()) ||
-        c.category.toLowerCase().includes(query.toLowerCase())
-      )
+    ? commands
+        .map(c => ({
+          cmd: c,
+          score: Math.max(
+            fuzzyScore(query, c.label),
+            fuzzyScore(query, c.category) * 0.5
+          ),
+        }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map(x => x.cmd)
     : commands;
+
+  const recentCommands = allRecentIds
+    .map(id => commands.find(c => c.id === id))
+    .filter(Boolean) as CommandItem[];
+
+  const displayList = query ? filtered : recentCommands.length > 0 ? recentCommands : commands;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -102,6 +154,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (open) {
+      setRecentIds(getRecentCommandIds());
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -113,20 +166,21 @@ export function CommandPalette() {
   const executeCommand = (cmd: CommandItem) => {
     setOpen(false);
     setQuery('');
+    recordRecentCommand(cmd.id);
     cmd.action();
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex(prev => Math.min(prev + 1, filtered.length - 1));
+      setSelectedIndex(prev => Math.min(prev + 1, displayList.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex(prev => Math.max(prev - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filtered[selectedIndex]) {
-        executeCommand(filtered[selectedIndex]);
+      if (displayList[selectedIndex]) {
+        executeCommand(displayList[selectedIndex]);
       }
     }
   };
@@ -151,10 +205,21 @@ export function CommandPalette() {
           <span class="repl-cmd-palette-esc">ESC</span>
         </div>
         <div class="repl-cmd-palette-list">
-          {filtered.length === 0 && (
-            <div class="repl-cmd-palette-empty">没有匹配的命令</div>
+          {!query && recentCommands.length > 0 && (
+            <div class="repl-cmd-palette-section-title">最近使用</div>
           )}
-          {filtered.map((cmd, i) => (
+          {filtered.length === 0 && query && (
+            <div class="repl-cmd-palette-empty">
+              <div class="repl-cmd-palette-empty-title">未找到匹配命令</div>
+              <div class="repl-cmd-palette-empty-hint">
+                尝试搜索：
+                <button class="repl-cmd-palette-suggestion" onClick={() => setQuery('对话')}>对话</button>
+                <button class="repl-cmd-palette-suggestion" onClick={() => setQuery('视图')}>视图</button>
+                <button class="repl-cmd-palette-suggestion" onClick={() => setQuery('设置')}>设置</button>
+              </div>
+            </div>
+          )}
+          {displayList.map((cmd, i) => (
             <div
               key={cmd.id}
               class={`repl-cmd-palette-item ${i === selectedIndex ? 'selected' : ''}`}
@@ -166,6 +231,11 @@ export function CommandPalette() {
               {cmd.shortcut && <span class="repl-cmd-palette-item-shortcut">{cmd.shortcut}</span>}
             </div>
           ))}
+        </div>
+        <div class="repl-cmd-palette-footer">
+          <span class="repl-cmd-palette-footer-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+          <span class="repl-cmd-palette-footer-hint"><kbd>↵</kbd> 执行</span>
+          <span class="repl-cmd-palette-footer-hint"><kbd>esc</kbd> 关闭</span>
         </div>
       </div>
     </div>

@@ -1,0 +1,10 @@
+[package]
+name = "agent-provider-http"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { version = "0.12", features = ["stream", "json"] }
+tokio = { version = "1", features = ["rt", "macros", "io-std"] }

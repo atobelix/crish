@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { tauriBridge } from '../core/tauri-bridge';
+import { showToast } from './ToastContainer';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import {
   IconFolder,
   IconFile,
@@ -116,7 +118,7 @@ export default function FileTree({
         }));
       setDirContents(prev => new Map([...prev, [normalizedDirPath, nodes]]));
     } catch (e) {
-      console.error('Failed to load directory:', e);
+      showToast('Failed to load directory', 'error', 4500);
     }
   };
 
@@ -273,37 +275,22 @@ export default function FileTree({
 
       {/* File Context Menu */}
       {fileContextMenu && (
-        <div
-          class="repl-context-menu"
-          style={`position:fixed;left:${fileContextMenu.x}px;top:${fileContextMenu.y}px`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {fileContextMenu.isDir && (
-            <>
-              <div class="repl-context-menu-item" onClick={() => { setFileContextMenu(null); }}>
-                <IconFilePlus /> 新建文件
-              </div>
-              <div class="repl-context-menu-item" onClick={() => { setFileContextMenu(null); }}>
-                <IconFolderPlus /> 新建文件夹
-              </div>
-              <div class="repl-context-menu-divider" />
-            </>
-          )}
-          <div class="repl-context-menu-item" onClick={() => { setFileContextMenu(null); }}>
-            <IconEdit /> 重命名
-          </div>
-          <div class="repl-context-menu-item" onClick={() => { navigator.clipboard?.writeText(fileContextMenu.path); setFileContextMenu(null); }}>
-            <IconCopy /> 复制路径
-          </div>
-          {!fileContextMenu.isDir && (
-            <>
-              <div class="repl-context-menu-divider" />
-              <div class="repl-context-menu-item danger" onClick={() => { setFileContextMenu(null); }}>
-                <IconTrash /> 删除
-              </div>
-            </>
-          )}
-        </div>
+        <ContextMenu
+          x={fileContextMenu.x}
+          y={fileContextMenu.y}
+          onClose={() => setFileContextMenu(null)}
+          items={[
+            ...(fileContextMenu.isDir ? [
+              { id: 'new-file', label: '新建文件', icon: IconFilePlus, action: () => { setFileContextMenu(null); showToast('新建文件功能即将上线', 'info'); } },
+              { id: 'new-folder', label: '新建文件夹', icon: IconFolderPlus, action: () => { setFileContextMenu(null); showToast('新建文件夹功能即将上线', 'info'); } },
+            ] as ContextMenuItem[] : []),
+            { id: 'rename', label: '重命名', icon: IconEdit, action: () => { setFileContextMenu(null); showToast('重命名功能即将上线', 'info'); } },
+            { id: 'copy-path', label: '复制路径', icon: IconCopy, action: () => { navigator.clipboard?.writeText(fileContextMenu.path); setFileContextMenu(null); showToast('路径已复制', 'success'); } },
+            ...(fileContextMenu.isDir ? [] : [
+              { id: 'delete', label: '删除', icon: IconTrash, danger: true, action: () => { setFileContextMenu(null); showToast('删除功能即将上线', 'info'); } },
+            ] as ContextMenuItem[]),
+          ]}
+        />
       )}
     </div>
   );

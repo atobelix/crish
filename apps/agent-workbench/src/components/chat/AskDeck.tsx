@@ -12,6 +12,7 @@ import { tauriBridge } from '../../core/tauri-bridge';
 import { formatTime } from '../utils';
 import AskCard from '../AskCard';
 import { IconClock, IconX } from '../icons';
+import { showToast } from '../ToastContainer';
 
 // ==================== AskDeck 组件（交互式提问） ====================
 
@@ -33,7 +34,7 @@ export function AskDeck() {
     try {
       await tauriBridge.answerQuestion(questionId, value, { runId: q.runId, sessionId: q.sessionId });
     } catch (error) {
-      console.error('回答提问失败:', error);
+      showToast('回答提问失败', 'error', 4500);
     } finally {
       setPending(p => ({ ...p, [questionId]: false }));
       appState.resolvePendingQuestion(questionId);

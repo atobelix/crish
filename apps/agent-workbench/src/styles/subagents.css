@@ -66,7 +66,7 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-dim);
     cursor: pointer;
-    transition: all var(--duration-fast) ease;
+    transition: all var(--duration-fast) var(--ease-default);
     font-family: var(--font-sans);
     white-space: nowrap;
 }
@@ -92,7 +92,7 @@
     opacity: 0;
     max-width: 0;
     overflow: hidden;
-    transition: opacity var(--duration-fast) ease, max-width var(--duration-slow) ease, margin var(--duration-slow) ease;
+    transition: opacity var(--duration-fast) var(--ease-default), max-width var(--duration-slow) var(--ease-default), margin var(--duration-slow) var(--ease-default);
     margin-left: 0;
 }
 
@@ -106,7 +106,7 @@
 .pill-action-sidebar {
     cursor: pointer;
     color: var(--color-text-dim);
-    transition: color var(--duration-instant) ease;
+    transition: color var(--duration-instant) var(--ease-default);
     padding: var(--space-0_5);
     border-radius: var(--radius-xs);
 }
@@ -207,7 +207,7 @@
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-dim);
-    transition: all var(--duration-fast) ease;
+    transition: all var(--duration-fast) var(--ease-default);
     white-space: nowrap;
     font-family: var(--font-sans);
 }
@@ -286,7 +286,7 @@
     border: var(--space-0_5) solid var(--color-border-card);
     border-radius: var(--radius-lg);
     padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
-    transition: border-color var(--duration-fast) ease;
+    transition: border-color var(--duration-fast) var(--ease-default);
 }
 
 .repl-agent-input-row:focus-within {
@@ -323,7 +323,7 @@
     background-color: var(--color-accent);
     color: var(--color-text-on-accent);
     cursor: pointer;
-    transition: opacity var(--duration-fast) ease, transform var(--duration-instant) ease;
+    transition: opacity var(--duration-fast) var(--ease-default), transform var(--duration-instant) var(--ease-default);
     flex-shrink: 0;
 }
 
@@ -466,7 +466,7 @@
     display: flex;
     align-items: center;
     color: var(--color-text-dim);
-    transition: transform var(--duration-slow) ease, opacity var(--duration-fast) ease;
+    transition: transform var(--duration-slow) var(--ease-default), opacity var(--duration-fast) var(--ease-default);
     opacity: 0;
 }
 
@@ -491,7 +491,7 @@
     overflow: hidden;
     max-height: calc(var(--space-12) * 84);
     opacity: 1;
-    transition: max-height var(--duration-slower) ease, opacity var(--duration-slow) ease, padding var(--duration-slower) ease;
+    transition: max-height var(--duration-slower) var(--ease-default), opacity var(--duration-slow) var(--ease-default), padding var(--duration-slower) var(--ease-default);
 }
 
 .repl-sub-tool-body.collapsed {
@@ -586,7 +586,7 @@
     display: flex;
     align-items: center;
     color: var(--color-text-dim);
-    transition: transform var(--duration-slow) ease, opacity var(--duration-fast) ease;
+    transition: transform var(--duration-slow) var(--ease-default), opacity var(--duration-fast) var(--ease-default);
     opacity: 0;
 }
 
@@ -605,7 +605,7 @@
     overflow: hidden;
     max-height: calc(var(--space-12) * 34);
     opacity: 1;
-    transition: max-height var(--duration-slower) ease, opacity var(--duration-slow) ease;
+    transition: max-height var(--duration-slower) var(--ease-default), opacity var(--duration-slow) var(--ease-default);
 }
 
 .repl-sub-tool-cmd-output.collapsed {
