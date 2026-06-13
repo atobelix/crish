@@ -224,9 +224,53 @@ document.addEventListener('DOMContentLoaded', () => {
     return { tools: calls.length, edited: edited.size, viewed: viewed.size };
   }
 
+  function renderDiffView(diff) {
+    if (!diff || !diff.hunks) return `<pre><code>${escapeHTML(diff)}</code></pre>`;
+
+    const fileHeader = `
+      <div class="diff-file-header">
+        <span class="diff-file-name">${escapeHTML(diff.file)}</span>
+        <span class="diff-file-stats">
+          <span class="diff-stat-added">+${diff.added}</span>
+          <span class="diff-stat-removed">-${diff.removed}</span>
+        </span>
+      </div>
+    `;
+
+    const hunksHtml = diff.hunks.map(hunk => {
+      const oldLines = hunk.lines.filter(l => l.type !== 'added').length;
+      const newLines = hunk.lines.filter(l => l.type !== 'removed').length;
+      let oldLine = hunk.oldStart;
+      let newLine = hunk.newStart;
+      const linesHtml = hunk.lines.map(line => {
+        const marker = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
+        const lineClass = `diff-${line.type}`;
+        const oldNum = line.type === 'added' ? '' : oldLine++;
+        const newNum = line.type === 'removed' ? '' : newLine++;
+        return `<div class="diff-line ${lineClass}"><span class="diff-num">${oldNum || ''}</span><span class="diff-num">${newNum || ''}</span><span class="diff-marker">${marker}</span><span class="diff-content">${escapeHTML(line.content)}</span></div>`;
+      }).join('');
+      return `<div class="diff-hunk-header">@@ -${hunk.oldStart},${oldLines} +${hunk.newStart},${newLines} @@</div>${linesHtml}`;
+    }).join('');
+
+    const summary = `
+      <div class="diff-summary">
+        <span>1 changed file</span>
+        <span class="diff-stat-added">+${diff.added}</span>
+        <span class="diff-stat-removed">-${diff.removed}</span>
+      </div>
+    `;
+
+    return `<div class="diff-view">${fileHeader}${hunksHtml}${summary}</div>`;
+  }
+
   function renderToolCall(call, index) {
     const expanded = call.expanded !== false;
     const safeArgs = escapeHTML(call.args);
+    const isEditTool = call.name === 'edit_file' || call.name === 'edit';
+    const outputContent = isEditTool && call.diff
+      ? renderDiffView(call.diff)
+      : `<pre><code>${escapeHTML(call.result)}</code></pre>`;
+
     return `
       <div class="tool-invocation" data-call-index="${index}" data-expanded="${expanded}">
         <div class="tool-call-row" title="${safeArgs}">
@@ -241,7 +285,9 @@ document.addEventListener('DOMContentLoaded', () => {
           </svg>
         </div>
         <div class="tool-result-window">
-          <pre class="code-block"><code>${escapeHTML(call.result)}</code></pre>
+          <div class="tool-output">
+            ${outputContent}
+          </div>
         </div>
       </div>
     `;
@@ -498,6 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const activateChatItem = (chatId, chatTitleText, clickedElement = null) => {
     currentChatId = chatId;
+    currentToolGroup = null; // Reset streaming tool group on chat switch
 
     // Hide empty state and restore input card to bottom container
     const emptyState = document.getElementById('empty-chat-state');
@@ -1479,6 +1526,184 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // --- Streaming tool call helpers ---
+  let currentToolGroup = null;
+
+  function renderCurrentMessages() {
+    if (!messageList || !currentChatId || !chatMessagesData[currentChatId]) return;
+    messageList.innerHTML = renderMessages(chatMessagesData[currentChatId]);
+    bindToolToggles(messageList);
+    highlightCode(messageList);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  function appendToolCall(name, args, result, options = {}) {
+    if (!currentChatId || !chatMessagesData[currentChatId]) return null;
+
+    const call = {
+      name,
+      args,
+      result,
+      expanded: options.expanded !== false,
+      done: true,
+      ...(options.diff ? { diff: options.diff } : {})
+    };
+
+    if (currentToolGroup && currentToolGroup.status === 'streaming') {
+      currentToolGroup.calls.push(call);
+    } else {
+      currentToolGroup = {
+        role: 'tool_group',
+        status: 'streaming',
+        expanded: true,
+        calls: [call]
+      };
+      chatMessagesData[currentChatId].push(currentToolGroup);
+    }
+    currentToolGroup.metrics = computeToolMetrics(currentToolGroup.calls);
+    renderCurrentMessages();
+    return currentToolGroup;
+  }
+
+  function finalizeToolGroup() {
+    if (!currentToolGroup) return;
+    currentToolGroup.status = currentToolGroup.calls.length > 1 ? 'summary' : 'expanded';
+    currentToolGroup.expanded = currentToolGroup.calls.length <= 1;
+    currentToolGroup = null;
+    renderCurrentMessages();
+  }
+
+  // Reusable tool call templates for demos / simulations
+  const toolCallTemplates = [
+    {
+      name: 'bash',
+      args: '$ ls -la src/components',
+      result: 'total 24\ndrwxr-xr-x  6 user staff  192 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff   96 Jun 14 09:55 ..\n-rw-r--r--  1 user staff  412 Jun 14 10:00 Button.jsx\n-rw-r--r--  1 user staff  892 Jun 14 10:00 Modal.jsx\n-rw-r--r--  1 user staff  645 Jun 14 10:00 Sidebar.jsx'
+    },
+    {
+      name: 'bash',
+      args: '$ cat package.json | grep version',
+      result: '"version": "1.2.0",\n"private": true,'
+    },
+    {
+      name: 'bash',
+      args: '$ npm run test -- --watch=false',
+      result: 'PASS  src/auth/login.test.js\nPASS  src/utils/format.test.js\nPASS  src/api/client.test.js\n\nTest Suites: 3 passed, 3 total\nTests:       18 passed, 18 total'
+    },
+    {
+      name: 'read_file',
+      args: '$ cat src/auth/login.js',
+      result: 'function login(username, password) {\n  if (username === "admin" && password === "secret") {\n    return { token: "xyz123" };\n  }\n  return null;\n}\n\nmodule.exports = { login };'
+    },
+    {
+      name: 'grep_search',
+      args: '$ grep -rn "TODO" src/',
+      result: 'src/utils.js:42:// TODO: refactor retry logic\nsrc/api.js:15:// TODO: add request timeout\nsrc/store.js:88:// TODO: normalize state shape'
+    },
+    {
+      name: 'edit_file',
+      args: '$ edit_file src/auth/login.js',
+      result: 'Applied 2 edits to src/auth/login.js',
+      diff: {
+        file: 'src/auth/login.js',
+        added: 4,
+        removed: 2,
+        hunks: [
+          {
+            oldStart: 1, newStart: 1,
+            lines: [
+              { type: 'context', content: 'function login(username, password) {' },
+              { type: 'removed', content: '  if (username === "admin" && password === "secret") {' },
+              { type: 'added', content: '  const hash = await bcrypt.hash(password, 10);' },
+              { type: 'added', content: '  if (username === "admin" && await bcrypt.compare(password, hash)) {' },
+              { type: 'context', content: '    return { token: "xyz123" };' },
+              { type: 'context', content: '  }' },
+              { type: 'removed', content: '  return null;' },
+              { type: 'added', content: '  return { error: "Invalid credentials" };' }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      name: 'edit_file',
+      args: '$ edit_file src/utils/retry.js',
+      result: 'Applied 5 edits to src/utils/retry.js',
+      diff: {
+        file: 'src/utils/retry.js',
+        added: 12,
+        removed: 3,
+        hunks: [
+          {
+            oldStart: 10, newStart: 10,
+            lines: [
+              { type: 'context', content: 'async function retry(fn, options = {}) {' },
+              { type: 'removed', content: '  for (let i = 0; i < 3; i++) {' },
+              { type: 'added', content: '  const maxAttempts = options.maxAttempts || 3;' },
+              { type: 'added', content: '  const delay = options.delay || 1000;' },
+              { type: 'added', content: '  for (let i = 0; i < maxAttempts; i++) {' },
+              { type: 'context', content: '    try {' },
+              { type: 'context', content: '      return await fn();' },
+              { type: 'context', content: '    } catch (err) {' },
+              { type: 'added', content: '      if (i === maxAttempts - 1) throw err;' },
+              { type: 'added', content: '      await sleep(delay);' },
+              { type: 'context', content: '    }' },
+              { type: 'context', content: '  }' }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      name: 'run_test',
+      args: '$ npm test -- src/auth',
+      result: 'PASS  src/auth/login.test.js\nPASS  src/auth/reset.test.js\n\nTest Suites: 2 passed, 2 total'
+    }
+  ];
+
+  window.appendToolCall = appendToolCall;
+  window.finalizeToolGroup = finalizeToolGroup;
+
+  window.demoContinuousToolCalls = function(options = {}) {
+    const count = options.count || 12;
+    const interval = options.interval || 1000;
+    const toolProbability = options.toolProbability || 0.85;
+
+    // Ensure we are in a chat view
+    if (!currentChatId || !chatMessagesData[currentChatId]) {
+      activateChatItem('todo-list-app', 'build a todo list app');
+    }
+
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= count) {
+        clearInterval(timer);
+        finalizeToolGroup();
+        if (Math.random() > 0.3) {
+          chatMessagesData[currentChatId].push({
+            role: 'assistant',
+            content: '连续工具调用演示结束，已处理所有请求。'
+          });
+          renderCurrentMessages();
+        }
+        return;
+      }
+
+      if (Math.random() < toolProbability) {
+        const tpl = toolCallTemplates[Math.floor(Math.random() * toolCallTemplates.length)];
+        appendToolCall(tpl.name, tpl.args, tpl.result, { expanded: false });
+      } else {
+        finalizeToolGroup();
+        chatMessagesData[currentChatId].push({
+          role: 'assistant',
+          content: `中间说明 #${i + 1}`
+        });
+        renderCurrentMessages();
+      }
+      i++;
+    }, interval);
+  };
+
   const simulateAIResponse = (userPrompt) => {
     const loadingMsg = document.createElement('div');
     loadingMsg.className = 'chat-message system-thinking';
@@ -1504,30 +1729,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Build tool group: single tool normally, multiple tools for longer prompts to demo summary
-      const calls = [];
       const baseArgs = `simulate_reply.js --prompt="${userPrompt.substring(0, 30)}..."`;
-      calls.push({ name: 'simulate_reply', args: baseArgs, result: `Processing prompt: ${userPrompt}\nStatus: ok\nDuration: 120ms`, expanded: true, done: true });
+      appendToolCall('simulate_reply', baseArgs, `Processing prompt: ${userPrompt}\nStatus: ok\nDuration: 120ms`, { expanded: false });
       if (userPrompt.length > 10) {
-        calls.push({ name: 'read_file', args: 'read_file --path="/tmp/mycodex-demo/config.json"', result: '{ "env": "local", "browser": "system" }', expanded: false, done: true });
+        appendToolCall('read_file', 'read_file --path="/tmp/mycodex-demo/config.json"', '{ "env": "local", "browser": "system" }', { expanded: false });
       }
-      const toolGroup = {
-        role: 'tool_group',
-        status: calls.length > 1 ? 'summary' : 'expanded',
-        expanded: false,
-        calls: calls
-      };
-      toolGroup.metrics = computeToolMetrics(toolGroup.calls);
+      finalizeToolGroup();
 
       const assistantMsg = { role: 'assistant', content: responseText };
-
-      // Update data store and DOM
       if (currentChatId && chatMessagesData[currentChatId]) {
-        chatMessagesData[currentChatId].push(toolGroup, assistantMsg);
+        chatMessagesData[currentChatId].push(assistantMsg);
       }
-
-      const toolEl = document.createElement('div');
-      toolEl.innerHTML = renderToolGroup(toolGroup);
-      messageList.appendChild(toolEl.firstElementChild);
 
       const aiEl = document.createElement('div');
       aiEl.innerHTML = renderMessage(assistantMsg);

@@ -778,42 +778,39 @@ body {
   color: #d73a49;
 }
 
-/* Tool Invocation / Tool Summary */
+/* Tool Invocation / Tool Summary — plain text rows, no box background/border */
 .tool-invocation,
 .tool-summary {
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 8px;
-  overflow: hidden;
-  background-color: transparent;
-  transition: border-color var(--transition-fast);
-  margin: 4px 0;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0;
 }
 
-.tool-invocation:hover,
-.tool-summary:hover {
-  border-color: rgba(0, 0, 0, 0.12);
-}
-
+/* Tool call row and summary row are visually at the same level: just a text line */
 .tool-call-row,
 .tool-summary-row {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 1px 0;
   cursor: pointer;
   user-select: none;
   gap: 8px;
-  transition: background-color var(--transition-fast);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  transition: color var(--transition-fast);
 }
 
 .tool-call-row:hover,
 .tool-summary-row:hover {
-  background-color: rgba(0, 0, 0, 0.02);
+  color: var(--text-main);
 }
 
 .tool-terminal-icon {
   width: 14px;
   height: 14px;
-  color: var(--text-secondary);
+  color: currentColor;
   flex-shrink: 0;
 }
 
@@ -821,7 +818,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-main);
+  color: currentColor;
   flex-shrink: 0;
 }
 
@@ -829,7 +826,7 @@ body {
   flex: 1;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--text-secondary);
+  color: currentColor;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -840,7 +837,7 @@ body {
 .tool-summary-text {
   flex: 1;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: currentColor;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -849,7 +846,7 @@ body {
 .tool-chevron-icon {
   width: 14px;
   height: 14px;
-  color: var(--text-secondary);
+  color: currentColor;
   flex-shrink: 0;
   transition: transform var(--transition-normal);
 }
@@ -864,41 +861,165 @@ body {
   max-height: 0;
   overflow: hidden;
   transition: max-height var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: transparent;
-}
-
-.tool-result-window {
-  border-top: 1px solid rgba(0,0,0,0.06);
-}
-
-.tool-result-window .code-block {
-  max-height: 200px;
-  overflow-y: auto;
-  margin: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
 }
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
-  max-height: 224px; /* 24px padding row + 200px result */
+  max-height: 240px;
+  margin: 4px 0 8px 22px; /* align with text after icon */
 }
 
 .tool-summary[data-expanded="true"] .tool-summary-body {
-  max-height: 1000px; /* Enough for nested invocations */
+  max-height: 1000px;
+  margin: 2px 0 8px 22px;
 }
 
 .tool-summary-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 8px 8px 8px;
-  background-color: transparent;
-  border-top: 1px solid rgba(0,0,0,0.06);
+  gap: 2px;
+  padding: 0;
+  background: transparent;
 }
 
-.tool-summary-body .tool-invocation {
+/* Tool output result: light background, bordered, padded container */
+.tool-output {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background-color: #f8f8f8;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tool-output pre {
   margin: 0;
-  border-color: rgba(0, 0, 0, 0.06);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333333;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-output code {
+  font-family: inherit;
+  color: #d73a49;
+  background-color: rgba(0, 0, 0, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11.5px;
+}
+
+/* Git diff style for edit tool results */
+.diff-view {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #333333;
+}
+
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  background-color: rgba(34, 197, 94, 0.06);
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.diff-file-name {
+  color: var(--text-main);
+}
+
+.diff-file-stats {
+  display: flex;
+  gap: 6px;
+}
+
+.diff-stat-added {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.diff-stat-removed {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.diff-hunk-header {
+  color: var(--text-secondary);
+  padding: 2px 0;
+  margin: 4px 0 2px 0;
+  font-size: 11px;
+}
+
+.diff-line {
+  display: flex;
+  gap: 8px;
+  white-space: pre;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+.diff-num {
+  min-width: 28px;
+  text-align: right;
+  color: #888888;
+  user-select: none;
+}
+
+.diff-marker {
+  width: 12px;
+  text-align: center;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.diff-content {
+  flex: 1;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-added {
+  background-color: rgba(34, 197, 94, 0.10);
+}
+.diff-added .diff-marker,
+.diff-added .diff-content {
+  color: #15803d;
+}
+
+.diff-removed {
+  background-color: rgba(239, 68, 68, 0.10);
+}
+.diff-removed .diff-marker,
+.diff-removed .diff-content {
+  color: #b91c1c;
+}
+
+.diff-context {
+  background-color: transparent;
+}
+
+.diff-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 6px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.diff-summary .diff-stat-added,
+.diff-summary .diff-stat-removed {
+  font-weight: 600;
 }
 
 .code-block {
@@ -2032,26 +2153,60 @@ body.dark-theme .search-input {
   background-color: rgba(255, 255, 255, 0.04);
 }
 
-body.dark-theme .tool-invocation,
-body.dark-theme .tool-summary {
-  background-color: transparent;
-  border-color: rgba(255, 255, 255, 0.08);
-}
-body.dark-theme .tool-invocation:hover,
-body.dark-theme .tool-summary:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+body.dark-theme .tool-call-row,
+body.dark-theme .tool-summary-row {
+  color: var(--text-secondary);
 }
 body.dark-theme .tool-call-row:hover,
 body.dark-theme .tool-summary-row:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  color: var(--text-main);
 }
-body.dark-theme .tool-result-window,
-body.dark-theme .tool-summary-body {
-  background-color: transparent;
-  border-top-color: rgba(255, 255, 255, 0.06);
+body.dark-theme .tool-output {
+  background-color: #1a1a1a;
+  border-color: rgba(255, 255, 255, 0.08);
 }
-body.dark-theme .tool-summary-body .tool-invocation {
-  border-color: rgba(255, 255, 255, 0.06);
+body.dark-theme .tool-output pre {
+  color: #e0e0e0;
+}
+body.dark-theme .tool-output code {
+  color: #ff7b72;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+body.dark-theme .diff-view {
+  color: #e0e0e0;
+}
+body.dark-theme .diff-file-header {
+  background-color: rgba(34, 197, 94, 0.10);
+}
+body.dark-theme .diff-file-name {
+  color: #f0f0f0;
+}
+body.dark-theme .diff-stat-added {
+  color: #4ade80;
+}
+body.dark-theme .diff-stat-removed {
+  color: #f87171;
+}
+body.dark-theme .diff-num {
+  color: #888888;
+}
+body.dark-theme .diff-added {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+body.dark-theme .diff-added .diff-marker,
+body.dark-theme .diff-added .diff-content {
+  color: #4ade80;
+}
+body.dark-theme .diff-removed {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+body.dark-theme .diff-removed .diff-marker,
+body.dark-theme .diff-removed .diff-content {
+  color: #f87171;
+}
+body.dark-theme .diff-summary {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
 }
 body.dark-theme .code-block {
   background-color: #0d1117;
