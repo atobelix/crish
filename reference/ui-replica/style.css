@@ -784,15 +784,14 @@ body {
   border: 1px solid rgba(0,0,0,0.08);
   border-radius: 8px;
   overflow: hidden;
-  background-color: #fafafa;
-  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+  background-color: transparent;
+  transition: border-color var(--transition-fast);
   margin: 4px 0;
 }
 
 .tool-invocation:hover,
 .tool-summary:hover {
-  border-color: var(--border-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .tool-call-row,
@@ -808,7 +807,7 @@ body {
 
 .tool-call-row:hover,
 .tool-summary-row:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
 .tool-terminal-icon {
@@ -865,19 +864,19 @@ body {
   max-height: 0;
   overflow: hidden;
   transition: max-height var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: #ffffff;
+  background-color: transparent;
 }
 
 .tool-result-window {
-  border-top: 1px solid rgba(0,0,0,0.08);
+  border-top: 1px solid rgba(0,0,0,0.06);
 }
 
 .tool-result-window .code-block {
   max-height: 200px;
   overflow-y: auto;
   margin: 0;
-  border-radius: 0;
-  border: none;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
@@ -893,12 +892,13 @@ body {
   flex-direction: column;
   gap: 4px;
   padding: 4px 8px 8px 8px;
-  background-color: #ffffff;
+  background-color: transparent;
   border-top: 1px solid rgba(0,0,0,0.06);
 }
 
 .tool-summary-body .tool-invocation {
   margin: 0;
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 .code-block {
@@ -2034,20 +2034,24 @@ body.dark-theme .search-input {
 
 body.dark-theme .tool-invocation,
 body.dark-theme .tool-summary {
-  background-color: #1a1a1a;
+  background-color: transparent;
   border-color: rgba(255, 255, 255, 0.08);
+}
+body.dark-theme .tool-invocation:hover,
+body.dark-theme .tool-summary:hover {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 body.dark-theme .tool-call-row:hover,
 body.dark-theme .tool-summary-row:hover {
-  background-color: #252525;
+  background-color: rgba(255, 255, 255, 0.02);
 }
 body.dark-theme .tool-result-window,
 body.dark-theme .tool-summary-body {
-  background-color: #151515;
-  border-top-color: rgba(255, 255, 255, 0.08);
+  background-color: transparent;
+  border-top-color: rgba(255, 255, 255, 0.06);
 }
-body.dark-theme .tool-result-window .code-block {
-  background-color: #0d1117;
+body.dark-theme .tool-summary-body .tool-invocation {
+  border-color: rgba(255, 255, 255, 0.06);
 }
 body.dark-theme .code-block {
   background-color: #0d1117;
