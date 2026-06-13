@@ -471,11 +471,13 @@
         <!-- Feature: Favorites (Read-only Markdown Document) View -->
         <div class="feature-panel-view" id="view-favorites" style="display: none;">
           <div class="fav-split-layout">
-            <div class="fav-sidebar">
-              <h4>已收藏的会话</h4>
-              <ul class="fav-list">
-                <li class="fav-item active">build a todo list app</li>
-                <li class="fav-item">refactor login logic</li>
+            <div class="secondary-sidebar">
+              <div class="secondary-sidebar-header">
+                <h4 class="secondary-sidebar-title">已收藏的会话</h4>
+              </div>
+              <ul class="secondary-sidebar-list">
+                <li class="secondary-sidebar-item active">build a todo list app</li>
+                <li class="secondary-sidebar-item">refactor login logic</li>
               </ul>
             </div>
             <div class="fav-doc-viewer">
@@ -581,15 +583,15 @@ class TodoApp {
         <!-- Feature: Skills View -->
         <div class="feature-panel-view" id="view-skills" style="display: none;">
           <div class="fav-split-layout">
-            <div class="fav-sidebar" style="width: 250px;">
-              <div class="panel-header-inline" style="margin-bottom: 12px; padding: 0 4px;">
-                <h4 style="margin:0;">系统与自定义技能</h4>
+            <div class="secondary-sidebar" style="width: 250px;">
+              <div class="secondary-sidebar-header">
+                <h4 class="secondary-sidebar-title">系统与自定义技能</h4>
                 <button class="action-btn-small">+</button>
               </div>
-              <ul class="fav-list" id="skills-list">
-                <li class="fav-item active" data-skill="format_markdown">format_markdown.js</li>
-                <li class="fav-item" data-skill="extract_todo">extract_todo.py</li>
-                <li class="fav-item" data-skill="minify_css">minify_css.js</li>
+              <ul class="secondary-sidebar-list" id="skills-list">
+                <li class="secondary-sidebar-item active" data-skill="format_markdown">format_markdown.js</li>
+                <li class="secondary-sidebar-item" data-skill="extract_todo">extract_todo.py</li>
+                <li class="secondary-sidebar-item" data-skill="minify_css">minify_css.js</li>
               </ul>
             </div>
             <div class="fav-doc-viewer" style="padding: 16px 20px;">
@@ -600,7 +602,7 @@ class TodoApp {
                 </div>
                 <p class="skill-desc" id="skill-description">自动规范化 Markdown 格式，修复空行、列表对齐、标题间距，并优化中文和英文之间的空格间隔。</p>
                 <div style="margin-top: 12px; margin-bottom: 8px; font-weight: 500; font-size: 13px;">技能实现源码：</div>
-                <pre class="code-block" style="background-color: var(--bg-hover); border-radius: 6px; font-family: var(--font-mono); font-size:12px; max-height: 250px; overflow-y: auto;"><code id="skill-code">// format_markdown.js
+                <pre class="code-block scrollable"><code id="skill-code">// format_markdown.js
 export default function formatMarkdown(text) {
   // 替换中英文之间的空格
   let formatted = text.replace(/([\u4e00-\u9fa5])([A-Za-z0-9])/g, '$1 $2');

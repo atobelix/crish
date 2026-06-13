@@ -1,3 +1,39 @@
+// Simple regex-based syntax highlighter for prototype code blocks
+function highlightCode(root = document) {
+  const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|yield|typeof|instanceof|in|of|break|continue|default|case|switch|true|false|null|undefined)\b/g;
+  const functions = /\b([a-zA-Z_$][\w$]*)(?=\()/g;
+  const numbers = /\b(\d+(?:\.\d+)?)\b/g;
+  const strings = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
+  const comments = /(\/\/.*$|#.*$)/gm;
+  const operators = /(\+|\-|\*|\/|=|!|&|\||<|>|\?|:|\.|,|;)/g;
+
+  root.querySelectorAll('.code-block code').forEach(block => {
+    if (block.dataset.highlighted) return;
+    let html = block.textContent;
+    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Protect already-highlighted tokens with placeholders
+    const placeholders = [];
+    const marker = '___HL';
+    const save = (token, className) => {
+      placeholders.push(`<span class="${className}">${token}</span>`);
+      return `${marker}${placeholders.length - 1}___`;
+    };
+
+    html = html.replace(comments, m => save(m, 'token-comment'));
+    html = html.replace(strings, m => save(m, 'token-string'));
+    html = html.replace(keywords, m => save(m, 'token-keyword'));
+    html = html.replace(functions, m => save(m, 'token-function'));
+    html = html.replace(numbers, m => save(m, 'token-number'));
+    html = html.replace(operators, m => save(m, 'token-operator'));
+
+    html = html.replace(new RegExp(`${marker}(\\d+)___`, 'g'), (_, i) => placeholders[+i]);
+
+    block.innerHTML = html;
+    block.dataset.highlighted = 'true';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // --- 1. macOS Window Control Interactions ---
   const macWindow = document.querySelector('.mac-window');
@@ -241,6 +277,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   };
+  // Helper: toggle input layout between empty-state (centered, tags visible)
+  // and active-chat (bottom docked, tags hidden)
+  const setInputMode = (mode) => {
+    const inputWrapper = document.querySelector('.input-area-wrapper');
+    const textareaEl = inputWrapper?.querySelector('.chat-textarea');
+    const contextTags = inputWrapper?.querySelector('.input-context-tags');
+
+    if (mode === 'empty') {
+      if (contextTags) contextTags.style.display = 'flex';
+      inputWrapper?.classList.remove('active-chat');
+      if (textareaEl) textareaEl.placeholder = '随心输入';
+    } else {
+      if (contextTags) contextTags.style.display = 'none';
+      inputWrapper?.classList.add('active-chat');
+      if (textareaEl) textareaEl.placeholder = '要求后续变更';
+    }
+  };
+
   const activateQuickChat = () => {
     // 1. Deactivate all active sidebar items (chats, folders, features)
     document.querySelectorAll('.chat-item, .nested-item').forEach(c => c.classList.remove('active'));
@@ -279,10 +333,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (inputWrapper && emptyContent) {
         emptyContent.appendChild(inputWrapper);
         
-        // Show context tags row and remove active-chat class (renders the grey container)
-        const contextTags = inputWrapper.querySelector('.input-context-tags');
-        if (contextTags) contextTags.style.display = 'flex';
-        inputWrapper.classList.remove('active-chat');
+        // Switch to empty-state layout: show tags, white card, empty placeholder
+        setInputMode('empty');
         
         // Hide dropdowns initially
         document.querySelectorAll('.attached-dropdown-menu').forEach(m => m.classList.remove('show'));
@@ -334,10 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
           inputContainer.appendChild(inputWrapper);
         }
         
-        // Hide context tags row in regular chat, and make wrapper transparent
-        const contextTags = inputWrapper.querySelector('.input-context-tags');
-        if (contextTags) contextTags.style.display = 'none';
-        inputWrapper.classList.add('active-chat');
+        // Switch to active-chat layout: hide tags, bottom docked, chat placeholder
+        setInputMode('chat');
         
         // Hide dropdowns
         document.querySelectorAll('.attached-dropdown-menu').forEach(m => m.classList.remove('show'));
@@ -657,6 +707,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Initialize input placeholder to match the default active-chat state
+  setInputMode('chat');
 
   // --- 6. Hierarchical Context Menu Setup ---
   const contextMenu = document.getElementById('context-menu');
@@ -1235,10 +1287,8 @@ document.addEventListener('DOMContentLoaded', () => {
         inputContainer.appendChild(inputWrapper);
         inputContainer.style.display = 'block';
         
-        // Hide context tags row and make wrapper transparent
-        const contextTags = inputWrapper.querySelector('.input-context-tags');
-        if (contextTags) contextTags.style.display = 'none';
-        inputWrapper.classList.add('active-chat');
+        // Switch to active-chat layout
+        setInputMode('chat');
         
         // Hide dropdowns
         document.querySelectorAll('.attached-dropdown-menu').forEach(m => m.classList.remove('show'));
@@ -1642,8 +1692,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // --- 17. Favorites document switcher ---
-  const favItems = document.querySelectorAll('.fav-item');
+  const favItems = document.querySelectorAll('.secondary-sidebar-item');
   const favDocBody = document.querySelector('.fav-doc-viewer .markdown-body');
+
+  // Initial highlight for any static code blocks
+  highlightCode();
 
   const favDocs = {
     'todo-list-app': `
@@ -1694,13 +1747,14 @@ export async function hashPassword(password) {
       const docKey = docName.includes('todo') ? 'todo-list-app' : 'refactor-auth';
       if (favDocs[docKey]) {
         favDocBody.innerHTML = favDocs[docKey];
+        highlightCode(favDocBody);
       }
     });
   });
 
 
   // --- 18. Skills switcher ---
-  const skillItems = document.querySelectorAll('#skills-list .fav-item');
+  const skillItems = document.querySelectorAll('#skills-list .secondary-sidebar-item');
   const skillName = document.getElementById('skill-name');
   const skillDesc = document.getElementById('skill-description');
   const skillCode = document.getElementById('skill-code');
@@ -1733,6 +1787,8 @@ export async function hashPassword(password) {
         skillName.textContent = data.name;
         skillDesc.textContent = data.desc;
         skillCode.textContent = data.code;
+        delete skillCode.dataset.highlighted;
+        highlightCode(skillCode.closest('.code-block'));
       }
     });
   });
