@@ -332,93 +332,7 @@
             </div>
           </div>
           <div class="message-list">
-
-            <!-- Chat Message 1 -->
-            <div class="chat-message">
-              <p>我会打开刚做好的 Todo 应用。先尝试内置浏览器；如果这个会话里仍然没有内置浏览器实例，就用系统浏览器打开本地文件。</p>
-            </div>
-
-            <!-- Chat Message 2 -->
-            <div class="chat-message">
-              <p>正在连接内置浏览器并准备打开本地 <code class="inline-code">index.html</code>。</p>
-            </div>
-
-            <!-- Tool Invocation 1 -->
-            <div class="tool-invocation">
-              <div class="tool-header">
-                <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="4 17 10 11 4 5"></polyline>
-                  <line x1="12" y1="19" x2="20" y2="19"></line>
-                </svg>
-                <span class="tool-title">Used 1 tool</span>
-                <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-              <div class="tool-body">
-                <pre class="code-block"><code>node_repl.js</code></pre>
-              </div>
-            </div>
-
-            <!-- Chat Message 3 -->
-            <div class="chat-message">
-              <p>连接环境里已有上次的浏览器初始化变量，我会复用它，避免重置会话状态。</p>
-            </div>
-
-            <!-- Tool Invocation 2 -->
-            <div class="tool-invocation">
-              <div class="tool-header">
-                <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="4 17 10 11 4 5"></polyline>
-                  <line x1="12" y1="19" x2="20" y2="19"></line>
-                </svg>
-                <span class="tool-title">Used 1 tool</span>
-                <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-              <div class="tool-body">
-                <pre class="code-block"><code>node_repl.js</code></pre>
-              </div>
-            </div>
-
-            <!-- Chat Message 4 -->
-            <div class="chat-message">
-              <p>内置浏览器仍然不可用。我按插件排错流程确认后，会使用系统浏览器打开同一个本地文件。</p>
-            </div>
-
-            <!-- Tool Invocation 3 -->
-            <div class="tool-invocation">
-              <div class="tool-header">
-                <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="4 17 10 11 4 5"></polyline>
-                  <line x1="12" y1="19" x2="20" y2="19"></line>
-                </svg>
-                <span class="tool-title">Used 1 tool</span>
-                <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-              <div class="tool-body">
-                <pre class="code-block"><code>node_repl.js</code></pre>
-              </div>
-            </div>
-
-            <!-- Chat Message 5 -->
-            <div class="chat-message">
-              <p>内置浏览器确认不可用，接下来直接用 macOS 默认浏览器打开本地页面文件。</p>
-            </div>
-
-            <!-- Chat Message 6 -->
-            <div class="chat-message">
-              <p>已打开 Todo 应用：<code class="inline-code">/tmp/mycodex-demo/index.html</code>。</p>
-            </div>
-
-            <!-- Chat Message 7 -->
-            <div class="chat-message">
-              <p>内置浏览器在这个会话里不可用，所以我用系统默认浏览器打开了本地文件。</p>
-            </div>
-
+            <!-- Messages are rendered dynamically from chatMessagesData -->
           </div>
         </div>
 
@@ -613,6 +527,17 @@ export default function formatMarkdown(text) {
 }</code></pre>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Sub-agent View (reuses main chat UI, no user input bubble) -->
+        <div class="feature-panel-view sub-agent-view" id="sub-agent-view" style="display: none;">
+          <div class="sub-agent-header">
+            <h3 id="sub-agent-title">Sub Agent</h3>
+            <button class="action-btn-small" id="close-sub-agent-btn">返回主对话</button>
+          </div>
+          <div class="sub-agent-chat">
+            <div class="message-list" id="sub-agent-message-list"></div>
           </div>
         </div>
 

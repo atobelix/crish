@@ -175,56 +175,189 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- 4. Mock Chat Data for dynamic loading ---
   const chatMessagesData = {
-    'todo-list-app': `
-      <div class="chat-message"><p>我会打开刚做好的 Todo 应用。先尝试内置浏览器；如果这个会话里仍然没有内置浏览器实例，就用系统浏览器打开本地文件。</p></div>
-      <div class="chat-message"><p>正在连接内置浏览器并准备打开本地 <code class="inline-code">index.html</code>。</p></div>
-      <div class="tool-invocation">
-        <div class="tool-header">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          <span class="tool-title">Used 1 tool</span>
-          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="tool-body"><pre class="code-block"><code>node_repl.js</code></pre></div>
-      </div>
-      <div class="chat-message"><p>连接环境里已有上次的浏览器初始化变量，我会复用它，避免重置会话状态。</p></div>
-      <div class="tool-invocation">
-        <div class="tool-header">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          <span class="tool-title">Used 1 tool</span>
-          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="tool-body"><pre class="code-block"><code>node_repl.js</code></pre></div>
-      </div>
-      <div class="chat-message"><p>内置浏览器仍然不可用。我按插件排错流程确认后，会使用系统浏览器打开同一个本地文件。</p></div>
-      <div class="tool-invocation">
-        <div class="tool-header">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          <span class="tool-title">Used 1 tool</span>
-          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="tool-body"><pre class="code-block"><code>node_repl.js</code></pre></div>
-      </div>
-      <div class="chat-message"><p>内置浏览器确认不可用，接下来直接用 macOS 默认浏览器打开本地页面文件。</p></div>
-      <div class="chat-message"><p>已打开 Todo 应用：<code class="inline-code">/tmp/mycodex-demo/index.html</code>。</p></div>
-      <div class="chat-message"><p>内置浏览器在这个会话里不可用，所以我用系统默认浏览器打开了本地文件。</p></div>
-    `,
-    'refactor-auth': `
-      <div class="chat-message"><p>I will help you refactor the login module to support standard secure password flows and OAuth2 configurations.</p></div>
-      <div class="chat-message"><p>Let's run a search to locate the auth/login files in this project.</p></div>
-      <div class="tool-invocation">
-        <div class="tool-header">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          <span class="tool-title">Used 1 tool</span>
-          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="tool-body"><pre class="code-block"><code>grep_search --query="login" --SearchPath="."</code></pre></div>
-      </div>
-      <div class="chat-message"><p>Found authentication code in <code class="inline-code">auth.js</code>. It is currently storing user credentials as plain-text! I will modify it to use bcrypt salt-hashing instead.</p></div>
-    `,
-    'conex-chat-1': `
-      <div class="chat-message"><p>Hi! I am ready to explore the <strong>conex</strong> codebase. What modules or features would you like to examine first?</p></div>
-    `
+    'todo-list-app': [
+      { role: 'assistant', content: '我会打开刚做好的 Todo 应用。先尝试内置浏览器；如果这个会话里仍然没有内置浏览器实例，就用系统浏览器打开本地文件。' },
+      { role: 'assistant', content: '正在连接内置浏览器并准备打开本地 <code class="inline-code">index.html</code>。' },
+      { role: 'tool_group', status: 'summary', expanded: false, calls: [
+        { name: 'node_repl', args: 'node_repl.js', result: 'node_repl.js', expanded: false, done: true },
+        { name: 'node_repl', args: 'node_repl.js', result: 'node_repl.js', expanded: false, done: true },
+        { name: 'node_repl', args: 'node_repl.js', result: 'node_repl.js', expanded: false, done: true }
+      ], metrics: { tools: 3, edited: 0, viewed: 0 } },
+      { role: 'assistant', content: '连接环境里已有上次的浏览器初始化变量，我会复用它，避免重置会话状态。' },
+      { role: 'assistant', content: '内置浏览器仍然不可用。我按插件排错流程确认后，会使用系统浏览器打开同一个本地文件。' },
+      { role: 'assistant', content: '内置浏览器确认不可用，接下来直接用 macOS 默认浏览器打开本地页面文件。' },
+      { role: 'assistant', content: '已打开 Todo 应用：<code class="inline-code">/tmp/mycodex-demo/index.html</code>。' },
+      { role: 'assistant', content: '内置浏览器在这个会话里不可用，所以我用系统默认浏览器打开了本地文件。' }
+    ],
+    'refactor-auth': [
+      { role: 'assistant', content: 'I will help you refactor the login module to support standard secure password flows and OAuth2 configurations.' },
+      { role: 'assistant', content: "Let's run a search to locate the auth/login files in this project." },
+      { role: 'tool_group', status: 'expanded', expanded: true, calls: [
+        { name: 'grep_search', args: 'grep_search --query="login" --SearchPath="."', result: 'auth.js\nloginForm.js\noauth-config.json', expanded: true, done: true }
+      ], metrics: { tools: 1, edited: 0, viewed: 3 } },
+      { role: 'assistant', content: 'Found authentication code in <code class="inline-code">auth.js</code>. It is currently storing user credentials as plain-text! I will modify it to use bcrypt salt-hashing instead.' }
+    ],
+    'conex-chat-1': [
+      { role: 'assistant', content: 'Hi! I am ready to explore the <strong>conex</strong> codebase. What modules or features would you like to examine first?' }
+    ]
   };
+
+  // --- Message / Tool rendering helpers ---
+  function escapeHTML(str) {
+    return String(str).replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag] || tag));
+  }
+
+  function computeToolMetrics(calls) {
+    const viewed = new Set();
+    const edited = new Set();
+    calls.forEach(call => {
+      const name = call.name.toLowerCase();
+      if (name.includes('read') || name.includes('view') || name.includes('grep') || name.includes('search')) {
+        viewed.add(call.result?.split('\n')[0] || call.args);
+      }
+      if (name.includes('write') || name.includes('edit') || name.includes('apply') || name.includes('replace')) {
+        edited.add(call.result?.split('\n')[0] || call.args);
+      }
+    });
+    return { tools: calls.length, edited: edited.size, viewed: viewed.size };
+  }
+
+  function renderToolCall(call, index) {
+    const expanded = call.expanded !== false;
+    const safeArgs = escapeHTML(call.args);
+    return `
+      <div class="tool-invocation" data-call-index="${index}" data-expanded="${expanded}">
+        <div class="tool-call-row" title="${safeArgs}">
+          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          <span class="tool-name">${escapeHTML(call.name)}</span>
+          <code class="tool-args">${safeArgs}</code>
+          <svg class="icon tool-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="tool-result-window">
+          <pre class="code-block"><code>${escapeHTML(call.result)}</code></pre>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderToolGroup(group) {
+    const metrics = group.metrics || computeToolMetrics(group.calls);
+    const summaryParts = [`${metrics.tools} 个工具`];
+    if (metrics.viewed > 0) summaryParts.push(`${metrics.viewed} 个文件查看`);
+    if (metrics.edited > 0) summaryParts.push(`${metrics.edited} 个文件编辑`);
+
+    if (group.status === 'summary') {
+      const expanded = group.expanded === true;
+      return `
+        <div class="tool-summary" data-expanded="${expanded}">
+          <div class="tool-summary-row">
+            <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            <span class="tool-summary-text">${summaryParts.join(' · ')}</span>
+            <svg class="icon tool-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="tool-summary-body">
+            ${group.calls.map((call, i) => renderToolCall(call, i)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // streaming or expanded: render calls directly
+    return group.calls.map((call, i) => renderToolCall(call, i)).join('');
+  }
+
+  function renderMessage(msg) {
+    if (msg.role === 'user') {
+      return `<div class="chat-message user-message"><div class="message-bubble">${msg.content}</div></div>`;
+    }
+    if (msg.role === 'assistant') {
+      return `<div class="chat-message assistant-message">${msg.content}</div>`;
+    }
+    if (msg.role === 'tool_group') {
+      return renderToolGroup(msg);
+    }
+    return '';
+  }
+
+  function renderMessages(messages) {
+    return messages.map(renderMessage).join('');
+  }
+
+  function bindToolToggles(container) {
+    container.querySelectorAll('.tool-call-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const invocation = row.closest('.tool-invocation');
+        const expanded = invocation.getAttribute('data-expanded') === 'true';
+        invocation.setAttribute('data-expanded', String(!expanded));
+      });
+    });
+    container.querySelectorAll('.tool-summary-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const summary = row.closest('.tool-summary');
+        const expanded = summary.getAttribute('data-expanded') === 'true';
+        summary.setAttribute('data-expanded', String(!expanded));
+      });
+    });
+  }
+
+  // Expose renderAgentView for sub-agent reuse
+  window.renderAgentView = function(container, messages, opts = {}) {
+    const showUserInput = opts.showUserInput !== false;
+    const filtered = showUserInput ? messages : messages.filter(m => m.role !== 'user');
+    container.innerHTML = renderMessages(filtered);
+    bindToolToggles(container);
+    highlightCode(container);
+  };
+
+  // Sub-agent view helpers
+  const subAgentView = document.getElementById('sub-agent-view');
+  const subAgentTitle = document.getElementById('sub-agent-title');
+  const subAgentMessageList = document.getElementById('sub-agent-message-list');
+
+  window.openSubAgent = function(name, messages) {
+    if (!subAgentView || !subAgentMessageList) return;
+    subAgentTitle.textContent = name || 'Sub Agent';
+    window.renderAgentView(subAgentMessageList, messages || [], { showUserInput: false });
+
+    // Hide chat and feature views, show sub-agent view
+    document.querySelectorAll('.feature-panel-view').forEach(el => { el.style.display = 'none'; });
+    const chatAreaEl = document.querySelector('.chat-area');
+    if (chatAreaEl) chatAreaEl.style.display = 'none';
+    const commandBar = document.querySelector('.command-bar');
+    if (commandBar) commandBar.style.display = 'none';
+    const inputContainer = document.querySelector('.input-panel-container');
+    if (inputContainer) inputContainer.style.display = 'none';
+    document.getElementById('empty-chat-state').style.display = 'none';
+
+    subAgentView.style.display = 'flex';
+    panelTitle.textContent = name || 'Sub Agent';
+  };
+
+  window.closeSubAgent = function() {
+    if (!subAgentView) return;
+    subAgentView.style.display = 'none';
+    // Return to last active chat
+    const targetId = currentChatId || 'todo-list-app';
+    const chatEl = document.querySelector(`[data-id="${targetId}"]`);
+    const title = chatEl ? (chatEl.querySelector('.chat-title, .nested-text')?.textContent || 'Chat') : 'Chat';
+    activateChatItem(targetId, title, chatEl);
+  };
+
+  if (document.getElementById('close-sub-agent-btn')) {
+    document.getElementById('close-sub-agent-btn').addEventListener('click', window.closeSubAgent);
+  }
 
 
   // --- 5. Sidebar Active Selections & Project Activation ---
@@ -235,6 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dropdownProjectMenu = document.querySelector('#dropdown-project .dropdown-menu');
   const featureAccordion = document.getElementById('feature-accordion');
   let activeProjName = 'mycodex-demo';
+  let currentChatId = null;
 
   // Activate Sidebar Item (Clean highlight state)
   const activateProjectItem = (projectLi) => {
@@ -363,6 +497,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const activateChatItem = (chatId, chatTitleText, clickedElement = null) => {
+    currentChatId = chatId;
+
     // Hide empty state and restore input card to bottom container
     const emptyState = document.getElementById('empty-chat-state');
     if (emptyState) emptyState.style.display = 'none';
@@ -417,9 +553,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load messages dynamically
     if (chatMessagesData[chatId]) {
-      messageList.innerHTML = chatMessagesData[chatId];
+      messageList.innerHTML = renderMessages(chatMessagesData[chatId]);
+      bindToolToggles(messageList);
+      highlightCode(messageList);
     } else {
-      messageList.innerHTML = `<div class="chat-message"><p>No messages in chat "${chatTitleText}". Send a message to start!</p></div>`;
+      messageList.innerHTML = `<div class="chat-message assistant-message"><p>No messages in chat "${escapeHTML(chatTitleText)}". Send a message to start!</p></div>`;
     }
     chatArea.scrollTop = 0;
   };
@@ -1243,7 +1381,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Create a new chat dynamically
       const chatId = 'chat-' + Date.now();
       const chatName = text.length > 25 ? text.substring(0, 25) + '...' : text;
-      
+      currentChatId = chatId;
+      chatMessagesData[chatId] = [];
+
       const chatLi = document.createElement('li');
       chatLi.className = 'list-item chat-item';
       chatLi.dataset.id = chatId;
@@ -1262,12 +1402,12 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       `;
-      
+
       const chatsListEl = document.getElementById('chats-list');
       if (chatsListEl) {
         chatsListEl.appendChild(chatLi);
       }
-      
+
       // Update sidebar scroll heights
       setTimeout(() => {
         const sec = document.getElementById('section-chats');
@@ -1286,10 +1426,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (inputWrapper && inputContainer) {
         inputContainer.appendChild(inputWrapper);
         inputContainer.style.display = 'block';
-        
+
         // Switch to active-chat layout
         setInputMode('chat');
-        
+
         // Hide dropdowns
         document.querySelectorAll('.attached-dropdown-menu').forEach(m => m.classList.remove('show'));
       }
@@ -1313,19 +1453,14 @@ document.addEventListener('DOMContentLoaded', () => {
       panelTitle.textContent = chatName;
     }
 
-    const userMsg = document.createElement('div');
-    userMsg.className = 'chat-message user-message';
-    userMsg.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text-main); margin-top: 12px; border-top: 1px dashed var(--border-color); padding-top: 12px;">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: var(--text-secondary);">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-        <span>User:</span>
-      </div>
-      <p style="margin-top: 6px; color: var(--text-main); line-height: 1.6;">${escapeHTML(text)}</p>
-    `;
-    messageList.appendChild(userMsg);
+    // Append user message to data and DOM
+    const userMsg = { role: 'user', content: escapeHTML(text) };
+    if (currentChatId && chatMessagesData[currentChatId]) {
+      chatMessagesData[currentChatId].push(userMsg);
+    }
+    const userEl = document.createElement('div');
+    userEl.innerHTML = renderMessage(userMsg);
+    messageList.appendChild(userEl.firstElementChild);
 
     textarea.value = '';
     textarea.style.height = 'auto';
@@ -1344,12 +1479,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, tag => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[tag] || tag));
-  }
-
   const simulateAIResponse = (userPrompt) => {
     const loadingMsg = document.createElement('div');
     loadingMsg.className = 'chat-message system-thinking';
@@ -1367,24 +1496,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       loadingMsg.remove();
 
-      const toolMock = document.createElement('div');
-      toolMock.className = 'tool-invocation';
-      toolMock.innerHTML = `
-        <div class="tool-header">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
-          <span class="tool-title">Used 1 tool</span>
-          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="tool-body">
-          <pre class="code-block"><code>simulate_reply.js --prompt="${escapeHTML(userPrompt.substring(0, 30))}..."</code></pre>
-        </div>
-      `;
-      messageList.appendChild(toolMock);
-
-      const aiMsg = document.createElement('div');
-      aiMsg.className = 'chat-message';
       let responseText = "我已经收到了您的请求，正在处理中。由于这是一个原型界面，所有交互均在本地模拟运行。";
       if (userPrompt.toLowerCase().includes('todo') || userPrompt.includes('应用')) {
         responseText = "我尝试重新运行了环境，并通过系统浏览器再次加载了页面。如果有什么需要微调的地方，请随时告诉我。";
@@ -1392,8 +1503,38 @@ document.addEventListener('DOMContentLoaded', () => {
         responseText = "你好！我是 MyCodex AI 助手。我可以帮你配置服务、执行自动化测试或者管理你的工作树。";
       }
 
-      aiMsg.innerHTML = `<p>${responseText}</p>`;
-      messageList.appendChild(aiMsg);
+      // Build tool group: single tool normally, multiple tools for longer prompts to demo summary
+      const calls = [];
+      const baseArgs = `simulate_reply.js --prompt="${userPrompt.substring(0, 30)}..."`;
+      calls.push({ name: 'simulate_reply', args: baseArgs, result: `Processing prompt: ${userPrompt}\nStatus: ok\nDuration: 120ms`, expanded: true, done: true });
+      if (userPrompt.length > 10) {
+        calls.push({ name: 'read_file', args: 'read_file --path="/tmp/mycodex-demo/config.json"', result: '{ "env": "local", "browser": "system" }', expanded: false, done: true });
+      }
+      const toolGroup = {
+        role: 'tool_group',
+        status: calls.length > 1 ? 'summary' : 'expanded',
+        expanded: false,
+        calls: calls
+      };
+      toolGroup.metrics = computeToolMetrics(toolGroup.calls);
+
+      const assistantMsg = { role: 'assistant', content: responseText };
+
+      // Update data store and DOM
+      if (currentChatId && chatMessagesData[currentChatId]) {
+        chatMessagesData[currentChatId].push(toolGroup, assistantMsg);
+      }
+
+      const toolEl = document.createElement('div');
+      toolEl.innerHTML = renderToolGroup(toolGroup);
+      messageList.appendChild(toolEl.firstElementChild);
+
+      const aiEl = document.createElement('div');
+      aiEl.innerHTML = renderMessage(assistantMsg);
+      messageList.appendChild(aiEl.firstElementChild);
+
+      bindToolToggles(messageList);
+      highlightCode(messageList);
       chatArea.scrollTop = chatArea.scrollHeight;
     }, 1200);
   };
@@ -1792,4 +1933,7 @@ export async function hashPassword(password) {
       }
     });
   });
+
+  // Initialize default active chat
+  activateChatItem('todo-list-app', 'build a todo list app');
 });
