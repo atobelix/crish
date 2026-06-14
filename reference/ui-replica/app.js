@@ -1,121 +1,428 @@
-// Simple regex-based syntax highlighter for prototype code blocks
+// Performance-optimized syntax highlighter using Prism.js with fallbacks
 function highlightCode(root = document) {
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|yield|typeof|instanceof|in|of|break|continue|default|case|switch|true|false|null|undefined)\b/g;
-  const functions = /\b([a-zA-Z_$][\w$]*)(?=\()/g;
-  const numbers = /\b(\d+(?:\.\d+)?)\b/g;
-  const strings = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
-  const comments = /(\/\/.*$|#.*$)/gm;
-  const operators = /(\+|\-|\*|\/|=|!|&|\||<|>|\?|:|\.|,|;)/g;
+  if (window.Prism) {
+    root.querySelectorAll('.code-block code, pre code, .markdown-body pre code').forEach(block => {
+      if (block.dataset.highlighted) return;
 
-  root.querySelectorAll('.code-block code').forEach(block => {
-    if (block.dataset.highlighted) return;
-    let html = block.textContent;
-    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      // Extract file extension or content features to detect language
+      let text = block.textContent;
+      let lang = 'javascript'; // default
 
-    // Protect already-highlighted tokens with placeholders
-    const placeholders = [];
-    const marker = '___HL';
-    const save = (token, className) => {
-      placeholders.push(`<span class="${className}">${token}</span>`);
-      return `${marker}${placeholders.length - 1}___`;
-    };
+      // Simple heuristic language detection
+      if (text.includes('def ') || text.includes('import sys') || text.includes('__main__')) {
+        lang = 'python';
+      } else if (text.includes('html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+        lang = 'markup';
+      } else if (text.includes('{') && (text.includes('margin:') || text.includes('padding:') || text.includes('color: var('))) {
+        lang = 'css';
+      } else if (text.startsWith('$ ') || text.startsWith('npm ') || text.startsWith('node ')) {
+        lang = 'bash';
+      }
 
-    html = html.replace(comments, m => save(m, 'token-comment'));
-    html = html.replace(strings, m => save(m, 'token-string'));
-    html = html.replace(keywords, m => save(m, 'token-keyword'));
-    html = html.replace(functions, m => save(m, 'token-function'));
-    html = html.replace(numbers, m => save(m, 'token-number'));
-    html = html.replace(operators, m => save(m, 'token-operator'));
+      block.classList.add(`language-${lang}`);
+      window.Prism.highlightElement(block);
+      block.dataset.highlighted = 'true';
+    });
+  } else {
+    // Basic fallback highlights when offline/CDN load fails
+    root.querySelectorAll('.code-block code, pre code, .markdown-body pre code').forEach(block => {
+      if (block.dataset.highlighted) return;
+      block.innerHTML = block.textContent
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      block.dataset.highlighted = 'true';
+    });
+  }
+}
 
-    html = html.replace(new RegExp(`${marker}(\\d+)___`, 'g'), (_, i) => placeholders[+i]);
+function convertStaticDiffs() {
+  document.querySelectorAll('.diff-item-content').forEach(container => {
+    const pre = container.querySelector('pre.diff-code-block');
+    if (!pre) return;
+    const code = pre.querySelector('code');
+    if (!code) return;
 
-    block.innerHTML = html;
-    block.dataset.highlighted = 'true';
+    const diffView = document.createElement('div');
+    diffView.className = 'diff-view';
+
+    // Get all spans inside code
+    const spans = code.querySelectorAll('span');
+    if (spans.length > 0) {
+      let oldLine = 1;
+      let newLine = 1;
+
+      spans.forEach(span => {
+        const text = span.textContent;
+        let type = 'context';
+        let marker = ' ';
+        let content = text;
+        let oldNum = '';
+        let newNum = '';
+
+        if (span.classList.contains('diff-chunk')) {
+          const match = text.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/);
+          if (match) {
+            oldLine = parseInt(match[1], 10);
+            newLine = parseInt(match[2], 10);
+          }
+          return; // Skip chunk headers
+        } else if (span.classList.contains('diff-deletion')) {
+          type = 'removed';
+          marker = '-';
+          if (text.startsWith('-')) {
+            content = text.substring(1);
+          }
+          oldNum = oldLine++;
+        } else if (span.classList.contains('diff-addition')) {
+          type = 'added';
+          marker = '+';
+          if (text.startsWith('+')) {
+            content = text.substring(1);
+          }
+          newNum = newLine++;
+        } else if (span.classList.contains('diff-context')) {
+          type = 'context';
+          marker = ' ';
+          oldNum = oldLine++;
+          newNum = newLine++;
+        }
+
+        const lineDiv = document.createElement('div');
+        lineDiv.className = `diff-line diff-${type}`;
+
+        const numSpan1 = document.createElement('span');
+        numSpan1.className = 'diff-num';
+        numSpan1.textContent = oldNum || '';
+        const numSpan2 = document.createElement('span');
+        numSpan2.className = 'diff-num';
+        numSpan2.textContent = newNum || '';
+
+        const markerSpan = document.createElement('span');
+        markerSpan.className = 'diff-marker';
+        markerSpan.textContent = marker;
+
+        const contentSpan = document.createElement('span');
+        contentSpan.className = 'diff-content';
+        contentSpan.textContent = content;
+
+        lineDiv.appendChild(numSpan1);
+        lineDiv.appendChild(numSpan2);
+        lineDiv.appendChild(markerSpan);
+        lineDiv.appendChild(contentSpan);
+
+        diffView.appendChild(lineDiv);
+      });
+    }
+
+    // Replace pre with diffView
+    pre.replaceWith(diffView);
   });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // --- 1. macOS Window Control Interactions ---
-  const macWindow = document.querySelector('.mac-window');
-  const closeBtn = document.querySelector('.control.close');
-  const minimizeBtn = document.querySelector('.control.minimize');
-  const expandBtn = document.querySelector('.control.expand');
+  // Convert static diff blocks to reuse the clean flex line-by-line structure
+  convertStaticDiffs();
+
+  // --- 1. Windows Window Control Interactions ---
+  const macWindow = document.querySelector('.mac-window'); // keep variable name for compatibility
+  const winCloseBtn = document.getElementById('win-close-btn');
+  const winMinBtn = document.getElementById('win-min-btn');
+  const winMaxBtn = document.getElementById('win-max-btn');
   const desktopBackground = document.querySelector('.desktop-background');
 
-  closeBtn.addEventListener('click', () => {
-    macWindow.style.display = 'none';
-    let restoreBtn = document.querySelector('.restore-window-btn');
-    if (!restoreBtn) {
-      restoreBtn = document.createElement('button');
-      restoreBtn.className = 'restore-window-btn';
-      restoreBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 16px; height: 16px; margin-right: 8px;">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-          <line x1="2" y1="10" x2="22" y2="10"></line>
-        </svg>
-        Open MyCodex Demo
-      `;
-      // Styling the restore button dynamically
-      restoreBtn.style.position = 'absolute';
-      restoreBtn.style.padding = '12px 24px';
-      restoreBtn.style.backgroundColor = '#fafafa';
-      restoreBtn.style.border = 'none';
-      restoreBtn.style.borderRadius = '30px';
-      restoreBtn.style.fontSize = '14px';
-      restoreBtn.style.fontWeight = '500';
-      restoreBtn.style.cursor = 'pointer';
-      restoreBtn.style.boxShadow = '0 10px 25px rgba(0,0,0,0.04)';
-      restoreBtn.style.fontFamily = 'Inter, sans-serif';
-      restoreBtn.style.display = 'flex';
-      restoreBtn.style.alignItems = 'center';
-      restoreBtn.style.transition = 'all 0.2s';
-      
-      restoreBtn.addEventListener('mouseenter', () => {
-        restoreBtn.style.transform = 'translateY(-2px)';
-        restoreBtn.style.boxShadow = '0 15px 30px rgba(0,0,0,0.06)';
-        restoreBtn.style.backgroundColor = '#f2f2f2';
-      });
-      restoreBtn.addEventListener('mouseleave', () => {
-        restoreBtn.style.transform = 'translateY(0)';
-        restoreBtn.style.boxShadow = '0 10px 25px rgba(0,0,0,0.04)';
+  if (winCloseBtn) {
+    winCloseBtn.addEventListener('click', () => {
+      macWindow.style.display = 'none';
+      let restoreBtn = document.querySelector('.restore-window-btn');
+      if (!restoreBtn) {
+        restoreBtn = document.createElement('button');
+        restoreBtn.className = 'restore-window-btn';
+        restoreBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 16px; height: 16px; margin-right: 8px;">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+          Open MyCodex Demo
+        `;
+        // Styling the restore button dynamically
+        restoreBtn.style.position = 'absolute';
+        restoreBtn.style.padding = '12px 24px';
         restoreBtn.style.backgroundColor = '#fafafa';
-      });
+        restoreBtn.style.border = 'none';
+        restoreBtn.style.borderRadius = '30px';
+        restoreBtn.style.fontSize = '14px';
+        restoreBtn.style.fontWeight = '500';
+        restoreBtn.style.cursor = 'pointer';
+        restoreBtn.style.boxShadow = '0 10px 25px rgba(0,0,0,0.04)';
+        restoreBtn.style.fontFamily = 'Inter, sans-serif';
+        restoreBtn.style.display = 'flex';
+        restoreBtn.style.alignItems = 'center';
+        restoreBtn.style.transition = 'all 0.2s';
+        restoreBtn.style.zIndex = '1000';
+        
+        restoreBtn.addEventListener('mouseenter', () => {
+          restoreBtn.style.transform = 'translateY(-2px)';
+          restoreBtn.style.boxShadow = '0 15px 30px rgba(0,0,0,0.06)';
+          restoreBtn.style.backgroundColor = '#f2f2f2';
+        });
+        restoreBtn.addEventListener('mouseleave', () => {
+          restoreBtn.style.transform = 'translateY(0)';
+          restoreBtn.style.boxShadow = '0 10px 25px rgba(0,0,0,0.04)';
+          restoreBtn.style.backgroundColor = '#fafafa';
+        });
 
-      restoreBtn.addEventListener('click', () => {
-        macWindow.style.display = 'flex';
-        restoreBtn.style.display = 'none';
-      });
-      desktopBackground.appendChild(restoreBtn);
-    } else {
-      restoreBtn.style.display = 'flex';
-    }
-  });
+        restoreBtn.addEventListener('click', () => {
+          macWindow.style.display = 'flex';
+          restoreBtn.style.display = 'none';
+        });
+        desktopBackground.appendChild(restoreBtn);
+      } else {
+        restoreBtn.style.display = 'flex';
+      }
+    });
+  }
 
-  minimizeBtn.addEventListener('click', () => {
-    macWindow.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s';
-    if (macWindow.style.transform === 'scale(0.3) translateY(100%)') {
-      macWindow.style.transform = 'scale(1) translateY(0)';
-      macWindow.style.opacity = '1';
-    } else {
-      macWindow.style.transform = 'scale(0.3) translateY(100%)';
-      macWindow.style.opacity = '0';
-      setTimeout(() => {
+  if (winMinBtn) {
+    winMinBtn.addEventListener('click', () => {
+      macWindow.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s';
+      if (macWindow.style.transform === 'scale(0.3) translateY(100%)') {
         macWindow.style.transform = 'scale(1) translateY(0)';
         macWindow.style.opacity = '1';
-      }, 2000);
+      } else {
+        macWindow.style.transform = 'scale(0.3) translateY(100%)';
+        macWindow.style.opacity = '0';
+        setTimeout(() => {
+          macWindow.style.transform = 'scale(1) translateY(0)';
+          macWindow.style.opacity = '1';
+        }, 2000);
+      }
+    });
+  }
+
+  if (winMaxBtn) {
+    winMaxBtn.addEventListener('click', () => {
+      const isMaximized = macWindow.style.maxWidth === '100%';
+      const iconMaximize = winMaxBtn.querySelector('.icon-maximize');
+      const iconRestore = winMaxBtn.querySelector('.icon-restore');
+      
+      if (isMaximized) {
+        macWindow.style.maxWidth = '1120px';
+        macWindow.style.height = '90vh';
+        macWindow.style.borderRadius = '12px';
+        if (iconMaximize) iconMaximize.style.display = 'block';
+        if (iconRestore) iconRestore.style.display = 'none';
+      } else {
+        macWindow.style.maxWidth = '100%';
+        macWindow.style.height = '100%';
+        macWindow.style.borderRadius = '0';
+        if (iconMaximize) iconMaximize.style.display = 'none';
+        if (iconRestore) iconRestore.style.display = 'block';
+      }
+    });
+  }
+
+  // --- 1.1 Windows Titlebar Dropdown & Command Palette Interactions ---
+  const commandPaletteModal = document.getElementById('command-palette-modal');
+  const winSearchBox = document.querySelector('.win-search-box');
+  const paletteSearchInput = document.querySelector('.palette-search-input');
+
+  const showCommandPalette = () => {
+    if (commandPaletteModal) {
+      commandPaletteModal.style.display = 'flex';
+      setTimeout(() => {
+        if (paletteSearchInput) paletteSearchInput.focus();
+      }, 50);
+    }
+  };
+
+  const hideCommandPalette = () => {
+    if (commandPaletteModal) {
+      commandPaletteModal.style.display = 'none';
+    }
+  };
+
+  const winToggleSidebarBtn = document.getElementById('win-toggle-sidebar-btn');
+  const sidebar = document.querySelector('.sidebar');
+  if (winToggleSidebarBtn && sidebar) {
+    winToggleSidebarBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sidebar.classList.toggle('collapsed');
+    });
+  }
+
+  const winToggleRightSidebarBtn = document.getElementById('win-toggle-right-sidebar-btn');
+  if (winToggleRightSidebarBtn) {
+    winToggleRightSidebarBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rSidebar = document.querySelector('.right-sidebar');
+      if (rSidebar) {
+        rSidebar.classList.toggle('collapsed');
+        if (!rSidebar.classList.contains('collapsed')) {
+          const rBtns = document.querySelectorAll('.right-tab-btn');
+          const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
+          if (!hasActive && rBtns.length > 0) {
+            rBtns[0].click();
+          }
+        }
+      }
+    });
+  }
+
+  if (winSearchBox) {
+    winSearchBox.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showCommandPalette();
+    });
+  }
+
+  if (commandPaletteModal) {
+    commandPaletteModal.addEventListener('click', (e) => {
+      if (e.target === commandPaletteModal) {
+        hideCommandPalette();
+      }
+    });
+  }
+
+  // Bind command palette item actions
+  const paletteItems = document.querySelectorAll('.palette-item');
+  paletteItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = item.getAttribute('data-action');
+      hideCommandPalette();
+      executePaletteAction(action);
+    });
+  });
+
+  function executePaletteAction(action) {
+    switch (action) {
+      case 'new-chat':
+        const headerAddChatBtn = document.querySelector('.header-add-chat-btn');
+        if (headerAddChatBtn) headerAddChatBtn.click();
+        break;
+      case 'toggle-sidebar':
+        const sidebarEl = document.querySelector('.sidebar');
+        if (sidebarEl) {
+          sidebarEl.classList.toggle('collapsed');
+        }
+        break;
+      case 'toggle-right-sidebar':
+        const rSidebar = document.querySelector('.right-sidebar');
+        if (rSidebar) {
+          rSidebar.classList.toggle('collapsed');
+          if (!rSidebar.classList.contains('collapsed')) {
+            const rBtns = document.querySelectorAll('.right-tab-btn');
+            const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
+            if (!hasActive && rBtns.length > 0) {
+              rBtns[0].click();
+            }
+          }
+        }
+        break;
+      case 'open-settings':
+        const settingsBtn = document.querySelector('.settings-btn');
+        if (settingsBtn) settingsBtn.click();
+        break;
+      case 'run-demo':
+        const demoBtn = document.getElementById('demo-tool-calls-btn');
+        if (demoBtn) demoBtn.click();
+        break;
+      case 'toggle-theme':
+        // Find current active theme card and toggle
+        const activeThemeCard = document.querySelector('.theme-grid .theme-card.active');
+        const themeCards = document.querySelectorAll('.theme-grid .theme-card');
+        if (activeThemeCard && themeCards.length > 0) {
+          let nextIndex = 0;
+          themeCards.forEach((c, idx) => {
+            if (c === activeThemeCard) {
+              nextIndex = (idx + 1) % themeCards.length;
+            }
+          });
+          themeCards[nextIndex].click();
+        }
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
+  }
+
+  // Keyboard shortcut listeners
+  document.addEventListener('keydown', (e) => {
+    // Ctrl+P opens command palette
+    if (e.ctrlKey && e.key === 'p') {
+      e.preventDefault();
+      showCommandPalette();
+    }
+    // Escape closes command palette
+    if (e.key === 'Escape') {
+      hideCommandPalette();
+    }
+    // Ctrl+B toggles sidebar
+    if (e.ctrlKey && e.key === 'b') {
+      e.preventDefault();
+      executePaletteAction('toggle-sidebar');
     }
   });
 
-  expandBtn.addEventListener('click', () => {
-    if (macWindow.style.maxWidth === '100%') {
-      macWindow.style.maxWidth = '1120px';
-      macWindow.style.height = '90vh';
-      macWindow.style.borderRadius = '12px';
-    } else {
-      macWindow.style.maxWidth = '100%';
-      macWindow.style.height = '100%';
-      macWindow.style.borderRadius = '0';
-    }
+  // Top menubar dropdown handling: Clicking on item in menu dropdown performs mock action
+  const winMenuDropdowns = document.querySelectorAll('.win-menu-dropdown');
+  winMenuDropdowns.forEach(dropdown => {
+    dropdown.addEventListener('click', (e) => {
+      const target = e.target.closest('.dropdown-item');
+      if (!target) return;
+      
+      e.stopPropagation();
+      const id = target.id;
+      
+      switch(id) {
+        case 'menu-new-file':
+        case 'menu-new-terminal':
+          alert(`模拟运行指令：${target.textContent.trim()}`);
+          break;
+        case 'menu-open-folder':
+          const openFolderBtn = document.getElementById('attached-open-folder-btn');
+          if (openFolderBtn) openFolderBtn.click();
+          else alert('打开文件夹文件选择器');
+          break;
+        case 'menu-save':
+          alert('模拟：工作区所有变更已成功保存！');
+          break;
+        case 'menu-exit':
+          if (winCloseBtn) winCloseBtn.click();
+          break;
+        case 'menu-undo':
+          alert('模拟撤销上一命令执行结果');
+          break;
+        case 'menu-redo':
+          alert('模拟重做上一命令');
+          break;
+        case 'menu-copy':
+          alert('模拟文本复制');
+          break;
+        case 'menu-paste':
+          alert('模拟文本粘贴');
+          break;
+        case 'menu-toggle-sidebar':
+          executePaletteAction('toggle-sidebar');
+          break;
+        case 'menu-toggle-right-sidebar':
+          executePaletteAction('toggle-right-sidebar');
+          break;
+        case 'menu-toggle-terminal':
+          alert('切换终端面板');
+          break;
+        case 'menu-run-task':
+          executePaletteAction('run-demo');
+          break;
+        case 'menu-about':
+          alert('MyCodex Developer Studio v1.0.0\n基于 Antigravity 强劲的智能 IDE 主题系统。');
+          break;
+        case 'menu-docs':
+          alert('打开在线文档页: https://gemini.google.com/antigravity');
+          break;
+      }
+    });
   });
 
 
@@ -242,15 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return `<div class="diff-hunk-header">@@ -${hunk.oldStart},${oldLines} +${hunk.newStart},${newLines} @@</div>${linesHtml}`;
     }).join('');
 
-    const summary = `
-      <div class="diff-summary">
-        <span>1 changed file</span>
-        <span class="diff-stat-added">+${diff.added}</span>
-        <span class="diff-stat-removed">-${diff.removed}</span>
-      </div>
-    `;
-
-    return `<div class="diff-view">${hunksHtml}${summary}</div>`;
+    return `<div class="diff-view">${hunksHtml}</div>`;
   }
 
   const toolNameLabels = {
@@ -399,7 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('empty-chat-state').style.display = 'none';
 
     subAgentView.style.display = 'flex';
-    panelTitle.textContent = name || 'Sub Agent';
+    panelTitle.textContent = 'mycodex-demo / ' + (name || 'Sub Agent');
   };
 
   window.closeSubAgent = function() {
@@ -546,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 6. Set title in panel header
-    panelTitle.textContent = '快速对话';
+    panelTitle.textContent = '对话 / 快速对话';
 
     // 7. Make sure quick-chat button shows active state
     const quickChatBtn = document.querySelector('.quick-chat-btn');
@@ -607,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Update Header title
-    panelTitle.textContent = chatTitleText;
+    panelTitle.textContent = activeProjName + ' / ' + chatTitleText;
 
     // Load messages dynamically
     if (chatMessagesData[chatId]) {
@@ -616,6 +915,12 @@ document.addEventListener('DOMContentLoaded', () => {
       highlightCode(messageList);
     } else {
       messageList.innerHTML = `<div class="chat-message assistant-message"><p>No messages in chat "${escapeHTML(chatTitleText)}". Send a message to start!</p></div>`;
+    }
+
+    // Clear finished status from this chat item on activation
+    if (clickedElement) {
+      const statusEl = clickedElement.querySelector('.chat-status.status-completed');
+      if (statusEl) statusEl.remove();
     }
     chatArea.scrollTop = 0;
   };
@@ -1014,8 +1319,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('contextmenu', closeContextMenu);
 
   // Hook context triggers to sidebar (delegation)
-  const sidebar = document.querySelector('.sidebar');
-  sidebar.addEventListener('contextmenu', (e) => {
+  if (sidebar) {
+    sidebar.addEventListener('contextmenu', (e) => {
     const target = e.target.closest('.project-item, .chat-item, .nested-item, .section-header');
     if (target) {
       e.preventDefault();
@@ -1034,7 +1339,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showContextMenu(rect.left, rect.bottom + 4, target);
     }
   });
-
+  }
 
   // --- 7. Context Menu Action Binding ---
   const pinnedList = document.getElementById('pinned-list');
@@ -1508,7 +1813,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (quickChatBtn) quickChatBtn.classList.remove('active');
 
       // Set header panel title
-      panelTitle.textContent = chatName;
+      panelTitle.textContent = activeProjName + ' / ' + chatName;
     }
 
     // Append user message to data and DOM
@@ -2012,7 +2317,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (val !== originalText) {
             textSpan.textContent = val;
             if (renameTargetElement.classList.contains('active')) {
-              panelTitle.textContent = val;
+              panelTitle.textContent = activeProjName + ' / ' + val;
             }
 
             const itemId = renameTargetElement.dataset.id;
@@ -2103,7 +2408,7 @@ document.addEventListener('DOMContentLoaded', () => {
       'plugins': '插件管理',
       'skills': '技能管理'
     }[viewId];
-    panelTitle.textContent = itemName;
+    panelTitle.textContent = '功能 / ' + itemName;
 
     // Remove active state from chats
     document.querySelectorAll('.chat-item, .nested-item').forEach(c => c.classList.remove('active'));
@@ -2226,6 +2531,1068 @@ export async function hashPassword(password) {
       }
     });
   });
+
+  // --- 16. MCP Server Cards Interactive Bindings ---
+  const mcpServerCards = document.querySelectorAll('.mcp-server-card');
+  mcpServerCards.forEach(card => {
+    const toggleSwitch = card.querySelector('.mcp-toggle-switch');
+    const configBtn = card.querySelector('.mcp-btn-config');
+    const configPanel = card.querySelector('.mcp-config-panel');
+    const saveBtn = card.querySelector('.mcp-btn-save');
+    const statusDot = card.querySelector('.mcp-status-dot');
+    const statusText = card.querySelector('.mcp-status-text');
+    const detailsDiv = card.querySelector('.mcp-details');
+
+    // Switch toggle logic
+    if (toggleSwitch) {
+      toggleSwitch.addEventListener('change', () => {
+        if (toggleSwitch.checked) {
+          card.classList.remove('disabled');
+          if (statusDot) statusDot.classList.add('active');
+          if (statusText) {
+            statusText.textContent = '已连接';
+            statusText.style.color = '';
+          }
+        } else {
+          card.classList.add('disabled');
+          if (statusDot) statusDot.classList.remove('active');
+          if (statusText) {
+            statusText.textContent = '已关闭';
+            statusText.style.color = 'var(--text-muted)';
+          }
+          // Close panel if open
+          if (configPanel) configPanel.classList.remove('expanded');
+        }
+      });
+    }
+
+    // Expand/collapse config panel
+    if (configBtn && configPanel) {
+      configBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (card.classList.contains('disabled')) return;
+        configPanel.classList.toggle('expanded');
+      });
+    }
+
+    // Save parameters logic (with mock loading indicator)
+    if (saveBtn) {
+      saveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const originalHtml = saveBtn.innerHTML;
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px; animation: spin-rotate 1s linear infinite; margin-right:4px; display:inline-block; vertical-align: middle;">
+            <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle>
+          </svg>
+          保存中...
+        `;
+
+        setTimeout(() => {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = originalHtml;
+          if (configPanel) configPanel.classList.remove('expanded');
+
+          // Check if it's filesystem server and update details path
+          const serverName = card.getAttribute('data-server');
+          if (serverName === 'filesystem') {
+            const argsInput = card.querySelector('.mcp-input-args');
+            if (argsInput && detailsDiv) {
+              const val = argsInput.value;
+              // Extract path from arguments
+              const parts = val.split(' ');
+              const pathPart = parts.find(p => p.includes('\\') || p.includes('/'));
+              if (pathPart) {
+                detailsDiv.textContent = `路径: ${pathPart}`;
+              }
+            }
+          }
+          alert('MCP 服务参数配置保存成功并已重连！');
+        }, 1200);
+      });
+    }
+  });
+
+  // --- Plugin card switch toggles ---
+  document.querySelectorAll('.plugin-card .switch-container input[type="checkbox"]').forEach(toggle => {
+    toggle.addEventListener('change', () => {
+      const card = toggle.closest('.plugin-card');
+      const badge = card.querySelector('.plugin-badge');
+      if (!badge) return;
+      if (toggle.checked) {
+        badge.className = 'plugin-badge active';
+        badge.textContent = '已启用';
+      } else {
+        badge.className = 'plugin-badge disabled';
+        badge.textContent = '已禁用';
+      }
+    });
+  });
+
+  // --- 17. Right Sidebar Tab Switcher logic ---
+  const rightTabBtns = document.querySelectorAll('.right-tab-btn');
+  const rightTabPanels = document.querySelectorAll('.right-tab-panel');
+  const rightSidebar = document.querySelector('.right-sidebar');
+
+  rightTabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.getAttribute('data-tab');
+      const targetPanel = document.getElementById(tabId);
+      
+      if (rightSidebar) {
+        const isCollapsed = rightSidebar.classList.contains('collapsed');
+        const isActive = btn.classList.contains('active');
+        
+        if (isActive && !isCollapsed) {
+          // Collapse if clicking active tab when sidebar is open
+          rightSidebar.classList.add('collapsed');
+          btn.classList.remove('active');
+          if (targetPanel) {
+            targetPanel.classList.remove('active');
+          }
+        } else {
+          // Expand and activate tab
+          rightSidebar.classList.remove('collapsed');
+          rightTabBtns.forEach(b => b.classList.remove('active'));
+          rightTabPanels.forEach(p => p.classList.remove('active'));
+          
+          btn.classList.add('active');
+          if (targetPanel) {
+            targetPanel.classList.add('active');
+          }
+        }
+      }
+    });
+  });
+
+  // --- 18. Tab 1: Dual Chat panel logic ---
+  const dualChatMessages = document.getElementById('dual-chat-messages');
+  const dualChatTextarea = document.getElementById('dual-chat-textarea');
+  const dualChatSendBtn = document.getElementById('dual-chat-send-btn');
+  const clearDualChatBtn = document.getElementById('clear-dual-chat-btn');
+
+  if (dualChatTextarea && dualChatSendBtn) {
+    dualChatTextarea.addEventListener('input', () => {
+      dualChatSendBtn.disabled = dualChatTextarea.value.trim() === '';
+    });
+
+    const sendDualMessage = () => {
+      const text = dualChatTextarea.value.trim();
+      if (!text) return;
+
+      // Append User message (Reusing main chat message bubble class)
+      const userMsgHtml = `
+        <div class="chat-message user-message">
+          <div class="message-bubble">${escapeHTML(text)}</div>
+        </div>
+      `;
+      dualChatMessages.insertAdjacentHTML('beforeend', userMsgHtml);
+      dualChatTextarea.value = '';
+      dualChatSendBtn.disabled = true;
+      dualChatMessages.scrollTop = dualChatMessages.scrollHeight;
+
+      // Mock AI response (Reusing main assistant message bubble class)
+      setTimeout(() => {
+        const assistantResponses = [
+          "这确实是一个很好的角度！我已经同步了当前的上下文，你可以继续在主会话中开发，这里将作为提示词优化的专属便签。",
+          "收到！关于你的提示词，我建议修改为以下预设：\n\n```markdown\n- 始终关注原子化修改\n- 每次生成均以 diff block 形式展示\n```\n你可以复制使用！",
+          "好的，已经将此次分析记录在辅助双轨通道中。根据上下文，刚才对 todo list 的修改非常合理，我们下一步可以运行测试。"
+        ];
+        const randomReply = assistantResponses[Math.floor(Math.random() * assistantResponses.length)];
+        const aiMsgHtml = `
+          <div class="chat-message assistant-message">${randomReply.replace(/\n/g, '<br>')}</div>
+        `;
+        dualChatMessages.insertAdjacentHTML('beforeend', aiMsgHtml);
+        dualChatMessages.scrollTop = dualChatMessages.scrollHeight;
+
+        // Dynamic Token increments!
+        if (window.addMockTokenLog) {
+          window.addMockTokenLog('dual_chat_reply', 1800, 350);
+        }
+      }, 1000);
+    };
+
+    dualChatSendBtn.addEventListener('click', sendDualMessage);
+    dualChatTextarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendDualMessage();
+      }
+    });
+  }
+
+  if (clearDualChatBtn && dualChatMessages) {
+    clearDualChatBtn.addEventListener('click', () => {
+      dualChatMessages.innerHTML = `
+        <div class="chat-message assistant-message">已成功清空副面板对话，你可以开始新的任务了。</div>
+      `;
+    });
+  }
+
+  // --- 19. Tab 2: Token Metrics dynamic updates ---
+  let currentTokensUsed = 4253109;
+  const totalTokensLimit = 10000000;
+  
+  window.addMockTokenLog = function(actionName, inputTokens, outputTokens) {
+    const logList = document.getElementById('token-log-list');
+    if (!logList) return;
+
+    // Create item
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    const logHtml = `
+      <li class="token-log-item">
+        <div class="log-meta">
+          <span class="log-action">${escapeHTML(actionName)}</span>
+          <span class="log-time">${timeStr}</span>
+        </div>
+        <div class="log-tokens">
+          <span class="input-tokens">+${inputTokens.toLocaleString()} in</span>
+          <span class="output-tokens">${outputTokens > 0 ? '+' + outputTokens.toLocaleString() + ' out' : '--'}</span>
+        </div>
+      </li>
+    `;
+    logList.insertAdjacentHTML('afterbegin', logHtml);
+
+    // Keep log list to 8 items max for UI neatness
+    if (logList.children.length > 8) {
+      logList.removeChild(logList.lastChild);
+    }
+
+    // Update tokens count
+    const totalAdded = inputTokens + outputTokens;
+    currentTokensUsed += totalAdded;
+    if (currentTokensUsed > totalTokensLimit) currentTokensUsed = totalTokensLimit;
+
+    // Update UI numbers
+    const totalUsedTokensSpan = document.querySelector('.total-used-tokens');
+    if (totalUsedTokensSpan) {
+      const percentage = ((currentTokensUsed / totalTokensLimit) * 100).toFixed(1);
+      totalUsedTokensSpan.textContent = `已使用: ${currentTokensUsed.toLocaleString()} (${percentage}%)`;
+    }
+
+    // Update progress bar splits (mocked adjustment)
+    const cachedInputBar = document.querySelector('.bar-fill.fill-cached-input');
+    const inputBar = document.querySelector('.bar-fill.fill-input');
+    const cachedOutputBar = document.querySelector('.bar-fill.fill-cached-output');
+    const outputBar = document.querySelector('.bar-fill.fill-output');
+
+    if (inputBar && outputBar) {
+      // Simulate slight width variations
+      const currentPct = (currentTokensUsed / totalTokensLimit) * 100;
+      const cachedInputPct = 25; // fixed base for mock
+      const cachedOutputPct = 3.5;
+      const inputPct = Math.max(5, currentPct - cachedInputPct - cachedOutputPct - 2);
+      const outputPct = currentPct - cachedInputPct - cachedOutputPct - inputPct;
+
+      if (cachedInputBar) cachedInputBar.style.width = cachedInputPct + '%';
+      inputBar.style.width = Math.max(0, inputPct) + '%';
+      if (cachedOutputBar) cachedOutputBar.style.width = cachedOutputPct + '%';
+      outputBar.style.width = Math.max(0, outputPct) + '%';
+    }
+  };
+
+  // Intercept main chat send button (whenever user sends message in main screen, increase tokens!)
+  const mainSendBtn = document.querySelector('.send-btn');
+  const mainTextarea = document.querySelector('.chat-textarea');
+  if (mainTextarea && mainSendBtn) {
+    mainSendBtn.addEventListener('click', () => {
+      const text = mainTextarea.value.trim();
+      if (text) {
+        setTimeout(() => {
+          window.addMockTokenLog('user_message', text.length * 3 + 120, 0);
+        }, 100);
+      }
+    });
+
+    mainTextarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const text = mainTextarea.value.trim();
+        if (text) {
+          setTimeout(() => {
+            window.addMockTokenLog('user_message', text.length * 3 + 120, 0);
+          }, 100);
+        }
+      }
+    });
+  }
+
+  // --- 20. Tab 3: Embedded Browser logic & Element Inspector ---
+  const browserBackBtn = document.getElementById('browser-back-btn');
+  const browserForwardBtn = document.getElementById('browser-forward-btn');
+  const browserRefreshBtn = document.getElementById('browser-refresh-btn');
+  const browserLoadingSpinner = document.getElementById('browser-loading-spinner');
+  const browserInspectBtn = document.getElementById('browser-inspect-btn');
+  const browserViewport = document.getElementById('browser-viewport');
+  const browserInspectOverlay = document.getElementById('browser-inspect-overlay');
+  const inspectLabel = document.getElementById('inspect-label');
+  const browserUrlInput = document.getElementById('browser-url-input');
+  const browserServerHub = document.getElementById('browser-server-hub');
+  
+  let isInspectModeActive = false;
+
+  // Server Card Click to Load App
+  if (browserServerHub) {
+    const serverCards = browserServerHub.querySelectorAll('.server-card');
+    serverCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const url = card.getAttribute('data-url');
+        const targetId = card.getAttribute('data-target');
+        
+        if (browserRefreshBtn) browserRefreshBtn.style.pointerEvents = 'none';
+        if (browserLoadingSpinner) browserLoadingSpinner.style.display = 'block';
+        if (browserUrlInput) browserUrlInput.value = url;
+
+        setTimeout(() => {
+          if (browserRefreshBtn) browserRefreshBtn.style.pointerEvents = 'auto';
+          if (browserLoadingSpinner) browserLoadingSpinner.style.display = 'none';
+          
+          // Hide Hub and show Target App
+          browserServerHub.style.display = 'none';
+          
+          // Hide all mock apps first
+          document.querySelectorAll('.mock-web-app').forEach(app => {
+            app.style.display = 'none';
+          });
+          
+          // Show target app
+          const targetApp = document.getElementById(targetId);
+          if (targetApp) targetApp.style.display = 'flex';
+
+          if (browserBackBtn) browserBackBtn.disabled = false;
+          
+          if (window.addMockTokenLog) {
+            window.addMockTokenLog(`browser_navigate (${card.querySelector('.server-name').textContent})`, 240, 0);
+          }
+        }, 800);
+      });
+    });
+  }
+
+  // Browser Back Button logic
+  if (browserBackBtn) {
+    browserBackBtn.addEventListener('click', () => {
+      // Check if we are showing a sub-app
+      const activeApp = document.querySelector('.mock-web-app:not([style*="display: none"])');
+      if (activeApp) {
+        if (browserLoadingSpinner) browserLoadingSpinner.style.display = 'block';
+        
+        setTimeout(() => {
+          if (browserLoadingSpinner) browserLoadingSpinner.style.display = 'none';
+          
+          // Hide active app and show hub
+          activeApp.style.display = 'none';
+          if (browserServerHub) browserServerHub.style.display = 'block';
+          if (browserUrlInput) browserUrlInput.value = 'http://localhost:5173';
+          
+          if (window.addMockTokenLog) {
+            window.addMockTokenLog('browser_back', 120, 0);
+          }
+        }, 500);
+      }
+    });
+  }
+
+  // Refresh spinner simulation
+  if (browserRefreshBtn && browserLoadingSpinner) {
+    browserRefreshBtn.addEventListener('click', () => {
+      browserRefreshBtn.style.pointerEvents = 'none';
+      browserLoadingSpinner.style.display = 'block';
+
+      setTimeout(() => {
+        browserRefreshBtn.style.pointerEvents = 'auto';
+        browserLoadingSpinner.style.display = 'none';
+        if (window.addMockTokenLog) {
+          window.addMockTokenLog('browser_reload', 120, 0);
+        }
+      }, 1000);
+    });
+  }
+
+  // Toggle Inspect Mode
+  if (browserInspectBtn) {
+    browserInspectBtn.addEventListener('click', () => {
+      isInspectModeActive = !isInspectModeActive;
+      browserInspectBtn.classList.toggle('active', isInspectModeActive);
+      
+      if (!isInspectModeActive) {
+        if (browserInspectOverlay) browserInspectOverlay.style.display = 'none';
+      }
+    });
+  }
+
+  // Listen to mousemove inside the viewport content for inspection
+  if (browserViewport && browserInspectOverlay && inspectLabel) {
+    browserViewport.addEventListener('mousemove', (e) => {
+      if (!isInspectModeActive) return;
+
+      const x = e.clientX;
+      const y = e.clientY;
+      
+      browserInspectOverlay.style.display = 'none';
+      const target = document.elementFromPoint(x, y);
+      
+      // Dynamically locate the currently visible mock-web-app
+      const activeApp = document.querySelector('.mock-web-app:not([style*="display: none"])');
+      
+      if (target && activeApp && activeApp.contains(target) && target !== activeApp) {
+        const viewportRect = browserViewport.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+
+        const top = targetRect.top - viewportRect.top + browserViewport.scrollTop;
+        const left = targetRect.left - viewportRect.left + browserViewport.scrollLeft;
+        
+        browserInspectOverlay.style.top = top + 'px';
+        browserInspectOverlay.style.left = left + 'px';
+        browserInspectOverlay.style.width = targetRect.width + 'px';
+        browserInspectOverlay.style.height = targetRect.height + 'px';
+        browserInspectOverlay.style.display = 'block';
+
+        let labelText = target.tagName.toLowerCase();
+        if (target.className && typeof target.className === 'string') {
+          const firstClass = target.className.split(' ')[0];
+          if (firstClass && !firstClass.startsWith('token-') && !firstClass.startsWith('mock-')) {
+            labelText += '.' + firstClass;
+          }
+        }
+        labelText += ` (${Math.round(targetRect.width)} × ${Math.round(targetRect.height)})`;
+        inspectLabel.textContent = labelText;
+      } else {
+        browserInspectOverlay.style.display = 'none';
+      }
+    });
+
+    browserViewport.addEventListener('mouseleave', () => {
+      if (browserInspectOverlay) browserInspectOverlay.style.display = 'none';
+    });
+
+    // Intercept clicks in inspect mode
+    browserViewport.addEventListener('click', (e) => {
+      if (isInspectModeActive) {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.target.closest('*');
+        const activeApp = document.querySelector('.mock-web-app:not([style*="display: none"])');
+        
+        if (target && activeApp && activeApp.contains(target) && target !== activeApp) {
+          let desc = target.tagName.toLowerCase();
+          if (target.className && typeof target.className === 'string') {
+            desc += '.' + target.className.split(' ')[0];
+          }
+          alert(`元素审查指示：\n元素: <${desc}>\n大小: ${target.offsetWidth}px x ${target.offsetHeight}px\n你可以直接让 AI 优化此处的 CSS 样式或功能。`);
+        }
+      }
+    }, true);
+  }
+
+  // --- 21. Tab 4: File Explorer & Inline Line Annotations logic ---
+  const fileTree = document.getElementById('file-tree');
+  const activeNotesContext = document.getElementById('active-notes-context');
+  const contextTagsContainer = document.getElementById('context-tags-container');
+  const explorerTreeView = document.getElementById('explorer-tree-view');
+  const explorerFileContentView = document.getElementById('explorer-file-content-view');
+  const fileViewerPath = document.getElementById('file-viewer-path');
+  const codeViewerContainer = document.getElementById('code-viewer-container');
+  const fileViewerBackBtn = document.getElementById('file-viewer-back-btn');
+
+  // Multi-dimensional notes database: fileNotes[filePath][lineNum] = noteText
+  const fileNotes = {};
+  let activeViewingPath = null;
+
+  // Mock High-Fidelity File Database
+  const mockFilesDatabase = {
+    "index.html": `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>MyCodex Workbench</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Left sidebar and main workspace layout -->
+    <aside class="sidebar">...</aside>
+    <main class="main-panel">...</main>
+  </div>
+</body>
+</html>`,
+    "style.css": `/* Global design system tokens */
+:root {
+  --bg-sidebar: #fafafa; /* Level 2 */
+  --bg-main: #ffffff;    /* Level 1 */
+  --bg-hover: #f0f0f0;   /* Level 3 */
+  --border-color: #ededed;
+}
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}`,
+    "app.js": `// Main client-side compiler controller
+document.addEventListener('DOMContentLoaded', () => {
+  console.log("Initializing workspace UI replica...");
+  setupSidebar();
+  setupGitDiffs();
+});
+
+function setupSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  // Collapsing transition handler
+}`,
+    "src/utils/mcpHelper.js": `// MCP Server Bridge Protocol Wrapper
+export function registerMCPServer(serverName, config) {
+  console.log(\`Registering MCP Server: \${serverName}\`);
+  if (config.enabled) {
+    return startServerInstance(serverName, config.args);
+  }
+  return null;
+}
+
+function startServerInstance(name, args) {
+  return {
+    status: 'connected',
+    pid: Math.floor(Math.random() * 10000),
+    uptime: 0
+  };
+}`,
+    "src/auth/login.js": `// High-performance User authentication handler
+const bcrypt = require("bcrypt");
+const { RateLimiter } = require("../utils/rate-limiter");
+const { AuditLogger } = require("../utils/audit");
+
+const limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });
+const logger = new AuditLogger({ service: "auth" });
+
+async function login(username, password) {
+  if (!username || !password) {
+    logger.warn("login_attempt_missing_fields", { username });
+    return { error: "Missing fields" };
+  }
+  // Authenticate user credentials safely
+  return { success: true };
+}`
+  };
+
+  // Helper: format title with project prefix
+  function setFormattedPanelTitle(path, isFile = false) {
+    const titleEl = document.querySelector('.panel-title');
+    if (titleEl) {
+      titleEl.textContent = `mycodex-demo / ${path}`;
+    }
+  }
+
+  // Simple RegEx syntax highlighters for light theme white background
+  function simpleCodeHighlight(lineText) {
+    let esc = escapeHTML(lineText);
+    // keywords
+    esc = esc.replace(/\b(const|let|var|function|class|return|import|export|from|async|await|new|if|else|for|while)\b/g, '<span class="token-keyword">$1</span>');
+    // strings
+    esc = esc.replace(/(["'`])(.*?)\1/g, '<span class="token-string">$1$2$1</span>');
+    // comments
+    esc = esc.replace(/(\/\/.*)$/g, '<span class="token-comment">$1</span>');
+    return esc;
+  }
+
+  // Render file viewer content by lines
+  function openFileInViewer(filePath) {
+    activeViewingPath = filePath;
+    if (fileViewerPath) fileViewerPath.textContent = filePath;
+    setFormattedPanelTitle(filePath, true);
+
+    const codeText = mockFilesDatabase[filePath] || 
+      `// Mock code block for ${filePath}\n// Double-click line number to insert note context.\n\nfunction init() {\n  console.log("Inspecting file...");\n  return true;\n}`;
+    
+    const lines = codeText.split('\n');
+    if (codeViewerContainer) {
+      codeViewerContainer.innerHTML = '';
+      
+      lines.forEach((lineText, idx) => {
+        const lineNum = idx + 1;
+        const highlighted = simpleCodeHighlight(lineText);
+        
+        // Code line row structure
+        const row = document.createElement('div');
+        row.className = 'code-line-row-wrapper';
+        row.setAttribute('data-line', lineNum);
+        
+        let rowHtml = `
+          <div class="code-line-row">
+            <div class="code-line-num" title="点击添加批注">${lineNum}</div>
+            <div class="code-line-content">${highlighted}</div>
+          </div>
+        `;
+        
+        row.innerHTML = rowHtml;
+
+        // Render saved notes if exists
+        const fileNotesMap = fileNotes[filePath];
+        if (fileNotesMap && fileNotesMap[lineNum]) {
+          const noteBox = renderAnnotationBox(lineNum, fileNotesMap[lineNum]);
+          row.appendChild(noteBox);
+        }
+
+        // Add line number click event
+        const numBtn = row.querySelector('.code-line-num');
+        numBtn.addEventListener('click', () => {
+          triggerAnnotationInput(row, lineNum);
+        });
+
+        codeViewerContainer.appendChild(row);
+      });
+    }
+
+    if (explorerTreeView) explorerTreeView.style.display = 'none';
+    if (explorerFileContentView) explorerFileContentView.style.display = 'flex';
+  }
+
+  // Render official annotation box below code line
+  function renderAnnotationBox(lineNum, noteText) {
+    const box = document.createElement('div');
+    box.className = 'line-annotation-box';
+    box.setAttribute('data-line', lineNum);
+    box.innerHTML = `
+      <div class="annotation-meta">
+        <span>行 ${lineNum} · AI 批注上下文</span>
+      </div>
+      <div class="annotation-text">${escapeHTML(noteText)}</div>
+      <div class="annotation-actions">
+        <button class="annotation-action-link delete-link">删除</button>
+      </div>
+    `;
+
+    box.querySelector('.delete-link').addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeLineAnnotation(activeViewingPath, lineNum, box);
+    });
+
+    return box;
+  }
+
+  // Trigger inline annotation input form
+  function triggerAnnotationInput(rowWrapper, lineNum) {
+    // Check if input is already there
+    if (rowWrapper.querySelector('.line-annotation-input-card')) return;
+
+    const inputCard = document.createElement('div');
+    inputCard.className = 'line-annotation-input-card';
+    inputCard.innerHTML = `
+      <textarea class="annotation-textarea" placeholder="输入要在此行备注的批注，例如：'重构为响应式布局'..." rows="2"></textarea>
+      <div class="annotation-input-actions">
+        <button class="annotation-btn-small btn-cancel">取消</button>
+        <button class="annotation-btn-small btn-save">保存</button>
+      </div>
+    `;
+
+    // Cancel action
+    inputCard.querySelector('.btn-cancel').addEventListener('click', () => {
+      inputCard.remove();
+    });
+
+    // Save action
+    inputCard.querySelector('.btn-save').addEventListener('click', () => {
+      const textarea = inputCard.querySelector('.annotation-textarea');
+      const val = textarea.value.trim();
+      if (val) {
+        saveLineAnnotation(activeViewingPath, lineNum, val, rowWrapper);
+      }
+      inputCard.remove();
+    });
+
+    rowWrapper.appendChild(inputCard);
+    inputCard.querySelector('.annotation-textarea').focus();
+  }
+
+  // Save line annotation
+  function saveLineAnnotation(filePath, lineNum, noteText, rowWrapper) {
+    if (!fileNotes[filePath]) fileNotes[filePath] = {};
+    
+    // Remove old box if exists
+    const oldBox = rowWrapper.querySelector('.line-annotation-box');
+    if (oldBox) oldBox.remove();
+
+    // Save
+    fileNotes[filePath][lineNum] = noteText;
+
+    // Append new box
+    const newBox = renderAnnotationBox(lineNum, noteText);
+    rowWrapper.appendChild(newBox);
+
+    // Update file tree node counts
+    updateFileTreeNodeBadge(filePath);
+    updateActiveNotesContextView();
+
+    // Add log
+    if (window.addMockTokenLog) {
+      const filename = filePath.split('/').pop();
+      window.addMockTokenLog(`annotate_file (${filename}:L${lineNum})`, 95, 0);
+    }
+  }
+
+  // Remove line annotation
+  function removeLineAnnotation(filePath, lineNum, boxElement) {
+    if (fileNotes[filePath]) {
+      delete fileNotes[filePath][lineNum];
+      if (Object.keys(fileNotes[filePath]).length === 0) {
+        delete fileNotes[filePath];
+      }
+    }
+    boxElement.remove();
+    updateFileTreeNodeBadge(filePath);
+    updateActiveNotesContextView();
+  }
+
+  // Calculate and update the green note indicator badge on the tree node
+  function updateFileTreeNodeBadge(filePath) {
+    const fileNode = fileTree.querySelector(`.tree-node.file[data-path="${CSS.escape(filePath)}"]`);
+    if (fileNode) {
+      const badge = fileNode.querySelector('.note-indicator-badge');
+      if (badge) {
+        const fileNotesMap = fileNotes[filePath];
+        const count = fileNotesMap ? Object.keys(fileNotesMap).length : 0;
+        if (count > 0) {
+          badge.textContent = count;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
+  }
+
+  // Folder expand/collapse logic
+  if (fileTree) {
+    const folderNodes = fileTree.querySelectorAll('.tree-node.folder');
+    folderNodes.forEach(folder => {
+      const row = folder.querySelector('.node-row');
+      const toggle = folder.querySelector('.toggle-icon');
+      const children = folder.querySelector('.node-children');
+
+      if (row) {
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isExpanded = folder.classList.toggle('expanded');
+          if (toggle) toggle.classList.toggle('expanded', isExpanded);
+          if (children) {
+            children.style.display = isExpanded ? 'block' : 'none';
+          }
+        });
+      }
+    });
+
+    // File double click triggers opening file content
+    const fileNodes = fileTree.querySelectorAll('.tree-node.file');
+    fileNodes.forEach(file => {
+      const row = file.querySelector('.node-row');
+      if (row) {
+        row.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          fileTree.querySelectorAll('.tree-node.file').forEach(f => f.classList.remove('selected'));
+          file.classList.add('selected');
+          const filePath = file.getAttribute('data-path');
+          openFileInViewer(filePath);
+        });
+      }
+    });
+  }
+
+  // Back to tree list
+  if (fileViewerBackBtn) {
+    fileViewerBackBtn.addEventListener('click', () => {
+      if (explorerFileContentView) explorerFileContentView.style.display = 'none';
+      if (explorerTreeView) explorerTreeView.style.display = 'block';
+      activeViewingPath = null;
+      setFormattedPanelTitle('build a todo list app');
+    });
+  }
+
+  // Helper: Update Active Notes list as context tag badges above the file tree
+  function updateActiveNotesContextView() {
+    if (!contextTagsContainer || !activeNotesContext) return;
+
+    contextTagsContainer.innerHTML = '';
+    let totalTagsCount = 0;
+
+    Object.keys(fileNotes).forEach(filePath => {
+      const lineMap = fileNotes[filePath];
+      Object.keys(lineMap).forEach(lineNum => {
+        totalTagsCount++;
+        const note = lineMap[lineNum];
+        const filename = filePath.split('/').pop();
+        const truncatedNote = note.length > 15 ? note.substring(0, 15) + '...' : note;
+
+        const tag = document.createElement('div');
+        tag.className = 'context-tag';
+        tag.innerHTML = `
+          <span>📄 ${filename}:L${lineNum} "${truncatedNote}"</span>
+          <span class="tag-remove" title="移除此批注">&times;</span>
+        `;
+
+        // Click tag to open file content
+        tag.addEventListener('click', () => {
+          // Switch to tab-file-explorer first
+          switchRightTab('tab-file-explorer');
+          openFileInViewer(filePath);
+        });
+
+        // Click close to remove annotation
+        const removeBtn = tag.querySelector('.tag-remove');
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          delete fileNotes[filePath][lineNum];
+          if (Object.keys(fileNotes[filePath]).length === 0) {
+            delete fileNotes[filePath];
+          }
+          updateFileTreeNodeBadge(filePath);
+          // If viewing this file, refresh viewer
+          if (activeViewingPath === filePath) {
+            openFileInViewer(filePath);
+          }
+          updateActiveNotesContextView();
+        });
+
+        contextTagsContainer.appendChild(tag);
+      });
+    });
+
+    if (totalTagsCount === 0) {
+      activeNotesContext.style.display = 'none';
+    } else {
+      activeNotesContext.style.display = 'flex';
+    }
+  }
+
+
+  // --- 22. Tab 5: VS Code style Git source control Diff Center logic ---
+  const diffAccordionList = document.getElementById('diff-accordion-list');
+  const stagedDiffList = document.getElementById('staged-diff-list');
+  const collapseAllDiffsBtn = document.getElementById('collapse-all-diffs-btn');
+  const gitCommitInput = document.getElementById('git-commit-input');
+  const gitCommitSubmitBtn = document.getElementById('git-commit-submit-btn');
+  const stagedCountBadge = document.getElementById('staged-count-badge');
+  const changesCountBadge = document.getElementById('changes-count-badge');
+
+  // Interactive Git Lists
+  let unstagedFiles = ['index.html', 'style.css', 'app.js', 'src/utils/mcpHelper.js'];
+  let stagedFiles = [];
+
+  // Chevron click expand differential views
+  function setupAccordionEvents(item) {
+    const header = item.querySelector('.diff-item-header');
+    if (header) {
+      header.addEventListener('click', (e) => {
+        // Prevent expanding when clicking interactive buttons
+        if (e.target.closest('.diff-git-action-btn')) return;
+        const isExpanded = item.classList.toggle('expanded');
+        if (isExpanded && window.addMockTokenLog) {
+          window.addMockTokenLog(`view_diff (${item.getAttribute('data-file')})`, 45, 0);
+        }
+      });
+    }
+
+    // Stage file button
+    const stageBtn = item.querySelector('.staged-btn');
+    if (stageBtn) {
+      stageBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const filename = item.getAttribute('data-file');
+        stageFile(filename, item);
+      });
+    }
+
+    // Revert changes button
+    const revertBtn = item.querySelector('.revert-btn');
+    if (revertBtn) {
+      revertBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const filename = item.getAttribute('data-file');
+        revertFile(filename, item);
+      });
+    }
+  }
+
+  // Initialize unstaged accordion items
+  if (diffAccordionList) {
+    diffAccordionList.querySelectorAll('.diff-accordion-item').forEach(item => {
+      setupAccordionEvents(item);
+    });
+  }
+
+  // Stage action
+  function stageFile(filename, itemElement) {
+    unstagedFiles = unstagedFiles.filter(f => f !== filename);
+    stagedFiles.push(filename);
+    
+    // Modify stage button to unstage button
+    const stageBtn = itemElement.querySelector('.staged-btn');
+    if (stageBtn) {
+      stageBtn.textContent = '-';
+      stageBtn.title = '取消暂存更改';
+      stageBtn.className = 'diff-git-action-btn unstaged-action-btn';
+      
+      // Re-register event to unstage action
+      stageBtn.replaceWith(stageBtn.cloneNode(true));
+      const newStageBtn = itemElement.querySelector('.unstaged-action-btn');
+      newStageBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unstageFile(filename, itemElement);
+      });
+    }
+
+    // Remove revert button when staged
+    const revertBtn = itemElement.querySelector('.revert-btn');
+    if (revertBtn) revertBtn.style.display = 'none';
+
+    // Move to staged changes container
+    if (stagedDiffList) stagedDiffList.appendChild(itemElement);
+
+    updateGitCountBadges();
+  }
+
+  // Unstage action
+  function unstageFile(filename, itemElement) {
+    stagedFiles = stagedFiles.filter(f => f !== filename);
+    unstagedFiles.push(filename);
+
+    // Modify unstage button to stage button
+    const unstageBtn = itemElement.querySelector('.unstaged-action-btn');
+    if (unstageBtn) {
+      unstageBtn.textContent = '+';
+      unstageBtn.title = '暂存更改';
+      unstageBtn.className = 'diff-git-action-btn staged-btn';
+
+      unstageBtn.replaceWith(unstageBtn.cloneNode(true));
+      const newStageBtn = itemElement.querySelector('.staged-btn');
+      newStageBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stageFile(filename, itemElement);
+      });
+    }
+
+    // Restore revert button
+    const revertBtn = itemElement.querySelector('.revert-btn');
+    if (revertBtn) revertBtn.style.display = 'inline-flex';
+
+    // Move to unstaged changes container
+    if (diffAccordionList) diffAccordionList.appendChild(itemElement);
+
+    updateGitCountBadges();
+  }
+
+  // Revert simulation
+  function revertFile(filename, itemElement) {
+    if (confirm(`确定要放弃对 ${filename} 的所有未暂存改动吗？此操作无法撤销。`)) {
+      unstagedFiles = unstagedFiles.filter(f => f !== filename);
+      itemElement.remove();
+      updateGitCountBadges();
+      
+      // Update file tree node Git status badge
+      const treeNode = fileTree.querySelector(`.tree-node.file[data-path="${CSS.escape(filename)}"]`);
+      if (treeNode) {
+        treeNode.className = 'tree-node file';
+        const badge = treeNode.querySelector('.git-status-badge');
+        if (badge) badge.style.display = 'none';
+      }
+    }
+  }
+
+  // Update numbers badges
+  function updateGitCountBadges() {
+    if (stagedCountBadge) stagedCountBadge.textContent = stagedFiles.length;
+    if (changesCountBadge) changesCountBadge.textContent = unstagedFiles.length;
+  }
+
+  // Collapse all diffs
+  if (collapseAllDiffsBtn) {
+    collapseAllDiffsBtn.addEventListener('click', () => {
+      document.querySelectorAll('.diff-accordion-item').forEach(item => {
+        item.classList.remove('expanded');
+      });
+    });
+  }
+
+  // Submit git commit simulation
+  const performGitCommit = () => {
+    const message = gitCommitInput ? gitCommitInput.value.trim() : '';
+    if (stagedFiles.length === 0) {
+      alert("请先暂存至少一个文件的改动以供提交！");
+      return;
+    }
+    const commitMsg = message || 'update code components';
+    
+    // Create elegant toast banner
+    const toast = document.createElement('div');
+    toast.className = 'git-commit-toast';
+    toast.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 14px; height: 14px; color: #10b981; margin-right: 6px;">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 8 12 12 16 14"></polyline>
+      </svg>
+      <span>Git 提交成功: "${commitMsg}" 已推送至 master 分支</span>
+    `;
+
+    // Dynamic toast styles
+    Object.assign(toast.style, {
+      position: 'absolute',
+      bottom: '16px',
+      right: '16px',
+      backgroundColor: '#ffffff',
+      border: '1px solid #ededed',
+      borderRadius: '8px',
+      padding: '8px 16px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+      fontSize: '11.5px',
+      color: '#3a3a38',
+      display: 'flex',
+      alignItems: 'center',
+      zIndex: '2000',
+      transition: 'opacity 0.3s, transform 0.3s',
+      opacity: '0',
+      transform: 'translateY(10px)'
+    });
+
+    document.querySelector('.mac-window').appendChild(toast);
+    
+    // Animate slide up
+    setTimeout(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    }, 50);
+
+    // Remove toast after 3 seconds
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+
+    // Empty staged list
+    if (stagedDiffList) stagedDiffList.innerHTML = '';
+    
+    // Remove Git status from file tree nodes
+    stagedFiles.forEach(file => {
+      const treeNode = fileTree.querySelector(`.tree-node.file[data-path="${CSS.escape(file)}"]`);
+      if (treeNode) {
+        treeNode.className = 'tree-node file';
+        const badge = treeNode.querySelector('.git-status-badge');
+        if (badge) badge.style.display = 'none';
+      }
+    });
+
+    stagedFiles = [];
+    if (gitCommitInput) gitCommitInput.value = '';
+    updateGitCountBadges();
+  };
+
+  if (gitCommitSubmitBtn) {
+    gitCommitSubmitBtn.addEventListener('click', performGitCommit);
+  }
+  if (gitCommitInput) {
+    gitCommitInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        performGitCommit();
+      }
+    });
+  }
 
   // Initialize default active chat
   activateChatItem('todo-list-app', 'build a todo list app');

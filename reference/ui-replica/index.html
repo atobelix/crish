@@ -9,21 +9,136 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Prism.js Default light theme for code block rendering -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
 </head>
 <body>
   <!-- Wallpaper/Background container -->
   <div class="desktop-background">
-    <!-- Mock macOS Window -->
+    <!-- Mock Window (Upgraded to Windows Titlebar Layout) -->
     <div class="mac-window">
       
-      <!-- Left Sidebar -->
-      <aside class="sidebar">
-        <!-- macOS Traffic Lights (Window Controls) -->
-        <div class="window-controls">
-          <span class="control close" title="关闭"></span>
-          <span class="control minimize" title="最小化"></span>
-          <span class="control expand" title="缩放"></span>
+      <!-- Windows-style Title & Navigation Bar -->
+      <div class="win-titlebar">
+        <!-- Left: Collapse Sidebar and Menu Bar -->
+        <div class="win-titlebar-left">
+          <!-- Collapse Left Sidebar Button -->
+          <button class="win-toggle-sidebar-btn" id="win-toggle-sidebar-btn" title="显示/隐藏侧边栏 (Ctrl+B)">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <path d="M14 9l-3 3 3 3"></path>
+            </svg>
+          </button>
+          
+          <!-- Menu Bar -->
+          <div class="win-menubar">
+            <div class="win-menu-item" data-menu="file">
+              <span>文件 (F)</span>
+              <div class="win-menu-dropdown">
+                <div class="dropdown-item" id="menu-new-file">新建文件 (Ctrl+N)</div>
+                <div class="dropdown-item" id="menu-open-folder">打开文件夹...</div>
+                <hr>
+                <div class="dropdown-item" id="menu-save">保存 (Ctrl+S)</div>
+                <div class="dropdown-item" id="menu-exit">退出</div>
+              </div>
+            </div>
+            <div class="win-menu-item" data-menu="edit">
+              <span>编辑 (E)</span>
+              <div class="win-menu-dropdown">
+                <div class="dropdown-item" id="menu-undo">撤销</div>
+                <div class="dropdown-item" id="menu-redo">重做</div>
+                <hr>
+                <div class="dropdown-item" id="menu-copy">复制</div>
+                <div class="dropdown-item" id="menu-paste">粘贴</div>
+              </div>
+            </div>
+            <div class="win-menu-item" data-menu="view">
+              <span>视图 (V)</span>
+              <div class="win-menu-dropdown">
+                <div class="dropdown-item" id="menu-toggle-sidebar">切换侧边栏</div>
+                <div class="dropdown-item" id="menu-toggle-right-sidebar">切换右侧边栏</div>
+                <div class="dropdown-item" id="menu-toggle-terminal">切换输出终端</div>
+              </div>
+            </div>
+            <div class="win-menu-item" data-menu="terminal">
+              <span>终端 (T)</span>
+              <div class="win-menu-dropdown">
+                <div class="dropdown-item" id="menu-new-terminal">新建终端</div>
+                <div class="dropdown-item" id="menu-run-task">运行任务...</div>
+              </div>
+            </div>
+            <div class="win-menu-item" data-menu="help">
+              <span>帮助 (H)</span>
+              <div class="win-menu-dropdown">
+                <div class="dropdown-item" id="menu-about">关于 MyCodex</div>
+                <div class="dropdown-item" id="menu-docs">查看文档</div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Center: Command Palette / Search Bar -->
+        <div class="win-titlebar-center">
+          <div class="win-search-box">
+            <svg class="win-search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" placeholder="搜索文件、设置或命令 (Ctrl+P)" class="win-search-input" readonly>
+          </div>
+        </div>
+
+        <!-- Right: Connections / Git Status & Window Controls -->
+        <div class="win-titlebar-right">
+          <!-- Status Items -->
+          <div class="win-status-group">
+            <span class="win-status-item status-latency" title="Gemini API 响应延迟">
+              <span class="status-dot-active"></span>
+              <span>Gemini 3.5 Flash · 42ms</span>
+            </span>
+            <span class="win-status-item status-git" title="当前 Git 分支">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 12px; height: 12px; margin-right: 3px;">
+                <circle cx="18" cy="18" r="3"></circle>
+                <circle cx="6" cy="6" r="3"></circle>
+                <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
+                <line x1="6" y1="9" x2="6" y2="21"></line>
+              </svg>
+              <span>master</span>
+            </span>
+          </div>
+
+          <!-- Windows controls -->
+          <div class="win-controls">
+            <button class="win-control win-minimize" id="win-min-btn" title="最小化">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+            <button class="win-control win-maximize" id="win-max-btn" title="最大化">
+              <svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="5" y="5" width="14" height="14" rx="1" ry="1"></rect>
+              </svg>
+              <svg class="icon-restore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display: none;">
+                <rect x="7" y="9" width="10" height="10" rx="1" ry="1"></rect>
+                <path d="M9 9V7a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"></path>
+              </svg>
+            </button>
+            <button class="win-control win-close" id="win-close-btn" title="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Window Body Wrapper -->
+      <div class="window-body">
+        
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
 
         <!-- Sidebar Navigation & Operations -->
         <div class="sidebar-content">
@@ -312,6 +427,13 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <polyline points="4 17 10 11 4 5"></polyline>
               <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </button>
+          <button class="terminal-toggle-btn" id="win-toggle-right-sidebar-btn" title="显示/隐藏右侧栏">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
+              <path d="M10 9l3 3-3 3"></path>
             </svg>
           </button>
         </header>
@@ -753,12 +875,841 @@ export default function formatMarkdown(text) {
 
       </main>
 
-    </div>
-  </div>
+      <!-- Right Sidebar (Auxiliary developer workspace) -->
+      <aside class="right-sidebar">
+        <!-- Sidebar Tab Headers -->
+        <div class="right-sidebar-tabs">
+          <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-token-metrics" title="Token 消耗统计">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-browser" title="内置浏览器 & 页面预览">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-file-explorer" title="文件浏览器 & 批注系统">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-diff-center" title="改动文件差异聚合总览">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path>
+              <rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Sidebar Tab Contents -->
+        <div class="right-sidebar-content">
+          <!-- Tab 1: Dual Chat / Agent Monitor -->
+          <div class="right-tab-panel active" id="tab-dual-chat">
+            <div class="dual-chat-container">
+              <!-- Elegant Trash Icon for clearing instead of bulky text header -->
+              <div class="chat-inline-actions">
+                <button class="icon-action-btn" id="clear-dual-chat-btn" title="清空对话">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </button>
+              </div>
+
+              <div class="message-list" id="dual-chat-messages">
+                <div class="chat-message assistant-message">
+                  你好！这里是双轨对话面板。你可以在这里测试辅助提示词、运行独立的任务，或监控子 Agent 的思考过程。这个面板可以和主面板共享相同的上下文信息。
+                </div>
+              </div>
+              
+              <div class="input-panel-container dual-chat-input-panel">
+                <div class="input-area-wrapper">
+                  <div class="input-card">
+                    <textarea placeholder="输入辅助命令或提示词... (Ctrl+Enter 发送)" class="chat-textarea" id="dual-chat-textarea" rows="1"></textarea>
+                    <div class="input-card-footer">
+                      <div class="footer-left">
+                        <button class="input-action-btn add-context-btn" title="添加文件/上下文">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                          </svg>
+                        </button>
+                      </div>
+                      <div class="footer-right">
+                        <button class="send-btn" id="dual-chat-send-btn" disabled>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="19" x2="12" y2="5"></line>
+                            <polyline points="5 12 12 5 19 12"></polyline>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Token Metrics -->
+          <div class="right-tab-panel" id="tab-token-metrics">
+            <div class="token-metrics-container">
+              <!-- Visual stack bar -->
+              <div class="token-progress-card">
+                <div class="token-card-header">
+                  <span class="total-used-tokens">已使用: 4,253,109 (42.5%)</span>
+                  <span class="token-limit-info-pill">上限: 10M</span>
+                </div>
+                <div class="token-stacked-bar">
+                  <div class="bar-fill fill-cached-input" style="width: 25%" title="缓存输入: 2,500,000 (25%)"></div>
+                  <div class="bar-fill fill-input" style="width: 12.5%" title="普通输入: 1,250,000 (12.5%)"></div>
+                  <div class="bar-fill fill-cached-output" style="width: 3%" title="缓存输出: 300,000 (3%)"></div>
+                  <div class="bar-fill fill-output" style="width: 2%" title="普通输出: 203,109 (2%)"></div>
+                </div>
+                <!-- Legend -->
+                <div class="token-legend">
+                  <div class="legend-item"><span class="dot dot-cached-input"></span><span>缓存输入 (2.5M)</span></div>
+                  <div class="legend-item"><span class="dot dot-input"></span><span>普通输入 (1.25M)</span></div>
+                  <div class="legend-item"><span class="dot dot-cached-output"></span><span>缓存输出 (300K)</span></div>
+                  <div class="legend-item"><span class="dot dot-output"></span><span>普通输出 (203K)</span></div>
+                </div>
+              </div>
+
+              <!-- Action Token Log list -->
+              <div class="token-log-section">
+                <h5>AI 行动 Token 消耗记录</h5>
+                <ul class="token-log-list" id="token-log-list">
+                  <li class="token-log-item">
+                    <div class="log-meta">
+                      <span class="log-action">grep_search</span>
+                      <span class="log-time">17:42:01</span>
+                    </div>
+                    <div class="log-tokens">
+                      <span class="input-tokens">+4,212 in</span>
+                      <span class="output-tokens">+85 out</span>
+                    </div>
+                  </li>
+                  <li class="token-log-item">
+                    <div class="log-meta">
+                      <span class="log-action">read_file (index.html)</span>
+                      <span class="log-time">17:42:15</span>
+                    </div>
+                    <div class="log-tokens">
+                      <span class="input-tokens">+15,800 in</span>
+                      <span class="output-tokens">--</span>
+                    </div>
+                  </li>
+                  <li class="token-log-item">
+                    <div class="log-meta">
+                      <span class="log-action">edit_file (style.css)</span>
+                      <span class="log-time">17:43:08</span>
+                    </div>
+                    <div class="log-tokens">
+                      <span class="input-tokens">+74,500 in</span>
+                      <span class="output-tokens">+2,400 out</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Embedded Browser -->
+          <div class="right-tab-panel" id="tab-browser">
+            <div class="browser-container">
+              <!-- Address bar with integrated Back, Refresh, and Inspect actions -->
+              <div class="browser-address-bar">
+                <button class="browser-btn" id="browser-back-btn" title="返回服务器列表">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                </button>
+                <button class="browser-btn" id="browser-refresh-btn" title="刷新">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                  </svg>
+                </button>
+                <div class="browser-url-input-wrapper">
+                  <input type="text" placeholder="输入 URL" class="browser-url-input" id="browser-url-input" value="http://localhost:5173">
+                  <svg class="browser-loading-spinner" id="browser-loading-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display: none;">
+                    <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle>
+                  </svg>
+                </div>
+                <button class="browser-btn inspect-toggle-btn" id="browser-inspect-btn" title="审查元素">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <polyline points="9 17 9 7 15 7 15 17"></polyline>
+                    <line x1="9" y1="12" x2="15" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Browser Viewport / Mock render screen -->
+              <div class="browser-viewport" id="browser-viewport">
+                <!-- Inspector overlay -->
+                <div class="browser-inspect-overlay" id="browser-inspect-overlay" style="display: none;">
+                  <div class="inspect-label" id="inspect-label">div.todo-item (320 x 44)</div>
+                </div>
+
+                <!-- Web Page content -->
+                <div class="browser-viewport-content" id="browser-viewport-content">
+                  
+                  <!-- Local Server Hub (Image 2 style) -->
+                  <div class="browser-server-hub" id="browser-server-hub" style="display: block;">
+                    <div class="hub-header">
+                      <span class="hub-title">本地</span>
+                      <button class="hub-filter-btn" title="筛选">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px; vertical-align:middle;">
+                          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="hub-list">
+                      <!-- Server 1: MyCodex Demo -->
+                      <div class="server-card" data-url="http://localhost:5173" data-target="mock-app-todo">
+                        <div class="server-thumbnail">
+                          <div class="thumb-window">
+                            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                            <div class="thumb-line"></div><div class="thumb-line short"></div>
+                          </div>
+                        </div>
+                        <div class="server-info">
+                          <div class="server-name">MyCodex Demo - UI Replica</div>
+                          <div class="server-url">localhost:5173</div>
+                        </div>
+                        <span class="status-dot green"></span>
+                      </div>
+                      
+                      <!-- Server 2: Crish Agent Workbench -->
+                      <div class="server-card" data-url="http://localhost:8088" data-target="mock-app-crish">
+                        <div class="server-thumbnail">
+                          <div class="thumb-window">
+                            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                            <div class="thumb-line"></div><div class="thumb-line short"></div>
+                          </div>
+                        </div>
+                        <div class="server-info">
+                          <div class="server-name">Crish Agent Workbench — Reference</div>
+                          <div class="server-url">localhost:8088</div>
+                        </div>
+                        <span class="status-dot green"></span>
+                      </div>
+                      
+                      <!-- Server 3: localhost:9000 -->
+                      <div class="server-card" data-url="http://localhost:9000" data-target="mock-app-9000">
+                        <div class="server-thumbnail">
+                          <div class="thumb-window">
+                            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                            <div class="thumb-line"></div><div class="thumb-line short"></div>
+                          </div>
+                        </div>
+                        <div class="server-info">
+                          <div class="server-name">localhost:9000</div>
+                          <div class="server-url">localhost:9000</div>
+                        </div>
+                        <span class="status-dot green"></span>
+                      </div>
+                      
+                      <!-- Server 4: Flowbit Chat -->
+                      <div class="server-card" data-url="http://localhost:5180" data-target="mock-app-flowbit">
+                        <div class="server-thumbnail">
+                          <div class="thumb-window">
+                            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                            <div class="thumb-line"></div><div class="thumb-line short"></div>
+                          </div>
+                        </div>
+                        <div class="server-info">
+                          <div class="server-name">Flowbit Chat</div>
+                          <div class="server-url">localhost:5180</div>
+                        </div>
+                        <span class="status-dot green"></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Web App 1: TaskFlow (Todo App) -->
+                  <div class="mock-web-app" id="mock-app-todo" style="display: none;">
+                    <header class="mock-app-header">
+                      <h1>TaskFlow</h1>
+                      <span class="mock-app-badge">Dev Mode</span>
+                    </header>
+                    <div class="mock-app-body">
+                      <div class="mock-input-row">
+                        <input type="text" placeholder="添加新任务..." class="mock-app-input" value="完成 MyCodex UI 重构设计">
+                        <button class="mock-app-add-btn">添加</button>
+                      </div>
+                      <ul class="mock-app-list">
+                        <li class="mock-app-item done">
+                          <span class="checkbox checked"></span>
+                          <span class="todo-text">引入 Prism.js 渲染高亮</span>
+                        </li>
+                        <li class="mock-app-item">
+                          <span class="checkbox"></span>
+                          <span class="todo-text">左侧侧边栏折叠支持</span>
+                        </li>
+                        <li class="mock-app-item">
+                          <span class="checkbox"></span>
+                          <span class="todo-text">实现右侧辅助选项卡</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <footer class="mock-app-footer">
+                      <span>剩余 2 项任务</span>
+                      <button class="mock-app-clear-btn">清除已完成</button>
+                    </footer>
+                  </div>
+
+                  <!-- Web App 2: Flowbit Chat -->
+                  <div class="mock-web-app" id="mock-app-flowbit" style="display: none;">
+                    <header class="mock-app-header">
+                      <h1>Flowbit Chat</h1>
+                      <span class="mock-app-badge">Online</span>
+                    </header>
+                    <div class="mock-app-body" style="padding: 10px; display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto;">
+                      <div style="font-size: 11px; color: #555; background: #f2f2f2; padding: 6px 10px; border-radius: 8px 8px 8px 2px; align-self: flex-start; max-width: 85%;">
+                        你好！有什么我可以帮您的吗？
+                      </div>
+                      <div style="font-size: 11px; color: #fff; background: var(--color-blue); padding: 6px 10px; border-radius: 8px 8px 2px 8px; align-self: flex-end; max-width: 85%;">
+                        请写一个简单的 React 按钮组件。
+                      </div>
+                    </div>
+                    <footer class="mock-app-footer">
+                      <input type="text" placeholder="说点什么..." style="border: none; outline: none; background: none; font-size: 10px; width: 100%; color: var(--text-main);">
+                    </footer>
+                  </div>
+
+                  <!-- Web App 3: Crish Agent Workbench -->
+                  <div class="mock-web-app" id="mock-app-crish" style="display: none;">
+                    <header class="mock-app-header">
+                      <h1>Crish Workbench</h1>
+                      <span class="mock-app-badge" style="background: var(--color-amber-bg); color: var(--color-amber);">Active</span>
+                    </header>
+                    <div class="mock-app-body" style="background: #ffffff; border: 1px solid var(--border-color); color: var(--text-main); font-family: var(--font-mono); font-size: 9px; padding: 10px; height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">
+                      <div>[18:30:10] Agent started.</div>
+                      <div>[18:30:11] Running search query...</div>
+                      <div>[18:30:14] Found 12 matching files.</div>
+                      <div>[18:30:15] Modifying sidebar styles.</div>
+                      <div>[18:30:16] Vite build successfully in 321ms.</div>
+                    </div>
+                    <footer class="mock-app-footer" style="font-family: var(--font-mono); font-size: 8.5px;">
+                      <span>PID: 8088</span>
+                      <span>Uptime: 1m 45s</span>
+                    </footer>
+                  </div>
+
+                  <!-- Web App 4: localhost:9000 -->
+                  <div class="mock-web-app" id="mock-app-9000" style="display: none;">
+                    <div style="padding: 30px 16px; text-align: center; background: #ffffff;">
+                      <div style="font-size: 24px; margin-bottom: 8px;">🌐</div>
+                      <h3 style="font-size: 12px; font-weight:600; color:var(--text-main);">localhost:9000</h3>
+                      <p style="font-size: 10.5px; color:var(--text-secondary); margin-top: 4px;">静态资源服务器运行中。未检测到默认 index.html 网页入口。</p>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: File Explorer -->
+          <div class="right-tab-panel" id="tab-file-explorer">
+            <div class="file-explorer-container">
+              
+              <!-- Subview A: Tree List View -->
+              <div id="explorer-tree-view">
+                <!-- Active Context Notes list at the top -->
+                <div class="active-notes-context" id="active-notes-context" style="display: none;">
+                  <div class="context-title">已装载 AI 批注上下文</div>
+                  <div class="context-tags" id="context-tags-container">
+                    <!-- JS will dynamically populate this -->
+                  </div>
+                </div>
+
+                <!-- File Tree structure -->
+                <div class="file-tree" id="file-tree">
+                  <!-- Folder 1: src -->
+                  <div class="tree-node folder expanded" data-path="src">
+                    <div class="node-row">
+                      <span class="toggle-icon expanded">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </span>
+                      <span class="node-icon folder-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      </span>
+                      <span class="node-name">src</span>
+                    </div>
+                    <div class="node-children">
+                      <!-- Folder: src/components -->
+                      <div class="tree-node folder expanded" data-path="src/components">
+                        <div class="node-row">
+                          <span class="toggle-icon expanded">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </span>
+                          <span class="node-icon folder-icon">
+                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                          </span>
+                          <span class="node-name">components</span>
+                        </div>
+                        <div class="node-children">
+                          <!-- File: src/components/ChatPanel.jsx [M] -->
+                          <div class="tree-node file git-modified" data-path="src/components/ChatPanel.jsx" title="双击打开并添加行内批注 (Git: 已修改)">
+                            <div class="node-row">
+                              <span class="toggle-icon"></span>
+                              <span class="node-icon file-icon">
+                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                              </span>
+                              <span class="node-name">ChatPanel.jsx</span>
+                              <span class="git-status-badge status-m">M</span>
+                              <span class="note-indicator-badge" style="display: none;">0</span>
+                            </div>
+                          </div>
+                          <!-- File: src/components/Sidebar.jsx -->
+                          <div class="tree-node file" data-path="src/components/Sidebar.jsx" title="双击打开并添加行内批注">
+                            <div class="node-row">
+                              <span class="toggle-icon"></span>
+                              <span class="node-icon file-icon">
+                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                              </span>
+                              <span class="node-name">Sidebar.jsx</span>
+                              <span class="note-indicator-badge" style="display: none;">0</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Folder: src/utils -->
+                      <div class="tree-node folder expanded" data-path="src/utils">
+                        <div class="node-row">
+                          <span class="toggle-icon expanded">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </span>
+                          <span class="node-icon folder-icon">
+                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                          </span>
+                          <span class="node-name">utils</span>
+                        </div>
+                        <div class="node-children">
+                          <!-- File: src/utils/mcpHelper.js [A] -->
+                          <div class="tree-node file git-added" data-path="src/utils/mcpHelper.js" title="双击打开并添加行内批注 (Git: 新增)">
+                            <div class="node-row">
+                              <span class="toggle-icon"></span>
+                              <span class="node-icon file-icon">
+                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                              </span>
+                              <span class="node-name">mcpHelper.js</span>
+                              <span class="git-status-badge status-a">A</span>
+                              <span class="note-indicator-badge" style="display: none;">0</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- File: src/styles/theme.css [M] -->
+                      <div class="tree-node file git-modified" data-path="src/styles/theme.css" title="双击打开并添加行内批注 (Git: 已修改)">
+                        <div class="node-row">
+                          <span class="toggle-icon"></span>
+                          <span class="node-icon file-icon">
+                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                          </span>
+                          <span class="node-name">theme.css</span>
+                          <span class="git-status-badge status-m">M</span>
+                          <span class="note-indicator-badge" style="display: none;">0</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Folder 2: public -->
+                  <div class="tree-node folder" data-path="public">
+                    <div class="node-row">
+                      <span class="toggle-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </span>
+                      <span class="node-icon folder-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      </span>
+                      <span class="node-name">public</span>
+                    </div>
+                    <div class="node-children" style="display: none;">
+                      <!-- File: public/favicon.ico -->
+                      <div class="tree-node file" data-path="public/favicon.ico" title="双击打开并添加行内批注">
+                        <div class="node-row">
+                          <span class="toggle-icon"></span>
+                          <span class="node-icon file-icon">
+                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                          </span>
+                          <span class="node-name">favicon.ico</span>
+                          <span class="note-indicator-badge" style="display: none;">0</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Folder 3: tests -->
+                  <div class="tree-node folder" data-path="tests">
+                    <div class="node-row">
+                      <span class="toggle-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </span>
+                      <span class="node-icon folder-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      </span>
+                      <span class="node-name">tests</span>
+                    </div>
+                    <div class="node-children" style="display: none;">
+                      <!-- File: tests/chat.test.js [D] -->
+                      <div class="tree-node file git-deleted" data-path="tests/chat.test.js" title="双击打开并添加行内批注 (Git: 已删除)">
+                        <div class="node-row">
+                          <span class="toggle-icon"></span>
+                          <span class="node-icon file-icon">
+                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                          </span>
+                          <span class="node-name" style="text-decoration: line-through;">chat.test.js</span>
+                          <span class="git-status-badge status-d">D</span>
+                          <span class="note-indicator-badge" style="display: none;">0</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Root level files -->
+                  <!-- File: index.html [M] -->
+                  <div class="tree-node file git-modified" data-path="index.html" title="双击打开并添加行内批注 (Git: 已修改)">
+                    <div class="node-row">
+                      <span class="toggle-icon"></span>
+                      <span class="node-icon file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="node-name">index.html</span>
+                      <span class="git-status-badge status-m">M</span>
+                      <span class="note-indicator-badge" style="display: none;">0</span>
+                    </div>
+                  </div>
+                  <!-- File: style.css [M] -->
+                  <div class="tree-node file git-modified" data-path="style.css" title="双击打开并添加行内批注 (Git: 已修改)">
+                    <div class="node-row">
+                      <span class="toggle-icon"></span>
+                      <span class="node-icon file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="node-name">style.css</span>
+                      <span class="git-status-badge status-m">M</span>
+                      <span class="note-indicator-badge" style="display: none;">0</span>
+                    </div>
+                  </div>
+                  <!-- File: app.js [M] -->
+                  <div class="tree-node file git-modified" data-path="app.js" title="双击打开并添加行内批注 (Git: 已修改)">
+                    <div class="node-row">
+                      <span class="toggle-icon"></span>
+                      <span class="node-icon file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="node-name">app.js</span>
+                      <span class="git-status-badge status-m">M</span>
+                      <span class="note-indicator-badge" style="display: none;">0</span>
+                    </div>
+                  </div>
+                  <!-- File: package.json -->
+                  <div class="tree-node file" data-path="package.json" title="双击打开并添加行内批注">
+                    <div class="node-row">
+                      <span class="toggle-icon"></span>
+                      <span class="node-icon file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="node-name">package.json</span>
+                      <span class="note-indicator-badge" style="display: none;">0</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="git-branch-footer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;">
+                    <line x1="6" y1="3" x2="6" y2="15"></line>
+                    <circle cx="18" cy="6" r="3"></circle>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <path d="M18 9a9 9 0 0 1-9 9"></path>
+                  </svg>
+                  <span>git:main</span>
+                </div>
+              </div>
+
+              <!-- Subview B: File Content & Line Annotation View (Hidden initially) -->
+              <div id="explorer-file-content-view" style="display: none;">
+                <div class="file-viewer-header">
+                  <button class="icon-action-btn" id="file-viewer-back-btn" title="返回文件列表">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 14px; height: 14px;">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <span class="file-viewer-path" id="file-viewer-path">src/auth/login.js</span>
+                </div>
+                <div class="file-viewer-scroll-area">
+                  <div class="code-viewer-container" id="code-viewer-container">
+                    <!-- Dynamic code rendering in white theme light color -->
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Tab 5: Diff Center -->
+          <div class="right-tab-panel" id="tab-diff-center">
+            <div class="diff-center-container">
+              <!-- Git Source Control Header -->
+              <div class="git-control-panel">
+                <div class="git-commit-box">
+                  <input type="text" class="git-commit-input" id="git-commit-input" placeholder="提交信息 (Ctrl+Enter)...">
+                  <button class="git-commit-btn" id="git-commit-submit-btn" title="提交 (Commit)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 13px; height: 13px;">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </button>
+                </div>
+                <div class="git-actions-row">
+                  <span class="git-status-title">源代码管理: Git</span>
+                  <div class="git-icon-buttons">
+                    <button class="git-action-icon-btn" id="collapse-all-diffs-btn" title="折叠所有差异">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 13px; height: 13px;">
+                        <line x1="4" y1="12" x2="20" y2="12"></line>
+                        <line x1="4" y1="6" x2="20" y2="6"></line>
+                        <line x1="4" y1="18" x2="20" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Staged Changes Group -->
+              <div class="git-group-header expanded" id="staged-group-header">
+                <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span>暂存的更改</span>
+                <span class="git-badge" id="staged-count-badge">0</span>
+              </div>
+              <div class="diff-accordion-list" id="staged-diff-list" style="margin-bottom: 12px;">
+                <!-- Staged items will go here -->
+              </div>
+
+              <!-- Changes (Unstaged) Group -->
+              <div class="git-group-header expanded" id="unstaged-group-header">
+                <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span>更改</span>
+                <span class="git-badge" id="changes-count-badge">4</span>
+              </div>
+              
+              <!-- Diff Accordion List (Unstaged changes) -->
+              <div class="diff-accordion-list" id="diff-accordion-list">
+                
+                <!-- File 1: index.html -->
+                <div class="diff-accordion-item" data-file="index.html">
+                  <div class="diff-item-header">
+                    <div class="diff-header-left">
+                      <span class="chevron-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </span>
+                      <span class="file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="diff-filename">index.html</span>
+                    </div>
+                    <div class="diff-header-right">
+                      <span class="diff-git-action-btn staged-btn" title="暂存更改">+</span>
+                      <span class="diff-git-action-btn revert-btn" title="放弃更改">↺</span>
+                      <span class="diff-stats"><span class="additions">+32</span> <span class="deletions">-5</span></span>
+                    </div>
+                  </div>
+                  <div class="diff-item-content">
+                    <pre class="diff-code-block"><code><span class="diff-chunk">@@ -868,14 +868,41 @@</span>
+<span class="diff-context">       &lt;/main&gt;</span>
+<span class="diff-context"> </span>
+<span class="diff-deletion">-      &lt;!-- Old footer or single pane --&gt;</span>
+<span class="diff-addition">+      &lt;!-- Right Sidebar (Auxiliary developer workspace) --&gt;</span>
+<span class="diff-addition">+      &lt;aside class="right-sidebar"&gt;</span>
+<span class="diff-addition">+        &lt;div class="right-sidebar-tabs"&gt;</span>
+<span class="diff-addition">+          &lt;button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话"&gt;</span>
+<span class="diff-addition">+            &lt;svg class="icon" viewBox="0 0 24 24" ...&gt;</span>
+<span class="diff-addition">+          &lt;/button&gt;</span>
+<span class="diff-context">           ...</span>
+<span class="diff-addition">+        &lt;/div&gt;</span>
+<span class="diff-addition">+      &lt;/aside&gt;</span></code></pre>
+                  </div>
+                </div>
+
+                <!-- File 2: style.css -->
+                <div class="diff-accordion-item" data-file="style.css">
+                  <div class="diff-item-header">
+                    <div class="diff-header-left">
+                      <span class="chevron-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </span>
+                      <span class="file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="diff-filename">style.css</span>
+                    </div>
+                    <div class="diff-header-right">
+                      <span class="diff-git-action-btn staged-btn" title="暂存更改">+</span>
+                      <span class="diff-git-action-btn revert-btn" title="放弃更改">↺</span>
+                      <span class="diff-stats"><span class="additions">+145</span> <span class="deletions">-12</span></span>
+                    </div>
+                  </div>
+                  <div class="diff-item-content">
+                    <pre class="diff-code-block"><code><span class="diff-chunk">@@ -4174,10 +4174,25 @@</span>
+<span class="diff-context"> /* ---------------------------------</span>
+<span class="diff-context">    RIGHT SIDEBAR & DEVELOPER AUXILIARY TOOLS</span>
+<span class="diff-context"> --------------------------------- */</span>
+<span class="diff-addition">+.right-sidebar {</span>
+<span class="diff-addition">+  width: 360px;</span>
+<span class="diff-addition">+  flex-shrink: 0;</span>
+<span class="diff-addition">+  background-color: var(--bg-sidebar);</span>
+<span class="diff-addition">+  border-left: 1px solid rgba(0,0,0,0.08);</span>
+<span class="diff-addition">+  display: flex;</span>
+<span class="diff-addition">+  flex-direction: column;</span>
+<span class="diff-addition">+}</span>
+<span class="diff-context"> </span>
+<span class="diff-deletion">-.sidebar-hidden { display: none; }</span>
+<span class="diff-addition">+.sidebar.collapsed {</span>
+<span class="diff-addition">+  width: 0px;</span>
+<span class="diff-addition">+  opacity: 0;</span>
+<span class="diff-addition">+  pointer-events: none;</span>
+<span class="diff-addition">+}</span></code></pre>
+                  </div>
+                </div>
+
+                <!-- File 3: app.js -->
+                <div class="diff-accordion-item" data-file="app.js">
+                  <div class="diff-item-header">
+                    <div class="diff-header-left">
+                      <span class="chevron-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </span>
+                      <span class="file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="diff-filename">app.js</span>
+                    </div>
+                    <div class="diff-header-right">
+                      <span class="diff-git-action-btn staged-btn" title="暂存更改">+</span>
+                      <span class="diff-git-action-btn revert-btn" title="放弃更改">↺</span>
+                      <span class="diff-stats"><span class="additions">+212</span> <span class="deletions">-8</span></span>
+                    </div>
+                  </div>
+                  <div class="diff-item-content">
+                    <pre class="diff-code-block"><code><span class="diff-chunk">@@ -39,12 +39,26 @@</span>
+<span class="diff-context"> document.addEventListener('DOMContentLoaded', () => {</span>
+<span class="diff-context"> </span>
+<span class="diff-addition">+  // --- Left Sidebar collapsible toggle ---</span>
+<span class="diff-addition">+  const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');</span>
+<span class="diff-addition">+  if (toggleSidebarBtn) {</span>
+<span class="diff-addition">+    toggleSidebarBtn.addEventListener('click', toggleSidebar);</span>
+<span class="diff-addition">+  }</span>
+<span class="diff-context"> </span>
+<span class="diff-deletion">-  // Old sidebar action</span>
+<span class="diff-addition">+  // --- Right Sidebar Tab switcher logic ---</span>
+<span class="diff-addition">+  const tabBtns = document.querySelectorAll('.right-tab-btn');</span>
+<span class="diff-addition">+  tabBtns.forEach(btn => {</span>
+<span class="diff-addition">+    btn.addEventListener('click', () => {</span>
+<span class="diff-addition">+      switchRightTab(btn.dataset.tab);</span>
+<span class="diff-addition">+    });</span>
+<span class="diff-addition">+  });</span></code></pre>
+                  </div>
+                </div>
+
+                <!-- File 4: src/utils/mcpHelper.js -->
+                <div class="diff-accordion-item" data-file="src/utils/mcpHelper.js">
+                  <div class="diff-item-header">
+                    <div class="diff-header-left">
+                      <span class="chevron-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </span>
+                      <span class="file-icon">
+                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                      </span>
+                      <span class="diff-filename">src/utils/mcpHelper.js</span>
+                    </div>
+                    <div class="diff-header-right">
+                      <span class="diff-git-action-btn staged-btn" title="暂存更改">+</span>
+                      <span class="diff-git-action-btn revert-btn" title="放弃更改">↺</span>
+                      <span class="diff-stats"><span class="additions">+60</span> <span class="deletions">0</span></span>
+                    </div>
+                  </div>
+                  <div class="diff-item-content">
+                    <pre class="diff-code-block"><code><span class="diff-chunk">@@ -0,0 +1,24 @@</span>
+<span class="diff-addition">+// NEW FILE [A]</span>
+<span class="diff-addition">+export function registerMCPServer(serverName, config) {</span>
+<span class="diff-addition">+  console.log(`Registering MCP Server: ${serverName}`);</span>
+<span class="diff-addition">+  if (config.enabled) {</span>
+<span class="diff-addition">+    return startServerInstance(serverName, config.args);</span>
+<span class="diff-addition">+  }</span>
+<span class="diff-addition">+  return null;</span>
+<span class="diff-addition">+}</span>
+<span class="diff-addition">+</span>
+<span class="diff-addition">+function startServerInstance(name, args) {</span>
+<span class="diff-addition">+  return {</span>
+<span class="diff-addition">+    status: 'connected',</span>
+<span class="diff-addition">+    pid: Math.floor(Math.random() * 10000),</span>
+<span class="diff-addition">+    uptime: 0</span>
+<span class="diff-addition">+  };</span>
+<span class="diff-addition">+}</span></code></pre>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      </div> <!-- End of .window-body -->
+    </div> <!-- End of .mac-window -->
+  </div> <!-- End of .desktop-background -->
 
   <!-- Global Custom Context Menu -->
   <div class="custom-context-menu" id="context-menu">
     <ul id="context-menu-list"></ul>
+  </div>
+
+  <!-- Windows Command Palette Modal -->
+  <div class="modal-overlay" id="command-palette-modal" style="display: none;">
+    <div class="command-palette-card">
+      <div class="command-palette-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="palette-search-icon">
+          <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" placeholder="输入命令以执行..." class="palette-search-input">
+      </div>
+      <ul class="command-palette-list">
+        <li class="palette-item" data-action="new-chat">
+          <span class="palette-item-text">新建对话 (New Chat)</span>
+          <kbd class="palette-kbd">Ctrl+N</kbd>
+        </li>
+        <li class="palette-item" data-action="toggle-sidebar">
+          <span class="palette-item-text">切换侧边栏显示 (Toggle Sidebar)</span>
+          <kbd class="palette-kbd">Ctrl+B</kbd>
+        </li>
+        <li class="palette-item" data-action="open-settings">
+          <span class="palette-item-text">打开设置 (Open Settings)</span>
+          <kbd class="palette-kbd">Ctrl+,</kbd>
+        </li>
+        <li class="palette-item" data-action="run-demo">
+          <span class="palette-item-text">运行工具调用演示 (Run Demo)</span>
+          <kbd class="palette-kbd">Ctrl+Shift+D</kbd>
+        </li>
+        <li class="palette-item" data-action="toggle-theme">
+          <span class="palette-item-text">切换深色/浅色模式 (Toggle Dark/Light Mode)</span>
+          <kbd class="palette-kbd">Ctrl+Shift+T</kbd>
+        </li>
+      </ul>
+    </div>
   </div>
 
   <!-- Settings Modal -->
@@ -1020,6 +1971,7 @@ export default function formatMarkdown(text) {
           </div>
 
           <!-- Tab 5: MCP -->
+          <!-- Tab 5: MCP -->
           <div class="settings-panel" id="tab-mcp">
             <div class="panel-header-inline">
               <h3>MCP (Model Context Protocol) 服务</h3>
@@ -1027,21 +1979,100 @@ export default function formatMarkdown(text) {
             </div>
             
             <div class="settings-group mt-16">
-              <div class="mcp-server-card">
+              <div class="mcp-server-card" data-server="filesystem">
                 <div class="mcp-header">
                   <span class="mcp-name">filesystem</span>
                   <span class="mcp-status-dot active"></span>
                   <span class="mcp-status-text">已连接</span>
+                  
+                  <div class="mcp-actions-group">
+                    <button class="mcp-btn-config" title="配置参数">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="icon-gear">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                      </svg>
+                      <span>配置</span>
+                    </button>
+                    <label class="switch-container">
+                      <input type="checkbox" class="mcp-toggle-switch" checked>
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
                 </div>
                 <div class="mcp-details">路径: C:\Users\orange\.gemini\antigravity\scratch</div>
+                
+                <!-- Collapsible parameter config panel -->
+                <div class="mcp-config-panel">
+                  <div class="mcp-form-row">
+                    <div class="mcp-form-group">
+                      <label>执行命令 (Command)</label>
+                      <input type="text" value="node" class="mcp-input-cmd">
+                    </div>
+                  </div>
+                  <div class="mcp-form-row mt-6">
+                    <div class="mcp-form-group">
+                      <label>启动参数 (Arguments)</label>
+                      <input type="text" value="C:\Users\orange\.gemini\config\mcp\filesystem.js C:\Users\orange\.gemini\antigravity\scratch" class="mcp-input-args">
+                    </div>
+                  </div>
+                  <div class="mcp-form-row mt-6">
+                    <div class="mcp-form-group">
+                      <label>环境变量 (Env Variables)</label>
+                      <input type="text" value="PATH=%PATH%;" class="mcp-input-env" placeholder="KEY=VALUE">
+                    </div>
+                  </div>
+                  <div class="mcp-config-footer mt-10">
+                    <button class="action-btn-primary mcp-btn-save">保存</button>
+                  </div>
+                </div>
               </div>
-              <div class="mcp-server-card mt-10">
+
+              <div class="mcp-server-card mt-10" data-server="github">
                 <div class="mcp-header">
                   <span class="mcp-name">github</span>
                   <span class="mcp-status-dot active"></span>
                   <span class="mcp-status-text">已连接</span>
+                  
+                  <div class="mcp-actions-group">
+                    <button class="mcp-btn-config" title="配置参数">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="icon-gear">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                      </svg>
+                      <span>配置</span>
+                    </button>
+                    <label class="switch-container">
+                      <input type="checkbox" class="mcp-toggle-switch" checked>
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
                 </div>
                 <div class="mcp-details">仓库权限: Read & Write</div>
+                
+                <!-- Collapsible parameter config panel -->
+                <div class="mcp-config-panel">
+                  <div class="mcp-form-row">
+                    <div class="mcp-form-group">
+                      <label>执行命令 (Command)</label>
+                      <input type="text" value="npx" class="mcp-input-cmd">
+                    </div>
+                  </div>
+                  <div class="mcp-form-row mt-6">
+                    <div class="mcp-form-group">
+                      <label>启动参数 (Arguments)</label>
+                      <input type="text" value="-y @modelcontextprotocol/server-github" class="mcp-input-args">
+                    </div>
+                  </div>
+                  <div class="mcp-form-row mt-6">
+                    <div class="mcp-form-group">
+                      <label>环境变量 (Env Variables)</label>
+                      <input type="text" value="GITHUB_PERSONAL_ACCESS_TOKEN=ghp_********************" class="mcp-input-env">
+                    </div>
+                  </div>
+                  <div class="mcp-config-footer mt-10">
+                    <button class="action-btn-primary mcp-btn-save">保存</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1179,6 +2210,8 @@ export default function formatMarkdown(text) {
     </div>
   </div>
 
+  <!-- Prism.js library for syntax highlighting -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
   <!-- Script File -->
   <script src="app.js" type="module"></script>
 </body>
