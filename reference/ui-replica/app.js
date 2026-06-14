@@ -3392,7 +3392,7 @@ export async function hashPassword(password) {
       // Build submenu as a child of parent (CSS hover propagation, no JS events)
       var submenu = document.createElement('div');
       submenu.className = 'attached-submenu cascading';
-      submenu.style.cssText = 'position:absolute;left:-154px;top:-4px;width:150px;flex-direction:column;row-gap:4px;padding:4px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;';
+      submenu.style.cssText = 'position:absolute;left:-184px;top:-4px;width:180px;flex-direction:column;row-gap:4px;padding:4px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;';
       var subHtml = '';
       def.submenuItems.forEach(function(item) {
         subHtml += '<div class="attached-action-btn" data-base="' + baseType + '" data-action="' + item.action + '">';
