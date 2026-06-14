@@ -3198,7 +3198,7 @@ export async function hashPassword(password) {
       createInstance: function(n) { return { label: '终端 ' + n, panelId: null }; }
     },
     'tab-token-metrics': {
-      label: 'Token 统计',
+      label: '使用统计',
       icon: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>'
     },
     'tab-file-explorer': {
@@ -3233,13 +3233,14 @@ export async function hashPassword(password) {
   var rightTabAddBtn = document.getElementById('right-tab-add-btn');
   var rightActions = document.getElementById('right-tab-actions');
   var allTabPanels = document.querySelectorAll('.right-tab-panel');
+  var activeTabId = activeTabs[0].id;
 
   function renderTabBar() {
     if (!rightTabList) return;
-    rightTabList.innerHTML = activeTabs.map(function(tab, idx) {
+    rightTabList.innerHTML = activeTabs.map(function(tab) {
       var def = tabDefinitions[tab.baseType];
       if (!def) return '';
-      var isActive = idx === 0;
+      var isActive = tab.id === activeTabId;
       var closable = activeTabs.length > 1;
       return '<button class="right-tab-btn ' + (isActive ? 'active' : '') + '" data-tab-id="' + tab.id + '" title="' + tab.label + '" draggable="true">' +
         '<span class="tab-icon-wrap">' +
@@ -3297,10 +3298,10 @@ export async function hashPassword(password) {
     const onMouseUp = (e) => {
       clearTimeout(dragTimer);
       dragTimer = null;
+      if (dragClone) { dragClone.remove(); dragClone = null; }
       if (isDragReady) {
         btn.classList.remove('dragging');
         rightTabList.querySelectorAll('.right-tab-btn').forEach(b => b.classList.remove('drag-over'));
-        if (dragClone) { dragClone.remove(); dragClone = null; }
         const overBtn = getOverBtn(e);
         if (overBtn && overBtn !== btn) {
           const overIdx = Array.from(rightTabList.children).indexOf(overBtn);
@@ -3354,11 +3355,19 @@ export async function hashPassword(password) {
     if (rightTabAddBtn) {
       rightTabAddBtn.onclick = showAddTabMenu;
     }
+    // Wheel horizontal scroll on tab list
+    rightTabList.addEventListener('wheel', function(e) {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        rightTabList.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
   }
 
   function activateTab(tabId) {
     var tab = activeTabs.find(function(t) { return t.id === tabId; });
     if (!tab) return;
+    activeTabId = tabId;
     allTabPanels.forEach(function(p) { p.classList.remove('active'); });
     if (tab.panelId) {
       var panel = document.getElementById(tab.panelId);
@@ -3380,7 +3389,8 @@ export async function hashPassword(password) {
       if (panel) panel.classList.remove('active');
     }
     if (activeTabs.length > 0) {
-      activateTab(activeTabs[0].id);
+      if (tabId === activeTabId) activeTabId = activeTabs[0].id;
+      activateTab(activeTabId);
     }
     renderTabBar();
   }
@@ -4412,4 +4422,15 @@ async function login(username, password) {
 
   // Initialize default active chat
   activateChatItem('todo-list-app', 'build a todo list app');
+
+  // --- Metric filter bar: icon clickable demo ---
+  var metricBtns = document.querySelectorAll('.metric-filter-bar .metric-icon-btn');
+  metricBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      // Don't toggle spinner or last "more" button
+      if (btn === metricBtns[0] || btn === metricBtns[1] || btn === metricBtns[metricBtns.length - 1]) return;
+      metricBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
 });

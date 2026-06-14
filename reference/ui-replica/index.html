@@ -1919,6 +1919,14 @@ export default function formatMarkdown(text) {
             </svg>
             <span>MCP</span>
           </button>
+          <button class="settings-tab-btn" data-target="tab-usage-stats">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span>使用统计</span>
+          </button>
         </aside>
 
         <!-- Settings Main Panels -->
@@ -2219,6 +2227,48 @@ export default function formatMarkdown(text) {
                   <div class="mcp-config-footer mt-10">
                     <button class="action-btn-primary mcp-btn-save">保存</button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 6: Usage Statistics -->
+          <div class="settings-panel" id="tab-usage-stats">
+            <h3>使用统计</h3>
+            <div class="settings-group mt-16">
+              <div class="metric-summary-cards">
+                <div class="metric-summary-item">
+                  <span class="summary-value">12,847</span>
+                  <span class="summary-label">总调用</span>
+                </div>
+                <div class="metric-summary-item">
+                  <span class="summary-value">4.25M</span>
+                  <span class="summary-label">Token 消耗</span>
+                </div>
+                <div class="metric-summary-item">
+                  <span class="summary-value">$2.13</span>
+                  <span class="summary-label">预估费用</span>
+                </div>
+                <div class="metric-summary-item">
+                  <span class="summary-value">4 个</span>
+                  <span class="summary-label">活跃模型</span>
+                </div>
+              </div>
+            </div>
+            <div class="settings-group mt-20">
+              <label>按项目消耗</label>
+              <div class="metric-cost-list">
+                <div class="metric-cost-item">
+                  <span class="cost-name">mycodex-demo / build todo list</span>
+                  <span class="cost-value">1.2M tokens</span>
+                </div>
+                <div class="metric-cost-item">
+                  <span class="cost-name">mycodex-demo / refactor auth</span>
+                  <span class="cost-value">892K tokens</span>
+                </div>
+                <div class="metric-cost-item">
+                  <span class="cost-name">conex / setup chat</span>
+                  <span class="cost-value">2.1M tokens</span>
                 </div>
               </div>
             </div>

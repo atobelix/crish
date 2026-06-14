@@ -1414,6 +1414,34 @@ body.dark-theme .win-control:hover {
   overflow: auto;
 }
 
+/* Unified scrollbar for tool output */
+.output-box::-webkit-scrollbar,
+.tool-output::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.output-box::-webkit-scrollbar-track,
+.tool-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+.output-box::-webkit-scrollbar-thumb,
+.tool-output::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+.output-box::-webkit-scrollbar-thumb:hover,
+.tool-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+body.dark-theme .output-box::-webkit-scrollbar-thumb,
+body.dark-theme .tool-output::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+body.dark-theme .output-box::-webkit-scrollbar-thumb:hover,
+body.dark-theme .tool-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 /* output-window / tool-result-window handles collapse/expand only (no scroll) */
 .output-window,
 .tool-result-window {
@@ -4902,28 +4930,29 @@ body.dark-theme .attached-action-btn:active {
   stroke-width: 1.8;
 }
 
-/* Hover: X icon overlays the SVG icon (with delay to prevent flicker) */
+/* Hover: X icon overlays the SVG icon */
 .right-tab-btn .tab-close {
   position: absolute;
   top: 0;
   left: 0;
   width: 14px;
   height: 14px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0s 0.15s;
+  transition: none;
 }
 
 .right-tab-btn:hover .tab-close {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 0s 0.25s;
 }
 
 .right-tab-btn:hover .tab-icon-wrap .icon {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0s 0.15s;
+  transition: none;
 }
 
 .right-tab-btn:hover {
@@ -4963,7 +4992,7 @@ body.dark-theme .attached-action-btn:active {
 /* Content area 闂?Row 3 */
 .right-sidebar-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -5206,6 +5235,75 @@ body.dark-theme .metric-dropdown {
 body.dark-theme .metric-dropdown:hover {
   background-color: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Settings usage statistics cards */
+.metric-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.metric-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: var(--bg-main);
+  gap: 4px;
+}
+
+.metric-summary-item .summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.metric-summary-item .summary-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.metric-cost-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-cost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  background: var(--bg-main);
+}
+
+.metric-cost-item .cost-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-cost-item .cost-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-main);
+  flex-shrink: 0;
+}
+
+body.dark-theme .metric-summary-item {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .metric-cost-item {
+  border-color: rgba(255, 255, 255, 0.05);
 }
 
 /* SVG chart dark theme overrides */
