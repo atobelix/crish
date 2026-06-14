@@ -646,6 +646,147 @@ document.addEventListener('DOMContentLoaded', () => {
     ]
   };
 
+  // ═══════════════════════════════════════════
+  //  ARCHITECTURE: Config / DataProvider / ChartRenderer
+  // ═══════════════════════════════════════════
+  window.AppConfig = {
+    mode: 'demo', // 'demo' | 'api' — switch for backend
+    apiBaseUrl: '/api/v1',
+    endpoints: {
+      messages:  '/sessions/{id}/messages',
+      tokens:    '/sessions/{id}/tokens',
+      metrics:   '/sessions/{id}/metrics',
+      plans:     '/sessions/{id}/plans',
+      diffs:     '/sessions/{id}/diffs',
+      usage:     '/usage/stats'
+    }
+  };
+
+  // --- DataProvider: abstract data source (demo ↔ api) ---
+  window.DataProvider = (function() {
+    var isDemo = window.AppConfig.mode === 'demo';
+
+    // Demo: return mock data immediately
+    function demoFetch(url, opts) {
+      return Promise.resolve({ ok: true, json: function() { return Promise.resolve(opts._mock || {}); } });
+    }
+
+    // API: real HTTP fetch
+    function apiFetch(url, opts) {
+      return fetch(window.AppConfig.apiBaseUrl + url, opts);
+    }
+
+    // Build URL from endpoint template
+    function buildUrl(template, params) {
+      var url = template;
+      for (var k in params) { url = url.replace('{' + k + '}', params[k]); }
+      return url;
+    }
+
+    return {
+      fetchMessages: function(sessionId) {
+        var url = buildUrl(window.AppConfig.endpoints.messages, { id: sessionId });
+        if (isDemo) return demoFetch(url, { _mock: window.MockData.messages[sessionId] || [] }).then(function(r) { return r.json(); });
+        return apiFetch(url).then(function(r) { return r.json(); });
+      },
+      fetchTokenMetrics: function(sessionId, opts) {
+        var url = buildUrl(window.AppConfig.endpoints.metrics, { id: sessionId }) + '?range=' + (opts && opts.range || '7d') + '&granularity=' + (opts && opts.granularity || 'auto');
+        if (isDemo) return demoFetch(url, { _mock: window.MockData.tokenMetrics }).then(function(r) { return r.json(); });
+        return apiFetch(url).then(function(r) { return r.json(); });
+      },
+      fetchUsageStats: function(opts) {
+        var url = window.AppConfig.endpoints.usage + '?scope=' + (opts && opts.scope || 'global') + '&range=' + (opts && opts.range || '30d');
+        if (isDemo) return demoFetch(url, { _mock: window.MockData.usageStats }).then(function(r) { return r.json(); });
+        return apiFetch(url).then(function(r) { return r.json(); });
+      }
+    };
+  })();
+
+  // --- ChartRenderer: SVG charts from data objects ---
+  window.ChartRenderer = {
+    // Line chart: points[{x,y}] → SVG path + gradient fill
+    renderLine: function(config) {
+      var w = config.width || 280, h = config.height || 100;
+      var points = config.points || [], color = config.color || '#3b82f6';
+      var padX = config.padX || 0, padY = config.padY || 10;
+      var maxY = Math.max.apply(null, points.map(function(p) { return p.y; })) || 1;
+      if (points.length < 2) return '<svg viewBox="0 0 ' + w + ' ' + h + '"></svg>';
+      var scaleX = (w - 2 * padX) / (points.length - 1);
+      var scaleY = (h - 2 * padY) / maxY;
+      var pathD = 'M' + points.map(function(p, i) {
+        var x = padX + i * scaleX, y = h - padY - p.y * scaleY;
+        if (i === 0) return x + ',' + y;
+        return ' Q' + ((x + padX + (i-1)*scaleX) / 2) + ',' + y + ' ' + x + ',' + y;
+      }).join(' ');
+      var fillD = pathD + ' L' + (padX + (points.length-1) * scaleX) + ',' + (h - padY) + ' L' + padX + ',' + (h - padY) + ' Z';
+      return '<svg class="line-chart" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet">' +
+        '<defs><linearGradient id="lcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + color + '" stop-opacity="0.15"/><stop offset="100%" stop-color="' + color + '" stop-opacity="0"/></linearGradient></defs>' +
+        '<line x1="' + padX + '" y1="' + (h - padY - maxY*0.33*scaleY) + '" x2="' + (w-padX) + '" y2="' + (h - padY - maxY*0.33*scaleY) + '" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>' +
+        '<line x1="' + padX + '" y1="' + (h - padY - maxY*0.66*scaleY) + '" x2="' + (w-padX) + '" y2="' + (h - padY - maxY*0.66*scaleY) + '" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>' +
+        '<path d="' + pathD + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<path d="' + fillD + '" fill="url(#lcg)" opacity="0.6"/>' +
+        '</svg>';
+    },
+    // Bar chart: datasets[{label,value,color}] → SVG rects
+    renderBars: function(config) {
+      var w = config.width || 400, h = config.height || 100;
+      var datasets = config.datasets || [];
+      var padY = config.padY || 15;
+      var maxVal = Math.max.apply(null, datasets.map(function(d) { return d.value; })) || 1;
+      var barW = Math.max(8, Math.floor((w - 20) / datasets.length - 4));
+      var gap = Math.floor((w - 20 - barW * datasets.length) / (datasets.length + 1));
+      var bars = datasets.map(function(d, i) {
+        var x = 10 + gap + i * (barW + gap);
+        var barH = (h - padY) * d.value / maxVal;
+        return '<rect x="' + x + '" y="' + (h - padY - barH) + '" width="' + barW + '" height="' + barH + '" rx="2" fill="' + (d.color || '#3b82f6') + '" opacity="0.75"/>' +
+          '<text x="' + (x + barW/2) + '" y="' + (h - 4) + '" font-size="6" fill="var(--text-muted)" text-anchor="middle">' + (d.label || '') + '</text>';
+      }).join('');
+      return '<svg class="bar-chart" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet">' +
+        '<line x1="0" y1="' + (h - padY - maxVal*0.5*(h-padY)/maxVal) + '" x2="' + w + '" y2="' + (h - padY - maxVal*0.5*(h-padY)/maxVal) + '" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>' +
+        bars + '</svg>';
+    }
+  };
+
+  // --- MockData: centralized demo data (replace with API calls later) ---
+  window.MockData = {
+    messages: {},
+    tokenMetrics: {
+      totalUsed: 4253109, limit: 10000000,
+      cachedInput: 2500000, input: 1250000, cachedOutput: 300000, output: 203109,
+      modelCalls: [
+        { name: 'GPT-4', calls: 3847, color: '#3b82f6' },
+        { name: 'Gemini', calls: 5120, color: '#10b981' },
+        { name: 'Claude', calls: 1820, color: '#8b5cf6' },
+        { name: 'GPT-3.5', calls: 2060, color: '#f97316' }
+      ],
+      hourlyTokens: [
+        { hour: 0, input: 50, output: 12, cached: 8 }, { hour: 1, input: 32, output: 10, cached: 0 },
+        { hour: 2, input: 45, output: 0, cached: 0 },  { hour: 3, input: 50, output: 0, cached: 8 },
+        { hour: 4, input: 42, output: 0, cached: 0 },  { hour: 5, input: 38, output: 10, cached: 0 },
+        { hour: 6, input: 52, output: 0, cached: 8 },   { hour: 7, input: 45, output: 10, cached: 0 },
+        { hour: 8, input: 40, output: 0, cached: 0 },    { hour: 9, input: 35, output: 10, cached: 0 },
+        { hour: 10, input: 30, output: 0, cached: 0 },   { hour: 11, input: 25, output: 10, cached: 0 }
+      ],
+      ratePoints: [{ x: 0, y: 55 }, { x: 1, y: 42 }, { x: 2, y: 35 }, { x: 3, y: 28 }, { x: 4, y: 22 }, { x: 5, y: 18 }, { x: 6, y: 25 }, { x: 7, y: 15 }, { x: 8, y: 20 }],
+      costPoints: [{ x: 0, y: 52 }, { x: 1, y: 50 }, { x: 2, y: 45 }, { x: 3, y: 42 }, { x: 4, y: 48 }, { x: 5, y: 44 }, { x: 6, y: 38 }, { x: 7, y: 40 }, { x: 8, y: 35 }]
+    },
+    usageStats: {
+      totalCalls: 12847, totalTokens: 4250000, estimatedCost: 2.13, activeModels: 4,
+      modelBreakdown: [
+        { name: 'GPT-4', value: 40, color: '#3b82f6' },
+        { name: 'Gemini', value: 55, color: '#10b981' },
+        { name: 'Claude', value: 35, color: '#8b5cf6' },
+        { name: 'GPT-3.5', value: 30, color: '#f97316' },
+        { name: 'Other', value: 45, color: '#fb923c' }
+      ],
+      projectCosts: [
+        { name: 'mycodex-demo / build todo list', tokens: '1.2M' },
+        { name: 'mycodex-demo / refactor auth', tokens: '892K' },
+        { name: 'conex / setup chat', tokens: '2.1M' }
+      ]
+    }
+  };
+
   // --- Message / Tool rendering helpers ---
   function escapeHTML(str) {
     return String(str).replace(/[&<>'"]/g, tag => ({
@@ -4432,7 +4573,7 @@ async function login(username, password) {
   // Initialize default active chat
   activateChatItem('todo-list-app', 'build a todo list app');
 
-    // --- Metric filter bar: dropdowns + chart toggles ---
+  // --- Metric filter bar: dropdowns + chart toggles ---
   var metricBtns = document.querySelectorAll('.metric-filter-bar .metric-icon-btn');
   var metricCards = document.querySelectorAll('.metric-content > .metric-chart-card');
   if (metricBtns.length > 0) {
@@ -4451,6 +4592,27 @@ async function login(username, password) {
       });
     });
   }
+
+  // Populate metrics from data provider (demo or API)
+  window.refreshMetrics = function(opts) {
+    window.DataProvider.fetchTokenMetrics(null, opts || {}).then(function(data) {
+      // Update overview card
+      var used = document.querySelector('.total-used-tokens');
+      if (used) used.textContent = '已使用: ' + (data.totalUsed || 0).toLocaleString() + ' (' + Math.round((data.totalUsed || 0) / (data.limit || 1) * 100) + '%)';
+
+      // Update bar chart if data available
+      var barChartSvg = document.querySelector('.bar-chart');
+      if (barChartSvg && data.hourlyTokens) {
+        // Bar chart is static for now; can refresh via ChartRenderer
+      }
+    });
+    window.DataProvider.fetchUsageStats().then(function(stats) {
+      // Update settings panel
+    });
+  };
+
+  // Auto-refresh on page load
+  window.refreshMetrics();
 
   var metricDdBtns = document.querySelectorAll('.metric-dropdown-btn');
   var ddMenus = {
