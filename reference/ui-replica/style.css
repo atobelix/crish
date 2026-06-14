@@ -5047,12 +5047,164 @@ body.dark-theme .attached-action-btn:active {
 
 /* Tab 2: Token Metrics panel styles */
 .token-metrics-container {
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   overflow-y: auto;
   flex: 1;
+}
+
+/* Metric filter bar */
+.metric-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.metric-dropdown {
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.metric-dropdown:hover {
+  background-color: var(--bg-hover);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.metric-dropdown .dd-arrow {
+  font-size: 8px;
+  color: var(--text-muted);
+}
+
+.metric-refresh-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  margin-left: auto;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.metric-refresh-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.metric-refresh-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Metric chart card */
+.metric-chart-card {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: var(--bg-main);
+  overflow: hidden;
+}
+
+.metric-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  gap: 8px;
+}
+
+.metric-chart-header .chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.metric-chart-header .chart-subtitle {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.chart-legend-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+}
+
+.chart-legend-inline .legend-line,
+.chart-legend-inline .legend-dot {
+  white-space: nowrap;
+}
+
+.metric-chart-body {
+  padding: 6px 8px;
+  min-height: 80px;
+}
+
+.metric-chart-body svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.heatmap-body {
+  padding: 4px 8px;
+}
+
+/* Dark theme for charts */
+body.dark-theme .metric-chart-card {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .metric-chart-header {
+  border-bottom-color: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-theme .metric-dropdown {
+  border-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+body.dark-theme .metric-dropdown:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* SVG chart dark theme overrides */
+body.dark-theme .line-chart line,
+body.dark-theme .bar-chart line {
+  stroke: rgba(255, 255, 255, 0.04) !important;
+}
+
+body.dark-theme .line-chart text,
+body.dark-theme .bar-chart text,
+body.dark-theme .heatmap text {
+  fill: var(--text-muted) !important;
+}
+
+body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
+  fill: rgba(255, 255, 255, 0.03) !important;
+}
+
+body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
+  fill: rgba(255, 255, 255, 0.03) !important;
 }
 
 .token-progress-card {

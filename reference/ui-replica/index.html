@@ -935,7 +935,16 @@ export default function formatMarkdown(text) {
           <!-- Tab 2: Token Metrics -->
           <div class="right-tab-panel" id="tab-token-metrics">
             <div class="token-metrics-container">
-              <!-- Visual stack bar -->
+              <!-- Filter bar -->
+              <div class="metric-filter-bar">
+                <button class="metric-dropdown">模型: 全部 <span class="dd-arrow">▼</span></button>
+                <button class="metric-dropdown">粒度: 按天 <span class="dd-arrow">▼</span></button>
+                <button class="metric-refresh-btn" title="刷新数据">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"></path></svg>
+                </button>
+              </div>
+
+              <!-- Overview Card -->
               <div class="token-progress-card">
                 <div class="token-card-header">
                   <span class="total-used-tokens">已使用: 4,253,109 (42.5%)</span>
@@ -947,12 +956,131 @@ export default function formatMarkdown(text) {
                   <div class="bar-fill fill-cached-output" style="width: 3%" title="缓存输出: 300,000 (3%)"></div>
                   <div class="bar-fill fill-output" style="width: 2%" title="普通输出: 203,109 (2%)"></div>
                 </div>
-                <!-- Legend -->
                 <div class="token-legend">
                   <div class="legend-item"><span class="dot dot-cached-input"></span><span>缓存输入 (2.5M)</span></div>
                   <div class="legend-item"><span class="dot dot-input"></span><span>普通输入 (1.25M)</span></div>
                   <div class="legend-item"><span class="dot dot-cached-output"></span><span>缓存输出 (300K)</span></div>
                   <div class="legend-item"><span class="dot dot-output"></span><span>普通输出 (203K)</span></div>
+                </div>
+              </div>
+
+              <!-- Model Frequency Chart -->
+              <div class="metric-chart-card">
+                <div class="metric-chart-header">
+                  <span class="chart-title">模型调用频率</span>
+                  <div class="chart-legend-inline">
+                    <span class="legend-line" style="color:#0084ff">━ GPT-4</span>
+                    <span class="legend-line" style="color:#10b981">━ Gemini</span>
+                    <span class="legend-line" style="color:#a855f7">━ Claude</span>
+                  </div>
+                </div>
+                <div class="metric-chart-body">
+                  <svg class="line-chart" viewBox="0 0 280 100" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0084ff" stop-opacity="0.2"/><stop offset="100%" stop-color="#0084ff" stop-opacity="0"/></linearGradient>
+                      <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="0.2"/><stop offset="100%" stop-color="#10b981" stop-opacity="0"/></linearGradient>
+                      <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a855f7" stop-opacity="0.2"/><stop offset="100%" stop-color="#a855f7" stop-opacity="0"/></linearGradient>
+                    </defs>
+                    <!-- Grid lines -->
+                    <line x1="0" y1="25" x2="280" y2="25" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <line x1="0" y1="50" x2="280" y2="50" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <line x1="0" y1="75" x2="280" y2="75" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <!-- GPT-4 line -->
+                    <path d="M0,85 Q14,80 28,55 Q42,45 56,40 Q70,50 84,35 Q98,25 112,30 Q126,20 140,15 Q154,18 168,25 Q182,30 196,20 Q210,15 224,18 Q238,22 252,12 Q266,8 280,10" fill="none" stroke="#0084ff" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M0,85 Q14,80 28,55 Q42,45 56,40 Q70,50 84,35 Q98,25 112,30 Q126,20 140,15 Q154,18 168,25 Q182,30 196,20 Q210,15 224,18 Q238,22 252,12 Q266,8 280,10 L280,90 L0,90 Z" fill="url(#g1)" opacity="0.6"/>
+                    <!-- Gemini line -->
+                    <path d="M0,88 Q14,75 28,65 Q42,60 56,55 Q70,45 84,50 Q98,40 112,45 Q126,55 140,50 Q154,40 168,35 Q182,28 196,30 Q210,25 224,20 Q238,15 252,18 Q266,12 280,15" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M0,88 Q14,75 28,65 Q42,60 56,55 Q70,45 84,50 Q98,40 112,45 Q126,55 140,50 Q154,40 168,35 Q182,28 196,30 Q210,25 224,20 Q238,15 252,18 Q266,12 280,15 L280,90 L0,90 Z" fill="url(#g2)" opacity="0.6"/>
+                    <!-- Claude line -->
+                    <path d="M0,90 Q14,88 28,85 Q42,75 56,70 Q70,65 84,60 Q98,55 112,50 Q126,45 140,42 Q154,38 168,40 Q182,45 196,55 Q210,50 224,45 Q238,40 252,35 Q266,30 280,28" fill="none" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M0,90 Q14,88 28,85 Q42,75 56,70 Q70,65 84,60 Q98,55 112,50 Q126,45 140,42 Q154,38 168,40 Q182,45 196,55 Q210,50 224,45 Q238,40 252,35 Q266,30 280,28 L280,90 L0,90 Z" fill="url(#g3)" opacity="0.6"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Hourly Consumption Bar Chart -->
+              <div class="metric-chart-card">
+                <div class="metric-chart-header">
+                  <span class="chart-title">逐时 Token 消耗</span>
+                  <div class="chart-legend-inline">
+                    <span class="legend-dot" style="color:#0084ff">● 输入</span>
+                    <span class="legend-dot" style="color:#f43f5e">● 输出</span>
+                    <span class="legend-dot" style="color:#10b981">● 缓存</span>
+                  </div>
+                </div>
+                <div class="metric-chart-body">
+                  <svg class="bar-chart" viewBox="0 0 280 90" preserveAspectRatio="xMidYMid meet">
+                    <!-- Grid -->
+                    <line x1="0" y1="30" x2="280" y2="30" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <line x1="0" y1="60" x2="280" y2="60" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <!-- Bars: stacked (input + output + cache) -->
+                    <rect x="4" y="52" width="18" height="28" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="4" y="40" width="18" height="12" rx="2" fill="#f43f5e" opacity="0.7"/>
+                    <rect x="26" y="48" width="18" height="32" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="26" y="38" width="18" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
+                    <rect x="48" y="35" width="18" height="45" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="70" y="30" width="18" height="50" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="70" y="22" width="18" height="8" rx="2" fill="#10b981" opacity="0.7"/>
+                    <rect x="92" y="38" width="18" height="42" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="114" y="42" width="18" height="38" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="114" y="32" width="18" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
+                    <rect x="136" y="28" width="18" height="52" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="136" y="20" width="18" height="8" rx="2" fill="#10b981" opacity="0.7"/>
+                    <rect x="158" y="35" width="18" height="45" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="158" y="25" width="18" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
+                    <rect x="180" y="40" width="18" height="40" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="202" y="45" width="18" height="35" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="224" y="50" width="18" height="30" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="224" y="40" width="18" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
+                    <rect x="246" y="55" width="18" height="25" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <rect x="246" y="45" width="18" height="10" rx="2" fill="#10b981" opacity="0.7"/>
+                    <rect x="268" y="60" width="18" height="20" rx="2" fill="#0084ff" opacity="0.7"/>
+                    <!-- X-axis labels -->
+                    <text x="13" y="82" font-size="6" fill="var(--text-muted)" text-anchor="middle">6</text>
+                    <text x="71" y="82" font-size="6" fill="var(--text-muted)" text-anchor="middle">9</text>
+                    <text x="137" y="82" font-size="6" fill="var(--text-muted)" text-anchor="middle">12</text>
+                    <text x="203" y="82" font-size="6" fill="var(--text-muted)" text-anchor="middle">15</text>
+                    <text x="269" y="82" font-size="6" fill="var(--text-muted)" text-anchor="middle">18</text>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Activity Heatmap -->
+              <div class="metric-chart-card">
+                <div class="metric-chart-header">
+                  <span class="chart-title">活动热力图</span>
+                  <span class="chart-subtitle">最近 4 周</span>
+                </div>
+                <div class="metric-chart-body heatmap-body">
+                  <svg class="heatmap" viewBox="0 0 260 70" preserveAspectRatio="xMidYMid meet">
+                    <!-- Day labels -->
+                    <text x="2" y="12" font-size="6" fill="var(--text-muted)">Mon</text>
+                    <text x="2" y="24" font-size="6" fill="var(--text-muted)">Wed</text>
+                    <text x="2" y="36" font-size="6" fill="var(--text-muted)">Fri</text>
+                    <text x="2" y="60" font-size="6" fill="var(--text-muted)">Sun</text>
+                    <!-- Heatmap cells: 7 rows × 28 cols, 6x6 cells with 2px gap -->
+                    <g fill="rgba(0,0,0,0.03)" rx="1.5">
+                      <!-- Row 1 (Mon) -->
+                      <rect x="28" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="36" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="44" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="52" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="60" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="68" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="84" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="92" y="6" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.25)"/><rect x="100" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="108" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="124" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="132" y="6" width="6" height="6" rx="1.5" fill="rgba(168,85,247,0.15)"/><rect x="140" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="156" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="164" y="6" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.25)"/><rect x="172" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="180" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="196" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="204" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="220" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="228" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="236" y="6" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="6" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/>
+                      <!-- Row 2 (Tue) -->
+                      <rect x="28" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="36" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="44" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="52" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="60" y="14" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.08)"/><rect x="68" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="84" y="14" width="6" height="6" rx="1.5" fill="rgba(244,63,94,0.15)"/><rect x="92" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="100" y="14" width="6" height="6" rx="1.5" fill="rgba(168,85,247,0.08)"/><rect x="108" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="124" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="132" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="140" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="156" y="14" width="6" height="6" rx="1.5" fill="rgba(244,63,94,0.15)"/><rect x="164" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="172" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="180" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="188" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="196" y="14" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.08)"/><rect x="204" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="220" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="228" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="236" y="14" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="14" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/>
+                      <!-- Row 3 (Wed) -->
+                      <rect x="28" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="36" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="44" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="52" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="60" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="68" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="84" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="92" y="22" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.15)"/><rect x="100" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="108" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="124" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="132" y="22" width="6" height="6" rx="1.5" fill="rgba(168,85,247,0.08)"/><rect x="140" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="156" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="164" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="172" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="180" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="196" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="204" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="220" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="228" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="236" y="22" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="22" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/>
+                      <!-- Row 4 (Thu) -->
+                      <rect x="28" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="36" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="44" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="52" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="60" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="68" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="84" y="30" width="6" height="6" rx="1.5" fill="rgba(244,63,94,0.15)"/><rect x="92" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="100" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="108" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="124" y="30" width="6" height="6" rx="1.5" fill="rgba(244,63,94,0.08)"/><rect x="132" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="140" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="156" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="164" y="30" width="6" height="6" rx="1.5" fill="rgba(16,185,129,0.25)"/><rect x="172" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="180" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="196" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="204" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="220" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="228" y="30" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="236" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="244" y="30" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/>
+                      <!-- Row 5 (Fri) -->
+                      <rect x="28" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="36" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="44" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.35)"/><rect x="52" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="60" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="68" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="84" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="92" y="38" width="6" height="6" rx="1.5" fill="rgba(168,85,247,0.15)"/><rect x="100" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="108" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="124" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="132" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="140" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="156" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.25)"/><rect x="164" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="172" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="180" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="196" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="204" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="220" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="228" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="236" y="38" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="38" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/>
+                      <!-- Row 6 (Sat) -->
+                      <rect x="28" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="36" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="44" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="52" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="60" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="68" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="84" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="92" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="100" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="108" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="124" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="132" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="140" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="156" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.15)"/><rect x="164" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="172" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="180" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="196" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="204" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="220" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="228" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="236" y="46" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="46" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/>
+                      <!-- Row 7 (Sun) -->
+                      <rect x="28" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="36" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="44" y="54" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="52" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="60" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="68" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="76" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="84" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="92" y="54" width="6" height="6" rx="1.5" fill="rgba(0,132,255,0.08)"/><rect x="100" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="108" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="116" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="124" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="132" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="140" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="148" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="156" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="164" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="172" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="180" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="188" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="196" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="204" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="212" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="220" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="228" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="236" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/><rect x="244" y="54" width="6" height="6" rx="1.5" fill="rgba(0,0,0,0.03)"/>
+                    </g>
+                    <!-- Month labels -->
+                    <text x="28" y="68" font-size="5.5" fill="var(--text-muted)">6月</text>
+                    <text x="84" y="68" font-size="5.5" fill="var(--text-muted)">7月</text>
+                    <text x="148" y="68" font-size="5.5" fill="var(--text-muted)">8月</text>
+                    <text x="212" y="68" font-size="5.5" fill="var(--text-muted)">9月</text>
+                  </svg>
                 </div>
               </div>
 
