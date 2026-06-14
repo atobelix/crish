@@ -796,9 +796,9 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 8px;
-  color: var(--text-secondary);
+  color: #8d8c8b;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
   transition: opacity var(--transition-fast);
 }
@@ -808,32 +808,34 @@ body {
   opacity: 0.7;
 }
 
-.tool-terminal-icon {
-  width: 14px;
-  height: 14px;
+.tool-terminal-icon,
+.tool-status-icon,
+.tool-chevron-icon {
+  width: 12px;
+  height: 12px;
   color: currentColor;
   flex-shrink: 0;
 }
 
-/* Summary row - same size as standalone, no bold */
+/* Summary row - parent level: text 13px, icons 12px */
 .tool-summary-row .tool-terminal-icon,
-.tool-summary-row .tool-status-icon { width: 14px; height: 14px; }
-.tool-summary-row .tool-chevron-icon { width: 14px; height: 14px; }
-.tool-summary-text { flex: 1; font-size: 14px; }
+.tool-summary-row .tool-status-icon { width: 12px; height: 12px; }
+.tool-summary-row .tool-chevron-icon { width: 12px; height: 12px; }
+.tool-summary-text { flex: 1; font-size: 13px; }
 
-/* Child tool call row (under summary) - 12px */
-.tool-summary-body .tool-status-icon { width: 12px; height: 12px; }
-.tool-summary-body .tool-chevron-icon { width: 12px; height: 12px; }
-.tool-summary-body .tool-terminal-icon { width: 12px; height: 12px; }
+/* Child tool call row (under summary): text 12px, icons 11px */
+.tool-summary-body .tool-terminal-icon,
+.tool-summary-body .tool-status-icon,
+.tool-summary-body .tool-chevron-icon { width: 11px; height: 11px; }
 .tool-summary-body .tool-name { font-size: 12px; }
 .tool-summary-body .tool-args { font-size: 12px; }
-.tool-summary-body .tool-edit-stats { font-size: 11px; }
-.tool-summary-body .tool-call-row { color: var(--text-secondary); }
+.tool-summary-body .tool-edit-stats { font-size: 10px; }
+.tool-summary-body .tool-call-row { color: #8d8c8b; }
 .tool-summary-body .tool-output { font-size: 12px; }
 
 .tool-name {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
   color: currentColor;
   flex-shrink: 0;
 }
@@ -841,7 +843,7 @@ body {
 .tool-args {
   flex: 1;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
   color: currentColor;
   white-space: nowrap;
   overflow: hidden;
@@ -850,41 +852,31 @@ body {
   padding: 0;
 }
 
-/* Status icon next to tool call row */
-.tool-status-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-.tool-status-icon-success { color: var(--text-muted); }
-.tool-status-icon-fail { color: var(--text-muted); }
+/* Status icon */
+.tool-status-icon-success { color: currentColor; }
+.tool-status-icon-fail { color: currentColor; }
 
-/* Edit stats (+N -M) in the tool call row */
+/* Edit stats (+N -M) */
 .tool-edit-stats {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 4px;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-/* Open-file / sidebar icon next to edit stats */
+/* Open-file / sidebar icon */
 .tool-open-files-btn {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: currentColor;
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: opacity var(--transition-fast);
 }
-.tool-open-files-btn:hover { color: var(--text-secondary); }
+.tool-open-files-btn:hover { opacity: 0.7; }
 
 .tool-chevron-icon {
-  width: 14px;
-  height: 14px;
-  color: currentColor;
-  flex-shrink: 0;
   transition: opacity var(--transition-fast), transform var(--transition-normal);
   opacity: 0;
 }
@@ -2251,7 +2243,7 @@ body.dark-theme .search-input {
 
 body.dark-theme .tool-call-row,
 body.dark-theme .tool-summary-row {
-  color: var(--text-main);
+  color: #9c9a9a;
 }
 body.dark-theme .tool-call-row:hover,
 body.dark-theme .tool-summary-row:hover {
