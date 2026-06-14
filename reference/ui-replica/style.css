@@ -230,6 +230,9 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
   border-radius: 8px;
   cursor: pointer;
   transition: background-color var(--transition-fast);
+  min-height: 26px;
+  display: flex;
+  align-items: center;
 }
 
 .win-menu-item:hover {
@@ -2091,6 +2094,7 @@ body.dark-theme .slash-popup .slash-item {
   font-size: 12.5px;
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
+  min-height: 26px;
 }
 
 .dropdown-trigger:hover {
@@ -4278,13 +4282,11 @@ body.dark-theme .plugin-icon-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
-  border-radius: 50%;
   width: 26px;
   height: 26px;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
-  margin-right: 4px;
+  border-radius: 8px;
   flex-shrink: 0;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .input-action-btn:hover {
@@ -4293,8 +4295,8 @@ body.dark-theme .plugin-icon-box {
 }
 
 .input-action-btn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Input Area Wrapper - transparent shell, card itself carries bg */
@@ -4363,6 +4365,7 @@ body.dark-theme .input-area-wrapper.active-chat {
   padding: 4px 8px;
   border-radius: 8px;
   outline: none;
+  min-height: 26px;
 }
 
 .context-tag:hover {
@@ -4514,6 +4517,10 @@ body.dark-theme .attached-submenu {
   margin: 0;
   max-height: 200px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  row-gap: 4px;
+  padding: 4px;
 }
 
 .dropdown-list::-webkit-scrollbar {
@@ -4540,6 +4547,7 @@ body.dark-theme .dropdown-list::-webkit-scrollbar-thumb {
   border-radius: 8px;
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
+  min-height: 26px;
 }
 
 .attached-menu-item:hover {
