@@ -780,10 +780,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return `
       <div class="change-summary" data-expanded="false">
         <div class="change-summary-header">
-          <svg class="icon change-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
           <span class="change-summary-text">文件变动总览 · ${files.length} 个文件被修改 (+${totalAdded} -${totalRemoved})</span>
           <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polyline points="6 9 12 15 18 9"></polyline>
@@ -2504,6 +2500,78 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => window.demoPlanFlow(), 1500);
     };
   }
+
+  // --- Command Approval Panel ---
+  const approvalPanel = document.getElementById('approval-panel');
+  const approvalList = document.getElementById('approval-list');
+  const approvalCount = document.getElementById('approval-count');
+
+  window.showApproval = function(items) {
+    if (!approvalPanel || !approvalList) return;
+    if (!items || items.length === 0) { approvalPanel.style.display = 'none'; return; }
+    approvalList.innerHTML = items.map((item, idx) => `
+      <div class="approval-item" data-idx="${idx}">
+        <div class="approval-left">
+          <svg class="approval-tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            ${item.icon || '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>'}
+          </svg>
+          <div class="approval-info">
+            <span class="approval-action">${escapeHTML(item.action)}</span>
+            <code class="approval-args">${escapeHTML(item.args)}</code>
+          </div>
+        </div>
+        <div class="approval-right">
+          <button class="approval-btn approve" data-idx="${idx}">允许</button>
+          <button class="approval-btn reject" data-idx="${idx}">拒绝</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Bind approve/reject
+    approvalList.querySelectorAll('.approval-btn.approve').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const item = items[idx];
+        if (item.onApprove) item.onApprove();
+        items.splice(idx, 1);
+        window.showApproval(items);
+      });
+    });
+    approvalList.querySelectorAll('.approval-btn.reject').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const item = items[idx];
+        if (item.onReject) item.onReject();
+        items.splice(idx, 1);
+        window.showApproval(items);
+      });
+    });
+
+    approvalCount.textContent = items.length;
+    approvalPanel.style.display = 'block';
+  };
+
+  window.clearApproval = function() {
+    if (approvalPanel) approvalPanel.style.display = 'none';
+  };
+
+  // Demo: show approval panel when tools are pending
+  window.demoApproval = function() {
+    window.showApproval([
+      {
+        action: '读取文件',
+        args: 'src/auth/login.js',
+        onApprove: () => appendToolCall('read_file', 'src/auth/login.js', 'file content...', { expanded: false }),
+        onReject: () => {}
+      },
+      {
+        action: '执行命令',
+        args: 'npm run test -- --coverage',
+        onApprove: () => appendToolCall('bash', 'npm run test -- --coverage', 'test output...', { expanded: false }),
+        onReject: () => {}
+      }
+    ]);
+  };
 
   // --- 11. Settings Modal Navigation ---
   const settingsBtn = document.querySelector('.settings-btn');

@@ -664,6 +664,15 @@ export default function formatMarkdown(text) {
           </div>
         </div>
 
+        <!-- Command Approval Panel (above input, dignified) -->
+        <div class="approval-panel" id="approval-panel" style="display: none;">
+          <div class="approval-header">
+            <span class="approval-title">待审批</span>
+            <span class="approval-count" id="approval-count">0</span>
+          </div>
+          <div class="approval-list" id="approval-list"></div>
+        </div>
+
         <!-- Input Area Container (Floating Card) -->
         <div class="input-panel-container">
           <div class="input-area-wrapper">
