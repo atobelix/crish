@@ -241,29 +241,29 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
   top: 100%;
   left: 0;
   background-color: var(--bg-main);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  padding: 4px 0;
-  min-width: 155px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 4px;
   display: none;
+  flex-direction: column;
+  row-gap: 4px;
+  min-width: 155px;
   z-index: 1000;
   margin-top: 2px;
 }
 
 .win-menu-item:hover .win-menu-dropdown {
-  display: block;
+  display: flex;
 }
 
 .win-menu-dropdown .dropdown-item {
-  padding: 6px 12px;
+  padding: 4px 8px;
   font-size: 11px;
   color: var(--text-main);
   cursor: pointer;
   white-space: nowrap;
   transition: background-color var(--transition-fast);
   border-radius: 8px;
-  margin: 1px 4px;
 }
 
 .win-menu-dropdown .dropdown-item:hover {
@@ -415,7 +415,6 @@ body.dark-theme .win-menu-item:hover {
 body.dark-theme .win-menu-dropdown {
   background-color: #252526;
   border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 body.dark-theme .win-menu-dropdown .dropdown-item {
@@ -2128,8 +2127,7 @@ body.dark-theme .slash-popup .slash-item {
   min-width: 160px;
   background-color: #ffffff;
   border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
   padding: 4px;
   list-style: none;
   display: none;
@@ -2145,13 +2143,13 @@ body.dark-theme .slash-popup .slash-item {
 .dropdown-menu.show {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  row-gap: 4px;
   opacity: 1;
   transform: translateY(0);
 }
 
 .menu-item {
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-size: 12.5px;
   border-radius: 8px;
   cursor: pointer;
@@ -4419,25 +4417,23 @@ body.dark-theme .context-tag svg.icon {
   bottom: 0;
   background-color: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
   width: 160px;
   z-index: 1010;
   display: none;
   flex-direction: column;
-  padding: 6px;
+  padding: 4px;
   box-sizing: border-box;
+  row-gap: 4px;
 }
 
 .submenu-container:hover .attached-submenu {
   display: flex;
-  gap: 1px;
 }
 
 body.dark-theme .attached-submenu {
   background-color: #1e1e1e;
   border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 /* Custom Attached Dropdowns */
@@ -4448,8 +4444,7 @@ body.dark-theme .attached-submenu {
   margin-top: 8px;
   background-color: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
   width: 240px;
   z-index: 1000;
   display: none;
@@ -4458,12 +4453,12 @@ body.dark-theme .attached-submenu {
   overflow: visible;
   text-align: left;
   font-weight: normal;
-  padding: 6px;
+  padding: 4px;
 }
 
 .attached-dropdown-menu.show {
   display: flex;
-  gap: 4px;
+  row-gap: 4px;
 }
 
 .dropdown-search {
@@ -4539,11 +4534,10 @@ body.dark-theme .dropdown-list::-webkit-scrollbar-thumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
-  margin: 1px 4px;
+  padding: 4px 8px;
   font-size: 12px;
   color: var(--text-main);
-  border-radius: 8px; /* Rounded corners */
+  border-radius: 8px;
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
@@ -4591,7 +4585,7 @@ body.dark-theme .dropdown-list::-webkit-scrollbar-thumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   margin: 0;
   font-size: 12px;
   color: var(--text-main);
@@ -4632,7 +4626,6 @@ body.dark-theme .dropdown-list::-webkit-scrollbar-thumb {
 body.dark-theme .attached-dropdown-menu {
   background-color: #1e1e1e;
   border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 body.dark-theme .attached-menu-item.selected {
   background-color: rgba(255, 255, 255, 0.08);
@@ -6170,13 +6163,11 @@ body.dark-theme .diff-deletion { background-color: rgba(244, 63, 94, 0.12); colo
   border-radius: 12px;
   padding: 4px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.03);
   background-color: #ffffff;
 }
 .dropdown-menu .menu-item {
   border-radius: 8px;
-  padding: 6px 12px;
-  margin: 1px 0;
+  padding: 4px 8px;
   font-size: 12px;
 }
 .file-tree .node-row {
