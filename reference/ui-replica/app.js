@@ -3389,7 +3389,7 @@ export async function hashPassword(password) {
       var baseType = parent.dataset.base;
       var def = tabDefinitions[baseType];
       var submenu = document.createElement('div');
-      submenu.style.cssText = 'position:fixed;display:none;width:150px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.08);z-index:1010;padding:4px;';
+      submenu.style.cssText = 'position:fixed;display:none;width:150px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;padding:4px;';
       var subHtml = '';
       def.submenuItems.forEach(function(item) {
         subHtml += '<div class="attached-action-btn" data-base="' + baseType + '" data-action="' + item.action + '">';
@@ -3398,15 +3398,31 @@ export async function hashPassword(password) {
       });
       submenu.innerHTML = subHtml;
       document.body.appendChild(submenu);
-      parent.addEventListener('mouseenter', function() {
+
+      var hideTimer = null;
+      function showSubmenu() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
         var pr = parent.getBoundingClientRect();
         submenu.style.display = 'flex';
         submenu.style.flexDirection = 'column';
-        submenu.style.gap = '1px';
-        submenu.style.left = (pr.right - 150) + 'px';
+        submenu.style.rowGap = '4px';
+        submenu.style.padding = '4px';
+        submenu.style.left = (pr.left + pr.width - 150) + 'px';
         submenu.style.top = (pr.top - 2) + 'px';
+      }
+      function hideSubmenu() {
+        hideTimer = setTimeout(function() {
+          if (!submenu.matches(':hover')) submenu.style.display = 'none';
+        }, 80);
+      }
+
+      parent.addEventListener('mouseenter', showSubmenu);
+      parent.addEventListener('mouseleave', hideSubmenu);
+      submenu.addEventListener('mouseenter', function() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        submenu.style.display = 'flex';
       });
-      parent.addEventListener('mouseleave', function() { submenu.style.display = 'none'; });
+      submenu.addEventListener('mouseleave', function() { submenu.style.display = 'none'; });
       submenu.querySelectorAll('.attached-action-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var base = btn.dataset.base;

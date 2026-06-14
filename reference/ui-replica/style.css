@@ -1018,15 +1018,32 @@ body.dark-theme .win-control:hover {
 .action-status-container {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   margin-left: auto;
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  position: relative;
+}
+
+.action-status-container .chat-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-status-container .item-actions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: none;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
 }
 
 .chat-status {
