@@ -225,7 +225,7 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
 .win-menu-item {
   position: relative;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-main);
   border-radius: 8px;
   cursor: pointer;
@@ -754,9 +754,9 @@ body.dark-theme .win-control:hover {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 6px;
-  width: 16px;
-  height: 16px;
+  border-radius: 4px;
+  width: 14px;
+  height: 14px;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -782,7 +782,7 @@ body.dark-theme .win-control:hover {
 /* Sidebar List Items (Clean Selection States) */
 .list-item {
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-main);
   cursor: pointer;
   transition: background-color var(--transition-fast);
@@ -809,7 +809,6 @@ body.dark-theme .win-control:hover {
 .list-item.chat-item.active .item-main {
   background-color: var(--bg-active);
   color: var(--text-main);
-  font-weight: 600;
 }
 
 /* Make active chat text darker/bolder, inactive lighter */
@@ -822,7 +821,6 @@ body.dark-theme .win-control:hover {
 .chat-item.active .chat-title,
 .nested-item.active .nested-text {
   color: var(--text-main);
-  font-weight: 600;
 }
 
 .item-text {
@@ -959,7 +957,7 @@ body.dark-theme .win-control:hover {
   align-items: center;
   padding: 4px 10px 4px 34px;
   gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
   border-radius: 8px;
   min-height: 28px;
@@ -969,7 +967,6 @@ body.dark-theme .win-control:hover {
 .nested-item.active {
   background-color: var(--bg-active);
   color: var(--text-main);
-  font-weight: 600;
 }
 
 .nested-text {
@@ -3599,11 +3596,11 @@ body.dark-theme .open-app-btn:hover {
 
 .feature-accordion-trigger {
   width: 100%;
-  height: 32px;
+  min-height: 28px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 10px;
   background-color: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
