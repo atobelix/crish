@@ -557,11 +557,11 @@ body.dark-theme .win-control:hover {
 /* Action button (Quick chat - Clean Premium Card) */
 .action-btn {
   width: 100%;
-  height: 32px;
+  height: 28px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 10px;
   background-color: transparent;
   border: none;
   outline: none;
@@ -569,18 +569,18 @@ body.dark-theme .win-control:hover {
   border-radius: 8px;
   color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
 .action-btn:hover {
-  background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .action-btn:active {
-  background-color: var(--bg-active);
+  color: var(--text-main);
 }
 
 .action-btn:focus,
@@ -591,7 +591,6 @@ body.dark-theme .win-control:hover {
 }
 
 .action-btn.active {
-  background-color: var(--bg-active);
   font-weight: 600;
   border: none;
   outline: none;
@@ -604,6 +603,13 @@ body.dark-theme .win-control:hover {
   stroke-linecap: round;
   stroke-linejoin: round;
   flex-shrink: 0;
+}
+
+/* Sidebar icons: 16px */
+.sidebar .icon,
+.sidebar svg.icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* Search container (Pill Shape) */
@@ -673,8 +679,9 @@ body.dark-theme .win-control:hover {
 .section-header {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 8px;
+  min-height: 28px;
   gap: 4px;
   cursor: pointer;
   transition: background-color var(--transition-fast);
@@ -743,13 +750,14 @@ body.dark-theme .win-control:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  border-radius: 8px;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  padding: 0;
+  border-radius: 6px;
+  width: 16px;
+  height: 16px;
+  transition: color var(--transition-fast);
 }
 
 .section-more-btn:hover, .header-add-folder-btn:hover, .header-add-chat-btn:hover {
-  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
@@ -779,21 +787,21 @@ body.dark-theme .win-control:hover {
 .list-item .item-main {
   display: flex;
   align-items: center;
-  padding: 5px 12px 5px 12px;
+  padding: 4px 10px;
   gap: 8px;
   border-radius: 8px;
-  transition: background-color var(--transition-fast);
+  transition: color var(--transition-fast);
+  min-height: 28px;
 }
 
 .list-item.project-item .item-main:hover,
 .list-item.chat-item:not(.project-item) .item-main:hover,
 .nested-item:hover {
-  background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 
 /* Selected chat item highlight */
 .list-item.chat-item.active .item-main {
-  background-color: var(--bg-active);
   color: var(--text-main);
   font-weight: 600;
 }
@@ -902,11 +910,11 @@ body.dark-theme .win-control:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  border-radius: 8px;
-  width: 18px;
-  height: 18px;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  padding: 0;
+  border-radius: 6px;
+  width: 16px;
+  height: 16px;
+  transition: color var(--transition-fast);
 }
 
 .section-more-btn svg,
@@ -914,14 +922,13 @@ body.dark-theme .win-control:hover {
 .header-add-chat-btn svg,
 .item-more-btn svg,
 .project-add-chat-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .item-more-btn:hover, .project-add-chat-btn:hover {
-  background-color: rgba(0,0,0,0.06);
   color: var(--text-main);
 }
 
@@ -943,13 +950,13 @@ body.dark-theme .win-control:hover {
 .nested-item {
   display: flex;
   align-items: center;
-  padding: 5px 12px 5px 34px;
+  padding: 4px 10px 4px 34px;
   gap: 6px;
   font-size: 13px;
   color: var(--text-secondary);
   border-radius: 8px;
-  cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  min-height: 28px;
+  transition: color var(--transition-fast);
 }
 
 .nested-item.active {
@@ -1003,7 +1010,7 @@ body.dark-theme .win-control:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 10px;
   background: none;
   border: none;
   border-radius: 8px;
@@ -1012,11 +1019,12 @@ body.dark-theme .win-control:hover {
   font-size: 13px;
   cursor: pointer;
   text-align: left;
-  transition: background-color var(--transition-fast);
+  transition: color var(--transition-fast);
+  min-height: 28px;
 }
 
 .settings-btn:hover {
-  background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 
 /* ---------------------------------
@@ -2159,6 +2167,9 @@ body.dark-theme .slash-popup .slash-item {
   cursor: pointer;
   color: var(--text-main);
   transition: background-color var(--transition-fast);
+  min-height: 26px;
+  display: flex;
+  align-items: center;
 }
 
 .menu-item:hover {
@@ -3618,7 +3629,7 @@ body.dark-theme .open-app-btn:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 12px 5px 34px;
+  padding: 4px 10px 4px 34px;
   border: none;
   background: none;
   border-radius: 8px;
@@ -3627,15 +3638,14 @@ body.dark-theme .open-app-btn:hover {
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   position: relative;
+  min-height: 28px;
 }
 .feature-item:hover {
-  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 .feature-item.active {
-  background-color: var(--bg-active);
   color: var(--text-main);
   font-weight: 600;
 }
