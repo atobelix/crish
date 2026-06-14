@@ -4726,7 +4726,6 @@ body.dark-theme .attached-action-btn:active {
 
 /* Tab bar 閳?Row 1: tab buttons + add + collapse */
 .right-tab-bar {
-.right-tab-bar {
   display: flex;
   align-items: center;
   padding: 4px 8px;
@@ -4735,6 +4734,7 @@ body.dark-theme .attached-action-btn:active {
   background-color: var(--bg-main);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   min-height: 32px;
+  flex-wrap: nowrap;
 }
 
 .right-tab-list {
@@ -4742,6 +4742,7 @@ body.dark-theme .attached-action-btn:active {
   align-items: center;
   gap: 2px;
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -4802,33 +4803,34 @@ body.dark-theme .attached-action-btn:active {
   white-space: nowrap;
 }
 
+.right-tab-btn .tab-icon-wrap {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .right-tab-btn svg.icon {
   width: 14px;
   height: 14px;
   stroke-width: 1.8;
-  flex-shrink: 0;
 }
 
-.right-tab-btn .tab-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-  min-width: 0;
-}
-
-/* Hover: close icon replaces the main SVG icon */
+/* Hover: X icon overlays the SVG icon */
 .right-tab-btn .tab-close {
-  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 14px;
   height: 14px;
-  flex-shrink: 0;
+  display: none;
 }
 
 .right-tab-btn:hover .tab-close {
   display: block;
 }
 
-.right-tab-btn:hover svg.icon {
+.right-tab-btn:hover .tab-icon-wrap .icon {
   display: none;
 }
 

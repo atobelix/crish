@@ -3170,9 +3170,11 @@ export async function hashPassword(password) {
       const isActive = idx === 0;
       const closable = activeTabs.length > 1;
       return `<button class="right-tab-btn ${isActive ? 'active' : ''}" data-tab="${id}" title="${def.label}">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
+        <span class="tab-icon-wrap">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
+          ${closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : ''}
+        </span>
         <span class="tab-label">${def.label}</span>
-        ${closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : ''}
       </button>`;
     }).join('');
     bindTabEvents();
