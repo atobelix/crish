@@ -815,6 +815,20 @@ body {
   flex-shrink: 0;
 }
 
+/* Hierarchy: summary row (parent) - larger */
+.tool-summary-row .tool-terminal-icon,
+.tool-summary-row .tool-status-icon { width: 16px; height: 16px; }
+.tool-summary-row .tool-chevron-icon { width: 16px; height: 16px; }
+.tool-summary-text { flex: 1; font-size: 15px; font-weight: 600; }
+
+/* Hierarchy: child tool call row (under summary) - smaller */
+.tool-summary-body .tool-status-icon { width: 12px; height: 12px; }
+.tool-summary-body .tool-chevron-icon { width: 12px; height: 12px; }
+.tool-summary-body .tool-name { font-size: 13px; font-weight: 500; }
+.tool-summary-body .tool-args { font-size: 13px; }
+.tool-summary-body .tool-edit-stats { font-size: 11px; }
+.tool-summary-body .tool-call-row { color: var(--text-secondary); }
+
 .tool-name {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -835,15 +849,6 @@ body {
   padding: 0;
 }
 
-.tool-summary-text {
-  flex: 1;
-  font-size: 14px;
-  color: currentColor;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Status icon next to tool call row */
 .tool-status-icon {
   width: 14px;
@@ -856,11 +861,23 @@ body {
 /* Edit stats (+N -M) in the tool call row */
 .tool-edit-stats {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
   margin-left: 4px;
   flex-shrink: 0;
   font-size: 12px;
 }
+
+/* Open-file / sidebar icon next to edit stats */
+.tool-open-files-btn {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.tool-open-files-btn:hover { color: var(--text-main); }
 
 .tool-chevron-icon {
   width: 14px;
@@ -892,7 +909,10 @@ body {
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
   max-height: 240px;
-  margin: 4px 0 8px 0;
+  margin: 4px 50px 8px 0;
+}
+.tool-summary-body .tool-invocation[data-expanded="true"] .tool-result-window {
+  margin-right: 50px;
 }
 
 .tool-summary[data-expanded="true"] .tool-summary-body {
@@ -903,7 +923,7 @@ body {
   position: relative;
 }
 
-/* Vertical guide line under the summary row's symbol */
+/* Vertical guide line under the summary row's symbol (no horizontal branch) */
 .tool-summary-body::before {
   content: '';
   position: absolute;
@@ -911,21 +931,6 @@ body {
   top: 8px;
   bottom: 8px;
   width: 1.5px;
-  background: rgba(0, 0, 0, 0.06);
-  border-radius: 2px;
-}
-
-/* Horizontal connector from guide line to each tool call row */
-.tool-summary-body .tool-call-row {
-  position: relative;
-}
-.tool-summary-body .tool-call-row::before {
-  content: '';
-  position: absolute;
-  left: -15px;
-  top: 50%;
-  width: 13px;
-  height: 1.5px;
   background: rgba(0, 0, 0, 0.06);
   border-radius: 2px;
 }
@@ -946,6 +951,7 @@ body {
   background-color: transparent;
   max-height: 240px;
   overflow-y: auto;
+  margin-right: 50px;
 }
 
 /* tool-result-window aligns with tool-name */
