@@ -3365,7 +3365,7 @@ export async function hashPassword(password) {
     var dropdown = document.createElement('div');
     dropdown.id = 'add-tab-dropdown';
     dropdown.className = 'attached-dropdown-menu show';
-    dropdown.style.cssText = 'position:fixed;z-index:1000;width:140px;margin-top:0;';
+    dropdown.style.cssText = 'position:fixed;z-index:1000;width:120px;margin-top:0;';
     var rect = rightTabAddBtn.getBoundingClientRect();
     dropdown.style.top = (rect.bottom + 4) + 'px';
     dropdown.style.right = (window.innerWidth - rect.right) + 'px';
@@ -3392,7 +3392,7 @@ export async function hashPassword(password) {
       // Build submenu as a child of parent (CSS hover propagation, no JS events)
       var submenu = document.createElement('div');
       submenu.className = 'attached-submenu cascading';
-      submenu.style.cssText = 'position:absolute;left:-164px;top:-4px;bottom:auto;width:160px;flex-direction:column;row-gap:4px;padding:4px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;';
+      submenu.style.cssText = 'position:absolute;left:-158px;top:-4px;bottom:auto;width:150px;flex-direction:column;row-gap:4px;padding:4px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;';
       var subHtml = '';
       def.submenuItems.forEach(function(item) {
         subHtml += '<div class="attached-action-btn" data-base="' + baseType + '" data-action="' + item.action + '">';
