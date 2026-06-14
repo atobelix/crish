@@ -572,14 +572,16 @@ body.dark-theme .win-control:hover {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .action-btn:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
 .action-btn:active {
+  background-color: var(--bg-active);
   color: var(--text-main);
 }
 
@@ -591,6 +593,7 @@ body.dark-theme .win-control:hover {
 }
 
 .action-btn.active {
+  background-color: var(--bg-active);
   font-weight: 600;
   border: none;
   outline: none;
@@ -688,7 +691,7 @@ body.dark-theme .win-control:hover {
 }
 
 .section-header:hover {
-  background-color: transparent;
+  background-color: var(--bg-hover);
 }
 
 .section-title {
@@ -754,10 +757,11 @@ body.dark-theme .win-control:hover {
   border-radius: 6px;
   width: 16px;
   height: 16px;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .section-more-btn:hover, .header-add-folder-btn:hover, .header-add-chat-btn:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
@@ -790,18 +794,20 @@ body.dark-theme .win-control:hover {
   padding: 4px 10px;
   gap: 8px;
   border-radius: 8px;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   min-height: 28px;
 }
 
 .list-item.project-item .item-main:hover,
 .list-item.chat-item:not(.project-item) .item-main:hover,
 .nested-item:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
 /* Selected chat item highlight */
 .list-item.chat-item.active .item-main {
+  background-color: var(--bg-active);
   color: var(--text-main);
   font-weight: 600;
 }
@@ -914,7 +920,7 @@ body.dark-theme .win-control:hover {
   border-radius: 6px;
   width: 16px;
   height: 16px;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .section-more-btn svg,
@@ -929,6 +935,7 @@ body.dark-theme .win-control:hover {
 }
 
 .item-more-btn:hover, .project-add-chat-btn:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
@@ -956,7 +963,7 @@ body.dark-theme .win-control:hover {
   color: var(--text-secondary);
   border-radius: 8px;
   min-height: 28px;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .nested-item.active {
@@ -1019,11 +1026,12 @@ body.dark-theme .win-control:hover {
   font-size: 13px;
   cursor: pointer;
   text-align: left;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   min-height: 28px;
 }
 
 .settings-btn:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
@@ -2223,34 +2231,42 @@ body.dark-theme .slash-popup .slash-item {
   background-color: #ffffff;
   border: 1px solid rgba(0,0,0,0.08);
   border-radius: 12px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.08);
   padding: 4px;
   min-width: 180px;
   display: none;
+  flex-direction: column;
+  row-gap: 4px;
 }
 
 .custom-context-menu.show {
-  display: block;
+  display: flex;
 }
 
 .custom-context-menu ul {
   list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  row-gap: 4px;
 }
 
 .custom-context-menu li {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 4px 8px;
   gap: 8px;
   font-size: 13px;
   color: var(--text-main);
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  min-height: 28px;
 }
 
 .custom-context-menu li:hover {
   background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .custom-context-menu li.menu-danger {
@@ -2258,6 +2274,7 @@ body.dark-theme .slash-popup .slash-item {
 }
 .custom-context-menu li.menu-danger:hover {
   background-color: #fff5f5;
+  color: #e53e3e;
 }
 
 /* Context Sub-menu (Organize Sidebar Sorting) */
@@ -2271,10 +2288,6 @@ body.dark-theme .slash-popup .slash-item {
   position: relative;
 }
 
-.custom-context-menu .nested-menu-container:hover .nested-menu {
-  display: block;
-}
-
 .custom-context-menu .nested-menu {
   position: absolute;
   top: 0;
@@ -2283,10 +2296,15 @@ body.dark-theme .slash-popup .slash-item {
   background-color: #ffffff;
   border: 1px solid rgba(0,0,0,0.08);
   border-radius: 12px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.08);
   padding: 4px;
   min-width: 150px;
   display: none;
+  flex-direction: column;
+  row-gap: 4px;
+}
+
+.custom-context-menu .nested-menu-container:hover .nested-menu {
+  display: flex;
 }
 
 /* ---------------------------------
@@ -3638,14 +3656,16 @@ body.dark-theme .open-app-btn:hover {
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
-  transition: color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   position: relative;
   min-height: 28px;
 }
 .feature-item:hover {
+  background-color: var(--bg-hover);
   color: var(--text-main);
 }
 .feature-item.active {
+  background-color: var(--bg-active);
   color: var(--text-main);
   font-weight: 600;
 }
