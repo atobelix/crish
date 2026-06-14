@@ -225,7 +225,7 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
 .win-menu-item {
   position: relative;
   padding: 4px 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-main);
   border-radius: 8px;
   cursor: pointer;
@@ -981,7 +981,6 @@ body.dark-theme .win-control:hover {
   background-color: rgba(0, 0, 0, 0.04);
   padding: 0px 4px;
   border-radius: 3px;
-  margin-right: 4px;
   flex-shrink: 0;
 }
 
@@ -998,8 +997,34 @@ body.dark-theme .win-control:hover {
   background-color: rgba(0, 0, 0, 0.05);
   padding: 1px 5px;
   border-radius: 8px;
-  margin-right: 4px;
   flex-shrink: 0;
+}
+
+/* Right-aligned action area in nested items */
+.action-status-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.action-status-container .item-actions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-status {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.chat-status svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 
 /* Sidebar Footer */
@@ -4094,77 +4119,25 @@ body.dark-theme .plugin-icon-box {
 }
 
 /* Chat Status container to place status and actions at the same position */
-.action-status-container {
-  position: relative;
-  width: 24px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.action-status-container .chat-status {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 1;
-  transition: opacity var(--transition-fast);
-  pointer-events: none;
-}
-
-.action-status-container .chat-status svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.2;
-}
-
-/* Pulse / Animation for running state */
-.action-status-container .chat-status.status-running svg {
-  animation: spin-rotate 1.5s linear infinite;
-}
-
-.action-status-container .item-actions {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-fast);
-  margin-left: 0;
-}
-
-/* Hover swap: hide status, show actions */
+/* Hover/active: swap status icon for action buttons */
 .nested-item:hover .action-status-container .chat-status,
 .list-item.chat-item:hover .action-status-container .chat-status {
-  opacity: 0;
+  display: none;
 }
 
 .nested-item:hover .action-status-container .item-actions,
 .list-item.chat-item:hover .action-status-container .item-actions {
-  opacity: 1;
-  pointer-events: auto;
+  display: flex;
 }
 
-/* Active chat item overrides: hide status, always show actions */
 .nested-item.active .action-status-container .chat-status,
 .list-item.chat-item.active .action-status-container .chat-status {
-  opacity: 0;
   display: none;
 }
 
 .nested-item.active .action-status-container .item-actions,
 .list-item.chat-item.active .action-status-container .item-actions {
-  opacity: 1;
-  pointer-events: auto;
+  display: flex;
 }
 
 /* 19. Empty Chat State (Quick Chat Empty State) */
