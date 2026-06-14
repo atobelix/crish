@@ -878,7 +878,8 @@ body {
 }
 
 .tool-summary[data-expanded="true"] .tool-summary-body {
-  max-height: 1000px;
+  max-height: 400px;
+  overflow-y: auto;
   margin: 2px 0 8px 0;
 }
 
