@@ -881,7 +881,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const expanded = group.expanded !== false;
     const total = group.plans.length;
     const done = group.plans.filter(p => p.status === 'completed').length;
-    const statusText = done === total ? '全部完成' : `${done}/${total} 已完成`;
+    const activePlan = group.plans.find(p => p.status === 'active');
+    const activeTask = activePlan ? activePlan.content : '';
+    const headerText = done === total
+      ? `计划 · 全部完成 (${total}/${total})`
+      : (activeTask ? `计划 · ${activeTask} (${done}/${total})` : `计划 · ${done}/${total} 已完成`);
     const fileItems = group.plans.map(p => {
       const cls = p.status === 'completed' ? 'completed' : (p.status === 'active' ? 'active' : '');
       const icon = p.status === 'completed'
@@ -900,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <line x1="9" y1="15" x2="15" y2="15"></line>
             <line x1="12" y1="12" x2="12" y2="18"></line>
           </svg>
-          <span class="plan-group-text">计划 · ${total} 个步骤 (${statusText})</span>
+          <span class="plan-group-text">${escapeHTML(headerText)}</span>
           <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -914,6 +918,10 @@ document.addEventListener('DOMContentLoaded', () => {
       header.addEventListener('click', () => {
         const group = header.closest('.plan-group');
         const expanded = group.getAttribute('data-expanded') === 'true';
+        // Collapse all other plan groups
+        container.querySelectorAll('.plan-group').forEach(el => {
+          if (el !== group) el.dataset.expanded = 'false';
+        });
         group.setAttribute('data-expanded', String(!expanded));
       });
     });
@@ -2140,6 +2148,14 @@ document.addEventListener('DOMContentLoaded', () => {
     bindToolToggles(messageList);
     highlightCode(messageList);
 
+    // Auto-collapse: only the last plan_group is expanded
+    const planGroups = messageList.querySelectorAll('.plan-group');
+    if (planGroups.length > 0) {
+      const last = planGroups[planGroups.length - 1];
+      planGroups.forEach(el => { el.dataset.expanded = 'false'; });
+      last.dataset.expanded = 'true';
+    }
+
     // Smart scroll: only scroll to bottom if user was already near the bottom
     const threshold = 30;
     if (chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - threshold) {
@@ -2450,34 +2466,31 @@ document.addEventListener('DOMContentLoaded', () => {
   window.demoPlanFlow = function() {
     if (!currentChatId || !chatMessagesData[currentChatId]) return;
 
-    const plans = demoPlanSteps.map((content, i) => ({
-      id: `step-${i}`,
-      content,
-      status: i === 0 ? 'active' : 'pending'
-    }));
-
-    const planGroup = {
-      role: 'plan_group',
-      expanded: true,
-      status: 'in_progress',
-      plans
-    };
-    chatMessagesData[currentChatId].push(planGroup);
-    renderCurrentMessages();
-
-    let stepIdx = 0;
-    const timer = setInterval(() => {
-      if (stepIdx >= plans.length) {
-        clearInterval(timer);
-        planGroup.status = 'completed';
-        plans.forEach(p => { p.status = 'completed'; });
-        renderCurrentMessages();
-        return;
-      }
-      if (stepIdx > 0) plans[stepIdx - 1].status = 'completed';
-      plans[stepIdx].status = 'active';
-      stepIdx++;
+    // Push initial plan (step 0 active)
+    function pushPlan(completedUpTo) {
+      const plans = demoPlanSteps.map((content, i) => ({
+        id: `step-${i}`,
+        content,
+        status: i < completedUpTo ? 'completed' : (i === completedUpTo ? 'active' : 'pending')
+      }));
+      const allDone = completedUpTo >= demoPlanSteps.length;
+      chatMessagesData[currentChatId].push({
+        role: 'plan_group',
+        expanded: true,
+        status: allDone ? 'completed' : 'in_progress',
+        plans
+      });
       renderCurrentMessages();
+    }
+
+    pushPlan(0);
+    let stepIdx = 1;
+    const timer = setInterval(() => {
+      pushPlan(stepIdx);
+      stepIdx++;
+      if (stepIdx > demoPlanSteps.length) {
+        clearInterval(timer);
+      }
     }, 1500);
     return timer;
   };
