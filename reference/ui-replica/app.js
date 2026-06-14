@@ -258,23 +258,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if (winToggleRightSidebarBtn) {
     winToggleRightSidebarBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const rSidebar = document.querySelector('.right-sidebar');
-      if (rSidebar) {
-        rSidebar.classList.toggle('collapsed');
-        if (!rSidebar.classList.contains('collapsed')) {
-          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
-          const rBtns = document.querySelectorAll('.right-tab-btn');
-          const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
-          if (!hasActive && rBtns.length > 0) {
-            rBtns[0].click();
-          }
+      if (rightSidebar) {
+        rightSidebar.classList.toggle('collapsed');
+        if (!rightSidebar.classList.contains('collapsed')) {
+          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
+          // Ensure first tab is active
+          const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
+          if (firstTab) activateTab(firstTab.dataset.tab);
         }
       }
     });
   }
 
-  // --- Sidebar drag-to-resize ---
-  function initSidebarResize(sidebar, edge, storageKey, defaultWidth) {
+  // --- Sidebar drag-to-resize with auto-collapse ---
+  function initSidebarResize(sidebar, edge, storageKey, defaultWidth, minWidth) {
     let isResizing = false;
 
     const onMouseDown = (e) => {
@@ -295,7 +292,18 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         newWidth = rect.right - e.clientX;
       }
-      newWidth = Math.max(120, Math.min(newWidth, rect.width * 0.5));
+      // If below minWidth, collapse instead of shrinking
+      if (newWidth < minWidth) {
+        sidebar.classList.add('collapsed');
+        try { localStorage.setItem(storageKey, ''); } catch (_) {}
+        isResizing = false;
+        sidebar.classList.remove('resizing');
+        sidebar.style.transition = '';
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        return;
+      }
+      newWidth = Math.max(minWidth, Math.min(newWidth, rect.width * 0.5));
       sidebar.style.width = newWidth + 'px';
     };
 
@@ -306,7 +314,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sidebar.style.transition = '';
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      try { localStorage.setItem(storageKey, sidebar.style.width); } catch (_) {}
+      try {
+        const w = sidebar.style.width;
+        if (w && parseFloat(w) >= minWidth) localStorage.setItem(storageKey, w);
+      } catch (_) {}
     };
 
     // Attach to the edge pseudo-element via capturing on the sidebar itself
@@ -336,18 +347,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const leftSidebar = document.querySelector('.sidebar');
   const rightSidebar = document.querySelector('.right-sidebar');
-  if (leftSidebar) initSidebarResize(leftSidebar, 'right', 'sidebar-left-width', '20vw');
-  if (rightSidebar) initSidebarResize(rightSidebar, 'left', 'sidebar-right-width', '25vw');
+  if (leftSidebar) initSidebarResize(leftSidebar, 'right', 'sidebar-left-width', '260px', 190);
+  if (rightSidebar) initSidebarResize(rightSidebar, 'left', 'sidebar-right-width', '360px', 300);
 
   // --- Responsive collapse: right first, then left ---
   function handleResponsiveCollapse() {
-    const mainPanel = document.querySelector('.main-panel');
     const winBody = document.querySelector('.window-body');
-    if (!mainPanel || !winBody) return;
+    if (!winBody) return;
     const available = winBody.clientWidth;
-    const leftW = leftSidebar ? leftSidebar.offsetWidth : 0;
-    const rightW = rightSidebar ? rightSidebar.offsetWidth : 0;
-    const minMain = 400;
+    const leftW = leftSidebar && !leftSidebar.classList.contains('collapsed') ? leftSidebar.offsetWidth : 0;
+    const rightW = rightSidebar && !rightSidebar.classList.contains('collapsed') ? rightSidebar.offsetWidth : 0;
+    const minMain = 520;
+    if (available - leftW - rightW < minMain) {
+      if (rightSidebar && !rightSidebar.classList.contains('collapsed')) {
+        rightSidebar.classList.add('collapsed');
+      } else if (leftSidebar && !leftSidebar.classList.contains('collapsed')) {
+        leftSidebar.classList.add('collapsed');
+      }
+    }
     if (available - leftW - rightW < minMain) {
       if (rightSidebar && !rightSidebar.classList.contains('collapsed')) {
         rightSidebar.classList.add('collapsed');
@@ -406,11 +423,9 @@ document.addEventListener('DOMContentLoaded', () => {
           rSidebar.classList.toggle('collapsed');
           if (!rSidebar.classList.contains('collapsed')) {
             try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
-            const rBtns = document.querySelectorAll('.right-tab-btn');
-            const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
-            if (!hasActive && rBtns.length > 0) {
-              rBtns[0].click();
-            }
+            // Ensure first tab is active
+            const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
+            if (firstTab) activateTab(firstTab.dataset.tab);
           }
         }
         break;
@@ -1975,9 +1990,59 @@ document.addEventListener('DOMContentLoaded', () => {
   const textarea = document.querySelector('.chat-textarea');
   const sendBtn = document.querySelector('.send-btn');
 
+  // --- Slash commands ---
+  const slashCommands = {
+    '/plan': { label: '运行计划演示', handler: () => { textarea.value = ''; window.demoPlanFlow(); } },
+    '/approve': { label: '显示审批面板', handler: () => { textarea.value = ''; window.demoApproval(); } },
+    '/tool': { label: '连续工具调用', handler: () => { textarea.value = ''; window.demoContinuousToolCalls(); } },
+    '/help': { label: '显示可用命令', handler: () => { textarea.value = ''; showSlashHelp(); } }
+  };
+
+  let slashPopup = null;
+
+  function createSlashPopup() {
+    if (slashPopup) return;
+    slashPopup = document.createElement('div');
+    slashPopup.className = 'slash-popup';
+    const inputCard = document.querySelector('.input-card');
+    if (inputCard) {
+      inputCard.style.position = 'relative';
+      inputCard.appendChild(slashPopup);
+    }
+  }
+
+  function showSlashPopup(filter) {
+    createSlashPopup();
+    const items = Object.keys(slashCommands)
+      .filter(cmd => !filter || cmd.startsWith(filter))
+      .map(cmd => `<div class="slash-item" data-cmd="${cmd}"><span class="slash-cmd">${cmd}</span><span class="slash-label">${escapeHTML(slashCommands[cmd].label)}</span></div>`)
+      .join('');
+    if (!items) { slashPopup.classList.remove('show'); return; }
+    slashPopup.innerHTML = items;
+    slashPopup.classList.add('show');
+    slashPopup.querySelectorAll('.slash-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const cmd = el.dataset.cmd;
+        slashPopup.classList.remove('show');
+        if (slashCommands[cmd]) slashCommands[cmd].handler();
+      });
+    });
+  }
+
+  function showSlashHelp() {
+    const msg = Object.keys(slashCommands).map(cmd => `${cmd} — ${slashCommands[cmd].label}`).join('\n');
+    alert('可用斜杠命令:\n\n' + msg);
+  }
+
   textarea.addEventListener('input', () => {
     textarea.style.height = 'auto';
     textarea.style.height = (textarea.scrollHeight - 6) + 'px';
+    // Slash command detection
+    if (textarea.value.startsWith('/')) {
+      showSlashPopup(textarea.value);
+    } else if (slashPopup) {
+      slashPopup.classList.remove('show');
+    }
 
     if (textarea.value.trim() !== '') {
       sendBtn.classList.add('active');
@@ -3064,41 +3129,163 @@ export async function hashPassword(password) {
     });
   });
 
-  // --- 17. Right Sidebar Tab Switcher logic ---
-  const rightTabBtns = document.querySelectorAll('.right-tab-btn');
-  const rightTabPanels = document.querySelectorAll('.right-tab-panel');
-  // rightSidebar already declared in sidebar resize section
+  // --- 17. Right Sidebar Tab Management ---
+  const tabDefinitions = {
+    'tab-dual-chat': {
+      label: '双轨对话',
+      icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path><path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>'
+    },
+    'tab-token-metrics': {
+      label: 'Token 统计',
+      icon: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>'
+    },
+    'tab-browser': {
+      label: '浏览器',
+      icon: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>'
+    },
+    'tab-file-explorer': {
+      label: '文件浏览',
+      icon: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>'
+    },
+    'tab-diff-center': {
+      label: '差异总览',
+      icon: '<path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path><rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>'
+    }
+  };
 
-  rightTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
-      const targetPanel = document.getElementById(tabId);
-      
-      if (rightSidebar) {
-        const isCollapsed = rightSidebar.classList.contains('collapsed');
-        const isActive = btn.classList.contains('active');
-        
-        if (isActive && !isCollapsed) {
-          // Collapse if clicking active tab when sidebar is open
-          rightSidebar.classList.add('collapsed');
-          btn.classList.remove('active');
-          if (targetPanel) {
-            targetPanel.classList.remove('active');
-          }
-        } else {
-          // Expand and activate tab
+  let activeTabs = ['tab-dual-chat'];
+  const rightTabList = document.getElementById('right-tab-list');
+  const rightTabAddBtn = document.getElementById('right-tab-add-btn');
+  const rightCollapseBtn = document.getElementById('right-tab-collapse-btn');
+  const rightActions = document.getElementById('right-tab-actions');
+  const allTabPanels = document.querySelectorAll('.right-tab-panel');
+
+  function renderTabBar() {
+    if (!rightTabList) return;
+    rightTabList.innerHTML = activeTabs.map((id, idx) => {
+      const def = tabDefinitions[id];
+      if (!def) return '';
+      const isActive = idx === 0;
+      const closable = activeTabs.length > 1;
+      return `<button class="right-tab-btn ${isActive ? 'active' : ''}" data-tab="${id}" title="${def.label}">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
+        <span class="tab-label">${def.label}</span>
+        ${closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : ''}
+      </button>`;
+    }).join('');
+    bindTabEvents();
+  }
+
+  function bindTabEvents() {
+    // Click tab: activate
+    rightTabList.querySelectorAll('.right-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest('.tab-close')) return;
+        const tabId = btn.dataset.tab;
+        if (rightSidebar.classList.contains('collapsed')) {
           rightSidebar.classList.remove('collapsed');
-          rightTabBtns.forEach(b => b.classList.remove('active'));
-          rightTabPanels.forEach(p => p.classList.remove('active'));
-          
-          btn.classList.add('active');
-          if (targetPanel) {
-            targetPanel.classList.add('active');
-          }
         }
-      }
+        // Reorder: move clicked tab to front
+        const idx = activeTabs.indexOf(tabId);
+        if (idx > 0) {
+          activeTabs.splice(idx, 1);
+          activeTabs.unshift(tabId);
+        }
+        activateTab(tabId);
+        renderTabBar();
+      });
+      // Middle-click: close
+      btn.addEventListener('mousedown', (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          closeTab(btn.dataset.tab);
+        }
+      });
     });
-  });
+    // Add button
+    if (rightTabAddBtn) {
+      rightTabAddBtn.onclick = showAddTabMenu;
+    }
+    // Collapse button
+    if (rightCollapseBtn) {
+      rightCollapseBtn.onclick = () => {
+        rightSidebar.classList.toggle('collapsed');
+        if (!rightSidebar.classList.contains('collapsed')) {
+          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
+          // Ensure first tab is active on expand
+          const firstTab = rightTabList.querySelector('.right-tab-btn');
+          if (firstTab) activateTab(firstTab.dataset.tab);
+        }
+      };
+    }
+  }
+
+  function activateTab(tabId) {
+    allTabPanels.forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(tabId);
+    if (panel) panel.classList.add('active');
+    // Sync active class on tab buttons
+    rightTabList.querySelectorAll('.right-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+    // Populate actions for the active tab
+    renderTabActions(tabId);
+  }
+
+  function renderTabActions(tabId) {
+    if (!rightActions) return;
+    // Dual chat actions
+    if (tabId === 'tab-dual-chat') {
+      rightActions.innerHTML = `
+        <button class="dual-chat-action-btn" id="inherit-context-btn" title="继承主对话上下文">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 20l4-16 4 16"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><path d="M5 8h2"></path><path d="M17 8h2"></path></svg>
+          <span>继承上下文</span>
+        </button>
+        <button class="dual-chat-action-btn" id="new-dual-chat-btn" title="开始新对话">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>新对话</span>
+        </button>
+        <button class="dual-chat-action-btn" id="clear-dual-chat-btn" title="清空对话">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>`;
+      return;
+    }
+    rightActions.innerHTML = '';
+  }
+
+  function closeTab(tabId) {
+    if (activeTabs.length <= 1) return;
+    const idx = activeTabs.indexOf(tabId);
+    if (idx === -1) return;
+    activeTabs.splice(idx, 1);
+    // Hide panel
+    const panel = document.getElementById(tabId);
+    if (panel) panel.classList.remove('active');
+    // Activate another tab
+    if (activeTabs.length > 0) {
+      activateTab(activeTabs[0]);
+    }
+    renderTabBar();
+  }
+
+  function showAddTabMenu() {
+    const available = Object.keys(tabDefinitions).filter(id => !activeTabs.includes(id));
+    if (available.length === 0) return;
+    // Simple inline menu: toggle through available tabs
+    const next = available[0];
+    activeTabs.push(next);
+    const panel = document.getElementById(next);
+    if (panel) {
+      allTabPanels.forEach(p => p.classList.remove('active'));
+      panel.classList.add('active');
+    }
+    activateTab(next);
+    renderTabBar();
+  }
+
+  // Initial render
+  renderTabBar();
+  activateTab('tab-dual-chat');
 
   // --- 18. Tab 1: Dual Chat panel logic ---
   const dualChatMessages = document.getElementById('dual-chat-messages');

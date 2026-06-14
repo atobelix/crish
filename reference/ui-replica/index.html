@@ -89,7 +89,7 @@
           </div>
         </div>
 
-        <!-- Right: Connections / Git Status & Window Controls -->
+        <!-- Right: Connections / Git Status, Sidebar Toggle & Window Controls -->
         <div class="win-titlebar-right">
           <!-- Status Items -->
           <div class="win-status-group">
@@ -106,6 +106,17 @@
               </svg>
               <span>master</span>
             </span>
+          </div>
+
+          <!-- Sidebar toggle buttons -->
+          <div class="win-sidebar-toggles">
+            <button class="terminal-toggle-btn" id="win-toggle-right-sidebar-btn" title="显示/隐藏右侧栏">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="15" y1="3" x2="15" y2="21"></line>
+                <path d="M10 9l3 3-3 3"></path>
+              </svg>
+            </button>
           </div>
 
           <!-- Windows controls -->
@@ -427,13 +438,6 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <polyline points="4 17 10 11 4 5"></polyline>
               <line x1="12" y1="19" x2="20" y2="19"></line>
-            </svg>
-          </button>
-          <button class="terminal-toggle-btn" id="win-toggle-right-sidebar-btn" title="显示/隐藏右侧栏">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="15" y1="3" x2="15" y2="21"></line>
-              <path d="M10 9l3 3-3 3"></path>
             </svg>
           </button>
         </header>
@@ -891,33 +895,6 @@ export default function formatMarkdown(text) {
           <!-- Tab 1: Dual Chat / Agent Monitor -->
           <div class="right-tab-panel active" id="tab-dual-chat">
             <div class="dual-chat-container">
-              <!-- Top action bar -->
-              <div class="dual-chat-header">
-                <button class="dual-chat-action-btn" id="inherit-context-btn" title="继承主对话上下文">
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M7 20l4-16 4 16"></path>
-                    <path d="M3 12h4"></path>
-                    <path d="M17 12h4"></path>
-                    <path d="M5 8h2"></path>
-                    <path d="M17 8h2"></path>
-                  </svg>
-                  <span>继承上下文</span>
-                </button>
-                <button class="dual-chat-action-btn" id="new-dual-chat-btn" title="开始新对话">
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  <span>新对话</span>
-                </button>
-                <button class="dual-chat-action-btn" id="clear-dual-chat-btn" title="清空对话">
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                </button>
-              </div>
-
               <div class="message-list" id="dual-chat-messages">
                 <div class="chat-message assistant-message">
                   你好！这里是双轨对话面板。你可以在这里测试辅助提示词、运行独立的任务，或监控子 Agent 的思考过程。这个面板可以和主面板共享相同的上下文信息。
@@ -1680,39 +1657,28 @@ export default function formatMarkdown(text) {
         </div>
 
         <!-- Tab switcher footer -->
-        <div class="right-tab-footer">
-          <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-              <path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-token-metrics" title="Token 消耗统计">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-browser" title="内置浏览器 & 页面预览">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-file-explorer" title="文件浏览器 & 批注系统">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-diff-center" title="改动文件差异聚合总览">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path>
-              <rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>
-            </svg>
+        <!-- Tab bar — Row 1 -->
+        <div class="right-tab-bar">
+          <div class="right-tab-list" id="right-tab-list">
+            <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                <path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>
+              </svg>
+              <span class="tab-label">双轨对话</span>
+              <svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <button class="right-tab-add-btn" id="right-tab-add-btn" title="添加标签页">+</button>
+          <button class="right-tab-collapse-btn" id="right-tab-collapse-btn" title="折叠右侧栏">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
         </div>
+
+        <!-- Action bar — Row 2 -->
+        <div class="right-tab-actions" id="right-tab-actions"></div>
+
+        <!-- Sidebar Tab Contents -->
       </aside>
 
       </div> <!-- End of .window-body -->

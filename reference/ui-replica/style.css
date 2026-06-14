@@ -320,7 +320,14 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
 .win-titlebar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+}
+
+.win-sidebar-toggles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .win-status-group {
@@ -445,6 +452,7 @@ body.dark-theme .win-control:hover {
 --------------------------------- */
 .sidebar {
   width: 260px;
+  min-width: 190px;
   flex-shrink: 0;
   background-color: var(--bg-sidebar);
   border-right: none;
@@ -480,11 +488,14 @@ body.dark-theme .win-control:hover {
 
 .sidebar.collapsed {
   width: 0;
+  min-width: 0;
+  flex: 0 0 0;
   padding-left: 0;
   padding-right: 0;
   opacity: 0;
   border-right-width: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
 /* Traffic Lights */
@@ -1818,6 +1829,72 @@ body.dark-theme .approval-btn.approve {
 body.dark-theme .approval-btn.approve:hover {
   background-color: rgba(52, 211, 153, 0.08);
   border-color: rgba(52, 211, 153, 0.3);
+}
+
+/* ==============================
+   Slash Command Popup
+   ============================== */
+.slash-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  background-color: var(--bg-main);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  max-height: 180px;
+  overflow-y: auto;
+  display: none;
+  z-index: 100;
+}
+
+.slash-popup.show {
+  display: block;
+}
+
+.slash-popup .slash-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background-color var(--transition-fast);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+.slash-popup .slash-item:last-child {
+  border-bottom: none;
+}
+
+.slash-popup .slash-item:hover,
+.slash-popup .slash-item.active {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.slash-popup .slash-cmd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.slash-popup .slash-label {
+  flex: 1;
+}
+
+body.dark-theme .slash-popup {
+  background-color: var(--bg-main);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-theme .slash-popup .slash-item {
+  border-bottom-color: rgba(255, 255, 255, 0.03);
 }
 
 .code-block {
@@ -4579,6 +4656,7 @@ body.dark-theme .attached-action-btn:active {
 --------------------------------- */
 .right-sidebar {
   width: 360px;
+  min-width: 300px;
   flex-shrink: 0;
   background-color: var(--bg-main);
   border-left: 1px solid rgba(0, 0, 0, 0.05);
@@ -4616,45 +4694,118 @@ body.dark-theme .attached-action-btn:active {
 
 .right-sidebar.collapsed {
   width: 0;
+  min-width: 0;
+  flex: 0 0 0;
   border-left: none;
   box-shadow: none;
+  overflow: hidden;
 }
 
 .right-sidebar.collapsed .right-sidebar-content,
-.right-sidebar.collapsed .right-tab-footer {
+.right-sidebar.collapsed .right-tab-bar {
   display: none;
 }
 
-.right-tab-footer {
+/* Tab bar — Row 1: tab buttons + add + collapse */
+.right-tab-bar {
   display: flex;
-  flex-direction: row;
-  justify-content: space-around;
   align-items: center;
-  padding: 4px 8px;
-  gap: 4px;
+  padding: 2px 4px;
+  gap: 2px;
   flex-shrink: 0;
   background-color: var(--bg-main);
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  min-height: 28px;
 }
 
+.right-tab-list {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.right-tab-add-btn,
+.right-tab-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 5px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1;
+}
+
+.right-tab-add-btn:hover,
+.right-tab-collapse-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.right-tab-add-btn svg,
+.right-tab-collapse-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Individual tab button in the bar */
 .right-tab-btn {
   background: none;
   border: none;
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: 4px;
+  padding: 2px 6px;
   cursor: pointer;
   color: var(--text-muted);
   transition: all var(--transition-fast);
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex: 1;
+  gap: 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .right-tab-btn svg.icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   stroke-width: 1.8;
+  flex-shrink: 0;
+}
+
+.right-tab-btn .tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.right-tab-btn .tab-close {
+  display: none;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.right-tab-btn:hover .tab-close {
+  display: block;
+}
+
+.right-tab-btn:hover .tab-label {
+  display: none;
 }
 
 .right-tab-btn:hover {
@@ -4667,6 +4818,27 @@ body.dark-theme .attached-action-btn:active {
   color: var(--text-main);
 }
 
+.right-tab-btn:only-child .tab-close {
+  display: none !important;
+}
+
+/* Action bar — Row 2: per-tap action buttons */
+.right-tab-actions {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  gap: 4px;
+  flex-shrink: 0;
+  background-color: var(--bg-main);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+  min-height: 24px;
+}
+
+.right-tab-actions:empty {
+  display: none;
+}
+
+/* Content area — Row 3 */
 .right-sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -5785,9 +5957,14 @@ body.dark-theme .right-sidebar {
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
 }
 
-body.dark-theme .right-tab-footer {
+body.dark-theme .right-tab-bar {
   background-color: var(--bg-main);
-  border-top-color: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-theme .right-tab-actions {
+  background-color: var(--bg-main);
+  border-bottom-color: rgba(255, 255, 255, 0.03);
 }
 
 body.dark-theme .right-tab-btn:hover {
