@@ -4899,63 +4899,23 @@ body.dark-theme .attached-action-btn:active {
 }
 
 /* Tab 1: Dual Chat panel styles */
-/* Dual chat header action bar */
-.dual-chat-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  flex-shrink: 0;
-  background-color: var(--bg-main);
-}
-
-.dual-chat-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-family: var(--font-sans);
-  transition: all var(--transition-fast);
-}
-
-.dual-chat-action-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-secondary);
-}
-
-.dual-chat-action-btn svg.icon {
-  width: 12px;
-  height: 12px;
-}
-
-.dual-chat-action-btn:last-child {
-  margin-left: auto;
-}
-
-/* Dual Chat Container */
 .dual-chat-container {
   display: flex;
   flex-direction: column;
   flex: 1;
   overflow: hidden;
   height: 100%;
-  background-color: var(--bg-main); /* Level 1 */
+  background-color: var(--bg-main);
 }
 
 .dual-chat-container .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background-color: var(--bg-main); /* Level 1 */
+  gap: 8px;
+  background-color: var(--bg-main);
 }
 
 /* Override padding for sidebar chat input panel */
@@ -5601,8 +5561,8 @@ body.dark-theme .attached-action-btn:active {
 
 .active-notes-context {
   padding: 10px 12px;
-  background-color: rgba(0, 132, 255, 0.03);
-  border-bottom: 1px solid rgba(0, 132, 255, 0.08);
+  background-color: var(--bg-hover);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -5613,7 +5573,7 @@ body.dark-theme .attached-action-btn:active {
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--color-blue);
+  color: var(--text-muted);
   letter-spacing: 0.5px;
 }
 
@@ -5621,19 +5581,6 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.context-tag {
-  background-color: var(--bg-main);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 8px;
-  padding: 3px 6px;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-main);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
 }
 
 .context-tag .tag-remove {
