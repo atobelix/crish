@@ -4908,16 +4908,19 @@ body.dark-theme .attached-action-btn:active {
   width: 14px;
   height: 14px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0s 0.15s;
 }
 
 .right-tab-btn:hover .tab-close {
   opacity: 1;
+  pointer-events: auto;
   transition: opacity 0s 0.25s;
 }
 
 .right-tab-btn:hover .tab-icon-wrap .icon {
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0s 0.15s;
 }
 
