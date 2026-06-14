@@ -4765,8 +4765,9 @@ body.dark-theme .attached-action-btn:active {
   display: none;
 }
 
-.right-tab-add-btn,
 .right-tab-add-btn {
+  background: none;
+  border: none;
   cursor: pointer;
   color: var(--text-muted);
   width: 26px;
@@ -4777,17 +4778,14 @@ body.dark-theme .attached-action-btn:active {
   justify-content: center;
   flex-shrink: 0;
   transition: background-color var(--transition-fast), color var(--transition-fast);
-  font-size: 14px;
+  font-size: 16px;
   font-family: var(--font-sans);
   line-height: 1;
 }
 
-.right-tab-add-btn:hover,
 .right-tab-add-btn:hover {
-}
-
-.right-tab-add-btn svg,
-.right-tab-add-btn svg {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
 /* Individual tab button in the bar */
@@ -4823,7 +4821,7 @@ body.dark-theme .attached-action-btn:active {
   stroke-width: 1.8;
 }
 
-/* Hover: X icon overlays the SVG icon */
+/* Hover: X icon overlays the SVG icon with delay to prevent flicker */
 .right-tab-btn .tab-close {
   position: absolute;
   top: 0;
@@ -4831,14 +4829,17 @@ body.dark-theme .attached-action-btn:active {
   width: 14px;
   height: 14px;
   display: none;
+  transition: opacity 0.05s ease;
 }
 
 .right-tab-btn:hover .tab-close {
   display: block;
+  transition-delay: 0.15s;
 }
 
 .right-tab-btn:hover .tab-icon-wrap .icon {
   display: none;
+  transition-delay: 0.15s;
 }
 
 .right-tab-btn:hover {
