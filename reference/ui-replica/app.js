@@ -536,6 +536,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Click toggle for win-menu: keeps dropdown open after click
+  document.querySelectorAll('.win-menu-item').forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      if (e.target.closest('.win-menu-dropdown')) return;
+      e.stopPropagation();
+      document.querySelectorAll('.win-menu-item.active').forEach(function(el) {
+        if (el !== item) el.classList.remove('active');
+      });
+      item.classList.toggle('active');
+    });
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.win-menu-item')) {
+      document.querySelectorAll('.win-menu-item.active').forEach(function(el) {
+        el.classList.remove('active');
+      });
+    }
+  });
+
 
   // --- 2. Sidebar Section Collapse (Clicking entire section-header) ---
   const sidebarSections = document.querySelectorAll('.sidebar-section');
@@ -3383,8 +3403,8 @@ export async function hashPassword(password) {
         submenu.style.display = 'flex';
         submenu.style.flexDirection = 'column';
         submenu.style.gap = '1px';
-        submenu.style.left = (pr.left - 154) + 'px';
-        submenu.style.top = pr.top + 'px';
+        submenu.style.left = (pr.right - 150) + 'px';
+        submenu.style.top = (pr.top - 2) + 'px';
       });
       parent.addEventListener('mouseleave', function() { submenu.style.display = 'none'; });
       submenu.querySelectorAll('.attached-action-btn').forEach(function(btn) {

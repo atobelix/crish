@@ -239,6 +239,10 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
+.win-menu-item.active .win-menu-dropdown {
+  display: flex;
+}
+
 .win-menu-dropdown {
   position: absolute;
   top: 100%;
@@ -4746,7 +4750,9 @@ body.dark-theme .attached-action-btn:active {
 
 .right-sidebar.collapsed .right-sidebar-content,
 .right-sidebar.collapsed .right-tab-bar {
-  display: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
 /* Tab bar 闂?Row 1: tab buttons + add + collapse */
