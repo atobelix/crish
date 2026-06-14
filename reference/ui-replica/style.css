@@ -16,11 +16,11 @@ button:focus-visible {
 
 :root {
   /* Design Tokens - Soft Stone Minimalism */
-  --bg-sidebar: #fafafa; /* Level 2: 閺嬩焦绁悘?*/
-  --bg-main: #ffffff; /* Level 1: 缁绢垳娅?*/
-  --bg-hover: #f0f0f0; /* Level 3: 鏉堝啯绁悘?*/
-  --bg-active: #ededed; /* Level 3: 鏉堝啯绁悘?*/
-  --border-color: #ededed; /* Level 3: 鏉堝啯绁悘? 閺嬩胶绮忔潏瑙勵攱 */
+  --bg-sidebar: #fafafa; /* Level 2: 闂佸搫顑勯悞锔剧矈椤掑嫭鍊?*/
+  --bg-main: #ffffff; /* Level 1: 缂備胶铏庨崹鍐测枍?*/
+  --bg-hover: #f0f0f0; /* Level 3: 闁哄鐗嗛崯顖滅矈椤掑嫭鍊?*/
+  --bg-active: #ededed; /* Level 3: 闁哄鐗嗛崯顖滅矈椤掑嫭鍊?*/
+  --border-color: #ededed; /* Level 3: 闁哄鐗嗛崯顖滅矈椤掑嫭鍊? 闂佸搫顑勯懗鍓佸垝韫囨梹缍囬悷娆忓閺€?*/
   --text-main: #3a3a38; /* Soft charcoal */
   --text-secondary: #666666; /* Soft medium gray */
   --text-muted: #999999; /* Soft light gray */
@@ -182,15 +182,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  border-radius: 8px;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .win-toggle-sidebar-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+}
+
+.win-toggle-sidebar-btn svg {
+  width: 14px;
+  height: 14px;
+}
   color: var(--text-main);
 }
 
@@ -1044,8 +1050,9 @@ body.dark-theme .win-control:hover {
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1055,6 +1062,11 @@ body.dark-theme .win-control:hover {
 .terminal-toggle-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
+}
+
+.terminal-toggle-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Command Bar (Subheader) */
@@ -1156,7 +1168,7 @@ body.dark-theme .win-control:hover {
   color: #d73a49;
 }
 
-/* Tool Invocation / Tool Summary 閳?plain text rows, no box background/border */
+/* Tool Invocation / Tool Summary 闂?plain text rows, no box background/border */
 .tool-invocation,
 .tool-summary {
   background: transparent;
@@ -4711,30 +4723,20 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-sidebar.collapsed {
-  width: 30px;
-  min-width: 30px;
-  flex: 0 0 30px;
-  border-left: 1px solid rgba(0, 0, 0, 0.05);
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0;
+  border-left: none;
   box-shadow: none;
   overflow: hidden;
 }
 
 .right-sidebar.collapsed .right-sidebar-content,
-.right-sidebar.collapsed .right-tab-list,
-.right-sidebar.collapsed .right-tab-add-btn,
-.right-sidebar.collapsed .right-tab-collapse-btn {
+.right-sidebar.collapsed .right-tab-bar {
   display: none;
 }
 
-.right-sidebar.collapsed .right-tab-bar {
-  justify-content: flex-end;
-}
-
-.right-sidebar.collapsed .right-tab-toggle-btn {
-  display: flex;
-}
-
-/* Tab bar 閳?Row 1: tab buttons + add + collapse */
+/* Tab bar 闂?Row 1: tab buttons + add + collapse */
 .right-tab-bar {
   display: flex;
   align-items: center;
@@ -4764,10 +4766,7 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-tab-add-btn,
-.right-tab-collapse-btn,
-.right-tab-toggle-btn {
-  background: none;
-  border: none;
+.right-tab-add-btn {
   cursor: pointer;
   color: var(--text-muted);
   width: 26px;
@@ -4784,17 +4783,11 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-tab-add-btn:hover,
-.right-tab-collapse-btn:hover,
-.right-tab-toggle-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-secondary);
+.right-tab-add-btn:hover {
 }
 
 .right-tab-add-btn svg,
-.right-tab-collapse-btn svg,
-.right-tab-toggle-btn svg {
-  width: 14px;
-  height: 14px;
+.right-tab-add-btn svg {
 }
 
 /* Individual tab button in the bar */
@@ -4902,7 +4895,7 @@ body.dark-theme .attached-action-btn:active {
   min-height: 32px;
 }
 
-/* Content area 閳?Row 3 */
+/* Content area 闂?Row 3 */
 .right-sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -5008,7 +5001,7 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?background instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 闂佸搫顑勯悞锔剧矈椤掑嫭鍊?background instead of border outline */
 }
 
 .token-card-header {
@@ -5090,12 +5083,12 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?*/
+  background-color: var(--bg-sidebar); /* Level 2: 闂佸搫顑勯悞锔剧矈椤掑嫭鍊?*/
   transition: background-color var(--transition-fast);
 }
 
 .token-log-item:hover {
-  background-color: var(--bg-hover); /* Level 3: 鏉堝啯绁悘?*/
+  background-color: var(--bg-hover); /* Level 3: 闁哄鐗嗛崯顖滅矈椤掑嫭鍊?*/
 }
 
 .log-meta {
@@ -5174,7 +5167,7 @@ body.dark-theme .attached-action-btn:active {
   align-items: center;
   padding: 6px 12px;
   gap: 12px;
-  background-color: var(--bg-main); /* Level 1: 缁绢垳娅?to match Image 2 */
+  background-color: var(--bg-main); /* Level 1: 缂備胶铏庨崹鍐测枍?to match Image 2 */
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -5868,7 +5861,7 @@ body.dark-theme .attached-action-btn:active {
   border: none; /* Removed border */
   border-radius: 12px; /* Consistent corner radius */
   overflow: hidden;
-  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?block instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 闂佸搫顑勯悞锔剧矈椤掑嫭鍊?block instead of border outline */
   transition: background-color var(--transition-fast);
 }
 
