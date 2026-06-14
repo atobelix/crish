@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
           try { const s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
           // Ensure first tab is active
           const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
-          if (firstTab) activateTab(firstTab.dataset.tab);
+          if (firstTab) activateTab(firstTab.dataset.tabId);
         }
       }
     });
@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
             // Ensure first tab is active
             const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
-            if (firstTab) activateTab(firstTab.dataset.tab);
+            if (firstTab) activateTab(firstTab.dataset.tabId);
           }
         }
         break;
@@ -3132,18 +3132,34 @@ export async function hashPassword(password) {
   });
 
   // --- 17. Right Sidebar Tab Management ---
+  let tabInstanceCounters = {};
   const tabDefinitions = {
     'tab-dual-chat': {
       label: '对话',
-      icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path><path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>'
+      multi: true,
+      hasSubmenu: true,
+      submenuItems: [
+        { action: 'inherit', label: '继承主面板对话', icon: '<path d="M7 20l4-16 4 16"></path><path d="M3 12h4"></path><path d="M17 12h4"></path>' },
+        { action: 'new', label: '新对话', icon: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>' }
+      ],
+      icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path><path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>',
+      createInstance: function(n) { return { label: '对话 ' + n, panelId: 'tab-dual-chat' }; }
+    },
+    'tab-browser': {
+      label: '浏览器',
+      multi: true,
+      icon: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>',
+      createInstance: function(n) { return { label: '浏览器 ' + n, panelId: 'tab-browser' }; }
+    },
+    'tab-terminal': {
+      label: '终端',
+      multi: true,
+      icon: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>',
+      createInstance: function(n) { return { label: '终端 ' + n, panelId: null }; }
     },
     'tab-token-metrics': {
       label: 'Token 统计',
       icon: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>'
-    },
-    'tab-browser': {
-      label: '浏览器',
-      icon: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>'
     },
     'tab-file-explorer': {
       label: '文件浏览',
@@ -3155,27 +3171,35 @@ export async function hashPassword(password) {
     }
   };
 
-  let activeTabs = ['tab-dual-chat'];
-  const rightTabList = document.getElementById('right-tab-list');
-  const rightTabAddBtn = document.getElementById('right-tab-add-btn');
-  const rightCollapseBtn = document.getElementById('right-tab-collapse-btn');
-  const rightActions = document.getElementById('right-tab-actions');
-  const allTabPanels = document.querySelectorAll('.right-tab-panel');
+  function createTabInstance(baseType) {
+    var def = tabDefinitions[baseType];
+    if (!def || !def.multi) return null;
+    tabInstanceCounters[baseType] = (tabInstanceCounters[baseType] || 0) + 1;
+    var n = tabInstanceCounters[baseType];
+    var info = def.createInstance ? def.createInstance(n) : { label: def.label, panelId: null };
+    return { id: baseType + '-' + n, baseType: baseType, label: info.label, panelId: info.panelId };
+  }
+
+  var activeTabs = [{ id: 'tab-dual-chat-1', baseType: 'tab-dual-chat', label: '对话', panelId: 'tab-dual-chat' }];
+  var rightTabList = document.getElementById('right-tab-list');
+  var rightTabAddBtn = document.getElementById('right-tab-add-btn');
+  var rightActions = document.getElementById('right-tab-actions');
+  var allTabPanels = document.querySelectorAll('.right-tab-panel');
 
   function renderTabBar() {
     if (!rightTabList) return;
-    rightTabList.innerHTML = activeTabs.map((id, idx) => {
-      const def = tabDefinitions[id];
+    rightTabList.innerHTML = activeTabs.map(function(tab, idx) {
+      var def = tabDefinitions[tab.baseType];
       if (!def) return '';
-      const isActive = idx === 0;
-      const closable = activeTabs.length > 1;
-      return `<button class="right-tab-btn ${isActive ? 'active' : ''}" data-tab="${id}" title="${def.label}" draggable="true">
-        <span class="tab-icon-wrap">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
-          ${closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : ''}
-        </span>
-        <span class="tab-label">${def.label}</span>
-      </button>`;
+      var isActive = idx === 0;
+      var closable = activeTabs.length > 1;
+      return '<button class="right-tab-btn ' + (isActive ? 'active' : '') + '" data-tab-id="' + tab.id + '" title="' + tab.label + '" draggable="true">' +
+        '<span class="tab-icon-wrap">' +
+          '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + def.icon + '</svg>' +
+          (closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : '') +
+        '</span>' +
+        '<span class="tab-label">' + tab.label + '</span>' +
+      '</button>';
     }).join('');
     bindTabEvents();
   }
@@ -3261,147 +3285,156 @@ export async function hashPassword(password) {
   }
 
   function bindTabEvents() {
-    // Click tab: activate
-    rightTabList.querySelectorAll('.right-tab-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    rightTabList.querySelectorAll('.right-tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
         if (e.target.closest('.tab-close')) return;
-        const tabId = btn.dataset.tab;
+        var tabId = btn.dataset.tabId;
         if (rightSidebar.classList.contains('collapsed')) {
           rightSidebar.classList.remove('collapsed');
         }
         activateTab(tabId);
         renderTabBar();
       });
-      // Middle-click: close
-      btn.addEventListener('mousedown', (e) => {
+      btn.addEventListener('mousedown', function(e) {
         if (e.button === 1) {
           e.preventDefault();
-          closeTab(btn.dataset.tab);
+          closeTab(btn.dataset.tabId);
         }
       });
-      // Long-press drag reorder
       initTabDrag(btn);
     });
-    // Add button
     if (rightTabAddBtn) {
       rightTabAddBtn.onclick = showAddTabMenu;
-    }
-    // Collapse button
-    if (rightCollapseBtn) {
-      rightCollapseBtn.onclick = () => {
-        rightSidebar.classList.toggle('collapsed');
-        if (!rightSidebar.classList.contains('collapsed')) {
-          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
-          // Ensure first tab is active on expand
-          const firstTab = rightTabList.querySelector('.right-tab-btn');
-          if (firstTab) activateTab(firstTab.dataset.tab);
-        }
-      };
     }
   }
 
   function activateTab(tabId) {
-    allTabPanels.forEach(p => p.classList.remove('active'));
-    const panel = document.getElementById(tabId);
-    if (panel) panel.classList.add('active');
-    // Sync active class on tab buttons
-    rightTabList.querySelectorAll('.right-tab-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tabId);
-    });
-    // Populate actions for the active tab
-    renderTabActions(tabId);
-  }
-
-  function renderTabActions(tabId) {
-    if (!rightActions) return;
-    // Dual chat actions — match browser-address-bar button style
-    if (tabId === 'tab-dual-chat') {
-      rightActions.innerHTML = `
-        <button class="browser-btn" id="inherit-context-btn" title="继承主对话上下文">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 20l4-16 4 16"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><path d="M5 8h2"></path><path d="M17 8h2"></path></svg>
-        </button>
-        <button class="browser-btn" id="new-dual-chat-btn" title="开始新对话">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        </button>
-        <button class="browser-btn" id="clear-dual-chat-btn" title="清空对话">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        </button>`;
-      return;
+    var tab = activeTabs.find(function(t) { return t.id === tabId; });
+    if (!tab) return;
+    allTabPanels.forEach(function(p) { p.classList.remove('active'); });
+    if (tab.panelId) {
+      var panel = document.getElementById(tab.panelId);
+      if (panel) panel.classList.add('active');
     }
-    // Other tabs keep their existing built-in toolbars
-    rightActions.innerHTML = '';
+    rightTabList.querySelectorAll('.right-tab-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.tabId === tabId);
+    });
   }
 
   function closeTab(tabId) {
     if (activeTabs.length <= 1) return;
-    const idx = activeTabs.indexOf(tabId);
+    var idx = activeTabs.findIndex(function(t) { return t.id === tabId; });
     if (idx === -1) return;
+    var tab = activeTabs[idx];
     activeTabs.splice(idx, 1);
-    // Hide panel
-    const panel = document.getElementById(tabId);
-    if (panel) panel.classList.remove('active');
-    // Activate another tab
+    if (tab.panelId) {
+      var panel = document.getElementById(tab.panelId);
+      if (panel) panel.classList.remove('active');
+    }
     if (activeTabs.length > 0) {
-      activateTab(activeTabs[0]);
+      activateTab(activeTabs[0].id);
     }
     renderTabBar();
   }
 
   function showAddTabMenu() {
-    const available = Object.keys(tabDefinitions).filter(id => !activeTabs.includes(id));
-    if (available.length === 0) return;
     if (!rightTabAddBtn) return;
-
-    // Remove existing dropdown
-    const existing = document.getElementById('add-tab-dropdown');
+    var existing = document.getElementById('add-tab-dropdown');
     if (existing) existing.remove();
-
-    const dropdown = document.createElement('div');
+    var available = Object.keys(tabDefinitions);
+    var dropdown = document.createElement('div');
     dropdown.id = 'add-tab-dropdown';
     dropdown.className = 'attached-dropdown-menu show';
-    dropdown.style.cssText = 'position:fixed;z-index:1000;width:160px;';
-    const rect = rightTabAddBtn.getBoundingClientRect();
+    dropdown.style.cssText = 'position:fixed;z-index:1000;width:140px;';
+    var rect = rightTabAddBtn.getBoundingClientRect();
     dropdown.style.top = (rect.bottom + 4) + 'px';
-    dropdown.style.left = Math.max(4, rect.left - 60) + 'px';
-
-    dropdown.innerHTML = available.map(id => {
-      const def = tabDefinitions[id];
-      return `<div class="attached-menu-item" data-tab="${id}">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
-        <span>${def.label}</span>
-      </div>`;
-    }).join('');
-
+    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    dropdown.style.left = 'auto';
+    var listHtml = '';
+    available.forEach(function(baseType) {
+      var def = tabDefinitions[baseType];
+      listHtml += '<div class="attached-menu-item';
+      if (def.hasSubmenu) listHtml += ' submenu-parent';
+      listHtml += '" data-base="' + baseType + '">';
+      listHtml += '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + def.icon + '</svg>';
+      listHtml += '<span>' + def.label + '</span>';
+      if (def.hasSubmenu) {
+        listHtml += '<svg class="submenu-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:10px;height:10px;margin-left:auto;color:var(--text-muted);"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+      }
+      listHtml += '</div>';
+    });
+    dropdown.innerHTML = listHtml;
     document.body.appendChild(dropdown);
-
-    dropdown.querySelectorAll('.attached-menu-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const tabId = item.dataset.tab;
-        activeTabs.push(tabId);
-        const panel = document.getElementById(tabId);
-        if (panel) {
-          allTabPanels.forEach(p => p.classList.remove('active'));
-          panel.classList.add('active');
+    dropdown.querySelectorAll('.submenu-parent').forEach(function(parent) {
+      var baseType = parent.dataset.base;
+      var def = tabDefinitions[baseType];
+      var submenu = document.createElement('div');
+      submenu.style.cssText = 'position:fixed;display:none;width:150px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.08);z-index:1010;padding:4px;';
+      var subHtml = '';
+      def.submenuItems.forEach(function(item) {
+        subHtml += '<div class="attached-action-btn" data-base="' + baseType + '" data-action="' + item.action + '">';
+        subHtml += '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:12px;height:12px">' + item.icon + '</svg>';
+        subHtml += '<span>' + item.label + '</span></div>';
+      });
+      submenu.innerHTML = subHtml;
+      document.body.appendChild(submenu);
+      parent.addEventListener('mouseenter', function() {
+        var pr = parent.getBoundingClientRect();
+        submenu.style.display = 'flex';
+        submenu.style.flexDirection = 'column';
+        submenu.style.gap = '1px';
+        submenu.style.left = (pr.left - 154) + 'px';
+        submenu.style.top = pr.top + 'px';
+      });
+      parent.addEventListener('mouseleave', function() { submenu.style.display = 'none'; });
+      submenu.querySelectorAll('.attached-action-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var base = btn.dataset.base;
+          var tab = createTabInstance(base);
+          if (!tab) { dropdown.remove(); submenu.remove(); return; }
+          activeTabs.unshift(tab);
+          if (tab.panelId) {
+            var panel = document.getElementById(tab.panelId);
+            if (panel) { document.querySelectorAll('.right-tab-panel').forEach(function(p) { p.classList.remove('active'); }); panel.classList.add('active'); }
+          }
+          activateTab(tab.id);
+          renderTabBar();
+          submenu.style.display = 'none';
+          dropdown.remove();
+          submenu.remove();
+        });
+      });
+    });
+    dropdown.querySelectorAll('.attached-menu-item:not(.submenu-parent)').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var baseType = item.dataset.base;
+        var existing2 = activeTabs.find(function(t) { return t.baseType === baseType; });
+        if (existing2) { activateTab(existing2.id); renderTabBar(); dropdown.remove(); return; }
+        var def2 = tabDefinitions[baseType];
+        var newTab = { id: baseType, baseType: baseType, label: def2.label, panelId: baseType };
+        activeTabs.unshift(newTab);
+        if (newTab.panelId) {
+          var panel2 = document.getElementById(newTab.panelId);
+          if (panel2) { document.querySelectorAll('.right-tab-panel').forEach(function(p) { p.classList.remove('active'); }); panel2.classList.add('active'); }
         }
-        activateTab(tabId);
+        activateTab(newTab.id);
         renderTabBar();
         dropdown.remove();
       });
     });
-
-    // Click outside to close
-    const closeHandler = (e) => {
+    var closeHandler = function(e) {
       if (!dropdown.contains(e.target) && e.target !== rightTabAddBtn) {
         dropdown.remove();
+        document.querySelectorAll('.attached-submenu').forEach(function(s) { s.remove(); });
         document.removeEventListener('mousedown', closeHandler);
       }
     };
-    setTimeout(() => document.addEventListener('mousedown', closeHandler), 0);
+    setTimeout(function() { document.addEventListener('mousedown', closeHandler); }, 0);
   }
 
   // Initial render
   renderTabBar();
-  activateTab('tab-dual-chat');
+  if (activeTabs.length > 0) activateTab(activeTabs[0].id);
 
   // --- 18. Tab 1: Dual Chat panel logic ---
   const dualChatMessages = document.getElementById('dual-chat-messages');
