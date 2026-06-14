@@ -4770,17 +4770,18 @@ body.dark-theme .attached-action-btn:active {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  width: 26px;
   height: 26px;
+  min-width: 26px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
-  font-size: 16px;
+  transition: all var(--transition-fast);
+  font-size: 15px;
   font-family: var(--font-sans);
   line-height: 1;
+  padding: 0 4px;
 }
 
 .right-tab-add-btn:hover {
@@ -4821,25 +4822,25 @@ body.dark-theme .attached-action-btn:active {
   stroke-width: 1.8;
 }
 
-/* Hover: X icon overlays the SVG icon with delay to prevent flicker */
+/* Hover: X icon overlays the SVG icon (with delay to prevent flicker) */
 .right-tab-btn .tab-close {
   position: absolute;
   top: 0;
   left: 0;
   width: 14px;
   height: 14px;
-  display: none;
-  transition: opacity 0.05s ease;
+  opacity: 0;
+  transition: opacity 0s 0.15s;
 }
 
 .right-tab-btn:hover .tab-close {
-  display: block;
-  transition-delay: 0.15s;
+  opacity: 1;
+  transition: opacity 0s 0.25s;
 }
 
 .right-tab-btn:hover .tab-icon-wrap .icon {
-  display: none;
-  transition-delay: 0.15s;
+  opacity: 0;
+  transition: opacity 0s 0.15s;
 }
 
 .right-tab-btn:hover {
@@ -4863,25 +4864,11 @@ body.dark-theme .attached-action-btn:active {
 /* Drag-and-drop styles */
 .right-tab-btn.dragging {
   opacity: 0.4;
-  transform: scale(0.95);
 }
 
 .right-tab-btn.drag-over {
   transform: translateX(4px);
   transition: transform 0.15s ease;
-}
-
-.right-tab-btn {
-  transition: all var(--transition-fast), transform 0.2s ease;
-}
-
-/* Drag handle cursor */
-.right-tab-btn {
-  cursor: grab;
-}
-
-.right-tab-btn:active {
-  cursor: grabbing;
 }
 
 /* Action bar - Row 2: per-tab action buttons */
