@@ -4332,9 +4332,8 @@ body.dark-theme .plugin-icon-box {
 
 /* Input Area Wrapper - transparent shell, card itself carries bg */
 .input-area-wrapper {
-  width: 71.4%; /* 5/7 of the available main-panel width */
-  max-width: 1000px;
-  min-width: 480px;
+  width: 100%;
+  max-width: 800px;
   margin: 0 auto;
   background-color: transparent;
   border: none;
