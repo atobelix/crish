@@ -3134,7 +3134,7 @@ export async function hashPassword(password) {
   // --- 17. Right Sidebar Tab Management ---
   const tabDefinitions = {
     'tab-dual-chat': {
-      label: '双轨对话',
+      label: '对话',
       icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path><path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>'
     },
     'tab-token-metrics': {
