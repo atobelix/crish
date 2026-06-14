@@ -276,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const onMouseDown = (e) => {
       isResizing = true;
+      sidebar.dataset.initWidth = sidebar.offsetWidth;
       sidebar.classList.add('resizing');
       sidebar.style.transition = 'none';
       document.body.style.cursor = 'col-resize';
@@ -286,14 +287,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const onMouseMove = (e) => {
       if (!isResizing) return;
       const rect = sidebar.parentElement.getBoundingClientRect();
+      const initWidth = parseFloat(sidebar.dataset.initWidth) || rect.width;
       let newWidth;
       if (edge === 'right') {
         newWidth = e.clientX - rect.left;
       } else {
         newWidth = rect.right - e.clientX;
       }
-      // If below minWidth, collapse instead of shrinking
-      if (newWidth < minWidth) {
+      // Damping: collapse only when dragged past half the initial width
+      if (newWidth < initWidth * 0.5) {
         sidebar.classList.add('collapsed');
         try { localStorage.setItem(storageKey, ''); } catch (_) {}
         isResizing = false;

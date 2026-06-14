@@ -16,11 +16,11 @@ button:focus-visible {
 
 :root {
   /* Design Tokens - Soft Stone Minimalism */
-  --bg-sidebar: #fafafa; /* Level 2: 极浅灰 */
-  --bg-main: #ffffff; /* Level 1: 纯白 */
-  --bg-hover: #f0f0f0; /* Level 3: 较浅灰 */
-  --bg-active: #ededed; /* Level 3: 较浅灰 */
-  --border-color: #ededed; /* Level 3: 较浅灰, 极细边框 */
+  --bg-sidebar: #fafafa; /* Level 2: 鏋佹祬鐏?*/
+  --bg-main: #ffffff; /* Level 1: 绾櫧 */
+  --bg-hover: #f0f0f0; /* Level 3: 杈冩祬鐏?*/
+  --bg-active: #ededed; /* Level 3: 杈冩祬鐏?*/
+  --border-color: #ededed; /* Level 3: 杈冩祬鐏? 鏋佺粏杈规 */
   --text-main: #3a3a38; /* Soft charcoal */
   --text-secondary: #666666; /* Soft medium gray */
   --text-muted: #999999; /* Soft light gray */
@@ -1156,7 +1156,7 @@ body.dark-theme .win-control:hover {
   color: #d73a49;
 }
 
-/* Tool Invocation / Tool Summary — plain text rows, no box background/border */
+/* Tool Invocation / Tool Summary 鈥?plain text rows, no box background/border */
 .tool-invocation,
 .tool-summary {
   background: transparent;
@@ -1586,7 +1586,9 @@ body.dark-theme .tool-summary-body::-webkit-scrollbar-thumb:hover {
 
 .change-summary[data-expanded="true"] .change-summary-body {
   max-height: 400px;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border-top-color: rgba(0, 0, 0, 0.06);
 }
 
@@ -1595,6 +1597,22 @@ body.dark-theme .tool-summary-body::-webkit-scrollbar-thumb:hover {
   flex-direction: column;
   gap: 1px;
   padding: 4px 0;
+  max-height: 150px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.change-file-diff-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.change-file-diff.visible {
+  display: block;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  overflow-x: auto;
 }
 
 .change-file-item {
@@ -4706,7 +4724,7 @@ body.dark-theme .attached-action-btn:active {
   display: none;
 }
 
-/* Tab bar — Row 1: tab buttons + add + collapse */
+/* Tab bar 鈥?Row 1: tab buttons + add + collapse */
 .right-tab-bar {
   display: flex;
   align-items: center;
@@ -4822,7 +4840,7 @@ body.dark-theme .attached-action-btn:active {
   display: none !important;
 }
 
-/* Action bar — Row 2: per-tap action buttons */
+/* Action bar 鈥?Row 2: per-tap action buttons */
 .right-tab-actions {
   display: flex;
   align-items: center;
@@ -4838,7 +4856,7 @@ body.dark-theme .attached-action-btn:active {
   display: none;
 }
 
-/* Content area — Row 3 */
+/* Content area 鈥?Row 3 */
 .right-sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -4984,7 +5002,7 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background-color: var(--bg-sidebar); /* Level 2: 极浅灰 background instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?background instead of border outline */
 }
 
 .token-card-header {
@@ -5066,12 +5084,12 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--bg-sidebar); /* Level 2: 极浅灰 */
+  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?*/
   transition: background-color var(--transition-fast);
 }
 
 .token-log-item:hover {
-  background-color: var(--bg-hover); /* Level 3: 较浅灰 */
+  background-color: var(--bg-hover); /* Level 3: 杈冩祬鐏?*/
 }
 
 .log-meta {
@@ -5150,7 +5168,7 @@ body.dark-theme .attached-action-btn:active {
   align-items: center;
   padding: 6px 12px;
   gap: 12px;
-  background-color: var(--bg-main); /* Level 1: 纯白 to match Image 2 */
+  background-color: var(--bg-main); /* Level 1: 绾櫧 to match Image 2 */
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -5857,7 +5875,7 @@ body.dark-theme .attached-action-btn:active {
   border: none; /* Removed border */
   border-radius: 12px; /* Consistent corner radius */
   overflow: hidden;
-  background-color: var(--bg-sidebar); /* Level 2: 极浅灰 block instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?block instead of border outline */
   transition: background-color var(--transition-fast);
 }
 
