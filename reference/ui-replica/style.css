@@ -230,7 +230,7 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
   border-radius: 8px;
   cursor: pointer;
   transition: background-color var(--transition-fast);
-  min-height: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
 }
@@ -267,6 +267,9 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
   white-space: nowrap;
   transition: background-color var(--transition-fast);
   border-radius: 8px;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
 }
 
 .win-menu-dropdown .dropdown-item:hover {
@@ -978,10 +981,20 @@ body.dark-theme .win-control:hover {
 
 .nested-item .chat-time {
   font-size: 10px;
-  background-color: rgba(0, 0, 0, 0.04);
-  padding: 0px 4px;
-  border-radius: 3px;
+  color: var(--text-muted);
   flex-shrink: 0;
+  display: none;
+}
+
+/* Show chat-time only when there is NO status icon (mutually exclusive) */
+.nested-item .action-status-container:empty + .chat-time,
+.nested-item .chat-status:only-child ~ .chat-time {
+  display: inline;
+}
+
+/* On hover: hide chat-time */
+.nested-item:hover .chat-time {
+  display: none;
 }
 
 /* Chat list structures */
@@ -993,10 +1006,7 @@ body.dark-theme .win-control:hover {
 }
 .chat-time {
   font-size: 11px;
-  color: var(--text-secondary);
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 1px 5px;
-  border-radius: 8px;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
