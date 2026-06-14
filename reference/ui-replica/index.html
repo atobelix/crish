@@ -877,40 +877,6 @@ export default function formatMarkdown(text) {
 
       <!-- Right Sidebar (Auxiliary developer workspace) -->
       <aside class="right-sidebar">
-        <!-- Sidebar Tab Headers -->
-        <div class="right-sidebar-tabs">
-          <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-token-metrics" title="Token 消耗统计">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-browser" title="内置浏览器 & 页面预览">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-file-explorer" title="文件浏览器 & 批注系统">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </button>
-          <button class="right-tab-btn" data-tab="tab-diff-center" title="改动文件差异聚合总览">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path>
-              <rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>
-            </svg>
-          </button>
-        </div>
-
         <!-- Sidebar Tab Contents -->
         <div class="right-sidebar-content">
           <!-- Tab 1: Dual Chat / Agent Monitor -->
@@ -1666,6 +1632,40 @@ export default function formatMarkdown(text) {
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Tab switcher footer -->
+        <div class="right-tab-footer">
+          <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-token-metrics" title="Token 消耗统计">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-browser" title="内置浏览器 & 页面预览">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-file-explorer" title="文件浏览器 & 批注系统">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-diff-center" title="改动文件差异聚合总览">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path>
+              <rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
         </div>
       </aside>
 

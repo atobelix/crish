@@ -566,6 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const status = call.status || 'success';
     const isEditTool = call.name === 'edit_file' || call.name === 'edit';
     const hasFailed = status === 'failure';
+    const uid = call.uid || `call-${index}-${Date.now()}`;
 
     // Status icon: terminal for success, dash-circle for failure (NOT red, use muted)
     const statusIcon = hasFailed
@@ -584,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
       : (isEditTool && call.diff ? renderDiffView(call.diff) : `<pre><code>${escapeHTML(call.result)}</code></pre>`);
 
     return `
-      <div class="tool-invocation" data-call-index="${index}" data-expanded="${expanded}" data-status="${status}">
+      <div class="tool-invocation" data-call-uid="${uid}" data-call-index="${index}" data-expanded="${expanded}" data-status="${status}">
         <div class="tool-call-row" title="${safeArgs}">
           ${statusIcon}
           <span class="tool-name">${escapeHTML(displayName)}</span>
@@ -594,8 +595,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </div>
-        <div class="tool-result-window">
-          <div class="tool-output">
+        <div class="output-window tool-result-window">
+          <div class="output-box tool-output">
             ${outputContent}
           </div>
         </div>
@@ -608,11 +609,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const summaryParts = [`${metrics.tools} 个工具`];
     if (metrics.viewed > 0) summaryParts.push(`${metrics.viewed} 个文件查看`);
     if (metrics.edited > 0) summaryParts.push(`${metrics.edited} 个文件编辑`);
+    const groupUid = group.uid || '';
 
     if (group.status === 'summary') {
       const expanded = group.expanded === true;
       return `
-        <div class="tool-summary" data-expanded="${expanded}">
+        <div class="tool-summary" data-group-uid="${groupUid}" data-expanded="${expanded}">
           <div class="tool-summary-row">
             <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <polyline points="4 17 10 11 4 5"></polyline>
@@ -644,11 +646,106 @@ document.addEventListener('DOMContentLoaded', () => {
     if (msg.role === 'tool_group') {
       return renderToolGroup(msg);
     }
+    if (msg.role === 'change_summary') {
+      const diffs = conversationDiffs[currentChatId] || {};
+      return `<div class="chat-message change-summary-message">${renderChangeSummary(diffs)}</div>`;
+    }
     return '';
   }
 
   function renderMessages(messages) {
     return messages.map(renderMessage).join('');
+  }
+
+  // --- Change summary (file diffs overview) ---
+  function renderChangeSummary(diffs) {
+    const files = Object.keys(diffs);
+    if (files.length === 0) return '';
+    const totalAdded = files.reduce((s, f) => s + diffs[f].added, 0);
+    const totalRemoved = files.reduce((s, f) => s + diffs[f].removed, 0);
+
+    const fileItems = files.map(file => {
+      const d = diffs[file];
+      return `
+        <div class="change-file-item" data-file="${escapeHTML(file)}">
+          <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span class="file-name">${escapeHTML(file)}</span>
+          <span class="file-stats">
+            <span class="diff-stat-added">+${d.added}</span>
+            <span class="diff-stat-removed">-${d.removed}</span>
+          </span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="change-summary" data-expanded="false">
+        <div class="change-summary-header">
+          <svg class="icon change-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          <span class="change-summary-text">文件变动总览 · ${files.length} 个文件被修改 (+${totalAdded} -${totalRemoved})</span>
+          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="change-summary-body">
+          <div class="change-file-list">${fileItems}</div>
+          <div class="change-file-diff-container"></div>
+        </div>
+      </div>`;
+  }
+
+  function appendChangeSummary() {
+    if (!currentChatId || !conversationDiffs[currentChatId]) return;
+    const diffs = conversationDiffs[currentChatId];
+    if (Object.keys(diffs).length === 0) return;
+    // Prevent duplicate change summaries
+    const msgs = chatMessagesData[currentChatId];
+    if (msgs.some(m => m.role === 'change_summary')) return;
+    msgs.push({ role: 'change_summary' });
+    renderCurrentMessages();
+  }
+
+  function bindChangeSummary(container) {
+    const header = container.querySelector('.change-summary-header');
+    if (header) {
+      header.addEventListener('click', () => {
+        const summary = header.closest('.change-summary');
+        const expanded = summary.getAttribute('data-expanded') === 'true';
+        summary.setAttribute('data-expanded', String(!expanded));
+      });
+    }
+
+    container.querySelectorAll('.change-file-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const fileName = item.dataset.file;
+        const body = item.closest('.change-summary-body');
+        const diffContainer = body.querySelector('.change-file-diff-container');
+        const diffs = conversationDiffs[currentChatId] || {};
+        const diff = diffs[fileName];
+        if (!diff) return;
+
+        body.querySelectorAll('.change-file-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+
+        diffContainer.innerHTML = `
+          <div class="change-file-diff visible">
+            <div class="diff-file-header">
+              <span class="diff-file-name">${escapeHTML(fileName)}</span>
+              <span class="diff-file-stats">
+                <span class="diff-stat-added">+${diff.added}</span>
+                <span class="diff-stat-removed">-${diff.removed}</span>
+              </span>
+            </div>
+            ${renderDiffView(diff)}
+          </div>`;
+        highlightCode(diffContainer);
+      });
+    });
   }
 
   function bindToolToggles(container) {
@@ -657,6 +754,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const invocation = row.closest('.tool-invocation');
         const expanded = invocation.getAttribute('data-expanded') === 'true';
         invocation.setAttribute('data-expanded', String(!expanded));
+        // Sync back to data model
+        const uid = invocation.dataset.callUid;
+        if (uid && chatMessagesData[currentChatId]) {
+          for (const msg of chatMessagesData[currentChatId]) {
+            if (msg.role === 'tool_group' && msg.calls) {
+              const call = msg.calls.find(c => c.uid === uid);
+              if (call) { call.expanded = !expanded; break; }
+            }
+          }
+        }
       });
     });
     container.querySelectorAll('.tool-summary-row').forEach(row => {
@@ -664,8 +771,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const summary = row.closest('.tool-summary');
         const expanded = summary.getAttribute('data-expanded') === 'true';
         summary.setAttribute('data-expanded', String(!expanded));
+        // Sync back to data model
+        const uid = summary.dataset.groupUid;
+        if (uid && chatMessagesData[currentChatId]) {
+          for (const msg of chatMessagesData[currentChatId]) {
+            if (msg.role === 'tool_group' && msg.uid === uid) {
+              msg.expanded = !expanded; break;
+            }
+          }
+        }
       });
     });
+    bindChangeSummary(container);
   }
 
   // Expose renderAgentView for sub-agent reuse
@@ -1830,7 +1947,12 @@ document.addEventListener('DOMContentLoaded', () => {
     sendBtn.classList.remove('active');
     sendBtn.setAttribute('disabled', 'true');
 
-    setTimeout(() => { chatArea.scrollTop = chatArea.scrollHeight; }, 50);
+    setTimeout(() => {
+      const threshold = 30;
+      if (chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - threshold) {
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }
+    }, 50);
     simulateAIResponse(text);
   };
 
@@ -1851,14 +1973,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Streaming tool call helpers ---
   let currentToolGroup = null;
+  const conversationDiffs = {}; // { chatId: { filepath: diff } }
 
   function renderCurrentMessages() {
     if (!messageList || !currentChatId || !chatMessagesData[currentChatId]) return;
+
+    // Save expanded states before re-render (by uid)
+    const expandedStates = new Map();
+    messageList.querySelectorAll('.tool-invocation[data-call-uid]').forEach(el => {
+      expandedStates.set(el.dataset.callUid, el.dataset.expanded === 'true');
+    });
+    messageList.querySelectorAll('.tool-summary[data-group-uid]').forEach(el => {
+      expandedStates.set(`group:${el.dataset.groupUid}`, el.dataset.expanded === 'true');
+    });
+
     messageList.innerHTML = renderMessages(chatMessagesData[currentChatId]);
+
+    // Restore expanded states after re-render
+    messageList.querySelectorAll('.tool-invocation[data-call-uid]').forEach(el => {
+      const saved = expandedStates.get(el.dataset.callUid);
+      if (saved !== undefined) {
+        el.dataset.expanded = String(saved);
+      }
+    });
+    messageList.querySelectorAll('.tool-summary[data-group-uid]').forEach(el => {
+      const saved = expandedStates.get(`group:${el.dataset.groupUid}`);
+      if (saved !== undefined) {
+        el.dataset.expanded = String(saved);
+      }
+    });
+
     bindToolToggles(messageList);
     highlightCode(messageList);
-    chatArea.scrollTop = chatArea.scrollHeight;
+
+    // Smart scroll: only scroll to bottom if user was already near the bottom
+    const threshold = 30;
+    if (chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - threshold) {
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
   }
+
+  let toolUidCounter = 0;
 
   function appendToolCall(name, args, result, options = {}) {
     if (!currentChatId || !chatMessagesData[currentChatId]) return null;
@@ -1867,6 +2022,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name,
       args,
       result,
+      uid: `call-${++toolUidCounter}`,
       expanded: options.expanded !== false,
       done: true,
       status: options.status || 'success',
@@ -1880,12 +2036,20 @@ document.addEventListener('DOMContentLoaded', () => {
       currentToolGroup = {
         role: 'tool_group',
         status: 'streaming',
+        uid: `group-${++toolUidCounter}`,
         expanded: true,
         calls: [call]
       };
       chatMessagesData[currentChatId].push(currentToolGroup);
     }
     currentToolGroup.metrics = computeToolMetrics(currentToolGroup.calls);
+
+    // Register edit diffs in conversation registry
+    if (options.diff && options.diff.file) {
+      if (!conversationDiffs[currentChatId]) conversationDiffs[currentChatId] = {};
+      conversationDiffs[currentChatId][options.diff.file] = options.diff;
+    }
+
     renderCurrentMessages();
     return currentToolGroup;
   }
@@ -2067,6 +2231,7 @@ document.addEventListener('DOMContentLoaded', () => {
             content: '连续工具调用演示结束，已处理所有请求。'
           });
           renderCurrentMessages();
+          appendChangeSummary();
         }
         return;
       }
@@ -2102,7 +2267,9 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
     messageList.appendChild(loadingMsg);
-    chatArea.scrollTop = chatArea.scrollHeight;
+    if (chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 30) {
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
 
     setTimeout(() => {
       loadingMsg.remove();
@@ -2120,20 +2287,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (userPrompt.length > 10) {
         appendToolCall('read_file', 'read_file --path="/tmp/mycodex-demo/config.json"', '{ "env": "local", "browser": "system" }', { expanded: false });
       }
+      // Add mock edit diffs so change summary has content
+      appendToolCall('edit_file', '$ edit_file src/auth/login.js', 'Applied 5 edits to src/auth/login.js', { expanded: false, diff: { file: 'src/auth/login.js', added: 8, removed: 4, hunks: [{ oldStart: 1, newStart: 1, lines: [{ type: 'context', content: 'const bcrypt = require("bcrypt");' }, { type: 'context', content: 'const { RateLimiter } = require("../utils/rate-limiter");' }, { type: 'context', content: '' }, { type: 'removed', content: 'const limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });' }, { type: 'added', content: 'const limiter = new RateLimiter({ windowMs: 30000, maxAttempts: 10 });' }, { type: 'context', content: '' }, { type: 'removed', content: 'async function login(username, password) {' }, { type: 'added', content: 'async function login(username, password, otpCode) {' }, { type: 'context', content: '  if (!username || !password) {' }, { type: 'added', content: '    return { error: "Missing required fields" };' }, { type: 'context', content: '  }' }, { type: 'context', content: '' }, { type: 'context', content: '  const remaining = limiter.check(username);' }, { type: 'context', content: '  if (remaining <= 0) {' }, { type: 'context', content: '    return { error: "Too many attempts. Please wait before trying again." };' }] }] } });
+      if (userPrompt.includes('测试') || userPrompt.includes('test')) {
+        appendToolCall('edit_file', '$ edit_file src/utils/format.js', 'Applied edits to format.js', { expanded: false, diff: { file: 'src/utils/format.js', added: 3, removed: 1, hunks: [{ oldStart: 5, newStart: 5, lines: [{ type: 'context', content: 'export function formatDate(input, options = {}) {' }, { type: 'context', content: '  if (input == null) return "";' }, { type: 'removed', content: '  const date = typeof input === "string" || typeof input === "number"' }, { type: 'added', content: '  // Normalize input to Date object' }, { type: 'added', content: '  const date = typeof input === "string" || typeof input === "number"' }, { type: 'context', content: '    ? new Date(input)' }, { type: 'context', content: '    : input;' }] }] } });
+      }
       finalizeToolGroup();
 
       const assistantMsg = { role: 'assistant', content: responseText };
       if (currentChatId && chatMessagesData[currentChatId]) {
         chatMessagesData[currentChatId].push(assistantMsg);
       }
-
-      const aiEl = document.createElement('div');
-      aiEl.innerHTML = renderMessage(assistantMsg);
-      messageList.appendChild(aiEl.firstElementChild);
-
-      bindToolToggles(messageList);
-      highlightCode(messageList);
-      chatArea.scrollTop = chatArea.scrollHeight;
+      renderCurrentMessages();
+      appendChangeSummary();
     }, 1200);
   };
 
