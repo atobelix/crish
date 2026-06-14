@@ -5110,7 +5110,8 @@ body.dark-theme .attached-action-btn:active {
 .metric-spacer {
   flex: 1;
 }
-  display: flex;
+
+/* Token Metrics panel styles */
   align-items: center;
   justify-content: center;
   border-radius: 6px;
