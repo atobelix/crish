@@ -3407,7 +3407,7 @@ export async function hashPassword(password) {
         submenu.style.flexDirection = 'column';
         submenu.style.rowGap = '4px';
         submenu.style.padding = '4px';
-        submenu.style.left = (pr.left + pr.width - 150) + 'px';
+        submenu.style.left = (pr.left - 150) + 'px';
         submenu.style.top = (pr.top - 2) + 'px';
       }
       function hideSubmenu() {
