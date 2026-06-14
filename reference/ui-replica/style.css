@@ -149,6 +149,7 @@ body {
   flex: 1;
   overflow: hidden;
   width: 100%;
+  position: relative;
 }
 
 /* ---------------------------------
@@ -4748,6 +4749,25 @@ body.dark-theme .attached-action-btn:active {
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   min-height: 30px;
   flex-wrap: nowrap;
+  /* Room for floating buttons */
+  padding-right: 56px;
+}
+
+/* Floating buttons: always visible at top-right of window-body */
+.right-floating-btns {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 4px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.right-floating-btns > * {
+  pointer-events: auto;
 }
 
 .right-tab-list {
