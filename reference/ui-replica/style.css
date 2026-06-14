@@ -16,11 +16,11 @@ button:focus-visible {
 
 :root {
   /* Design Tokens - Soft Stone Minimalism */
-  --bg-sidebar: #fafafa; /* Level 2: 鏋佹祬鐏?*/
-  --bg-main: #ffffff; /* Level 1: 绾櫧 */
-  --bg-hover: #f0f0f0; /* Level 3: 杈冩祬鐏?*/
-  --bg-active: #ededed; /* Level 3: 杈冩祬鐏?*/
-  --border-color: #ededed; /* Level 3: 杈冩祬鐏? 鏋佺粏杈规 */
+  --bg-sidebar: #fafafa; /* Level 2: 閺嬩焦绁悘?*/
+  --bg-main: #ffffff; /* Level 1: 缁绢垳娅?*/
+  --bg-hover: #f0f0f0; /* Level 3: 鏉堝啯绁悘?*/
+  --bg-active: #ededed; /* Level 3: 鏉堝啯绁悘?*/
+  --border-color: #ededed; /* Level 3: 鏉堝啯绁悘? 閺嬩胶绮忔潏瑙勵攱 */
   --text-main: #3a3a38; /* Soft charcoal */
   --text-secondary: #666666; /* Soft medium gray */
   --text-muted: #999999; /* Soft light gray */
@@ -1156,7 +1156,7 @@ body.dark-theme .win-control:hover {
   color: #d73a49;
 }
 
-/* Tool Invocation / Tool Summary 鈥?plain text rows, no box background/border */
+/* Tool Invocation / Tool Summary 閳?plain text rows, no box background/border */
 .tool-invocation,
 .tool-summary {
   background: transparent;
@@ -4724,24 +4724,32 @@ body.dark-theme .attached-action-btn:active {
   display: none;
 }
 
-/* Tab bar 鈥?Row 1: tab buttons + add + collapse */
+/* Tab bar 閳?Row 1: tab buttons + add + collapse */
+.right-tab-bar {
 .right-tab-bar {
   display: flex;
   align-items: center;
-  padding: 2px 4px;
-  gap: 2px;
+  padding: 4px 8px;
+  gap: 4px;
   flex-shrink: 0;
   background-color: var(--bg-main);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-  min-height: 28px;
+  min-height: 32px;
 }
 
 .right-tab-list {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   flex: 1;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.right-tab-list::-webkit-scrollbar {
+  display: none;
 }
 
 .right-tab-add-btn,
@@ -4750,14 +4758,15 @@ body.dark-theme .attached-action-btn:active {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 2px 5px;
-  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: background-color var(--transition-fast), color var(--transition-fast);
-  font-size: 13px;
+  font-size: 14px;
   font-family: var(--font-sans);
   line-height: 1;
 }
@@ -4770,35 +4779,32 @@ body.dark-theme .attached-action-btn:active {
 
 .right-tab-add-btn svg,
 .right-tab-collapse-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Individual tab button in the bar */
 .right-tab-btn {
   background: none;
   border: none;
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 6px;
+  padding: 4px 8px;
   cursor: pointer;
   color: var(--text-muted);
   transition: all var(--transition-fast);
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 1;
-  min-width: 0;
+  gap: 6px;
+  flex-shrink: 0;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   position: relative;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .right-tab-btn svg.icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   stroke-width: 1.8;
   flex-shrink: 0;
 }
@@ -4810,19 +4816,19 @@ body.dark-theme .attached-action-btn:active {
   min-width: 0;
 }
 
+/* Hover: close icon replaces the main SVG icon */
 .right-tab-btn .tab-close {
   display: none;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  margin-left: 2px;
 }
 
 .right-tab-btn:hover .tab-close {
   display: block;
 }
 
-.right-tab-btn:hover .tab-label {
+.right-tab-btn:hover svg.icon {
   display: none;
 }
 
@@ -4840,23 +4846,23 @@ body.dark-theme .attached-action-btn:active {
   display: none !important;
 }
 
-/* Action bar 鈥?Row 2: per-tap action buttons */
+.right-tab-btn:only-child:hover svg.icon {
+  display: block;
+}
+
+/* Action bar - Row 2: per-tab action buttons */
 .right-tab-actions {
   display: flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 4px 8px;
   gap: 4px;
   flex-shrink: 0;
   background-color: var(--bg-main);
   border-bottom: 1px solid rgba(0, 0, 0, 0.03);
-  min-height: 24px;
+  min-height: 32px;
 }
 
-.right-tab-actions:empty {
-  display: none;
-}
-
-/* Content area 鈥?Row 3 */
+/* Content area 閳?Row 3 */
 .right-sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -5002,7 +5008,7 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?background instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?background instead of border outline */
 }
 
 .token-card-header {
@@ -5084,12 +5090,12 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?*/
+  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?*/
   transition: background-color var(--transition-fast);
 }
 
 .token-log-item:hover {
-  background-color: var(--bg-hover); /* Level 3: 杈冩祬鐏?*/
+  background-color: var(--bg-hover); /* Level 3: 鏉堝啯绁悘?*/
 }
 
 .log-meta {
@@ -5168,7 +5174,7 @@ body.dark-theme .attached-action-btn:active {
   align-items: center;
   padding: 6px 12px;
   gap: 12px;
-  background-color: var(--bg-main); /* Level 1: 绾櫧 to match Image 2 */
+  background-color: var(--bg-main); /* Level 1: 缁绢垳娅?to match Image 2 */
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -5875,7 +5881,7 @@ body.dark-theme .attached-action-btn:active {
   border: none; /* Removed border */
   border-radius: 12px; /* Consistent corner radius */
   overflow: hidden;
-  background-color: var(--bg-sidebar); /* Level 2: 鏋佹祬鐏?block instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 閺嬩焦绁悘?block instead of border outline */
   transition: background-color var(--transition-fast);
 }
 

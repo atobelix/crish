@@ -3236,22 +3236,21 @@ export async function hashPassword(password) {
 
   function renderTabActions(tabId) {
     if (!rightActions) return;
-    // Dual chat actions
+    // Dual chat actions — match browser-address-bar button style
     if (tabId === 'tab-dual-chat') {
       rightActions.innerHTML = `
-        <button class="dual-chat-action-btn" id="inherit-context-btn" title="继承主对话上下文">
+        <button class="browser-btn" id="inherit-context-btn" title="继承主对话上下文">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 20l4-16 4 16"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><path d="M5 8h2"></path><path d="M17 8h2"></path></svg>
-          <span>继承上下文</span>
         </button>
-        <button class="dual-chat-action-btn" id="new-dual-chat-btn" title="开始新对话">
+        <button class="browser-btn" id="new-dual-chat-btn" title="开始新对话">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          <span>新对话</span>
         </button>
-        <button class="dual-chat-action-btn" id="clear-dual-chat-btn" title="清空对话">
+        <button class="browser-btn" id="clear-dual-chat-btn" title="清空对话">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>`;
       return;
     }
+    // Other tabs keep their existing built-in toolbars
     rightActions.innerHTML = '';
   }
 
@@ -3273,16 +3272,53 @@ export async function hashPassword(password) {
   function showAddTabMenu() {
     const available = Object.keys(tabDefinitions).filter(id => !activeTabs.includes(id));
     if (available.length === 0) return;
-    // Simple inline menu: toggle through available tabs
-    const next = available[0];
-    activeTabs.push(next);
-    const panel = document.getElementById(next);
-    if (panel) {
-      allTabPanels.forEach(p => p.classList.remove('active'));
-      panel.classList.add('active');
-    }
-    activateTab(next);
-    renderTabBar();
+    if (!rightTabAddBtn) return;
+
+    // Remove existing dropdown
+    const existing = document.getElementById('add-tab-dropdown');
+    if (existing) existing.remove();
+
+    const dropdown = document.createElement('div');
+    dropdown.id = 'add-tab-dropdown';
+    dropdown.className = 'attached-dropdown-menu show';
+    dropdown.style.cssText = 'position:fixed;z-index:1000;width:160px;';
+    const rect = rightTabAddBtn.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.left = Math.max(4, rect.left - 60) + 'px';
+
+    dropdown.innerHTML = available.map(id => {
+      const def = tabDefinitions[id];
+      return `<div class="attached-menu-item" data-tab="${id}">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
+        <span>${def.label}</span>
+      </div>`;
+    }).join('');
+
+    document.body.appendChild(dropdown);
+
+    dropdown.querySelectorAll('.attached-menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const tabId = item.dataset.tab;
+        activeTabs.push(tabId);
+        const panel = document.getElementById(tabId);
+        if (panel) {
+          allTabPanels.forEach(p => p.classList.remove('active'));
+          panel.classList.add('active');
+        }
+        activateTab(tabId);
+        renderTabBar();
+        dropdown.remove();
+      });
+    });
+
+    // Click outside to close
+    const closeHandler = (e) => {
+      if (!dropdown.contains(e.target) && e.target !== rightTabAddBtn) {
+        dropdown.remove();
+        document.removeEventListener('mousedown', closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeHandler), 0);
   }
 
   // Initial render
