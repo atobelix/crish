@@ -373,8 +373,8 @@ body.dark-theme .win-toggle-sidebar-btn:hover {
 }
 
 .win-control.win-close:hover {
-  background-color: #e81123 !important;
-  color: #ffffff !important;
+  background-color: #e81123;
+  color: #ffffff;
 }
 
 /* Dark theme overrides for Windows Titlebar */
@@ -455,11 +455,11 @@ body.dark-theme .win-control:hover {
 }
 
 .sidebar.collapsed {
-  width: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  opacity: 0 !important;
-  border-right-width: 0 !important;
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  border-right-width: 0;
   pointer-events: none;
 }
 
@@ -579,16 +579,16 @@ body.dark-theme .win-control:hover {
 }
 
 .search-container:focus-within .search-icon-active {
-  display: inline-block !important;
+  display: inline-block;
 }
 .search-container:focus-within .search-icon-inactive {
-  display: none !important;
+  display: none;
 }
 .search-container:not(:focus-within) .search-icon-active {
-  display: none !important;
+  display: none;
 }
 .search-container:not(:focus-within) .search-icon-inactive {
-  display: inline-block !important;
+  display: inline-block;
 }
 
 .search-input {
@@ -720,7 +720,7 @@ body.dark-theme .win-control:hover {
 }
 
 .sidebar-section.collapsed .section-list {
-  max-height: 0 !important;
+  max-height: 0;
 }
 
 /* Sidebar List Items (Clean Selection States) */
@@ -893,7 +893,7 @@ body.dark-theme .win-control:hover {
 }
 
 .project-item.project-collapsed .nested-list {
-  display: none !important;
+  display: none;
 }
 
 .nested-item {
@@ -2084,7 +2084,7 @@ body.dark-theme .palette-kbd {
 .custom-settings-dropdown .dropdown-menu {
   width: 100%;
   top: calc(100% + 4px);
-  bottom: auto !important;
+  bottom: auto;
   box-shadow: 0 6px 16px rgba(0,0,0,0.06);
 }
 
@@ -2567,7 +2567,7 @@ kbd {
 }
 
 .mcp-server-card.disabled .mcp-status-dot {
-  background-color: var(--text-muted) !important;
+  background-color: var(--text-muted);
 }
 
 .mcp-server-card.disabled .mcp-status-text {
@@ -3640,14 +3640,14 @@ body.dark-theme .plugin-icon-box {
 /* Active chat item overrides: hide status, always show actions */
 .nested-item.active .action-status-container .chat-status,
 .list-item.chat-item.active .action-status-container .chat-status {
-  opacity: 0 !important;
-  display: none !important;
+  opacity: 0;
+  display: none;
 }
 
 .nested-item.active .action-status-container .item-actions,
 .list-item.chat-item.active .action-status-container .item-actions {
-  opacity: 1 !important;
-  pointer-events: auto !important;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 19. Empty Chat State (Quick Chat Empty State) */
@@ -4204,11 +4204,11 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-sidebar.collapsed {
-  width: 38px !important;
+  width: 38px;
 }
 
 .right-sidebar.collapsed .right-sidebar-content {
-  display: none !important;
+  display: none;
 }
 
 .right-sidebar-tabs {
@@ -4219,19 +4219,19 @@ body.dark-theme .attached-action-btn:active {
   gap: 8px;
   justify-content: space-around;
   background-color: var(--bg-sidebar); /* Level 2 */
-  height: 38px !important;
+  height: 38px;
   align-items: center;
   flex-shrink: 0;
 }
 
 .right-sidebar.collapsed .right-sidebar-tabs {
-  flex-direction: column !important;
-  height: 100% !important;
-  width: 100% !important;
-  padding: 10px 0 !important;
-  border-bottom: none !important;
-  justify-content: flex-start !important;
-  gap: 12px !important;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  padding: 10px 0;
+  border-bottom: none;
+  justify-content: flex-start;
+  gap: 12px;
 }
 
 .right-tab-btn {
@@ -4250,10 +4250,10 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-sidebar.collapsed .right-tab-btn {
-  width: 100% !important;
-  max-width: 100% !important;
-  padding: 8px 0 !important;
-  flex: none !important;
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 0;
+  flex: none;
 }
 
 .right-tab-btn svg.icon {
@@ -5230,8 +5230,8 @@ body.dark-theme .attached-action-btn:active {
   flex: 1;
   overflow-y: auto;
   background-color: var(--bg-main);
-  padding: 0 !important;
-  gap: 0 !important;
+  padding: 0;
+  gap: 0;
 }
 
 .diff-legend-info {
@@ -5508,174 +5508,174 @@ body.dark-theme .diff-deletion { background-color: rgba(244, 63, 94, 0.12); colo
 
 /* 1. Hide templates right-panel-header */
 .right-panel-header {
-  display: none !important;
+  display: none;
 }
 
 /* 2. Micro-adjust right sidebar tabs */
 .right-sidebar-tabs {
-  height: 38px !important;
-  padding: 0 10px !important;
-  border-bottom: 1px solid var(--border-color) !important;
-  gap: 6px !important;
-  background-color: var(--bg-sidebar) !important;
+  height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 6px;
+  background-color: var(--bg-sidebar);
 }
 .right-tab-btn {
-  padding: 5px !important;
-  border-radius: 8px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  transition: background-color 0.2s, color 0.2s !important;
+  padding: 5px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
 }
 .right-tab-btn svg.icon {
-  width: 14px !important;
-  height: 14px !important;
+  width: 14px;
+  height: 14px;
 }
 
-/* 3. Apple-style Nested Radii Polishing (Inner elements coordinate with outer ones) */
+/* 3. Apple-style Nested Radii Polishing */
 .dropdown-menu {
-  border-radius: 12px !important;
-  padding: 4px !important;
-  border: 1px solid var(--border-color) !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.03) !important;
-  background-color: #ffffff !important;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+  background-color: #ffffff;
 }
 .dropdown-menu .menu-item {
-  border-radius: 8px !important;
-  padding: 6px 12px !important;
-  margin: 1px 0 !important;
-  font-size: 12px !important;
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 1px 0;
+  font-size: 12px;
 }
 .file-tree .node-row {
-  border-radius: 6px !important;
-  margin: 1px 4px !important;
-  padding: 4px 6px !important;
+  border-radius: 6px;
+  margin: 1px 4px;
+  padding: 4px 6px;
 }
 .server-card {
-  border-radius: 12px !important;
-  border: 1px solid var(--border-color) !important;
-  background-color: #ffffff !important;
-  box-shadow: none !important;
-  padding: 10px !important;
-  transition: background-color 0.15s, transform 0.15s !important;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background-color: #ffffff;
+  box-shadow: none;
+  padding: 10px;
+  transition: background-color 0.15s, transform 0.15s;
 }
 .server-card:hover {
-  background-color: var(--bg-hover) !important;
+  background-color: var(--bg-hover);
 }
 .server-card .server-thumbnail {
-  border-radius: 8px !important;
+  border-radius: 8px;
 }
 
 /* 4. Force Light-Theme Code Blocks & Outputs (Overriding tomorrow dark styles) */
 pre,
 pre[class*="language-"],
 .code-block {
-  background-color: #ffffff !important;
-  color: var(--text-main) !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 8px !important;
-  padding: 14px 16px !important;
-  margin: 10px 0 !important;
-  font-family: var(--font-mono) !important;
-  font-size: 12px !important;
-  line-height: 1.6 !important;
-  box-shadow: none !important;
-  overflow-x: auto !important;
-  display: block !important;
+  background-color: #ffffff;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: none;
+  overflow-x: auto;
+  display: block;
 }
 
 pre code,
 pre[class*="language-"] code,
 .code-block code {
-  display: block !important;
-  font-family: inherit !important;
-  white-space: pre !important;
-  background-color: transparent !important;
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  font-size: 12px !important;
+  display: block;
+  font-family: inherit;
+  white-space: pre;
+  background-color: transparent;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
 }
 
 /* Diff code blocks compact padding, zero margins, no border, no border-radius */
 pre.diff-code-block,
 pre[class*="language-"].diff-code-block,
 .diff-code-block {
-  padding: 8px 12px !important;
-  margin: 0 !important;
-  font-size: 10.5px !important;
-  line-height: 1.5 !important;
-  border: none !important;
-  border-radius: 0 !important;
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  border: none;
+  border-radius: 0;
 }
 
 .tool-output {
-  background-color: #ffffff !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 8px !important;
-  margin: 0 clamp(20px, 4vw, 50px) 0 0 !important;
-  padding: 8px 12px !important;
-  max-height: 220px !important;
-  overflow: auto !important;
-  color: var(--text-secondary) !important; /* Muted text inside tool output */
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin: 0 clamp(20px, 4vw, 50px) 0 0;
+  padding: 8px 12px;
+  max-height: 220px;
+  overflow: auto;
+  color: var(--text-secondary);
 }
 
 .tool-output pre,
 .tool-output code,
 .tool-output pre[class*="language-"],
 .tool-output code[class*="language-"] {
-  background-color: transparent !important;
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  font-size: 12px !important;
-  line-height: 1.5 !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  color: var(--text-secondary) !important; /* Muted text inside tool output pre/code */
+  background-color: transparent;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
 }
 
 /* Ensure code viewer and mock web app pre elements behave well */
 .code-viewer-container pre,
 .mock-web-app pre {
-  background-color: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
 }
 
 /* Keep inline code blocks beautiful and contrasty */
 .inline-code,
 :not(pre) > code,
 :not(pre) > code[class*="language-"] {
-  background-color: rgba(0, 0, 0, 0.05) !important;
-  color: #d73a49 !important;
-  padding: 2px 6px !important;
-  border-radius: 4px !important;
-  font-size: 12px !important;
-  font-family: var(--font-mono) !important;
-  border: none !important;
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #d73a49;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  border: none;
 }
 
 /* Ensure class="tool-args" has no background color, border or padding overrides */
 code.tool-args,
 .tool-args {
-  background: transparent !important;
-  background-color: transparent !important;
-  color: inherit !important;
-  border: none !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  font-family: var(--font-sans) !important;
+  background: transparent;
+  background-color: transparent;
+  color: inherit;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-sans);
 }
 
 .diff-item-content {
-  background-color: #ffffff !important;
-  border-top: 1px solid var(--border-color) !important;
-  padding: 8px 12px !important;
+  background-color: #ffffff;
+  border-top: 1px solid var(--border-color);
+  padding: 8px 12px;
 }
 
 /* High contrast light mode highlights - softened and lightened */
@@ -5690,39 +5690,39 @@ code.tool-args,
 
 /* Custom light theme diff additions and deletions */
 .diff-addition, .diff-added {
-  background-color: rgba(46, 160, 67, 0.08) !important;
-  color: #22863a !important;
-  font-weight: 500 !important;
+  background-color: rgba(46, 160, 67, 0.08);
+  color: #22863a;
+  font-weight: 500;
   display: block;
 }
 .diff-deletion, .diff-removed {
-  background-color: rgba(248, 81, 73, 0.08) !important;
-  color: #d73a49 !important;
-  font-weight: 500 !important;
+  background-color: rgba(248, 81, 73, 0.08);
+  color: #d73a49;
+  font-weight: 500;
   display: block;
 }
 
 /* Hide hunk headers globally in diff views */
 .diff-hunk-header,
 .diff-chunk {
-  display: none !important;
+  display: none;
 }
 
 /* Align tool output card inside tool summaries to prevent double indentation */
 .tool-summary-body .tool-result-window {
-  padding-left: 0 !important;
+  padding-left: 0;
 }
 
 /* Allow diff-lines to stretch to the maximum width of the scroll container, filling the line */
 .diff-view {
-  display: inline-block !important;
-  min-width: 100% !important;
-  box-sizing: border-box !important;
+  display: inline-block;
+  min-width: 100%;
+  box-sizing: border-box;
 }
 .diff-line {
-  display: flex !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 5. VS Code Style Git Panel */
@@ -5846,21 +5846,21 @@ code.tool-args,
 
 /* diff item headers */
 .diff-accordion-item {
-  border: 1px solid var(--border-color) !important;
-  border-radius: 8px !important;
-  margin: 4px 14px !important;
-  background-color: #ffffff !important;
-  overflow: hidden !important;
-  box-shadow: none !important;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin: 4px 14px;
+  background-color: #ffffff;
+  overflow: hidden;
+  box-shadow: none;
 }
 .diff-item-header {
-  background-color: #ffffff !important;
-  padding: 7px 10px !important;
-  height: auto !important;
-  display: flex !important;
+  background-color: #ffffff;
+  padding: 7px 10px;
+  height: auto;
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  border: none !important;
+  border: none;
   cursor: pointer;
 }
 .diff-header-left {
@@ -6081,15 +6081,15 @@ code.tool-args,
   background-color: var(--bg-active);
 }
 .note-indicator-badge {
-  background-color: var(--color-mint) !important;
-  color: #ffffff !important;
-  font-size: 9px !important;
-  font-weight: bold !important;
-  padding: 1px 5.5px !important;
-  border-radius: 8px !important;
-  margin-left: auto !important;
-  line-height: 1 !important;
-  display: inline-block !important;
+  background-color: var(--color-mint);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 5.5px;
+  border-radius: 8px;
+  margin-left: auto;
+  line-height: 1;
+  display: inline-block;
 }
 
 /* 7. Trash bin floating actions in dual chat */
@@ -6105,8 +6105,8 @@ code.tool-args,
 
 /* 8. Extra cleanup for browser inspect active */
 .browser-btn.inspect-toggle-btn.active {
-  background-color: var(--color-blue-bg) !important;
-  color: var(--color-blue) !important;
+  background-color: var(--color-blue-bg);
+  color: var(--color-blue);
 }
 
 .token-limit-info-pill {
@@ -6124,18 +6124,18 @@ code.tool-args,
 }
 
 .file-tree-icon {
-  width: 14px !important;
-  height: 14px !important;
-  color: var(--text-secondary) !important;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
 }
 .tree-node.git-modified > .node-row .file-tree-icon {
-  color: var(--color-amber) !important;
+  color: var(--color-amber);
 }
 .tree-node.git-added > .node-row .file-tree-icon {
-  color: var(--color-mint) !important;
+  color: var(--color-mint);
 }
 .tree-node.git-deleted > .node-row .file-tree-icon {
-  color: var(--color-rose) !important;
+  color: var(--color-rose);
 }
 
 /* 9. Git Branch Footer */
