@@ -4670,12 +4670,6 @@ body.dark-theme .dropdown-list::-webkit-scrollbar-thumb {
   font-weight: 500;
 }
 
-/* Cascading submenu items: right-aligned */
-.attached-submenu.cascading .attached-action-btn {
-  justify-content: flex-end;
-  padding-right: 12px;
-}
-
 .attached-action-btn:active {
   background-color: var(--bg-active);
 }
