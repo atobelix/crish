@@ -744,6 +744,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const diffs = conversationDiffs[currentChatId] || {};
       return `<div class="chat-message change-summary-message">${renderChangeSummary(diffs)}</div>`;
     }
+    if (msg.role === 'plan_group') {
+      return `<div class="chat-message">${renderPlanGroup(msg)}</div>`;
+    }
     return '';
   }
 
@@ -828,13 +831,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         diffContainer.innerHTML = `
           <div class="change-file-diff visible">
-            <div class="diff-file-header">
-              <span class="diff-file-name">${escapeHTML(fileName)}</span>
-              <span class="diff-file-stats">
-                <span class="diff-stat-added">+${diff.added}</span>
-                <span class="diff-stat-removed">-${diff.removed}</span>
-              </span>
-            </div>
             ${renderDiffView(diff)}
           </div>`;
         highlightCode(diffContainer);
@@ -877,6 +873,50 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
     bindChangeSummary(container);
+    bindPlanToggles(container);
+  }
+
+  // --- Plan group (inline message flow) ---
+  function renderPlanGroup(group) {
+    const expanded = group.expanded !== false;
+    const total = group.plans.length;
+    const done = group.plans.filter(p => p.status === 'completed').length;
+    const statusText = done === total ? '全部完成' : `${done}/${total} 已完成`;
+    const fileItems = group.plans.map(p => {
+      const cls = p.status === 'completed' ? 'completed' : (p.status === 'active' ? 'active' : '');
+      const icon = p.status === 'completed'
+        ? '<svg class="plan-icon completed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        : (p.status === 'active'
+          ? '<svg class="plan-icon active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg>'
+          : '<svg class="plan-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle></svg>');
+      return `<div class="plan-item ${cls}">${icon}<span class="plan-content">${escapeHTML(p.content)}</span></div>`;
+    }).join('');
+    return `
+      <div class="plan-group" data-expanded="${expanded}">
+        <div class="plan-group-header">
+          <svg class="icon plan-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+            <line x1="12" y1="12" x2="12" y2="18"></line>
+          </svg>
+          <span class="plan-group-text">计划 · ${total} 个步骤 (${statusText})</span>
+          <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="plan-group-body">${fileItems}</div>
+      </div>`;
+  }
+
+  function bindPlanToggles(container) {
+    container.querySelectorAll('.plan-group-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const group = header.closest('.plan-group');
+        const expanded = group.getAttribute('data-expanded') === 'true';
+        group.setAttribute('data-expanded', String(!expanded));
+      });
+    });
   }
 
   // Expose renderAgentView for sub-agent reuse
@@ -2397,62 +2437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   };
 
-  // --- Plan Panel: API interface + Demo ---
-  // Future backend API contract
-  window.planAPI = {
-    createPlan: (sessionId, title, steps) => Promise.resolve({ id: 'plan-xxx', steps }),
-    getPlans: (sessionId) => Promise.resolve([]),
-    updatePlanStatus: (planId, status) => Promise.resolve({ id: planId, status }),
-    subscribePlanUpdates: (sessionId, callback) => { /* WebSocket subscription */ return () => {}; }
-  };
-
-  const planListEl = document.getElementById('plan-list');
-  const planProgressEl = document.querySelector('.plan-progress');
-  const planStatusEl = document.querySelector('.plan-status-badge');
-
-  function renderPlan(plan) {
-    if (!planListEl) return;
-    const total = plan.plans.length;
-    const done = plan.plans.filter(p => p.status === 'completed').length;
-
-    if (total === 0) {
-      planListEl.innerHTML = '<div class="plan-empty">暂无计划项，等待 AI 生成…</div>';
-      planProgressEl.textContent = '0/0 已完成';
-      planStatusEl.textContent = '暂无计划';
-      planStatusEl.className = 'plan-status-badge';
-      return;
-    }
-
-    planProgressEl.textContent = `${done}/${total} 已完成`;
-    if (done === total) {
-      planStatusEl.textContent = '全部完成';
-      planStatusEl.className = 'plan-status-badge done';
-    } else {
-      planStatusEl.textContent = '进行中';
-      planStatusEl.className = 'plan-status-badge active';
-    }
-
-    const items = plan.plans.map((p, i) => {
-      const cls = p.status === 'completed' ? 'completed' : (p.status === 'active' ? 'active' : '');
-      const iconSvg = p.status === 'completed'
-        ? '<svg class="plan-icon completed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-        : (p.status === 'active'
-          ? '<svg class="plan-icon active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg>'
-          : '<svg class="plan-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle></svg>');
-      return `<div class="plan-item ${cls}" data-plan-id="${escapeHTML(p.id)}">${iconSvg}<span class="plan-content">${escapeHTML(p.content)}</span></div>`;
-    }).join('');
-    planListEl.innerHTML = items;
-
-    // Scroll to active or last item
-    const activeItem = planListEl.querySelector('.plan-item.active');
-    if (activeItem) {
-      activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    } else {
-      planListEl.scrollTop = planListEl.scrollHeight;
-    }
-  }
-
-  // Demo plan flow
+  // --- Plan group: demo flow (generates plan_group messages in chat data) ---
   const demoPlanSteps = [
     '分析项目目录结构及现有代码',
     '识别关键模块与数据流',
@@ -2463,49 +2448,49 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   window.demoPlanFlow = function() {
-    if (!planListEl) return;
-    const plan = {
+    if (!currentChatId || !chatMessagesData[currentChatId]) return;
+
+    const plans = demoPlanSteps.map((content, i) => ({
+      id: `step-${i}`,
+      content,
+      status: i === 0 ? 'active' : 'pending'
+    }));
+
+    const planGroup = {
+      role: 'plan_group',
+      expanded: true,
       status: 'in_progress',
-      plans: demoPlanSteps.map((content, i) => ({
-        id: `step-${i}`,
-        content,
-        status: i === 0 ? 'active' : 'pending'
-      }))
+      plans
     };
-    renderPlan(plan);
+    chatMessagesData[currentChatId].push(planGroup);
+    renderCurrentMessages();
 
     let stepIdx = 0;
     const timer = setInterval(() => {
-      if (stepIdx >= plan.plans.length) {
+      if (stepIdx >= plans.length) {
         clearInterval(timer);
-        plan.status = 'completed';
-        renderPlan(plan);
+        planGroup.status = 'completed';
+        plans.forEach(p => { p.status = 'completed'; });
+        renderCurrentMessages();
         return;
       }
-      plan.plans[stepIdx].status = 'completed';
-      if (stepIdx + 1 < plan.plans.length) {
-        plan.plans[stepIdx + 1].status = 'active';
-      }
+      if (stepIdx > 0) plans[stepIdx - 1].status = 'completed';
+      plans[stepIdx].status = 'active';
       stepIdx++;
-      renderPlan(plan);
+      renderCurrentMessages();
     }, 1500);
     return timer;
   };
 
-  // Link demo button to also trigger plan demo
-  const demoBtn = document.getElementById('demo-tool-calls-btn');
-  if (demoBtn) {
-    demoBtn.addEventListener('click', function planDemoHandler() {
-      setTimeout(() => {
-        const planBtn = document.querySelector('.right-tab-btn[data-tab="tab-plan"]');
-        if (planBtn) planBtn.click();
-        window.demoPlanFlow();
-      }, 12000);
-    }, { once: true });
+  // Link demo: after tool calls, add plan group to chat
+  const origDemo = window.demoContinuousToolCalls;
+  if (origDemo) {
+    const origDemoFn = origDemo;
+    window.demoContinuousToolCalls = function(options) {
+      origDemoFn(options);
+      setTimeout(() => window.demoPlanFlow(), 1500);
+    };
   }
-
-  // Expose renderPlan for external use
-  window.renderPlan = renderPlan;
 
   // --- 11. Settings Modal Navigation ---
   const settingsBtn = document.querySelector('.settings-btn');
