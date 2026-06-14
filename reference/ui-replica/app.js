@@ -263,23 +263,44 @@ document.addEventListener('DOMContentLoaded', () => {
     return `<div class="diff-view">${fileHeader}${hunksHtml}${summary}</div>`;
   }
 
+  const toolNameLabels = {
+    'bash': '调用', 'read_file': '读取', 'edit_file': '编辑',
+    'edit': '编辑', 'grep_search': '搜索', 'run_test': '测试',
+    'simulate_reply': '调用', 'node_repl': '执行'
+  };
+
   function renderToolCall(call, index) {
     const expanded = call.expanded !== false;
     const safeArgs = escapeHTML(call.args);
+    const friendlyLabel = call.label || safeArgs;
+    const displayName = toolNameLabels[call.name] || call.name;
+    const status = call.status || 'success';
     const isEditTool = call.name === 'edit_file' || call.name === 'edit';
-    const outputContent = isEditTool && call.diff
-      ? renderDiffView(call.diff)
-      : `<pre><code>${escapeHTML(call.result)}</code></pre>`;
+    const hasFailed = status === 'failure';
+
+    // Status icon: terminal for success, dash-circle for failure (NOT red, use muted)
+    const statusIcon = hasFailed
+      ? `<svg class="icon tool-status-icon tool-status-icon-fail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`
+      : `<svg class="icon tool-status-icon tool-status-icon-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+    // Edit stats: show +N -M in row
+    let editStatsHtml = '';
+    if (isEditTool && call.diff) {
+      editStatsHtml = `<span class="tool-edit-stats"><span class="diff-stat-added">+${call.diff.added}</span><span class="diff-stat-removed">-${call.diff.removed}</span></span>`;
+    }
+
+    // Output: for failed calls, show empty / minimal content
+    const outputContent = hasFailed
+      ? `<pre style="color: var(--text-muted); font-style: italic;">调用超时，内容不可用。</pre>`
+      : (isEditTool && call.diff ? renderDiffView(call.diff) : `<pre><code>${escapeHTML(call.result)}</code></pre>`);
 
     return `
-      <div class="tool-invocation" data-call-index="${index}" data-expanded="${expanded}">
+      <div class="tool-invocation" data-call-index="${index}" data-expanded="${expanded}" data-status="${status}">
         <div class="tool-call-row" title="${safeArgs}">
-          <svg class="icon tool-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
-          <span class="tool-name">${escapeHTML(call.name)}</span>
-          <code class="tool-args">${safeArgs}</code>
+          ${statusIcon}
+          <span class="tool-name">${escapeHTML(displayName)}</span>
+          <code class="tool-args">${escapeHTML(friendlyLabel)}</code>
+          ${editStatsHtml}
           <svg class="icon tool-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -1553,6 +1574,8 @@ document.addEventListener('DOMContentLoaded', () => {
       result,
       expanded: options.expanded !== false,
       done: true,
+      status: options.status || 'success',
+      ...(options.label ? { label: options.label } : {}),
       ...(options.diff ? { diff: options.diff } : {})
     };
 
@@ -1583,43 +1606,42 @@ document.addEventListener('DOMContentLoaded', () => {
   // Reusable tool call templates for demos / simulations
   const toolCallTemplates = [
     {
-      name: 'bash',
+      name: 'bash', label: 'src/',
       args: '$ ls -laR src/',
       result: 'src/:\ndrwxr-xr-x   8 user staff   256 Jun 14 10:00 .\ndrwxr-xr-x  12 user staff   384 Jun 14 09:55 ..\ndrwxr-xr-x  10 user staff   320 Jun 14 09:58 auth\ndrwxr-xr-x  15 user staff   480 Jun 14 10:00 api\ndrwxr-xr-x   6 user staff   192 Jun 14 10:00 utils\n-rw-r--r--   1 user staff  1203 Jun 14 10:01 index.js\n-rw-r--r--   1 user staff  3456 Jun 14 09:59 config.json\n\nsrc/auth:\ndrwxr-xr-x  4 user staff   128 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff   823 Jun 14 10:00 login.js\n-rw-r--r--  1 user staff  1289 Jun 14 10:00 reset.js\n\nsrc/api:\ndrwxr-xr-x  5 user staff   160 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff   412 Jun 14 10:00 client.js\n-rw-r--r--  1 user staff   892 Jun 14 10:00 routes.js\n-rw-r--r--  1 user staff   645 Jun 14 10:00 middleware.js\n\nsrc/utils:\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff  2154 Jun 14 10:00 format.js'
     },
     {
-      name: 'bash',
+      name: 'bash', label: 'dist/',
       args: '$ du -sh dist/',
       result: 'dist/\ntotal 24M\ndrwxr-xr-x  6 user staff   192 Jun 14 10:00 assets\ndrwxr-xr-x  4 user staff   128 Jun 14 10:00 static\n-rw-r--r--  1 user staff 1.2M Jun 14 10:00 bundle.js\n-rw-r--r--  1 user staff  42k Jun 14 10:00 index.html'
     },
     {
-      name: 'bash',
+      name: 'bash', label: 'npm run test --coverage',
       args: '$ npm run test -- --coverage',
       result: 'PASS  src/auth/login.test.js  (5.2s)\n  ✓ returns token on valid credentials (12ms)\n  ✓ rejects invalid password (8ms)\n  ✓ handles missing fields (6ms)\n  ✓ rate-limits after 5 attempts (45ms)\n\nPASS  src/utils/format.test.js  (3.8s)\n  ✓ formats date correctly (4ms)\n  ✓ handles null input (2ms)\n  ✓ truncates long strings (3ms)\n  ✓ escapes HTML entities (5ms)\n\nPASS  src/api/client.test.js  (6.1s)\n  ✓ GET /users returns list (15ms)\n  ✓ POST /users creates user (22ms)\n  ✓ DELETE /users/:id returns 404 for unknown (11ms)\n  ✓ handles network timeout (34ms)\n\n------------------------|---------|----------|---------|---------|\nFile                    | % Stmts | % Branch | % Funcs | % Lines |\n------------------------|---------|----------|---------|---------|\nAll files               |   88.5  |    82.3  |   91.2  |   88.5  |\n src/auth/login.js      |   95.2  |    88.9  |  100.0  |   95.2  |\n src/api/client.js      |   82.6  |    75.0  |   83.3  |   82.6  |\n src/utils/format.js    |   90.0  |    83.3  |   90.0  |   90.0  |\n------------------------|---------|----------|---------|---------|\n\nTest Suites: 3 passed, 3 total\nTests:       12 passed, 12 total'
     },
     {
-      name: 'read_file',
+      name: 'read_file', label: 'src/auth/login.js',
       args: '$ cat src/auth/login.js',
       result: 'const bcrypt = require("bcrypt");\nconst { RateLimiter } = require("../utils/rate-limiter");\n\nconst limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });\n\nasync function login(username, password) {\n  if (!username || !password) {\n    return { error: "Missing required fields" };\n  }\n\n  const remaining = limiter.check(username);\n  if (remaining <= 0) {\n    return { error: "Too many attempts. Please wait before trying again." };\n  }\n\n  const user = await db.users.findByUsername(username);\n  if (!user) {\n    return { error: "Invalid credentials" };\n  }\n\n  const valid = await bcrypt.compare(password, user.passwordHash);\n  if (!valid) {\n    return { error: "Invalid credentials" };\n  }\n\n  const token = jwt.sign(\n    { userId: user.id, role: user.role },\n    process.env.JWT_SECRET,\n    { expiresIn: "24h" }\n  );\n\n  return { token, user: { id: user.id, username: user.username, role: user.role } };\n}\n\nmodule.exports = { login };'
     },
     {
-      name: 'read_file',
+      name: 'read_file', label: 'src/utils/format.js',
       args: '$ cat src/utils/format.js',
       result: '/**\n * Format a date to a human-readable string.\n * Supports ISO strings, timestamps, and Date objects.\n */\nexport function formatDate(input, options = {}) {\n  if (input == null) return "";\n  const date = typeof input === "string" || typeof input === "number"\n    ? new Date(input)\n    : input;\n  if (isNaN(date.getTime())) return "Invalid date";\n  const locale = options.locale || "zh-CN";\n  return new Intl.DateTimeFormat(locale, {\n    year: "numeric",\n    month: "long",\n    day: "numeric",\n    hour: "2-digit",\n    minute: "2-digit",\n    ...options\n  }).format(date);\n}\n\n/**\n * Truncate a string to a given length, appending "..." if truncated.\n */\nexport function truncate(str, maxLength = 100) {\n  if (!str) return "";\n  if (str.length <= maxLength) return str;\n  return str.slice(0, maxLength - 3) + "...";\n}'
     },
     {
-      name: 'grep_search',
+      name: 'grep_search', label: '"TODO|FIXME|HACK" 在 src/ 中',
       args: '$ grep -rn "TODO\\|FIXME\\|HACK" src/',
       result: 'src/utils/format.js:42:  // TODO: add support for relative dates\nsrc/utils/rate-limiter.js:15:  // FIXME: race condition when multiple requests arrive simultaneously\nsrc/utils/rate-limiter.js:88:  // TODO: persist rate limit state to redis\nsrc/api/routes.js:23:  // TODO: implement pagination for large result sets\nsrc/api/routes.js:67:  // HACK: temporary workaround for IE11 compatibility, remove when dropping support\nsrc/store.js:45:  // TODO: normalize state shape, currently nested objects are 3 levels deep\nsrc/auth/reset.js:12:  // TODO: add email notification when password reset is requested\nsrc/auth/reset.js:34:  // TODO: invalidate all existing sessions after password reset\nsrc/index.js:8:  // FIXME: process.env not set during testing, use fallback defaults\nsrc/index.js:15:  // TODO: add graceful shutdown handler for SIGTERM/SIGINT'
     },
     {
-      name: 'edit_file',
+      name: 'edit_file', label: 'src/auth/login.js',
       args: '$ edit_file src/auth/login.js',
       result: 'Applied 5 edits to src/auth/login.js',
       diff: {
         file: 'src/auth/login.js',
-        added: 8,
-        removed: 4,
+        added: 8, removed: 4,
         hunks: [
           {
             oldStart: 1, newStart: 1,
@@ -1664,13 +1686,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     },
     {
-      name: 'edit_file',
+      name: 'edit_file', label: 'src/utils/rate-limiter.js',
       args: '$ edit_file src/utils/rate-limiter.js',
       result: 'Applied 8 edits to src/utils/rate-limiter.js',
       diff: {
         file: 'src/utils/rate-limiter.js',
-        added: 18,
-        removed: 5,
+        added: 18, removed: 5,
         hunks: [
           {
             oldStart: 12, newStart: 12,
@@ -1721,7 +1742,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     },
     {
-      name: 'run_test',
+      name: 'run_test', label: 'auth 测试套件',
       args: '$ npm test -- --filter="auth"',
       result: 'PASS  src/auth/login.test.js  (4.8s)\n  ✓ returns token on valid credentials (10ms)\n  ✓ rejects invalid password (7ms)\n  ✓ handles missing fields (5ms)\n  ✓ rate-limits after 5 attempts (42ms)\n  ✓ logs audit events on failure (28ms)\n\nPASS  src/auth/reset.test.js  (3.2s)\n  ✓ sends reset email (15ms)\n  ✓ requires valid token (8ms)\n  ✓ expires after 1 hour (11ms)\n\nTest Suites: 2 passed, 2 total\nTests:       8 passed, 8 total'
     }
@@ -1758,7 +1779,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (Math.random() < toolProbability) {
         const tpl = toolCallTemplates[Math.floor(Math.random() * toolCallTemplates.length)];
         const opts = { expanded: false };
+        if (tpl.label) opts.label = tpl.label;
         if (tpl.diff) opts.diff = tpl.diff;
+        opts.status = Math.random() < 0.15 ? 'failure' : 'success';
         appendToolCall(tpl.name, tpl.args, tpl.result, opts);
       } else {
         finalizeToolGroup();

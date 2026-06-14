@@ -844,6 +844,24 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Status icon next to tool call row */
+.tool-status-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.tool-status-icon-success { color: var(--text-secondary); }
+.tool-status-icon-fail { color: var(--text-muted); }
+
+/* Edit stats (+N -M) in the tool call row */
+.tool-edit-stats {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
 .tool-chevron-icon {
   width: 14px;
   height: 14px;
@@ -881,6 +899,35 @@ body {
   max-height: 400px;
   overflow-y: auto;
   margin: 2px 0 8px 0;
+  padding-left: 22px;
+  position: relative;
+}
+
+/* Vertical guide line under the summary row's symbol */
+.tool-summary-body::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 1.5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
+}
+
+/* Horizontal connector from guide line to each tool call row */
+.tool-summary-body .tool-call-row {
+  position: relative;
+}
+.tool-summary-body .tool-call-row::before {
+  content: '';
+  position: absolute;
+  left: -15px;
+  top: 50%;
+  width: 13px;
+  height: 1.5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
 }
 
 .tool-summary-body {
@@ -899,6 +946,40 @@ body {
   background-color: transparent;
   max-height: 240px;
   overflow-y: auto;
+}
+
+/* tool-result-window aligns with tool-name */
+.tool-result-window {
+  padding-left: 22px;
+}
+
+/* Modern scrollbar for tool output and summary body */
+.tool-output::-webkit-scrollbar,
+.tool-summary-body::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.tool-output::-webkit-scrollbar-track,
+.tool-summary-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tool-output::-webkit-scrollbar-thumb,
+.tool-summary-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+.tool-output::-webkit-scrollbar-thumb:hover,
+.tool-summary-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+body.dark-theme .tool-output::-webkit-scrollbar-thumb,
+body.dark-theme .tool-summary-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+body.dark-theme .tool-output::-webkit-scrollbar-thumb:hover,
+body.dark-theme .tool-summary-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .tool-output pre {
@@ -2175,6 +2256,10 @@ body.dark-theme .tool-output pre {
 }
 body.dark-theme .tool-output code {
   color: #ff7b72;
+}
+body.dark-theme .tool-summary-body::before,
+body.dark-theme .tool-summary-body .tool-call-row::before {
+  background: rgba(255, 255, 255, 0.06);
 }
 body.dark-theme .diff-view {
   color: #e0e0e0;
