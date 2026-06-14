@@ -4711,29 +4711,39 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-sidebar.collapsed {
-  width: 0;
-  min-width: 0;
-  flex: 0 0 0;
-  border-left: none;
+  width: 30px;
+  min-width: 30px;
+  flex: 0 0 30px;
+  border-left: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: none;
   overflow: hidden;
 }
 
 .right-sidebar.collapsed .right-sidebar-content,
-.right-sidebar.collapsed .right-tab-bar {
+.right-sidebar.collapsed .right-tab-list,
+.right-sidebar.collapsed .right-tab-add-btn,
+.right-sidebar.collapsed .right-tab-collapse-btn {
   display: none;
+}
+
+.right-sidebar.collapsed .right-tab-bar {
+  justify-content: flex-end;
+}
+
+.right-sidebar.collapsed .right-tab-toggle-btn {
+  display: flex;
 }
 
 /* Tab bar 閳?Row 1: tab buttons + add + collapse */
 .right-tab-bar {
   display: flex;
   align-items: center;
-  padding: 4px 8px;
-  gap: 4px;
+  padding: 2px 6px;
+  gap: 2px;
   flex-shrink: 0;
   background-color: var(--bg-main);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-  min-height: 32px;
+  min-height: 30px;
   flex-wrap: nowrap;
 }
 
@@ -4754,13 +4764,14 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-tab-add-btn,
-.right-tab-collapse-btn {
+.right-tab-collapse-btn,
+.right-tab-toggle-btn {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -4773,13 +4784,15 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .right-tab-add-btn:hover,
-.right-tab-collapse-btn:hover {
+.right-tab-collapse-btn:hover,
+.right-tab-toggle-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-secondary);
 }
 
 .right-tab-add-btn svg,
-.right-tab-collapse-btn svg {
+.right-tab-collapse-btn svg,
+.right-tab-toggle-btn svg {
   width: 14px;
   height: 14px;
 }
@@ -4789,7 +4802,8 @@ body.dark-theme .attached-action-btn:active {
   background: none;
   border: none;
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 0 8px;
+  height: 26px;
   cursor: pointer;
   color: var(--text-muted);
   transition: all var(--transition-fast);
@@ -4848,8 +4862,32 @@ body.dark-theme .attached-action-btn:active {
   display: none !important;
 }
 
-.right-tab-btn:only-child:hover svg.icon {
+.right-tab-btn:only-child:hover .tab-icon-wrap .icon {
   display: block;
+}
+
+/* Drag-and-drop styles */
+.right-tab-btn.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+
+.right-tab-btn.drag-over {
+  transform: translateX(4px);
+  transition: transform 0.15s ease;
+}
+
+.right-tab-btn {
+  transition: all var(--transition-fast), transform 0.2s ease;
+}
+
+/* Drag handle cursor */
+.right-tab-btn {
+  cursor: grab;
+}
+
+.right-tab-btn:active {
+  cursor: grabbing;
 }
 
 /* Action bar - Row 2: per-tab action buttons */

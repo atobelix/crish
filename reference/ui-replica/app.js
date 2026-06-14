@@ -3169,7 +3169,7 @@ export async function hashPassword(password) {
       if (!def) return '';
       const isActive = idx === 0;
       const closable = activeTabs.length > 1;
-      return `<button class="right-tab-btn ${isActive ? 'active' : ''}" data-tab="${id}" title="${def.label}">
+      return `<button class="right-tab-btn ${isActive ? 'active' : ''}" data-tab="${id}" title="${def.label}" draggable="true">
         <span class="tab-icon-wrap">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${def.icon}</svg>
           ${closable ? '<svg class="tab-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' : ''}
@@ -3180,6 +3180,8 @@ export async function hashPassword(password) {
     bindTabEvents();
   }
 
+  let dragSrcIdx = -1;
+
   function bindTabEvents() {
     // Click tab: activate
     rightTabList.querySelectorAll('.right-tab-btn').forEach(btn => {
@@ -3188,12 +3190,6 @@ export async function hashPassword(password) {
         const tabId = btn.dataset.tab;
         if (rightSidebar.classList.contains('collapsed')) {
           rightSidebar.classList.remove('collapsed');
-        }
-        // Reorder: move clicked tab to front
-        const idx = activeTabs.indexOf(tabId);
-        if (idx > 0) {
-          activeTabs.splice(idx, 1);
-          activeTabs.unshift(tabId);
         }
         activateTab(tabId);
         renderTabBar();
@@ -3204,6 +3200,37 @@ export async function hashPassword(password) {
           e.preventDefault();
           closeTab(btn.dataset.tab);
         }
+      });
+      // Drag-and-drop reorder
+      btn.addEventListener('dragstart', (e) => {
+        dragSrcIdx = Array.from(rightTabList.children).indexOf(btn);
+        e.dataTransfer.effectAllowed = 'move';
+        btn.classList.add('dragging');
+      });
+      btn.addEventListener('dragend', () => {
+        btn.classList.remove('dragging');
+        rightTabList.querySelectorAll('.right-tab-btn').forEach(b => b.classList.remove('drag-over'));
+      });
+      btn.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const overIdx = Array.from(rightTabList.children).indexOf(btn);
+        if (overIdx !== dragSrcIdx) {
+          rightTabList.querySelectorAll('.right-tab-btn').forEach(b => b.classList.remove('drag-over'));
+          btn.classList.add('drag-over');
+        }
+      });
+      btn.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const overIdx = Array.from(rightTabList.children).indexOf(btn);
+        if (overIdx !== dragSrcIdx && dragSrcIdx >= 0) {
+          // Reorder activeTabs array
+          const item = activeTabs.splice(dragSrcIdx, 1)[0];
+          activeTabs.splice(overIdx, 0, item);
+          renderTabBar();
+        }
+        rightTabList.querySelectorAll('.right-tab-btn').forEach(b => b.classList.remove('drag-over'));
+        dragSrcIdx = -1;
       });
     });
     // Add button
