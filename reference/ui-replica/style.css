@@ -16,11 +16,11 @@ button:focus-visible {
 
 :root {
   /* Design Tokens - Soft Stone Minimalism */
-  --bg-sidebar: #fafafa; /* Level 2: 闂備礁鎼鍕倿閿斿墽鐭堟い鎺戝閸?*/
-  --bg-main: #ffffff; /* Level 1: 缂傚倷鑳堕搹搴ㄥ垂閸愭祴鏋?*/
-  --bg-hover: #f0f0f0; /* Level 3: 闂佸搫顦悧鍡涘疮椤栨粎鐭堟い鎺戝閸?*/
-  --bg-active: #ededed; /* Level 3: 闂佸搫顦悧鍡涘疮椤栨粎鐭堟い鎺戝閸?*/
-  --border-color: #ededed; /* Level 3: 闂佸搫顦悧鍡涘疮椤栨粎鐭堟い鎺戝閸? 闂備礁鎼鍕嚄閸撲礁鍨濋煫鍥ㄦ⒐缂嶅洭鎮峰▎蹇擃伌闁衡偓?*/
+  --bg-sidebar: #fafafa; /* Level 2: 闂傚倷绀侀幖顐︻敄閸曨垱鍊块柨鏂垮⒔閻牊銇勯幒鎴濐仾闁?*/
+  --bg-main: #ffffff; /* Level 1: 缂傚倸鍊烽懗鍫曟惞鎼淬劌鍨傞柛鎰ゴ閺?*/
+  --bg-hover: #f0f0f0; /* Level 3: 闂備礁鎼ˇ顖炴偋閸℃稑鐤い鏍ㄧ矌閻牊銇勯幒鎴濐仾闁?*/
+  --bg-active: #ededed; /* Level 3: 闂備礁鎼ˇ顖炴偋閸℃稑鐤い鏍ㄧ矌閻牊銇勯幒鎴濐仾闁?*/
+  --border-color: #ededed; /* Level 3: 闂備礁鎼ˇ顖炴偋閸℃稑鐤い鏍ㄧ矌閻牊銇勯幒鎴濐仾闁? 闂傚倷绀侀幖顐︻敄閸曨垱鍤勯柛鎾茬閸ㄦ繈鐓崶銊︹拹缂傚秴娲幃宄扳枎韫囨搩浼岄梺琛″亾?*/
   --text-main: #3a3a38; /* Soft charcoal */
   --text-secondary: #666666; /* Soft medium gray */
   --text-muted: #999999; /* Soft light gray */
@@ -4970,7 +4970,8 @@ body.dark-theme .attached-action-btn:active {
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  background-color: var(--bg-main); /* Level 1 */
+  background-color: var(--bg-main);
+  min-height: 0;
 }
 
 .right-tab-panel.active {
@@ -5046,55 +5047,46 @@ body.dark-theme .attached-action-btn:active {
 }
 
 /* Tab 2: Token Metrics panel styles */
-.token-metrics-container {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  flex: 1;
-}
-
 /* Metric filter bar */
 .metric-filter-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.metric-dropdown {
-  background: none;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: var(--font-sans);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.metric-dropdown:hover {
-  background-color: var(--bg-hover);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-.metric-dropdown .dd-arrow {
-  font-size: 8px;
-  color: var(--text-muted);
-}
-
-.metric-refresh-btn {
+.metric-icon-btn {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.metric-icon-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.metric-icon-btn.active {
+  background-color: var(--bg-active);
+  color: var(--text-main);
+}
+
+.metric-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.metric-spacer {
+  flex: 1;
+}
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5214,7 +5206,7 @@ body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background-color: var(--bg-sidebar); /* Level 2: 闂備礁鎼鍕倿閿斿墽鐭堟い鎺戝閸?background instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 闂傚倷绀侀幖顐︻敄閸曨垱鍊块柨鏂垮⒔閻牊銇勯幒鎴濐仾闁?background instead of border outline */
 }
 
 .token-card-header {
@@ -5296,12 +5288,12 @@ body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--bg-sidebar); /* Level 2: 闂備礁鎼鍕倿閿斿墽鐭堟い鎺戝閸?*/
+  background-color: var(--bg-sidebar); /* Level 2: 闂傚倷绀侀幖顐︻敄閸曨垱鍊块柨鏂垮⒔閻牊銇勯幒鎴濐仾闁?*/
   transition: background-color var(--transition-fast);
 }
 
 .token-log-item:hover {
-  background-color: var(--bg-hover); /* Level 3: 闂佸搫顦悧鍡涘疮椤栨粎鐭堟い鎺戝閸?*/
+  background-color: var(--bg-hover); /* Level 3: 闂備礁鎼ˇ顖炴偋閸℃稑鐤い鏍ㄧ矌閻牊銇勯幒鎴濐仾闁?*/
 }
 
 .log-meta {
@@ -5380,7 +5372,7 @@ body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
   align-items: center;
   padding: 6px 12px;
   gap: 12px;
-  background-color: var(--bg-main); /* Level 1: 缂傚倷鑳堕搹搴ㄥ垂閸愭祴鏋?to match Image 2 */
+  background-color: var(--bg-main); /* Level 1: 缂傚倸鍊烽懗鍫曟惞鎼淬劌鍨傞柛鎰ゴ閺?to match Image 2 */
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -6074,7 +6066,7 @@ body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
   border: none; /* Removed border */
   border-radius: 12px; /* Consistent corner radius */
   overflow: hidden;
-  background-color: var(--bg-sidebar); /* Level 2: 闂備礁鎼鍕倿閿斿墽鐭堟い鎺戝閸?block instead of border outline */
+  background-color: var(--bg-sidebar); /* Level 2: 闂傚倷绀侀幖顐︻敄閸曨垱鍊块柨鏂垮⒔閻牊銇勯幒鎴濐仾闁?block instead of border outline */
   transition: background-color var(--transition-fast);
 }
 
