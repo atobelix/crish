@@ -1025,7 +1025,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function setRightSidebarVisible(visible) {
     var s = document.querySelector('.right-sidebar');
     var b = document.querySelector('.right-floating-btns');
-    if (s) s.style.display = visible ? '' : 'none';
+    if (s) {
+      s.style.display = visible ? '' : 'none';
+      if (visible) s.classList.remove('collapsed');
+    }
     if (b) b.style.display = visible ? '' : 'none';
   }
 
@@ -4425,12 +4428,26 @@ async function login(username, password) {
 
   // --- Metric filter bar: icon clickable demo ---
   var metricBtns = document.querySelectorAll('.metric-filter-bar .metric-icon-btn');
-  metricBtns.forEach(function(btn) {
+  var metricCards = document.querySelectorAll('.metric-chart-card');
+  var allMetricCards = document.querySelectorAll('.metric-content > .token-progress-card, .metric-content > .metric-chart-card');
+  metricBtns.forEach(function(btn, i) {
     btn.addEventListener('click', function() {
-      // Don't toggle spinner or last "more" button
-      if (btn === metricBtns[0] || btn === metricBtns[1] || btn === metricBtns[metricBtns.length - 1]) return;
+      // Skip clock (index 0), model (index 1), and more (last) buttons
+      if (i === 0 || i === 1 || i === metricBtns.length - 1) return;
       metricBtns.forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
+      // Index 2=line, 3=bar, 4=heatmap
+      var cardIdx = i - 2;
+      metricCards.forEach(function(card, ci) { card.style.display = (ci === cardIdx) ? '' : 'none'; });
     });
   });
+  // More button (last): toggle token log + overview
+  if (metricBtns.length > 0) {
+    metricBtns[metricBtns.length - 1].addEventListener('click', function() {
+      var log = document.querySelector('.token-log-section');
+      var overview = document.querySelector('.token-progress-card');
+      if (log) log.style.display = log.style.display === 'none' ? '' : 'none';
+      if (overview) overview.style.display = overview.style.display === 'none' ? '' : 'none';
+    });
+  }
 });

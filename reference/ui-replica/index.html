@@ -2256,6 +2256,27 @@ export default function formatMarkdown(text) {
               </div>
             </div>
             <div class="settings-group mt-20">
+              <label>模型消耗对比</label>
+              <div class="metric-chart-card" style="margin-top:8px">
+                <div class="metric-chart-body">
+                  <svg class="bar-chart" viewBox="0 0 400 100" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">
+                    <line x1="0" y1="30" x2="400" y2="30" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <line x1="0" y1="60" x2="400" y2="60" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>
+                    <rect x="10" y="50" width="70" height="40" rx="3" fill="#00b4d8" opacity="0.7"/>
+                    <rect x="90" y="35" width="70" height="55" rx="3" fill="#10b981" opacity="0.7"/>
+                    <rect x="170" y="55" width="70" height="35" rx="3" fill="#8b5cf6" opacity="0.7"/>
+                    <rect x="250" y="60" width="70" height="30" rx="3" fill="#f97316" opacity="0.7"/>
+                    <rect x="330" y="45" width="70" height="45" rx="3" fill="#f43f5e" opacity="0.7"/>
+                    <text x="45" y="95" font-size="8" fill="var(--text-muted)" text-anchor="middle">GPT-4</text>
+                    <text x="125" y="95" font-size="8" fill="var(--text-muted)" text-anchor="middle">Gemini</text>
+                    <text x="205" y="95" font-size="8" fill="var(--text-muted)" text-anchor="middle">Claude</text>
+                    <text x="285" y="95" font-size="8" fill="var(--text-muted)" text-anchor="middle">GPT-3.5</text>
+                    <text x="365" y="95" font-size="8" fill="var(--text-muted)" text-anchor="middle">其他</text>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="settings-group mt-20">
               <label>按项目消耗</label>
               <div class="metric-cost-list">
                 <div class="metric-cost-item">

@@ -4996,11 +4996,12 @@ body.dark-theme .attached-action-btn:active {
   display: flex;
   flex-direction: column;
   position: relative;
+  min-height: 0;
 }
 
 .right-tab-panel {
   display: none;
-  height: 100%;
+  flex: 1;
   flex-direction: column;
   overflow: hidden;
   background-color: var(--bg-main);
@@ -5083,9 +5084,10 @@ body.dark-theme .attached-action-btn:active {
 .token-metrics-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   overflow: hidden;
   background: var(--bg-main);
+  min-height: 0;
 }
 
 /* Fixed filter bar with bottom border */
