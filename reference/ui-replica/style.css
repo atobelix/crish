@@ -5147,12 +5147,49 @@ body.dark-theme .attached-action-btn:active {
   flex: 1;
 }
 
-/* Token Metrics panel styles */
-  align-items: center;
-  justify-content: center;
+/* Compact dropdown button in metric filter bar */
+.metric-dropdown-btn {
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   border-radius: 6px;
-  margin-left: auto;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.metric-dropdown-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--text-main);
+}
+
+.metric-dropdown-btn svg:first-child {
+  width: 12px;
+  height: 12px;
+}
+
+.metric-dropdown-btn .dd-chevron {
+  width: 9px;
+  height: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+body.dark-theme .metric-dropdown-btn {
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-theme .metric-dropdown-btn:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .metric-refresh-btn:hover {

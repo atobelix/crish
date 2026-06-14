@@ -937,23 +937,30 @@ export default function formatMarkdown(text) {
             <div class="token-metrics-container">
               <!-- Filter bar -->
               <div class="metric-filter-bar">
-                <button class="metric-icon-btn" title="时间范围">
+                <button class="metric-dropdown-btn" data-dropdown="scope">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>当前对话</span>
+                  <svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
-                <button class="metric-icon-btn" title="选择模型">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M20 9h3M1 15h3M20 15h3"></path></svg>
+                <button class="metric-dropdown-btn" data-dropdown="time">
+                  <span>近7天</span>
+                  <svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
-                <button class="metric-icon-btn active" title="折线图">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 20 18 14 14 16 10 10 6 12 2 6"></polyline><line x1="2" y1="20" x2="22" y2="20"></line></svg>
-                </button>
-                <button class="metric-icon-btn" title="柱状图">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                </button>
-                <button class="metric-icon-btn" title="热力图">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="4" height="4" rx="1"></rect><rect x="10" y="3" width="4" height="4" rx="1"></rect><rect x="17" y="3" width="4" height="4" rx="1"></rect><rect x="3" y="10" width="4" height="4" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx="1"></rect><rect x="17" y="10" width="4" height="4" rx="1"></rect><rect x="3" y="17" width="4" height="4" rx="1"></rect><rect x="10" y="17" width="4" height="4" rx="1"></rect><rect x="17" y="17" width="4" height="4" rx="1"></rect></svg>
+                <button class="metric-dropdown-btn" data-dropdown="granularity">
+                  <span>自适应</span>
+                  <svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <div class="metric-spacer"></div>
-                <button class="metric-icon-btn" title="更多选项">
+                <button class="metric-icon-btn active" title="折线图" data-chart="line">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 20 18 14 14 16 10 10 6 12 2 6"></polyline></svg>
+                </button>
+                <button class="metric-icon-btn" title="柱状图" data-chart="bar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                </button>
+                <button class="metric-icon-btn" title="热力图" data-chart="heatmap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="4" height="4" rx="1"></rect><rect x="10" y="3" width="4" height="4" rx="1"></rect><rect x="17" y="3" width="4" height="4" rx="1"></rect><rect x="3" y="10" width="4" height="4" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx="1"></rect><rect x="17" y="10" width="4" height="4" rx="1"></rect><rect x="3" y="17" width="4" height="4" rx="1"></rect><rect x="10" y="17" width="4" height="4" rx="1"></rect><rect x="17" y="17" width="4" height="4" rx="1"></rect></svg>
+                </button>
+                <button class="metric-icon-btn" title="更多" data-chart="more">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="1.5"></circle><circle cx="18" cy="12" r="1.5"></circle><circle cx="6" cy="12" r="1.5"></circle></svg>
                 </button>
               </div>
@@ -1096,6 +1103,51 @@ export default function formatMarkdown(text) {
                     <text x="84" y="68" font-size="5.5" fill="var(--text-muted)">7月</text>
                     <text x="148" y="68" font-size="5.5" fill="var(--text-muted)">8月</text>
                     <text x="212" y="68" font-size="5.5" fill="var(--text-muted)">9月</text>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Token Rate Chart -->
+              <div class="metric-chart-card" data-card="rate">
+                <div class="metric-chart-header">
+                  <span class="chart-title">Token 速率 (tok/sec)</span>
+                  <span class="chart-subtitle">按小时</span>
+                </div>
+                <div class="metric-chart-body">
+                  <svg class="line-chart" viewBox="0 0 280 70" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00b4d8" stop-opacity="0.15"/><stop offset="100%" stop-color="#00b4d8" stop-opacity="0"/></linearGradient>
+                    </defs>
+                    <line x1="0" y1="30" x2="280" y2="30" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>
+                    <line x1="0" y1="50" x2="280" y2="50" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>
+                    <path d="M0,55 Q35,42 70,35 Q105,28 140,22 Q175,18 210,25 Q245,15 280,20" fill="none" stroke="#00b4d8" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M0,55 Q35,42 70,35 Q105,28 140,22 Q175,18 210,25 Q245,15 280,20 L280,60 L0,60 Z" fill="url(#gr)" opacity="0.6"/>
+                    <text x="10" y="62" font-size="6" fill="var(--text-muted)">6:00</text>
+                    <text x="130" y="62" font-size="6" fill="var(--text-muted)">12:00</text>
+                    <text x="250" y="62" font-size="6" fill="var(--text-muted)">18:00</text>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Cost Trend Chart -->
+              <div class="metric-chart-card" data-card="cost">
+                <div class="metric-chart-header">
+                  <span class="chart-title">预估费用趋势 ($)</span>
+                  <span class="chart-subtitle">按天</span>
+                </div>
+                <div class="metric-chart-body">
+                  <svg class="line-chart" viewBox="0 0 280 70" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="gc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fb923c" stop-opacity="0.15"/><stop offset="100%" stop-color="#fb923c" stop-opacity="0"/></linearGradient>
+                    </defs>
+                    <line x1="0" y1="30" x2="280" y2="30" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>
+                    <line x1="0" y1="50" x2="280" y2="50" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>
+                    <path d="M0,52 Q35,50 70,45 Q105,42 140,48 Q175,44 210,38 Q245,40 280,35" fill="none" stroke="#fb923c" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M0,52 Q35,50 70,45 Q105,42 140,48 Q175,44 210,38 Q245,40 280,35 L280,60 L0,60 Z" fill="url(#gc)" opacity="0.6"/>
+                    <text x="10" y="62" font-size="6" fill="var(--text-muted)">10/06</text>
+                    <text x="100" y="62" font-size="6" fill="var(--text-muted)">10/09</text>
+                    <text x="190" y="62" font-size="6" fill="var(--text-muted)">10/12</text>
+                    <text x="250" y="62" font-size="6" fill="var(--text-muted)">10/15</text>
                   </svg>
                 </div>
               </div>

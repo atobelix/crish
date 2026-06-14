@@ -259,11 +259,14 @@ document.addEventListener('DOMContentLoaded', () => {
     winToggleRightSidebarBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (rightSidebar) {
+        var isNowCollapsed = !rightSidebar.classList.contains('collapsed');
         rightSidebar.classList.toggle('collapsed');
-        if (!rightSidebar.classList.contains('collapsed')) {
-          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
-          // Ensure first tab is active
-          const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
+        if (isNowCollapsed) {
+          try { localStorage.setItem('sidebar-right-width', rightSidebar.style.width || ''); } catch (_) {}
+          rightSidebar.style.width = '';
+        } else {
+          try { var s = localStorage.getItem('sidebar-right-width'); if (s) rightSidebar.style.width = s; } catch (_) {}
+          var firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
           if (firstTab) activateTab(firstTab.dataset.tabId);
         }
       }
@@ -422,10 +425,13 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'toggle-right-sidebar':
         const rSidebar = document.querySelector('.right-sidebar');
         if (rSidebar) {
+          var isNowCollapsed = !rSidebar.classList.contains('collapsed');
           rSidebar.classList.toggle('collapsed');
-          if (!rSidebar.classList.contains('collapsed')) {
+          if (isNowCollapsed) {
+            try { localStorage.setItem('sidebar-right-width', rSidebar.style.width || ''); } catch (_) {}
+            rSidebar.style.width = '';
+          } else {
             try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
-            // Ensure first tab is active
             const firstTab = rightTabList ? rightTabList.querySelector('.right-tab-btn') : null;
             if (firstTab) activateTab(firstTab.dataset.tabId);
           }
@@ -4426,28 +4432,68 @@ async function login(username, password) {
   // Initialize default active chat
   activateChatItem('todo-list-app', 'build a todo list app');
 
-  // --- Metric filter bar: icon clickable demo ---
+    // --- Metric filter bar: dropdowns + chart toggles ---
   var metricBtns = document.querySelectorAll('.metric-filter-bar .metric-icon-btn');
-  var metricCards = document.querySelectorAll('.metric-chart-card');
-  var allMetricCards = document.querySelectorAll('.metric-content > .token-progress-card, .metric-content > .metric-chart-card');
-  metricBtns.forEach(function(btn, i) {
-    btn.addEventListener('click', function() {
-      // Skip clock (index 0), model (index 1), and more (last) buttons
-      if (i === 0 || i === 1 || i === metricBtns.length - 1) return;
-      metricBtns.forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      // Index 2=line, 3=bar, 4=heatmap
-      var cardIdx = i - 2;
-      metricCards.forEach(function(card, ci) { card.style.display = (ci === cardIdx) ? '' : 'none'; });
-    });
-  });
-  // More button (last): toggle token log + overview
+  var metricCards = document.querySelectorAll('.metric-content > .metric-chart-card');
   if (metricBtns.length > 0) {
-    metricBtns[metricBtns.length - 1].addEventListener('click', function() {
-      var log = document.querySelector('.token-log-section');
-      var overview = document.querySelector('.token-progress-card');
-      if (log) log.style.display = log.style.display === 'none' ? '' : 'none';
-      if (overview) overview.style.display = overview.style.display === 'none' ? '' : 'none';
+    metricBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var chartType = btn.dataset.chart;
+        if (!chartType) return;
+        metricBtns.forEach(function(b2) { b2.classList.remove('active'); });
+        btn.classList.add('active');
+        if (chartType === 'more') {
+          var log = document.querySelector('.token-log-section');
+          if (log) log.style.display = (log.style.display === 'none') ? '' : 'none';
+          return;
+        }
+        metricCards.forEach(function(card) { card.style.display = ''; });
+      });
     });
   }
+
+  var metricDdBtns = document.querySelectorAll('.metric-dropdown-btn');
+  var ddMenus = {
+    scope: ['当前对话', '当前项目', '全局'],
+    time: ['最近24小时', '近3天', '近7天', '近30天', '全部'],
+    granularity: ['自适应', '按分钟', '按小时', '按天']
+  };
+  metricDdBtns.forEach(function(ddBtn) {
+    ddBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var key = ddBtn.dataset.dropdown;
+      var items = ddMenus[key];
+      if (!items) return;
+      var existing = document.getElementById('metric-popup');
+      if (existing) existing.remove();
+      var popup = document.createElement('div');
+      popup.id = 'metric-popup';
+      popup.className = 'attached-dropdown-menu show';
+      popup.style.cssText = 'position:fixed;z-index:1000;width:120px;margin-top:0;';
+      var rect = ddBtn.getBoundingClientRect();
+      popup.style.top = (rect.bottom + 4) + 'px';
+      popup.style.left = rect.left + 'px';
+      var currentText = ddBtn.querySelector('span').textContent;
+      popup.innerHTML = items.map(function(item) {
+        return '<div class="attached-menu-item" data-val="' + item + '">' +
+          '<span>' + item + '</span>' +
+          (currentText === item ? '<svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-left:auto;color:var(--color-mint);"><polyline points="20 6 9 17 4 12"></polyline></svg>' : '') +
+          '</div>';
+      }).join('');
+      document.body.appendChild(popup);
+      popup.querySelectorAll('.attached-menu-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+          ddBtn.querySelector('span').textContent = item.dataset.val;
+          popup.remove();
+        });
+      });
+      var closeH = function(ev) {
+        if (!popup.contains(ev.target) && ev.target !== ddBtn) {
+          popup.remove();
+          document.removeEventListener('mousedown', closeH);
+        }
+      };
+      setTimeout(function() { document.addEventListener('mousedown', closeH); }, 0);
+    });
+  });
 });
