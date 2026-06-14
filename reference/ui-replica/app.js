@@ -1526,6 +1526,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  const demoToolCallsBtn = document.getElementById('demo-tool-calls-btn');
+  if (demoToolCallsBtn) {
+    demoToolCallsBtn.addEventListener('click', () => {
+      demoContinuousToolCalls({ count: 10, interval: 1000, toolProbability: 0.9 });
+    });
+  }
+
   // --- Streaming tool call helpers ---
   let currentToolGroup = null;
 

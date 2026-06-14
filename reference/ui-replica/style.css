@@ -796,15 +796,16 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  transition: color var(--transition-fast);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  transition: opacity var(--transition-fast);
 }
 
 .tool-call-row:hover,
 .tool-summary-row:hover {
-  color: var(--text-main);
+  opacity: 0.7;
 }
 
 .tool-terminal-icon {
@@ -815,8 +816,8 @@ body {
 }
 
 .tool-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 600;
   color: currentColor;
   flex-shrink: 0;
@@ -824,8 +825,8 @@ body {
 
 .tool-args {
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   color: currentColor;
   white-space: nowrap;
   overflow: hidden;
@@ -836,7 +837,7 @@ body {
 
 .tool-summary-text {
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
   color: currentColor;
   white-space: nowrap;
   overflow: hidden;
@@ -866,12 +867,12 @@ body {
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
   max-height: 240px;
-  margin: 4px 0 8px 22px; /* align with text after icon */
+  margin: 4px 0 8px 36px; /* indent under tool call row text */
 }
 
 .tool-summary[data-expanded="true"] .tool-summary-body {
   max-height: 1000px;
-  margin: 2px 0 8px 22px;
+  margin: 2px 0 8px 36px;
 }
 
 .tool-summary-body {
@@ -882,13 +883,13 @@ body {
   background: transparent;
 }
 
-/* Tool output result: light background, bordered, padded container */
+/* Tool output result: no background, very thin gray outline only */
 .tool-output {
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;
   padding: 8px 10px;
-  background-color: #f8f8f8;
-  max-height: 260px;
+  background-color: transparent;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -2155,14 +2156,14 @@ body.dark-theme .search-input {
 
 body.dark-theme .tool-call-row,
 body.dark-theme .tool-summary-row {
-  color: var(--text-secondary);
+  color: var(--text-main);
 }
 body.dark-theme .tool-call-row:hover,
 body.dark-theme .tool-summary-row:hover {
-  color: var(--text-main);
+  opacity: 0.8;
 }
 body.dark-theme .tool-output {
-  background-color: #1a1a1a;
+  background-color: transparent;
   border-color: rgba(255, 255, 255, 0.08);
 }
 body.dark-theme .tool-output pre {
