@@ -1410,9 +1410,11 @@ body.dark-theme .win-control:hover {
   padding: 4px 6px;
   background-color: transparent;
   color: var(--text-secondary);
+  max-height: 400px;
+  overflow: auto;
 }
 
-/* output-window / tool-result-window handles collapse/expand + scrolling */
+/* output-window / tool-result-window handles collapse/expand only (no scroll) */
 .output-window,
 .tool-result-window {
   padding-left: 20px;
@@ -1429,7 +1431,7 @@ body.dark-theme .win-control:hover {
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
   max-height: 400px;
-  overflow: auto;
+  overflow: visible;
   margin: 4px clamp(20px, 4vw, 50px) 8px 0;
 }
 
@@ -1437,7 +1439,7 @@ body.dark-theme .win-control:hover {
 .output-window[data-expanded="true"],
 .tool-result-window[data-expanded="true"] {
   max-height: 400px;
-  overflow: auto;
+  overflow: visible;
 }
 
 /* Modern scrollbar for output window and summary body */
