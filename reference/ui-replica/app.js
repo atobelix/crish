@@ -1584,49 +1584,80 @@ document.addEventListener('DOMContentLoaded', () => {
   const toolCallTemplates = [
     {
       name: 'bash',
-      args: '$ ls -la src/components',
-      result: 'total 24\ndrwxr-xr-x  6 user staff  192 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff   96 Jun 14 09:55 ..\n-rw-r--r--  1 user staff  412 Jun 14 10:00 Button.jsx\n-rw-r--r--  1 user staff  892 Jun 14 10:00 Modal.jsx\n-rw-r--r--  1 user staff  645 Jun 14 10:00 Sidebar.jsx'
+      args: '$ ls -laR src/',
+      result: 'src/:\ndrwxr-xr-x   8 user staff   256 Jun 14 10:00 .\ndrwxr-xr-x  12 user staff   384 Jun 14 09:55 ..\ndrwxr-xr-x  10 user staff   320 Jun 14 09:58 auth\ndrwxr-xr-x  15 user staff   480 Jun 14 10:00 api\ndrwxr-xr-x   6 user staff   192 Jun 14 10:00 utils\n-rw-r--r--   1 user staff  1203 Jun 14 10:01 index.js\n-rw-r--r--   1 user staff  3456 Jun 14 09:59 config.json\n\nsrc/auth:\ndrwxr-xr-x  4 user staff   128 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff   823 Jun 14 10:00 login.js\n-rw-r--r--  1 user staff  1289 Jun 14 10:00 reset.js\n\nsrc/api:\ndrwxr-xr-x  5 user staff   160 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff   412 Jun 14 10:00 client.js\n-rw-r--r--  1 user staff   892 Jun 14 10:00 routes.js\n-rw-r--r--  1 user staff   645 Jun 14 10:00 middleware.js\n\nsrc/utils:\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 .\ndrwxr-xr-x  3 user staff    96 Jun 14 10:00 ..\n-rw-r--r--  1 user staff  2154 Jun 14 10:00 format.js'
     },
     {
       name: 'bash',
-      args: '$ cat package.json | grep version',
-      result: '"version": "1.2.0",\n"private": true,'
+      args: '$ du -sh dist/',
+      result: 'dist/\ntotal 24M\ndrwxr-xr-x  6 user staff   192 Jun 14 10:00 assets\ndrwxr-xr-x  4 user staff   128 Jun 14 10:00 static\n-rw-r--r--  1 user staff 1.2M Jun 14 10:00 bundle.js\n-rw-r--r--  1 user staff  42k Jun 14 10:00 index.html'
     },
     {
       name: 'bash',
-      args: '$ npm run test -- --watch=false',
-      result: 'PASS  src/auth/login.test.js\nPASS  src/utils/format.test.js\nPASS  src/api/client.test.js\n\nTest Suites: 3 passed, 3 total\nTests:       18 passed, 18 total'
+      args: '$ npm run test -- --coverage',
+      result: 'PASS  src/auth/login.test.js  (5.2s)\n  ✓ returns token on valid credentials (12ms)\n  ✓ rejects invalid password (8ms)\n  ✓ handles missing fields (6ms)\n  ✓ rate-limits after 5 attempts (45ms)\n\nPASS  src/utils/format.test.js  (3.8s)\n  ✓ formats date correctly (4ms)\n  ✓ handles null input (2ms)\n  ✓ truncates long strings (3ms)\n  ✓ escapes HTML entities (5ms)\n\nPASS  src/api/client.test.js  (6.1s)\n  ✓ GET /users returns list (15ms)\n  ✓ POST /users creates user (22ms)\n  ✓ DELETE /users/:id returns 404 for unknown (11ms)\n  ✓ handles network timeout (34ms)\n\n------------------------|---------|----------|---------|---------|\nFile                    | % Stmts | % Branch | % Funcs | % Lines |\n------------------------|---------|----------|---------|---------|\nAll files               |   88.5  |    82.3  |   91.2  |   88.5  |\n src/auth/login.js      |   95.2  |    88.9  |  100.0  |   95.2  |\n src/api/client.js      |   82.6  |    75.0  |   83.3  |   82.6  |\n src/utils/format.js    |   90.0  |    83.3  |   90.0  |   90.0  |\n------------------------|---------|----------|---------|---------|\n\nTest Suites: 3 passed, 3 total\nTests:       12 passed, 12 total'
     },
     {
       name: 'read_file',
       args: '$ cat src/auth/login.js',
-      result: 'function login(username, password) {\n  if (username === "admin" && password === "secret") {\n    return { token: "xyz123" };\n  }\n  return null;\n}\n\nmodule.exports = { login };'
+      result: 'const bcrypt = require("bcrypt");\nconst { RateLimiter } = require("../utils/rate-limiter");\n\nconst limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });\n\nasync function login(username, password) {\n  if (!username || !password) {\n    return { error: "Missing required fields" };\n  }\n\n  const remaining = limiter.check(username);\n  if (remaining <= 0) {\n    return { error: "Too many attempts. Please wait before trying again." };\n  }\n\n  const user = await db.users.findByUsername(username);\n  if (!user) {\n    return { error: "Invalid credentials" };\n  }\n\n  const valid = await bcrypt.compare(password, user.passwordHash);\n  if (!valid) {\n    return { error: "Invalid credentials" };\n  }\n\n  const token = jwt.sign(\n    { userId: user.id, role: user.role },\n    process.env.JWT_SECRET,\n    { expiresIn: "24h" }\n  );\n\n  return { token, user: { id: user.id, username: user.username, role: user.role } };\n}\n\nmodule.exports = { login };'
+    },
+    {
+      name: 'read_file',
+      args: '$ cat src/utils/format.js',
+      result: '/**\n * Format a date to a human-readable string.\n * Supports ISO strings, timestamps, and Date objects.\n */\nexport function formatDate(input, options = {}) {\n  if (input == null) return "";\n  const date = typeof input === "string" || typeof input === "number"\n    ? new Date(input)\n    : input;\n  if (isNaN(date.getTime())) return "Invalid date";\n  const locale = options.locale || "zh-CN";\n  return new Intl.DateTimeFormat(locale, {\n    year: "numeric",\n    month: "long",\n    day: "numeric",\n    hour: "2-digit",\n    minute: "2-digit",\n    ...options\n  }).format(date);\n}\n\n/**\n * Truncate a string to a given length, appending "..." if truncated.\n */\nexport function truncate(str, maxLength = 100) {\n  if (!str) return "";\n  if (str.length <= maxLength) return str;\n  return str.slice(0, maxLength - 3) + "...";\n}'
     },
     {
       name: 'grep_search',
-      args: '$ grep -rn "TODO" src/',
-      result: 'src/utils.js:42:// TODO: refactor retry logic\nsrc/api.js:15:// TODO: add request timeout\nsrc/store.js:88:// TODO: normalize state shape'
+      args: '$ grep -rn "TODO\\|FIXME\\|HACK" src/',
+      result: 'src/utils/format.js:42:  // TODO: add support for relative dates\nsrc/utils/rate-limiter.js:15:  // FIXME: race condition when multiple requests arrive simultaneously\nsrc/utils/rate-limiter.js:88:  // TODO: persist rate limit state to redis\nsrc/api/routes.js:23:  // TODO: implement pagination for large result sets\nsrc/api/routes.js:67:  // HACK: temporary workaround for IE11 compatibility, remove when dropping support\nsrc/store.js:45:  // TODO: normalize state shape, currently nested objects are 3 levels deep\nsrc/auth/reset.js:12:  // TODO: add email notification when password reset is requested\nsrc/auth/reset.js:34:  // TODO: invalidate all existing sessions after password reset\nsrc/index.js:8:  // FIXME: process.env not set during testing, use fallback defaults\nsrc/index.js:15:  // TODO: add graceful shutdown handler for SIGTERM/SIGINT'
     },
     {
       name: 'edit_file',
       args: '$ edit_file src/auth/login.js',
-      result: 'Applied 2 edits to src/auth/login.js',
+      result: 'Applied 5 edits to src/auth/login.js',
       diff: {
         file: 'src/auth/login.js',
-        added: 4,
-        removed: 2,
+        added: 8,
+        removed: 4,
         hunks: [
           {
             oldStart: 1, newStart: 1,
             lines: [
-              { type: 'context', content: 'function login(username, password) {' },
-              { type: 'removed', content: '  if (username === "admin" && password === "secret") {' },
-              { type: 'added', content: '  const hash = await bcrypt.hash(password, 10);' },
-              { type: 'added', content: '  if (username === "admin" && await bcrypt.compare(password, hash)) {' },
-              { type: 'context', content: '    return { token: "xyz123" };' },
+              { type: 'context', content: 'const bcrypt = require("bcrypt");' },
+              { type: 'removed', content: 'const { RateLimiter } = require("../utils/rate-limiter");' },
+              { type: 'added', content: 'const { RateLimiter } = require("../utils/rate-limiter");' },
+              { type: 'added', content: 'const { AuditLogger } = require("../utils/audit");' },
+              { type: 'context', content: '' },
+              { type: 'removed', content: 'const limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });' },
+              { type: 'added', content: 'const limiter = new RateLimiter({ windowMs: 60000, maxAttempts: 5 });' },
+              { type: 'added', content: 'const logger = new AuditLogger({ service: "auth" });' },
+              { type: 'context', content: '' },
+              { type: 'context', content: 'async function login(username, password) {' },
+              { type: 'context', content: '  if (!username || !password) {' },
+              { type: 'removed', content: '    return { error: "Missing required fields" };' },
+              { type: 'added', content: '    logger.warn("login_attempt_missing_fields", { username });' },
+              { type: 'added', content: '    return { error: "Missing required fields" };' }
+            ]
+          },
+          {
+            oldStart: 15, newStart: 18,
+            lines: [
+              { type: 'context', content: '  const valid = await bcrypt.compare(password, user.passwordHash);' },
+              { type: 'context', content: '  if (!valid) {' },
+              { type: 'added', content: '    logger.warn("login_failed_invalid_password", { username });' },
+              { type: 'context', content: '    return { error: "Invalid credentials" };' },
               { type: 'context', content: '  }' },
-              { type: 'removed', content: '  return null;' },
-              { type: 'added', content: '  return { error: "Invalid credentials" };' }
+              { type: 'context', content: '' },
+              { type: 'context', content: '  const token = jwt.sign(' },
+              { type: 'removed', content: '    { userId: user.id, role: user.role },' },
+              { type: 'added', content: '    { userId: user.id, role: user.role, sessionId: crypto.randomUUID() },' },
+              { type: 'context', content: '    process.env.JWT_SECRET,' },
+              { type: 'context', content: '    { expiresIn: "24h" }' },
+              { type: 'context', content: '  );' },
+              { type: 'context', content: '' },
+              { type: 'added', content: '  logger.info("login_success", { username, userId: user.id });' },
+              { type: 'context', content: '  return { token, user: { id: user.id, username: user.username, role: user.role } };' }
             ]
           }
         ]
@@ -1634,28 +1665,56 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     {
       name: 'edit_file',
-      args: '$ edit_file src/utils/retry.js',
-      result: 'Applied 5 edits to src/utils/retry.js',
+      args: '$ edit_file src/utils/rate-limiter.js',
+      result: 'Applied 8 edits to src/utils/rate-limiter.js',
       diff: {
-        file: 'src/utils/retry.js',
-        added: 12,
-        removed: 3,
+        file: 'src/utils/rate-limiter.js',
+        added: 18,
+        removed: 5,
         hunks: [
           {
-            oldStart: 10, newStart: 10,
+            oldStart: 12, newStart: 12,
             lines: [
-              { type: 'context', content: 'async function retry(fn, options = {}) {' },
-              { type: 'removed', content: '  for (let i = 0; i < 3; i++) {' },
-              { type: 'added', content: '  const maxAttempts = options.maxAttempts || 3;' },
-              { type: 'added', content: '  const delay = options.delay || 1000;' },
-              { type: 'added', content: '  for (let i = 0; i < maxAttempts; i++) {' },
-              { type: 'context', content: '    try {' },
-              { type: 'context', content: '      return await fn();' },
-              { type: 'context', content: '    } catch (err) {' },
-              { type: 'added', content: '      if (i === maxAttempts - 1) throw err;' },
-              { type: 'added', content: '      await sleep(delay);' },
+              { type: 'context', content: 'class RateLimiter {' },
+              { type: 'context', content: '  constructor(options = {}) {' },
+              { type: 'context', content: '    this.windowMs = options.windowMs || 60000;' },
+              { type: 'context', content: '    this.maxAttempts = options.maxAttempts || 10;' },
+              { type: 'removed', content: '    this.store = new Map();' },
+              { type: 'added', content: '    this.store = new Map();' },
+              { type: 'added', content: '    this._cleanupInterval = setInterval(() => this._cleanup(), 30000);' },
+              { type: 'context', content: '  }' },
+              { type: 'context', content: '' },
+              { type: 'context', content: '  check(key) {' },
+              { type: 'context', content: '    const now = Date.now();' },
+              { type: 'removed', content: '    // FIXME: race condition when multiple requests arrive simultaneously' },
+              { type: 'context', content: '    const windowStart = now - this.windowMs;' },
+              { type: 'context', content: '    let entries = this.store.get(key) || [];' },
+              { type: 'context', content: '    entries = entries.filter(t => t > windowStart);' },
+              { type: 'added', content: '    // Use a lock to prevent race conditions on concurrent requests' },
+              { type: 'added', content: '    if (this._locked) {' },
+              { type: 'added', content: '      return 0;' },
+              { type: 'added', content: '    }' },
+              { type: 'context', content: '    const remaining = this.maxAttempts - entries.length;' },
+              { type: 'context', content: '    if (remaining > 0) {' },
+              { type: 'context', content: '      entries.push(now);' },
+              { type: 'context', content: '      this.store.set(key, entries);' },
               { type: 'context', content: '    }' },
-              { type: 'context', content: '  }' }
+              { type: 'added', content: '    this._locked = false;' },
+              { type: 'context', content: '    return remaining;' },
+              { type: 'context', content: '  }' },
+              { type: 'context', content: '' },
+              { type: 'added', content: '  _cleanup() {' },
+              { type: 'added', content: '    const now = Date.now();' },
+              { type: 'added', content: '    const windowStart = now - this.windowMs;' },
+              { type: 'added', content: '    for (const [key, entries] of this.store) {' },
+              { type: 'added', content: '      const filtered = entries.filter(t => t > windowStart);' },
+              { type: 'added', content: '      if (filtered.length === 0) {' },
+              { type: 'added', content: '        this.store.delete(key);' },
+              { type: 'added', content: '      } else {' },
+              { type: 'added', content: '        this.store.set(key, filtered);' },
+              { type: 'added', content: '      }' },
+              { type: 'added', content: '    }' },
+              { type: 'added', content: '  }' }
             ]
           }
         ]
@@ -1663,8 +1722,8 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     {
       name: 'run_test',
-      args: '$ npm test -- src/auth',
-      result: 'PASS  src/auth/login.test.js\nPASS  src/auth/reset.test.js\n\nTest Suites: 2 passed, 2 total'
+      args: '$ npm test -- --filter="auth"',
+      result: 'PASS  src/auth/login.test.js  (4.8s)\n  ✓ returns token on valid credentials (10ms)\n  ✓ rejects invalid password (7ms)\n  ✓ handles missing fields (5ms)\n  ✓ rate-limits after 5 attempts (42ms)\n  ✓ logs audit events on failure (28ms)\n\nPASS  src/auth/reset.test.js  (3.2s)\n  ✓ sends reset email (15ms)\n  ✓ requires valid token (8ms)\n  ✓ expires after 1 hour (11ms)\n\nTest Suites: 2 passed, 2 total\nTests:       8 passed, 8 total'
     }
   ];
 
@@ -1698,7 +1757,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (Math.random() < toolProbability) {
         const tpl = toolCallTemplates[Math.floor(Math.random() * toolCallTemplates.length)];
-        appendToolCall(tpl.name, tpl.args, tpl.result, { expanded: false });
+        const opts = { expanded: false };
+        if (tpl.diff) opts.diff = tpl.diff;
+        appendToolCall(tpl.name, tpl.args, tpl.result, opts);
       } else {
         finalizeToolGroup();
         chatMessagesData[currentChatId].push({
