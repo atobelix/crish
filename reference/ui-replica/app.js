@@ -991,6 +991,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     subAgentView.style.display = 'flex';
     panelTitle.textContent = 'mycodex-demo / ' + (name || 'Sub Agent');
+
+    // Hide right sidebar on sub-agent view
+    setRightSidebarVisible(false);
   };
 
   window.closeSubAgent = function() {
@@ -1017,6 +1020,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const featureAccordion = document.getElementById('feature-accordion');
   let activeProjName = 'mycodex-demo';
   let currentChatId = null;
+
+  // Right sidebar visibility: only on chat views
+  function setRightSidebarVisible(visible) {
+    var s = document.querySelector('.right-sidebar');
+    var b = document.querySelector('.right-floating-btns');
+    if (s) s.style.display = visible ? '' : 'none';
+    if (b) b.style.display = visible ? '' : 'none';
+  }
 
   // Activate Sidebar Item (Clean highlight state)
   const activateProjectItem = (projectLi) => {
@@ -1139,7 +1150,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // 6. Set title in panel header
     panelTitle.textContent = '对话 / 快速对话';
 
-    // 7. Make sure quick-chat button shows active state
+    // 7. Show right sidebar on chat views
+    setRightSidebarVisible(true);
+
+    // 8. Make sure quick-chat button shows active state
     const quickChatBtn = document.querySelector('.quick-chat-btn');
     if (quickChatBtn) quickChatBtn.classList.add('active');
   };
@@ -1199,6 +1213,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update Header title
     panelTitle.textContent = activeProjName + ' / ' + chatTitleText;
+
+    // Show right sidebar on chat views
+    setRightSidebarVisible(true);
 
     // Load messages dynamically
     if (chatMessagesData[chatId]) {
@@ -2931,6 +2948,9 @@ document.addEventListener('DOMContentLoaded', () => {
       'skills': '技能管理'
     }[viewId];
     panelTitle.textContent = '功能 / ' + itemName;
+
+    // Hide right sidebar on non-chat views
+    setRightSidebarVisible(false);
 
     // Remove active state from chats
     document.querySelectorAll('.chat-item, .nested-item').forEach(c => c.classList.remove('active'));
