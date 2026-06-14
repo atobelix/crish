@@ -4554,6 +4554,32 @@ body.dark-theme .attached-submenu {
   padding: 4px;
 }
 
+/* Cascade submenu: CSS-only hover (no JS events needed) */
+.submenu-parent {
+  position: relative;
+}
+
+.submenu-parent > .attached-submenu.cascading {
+  display: none;
+}
+
+.submenu-parent:hover > .attached-submenu.cascading,
+.attached-submenu.cascading:hover {
+  display: flex;
+}
+
+/* Hover bridge: 8px gap between parent and submenu (to the left) */
+.submenu-parent::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  pointer-events: auto;
+  z-index: 1011;
+}
+
 .dropdown-list::-webkit-scrollbar {
   width: 4px;
 }

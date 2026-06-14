@@ -3388,8 +3388,11 @@ export async function hashPassword(password) {
     dropdown.querySelectorAll('.submenu-parent').forEach(function(parent) {
       var baseType = parent.dataset.base;
       var def = tabDefinitions[baseType];
+
+      // Build submenu as a child of parent (CSS hover propagation, no JS events)
       var submenu = document.createElement('div');
-      submenu.style.cssText = 'position:fixed;display:none;width:150px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;padding:4px;';
+      submenu.className = 'attached-submenu cascading';
+      submenu.style.cssText = 'position:absolute;left:-154px;top:-4px;width:150px;flex-direction:column;row-gap:4px;padding:4px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;z-index:1010;';
       var subHtml = '';
       def.submenuItems.forEach(function(item) {
         subHtml += '<div class="attached-action-btn" data-base="' + baseType + '" data-action="' + item.action + '">';
@@ -3397,32 +3400,10 @@ export async function hashPassword(password) {
         subHtml += '<span>' + item.label + '</span></div>';
       });
       submenu.innerHTML = subHtml;
-      document.body.appendChild(submenu);
+      parent.style.position = 'relative';
+      parent.appendChild(submenu);
 
-      var hideTimer = null;
-      function showSubmenu() {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        var pr = parent.getBoundingClientRect();
-        submenu.style.display = 'flex';
-        submenu.style.flexDirection = 'column';
-        submenu.style.rowGap = '4px';
-        submenu.style.padding = '4px';
-        submenu.style.left = (pr.left - 150) + 'px';
-        submenu.style.top = (pr.top - 2) + 'px';
-      }
-      function hideSubmenu() {
-        hideTimer = setTimeout(function() {
-          if (!submenu.matches(':hover')) submenu.style.display = 'none';
-        }, 80);
-      }
-
-      parent.addEventListener('mouseenter', showSubmenu);
-      parent.addEventListener('mouseleave', hideSubmenu);
-      submenu.addEventListener('mouseenter', function() {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        submenu.style.display = 'flex';
-      });
-      submenu.addEventListener('mouseleave', function() { submenu.style.display = 'none'; });
+      // Click handlers for submenu items
       submenu.querySelectorAll('.attached-action-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var base = btn.dataset.base;
