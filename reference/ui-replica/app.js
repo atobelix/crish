@@ -248,6 +248,9 @@ document.addEventListener('DOMContentLoaded', () => {
     winToggleSidebarBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       sidebar.classList.toggle('collapsed');
+      if (!sidebar.classList.contains('collapsed')) {
+        try { const s = localStorage.getItem('sidebar-left-width'); if (s) sidebar.style.width = s; } catch (_) {}
+      }
     });
   }
 
@@ -259,6 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (rSidebar) {
         rSidebar.classList.toggle('collapsed');
         if (!rSidebar.classList.contains('collapsed')) {
+          try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
           const rBtns = document.querySelectorAll('.right-tab-btn');
           const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
           if (!hasActive && rBtns.length > 0) {
@@ -268,6 +272,92 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // --- Sidebar drag-to-resize ---
+  function initSidebarResize(sidebar, edge, storageKey, defaultWidth) {
+    let isResizing = false;
+
+    const onMouseDown = (e) => {
+      isResizing = true;
+      sidebar.classList.add('resizing');
+      sidebar.style.transition = 'none';
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e) => {
+      if (!isResizing) return;
+      const rect = sidebar.parentElement.getBoundingClientRect();
+      let newWidth;
+      if (edge === 'right') {
+        newWidth = e.clientX - rect.left;
+      } else {
+        newWidth = rect.right - e.clientX;
+      }
+      newWidth = Math.max(120, Math.min(newWidth, rect.width * 0.5));
+      sidebar.style.width = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      sidebar.classList.remove('resizing');
+      sidebar.style.transition = '';
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { localStorage.setItem(storageKey, sidebar.style.width); } catch (_) {}
+    };
+
+    // Attach to the edge pseudo-element via capturing on the sidebar itself
+    sidebar.addEventListener('mousedown', (e) => {
+      if (edge === 'right') {
+        const rect = sidebar.getBoundingClientRect();
+        if (e.clientX >= rect.right - 6 && e.clientX <= rect.right) {
+          onMouseDown(e);
+        }
+      } else {
+        const rect = sidebar.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.left + 6) {
+          onMouseDown(e);
+        }
+      }
+    });
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    // Restore saved width
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) sidebar.style.width = saved;
+    } catch (_) {}
+  }
+
+  const leftSidebar = document.querySelector('.sidebar');
+  const rightSidebar = document.querySelector('.right-sidebar');
+  if (leftSidebar) initSidebarResize(leftSidebar, 'right', 'sidebar-left-width', '20vw');
+  if (rightSidebar) initSidebarResize(rightSidebar, 'left', 'sidebar-right-width', '25vw');
+
+  // --- Responsive collapse: right first, then left ---
+  function handleResponsiveCollapse() {
+    const mainPanel = document.querySelector('.main-panel');
+    const winBody = document.querySelector('.window-body');
+    if (!mainPanel || !winBody) return;
+    const available = winBody.clientWidth;
+    const leftW = leftSidebar ? leftSidebar.offsetWidth : 0;
+    const rightW = rightSidebar ? rightSidebar.offsetWidth : 0;
+    const minMain = 400;
+    if (available - leftW - rightW < minMain) {
+      if (rightSidebar && !rightSidebar.classList.contains('collapsed')) {
+        rightSidebar.classList.add('collapsed');
+      } else if (leftSidebar && !leftSidebar.classList.contains('collapsed')) {
+        leftSidebar.classList.add('collapsed');
+      }
+    }
+  }
+
+  window.addEventListener('resize', handleResponsiveCollapse);
 
   if (winSearchBox) {
     winSearchBox.addEventListener('click', (e) => {
@@ -305,6 +395,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const sidebarEl = document.querySelector('.sidebar');
         if (sidebarEl) {
           sidebarEl.classList.toggle('collapsed');
+          if (!sidebarEl.classList.contains('collapsed')) {
+            try { const s = localStorage.getItem('sidebar-left-width'); if (s) sidebarEl.style.width = s; } catch (_) {}
+          }
         }
         break;
       case 'toggle-right-sidebar':
@@ -312,6 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rSidebar) {
           rSidebar.classList.toggle('collapsed');
           if (!rSidebar.classList.contains('collapsed')) {
+            try { const s = localStorage.getItem('sidebar-right-width'); if (s) rSidebar.style.width = s; } catch (_) {}
             const rBtns = document.querySelectorAll('.right-tab-btn');
             const hasActive = Array.from(rBtns).some(b => b.classList.contains('active'));
             if (!hasActive && rBtns.length > 0) {
@@ -2303,6 +2397,115 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   };
 
+  // --- Plan Panel: API interface + Demo ---
+  // Future backend API contract
+  window.planAPI = {
+    createPlan: (sessionId, title, steps) => Promise.resolve({ id: 'plan-xxx', steps }),
+    getPlans: (sessionId) => Promise.resolve([]),
+    updatePlanStatus: (planId, status) => Promise.resolve({ id: planId, status }),
+    subscribePlanUpdates: (sessionId, callback) => { /* WebSocket subscription */ return () => {}; }
+  };
+
+  const planListEl = document.getElementById('plan-list');
+  const planProgressEl = document.querySelector('.plan-progress');
+  const planStatusEl = document.querySelector('.plan-status-badge');
+
+  function renderPlan(plan) {
+    if (!planListEl) return;
+    const total = plan.plans.length;
+    const done = plan.plans.filter(p => p.status === 'completed').length;
+
+    if (total === 0) {
+      planListEl.innerHTML = '<div class="plan-empty">暂无计划项，等待 AI 生成…</div>';
+      planProgressEl.textContent = '0/0 已完成';
+      planStatusEl.textContent = '暂无计划';
+      planStatusEl.className = 'plan-status-badge';
+      return;
+    }
+
+    planProgressEl.textContent = `${done}/${total} 已完成`;
+    if (done === total) {
+      planStatusEl.textContent = '全部完成';
+      planStatusEl.className = 'plan-status-badge done';
+    } else {
+      planStatusEl.textContent = '进行中';
+      planStatusEl.className = 'plan-status-badge active';
+    }
+
+    const items = plan.plans.map((p, i) => {
+      const cls = p.status === 'completed' ? 'completed' : (p.status === 'active' ? 'active' : '');
+      const iconSvg = p.status === 'completed'
+        ? '<svg class="plan-icon completed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        : (p.status === 'active'
+          ? '<svg class="plan-icon active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg>'
+          : '<svg class="plan-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle></svg>');
+      return `<div class="plan-item ${cls}" data-plan-id="${escapeHTML(p.id)}">${iconSvg}<span class="plan-content">${escapeHTML(p.content)}</span></div>`;
+    }).join('');
+    planListEl.innerHTML = items;
+
+    // Scroll to active or last item
+    const activeItem = planListEl.querySelector('.plan-item.active');
+    if (activeItem) {
+      activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      planListEl.scrollTop = planListEl.scrollHeight;
+    }
+  }
+
+  // Demo plan flow
+  const demoPlanSteps = [
+    '分析项目目录结构及现有代码',
+    '识别关键模块与数据流',
+    '确定实现方案架构',
+    '编写核心业务逻辑代码',
+    '添加单元测试覆盖',
+    '执行集成测试并修复问题'
+  ];
+
+  window.demoPlanFlow = function() {
+    if (!planListEl) return;
+    const plan = {
+      status: 'in_progress',
+      plans: demoPlanSteps.map((content, i) => ({
+        id: `step-${i}`,
+        content,
+        status: i === 0 ? 'active' : 'pending'
+      }))
+    };
+    renderPlan(plan);
+
+    let stepIdx = 0;
+    const timer = setInterval(() => {
+      if (stepIdx >= plan.plans.length) {
+        clearInterval(timer);
+        plan.status = 'completed';
+        renderPlan(plan);
+        return;
+      }
+      plan.plans[stepIdx].status = 'completed';
+      if (stepIdx + 1 < plan.plans.length) {
+        plan.plans[stepIdx + 1].status = 'active';
+      }
+      stepIdx++;
+      renderPlan(plan);
+    }, 1500);
+    return timer;
+  };
+
+  // Link demo button to also trigger plan demo
+  const demoBtn = document.getElementById('demo-tool-calls-btn');
+  if (demoBtn) {
+    demoBtn.addEventListener('click', function planDemoHandler() {
+      setTimeout(() => {
+        const planBtn = document.querySelector('.right-tab-btn[data-tab="tab-plan"]');
+        if (planBtn) planBtn.click();
+        window.demoPlanFlow();
+      }, 12000);
+    }, { once: true });
+  }
+
+  // Expose renderPlan for external use
+  window.renderPlan = renderPlan;
 
   // --- 11. Settings Modal Navigation ---
   const settingsBtn = document.querySelector('.settings-btn');
@@ -2798,7 +3001,7 @@ export async function hashPassword(password) {
   // --- 17. Right Sidebar Tab Switcher logic ---
   const rightTabBtns = document.querySelectorAll('.right-tab-btn');
   const rightTabPanels = document.querySelectorAll('.right-tab-panel');
-  const rightSidebar = document.querySelector('.right-sidebar');
+  // rightSidebar already declared in sidebar resize section
 
   rightTabBtns.forEach(btn => {
     btn.addEventListener('click', () => {

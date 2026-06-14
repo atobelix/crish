@@ -130,9 +130,25 @@
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </button>
+            </div>
           </div>
+
+          <!-- Tab 6: Plan Panel -->
+          <div class="right-tab-panel" id="tab-plan">
+            <div class="plan-panel">
+              <!-- Plan header: progress + status -->
+              <div class="plan-header">
+                <span class="plan-progress">0/0 已完成</span>
+                <span class="plan-status-badge">暂无计划</span>
+              </div>
+              <!-- Plan list: scrollable fixed-height -->
+              <div class="plan-list" id="plan-list">
+                <div class="plan-empty">暂无计划项，等待 AI 生成…</div>
+              </div>
+            </div>
+          </div>
+
         </div>
-      </div>
 
       <!-- Window Body Wrapper -->
       <div class="window-body">
@@ -743,7 +759,7 @@ export default function formatMarkdown(text) {
                 <div class="attached-dropdown-menu" id="attached-project-dropdown">
                   <div class="dropdown-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="search-icon-small" style="width:12px; height:12px; margin-right:4px; color:var(--text-secondary);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" placeholder="搜索项目" class="attached-search-input">
+                    <input type="text" placeholder="搜索项目" class="search-field">
                   </div>
                   <ul class="dropdown-list">
                     <li class="attached-menu-item" data-value="conex">
@@ -843,7 +859,7 @@ export default function formatMarkdown(text) {
                 <div class="attached-dropdown-menu" id="attached-branch-dropdown">
                   <div class="dropdown-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="search-icon-small" style="width:12px; height:12px; margin-right:4px; color:var(--text-secondary);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" placeholder="搜索分支" class="attached-search-input">
+                    <input type="text" placeholder="搜索分支" class="search-field">
                   </div>
                   <div class="dropdown-subtitle">分支</div>
                   <ul class="dropdown-list">
@@ -882,9 +898,26 @@ export default function formatMarkdown(text) {
           <!-- Tab 1: Dual Chat / Agent Monitor -->
           <div class="right-tab-panel active" id="tab-dual-chat">
             <div class="dual-chat-container">
-              <!-- Elegant Trash Icon for clearing instead of bulky text header -->
-              <div class="chat-inline-actions">
-                <button class="icon-action-btn" id="clear-dual-chat-btn" title="清空对话">
+              <!-- Top action bar -->
+              <div class="dual-chat-header">
+                <button class="dual-chat-action-btn" id="inherit-context-btn" title="继承主对话上下文">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M7 20l4-16 4 16"></path>
+                    <path d="M3 12h4"></path>
+                    <path d="M17 12h4"></path>
+                    <path d="M5 8h2"></path>
+                    <path d="M17 8h2"></path>
+                  </svg>
+                  <span>继承上下文</span>
+                </button>
+                <button class="dual-chat-action-btn" id="new-dual-chat-btn" title="开始新对话">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>新对话</span>
+                </button>
+                <button class="dual-chat-action-btn" id="clear-dual-chat-btn" title="清空对话">
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -897,7 +930,7 @@ export default function formatMarkdown(text) {
                   你好！这里是双轨对话面板。你可以在这里测试辅助提示词、运行独立的任务，或监控子 Agent 的思考过程。这个面板可以和主面板共享相同的上下文信息。
                 </div>
               </div>
-              
+
               <div class="input-panel-container dual-chat-input-panel">
                 <div class="input-area-wrapper">
                   <div class="input-card">
@@ -1192,6 +1225,30 @@ export default function formatMarkdown(text) {
               
               <!-- Subview A: Tree List View -->
               <div id="explorer-tree-view">
+                <!-- Git branch + actions header -->
+                <div class="file-explorer-header">
+                  <div class="context-tag file-git-btn" id="file-git-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <circle cx="18" cy="18" r="3"></circle>
+                      <circle cx="6" cy="6" r="3"></circle>
+                      <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
+                      <line x1="6" y1="9" x2="6" y2="21"></line>
+                    </svg>
+                    <span>main</span>
+                    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                  <div class="explorer-actions">
+                    <button class="explorer-action-btn" title="刷新">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+                    </button>
+                    <button class="explorer-action-btn" title="新建文件">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                  </div>
+                </div>
+
                 <!-- Active Context Notes list at the top -->
                 <div class="active-notes-context" id="active-notes-context" style="display: none;">
                   <div class="context-title">已装载 AI 批注上下文</div>
@@ -1396,16 +1453,7 @@ export default function formatMarkdown(text) {
                     </div>
                   </div>
                 </div>
-                
-                <div class="git-branch-footer">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px; height:11px; vertical-align:middle; margin-right:4px;">
-                    <line x1="6" y1="3" x2="6" y2="15"></line>
-                    <circle cx="18" cy="6" r="3"></circle>
-                    <circle cx="6" cy="18" r="3"></circle>
-                    <path d="M18 9a9 9 0 0 1-9 9"></path>
-                  </svg>
-                  <span>git:main</span>
-                </div>
+
               </div>
 
               <!-- Subview B: File Content & Line Annotation View (Hidden initially) -->
@@ -1431,28 +1479,32 @@ export default function formatMarkdown(text) {
           <!-- Tab 5: Diff Center -->
           <div class="right-tab-panel" id="tab-diff-center">
             <div class="diff-center-container">
-              <!-- Git Source Control Header -->
-              <div class="git-control-panel">
-                <div class="git-commit-box">
-                  <input type="text" class="git-commit-input" id="git-commit-input" placeholder="提交信息 (Ctrl+Enter)...">
-                  <button class="git-commit-btn" id="git-commit-submit-btn" title="提交 (Commit)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 13px; height: 13px;">
-                      <polyline points="20 6 9 17 4 12"></polyline>
+
+              <!-- Unified header row: toggle + actions -->
+              <div class="diff-header-row">
+                <div class="diff-toggle-group">
+                  <button class="diff-toggle-btn active" data-diff="current">当前变更</button>
+                  <button class="diff-toggle-btn" data-diff="previous">上一轮</button>
+                </div>
+                <div class="diff-actions">
+                  <button class="diff-action-btn" id="collapse-all-diffs-btn" title="折叠所有">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px">
+                      <line x1="4" y1="12" x2="20" y2="12"></line>
+                      <line x1="4" y1="6" x2="20" y2="6"></line>
+                      <line x1="4" y1="18" x2="20" y2="18"></line>
                     </svg>
                   </button>
                 </div>
-                <div class="git-actions-row">
-                  <span class="git-status-title">源代码管理: Git</span>
-                  <div class="git-icon-buttons">
-                    <button class="git-action-icon-btn" id="collapse-all-diffs-btn" title="折叠所有差异">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 13px; height: 13px;">
-                        <line x1="4" y1="12" x2="20" y2="12"></line>
-                        <line x1="4" y1="6" x2="20" y2="6"></line>
-                        <line x1="4" y1="18" x2="20" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+              </div>
+
+              <!-- Git commit box -->
+              <div class="git-commit-box">
+                <input type="text" class="git-commit-input" id="git-commit-input" placeholder="提交信息 (Ctrl+Enter)...">
+                <button class="git-commit-btn" id="git-commit-submit-btn" title="提交 (Commit)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
               </div>
 
               <!-- Staged Changes Group -->
@@ -1638,7 +1690,8 @@ export default function formatMarkdown(text) {
         <div class="right-tab-footer">
           <button class="right-tab-btn active" data-tab="tab-dual-chat" title="双轨对话 / Agent 监控">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+              <path d="M17 9a6.48 6.48 0 0 0-5.5-5.5 8.48 8.48 0 0 0-4.3.6"></path>
             </svg>
           </button>
           <button class="right-tab-btn" data-tab="tab-token-metrics" title="Token 消耗统计">
@@ -1664,6 +1717,14 @@ export default function formatMarkdown(text) {
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1"></path>
               <rect x="8" y="2" width="14" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
+          <button class="right-tab-btn" data-tab="tab-plan" title="计划面板">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+              <line x1="12" y1="12" x2="12" y2="18"></line>
             </svg>
           </button>
         </div>

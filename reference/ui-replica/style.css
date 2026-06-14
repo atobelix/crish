@@ -454,6 +454,28 @@ body.dark-theme .win-control:hover {
   user-select: none;
   transition: width 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), padding 0.25s, opacity 0.25s, border-right-width 0.25s;
   overflow: hidden;
+  position: relative;
+}
+
+.sidebar.resizing {
+  transition: none !important;
+}
+
+/* Drag handle on right edge of sidebar */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar::after:hover {
+  background-color: rgba(0, 0, 0, 0.06);
 }
 
 .sidebar.collapsed {
@@ -992,11 +1014,12 @@ body.dark-theme .win-control:hover {
 /* Panel Header */
 .panel-header {
   height: auto;
-  padding: 8px 16px 2px 16px;
-  border-bottom: none;
+  padding: 6px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .panel-title {
@@ -4208,7 +4231,7 @@ body.dark-theme .attached-submenu {
   pointer-events: none;
 }
 
-.attached-search-input {
+.search-field {
   width: calc(100% - 8px);
   margin: 1px 4px;
   height: auto;
@@ -4224,7 +4247,7 @@ body.dark-theme .attached-submenu {
   transition: border-color var(--transition-fast);
 }
 
-.attached-search-input:focus {
+.search-field:focus {
   border-color: rgba(0, 0, 0, 0.12);
   background-color: transparent;
   outline: none;
@@ -4368,13 +4391,13 @@ body.dark-theme .attached-menu-item:hover {
   background-color: rgba(255, 255, 255, 0.06);
 }
 
-body.dark-theme .attached-search-input {
+body.dark-theme .search-field {
   background-color: transparent;
   border-color: rgba(255, 255, 255, 0.1);
   color: var(--text-main);
 }
 
-body.dark-theme .attached-search-input:focus {
+body.dark-theme .search-field:focus {
   background-color: transparent;
   border-color: rgba(255, 255, 255, 0.15);
 }
@@ -4426,6 +4449,27 @@ body.dark-theme .attached-action-btn:active {
   position: relative;
   z-index: 1;
   transition: width 0.25s cubic-bezier(0.25, 0.8, 0.25, 0.8);
+}
+
+.right-sidebar.resizing {
+  transition: none !important;
+}
+
+/* Drag handle on left edge of right sidebar */
+.right-sidebar::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color var(--transition-fast);
+}
+
+.right-sidebar::before:hover {
+  background-color: rgba(0, 0, 0, 0.06);
 }
 
 .right-sidebar.collapsed {
@@ -4517,6 +4561,46 @@ body.dark-theme .attached-action-btn:active {
 }
 
 /* Tab 1: Dual Chat panel styles */
+/* Dual chat header action bar */
+.dual-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  background-color: var(--bg-main);
+}
+
+.dual-chat-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  transition: all var(--transition-fast);
+}
+
+.dual-chat-action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.dual-chat-action-btn svg.icon {
+  width: 12px;
+  height: 12px;
+}
+
+.dual-chat-action-btn:last-child {
+  margin-left: auto;
+}
+
+/* Dual Chat Container */
 .dual-chat-container {
   display: flex;
   flex-direction: column;
@@ -4729,9 +4813,9 @@ body.dark-theme .attached-action-btn:active {
 }
 
 .inspect-toggle-btn.active {
-  background-color: var(--color-blue-bg);
-  color: var(--color-blue);
-  border-color: rgba(0, 132, 255, 0.3);
+  background-color: var(--bg-active);
+  color: var(--text-main);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .inspect-toggle-btn svg {
@@ -4800,27 +4884,24 @@ body.dark-theme .attached-action-btn:active {
 
 .browser-url-input {
   width: 100%;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-sidebar);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: transparent;
   border-radius: 8px;
   padding: 4px 24px 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--font-sans);
   color: var(--text-main);
-  text-align: center;
   outline: none;
-  font-weight: 500;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition: border-color var(--transition-fast);
 }
 
 .browser-url-input:hover {
-  border-color: var(--text-muted);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .browser-url-input:focus {
-  background-color: var(--bg-main);
-  border-color: var(--color-blue);
-  text-align: left;
+  border-color: rgba(0, 0, 0, 0.12);
+  background-color: transparent;
 }
 
 .browser-loading-spinner {
@@ -5607,15 +5688,16 @@ body.dark-theme .browser-address-bar {
 }
 
 body.dark-theme .browser-url-input {
-  background-color: var(--bg-sidebar);
+  background-color: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
   color: var(--text-main);
 }
 body.dark-theme .browser-url-input:hover {
-  border-color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 body.dark-theme .browser-url-input:focus {
-  background-color: var(--bg-main);
-  border-color: var(--color-blue);
+  background-color: transparent;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 body.dark-theme .browser-btn:hover {
@@ -5623,8 +5705,8 @@ body.dark-theme .browser-btn:hover {
   color: var(--text-main);
 }
 body.dark-theme .browser-btn.inspect-toggle-btn.active {
-  background-color: rgba(0, 132, 255, 0.15);
-  color: #66b0ff;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
 }
 
 body.dark-theme .browser-viewport {
@@ -5723,6 +5805,9 @@ body.dark-theme .diff-center-container {
 
 body.dark-theme .git-commit-box {
   background-color: var(--bg-main);
+}
+body.dark-theme .git-commit-box:focus-within {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 body.dark-theme .diff-accordion-item {
   background-color: var(--bg-sidebar);
@@ -5921,27 +6006,84 @@ code.tool-args,
 }
 
 /* 5. VS Code Style Git Panel */
-.git-control-panel {
-  padding: 10px 14px 6px 14px;
+/* Diff center header row */
+.diff-header-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background-color: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  gap: 8px;
 }
+
+.diff-toggle-group {
+  display: flex;
+  gap: 2px;
+  background-color: var(--bg-hover);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.diff-toggle-btn {
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  transition: all var(--transition-fast);
+}
+
+.diff-toggle-btn:hover {
+  color: var(--text-secondary);
+}
+
+.diff-toggle-btn.active {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+}
+
+.diff-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.diff-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.diff-action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+/* Git commit box */
 .git-commit-box {
   display: flex;
+  margin: 0 14px 6px 14px;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background-color: #ffffff;
+  border-radius: 8px;
+  background-color: var(--bg-main);
   overflow: hidden;
   align-items: center;
   padding-right: 4px;
   transition: border-color 0.2s;
 }
+
 .git-commit-box:focus-within {
-  border-color: var(--color-blue);
+  border-color: rgba(0, 0, 0, 0.12);
 }
+
 .git-commit-input {
   flex: 1;
   border: none;
@@ -5951,6 +6093,7 @@ code.tool-args,
   color: var(--text-main);
   background: transparent;
 }
+
 .git-commit-btn {
   background: none;
   border: none;
@@ -5961,47 +6104,14 @@ code.tool-args,
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
+
 .git-commit-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--color-blue);
-}
-.git-actions-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.git-status-title {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.git-icon-buttons {
-  display: flex;
-  gap: 2px;
-}
-.git-action-icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 4px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.git-action-icon-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
 }
-.git-action-icon-btn svg {
-  width: 12px;
-  height: 12px;
-}
+
 .git-group-header {
   display: flex;
   align-items: center;
@@ -6010,13 +6120,12 @@ code.tool-args,
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  background-color: var(--bg-sidebar);
+  background: none;
   user-select: none;
-  transition: background-color 0.15s;
-  border-bottom: 1px solid var(--border-color);
+  transition: color 0.15s;
 }
 .git-group-header:hover {
-  background-color: var(--bg-hover);
+  color: var(--text-main);
 }
 .git-group-header .chevron-icon {
   width: 9px;
@@ -6099,10 +6208,161 @@ code.tool-args,
 }
 .diff-git-action-btn:hover {
   background-color: var(--bg-hover);
-  color: var(--color-blue);
+  color: var(--text-main);
 }
 
-/* 6. Inline Code Annotations Viewer */
+/* ==============================
+   Plan Panel
+   ============================== */
+.plan-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-main);
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.plan-progress {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.plan-status-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.plan-status-badge.active {
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--text-main);
+}
+
+.plan-status-badge.done {
+  background-color: rgba(16, 185, 129, 0.08);
+  color: #059669;
+}
+
+.plan-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.plan-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.plan-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+
+.plan-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.plan-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-main);
+  transition: background-color var(--transition-fast);
+}
+
+.plan-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.plan-item.active {
+  background-color: rgba(0, 0, 0, 0.02);
+  border-left: 2px solid rgba(0, 0, 0, 0.15);
+}
+
+.plan-item.completed {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.plan-item .plan-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.plan-item .plan-icon.pending {
+  color: var(--text-muted);
+}
+
+.plan-item .plan-icon.active {
+  color: var(--text-secondary);
+}
+
+.plan-item .plan-icon.completed {
+  color: #059669;
+}
+
+.plan-item .plan-content {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+body.dark-theme .plan-status-badge.active {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+body.dark-theme .plan-status-badge.done {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+
+body.dark-theme .plan-item.active {
+  background-color: rgba(255, 255, 255, 0.03);
+  border-left-color: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-theme .plan-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .plan-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 #explorer-tree-view {
   display: flex;
   flex-direction: column;
@@ -6300,8 +6560,8 @@ code.tool-args,
 
 /* 8. Extra cleanup for browser inspect active */
 .browser-btn.inspect-toggle-btn.active {
-  background-color: var(--color-blue-bg);
-  color: var(--color-blue);
+  background-color: var(--bg-active);
+  color: var(--text-main);
 }
 
 .token-limit-info-pill {
@@ -6334,15 +6594,66 @@ code.tool-args,
 }
 
 /* 9. Git Branch Footer */
-.git-branch-footer {
+/* File explorer header: git button + actions */
+.file-explorer-header {
   display: flex;
   align-items: center;
-  padding: 6px 14px;
-  font-size: 10px;
+  justify-content: space-between;
+  padding: 4px 10px;
+  gap: 6px;
+}
+
+.file-explorer-header .file-git-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-secondary);
-  background-color: var(--bg-sidebar);
-  border-top: 1px solid var(--border-color);
-  gap: 4px;
-  flex-shrink: 0;
-  user-select: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background-color var(--transition-fast);
+}
+
+.file-explorer-header .file-git-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.file-explorer-header .file-git-btn svg.icon {
+  width: 12px;
+  height: 12px;
+}
+
+.file-explorer-header .file-git-btn svg.chevron {
+  width: 10px;
+  height: 10px;
+  color: var(--text-muted);
+}
+
+.explorer-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.explorer-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.explorer-action-btn:hover {
+  color: var(--text-secondary);
+  background-color: var(--bg-hover);
+}
+
+.explorer-action-btn svg {
+  width: 12px;
+  height: 12px;
 }
