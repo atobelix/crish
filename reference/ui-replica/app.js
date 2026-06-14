@@ -3220,7 +3220,15 @@ export async function hashPassword(password) {
     return { id: baseType + '-' + n, baseType: baseType, label: info.label, panelId: info.panelId };
   }
 
-  var activeTabs = [{ id: 'tab-dual-chat-1', baseType: 'tab-dual-chat', label: '对话', panelId: 'tab-dual-chat' }];
+  var activeTabs = [
+    { id: 'tab-dual-chat-1', baseType: 'tab-dual-chat', label: '对话', panelId: 'tab-dual-chat' },
+    { id: 'tab-browser-1', baseType: 'tab-browser', label: '浏览器', panelId: 'tab-browser' },
+    { id: 'tab-file-explorer', baseType: 'tab-file-explorer', label: '文件浏览', panelId: 'tab-file-explorer' },
+    { id: 'tab-diff-center', baseType: 'tab-diff-center', label: '差异总览', panelId: 'tab-diff-center' }
+  ];
+  // Mark existing counters
+  tabInstanceCounters['tab-dual-chat'] = 1;
+  tabInstanceCounters['tab-browser'] = 1;
   var rightTabList = document.getElementById('right-tab-list');
   var rightTabAddBtn = document.getElementById('right-tab-add-btn');
   var rightActions = document.getElementById('right-tab-actions');
