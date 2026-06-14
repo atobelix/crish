@@ -737,7 +737,7 @@ body {
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   max-width: 800px;
   margin: 0 auto;
 }
@@ -796,7 +796,7 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 8px;
-  color: var(--text-main);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.6;
@@ -815,24 +815,25 @@ body {
   flex-shrink: 0;
 }
 
-/* Hierarchy: summary row (parent) - larger */
+/* Summary row - same size as standalone, no bold */
 .tool-summary-row .tool-terminal-icon,
-.tool-summary-row .tool-status-icon { width: 16px; height: 16px; }
-.tool-summary-row .tool-chevron-icon { width: 16px; height: 16px; }
-.tool-summary-text { flex: 1; font-size: 15px; font-weight: 600; }
+.tool-summary-row .tool-status-icon { width: 14px; height: 14px; }
+.tool-summary-row .tool-chevron-icon { width: 14px; height: 14px; }
+.tool-summary-text { flex: 1; font-size: 14px; }
 
-/* Hierarchy: child tool call row (under summary) - smaller */
+/* Child tool call row (under summary) - 12px */
 .tool-summary-body .tool-status-icon { width: 12px; height: 12px; }
 .tool-summary-body .tool-chevron-icon { width: 12px; height: 12px; }
-.tool-summary-body .tool-name { font-size: 13px; font-weight: 500; }
-.tool-summary-body .tool-args { font-size: 13px; }
+.tool-summary-body .tool-terminal-icon { width: 12px; height: 12px; }
+.tool-summary-body .tool-name { font-size: 12px; }
+.tool-summary-body .tool-args { font-size: 12px; }
 .tool-summary-body .tool-edit-stats { font-size: 11px; }
 .tool-summary-body .tool-call-row { color: var(--text-secondary); }
+.tool-summary-body .tool-output { font-size: 12px; }
 
 .tool-name {
   font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
   color: currentColor;
   flex-shrink: 0;
 }
@@ -855,7 +856,7 @@ body {
   height: 14px;
   flex-shrink: 0;
 }
-.tool-status-icon-success { color: var(--text-secondary); }
+.tool-status-icon-success { color: var(--text-muted); }
 .tool-status-icon-fail { color: var(--text-muted); }
 
 /* Edit stats (+N -M) in the tool call row */
@@ -877,7 +878,7 @@ body {
   cursor: pointer;
   transition: color var(--transition-fast);
 }
-.tool-open-files-btn:hover { color: var(--text-main); }
+.tool-open-files-btn:hover { color: var(--text-secondary); }
 
 .tool-chevron-icon {
   width: 14px;
@@ -909,10 +910,12 @@ body {
 
 .tool-invocation[data-expanded="true"] .tool-result-window {
   max-height: 240px;
-  margin: 4px 50px 8px 0;
+  margin: 4px 0 8px 0;
 }
-.tool-summary-body .tool-invocation[data-expanded="true"] .tool-result-window {
-  margin-right: 50px;
+
+/* Child rows have same right margin as output for visual balance */
+.tool-summary-body .tool-call-row {
+  margin-right: clamp(20px, 4vw, 50px);
 }
 
 .tool-summary[data-expanded="true"] .tool-summary-body {
@@ -943,7 +946,8 @@ body {
   background: transparent;
 }
 
-/* Tool output result: no background, very thin gray outline only */
+/* Tool output result: no background, very thin gray outline only.
+   Right margin is responsive: min 20px on narrow, up to 50px on wide */
 .tool-output {
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;
@@ -951,7 +955,7 @@ body {
   background-color: transparent;
   max-height: 240px;
   overflow-y: auto;
-  margin-right: 50px;
+  margin-right: clamp(20px, 4vw, 50px);
 }
 
 /* tool-result-window aligns with tool-name */
@@ -2263,8 +2267,7 @@ body.dark-theme .tool-output pre {
 body.dark-theme .tool-output code {
   color: #ff7b72;
 }
-body.dark-theme .tool-summary-body::before,
-body.dark-theme .tool-summary-body .tool-call-row::before {
+body.dark-theme .tool-summary-body::before {
   background: rgba(255, 255, 255, 0.06);
 }
 body.dark-theme .diff-view {
