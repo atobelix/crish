@@ -5961,7 +5961,176 @@ body.dark-theme .heatmap rect[fill="rgba(0,0,0,0.03)"] {
   position: relative;
   background-color: var(--bg-main);
   height: 100%;
+  min-height: 0;
 }
+
+/* Toolbar */
+.explorer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  background: var(--bg-main);
+  min-height: 28px;
+}
+
+.explorer-tool-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.explorer-tool-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.explorer-tool-btn.active { background: var(--bg-active); color: var(--text-main); }
+.explorer-tool-btn svg { width: 13px; height: 13px; }
+
+.explorer-spacer { flex: 1; }
+
+/* Split layout */
+.explorer-split {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.explorer-tree-panel {
+  width: 55%;
+  min-width: 100px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(0,0,0,0.04);
+  padding: 2px 0;
+}
+
+.explorer-tree-panel.collapsed { width: 0; min-width: 0; border-right: none; padding: 0; }
+
+.explorer-content-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.file-viewer-header {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  min-height: 24px;
+}
+
+.file-viewer-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+}
+
+.file-viewer-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  margin: 0;
+  background: transparent;
+}
+
+.file-viewer-code code {
+  font-family: inherit;
+  background: transparent;
+}
+
+/* Annotation bar */
+.annotation-bar {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-main);
+}
+
+.annotation-context {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.annotation-context span {
+  color: var(--color-blue);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.annotation-input-row {
+  display: flex;
+  gap: 4px;
+}
+
+.annotation-input {
+  flex: 1;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  outline: none;
+  font-family: var(--font-sans);
+  background: transparent;
+  color: var(--text-main);
+}
+
+.annotation-input:focus { border-color: rgba(0,0,0,0.15); }
+
+.annotation-send-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.annotation-send-btn:hover { background: var(--bg-hover); color: var(--color-mint); }
+.annotation-send-btn svg { width: 13px; height: 13px; }
+
+body.dark-theme .explorer-tree-panel { border-right-color: rgba(255,255,255,0.04); }
+body.dark-theme .annotation-bar { border-top-color: rgba(255,255,255,0.04); }
+body.dark-theme .annotation-input { border-color: rgba(255,255,255,0.08); color: var(--text-main); }
+body.dark-theme .annotation-input:focus { border-color: rgba(255,255,255,0.15); }
 
 .active-notes-context {
   padding: 10px 12px;

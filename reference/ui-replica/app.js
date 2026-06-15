@@ -3321,6 +3321,157 @@ export async function hashPassword(password) {
     });
   });
 
+// --- File Explorer: split view, annotations, file content ---
+  var mockFileContents = {
+    'src/components/ChatPanel.jsx': 'import React, { useState } from \'react\';\nimport { SendIcon } from \'./icons\';\n\nfunction ChatPanel({ messages, onSend }) {\n  const [input, setInput] = useState(\'\');\n  const handleSubmit = (e) => {\n    e.preventDefault();\n    if (!input.trim()) return;\n    onSend(input);\n    setInput(\'\');\n  };\n  return (\n    <div className="chat-panel">\n      <div className="message-list">\n        {messages.map((m, i) => (\n          <MessageBubble key={i} text={m.text} role={m.role} />\n        ))}\n      </div>\n      <form onSubmit={handleSubmit}>\n        <input value={input} onChange={e => setInput(e.target.value)} />\n        <button type="submit"><SendIcon /></button>\n      </form>\n    </div>\n  );\n}',
+    'src/components/Sidebar.jsx': 'import React from \'react\';\nimport { FolderIcon, ChatIcon } from \'./icons\';\n\nfunction Sidebar({ projects, chats, onSelectChat }) {\n  return (\n    <aside className="sidebar">\n      <div className="sidebar-header">\n        <h2>Project Navigator</h2>\n        <button className="new-chat-btn">+ New Chat</button>\n      </div>\n      {projects.map((proj) => (\n        <ProjectFolder key={proj.id} project={proj}>\n          {chats.filter(c => c.projectId === proj.id).map(chat => (\n            <ChatItem key={chat.id} chat={chat} onClick={onSelectChat} />\n          ))}\n        </ProjectFolder>\n      ))}\n    </aside>\n  );\n}',
+    'src/utils/mcpHelper.js': 'export function registerMCPServer(sName, config) {\n  if (config.enabled) {\n    console.log("MCP Server: " + sName);\n    return startServer(sName, config.args);\n  }\n  return null;\n}\n\nfunction startServer(name, args) {\n  return {\n    status: "connected",\n    pid: Math.floor(Math.random() * 10000)\n  };\n}',
+    'src/styles/theme.css': ':root {\n  --bg-main: #ffffff;\n  --bg-sidebar: #fafafa;\n  --text-main: #3a3a38;\n  --text-secondary: #666666;\n}\n\nbody.dark-theme {\n  --bg-main: #1e1e1e;\n  --bg-sidebar: #1a1a1a;\n  --text-main: #e0e0e0;\n  --text-secondary: #a0a0a0;\n}',
+    'index.html': '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n  <meta charset="UTF-8">\n  <title>MyCodex Demo</title>\n</head>\n<body>\n  <div id="app"></div>\n  <script src="app.js"></script>\n</body>\n</html>',
+    'style.css': '/* Base Reset */\n*, *::before, *::after { box-sizing: border-box; }\nbody { margin: 0; font-family: "Inter", sans-serif; }\n\n.sidebar { width: 260px; background: var(--bg-sidebar); }\n.main-panel { flex: 1; background: var(--bg-main); }\n.chat-area { flex: 1; overflow-y: auto; }',
+    'app.js': '// Performance-optimized syntax highlighter\nfunction highlightCode(root) {\n  if (window.Prism) {\n    root.querySelectorAll(\'.code-block code, pre code\').forEach(block => {\n      Prism.highlightElement(block);\n    });\n  }\n}\n\ndocument.addEventListener(\'DOMContentLoaded\', () => {\n  initApp();\n});'
+  };
+
+  // File tree: double-click file -> show content
+  document.querySelectorAll('#file-tree .tree-node.file').forEach(function(node) {
+    node.addEventListener('dblclick', function() {
+      var path = node.dataset.path;
+      var viewerPath = document.getElementById('file-viewer-path');
+      var viewerCode = document.getElementById('file-viewer-code');
+      if (viewerPath) viewerPath.textContent = path;
+      if (viewerCode) {
+        var code = mockFileContents[path] || '// File: ' + path + '\n// No preview available';
+        viewerCode.textContent = code;
+        if (window.Prism) {
+          var lang = path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' : (path.endsWith('.css') ? 'css' : (path.endsWith('.html') ? 'markup' : 'javascript'));
+          viewerCode.className = 'language-' + lang;
+          window.Prism.highlightElement(viewerCode);
+        }
+      }
+    });
+  });
+
+  // File tree: single click -> show content (more intuitive)
+  document.querySelectorAll('#file-tree .tree-node.file .node-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var node = row.closest('.tree-node.file');
+      if (!node) return;
+      var path = node.dataset.path;
+      var viewerPath = document.getElementById('file-viewer-path');
+      var viewerCode = document.getElementById('file-viewer-code');
+      if (viewerPath) viewerPath.textContent = path;
+      if (viewerCode) {
+        var code = mockFileContents[path] || '// File: ' + path + '\n// No preview available';
+        viewerCode.textContent = code;
+        if (window.Prism) {
+          var lang = path.endsWith('.js') || path.endsWith('.jsx') ? 'javascript' : (path.endsWith('.css') ? 'css' : (path.endsWith('.html') ? 'markup' : 'javascript'));
+          viewerCode.className = 'language-' + lang;
+          window.Prism.highlightElement(viewerCode);
+        }
+      }
+    });
+  });
+
+  // Toggle tree panel
+  var toggleTreeBtn = document.getElementById('explorer-toggle-tree');
+  var treePanel = document.getElementById('explorer-tree-panel');
+  if (toggleTreeBtn && treePanel) {
+    toggleTreeBtn.addEventListener('click', function() {
+      treePanel.classList.toggle('collapsed');
+      toggleTreeBtn.classList.toggle('active');
+    });
+  }
+
+  // Close file
+  var closeFileBtn = document.getElementById('explorer-close-file');
+  if (closeFileBtn) {
+    closeFileBtn.addEventListener('click', function() {
+      var viewerPath = document.getElementById('file-viewer-path');
+      var viewerCode = document.getElementById('file-viewer-code');
+      if (viewerPath) viewerPath.textContent = '选择文件以查看内容';
+      if (viewerCode) { viewerCode.textContent = ''; viewerCode.className = ''; }
+    });
+  }
+
+  // Folder toggle
+  document.querySelectorAll('#file-tree .tree-node.folder .node-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var folder = row.parentElement;
+      var wasExpanded = folder.classList.contains('expanded');
+      folder.classList.toggle('expanded');
+      var children = folder.querySelector('.node-children');
+      if (children) children.style.display = wasExpanded ? 'none' : 'block';
+      var toggle = row.querySelector('.toggle-icon');
+      if (toggle) toggle.classList.toggle('expanded');
+    });
+  });
+
+  // Annotation: text selection -> show annotation bar
+  var viewerCodeEl = document.getElementById('file-viewer-code');
+  var annotationBar = document.getElementById('annotation-bar');
+  var annotationTxt = document.getElementById('annotation-text');
+  var annotationInput = document.getElementById('annotation-input');
+  var annotationSend = document.getElementById('annotation-send-btn');
+  var annotateBtn = document.getElementById('explorer-annotate');
+  var notesContext = document.getElementById('active-notes-context');
+  var contextTags = document.getElementById('context-tags-container');
+  var annotationNotes = [];
+
+  if (viewerCodeEl && annotationBar) {
+    viewerCodeEl.addEventListener('mouseup', function() {
+      var sel = window.getSelection();
+      var selected = sel.toString().trim();
+      if (selected && selected.length > 2 && annotateBtn && annotateBtn.classList.contains('active')) {
+        annotationTxt.textContent = selected.substring(0, 60) + (selected.length > 60 ? '...' : '');
+        annotationBar.style.display = 'flex';
+        annotationInput.value = '';
+        annotationInput.dataset.selected = selected;
+        setTimeout(function() { annotationInput.focus(); }, 50);
+      }
+    });
+
+    annotationSend.addEventListener('click', function() {
+      var comment = annotationInput.value.trim();
+      var selected = annotationInput.dataset.selected;
+      var path = document.getElementById('file-viewer-path').textContent;
+      if (!comment || !selected) return;
+      annotationNotes.push({ text: selected, comment: comment, path: path, time: new Date().toLocaleTimeString() });
+      annotationBar.style.display = 'none';
+      if (notesContext) notesContext.style.display = 'flex';
+      if (contextTags) updateContextTags();
+    });
+
+    function updateContextTags() {
+      if (!contextTags) return;
+      contextTags.innerHTML = annotationNotes.map(function(n, i) {
+        return '<div class="context-tag" title="' + n.comment + ' (' + n.path + ')">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>' +
+          '<span>' + n.comment.substring(0, 15) + '</span>' +
+          '<span class="tag-remove">x</span></div>';
+      }).join('');
+      contextTags.querySelectorAll('.tag-remove').forEach(function(btn, i) {
+        btn.addEventListener('click', function() { annotationNotes.splice(i, 1); updateContextTags(); });
+      });
+    }
+
+    annotateBtn.addEventListener('click', function() {
+      annotateBtn.classList.toggle('active');
+      if (!annotateBtn.classList.contains('active')) annotationBar.style.display = 'none';
+    });
+  }
+
+  // Refresh button (mock)
+  var refreshBtn = document.getElementById('explorer-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function() {
+      var codeEl = document.getElementById('file-viewer-code');
+      if (codeEl && codeEl.textContent) {
+        if (window.Prism) window.Prism.highlightElement(codeEl);
+      }
+    });
+  }
+
   // --- 17. Right Sidebar Tab Management ---
   let tabInstanceCounters = {};
   const tabDefinitions = {

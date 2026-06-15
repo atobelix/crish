@@ -1391,257 +1391,126 @@ export default function formatMarkdown(text) {
           <!-- Tab 4: File Explorer -->
           <div class="right-tab-panel" id="tab-file-explorer">
             <div class="file-explorer-container">
-              
-              <!-- Subview A: Tree List View -->
-              <div id="explorer-tree-view">
-                <!-- Git branch + actions header -->
-                <div class="file-explorer-header">
-                  <div class="context-tag file-git-btn" id="file-git-btn">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                      <circle cx="18" cy="18" r="3"></circle>
-                      <circle cx="6" cy="6" r="3"></circle>
-                      <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
-                      <line x1="6" y1="9" x2="6" y2="21"></line>
-                    </svg>
-                    <span>main</span>
-                    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </div>
-                  <div class="explorer-actions">
-                    <button class="explorer-action-btn" title="刷新">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
-                    </button>
-                    <button class="explorer-action-btn" title="新建文件">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Active Context Notes list at the top -->
-                <div class="active-notes-context" id="active-notes-context" style="display: none;">
-                  <div class="context-title">已装载 AI 批注上下文</div>
-                  <div class="context-tags" id="context-tags-container">
-                    <!-- JS will dynamically populate this -->
-                  </div>
-                </div>
-
-                <!-- File Tree structure -->
-                <div class="file-tree" id="file-tree">
-                  <!-- Folder 1: src -->
-                  <div class="tree-node folder expanded" data-path="src">
-                    <div class="node-row">
-                      <span class="toggle-icon expanded">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </span>
-                      <span class="node-icon folder-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                      </span>
-                      <span class="node-name">src</span>
-                    </div>
-                    <div class="node-children">
-                      <!-- Folder: src/components -->
-                      <div class="tree-node folder expanded" data-path="src/components">
-                        <div class="node-row">
-                          <span class="toggle-icon expanded">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                          </span>
-                          <span class="node-icon folder-icon">
-                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                          </span>
-                          <span class="node-name">components</span>
-                        </div>
-                        <div class="node-children">
-                          <!-- File: src/components/ChatPanel.jsx [M] -->
-                          <div class="tree-node file git-modified" data-path="src/components/ChatPanel.jsx" title="双击打开并添加行内批注 (Git: 已修改)">
-                            <div class="node-row">
-                              <span class="toggle-icon"></span>
-                              <span class="node-icon file-icon">
-                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                              </span>
-                              <span class="node-name">ChatPanel.jsx</span>
-                              <span class="git-status-badge status-m">M</span>
-                              <span class="note-indicator-badge" style="display: none;">0</span>
-                            </div>
-                          </div>
-                          <!-- File: src/components/Sidebar.jsx -->
-                          <div class="tree-node file" data-path="src/components/Sidebar.jsx" title="双击打开并添加行内批注">
-                            <div class="node-row">
-                              <span class="toggle-icon"></span>
-                              <span class="node-icon file-icon">
-                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                              </span>
-                              <span class="node-name">Sidebar.jsx</span>
-                              <span class="note-indicator-badge" style="display: none;">0</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <!-- Folder: src/utils -->
-                      <div class="tree-node folder expanded" data-path="src/utils">
-                        <div class="node-row">
-                          <span class="toggle-icon expanded">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                          </span>
-                          <span class="node-icon folder-icon">
-                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                          </span>
-                          <span class="node-name">utils</span>
-                        </div>
-                        <div class="node-children">
-                          <!-- File: src/utils/mcpHelper.js [A] -->
-                          <div class="tree-node file git-added" data-path="src/utils/mcpHelper.js" title="双击打开并添加行内批注 (Git: 新增)">
-                            <div class="node-row">
-                              <span class="toggle-icon"></span>
-                              <span class="node-icon file-icon">
-                                <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                              </span>
-                              <span class="node-name">mcpHelper.js</span>
-                              <span class="git-status-badge status-a">A</span>
-                              <span class="note-indicator-badge" style="display: none;">0</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- File: src/styles/theme.css [M] -->
-                      <div class="tree-node file git-modified" data-path="src/styles/theme.css" title="双击打开并添加行内批注 (Git: 已修改)">
-                        <div class="node-row">
-                          <span class="toggle-icon"></span>
-                          <span class="node-icon file-icon">
-                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                          </span>
-                          <span class="node-name">theme.css</span>
-                          <span class="git-status-badge status-m">M</span>
-                          <span class="note-indicator-badge" style="display: none;">0</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Folder 2: public -->
-                  <div class="tree-node folder" data-path="public">
-                    <div class="node-row">
-                      <span class="toggle-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </span>
-                      <span class="node-icon folder-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                      </span>
-                      <span class="node-name">public</span>
-                    </div>
-                    <div class="node-children" style="display: none;">
-                      <!-- File: public/favicon.ico -->
-                      <div class="tree-node file" data-path="public/favicon.ico" title="双击打开并添加行内批注">
-                        <div class="node-row">
-                          <span class="toggle-icon"></span>
-                          <span class="node-icon file-icon">
-                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                          </span>
-                          <span class="node-name">favicon.ico</span>
-                          <span class="note-indicator-badge" style="display: none;">0</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Folder 3: tests -->
-                  <div class="tree-node folder" data-path="tests">
-                    <div class="node-row">
-                      <span class="toggle-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </span>
-                      <span class="node-icon folder-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                      </span>
-                      <span class="node-name">tests</span>
-                    </div>
-                    <div class="node-children" style="display: none;">
-                      <!-- File: tests/chat.test.js [D] -->
-                      <div class="tree-node file git-deleted" data-path="tests/chat.test.js" title="双击打开并添加行内批注 (Git: 已删除)">
-                        <div class="node-row">
-                          <span class="toggle-icon"></span>
-                          <span class="node-icon file-icon">
-                            <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                          </span>
-                          <span class="node-name" style="text-decoration: line-through;">chat.test.js</span>
-                          <span class="git-status-badge status-d">D</span>
-                          <span class="note-indicator-badge" style="display: none;">0</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Root level files -->
-                  <!-- File: index.html [M] -->
-                  <div class="tree-node file git-modified" data-path="index.html" title="双击打开并添加行内批注 (Git: 已修改)">
-                    <div class="node-row">
-                      <span class="toggle-icon"></span>
-                      <span class="node-icon file-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                      </span>
-                      <span class="node-name">index.html</span>
-                      <span class="git-status-badge status-m">M</span>
-                      <span class="note-indicator-badge" style="display: none;">0</span>
-                    </div>
-                  </div>
-                  <!-- File: style.css [M] -->
-                  <div class="tree-node file git-modified" data-path="style.css" title="双击打开并添加行内批注 (Git: 已修改)">
-                    <div class="node-row">
-                      <span class="toggle-icon"></span>
-                      <span class="node-icon file-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                      </span>
-                      <span class="node-name">style.css</span>
-                      <span class="git-status-badge status-m">M</span>
-                      <span class="note-indicator-badge" style="display: none;">0</span>
-                    </div>
-                  </div>
-                  <!-- File: app.js [M] -->
-                  <div class="tree-node file git-modified" data-path="app.js" title="双击打开并添加行内批注 (Git: 已修改)">
-                    <div class="node-row">
-                      <span class="toggle-icon"></span>
-                      <span class="node-icon file-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                      </span>
-                      <span class="node-name">app.js</span>
-                      <span class="git-status-badge status-m">M</span>
-                      <span class="note-indicator-badge" style="display: none;">0</span>
-                    </div>
-                  </div>
-                  <!-- File: package.json -->
-                  <div class="tree-node file" data-path="package.json" title="双击打开并添加行内批注">
-                    <div class="node-row">
-                      <span class="toggle-icon"></span>
-                      <span class="node-icon file-icon">
-                        <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                      </span>
-                      <span class="node-name">package.json</span>
-                      <span class="note-indicator-badge" style="display: none;">0</span>
-                    </div>
-                  </div>
-                </div>
-
+              <!-- Top toolbar -->
+              <div class="explorer-toolbar">
+                <button class="explorer-tool-btn" id="explorer-toggle-tree" title="切换文件树">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <button class="explorer-tool-btn" id="explorer-refresh" title="刷新">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"></path></svg>
+                </button>
+                <button class="explorer-tool-btn" id="explorer-annotate" title="批注模式">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                </button>
+                <div class="explorer-spacer"></div>
+                <div class="context-tag file-git-btn" id="file-git-btn">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle>
+                    <path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line>
+                  </svg>
+                  <span>main</span>
+                </button>
+                <button class="explorer-tool-btn" id="explorer-close-file" title="关闭文件">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
               </div>
 
-              <!-- Subview B: File Content & Line Annotation View (Hidden initially) -->
-              <div id="explorer-file-content-view" style="display: none;">
-                <div class="file-viewer-header">
-                  <button class="icon-action-btn" id="file-viewer-back-btn" title="返回文件列表">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 14px; height: 14px;">
-                      <polyline points="15 18 9 12 15 6"></polyline>
-                    </svg>
+              <!-- Active Context Notes -->
+              <div class="active-notes-context" id="active-notes-context" style="display: none;">
+                <div class="context-title">已装载 AI 批注上下文</div>
+                <div class="context-tags" id="context-tags-container"></div>
+              </div>
+
+              <!-- Split layout: tree + content -->
+              <div class="explorer-split">
+                <!-- Left: File Tree -->
+                <div class="explorer-tree-panel" id="explorer-tree-panel">
+                  <div class="file-tree" id="file-tree">
+                    <!-- Folder 1: src -->
+                    <div class="tree-node folder expanded" data-path="src">
+                      <div class="node-row">
+                        <span class="toggle-icon expanded">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                        <span class="node-icon folder-icon">
+                          <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        </span>
+                        <span class="node-name">src</span>
+                      </div>
+                      <div class="node-children">
+                        <div class="tree-node folder expanded" data-path="src/components">
+                          <div class="node-row">
+                            <span class="toggle-icon expanded">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
+                            <span class="node-icon folder-icon">
+                              <svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </span>
+                            <span class="node-name">components</span>
+                          </div>
+                          <div class="node-children">
+                            <div class="tree-node file git-modified" data-path="src/components/ChatPanel.jsx">
+                              <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">ChatPanel.jsx</span><span class="git-status-badge status-m">M</span></div>
+                            </div>
+                            <div class="tree-node file" data-path="src/components/Sidebar.jsx">
+                              <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">Sidebar.jsx</span></div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="tree-node folder expanded" data-path="src/utils">
+                          <div class="node-row"><span class="toggle-icon expanded"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg></span><span class="node-icon folder-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span><span class="node-name">utils</span></div>
+                          <div class="node-children">
+                            <div class="tree-node file git-added" data-path="src/utils/mcpHelper.js">
+                              <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">mcpHelper.js</span><span class="git-status-badge status-a">A</span></div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="tree-node file git-modified" data-path="src/styles/theme.css">
+                          <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">theme.css</span><span class="git-status-badge status-m">M</span></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tree-node folder" data-path="public">
+                      <div class="node-row"><span class="toggle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg></span><span class="node-icon folder-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span><span class="node-name">public</span></div>
+                      <div class="node-children" style="display:none">
+                        <div class="tree-node file" data-path="public/favicon.ico">
+                          <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></span><span class="node-name">favicon.ico</span></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tree-node file git-modified" data-path="index.html">
+                      <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">index.html</span><span class="git-status-badge status-m">M</span></div>
+                    </div>
+                    <div class="tree-node file git-modified" data-path="style.css">
+                      <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">style.css</span><span class="git-status-badge status-m">M</span></div>
+                    </div>
+                    <div class="tree-node file git-modified" data-path="app.js">
+                      <div class="node-row"><span class="toggle-icon"></span><span class="node-icon file-icon"><svg class="icon file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></span><span class="node-name">app.js</span><span class="git-status-badge status-m">M</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: File Content -->
+                <div class="explorer-content-panel" id="explorer-content-panel">
+                  <div class="file-viewer-header">
+                    <span class="file-viewer-path" id="file-viewer-path">选择文件以查看内容</span>
+                  </div>
+                  <div class="file-viewer-body" id="file-viewer-body">
+                    <pre class="file-viewer-code" id="file-viewer-code"><code class="language-javascript"></code></pre>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Annotation comment bar -->
+              <div class="annotation-bar" id="annotation-bar" style="display:none">
+                <div class="annotation-context" id="annotation-context">选中文本: <span id="annotation-text"></span></div>
+                <div class="annotation-input-row">
+                  <input type="text" class="annotation-input" id="annotation-input" placeholder="添加批注...">
+                  <button class="annotation-send-btn" id="annotation-send-btn" title="确定批注">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                   </button>
-                  <span class="file-viewer-path" id="file-viewer-path">src/auth/login.js</span>
-                </div>
-                <div class="file-viewer-scroll-area">
-                  <div class="code-viewer-container" id="code-viewer-container">
-                    <!-- Dynamic code rendering in white theme light color -->
-                  </div>
                 </div>
               </div>
-
             </div>
           </div>
 
