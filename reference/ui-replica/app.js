@@ -3407,28 +3407,60 @@ export async function hashPassword(password) {
     });
   });
 
-  // Annotation: text selection -> show annotation bar
+  // Annotation: text selection -> floating icon -> click to annotate
   var viewerCodeEl = document.getElementById('file-viewer-code');
   var annotationBar = document.getElementById('annotation-bar');
   var annotationTxt = document.getElementById('annotation-text');
   var annotationInput = document.getElementById('annotation-input');
   var annotationSend = document.getElementById('annotation-send-btn');
-  var annotateBtn = document.getElementById('explorer-annotate');
   var notesContext = document.getElementById('active-notes-context');
   var contextTags = document.getElementById('context-tags-container');
   var annotationNotes = [];
+  var annotateFloatIcon = null;
+
+  // Create floating annotation icon
+  function getAnnotateIcon() {
+    if (!annotateFloatIcon) {
+      annotateFloatIcon = document.createElement('div');
+      annotateFloatIcon.style.cssText = 'position:fixed;display:none;width:20px;height:20px;background:var(--color-blue);border-radius:50%;cursor:pointer;z-index:999;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+      annotateFloatIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="width:11px;height:11px"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>';
+      document.body.appendChild(annotateFloatIcon);
+    }
+    return annotateFloatIcon;
+  }
 
   if (viewerCodeEl && annotationBar) {
-    viewerCodeEl.addEventListener('mouseup', function() {
-      var sel = window.getSelection();
-      var selected = sel.toString().trim();
-      if (selected && selected.length > 2 && annotateBtn && annotateBtn.classList.contains('active')) {
-        annotationTxt.textContent = selected.substring(0, 60) + (selected.length > 60 ? '...' : '');
-        annotationBar.style.display = 'flex';
-        annotationInput.value = '';
-        annotationInput.dataset.selected = selected;
-        setTimeout(function() { annotationInput.focus(); }, 50);
-      }
+    viewerCodeEl.addEventListener('mouseup', function(e) {
+      setTimeout(function() {
+        var sel = window.getSelection();
+        var selected = sel.toString().trim();
+        if (selected && selected.length > 2) {
+          var icon = getAnnotateIcon();
+          var range = sel.getRangeAt(0);
+          var rect = range.getBoundingClientRect();
+          icon.style.display = 'flex';
+          icon.style.left = (rect.right + 4) + 'px';
+          icon.style.top = (rect.top - 12) + 'px';
+          icon.dataset.selected = selected;
+          icon.onclick = function() {
+            annotationTxt.textContent = selected.substring(0, 60) + (selected.length > 60 ? '...' : '');
+            annotationBar.style.display = 'flex';
+            annotationInput.value = '';
+            annotationInput.dataset.selected = selected;
+            annotationInput.focus();
+            icon.style.display = 'none';
+          };
+        } else {
+          if (annotateFloatIcon) annotateFloatIcon.style.display = 'none';
+        }
+      }, 10);
+    });
+
+    document.addEventListener('mousedown', function(e) {
+      if (annotateFloatIcon && e.target.closest('.annotation-send-btn')) return;
+      setTimeout(function() {
+        if (annotateFloatIcon) annotateFloatIcon.style.display = 'none';
+      }, 200);
     });
 
     annotationSend.addEventListener('click', function() {
@@ -3454,11 +3486,6 @@ export async function hashPassword(password) {
         btn.addEventListener('click', function() { annotationNotes.splice(i, 1); updateContextTags(); });
       });
     }
-
-    annotateBtn.addEventListener('click', function() {
-      annotateBtn.classList.toggle('active');
-      if (!annotateBtn.classList.contains('active')) annotationBar.style.display = 'none';
-    });
   }
 
   // Refresh button (mock)
