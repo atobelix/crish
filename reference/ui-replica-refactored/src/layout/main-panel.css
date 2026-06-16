@@ -1,0 +1,444 @@
+.main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-main);
+  overflow: hidden;
+  border-top-left-radius: var(--radius-sm);
+}
+
+/* ── Panel Header ── */
+.panel-header {
+  height: auto;
+  padding: var(--space-1) 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-md);
+  flex-shrink: 0;
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  flex-shrink: 0;
+}
+
+.panel-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.panel-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: var(--ih-26);
+  height: var(--ih-26);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.panel-action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* ── Title Dropdown Menus ── */
+.title-dropdown {
+  position: relative;
+}
+
+.title-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  min-width: 140px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  padding: var(--space-1);
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+}
+
+.title-dropdown-menu.show {
+  display: flex;
+}
+
+.title-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: var(--ip-compact);
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  min-height: var(--ih-26);
+  white-space: nowrap;
+}
+
+.title-dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.menu-has-sub {
+  position: relative;
+}
+
+.title-dropdown-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 2px;
+  min-width: 130px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  padding: var(--space-1);
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+}
+
+.menu-has-sub:hover .title-dropdown-submenu {
+  display: flex;
+}
+
+body.dark-theme .title-dropdown-menu,
+body.dark-theme .title-dropdown-submenu {
+  background-color: #181818;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Panel Sidebar Toggle ── */
+.panel-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--space-1);
+  height: var(--ih-26);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.panel-sidebar-toggle:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.panel-sidebar-toggle .toggle-chevron {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+/* Chevron faces UP by default; rotate 180deg when menu is open */
+.panel-sidebar-toggle-wrap.open .toggle-chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Sidebar Panel Dropdown Menu ── */
+.panel-sidebar-toggle-wrap {
+  position: relative;
+}
+
+.panel-sidebar-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  min-width: 130px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  padding: var(--space-1);
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+}
+
+.panel-sidebar-menu.show {
+  display: flex;
+}
+
+.panel-sidebar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: var(--ip-compact);
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  min-height: var(--ih-26);
+  white-space: nowrap;
+}
+
+.panel-sidebar-menu-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.panel-sidebar-menu-item svg.icon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-secondary);
+}
+
+body.dark-theme .panel-sidebar-menu {
+  background-color: #181818;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.panel-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+}
+
+.breadcrumb-project,
+.breadcrumb-conv {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-1);
+  transition: var(--transition-fast);
+}
+
+.breadcrumb-project:hover,
+.breadcrumb-conv:hover {
+  background-color: var(--bg-hover);
+}
+
+.breadcrumb-sep {
+  color: var(--text-muted);
+  margin: 0 2px;
+  pointer-events: none;
+}
+
+/* ── Command Bar ── */
+.command-bar {
+  padding: var(--space-2) var(--space-6);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.open-app-btn {
+  background: none;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: var(--fw-medium);
+  transition: var(--transition-fast);
+}
+
+.open-app-btn:hover {
+  background-color: var(--bg-active);
+}
+
+/* ── Chat Area ── */
+.chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-6) var(--space-6);
+  scroll-behavior: smooth;
+}
+
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.chat-message {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: #2c2c2c;
+  word-break: break-word;
+}
+
+body.dark-theme .chat-message {
+  color: #e0e0e0;
+}
+
+/* ── Demo Floating Capsule ── */
+.demo-capsule {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+  user-select: none;
+}
+
+.demo-capsule:hover {
+  border-color: var(--color-mint-border);
+  box-shadow: 0 2px 8px rgba(25, 179, 107, 0.1);
+}
+
+.demo-capsule-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.demo-capsule-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-mint);
+  display: inline-block;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.demo-capsule-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 130px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  padding: var(--space-1);
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+  z-index: 600;
+}
+
+.demo-capsule-menu.show {
+  display: flex;
+}
+
+.demo-capsule-item {
+  padding: var(--ip-compact);
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: var(--transition-fast);
+  min-height: var(--ih-26);
+}
+
+.demo-capsule-item:hover {
+  background-color: var(--bg-hover);
+}
+
+body.dark-theme .demo-capsule {
+  background-color: #1f1f1f;
+  border-color: rgba(255,255,255,0.08);
+}
+
+body.dark-theme .demo-capsule-menu {
+  background-color: #181818;
+  border-color: rgba(255,255,255,0.08);
+}
+
+.user-message {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.user-message .message-bubble {
+  background-color: var(--gray-4);
+  padding: var(--space-2) 14px;
+  border-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--space-1);
+  max-width: 85%;
+  color: #1a1a1a;
+}
+
+body.dark-theme .user-message .message-bubble {
+  background-color: #2a2a2a;
+  color: #f0f0f0;
+}
+
+.assistant-message {
+  background: transparent;
+  color: #2c2c2c;
+}
+
+/* ── Empty Chat State ── */
+.empty-chat-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-6);
+  user-select: none;
+}
+
+.empty-state-content {
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 var(--space-6);
+}
+
+.empty-greeting {
+  font-size: var(--fs-h2);
+  font-weight: 400;
+  font-family: 'Outfit', var(--font-sans);
+  color: var(--text-main);
+  margin-bottom: 28px;
+  letter-spacing: -0.3px;
+  line-height: var(--lh-tight, 1.25);
+  max-width: 800px;
+}
+
+body.dark-theme .assistant-message {
+  color: #e0e0e0;
+}

@@ -1,0 +1,65 @@
+/*
+ * ── Feature Accordion ──
+ * Located in sidebar, expands to show feature items.
+ * Uses the shared accordion system.
+ */
+
+.feature-accordion {
+  padding-bottom: 0;
+}
+
+.feature-accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: 0 var(--space-2);
+  background-color: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-normal);
+  color: var(--text-main);
+  transition: var(--transition-fast);
+  min-height: var(--ih-26);
+}
+
+.feature-accordion-trigger .accordion-chevron {
+  margin-left: auto;
+}
+
+.feature-accordion-trigger:hover {
+  background-color: var(--bg-active);
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: var(--ip-standard);
+  padding-left: calc(var(--space-2) + 16px + var(--gap-md));
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  color: var(--sidebar-text);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition-fast);
+  position: relative;
+  min-height: var(--ih-26);
+  font-weight: var(--fw-normal);
+}
+
+.feature-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--sidebar-text);
+}
+
+.feature-item.active {
+  background-color: var(--bg-active);
+  color: var(--sidebar-text-active);
+}

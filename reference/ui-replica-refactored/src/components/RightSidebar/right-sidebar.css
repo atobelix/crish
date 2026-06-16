@@ -1,0 +1,203 @@
+.right-sidebar {
+  width: 360px;
+  min-width: 300px;
+  flex-shrink: 0;
+  background-color: var(--bg-main);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  font-family: var(--font-sans);
+  position: relative;
+  z-index: 1;
+  transition: width 0.25s var(--ease-in-out),
+              opacity 0.25s;
+}
+
+.right-sidebar.resizing {
+  transition: none !important;
+}
+
+.right-sidebar::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: var(--transition-fast);
+}
+
+.right-sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.right-sidebar.collapsed .right-sidebar-content,
+.right-sidebar.collapsed .right-tab-bar {
+  display: none;
+}
+
+body.dark-theme .right-sidebar {
+  background-color: var(--bg-main);
+}
+
+
+
+/* ── Tab Bar ── */
+.right-tab-bar {
+  display: flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  gap: var(--gap-xs);
+  flex-shrink: 0;
+  background-color: var(--bg-main);
+  min-height: 32px;
+  flex-wrap: nowrap;
+}
+
+body.dark-theme .right-tab-bar {
+  background-color: var(--bg-main);
+}
+
+.right-tab-list {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-xs);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.right-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.right-tab-btn {
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  height: 26px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  position: relative;
+  white-space: nowrap;
+}
+
+.right-tab-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.right-tab-btn.active {
+  background-color: var(--bg-active);
+  color: var(--text-main);
+}
+
+body.dark-theme .right-tab-btn:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+body.dark-theme .right-tab-btn.active {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.right-tab-btn .tab-icon-wrap {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.right-tab-btn svg.icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+}
+
+.right-tab-btn .tab-close {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.right-tab-btn:hover .tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.right-tab-btn:hover .tab-icon-wrap .icon {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Tab Panel ── */
+.right-tab-panel {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  min-height: 0;
+}
+
+.right-tab-panel.active {
+  display: flex;
+}
+
+body.dark-theme .right-tab-panel {
+  background-color: var(--bg-main);
+}
+
+/* ── Token Metrics Panel ── */
+.token-metrics-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-main);
+  min-height: 0;
+}
+
+.metric-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  min-height: 0;
+}
+
+/* ── Tab Content ── */
+.right-sidebar-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}

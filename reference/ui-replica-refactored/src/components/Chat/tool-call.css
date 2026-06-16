@@ -1,0 +1,219 @@
+/*
+ * ── Tool Call / Tool Group Rows ──
+ *
+ * These are TEXT-ADAPTIVE rows:
+ * - NO min-height (height follows font-size × line-height)
+ * - Padding is minimal (1px 0) for tight spacing
+ * - Font size uses Scale B (text-adaptive)
+ */
+
+.tool-invocation,
+.tool-summary {
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Tool Call Row (single line, text-adaptive) ── */
+.tool-call-row,
+.tool-summary-row {
+  display: flex;
+  align-items: center;
+  padding: var(--tp-tight);
+  cursor: pointer;
+  user-select: none;
+  gap: var(--gap-md);
+  color: var(--text-tertiary, #8d8c8b);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  transition: opacity var(--transition-fast);
+}
+
+.tool-call-row:hover,
+.tool-summary-row:hover {
+  opacity: 0.7;
+}
+
+/* ── Tool Status Icons ── */
+.tool-status-icon,
+.tool-chevron-icon {
+  width: 12px;
+  height: 12px;
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.tool-terminal-icon {
+  width: 12px;
+  height: 12px;
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.tool-status-icon-success { color: currentColor; }
+.tool-status-icon-fail { color: currentColor; }
+
+/* ── Tool Name & Args ── */
+.tool-name {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.tool-args {
+  flex: 1;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  color: currentColor;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+  padding: 0;
+}
+
+/* ── Tool Chevron (hidden by default) ── */
+.tool-chevron-icon {
+  opacity: 0;
+  transition: opacity var(--transition-fast),
+              transform var(--transition-normal);
+}
+
+.tool-call-row:hover .tool-chevron-icon,
+.tool-summary-row:hover .tool-chevron-icon {
+  opacity: 0.8;
+}
+
+.tool-invocation[data-expanded='true'] .tool-chevron-icon,
+.tool-summary[data-expanded='true'] .tool-chevron-icon {
+  opacity: 0.8;
+  transform: rotate(180deg);
+}
+
+/* ── Edit Stats ── */
+.tool-edit-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+}
+
+.tool-open-files-btn {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: currentColor;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.tool-open-files-btn:hover { opacity: 0.7; }
+
+/* ── Child Rows (inside summary body, smaller) ── */
+.tool-summary-body .tool-call-row {
+  color: var(--text-tertiary, #8d8c8b);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  margin-right: clamp(20px, 4vw, 50px);
+}
+
+.tool-summary-body .tool-name {
+  font-size: var(--fs-sm);
+}
+
+.tool-summary-body .tool-args {
+  font-size: var(--fs-sm);
+}
+
+.tool-summary-body .tool-edit-stats {
+  font-size: var(--fs-micro);
+}
+
+/* ── Output Window (collapsible) ── */
+.tool-result-window,
+.tool-summary-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--transition-normal) var(--ease-out);
+  background: transparent;
+}
+
+.tool-invocation[data-expanded='true'] .tool-result-window {
+  max-height: 400px;
+  overflow: visible;
+  margin: var(--space-1) clamp(20px, 4vw, 50px) var(--space-2) 0;
+}
+
+.tool-summary[data-expanded='true'] .tool-summary-body {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 2px 0 var(--space-2) 0;
+  padding-left: 22px;
+  position: relative;
+}
+
+/* Vertical guide line */
+.tool-summary[data-expanded='true'] .tool-summary-body::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: 1.5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
+}
+
+.tool-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+  padding: 0;
+  background: transparent;
+}
+
+/* ── Tool Output Box ── */
+.output-box,
+.tool-output {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-1);
+  background-color: transparent;
+  color: var(--text-secondary);
+  max-height: 400px;
+  overflow: auto;
+}
+
+.output-window,
+.tool-result-window {
+  padding-left: 20px;
+}
+
+/* Output code overrides */
+.output-box pre,
+.tool-output pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: inherit;
+  white-space: pre-wrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  overflow: visible;
+}
+
+body.dark-theme .tool-call-row,
+body.dark-theme .tool-summary-row {
+  color: var(--text-muted);
+}
+
+body.dark-theme .output-box,
+body.dark-theme .tool-output {
+  border-color: rgba(255, 255, 255, 0.08);
+}

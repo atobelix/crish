@@ -1,0 +1,165 @@
+:root {
+  /* ── Base Gray Scale ── */
+  --gray-0: #ffffff;
+  --gray-1: #fafafa;
+  --gray-2: #f7f7f7;
+  --gray-3: #f5f5f5;
+  --gray-4: #f2f2f2;
+  --gray-5: #f0f0f0;
+  --gray-6: #ededed;
+
+  /* ── Text Colors ── */
+  --text-main: #3a3a38;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  --text-tertiary: #8d8c8b;
+
+  /* ── Surface Colors ── */
+  --bg-dash: #fafafa;
+  --bg-sidebar: #fafafa;
+  --bg-main: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-active: #ededed;
+  --bg-card: #ffffff;
+
+  /* ── Border Colors ── */
+  --border-default: #f2f2f2;
+  --border-light: rgba(0, 0, 0, 0.06);
+  --border-medium: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.12);
+
+  /* ── macOS Window Controls ── */
+  --mac-close: #ff5f56;
+  --mac-minimize: #ffbd2e;
+  --mac-expand: #27c93f;
+
+  /* ── Accent Colors ── */
+  --accent: #19b36b;
+  --accent-light: #f0fdf4;
+  --accent-border: #dcfce7;
+
+  --primary: #e11d48;
+  --primary-light: #ffe4e6;
+  --primary-border: #ffe4e6;
+
+  --success: #22c55e;
+  --success-light: #ecfdf5;
+  --success-border: #bbf7d0;
+
+  --warning: #ea580c;
+  --warning-light: #fff7ed;
+  --warning-border: #ffedd5;
+
+  --danger: #ef4444;
+  --danger-light: #fef2f2;
+  --danger-border: #fecaca;
+
+  /* ── Brand Colors (Saturated Palette) ── */
+  --color-mint: #19b36b;
+  --color-mint-bg: #f0fdf4;
+  --color-mint-border: #dcfce7;
+
+  --color-rose: #f43f5e;
+  --color-rose-bg: #fff1f2;
+  --color-rose-border: #ffe4e6;
+
+  --color-amber: #ea580c;
+  --color-amber-bg: #fff7ed;
+  --color-amber-border: #ffedd5;
+
+  --color-blue: #0084ff;
+  --color-blue-bg: #f0f7ff;
+  --color-blue-border: #e0f2fe;
+
+  --color-purple: #a855f7;
+  --color-purple-bg: #faf5ff;
+  --color-purple-border: #f3e8ff;
+
+  --color-lime: #65a30d;
+  --color-lime-bg: #f7fee7;
+  --color-lime-border: #ecfccb;
+
+  --color-cyan: #00b4d8;
+  --color-cyan-bg: #f0fbff;
+  --color-cyan-border: #caf0fb;
+
+  --color-orange: #f97316;
+  --color-orange-bg: #fff7f0;
+  --color-orange-border: #fed7aa;
+
+  --color-hot-pink: #ec4899;
+  --color-hot-pink-bg: #fdf2f8;
+  --color-hot-pink-border: #fbcfe8;
+
+  --color-teal: #0d9488;
+  --color-teal-bg: #f0fdfa;
+  --color-teal-border: #99f6e4;
+
+  --color-cobalt: #2563eb;
+  --color-cobalt-bg: #eff6ff;
+  --color-cobalt-border: #bfdbfe;
+
+  --color-fuchsia: #c026d3;
+  --color-fuchsia-bg: #fdf4ff;
+  --color-fuchsia-border: #f5d0fe;
+
+  --color-sky: #0ea5e9;
+  --color-sky-bg: #f0faff;
+  --color-sky-border: #bae6fd;
+
+  --color-gold: #d97706;
+  --color-gold-bg: #fffbeb;
+  --color-gold-border: #fde68a;
+
+  --color-jade: #19b36b;
+  --color-jade-bg: #ecfdf5;
+  --color-jade-border: #a7f3d0;
+
+  --color-coral: #fb7185;
+  --color-coral-bg: #fff1f2;
+  --color-coral-border: #fecdd3;
+
+  --color-forest: #16a34a;
+  --color-forest-bg: #f0fdf4;
+  --color-forest-border: #bbf7d0;
+
+  --color-lavender: #7c3aed;
+  --color-lavender-bg: #f5f3ff;
+  --color-lavender-border: #ddd6fe;
+
+  --color-indigo: #4338ca;
+  --color-indigo-bg: #eef2ff;
+  --color-indigo-border: #c7d2fe;
+
+  --color-aqua: #06b6d4;
+  --color-aqua-bg: #ecfeff;
+  --color-aqua-border: #a5f3fc;
+
+  --color-grape: #9333ea;
+  --color-grape-bg: #faf5ff;
+  --color-grape-border: #e9d5ff;
+
+  --color-spring: #22c55e;
+  --color-spring-bg: #f0fdf4;
+  --color-spring-border: #bbf7d0;
+
+  --color-rouge: #be185d;
+  --color-rouge-bg: #fdf2f8;
+  --color-rouge-border: #fbcfe8;
+
+  --color-mango: #fb923c;
+  --color-mango-bg: #fff7ed;
+  --color-mango-border: #fed7aa;
+
+  --color-cerulean: #0284c7;
+  --color-cerulean-bg: #f0f9ff;
+  --color-cerulean-border: #bae6fd;
+
+  --color-yellow: #eab308;
+  --color-yellow-bg: #fefce8;
+  --color-yellow-border: #fef08a;
+
+  --color-wine: #9f1239;
+  --color-wine-bg: #fff1f2;
+  --color-wine-border: #fecdd3;
+}

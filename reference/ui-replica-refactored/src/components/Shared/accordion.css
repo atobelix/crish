@@ -1,0 +1,188 @@
+/*
+ * ── Unified Accordion System ──
+ *
+ * All expandable/collapsible panels share this base structure:
+ *   .accordion          �?container
+ *     .accordion-header  �?clickable trigger
+ *     .accordion-body    �?collapsible content (max-height transition)
+ *
+ * State attribute: [data-expanded="true"]
+ *
+ * Variants:
+ *   .accordion-chevron  �?has a rotate chevron icon
+ *   .accordion-section  �?sidebar section variant
+ *   .accordion-folder   �?project folder variant
+ */
+
+.accordion {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.accordion-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-fast);
+  border-radius: var(--radius-sm);
+  padding: var(--ip-standard);
+}
+
+.accordion-header:hover {
+  background-color: transparent;
+}
+
+/* ── Chevron (shared across all accordions) ── */
+.accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--collapse-duration) var(--collapse-ease);
+}
+
+.accordion-chevron svg {
+  width: 11px;
+  height: 11px;
+  color: var(--text-secondary);
+}
+
+/* Chevron hidden by default, shows on header hover or when expanded */
+.accordion-chevron-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.accordion-header:hover .accordion-chevron-hidden {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Rotate chevron when expanded (points down = 0, collapsed = -90deg) */
+.accordion[data-expanded='false'] > .accordion-header .accordion-chevron {
+  transform: rotate(-90deg);
+}
+
+.accordion[data-expanded='true'] > .accordion-header .accordion-chevron {
+  transform: rotate(0deg);
+}
+
+/* ── Body (collapsible) ── */
+.accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--collapse-duration) var(--collapse-ease);
+}
+
+.accordion[data-expanded='true'] > .accordion-body {
+  max-height: var(--accordion-max-height, 400px);
+  overflow-y: auto;
+}
+
+/* ── Variant: Sidebar Section (fixed min-height) ── */
+.accordion-section > .accordion-header {
+  padding: var(--space-1) var(--space-2);
+  min-height: var(--ih-28);
+}
+
+.accordion-section > .accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+}
+
+/* ── Variant: Folder (project items, fixed min-height) ── */
+.accordion-folder > .accordion-header {
+  min-height: var(--ih-28);
+}
+
+/* ── Variant: Feature accordion (fixed min-height) ── */
+.accordion-feature > .accordion-header {
+  min-height: var(--ih-28);
+}
+
+/* ── Variant: Change Summary (text-adaptive header) ── */
+.accordion-change-summary > .accordion-header {
+  min-height: auto;
+  padding: var(--space-1) var(--space-2);
+}
+
+/* ── Variant: Plan Group (text-adaptive header) ── */
+.accordion-plan > .accordion-header {
+  min-height: auto;
+  padding: var(--tp-tight);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+}
+.accordion-folder > .accordion-body {
+  padding-left: 0;
+}
+
+/* ── Variant: Tool Call ── */
+.accordion-tool > .accordion-body {
+  background: transparent;
+}
+
+.accordion-tool[data-expanded='true'] > .accordion-body {
+  margin: var(--space-1) 0 var(--space-2) 0;
+}
+
+/* ── Variant: Tool Group ── */
+.accordion-tool-group[data-expanded='true'] > .accordion-body {
+  padding-left: 22px;
+  position: relative;
+  gap: var(--gap-xs);
+}
+
+.accordion-tool-group[data-expanded='true'] > .accordion-body::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: 1.5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
+}
+
+/* ── Variant: Change Summary ── */
+.accordion-change-summary {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-main);
+  overflow: hidden;
+}
+
+.accordion-change-summary > .accordion-body {
+  border-top: 1px solid transparent;
+}
+
+.accordion-change-summary[data-expanded='true'] > .accordion-body {
+  border-top-color: var(--border-light);
+}
+
+/* ── Variant: Plan Group ── */
+.accordion-plan[data-expanded='true'] > .accordion-body {
+  margin-top: var(--space-1);
+  padding-left: 20px;
+  gap: var(--gap-xxs, 3px);
+}
+
+/* ── Variant: MCP Config ── */
+.accordion-mcp-config[data-expanded='true'] > .accordion-body {
+  margin-top: var(--space-2);
+  border-top: 1px dashed var(--border-light);
+  padding-top: var(--space-2);
+}
+
+/* ── Variant: Feature Accordion ── */
+.accordion-feature > .accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+  margin-top: var(--gap-xs);
+}
