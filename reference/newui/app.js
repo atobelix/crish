@@ -64,8 +64,66 @@ document.addEventListener('DOMContentLoaded', () => {
     col.filter(card => card !== document.getElementById('card-terminal'))
   );
 
+  function getActiveCards(ws) {
+    if (!ws.activeCardsOrder) {
+      ws.activeCardsOrder = [];
+      const defaultOrder = ['chat', 'plan', 'preview', 'diff', 'tasks', 'terminal'];
+      defaultOrder.forEach(key => {
+        const card = ws.canvas.querySelector(`[id^="card-${key}"]`);
+        if (card) {
+          ws.activeCardsOrder.push(card.id);
+        }
+      });
+    }
+    return ws.activeCardsOrder.map(id => ws.canvas.querySelector(`#${id}`)).filter(card => card && card.style.display !== 'none');
+  }
+
+  function rebuildWorkspaceColumns(ws) {
+    const active = getActiveCards(ws);
+    if (active.length === 0) return;
+
+    const chatCard = active.find(c => c.id.indexOf('card-chat') !== -1);
+    const others = active.filter(c => c.id.indexOf('card-chat') === -1);
+
+    const newColumns = [];
+    const newColWidthRatios = [];
+
+    // Column 0
+    const col0 = [];
+    if (chatCard) {
+      col0.push(chatCard);
+    }
+
+    const totalCount = active.length;
+    if (totalCount % 2 !== 0 && others.length > 0) {
+      const lastCard = others.pop();
+      col0.push(lastCard);
+    }
+
+    newColumns.push(col0);
+    newColWidthRatios.push(0.38);
+
+    for (let i = 0; i < others.length; i += 2) {
+      const col = [];
+      col.push(others[i]);
+      if (i + 1 < others.length) {
+        col.push(others[i + 1]);
+      }
+      newColumns.push(col);
+      newColWidthRatios.push(0.3);
+    }
+
+    const sum = newColWidthRatios.reduce((a, b) => a + b, 0);
+    ws.colWidthRatios = newColWidthRatios.map(r => r / sum);
+    ws.columns = newColumns;
+  }
+
   // Re-layout a single workspace canvas
   function layoutWorkspace(ws, overrideWidth, overrideHeight) {
+    if (!isDragging) {
+      rebuildWorkspaceColumns(ws);
+    }
+
     const W = overrideWidth !== undefined ? overrideWidth : ws.canvas.clientWidth;
     const H = overrideHeight !== undefined ? overrideHeight : ws.canvas.clientHeight;
     
@@ -140,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Apply Flat Layout styles to main Chat card when docked and has 1 or fewer tabs
           if (card.id.indexOf('card-chat') !== -1) {
             const tabsCount = card.querySelectorAll('.card-tab').length;
-            if (tabsCount <= 1) {
+            if (tabsCount <= 1 && cards.length === 1) {
               card.classList.add('flat-layout');
             } else {
               card.classList.remove('flat-layout');
@@ -1215,7 +1273,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     else if (mouseX <= EDGE_ZONE_WIDTH) {
       edgeDockIndicator.style.display = 'block';
-      edgeDockIndicator.style.left = '8px';
+      const chatCard = currentDragWs.canvas.querySelector('[id^="card-chat"]');
+      const leftOffset = chatCard ? (chatCard.clientWidth + GAP) : 8;
+      edgeDockIndicator.style.left = leftOffset + 'px';
       edgeDockIndicator.style.top = '8px';
       edgeDockIndicator.style.height = (H - 16) + 'px';
       edgeDockIndicator.style.width = '100px';
@@ -1251,6 +1311,10 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       }
       currentLeft += colWidth + GAP;
+    }
+
+    if (targetColIdx === 0) {
+      targetColIdx = 1;
     }
 
     const targetColCards = currentDragWs.columns[targetColIdx];
@@ -1325,8 +1389,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Initialize tabs for all static cards including the primary Chat card
-  document.querySelectorAll('.workspace-card').forEach(initCardTabs);
+  // Initialize tabs for all static cards except the primary Chat card
+  document.querySelectorAll('.workspace-card:not(#card-chat)').forEach(initCardTabs);
 
   // Mouse Down Event for dragging
   document.addEventListener('mousedown', (e) => {
@@ -1381,6 +1445,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const card = handle.closest('.workspace-card');
     if (!card) return;
+    if (card.id.indexOf('card-chat') !== -1) return;
 
     const wsSection = card.closest('.workspace-section');
     if (!wsSection) return;
@@ -2088,11 +2153,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.draggable-session').forEach(el => el.classList.remove('active'));
       item.classList.add('active');
 
-      const titleText = item.querySelector('.session-text').innerText;
-      const mainTitle = document.getElementById('card-chat').querySelector('.card-title');
-      if (mainTitle) {
-        mainTitle.innerText = `navigation-site / ${titleText}`;
-      }
+      updateChatBreadcrumbs(item);
       return;
     }
 
@@ -2228,6 +2289,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         draggedCard.classList.remove('dragging');
         cleanupEmptyColumns(currentDragWs);
+
+        // Update the activeCardsOrder of currentDragWs
+        const newOrder = [];
+        currentDragWs.columns.forEach(col => {
+          col.forEach(card => {
+            if (card && !card.classList.contains('card-placeholder')) {
+              newOrder.push(card.id);
+            }
+          });
+        });
+        currentDragWs.activeCardsOrder = newOrder;
+
         layoutWorkspace(currentDragWs);
 
         draggedCard = null;
@@ -2251,9 +2324,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
         else if (mouseX <= EDGE_ZONE_WIDTH) {
           currentDragWs.columns[placeholderCol] = currentDragWs.columns[placeholderCol].filter(item => item !== placeholder);
-          currentDragWs.columns.splice(0, 0, [draggedCard]);
-          currentDragWs.colWidthRatios.splice(0, 0, 0.25);
-          targetCol = 0;
+          currentDragWs.columns.splice(1, 0, [draggedCard]);
+          currentDragWs.colWidthRatios.splice(1, 0, 0.25);
+          targetCol = 1;
           targetRow = 0;
         } else {
           currentDragWs.columns[placeholderCol][placeholderRow] = draggedCard;
@@ -2266,6 +2339,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         draggedCard.classList.remove('dragging');
         cleanupEmptyColumns(currentDragWs);
+
+        // Update the activeCardsOrder of currentDragWs based on the actual DOM columns
+        const newOrder = [];
+        currentDragWs.columns.forEach(col => {
+          col.forEach(card => {
+            if (card && !card.classList.contains('card-placeholder')) {
+              newOrder.push(card.id);
+            }
+          });
+        });
+        currentDragWs.activeCardsOrder = newOrder;
+
         layoutWorkspace(currentDragWs);
 
         draggedCard = null;
@@ -2315,8 +2400,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rightClickedSessionElement.classList.add('active');
       
       // Update primary chat card title
-      const mainTitle = document.getElementById('card-chat').querySelector('.card-title');
-      mainTitle.innerText = `navigation-site / ${title}`;
+      updateChatBreadcrumbs(rightClickedSessionElement);
     } 
     else if (action === 'open-new-vertical') {
       // Spawn new side-by-side workspace section
@@ -2408,8 +2492,126 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial layout on load (apply responsive layout engine)
   applyResponsiveLayout(false);
 
+  function updateChatBreadcrumbs(sessionElement) {
+    if (!sessionElement) return;
+    const folderGroup = sessionElement.closest('.folder-group');
+    const folderName = folderGroup ? folderGroup.querySelector('.folder-name').innerText.trim() : '常规会话';
+    const sessionName = sessionElement.querySelector('.session-text').innerText.trim();
+    
+    // Update breadcrumbs in Workspace 0 Chat card
+    const chatCard = document.getElementById('card-chat');
+    if (chatCard) {
+      const folderTxt = chatCard.querySelector('.folder-name-txt');
+      const sessionTxt = chatCard.querySelector('.session-name-txt');
+      if (folderTxt) folderTxt.innerText = folderName;
+      if (sessionTxt) sessionTxt.innerText = sessionName;
+    }
+  }
+
+  const folderDropdown = document.getElementById('folder-dropdown');
+  const folderDropdownList = document.getElementById('folder-dropdown-list');
+  
+  function populateFolderDropdown() {
+    if (!folderDropdownList) return;
+    folderDropdownList.innerHTML = '';
+    
+    const folders = document.querySelectorAll('.folder-group');
+    folders.forEach(folder => {
+      const folderName = folder.querySelector('.folder-name').innerText.trim();
+      const isActive = folder.querySelector('.draggable-session.active') !== null;
+      
+      const btn = document.createElement('button');
+      btn.className = 'dropdown-item-btn' + (isActive ? ' active' : '');
+      btn.innerHTML = `<i data-lucide="folder"></i><span>${folderName}</span>`;
+      
+      btn.addEventListener('click', (e) => {
+        const firstSession = folder.querySelector('.draggable-session');
+        if (firstSession) {
+          document.querySelectorAll('.draggable-session').forEach(el => el.classList.remove('active'));
+          firstSession.classList.add('active');
+          updateChatBreadcrumbs(firstSession);
+        }
+        folderDropdown.classList.remove('open');
+        e.stopPropagation();
+      });
+      
+      folderDropdownList.appendChild(btn);
+    });
+    
+    lucide.createIcons({
+      attrs: { 'stroke-width': 2 },
+      nameAttr: 'data-lucide',
+      node: folderDropdownList
+    });
+  }
+
+  const sessionDropdown = document.getElementById('session-dropdown');
+  const sessionDropdownList = document.getElementById('session-dropdown-list');
+  
+  function populateSessionDropdown() {
+    if (!sessionDropdownList) return;
+    sessionDropdownList.innerHTML = '';
+    
+    const activeSession = document.querySelector('.draggable-session.active');
+    if (!activeSession) return;
+    
+    const folderGroup = activeSession.closest('.folder-group');
+    if (!folderGroup) return;
+    
+    const sessions = folderGroup.querySelectorAll('.draggable-session');
+    sessions.forEach(session => {
+      const sessionName = session.querySelector('.session-text').innerText.trim();
+      const isActive = session === activeSession;
+      
+      const btn = document.createElement('button');
+      btn.className = 'dropdown-item-btn' + (isActive ? ' active' : '');
+      btn.innerHTML = `<i data-lucide="message-square"></i><span>${sessionName}</span>`;
+      
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.draggable-session').forEach(el => el.classList.remove('active'));
+        session.classList.add('active');
+        updateChatBreadcrumbs(session);
+        sessionDropdown.classList.remove('open');
+        e.stopPropagation();
+      });
+      
+      sessionDropdownList.appendChild(btn);
+    });
+    
+    lucide.createIcons({
+      attrs: { 'stroke-width': 2 },
+      nameAttr: 'data-lucide',
+      node: sessionDropdownList
+    });
+  }
+
   // Focus click listener for workspaces and cards
   document.addEventListener('click', (e) => {
+    // 0. Breadcrumb dropdown toggling
+    const folderTrigger = e.target.closest('.folder-trigger');
+    const sessionTrigger = e.target.closest('.session-trigger');
+    
+    if (folderDropdown) folderDropdown.classList.remove('open');
+    if (sessionDropdown) sessionDropdown.classList.remove('open');
+    
+    if (folderTrigger) {
+      populateFolderDropdown();
+      const rect = folderTrigger.getBoundingClientRect();
+      folderDropdown.style.left = rect.left + 'px';
+      folderDropdown.style.top = (rect.bottom + 4) + 'px';
+      folderDropdown.classList.add('open');
+      e.stopPropagation();
+    }
+    
+    if (sessionTrigger) {
+      populateSessionDropdown();
+      const rect = sessionTrigger.getBoundingClientRect();
+      sessionDropdown.style.left = rect.left + 'px';
+      sessionDropdown.style.top = (rect.bottom + 4) + 'px';
+      sessionDropdown.classList.add('open');
+      e.stopPropagation();
+    }
+
     // 1. Workspace index switching
     const wsSection = e.target.closest('.workspace-section');
     if (wsSection) {
@@ -2470,7 +2672,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const forceCol2Hide = isResizing && (w < 800);
     const forceCol1Hide = isResizing && (w < 650);
     const forcePlanHide = isResizing && (w < 650 && h < 550);
-    const forceSingleCardMode = w < 650;
+    const forceSingleCardMode = !isResizing && (w < 650);
 
     // 1. Sidebar responsiveness
     const effSidebarCollapse = forceSidebarCollapse || userPanelStates.sidebarCollapsed;
@@ -2502,16 +2704,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Card responsiveness
     workspaceData.forEach(ws => {
+      const keys = ['preview', 'diff', 'terminal', 'tasks', 'plan'];
+      
       if (forceSingleCardMode) {
-        // Enforce single-card mode: merge everything into card-chat
-        restoreAllTabsFromChat(ws);
-        mergeAllTabsIntoChat(ws);
+        // Hide all other cards
+        keys.forEach(key => {
+          let card = ws.canvas.querySelector(`[id^="card-${key}"]`);
+          if (card) {
+            card.style.display = 'none';
+          }
+        });
       } else {
-        // Restore all tabs back to their original cards
-        restoreAllTabsFromChat(ws);
-
-        // Apply normal responsive column visibilities
-        const keys = ['preview', 'diff', 'terminal', 'tasks', 'plan'];
+        // Normal mode: apply userPanelStates and forceHide thresholds
         keys.forEach(key => {
           let isVisible = userPanelStates[key];
           if (key === 'tasks' || key === 'terminal') {
@@ -2531,28 +2735,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (card) {
             if (isVisible) {
               card.style.display = 'flex';
-              
-              let defaultCol = 1;
-              if (key === 'plan') defaultCol = 0;
-              if (key === 'tasks' || key === 'terminal') defaultCol = 2;
-
-              while (ws.columns.length <= defaultCol) {
-                ws.columns.push([]);
-                ws.colWidthRatios.push(0.3);
-              }
-
-              let exists = false;
-              ws.columns.forEach(col => {
-                if (col.includes(card)) exists = true;
-              });
-
-              if (!exists) {
-                ws.columns[defaultCol].push(card);
-                ws.cardWeights[card.id] = 1.0;
-              }
             } else {
               card.style.display = 'none';
-              ws.columns = ws.columns.map(col => col.filter(item => item !== card));
             }
           }
         });
