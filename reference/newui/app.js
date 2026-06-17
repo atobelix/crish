@@ -2862,10 +2862,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Throttled & Debounced resize listener
+  let isWindowResizing = false;
   let resizeThrottleTimeout = null;
   let resizeCommitTimeout = null;
 
   function handleWindowResize() {
+    isWindowResizing = true;
+
     if (resizeCommitTimeout) {
       clearTimeout(resizeCommitTimeout);
     }
@@ -2877,14 +2880,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 80);
     }
 
-    // Commit layout states 400ms after user stops resizing (松手)
+    // Fallback commit after 1500ms of no resize events (松手 fallback)
     resizeCommitTimeout = setTimeout(() => {
-      commitResizeStates();
-      applyResponsiveLayout(false);
-    }, 400);
+      if (isWindowResizing) {
+        isWindowResizing = false;
+        commitResizeStates();
+        applyResponsiveLayout(false);
+      }
+    }, 1500);
   }
 
   window.addEventListener('resize', handleWindowResize);
+
+  window.addEventListener('mouseup', () => {
+    if (isWindowResizing) {
+      isWindowResizing = false;
+      if (resizeCommitTimeout) {
+        clearTimeout(resizeCommitTimeout);
+        resizeCommitTimeout = null;
+      }
+      commitResizeStates();
+      applyResponsiveLayout(false);
+    }
+  });
 
   function applyResponsiveLayout(isResizing = false) {
     const w = window.innerWidth;
@@ -3010,6 +3028,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
+
+  // Size Selector Handling
+  const sizeButtons = document.querySelectorAll('.size-btn');
+  sizeButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const size = btn.getAttribute('data-size');
+      document.documentElement.setAttribute('data-ui-size', size);
+      
+      // Update active class
+      sizeButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      e.stopPropagation();
+    });
+  });
 
   // Scroll Chat body to bottom on load
   const chatBody = document.querySelector('.chat-body');
