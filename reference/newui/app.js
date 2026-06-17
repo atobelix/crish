@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  function toggleCardInWorkspace(ws, key, isVisible) {
+  function toggleCardInWorkspace(ws, key, isVisible, forceStandalone = false) {
     // Look up card inside this workspace canvas
     let card = ws.canvas.querySelector(`[id^="card-${key}"]`);
     
@@ -462,30 +462,66 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!card) return;
 
     if (isVisible) {
-      card.style.display = 'flex';
+      const tabModeChk = document.getElementById('toggle-tab-mode');
+      const preferMerge = !forceStandalone && tabModeChk && tabModeChk.checked;
       
-      // Determine default column index (0 = Chat/Plan, 1 = Preview/Diff, 2 = Tasks/Terminal)
-      let defaultCol = 1;
-      if (key === 'plan') defaultCol = 0;
-      if (key === 'tasks' || key === 'terminal') defaultCol = 2;
-
-      // Expand columns list if defaultCol is out of bounds
-      while (ws.columns.length <= defaultCol) {
-        ws.columns.push([]);
-        ws.colWidthRatios.push(0.3);
+      let targetCard = null;
+      if (preferMerge) {
+        // Find the first active non-chat card in this workspace section.
+        const activeCards = Array.from(ws.canvas.querySelectorAll('.workspace-card')).filter(c => {
+          if (c.id.includes('card-chat')) return false;
+          if (c.style.display === 'none') return false;
+          if (c === card) return false;
+          return true;
+        });
+        if (activeCards.length > 0) {
+          targetCard = activeCards[0];
+        }
       }
 
-      // Check if it already exists to avoid duplicates
-      let exists = false;
-      ws.columns.forEach(col => {
-        if (col.includes(card)) exists = true;
-      });
+      if (targetCard) {
+        const existingTab = targetCard.querySelector(`.card-tab[data-card-id="${card.id}"]`);
+        if (!existingTab) {
+          mergeTabIntoCard(card, targetCard, card.id);
+        } else {
+          switchActiveTab(targetCard, card.id);
+        }
+        card.style.display = 'none';
+        ws.columns = ws.columns.map(col => col.filter(item => item !== card));
+      } else {
+        card.style.display = 'flex';
+        
+        // Determine default column index (0 = Chat/Plan, 1 = Preview/Diff, 2 = Tasks/Terminal)
+        let defaultCol = 1;
+        if (key === 'plan') defaultCol = 0;
+        if (key === 'tasks' || key === 'terminal') defaultCol = 2;
 
-      if (!exists) {
-        ws.columns[defaultCol].push(card);
-        ws.cardWeights[card.id] = 1.0;
+        // Expand columns list if defaultCol is out of bounds
+        while (ws.columns.length <= defaultCol) {
+          ws.columns.push([]);
+          ws.colWidthRatios.push(0.3);
+        }
+
+        // Check if it already exists to avoid duplicates
+        let exists = false;
+        ws.columns.forEach(col => {
+          if (col.includes(card)) exists = true;
+        });
+
+        if (!exists) {
+          ws.columns[defaultCol].push(card);
+          ws.cardWeights[card.id] = 1.0;
+        }
       }
     } else {
+      // If closing the card, check if it's currently a tab in another card
+      const tabEl = ws.canvas.querySelector(`.card-tab[data-card-id="${card.id}"]`);
+      if (tabEl) {
+        const parentCard = tabEl.closest('.workspace-card');
+        if (parentCard && parentCard !== card) {
+          closeTab(parentCard, card.id);
+        }
+      }
       card.style.display = 'none';
       ws.columns = ws.columns.map(col => col.filter(item => item !== card));
     }
@@ -2296,7 +2332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         moveBodyBackToOriginal(cardId);
         
         // Toggle/make the target card visible as a standalone card in this workspace
-        toggleCardInWorkspace(ws, key, true);
+        toggleCardInWorkspace(ws, key, true, true);
         
         // Update the source card tabs/visibility
         const remainingTabs = tabSourceCard.querySelectorAll('.card-tab');
@@ -2972,12 +3008,21 @@ document.addEventListener('DOMContentLoaded', () => {
             card = ws.canvas.querySelector(`[id^="card-${key}"]`);
           }
 
-          if (card) {
-            if (isVisible) {
-              card.style.display = 'flex';
-            } else {
-              card.style.display = 'none';
+          if (isResizing) {
+            if (card) {
+              if (isVisible) {
+                const isTabOfAnotherCard = ws.canvas.querySelector(`.workspace-card:not(#${card.id}) .card-tab[data-card-id="${card.id}"]`) !== null;
+                if (isTabOfAnotherCard) {
+                  card.style.display = 'none';
+                } else {
+                  card.style.display = 'flex';
+                }
+              } else {
+                card.style.display = 'none';
+              }
             }
+          } else {
+            toggleCardInWorkspace(ws, key, isVisible);
           }
         });
       }
