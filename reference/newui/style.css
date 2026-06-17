@@ -839,6 +839,39 @@ body {
   border: 1px solid var(--border-color);
 }
 
+.session-item.archived {
+  display: none !important;
+}
+
+.session-item.branch-session {
+  padding-left: 20px !important;
+  position: relative;
+}
+
+.session-item.branch-session::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 50%;
+  width: 6px;
+  border-left: 1px dashed var(--border-color);
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.session-item.branch-session .branch-icon-wrap {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.session-item.branch-session .branch-connector-icon {
+  width: 10px !important;
+  height: 10px !important;
+}
+
 /* Sidebar Horizontal Resizer Handle */
 .sidebar-resizer {
   position: absolute;
