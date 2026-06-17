@@ -52,6 +52,10 @@ reference/ui-replica/package-lock.json
 reference/ui-replica-refactored/node_modules/
 reference/ui-replica-refactored/dist/
 
+# newui (keep for state-driven refactoring)
+!reference/newui/
+!reference/newui/**
+
 # Agent runtime data
 .agent-runtime/
 .codex-tool-scratch/
