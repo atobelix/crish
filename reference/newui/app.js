@@ -1364,7 +1364,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bind tab click events globally
   document.addEventListener('click', (e) => {
-    const tabClose = e.target.closest('.tab-close-btn');
+    let tabClose = e.target.closest('.tab-close-btn');
+    // Also check bounding box for click event if pointer-events was none
+    if (!tabClose) {
+      const tab = e.target.closest('.card-tab');
+      if (tab) {
+        const btn = tab.querySelector('.tab-close-btn');
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          if (e.clientX >= rect.left && e.clientX <= rect.right &&
+              e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            tabClose = btn;
+          }
+        }
+      }
+    }
+
     if (tabClose) {
       const tab = tabClose.closest('.card-tab');
       if (tab) {
@@ -1427,7 +1442,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.button !== 0) return;
 
     const tab = e.target.closest('.card-tab');
-    const isTabClose = e.target.closest('.tab-close-btn');
+    let isTabClose = e.target.closest('.tab-close-btn');
+
+    // Bypass pointer-events: none race condition in mousedown
+    if (tab && !isTabClose) {
+      const btn = tab.querySelector('.tab-close-btn');
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          isTabClose = btn;
+        }
+      }
+    }
 
     if (tab && !isTabClose) {
       pendingTab = tab;
@@ -1973,12 +2000,14 @@ document.addEventListener('DOMContentLoaded', () => {
         pendingTab = null;
         lastHoveredTabBar = tabSourceTabBar;
 
-        // Cache card rects to prevent read-write layout thrashing in mousemove loop
-        cachedCardRects = cachedWorkspaceCards.map(card => ({
-          el: card,
-          rect: card.getBoundingClientRect(),
-          tabBar: card.querySelector('.tabs-bar')
-        }));
+        // Cache card rects to prevent read-write layout thrashing in mousemove loop (filtered to same workspace)
+        cachedCardRects = cachedWorkspaceCards
+          .filter(card => card.closest('.workspace-section') === tabSourceCard.closest('.workspace-section'))
+          .map(card => ({
+            el: card,
+            rect: card.getBoundingClientRect(),
+            tabBar: card.querySelector('.tabs-bar')
+          }));
 
         updateTabRectsCache(tabSourceTabBar);
       }
@@ -2077,6 +2106,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let hoveredCard   = null;
       for (const card of cachedWorkspaceCards) {
         if (card === draggedCard || card.style.display === 'none') continue;
+        if (card.closest('.workspace-section') !== currentDragWs.dom) continue; // Restrict to same workspace
         const r = card.getBoundingClientRect();
         if (e.clientX >= r.left && e.clientX <= r.right &&
             e.clientY >= r.top  && e.clientY <= r.bottom) {
@@ -2247,6 +2277,36 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           switchActiveTab(tabSourceCard, cardId);
         }
+      } else {
+        // Tab Detaching: elevate the tab into a standalone card!
+        const cardId = draggedTabEl.getAttribute('data-card-id');
+        let key = cardId.replace('card-', '');
+        if (key.indexOf('-') !== -1) {
+          key = key.split('-')[0];
+        }
+        
+        const wsSection = tabSourceCard.closest('.workspace-section');
+        const wsIndex = parseInt(wsSection.id.split('-').pop()) || 0;
+        const ws = workspaceData[wsIndex];
+        
+        // Remove the tab from the source card
+        draggedTabEl.remove();
+        
+        // Move body/subheader back to the target card
+        moveBodyBackToOriginal(cardId);
+        
+        // Toggle/make the target card visible as a standalone card in this workspace
+        toggleCardInWorkspace(ws, key, true);
+        
+        // Update the source card tabs/visibility
+        const remainingTabs = tabSourceCard.querySelectorAll('.card-tab');
+        if (remainingTabs.length > 0) {
+          switchActiveTab(tabSourceCard, remainingTabs[0].getAttribute('data-card-id'));
+        } else {
+          tabSourceCard.style.display = 'none';
+          ws.columns = ws.columns.map(col => col.filter(item => item !== tabSourceCard));
+          layoutWorkspace(ws);
+        }
       }
       
       if (tabGhostEl) {
@@ -2365,6 +2425,84 @@ document.addEventListener('DOMContentLoaded', () => {
   let rightClickedSessionId = null;
   let rightClickedSessionElement = null;
 
+  function updateContextMenuItems(item) {
+    const pinBtn = sessionContextMenu.querySelector('[data-action="pin-session"]');
+    const unpinBtn = sessionContextMenu.querySelector('[data-action="unpin-session"]');
+    if (pinBtn && unpinBtn) {
+      if (pinnedSessionList.contains(item)) {
+        pinBtn.style.display = 'none';
+        unpinBtn.style.display = 'flex';
+      } else {
+        pinBtn.style.display = 'flex';
+        unpinBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function showToast(message, undoCallback) {
+    const existing = document.getElementById('conex-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'conex-toast';
+    Object.assign(toast.style, {
+      position: 'fixed',
+      bottom: '24px',
+      left: '50%',
+      transform: 'translateX(-50%) translateY(100px)',
+      backgroundColor: '#1f2937',
+      color: '#ffffff',
+      padding: '10px 16px',
+      borderRadius: '8px',
+      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      zIndex: '100000',
+      fontFamily: 'var(--font-family, sans-serif)',
+      fontSize: '13px',
+      transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    });
+
+    const text = document.createElement('span');
+    text.innerText = message;
+    toast.appendChild(text);
+
+    if (undoCallback) {
+      const undoBtn = document.createElement('button');
+      undoBtn.innerText = '撤销';
+      Object.assign(undoBtn.style, {
+        background: 'none',
+        border: 'none',
+        color: '#a78bfa',
+        cursor: 'pointer',
+        fontWeight: '600',
+        padding: '2px 6px',
+        fontSize: '13px'
+      });
+      undoBtn.addEventListener('click', () => {
+        undoCallback();
+        toast.style.transform = 'translateX(-50%) translateY(100px)';
+        setTimeout(() => toast.remove(), 300);
+      });
+      toast.appendChild(undoBtn);
+    }
+
+    document.body.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+      toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.transform = 'translateX(-50%) translateY(100px)';
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, 4000);
+  }
+
+  // Context menu trigger via right click
   document.addEventListener('contextmenu', (e) => {
     const item = e.target.closest('.draggable-session');
     if (!item) {
@@ -2376,12 +2514,35 @@ document.addEventListener('DOMContentLoaded', () => {
     rightClickedSessionElement = item;
     rightClickedSessionId = item.getAttribute('data-session-id');
 
+    updateContextMenuItems(item);
+
     sessionContextMenu.style.left = e.clientX + 'px';
     sessionContextMenu.style.top = e.clientY + 'px';
     sessionContextMenu.classList.add('open');
   });
 
+  // Context menu trigger via actions button (More button)
   document.addEventListener('click', (e) => {
+    const actionsBtn = e.target.closest('.session-actions-btn');
+    if (actionsBtn) {
+      const item = actionsBtn.closest('.draggable-session');
+      if (item) {
+        rightClickedSessionElement = item;
+        rightClickedSessionId = item.getAttribute('data-session-id');
+
+        const rect = actionsBtn.getBoundingClientRect();
+        sessionContextMenu.style.left = (rect.left + rect.width - 180) + 'px';
+        sessionContextMenu.style.top = (rect.bottom + 4) + 'px';
+        
+        updateContextMenuItems(item);
+        
+        sessionContextMenu.classList.add('open');
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      return;
+    }
+
     if (!sessionContextMenu.contains(e.target)) {
       sessionContextMenu.classList.remove('open');
     }
@@ -2395,26 +2556,87 @@ document.addEventListener('DOMContentLoaded', () => {
     const title = rightClickedSessionElement.querySelector('.session-text').innerText;
 
     if (action === 'open-current') {
-      // Just select and highlight
       document.querySelectorAll('.draggable-session').forEach(el => el.classList.remove('active'));
       rightClickedSessionElement.classList.add('active');
-      
-      // Update primary chat card title
       updateChatBreadcrumbs(rightClickedSessionElement);
     } 
     else if (action === 'open-new-vertical') {
-      // Spawn new side-by-side workspace section
       spawnWorkspace(rightClickedSessionId, title);
     } 
+    else if (action === 'open-new-window') {
+      const url = window.location.href.split('?')[0] + `?session=${rightClickedSessionId}`;
+      window.open(url, '_blank', 'width=1200,height=800');
+    }
     else if (action === 'pin-session') {
-      pinnedSessionList.appendChild(rightClickedSessionElement);
-      pinnedPlaceholder.classList.add('hidden');
+      animateListLayout(() => {
+        if (rightClickedSessionElement.parentNode !== pinnedSessionList) {
+          rightClickedSessionElement.setAttribute('data-original-folder-id', rightClickedSessionElement.parentNode.id);
+        }
+        pinnedSessionList.appendChild(rightClickedSessionElement);
+        pinnedPlaceholder.classList.add('hidden');
+      });
     } 
+    else if (action === 'unpin-session') {
+      animateListLayout(() => {
+        const originalFolderId = rightClickedSessionElement.getAttribute('data-original-folder-id') || 'list-regular';
+        const targetList = document.getElementById(originalFolderId);
+        if (targetList) {
+          targetList.appendChild(rightClickedSessionElement);
+        }
+        if (pinnedSessionList.children.length === 0) {
+          pinnedPlaceholder.classList.remove('hidden');
+        }
+      });
+    }
+    else if (action === 'archive-session') {
+      animateListLayout(() => {
+        rightClickedSessionElement.classList.add('archived');
+      });
+      showToast('会话已存档', () => {
+        animateListLayout(() => {
+          rightClickedSessionElement.classList.remove('archived');
+        });
+      });
+    }
+    else if (action === 'branch-session') {
+      animateListLayout(() => {
+        const clone = rightClickedSessionElement.cloneNode(true);
+        const originalId = rightClickedSessionElement.getAttribute('data-session-id');
+        const newId = `${originalId}-branch-${Date.now()}`;
+        clone.setAttribute('data-session-id', newId);
+        
+        clone.classList.remove('active');
+        clone.classList.add('branch-session');
+        
+        const textSpan = clone.querySelector('.session-text');
+        if (textSpan) {
+          textSpan.innerText = `分支: ${textSpan.innerText.replace(/^分支:\s*/, '')}`;
+          textSpan.setAttribute('title', textSpan.innerText);
+        }
+        
+        if (!clone.querySelector('.branch-icon-wrap')) {
+          const iconWrapper = document.createElement('span');
+          iconWrapper.className = 'branch-icon-wrap';
+          iconWrapper.innerHTML = '<i data-lucide="git-branch" class="branch-connector-icon"></i>';
+          clone.insertBefore(iconWrapper, clone.firstChild);
+        }
+        
+        rightClickedSessionElement.parentNode.insertBefore(clone, rightClickedSessionElement.nextSibling);
+        
+        lucide.createIcons({
+          attrs: { 'stroke-width': 2 },
+          nameAttr: 'data-lucide',
+          node: clone
+        });
+      });
+    }
     else if (action === 'delete-session') {
-      rightClickedSessionElement.remove();
-      if (pinnedSessionList.children.length === 0) {
-        pinnedPlaceholder.classList.remove('hidden');
-      }
+      animateListLayout(() => {
+        rightClickedSessionElement.remove();
+        if (pinnedSessionList.children.length === 0) {
+          pinnedPlaceholder.classList.remove('hidden');
+        }
+      });
     }
 
     sessionContextMenu.classList.remove('open');
