@@ -1,7 +1,7 @@
 .right-sidebar {
   width: 360px;
   min-width: 300px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   background-color: var(--bg-main);
   display: flex;
   flex-direction: column;
@@ -10,8 +10,7 @@
   font-family: var(--font-sans);
   position: relative;
   z-index: 1;
-  transition: width 0.25s var(--ease-in-out),
-              opacity 0.25s;
+  transition: width 0.25s var(--ease-in-out);
 }
 
 .right-sidebar.resizing {

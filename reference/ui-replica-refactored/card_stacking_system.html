@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多卡片堆叠系统</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #fff;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+  /* 导航栏 */
+  .navbar {
+    height: 48px;
+    background: #fff;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    position: relative;
+    z-index: 1000;
+    flex-shrink: 0;
+  }
+  .navbar-left { font-weight: 600; font-size: 15px; color: #1a1a1a; }
+  .navbar-right { position: relative; }
+  .card-btn {
+    width: 32px; height: 32px;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s;
+  }
+  .card-btn:hover { background: rgba(0,0,0,0.04); }
+  /* 展开面板 */
+  .dropdown-panel {
+    position: absolute;
+    top: 40px; right: 0;
+    width: 200px;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    padding: 6px;
+    display: none;
+    z-index: 1001;
+  }
+  .dropdown-panel.show { display: block; }
+  .dropdown-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+    transition: background 0.15s;
+  }
+  .dropdown-item:hover { background: rgba(0,0,0,0.04); }
+
+  /* 主容器 */
+  .main-container {
+    display: flex;
+    height: calc(100vh - 48px);
+    width: 100vw;
+    position: relative;
+  }
+
+  /* 主面板（信息流） */
+  .main-panel {
+    flex: 1;
+    min-width: 200px;
+    background: #fff;
+    overflow: auto;
+    padding: 20px;
+    transition: flex-basis 0.2s ease;
+    position: relative;
+  }
+  .info-flow {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .flow-item {
+    background: #fafafa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .flow-item h3 { font-size: 15px; margin-bottom: 8px; color: #1a1a1a; }
+  .flow-item p { font-size: 13px; color: #666; line-height: 1.6; }
+
+  /* 卡片区域容器 */
+  .card-area {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-left: 1px solid rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+  }
+  /* 列 */
+  .card-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+  .card-column-resizer {
+    width: 4px;
+    background: transparent;
+    cursor: col-resize;
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+  }
+  .card-column-resizer:hover { background: rgba(0,0,0,0.08); }
+  .card-column-resizer.dragging { background: rgba(0,0,0,0.15); }
+
+  /* 单个卡片 */
+  .card {
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    min-height: 120px;
+    min-width: 200px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    transition: box-shadow 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .card.dragging {
+    opacity: 0.95;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    z-index: 9999;
+    position: fixed !important;
+    pointer-events: none;
+    border-color: rgba(0,0,0,0.1);
+  }
+  .card.dragging-tab {
+    opacity: 0.95;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+    z-index: 9999;
+    position: fixed !important;
+    pointer-events: none;
+  }
+  .card.drop-target { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+  .card.drop-target-tab { background: rgba(59,130,246,0.04); }
+
+  /* 卡片头部 */
+  .card-header {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    background: #fff;
+    user-select: none;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+  .card-header:active { cursor: grabbing; }
+  .card-header-left { display: flex; align-items: center; gap: 2px; flex: 1; overflow: hidden; }
+  .card-header-right { display: flex; align-items: center; gap: 2px; }
+
+  /* 标签页 */
+  .tab {
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: #666;
+    transition: background 0.15s, color 0.15s;
+    position: relative;
+    user-select: none;
+  }
+  .tab:hover { background: rgba(0,0,0,0.04); }
+  .tab.active { color: #1a1a1a; background: rgba(0,0,0,0.04); font-weight: 500; }
+  .tab.dragging-tab-item {
+    position: fixed;
+    z-index: 10000;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    pointer-events: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  /* 头部按钮 */
+  .header-btn {
+    width: 22px; height: 22px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: #888;
+    transition: background 0.15s, color 0.15s;
+  }
+  .header-btn:hover { background: rgba(0,0,0,0.04); color: #333; }
+
+  /* 卡片内容 */
+  .card-body {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.6;
+  }
+  .card-body h4 { font-size: 14px; margin-bottom: 8px; color: #1a1a1a; }
+  .card-body p { margin-bottom: 8px; }
+
+  /* 行调整器 */
+  .row-resizer {
+    height: 4px;
+    background: transparent;
+    cursor: row-resize;
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .row-resizer:hover { background: rgba(0,0,0,0.08); }
+  .row-resizer.dragging { background: rgba(0,0,0,0.15); }
+
+  /* 吸附指示器 */
+  .snap-indicator {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9998;
+    border: 2px solid #3b82f6;
+    border-radius: 8px;
+    background: rgba(59,130,246,0.06);
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  .snap-indicator.show { opacity: 1; }
+
+  /* 空状态 */
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #999;
+    font-size: 13px;
+  }
+
+  /* 拖拽时的占位 */
+  .card-placeholder {
+    border: 2px dashed rgba(0,0,0,0.1);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.01);
+    min-height: 120px;
+    min-width: 200px;
+    flex-shrink: 0;
+  }
+
+  /* 卡片展开按钮 */
+  .expand-btn { font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- 导航栏 -->
+<div class="navbar">
+  <div class="navbar-left">卡片堆叠系统</div>
+  <div class="navbar-right">
+    <button class="card-btn" id="cardMenuBtn" title="卡片菜单">☰</button>
+    <div class="dropdown-panel" id="dropdownPanel">
+      <div class="dropdown-item" data-type="note">新建笔记卡片</div>
+      <div class="dropdown-item" data-type="todo">新建待办卡片</div>
+      <div class="dropdown-item" data-type="chart">新建图表卡片</div>
+      <div class="dropdown-item" data-type="settings">新建设置卡片</div>
+      <div class="dropdown-item" data-type="clear">清空所有卡片</div>
+    </div>
+  </div>
+</div>
+
+<!-- 吸附指示器 -->
+<div class="snap-indicator" id="snapIndicator"></div>
+
+<!-- 主容器 -->
+<div class="main-container" id="mainContainer">
+  <!-- 主面板（信息流） -->
+  <div class="main-panel" id="mainPanel">
+    <div class="info-flow" id="infoFlow">
+      <div class="flow-item">
+        <h3>欢迎使用多卡片堆叠系统</h3>
+        <p>点击右上角 ☰ 按钮可以新建卡片。卡片默认堆叠在右侧区域。你可以拖拽卡片调整位置，拖拽标签页在卡片之间移动，也可以调整卡片大小。</p>
+      </div>
+      <div class="flow-item">
+        <h3>拖拽操作指南</h3>
+        <p>• 拖拽卡片头部：移动整个卡片位置<br>• 拖拽标签页：将标签页移动到其他卡片<br>• 拖拽卡片底部/右侧边缘：调整卡片大小<br>• 卡片可以吸附到上下左右四个区域</p>
+      </div>
+      <div class="flow-item">
+        <h3>卡片堆叠规则</h3>
+        <p>第一个卡片占据整个右侧高度。打开第二个卡片时，两个卡片共享高度（一列）。第三个卡片追加到第二列。你可以自由调整列宽和行高。</p>
+      </div>
+      <div class="flow-item">
+        <h3>信息流演示内容</h3>
+        <p>这是主面板的信息流区域。当右侧有卡片时，信息流会自动为卡片留出空间。卡片的宽度可以自由调整，信息流会自适应剩余空间。</p>
+      </div>
+      <div class="flow-item">
+        <h3>更多演示数据</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+      </div>
+      <div class="flow-item">
+        <h3>系统特性</h3>
+        <p>支持无限卡片、无极调节尺寸、实时拖拽反馈、标签页管理、卡片合并与拆分。界面设计高级克制，使用白色为主色调，卡片边框极细。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 卡片区域 -->
+  <div class="card-area" id="cardArea">
+    <!-- 动态生成列和卡片 -->
+  </div>
+</div>
+
+<script>
+// ==================== 状态管理 ====================
+let cards = [];
+let columns = [];
+let nextCardId = 1;
+let nextTabId = 1;
+
+// 拖拽状态
+let dragState = null;
+let tabDragState = null;
+let resizeState = null;
+let colResizeState = null;
+
+// 吸附区域
+const SNAP_THRESHOLD = 60;
+
+// ==================== 初始化 ====================
+document.addEventListener('DOMContentLoaded', () => {
+  initDropdown();
+  initGlobalEvents();
+  // 默认创建两个卡片演示
+  createCard('note', '笔记 1');
+  createCard('todo', '待办 1');
+});
+
+// ==================== 下拉菜单 ====================
+function initDropdown() {
+  const btn = document.getElementById('cardMenuBtn');
+  const panel = document.getElementById('dropdownPanel');
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('show');
+  });
+
+  panel.querySelectorAll('.dropdown-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const type = item.dataset.type;
+      if (type === 'clear') {
+        clearAllCards();
+      } else {
+        const names = { note: '笔记', todo: '待办', chart: '图表', settings: '设置' };
+        createCard(type, names[type] + ' ' + nextCardId);
+      }
+      panel.classList.remove('show');
+    });
+  });
+
+  document.addEventListener('click', () => panel.classList.remove('show'));
+}
+
+// ==================== 卡片创建 ====================
+function createCard(type, title) {
+  const cardId = 'card-' + nextCardId++;
+  const tabId = 'tab-' + nextTabId++;
+
+  const card = {
+    id: cardId,
+    tabs: [{ id: tabId, title: title, type: type, active: true }],
+    width: 320,
+    height: null, // null 表示自动分配
+    columnIndex: 0,
+    rowIndex: 0
+  };
+
+  cards.push(card);
+  recalcLayout();
+  render();
+}
+
+function clearAllCards() {
+  cards = [];
+  columns = [];
+  render();
+}
+
+// ==================== 布局计算 ====================
+function recalcLayout() {
+  if (cards.length === 0) {
+    columns = [];
+    return;
+  }
+
+  // 简单的列分配：每2个卡片一列
+  const cardsPerCol = 2;
+  columns = [];
+
+  for (let i = 0; i < cards.length; i++) {
+    const colIdx = Math.floor(i / cardsPerCol);
+    const rowIdx = i % cardsPerCol;
+
+    if (!columns[colIdx]) columns[colIdx] = { cards: [], width: 320 };
+    columns[colIdx].cards.push(cards[i]);
+    cards[i].columnIndex = colIdx;
+    cards[i].rowIndex = rowIdx;
+  }
+
+  // 确保每列有默认宽度
+  columns.forEach((col, idx) => {
+    if (!col.width) col.width = 320;
+  });
+}
+
+// ==================== 渲染 ====================
+function render() {
+  const cardArea = document.getElementById('cardArea');
+  cardArea.innerHTML = '';
+
+  if (cards.length === 0) {
+    cardArea.style.display = 'none';
+    document.getElementById('mainPanel').style.flex = '1';
+    return;
+  }
+
+  cardArea.style.display = 'flex';
+
+  columns.forEach((col, colIdx) => {
+    // 列
+    const colEl = document.createElement('div');
+    colEl.className = 'card-column';
+    colEl.style.width = col.width + 'px';
+    colEl.dataset.colIdx = colIdx;
+
+    col.cards.forEach((card, rowIdx) => {
+      const cardEl = createCardElement(card);
+      colEl.appendChild(cardEl);
+
+      // 行调整器（除了最后一个）
+      if (rowIdx < col.cards.length - 1) {
+        const resizer = document.createElement('div');
+        resizer.className = 'row-resizer';
+        resizer.dataset.cardId = card.id;
+        resizer.addEventListener('mousedown', (e) => startRowResize(e, card, colIdx));
+        colEl.appendChild(resizer);
+      }
+    });
+
+    cardArea.appendChild(colEl);
+
+    // 列调整器（除了最后一个）
+    if (colIdx < columns.length - 1) {
+      const colResizer = document.createElement('div');
+      colResizer.className = 'card-column-resizer';
+      colResizer.dataset.colIdx = colIdx;
+      colResizer.addEventListener('mousedown', (e) => startColResize(e, colIdx));
+      cardArea.appendChild(colResizer);
+    }
+  });
+
+  updateMainPanelWidth();
+}
+
+function createCardElement(card) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.cardId = card.id;
+  el.style.flex = card.height ? 'none' : '1';
+  if (card.height) el.style.height = card.height + 'px';
+
+  // 头部
+  const header = document.createElement('div');
+  header.className = 'card-header';
+  header.addEventListener('mousedown', (e) => startCardDrag(e, card));
+
+  // 左侧标签
+  const left = document.createElement('div');
+  left.className = 'card-header-left';
+  card.tabs.forEach(tab => {
+    const tabEl = document.createElement('div');
+    tabEl.className = 'tab' + (tab.active ? ' active' : '');
+    tabEl.textContent = tab.title;
+    tabEl.dataset.tabId = tab.id;
+    tabEl.dataset.cardId = card.id;
+    tabEl.addEventListener('mousedown', (e) => startTabDrag(e, tab, card));
+    tabEl.addEventListener('click', (e) => {
+      if (!tabDragState) activateTab(card, tab.id);
+    });
+    left.appendChild(tabEl);
+  });
+  header.appendChild(left);
+
+  // 右侧按钮
+  const right = document.createElement('div');
+  right.className = 'card-header-right';
+
+  const expandBtn = document.createElement('button');
+  expandBtn.className = 'header-btn expand-btn';
+  expandBtn.innerHTML = '⛶';
+  expandBtn.title = '展开/折叠';
+  expandBtn.addEventListener('click', () => toggleCardExpand(card));
+  right.appendChild(expandBtn);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'header-btn';
+  closeBtn.innerHTML = '×';
+  closeBtn.title = '关闭卡片';
+  closeBtn.addEventListener('click', () => removeCard(card.id));
+  right.appendChild(closeBtn);
+
+  header.appendChild(right);
+  el.appendChild(header);
+
+  // 内容
+  const body = document.createElement('div');
+  body.className = 'card-body';
+  const activeTab = card.tabs.find(t => t.active);
+  body.innerHTML = getTabContent(activeTab);
+  el.appendChild(body);
+
+  return el;
+}
+
+function getTabContent(tab) {
+  const contents = {
+    note: '<h4>📝 ' + tab.title + '</h4><p>这是一个笔记卡片。你可以在这里记录想法、灵感或重要信息。</p><p>支持拖拽标签页到其他卡片，也可以拖拽整个卡片调整位置。</p>',
+    todo: '<h4>✅ ' + tab.title + '</h4><p>待办事项列表：</p><p>□ 完成项目文档</p><p>□ 回复客户邮件</p><p>□ 整理会议记录</p>',
+    chart: '<h4>📊 ' + tab.title + '</h4><p>图表数据展示区域。</p><p>可以嵌入各种可视化图表组件。</p>',
+    settings: '<h4>⚙️ ' + tab.title + '</h4><p>设置面板</p><p>• 主题：浅色</p><p>• 语言：中文</p><p>• 通知：开启</p>'
+  };
+  return contents[tab.type] || contents.note;
+}
+
+function activateTab(card, tabId) {
+  card.tabs.forEach(t => t.active = (t.id === tabId));
+  render();
+}
+
+function removeCard(cardId) {
+  cards = cards.filter(c => c.id !== cardId);
+  recalcLayout();
+  render();
+}
+
+function toggleCardExpand(card) {
+  // 简单切换高度
+  if (card.height) {
+    card.height = null;
+  } else {
+    card.height = 400;
+  }
+  render();
+}
+
+function updateMainPanelWidth() {
+  const cardArea = document.getElementById('cardArea');
+  if (cards.length === 0) {
+    document.getElementById('mainPanel').style.flex = '1';
+    return;
+  }
+  // 主面板自动占据剩余空间
+}
+
+// ==================== 卡片拖拽 ====================
+function startCardDrag(e, card) {
+  if (e.target.closest('.tab') || e.target.closest('.header-btn')) return;
+  e.preventDefault();
+
+  const cardEl = document.querySelector(`[data-card-id="${card.id}"]`);
+  const rect = cardEl.getBoundingClientRect();
+
+  dragState = {
+    card: card,
+    cardEl: cardEl,
+    startX: e.clientX,
+    startY: e.clientY,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+    originalRect: rect,
+    placeholder: null
+  };
+
+  // 创建拖拽镜像
+  const clone = cardEl.cloneNode(true);
+  clone.classList.add('dragging');
+  clone.style.width = rect.width + 'px';
+  clone.style.height = rect.height + 'px';
+  clone.style.left = rect.left + 'px';
+  clone.style.top = rect.top + 'px';
+  document.body.appendChild(clone);
+  dragState.clone = clone;
+
+  // 原卡片变占位
+  cardEl.style.opacity = '0.3';
+}
+
+// ==================== 标签页拖拽 ====================
+function startTabDrag(e, tab, card) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const tabEl = e.currentTarget;
+  const rect = tabEl.getBoundingClientRect();
+
+  tabDragState = {
+    tab: tab,
+    fromCard: card,
+    tabEl: tabEl,
+    startX: e.clientX,
+    startY: e.clientY,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+    clone: null
+  };
+
+  // 创建标签页拖拽镜像
+  const clone = document.createElement('div');
+  clone.className = 'tab dragging-tab-item';
+  clone.textContent = tab.title;
+  clone.style.left = rect.left + 'px';
+  clone.style.top = rect.top + 'px';
+  clone.style.width = rect.width + 'px';
+  document.body.appendChild(clone);
+  tabDragState.clone = clone;
+}
+
+// ==================== 行调整 ====================
+function startRowResize(e, card, colIdx) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const resizer = e.currentTarget;
+  resizer.classList.add('dragging');
+
+  const col = columns[colIdx];
+  const cardIdx = col.cards.indexOf(card);
+  const nextCard = col.cards[cardIdx + 1];
+
+  const cardEl = document.querySelector(`[data-card-id="${card.id}"]`);
+  const nextEl = document.querySelector(`[data-card-id="${nextCard.id}"]`);
+
+  resizeState = {
+    card: card,
+    nextCard: nextCard,
+    cardEl: cardEl,
+    nextEl: nextEl,
+    startY: e.clientY,
+    startHeight: cardEl.offsetHeight,
+    nextStartHeight: nextEl.offsetHeight,
+    colHeight: resizer.parentElement.offsetHeight,
+    resizer: resizer
+  };
+}
+
+// ==================== 列调整 ====================
+function startColResize(e, colIdx) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const resizer = e.currentTarget;
+  resizer.classList.add('dragging');
+
+  const col = columns[colIdx];
+  const nextCol = columns[colIdx + 1];
+
+  colResizeState = {
+    col: col,
+    nextCol: nextCol,
+    colIdx: colIdx,
+    startX: e.clientX,
+    startWidth: col.width,
+    nextStartWidth: nextCol.width,
+    resizer: resizer
+  };
+}
+
+// ==================== 全局鼠标事件 ====================
+function initGlobalEvents() {
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function onMouseMove(e) {
+  // 卡片拖拽
+  if (dragState) {
+    const ds = dragState;
+    ds.clone.style.left = (e.clientX - ds.offsetX) + 'px';
+    ds.clone.style.top = (e.clientY - ds.offsetY) + 'px';
+
+    // 吸附检测
+    checkSnap(e.clientX, e.clientY, ds.width, ds.height);
+    return;
+  }
+
+  // 标签页拖拽
+  if (tabDragState) {
+    const ts = tabDragState;
+    ts.clone.style.left = (e.clientX - ts.offsetX) + 'px';
+    ts.clone.style.top = (e.clientY - ts.offsetY) + 'px';
+
+    // 检测悬停的卡片
+    document.querySelectorAll('.card').forEach(cardEl => {
+      const rect = cardEl.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        if (cardEl.dataset.cardId !== ts.fromCard.id) {
+          cardEl.classList.add('drop-target-tab');
+        }
+      } else {
+        cardEl.classList.remove('drop-target-tab');
+      }
+    });
+    return;
+  }
+
+  // 行调整
+  if (resizeState) {
+    const rs = resizeState;
+    const delta = e.clientY - rs.startY;
+    const newHeight = Math.max(80, rs.startHeight + delta);
+    const nextNewHeight = Math.max(80, rs.nextStartHeight - delta);
+
+    rs.cardEl.style.flex = 'none';
+    rs.cardEl.style.height = newHeight + 'px';
+    rs.nextEl.style.flex = 'none';
+    rs.nextEl.style.height = nextNewHeight + 'px';
+    return;
+  }
+
+  // 列调整
+  if (colResizeState) {
+    const cs = colResizeState;
+    const delta = e.clientX - cs.startX;
+    const newWidth = Math.max(200, cs.startWidth + delta);
+    const nextNewWidth = Math.max(200, cs.nextStartWidth - delta);
+
+    cs.col.width = newWidth;
+    cs.nextCol.width = nextNewWidth;
+
+    const colEls = document.querySelectorAll('.card-column');
+    if (colEls[cs.colIdx]) colEls[cs.colIdx].style.width = newWidth + 'px';
+    if (colEls[cs.colIdx + 1]) colEls[cs.colIdx + 1].style.width = nextNewWidth + 'px';
+    return;
+  }
+}
+
+function onMouseUp(e) {
+  // 卡片拖拽结束
+  if (dragState) {
+    const ds = dragState;
+
+    // 检查是否释放到某个区域
+    const snap = getSnapZone(e.clientX, e.clientY);
+    if (snap) {
+      applySnap(snap, ds.card);
+    }
+
+    // 检查是否释放到某列中
+    const colEls = document.querySelectorAll('.card-column');
+    let dropped = false;
+    colEls.forEach((colEl, idx) => {
+      const rect = colEl.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        // 移动到该列
+        moveCardToColumn(ds.card, idx);
+        dropped = true;
+      }
+    });
+
+    if (!dropped && !snap) {
+      // 如果没有放到任何区域，检查是否放到主面板
+      const mainRect = document.getElementById('mainPanel').getBoundingClientRect();
+      if (e.clientX >= mainRect.left && e.clientX <= mainRect.right &&
+          e.clientY >= mainRect.top && e.clientY <= mainRect.bottom) {
+        // 放到主面板右侧（新列）
+        moveCardToNewColumn(ds.card, 0);
+      }
+    }
+
+    ds.clone.remove();
+    ds.cardEl.style.opacity = '1';
+    dragState = null;
+    hideSnapIndicator();
+    recalcLayout();
+    render();
+    return;
+  }
+
+  // 标签页拖拽结束
+  if (tabDragState) {
+    const ts = tabDragState;
+
+    // 查找释放的卡片
+    let targetCard = null;
+    document.querySelectorAll('.card').forEach(cardEl => {
+      const rect = cardEl.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        targetCard = cards.find(c => c.id === cardEl.dataset.cardId);
+      }
+      cardEl.classList.remove('drop-target-tab');
+    });
+
+    if (targetCard && targetCard.id !== ts.fromCard.id) {
+      // 移动标签页
+      moveTabToCard(ts.tab, ts.fromCard, targetCard);
+    }
+
+    ts.clone.remove();
+    tabDragState = null;
+    render();
+    return;
+  }
+
+  // 行调整结束
+  if (resizeState) {
+    resizeState.resizer.classList.remove('dragging');
+    resizeState = null;
+    return;
+  }
+
+  // 列调整结束
+  if (colResizeState) {
+    colResizeState.resizer.classList.remove('dragging');
+    colResizeState = null;
+    return;
+  }
+}
+
+// ==================== 吸附逻辑 ====================
+function checkSnap(x, y, w, h) {
+  const indicator = document.getElementById('snapIndicator');
+  const snap = getSnapZone(x, y);
+
+  if (snap) {
+    indicator.style.left = snap.rect.left + 'px';
+    indicator.style.top = snap.rect.top + 'px';
+    indicator.style.width = snap.rect.width + 'px';
+    indicator.style.height = snap.rect.height + 'px';
+    indicator.classList.add('show');
+  } else {
+    indicator.classList.remove('show');
+  }
+}
+
+function hideSnapIndicator() {
+  document.getElementById('snapIndicator').classList.remove('show');
+}
+
+function getSnapZone(x, y) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const navbarH = 48;
+
+  // 上
+  if (y < navbarH + SNAP_THRESHOLD) {
+    return { zone: 'top', rect: { left: 0, top: navbarH, width: vw, height: vh * 0.4 } };
+  }
+  // 下
+  if (y > vh - SNAP_THRESHOLD) {
+    return { zone: 'bottom', rect: { left: 0, top: vh * 0.6, width: vw, height: vh * 0.4 } };
+  }
+  // 左
+  if (x < SNAP_THRESHOLD) {
+    return { zone: 'left', rect: { left: 0, top: navbarH, width: vw * 0.35, height: vh - navbarH } };
+  }
+  // 右
+  if (x > vw - SNAP_THRESHOLD) {
+    return { zone: 'right', rect: { left: vw * 0.65, top: navbarH, width: vw * 0.35, height: vh - navbarH } };
+  }
+
+  return null;
+}
+
+function applySnap(snap, card) {
+  // 根据吸附区域重新排列
+  // 简化为：放到对应位置的新列
+  if (snap.zone === 'right') {
+    moveCardToNewColumn(card, columns.length);
+  } else if (snap.zone === 'left') {
+    moveCardToNewColumn(card, 0);
+  }
+}
+
+// ==================== 卡片/标签页移动 ====================
+function moveCardToColumn(card, targetColIdx) {
+  cards = cards.filter(c => c.id !== card.id);
+
+  // 找到目标列的插入位置
+  let insertIdx = 0;
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i].columnIndex === targetColIdx) {
+      insertIdx = i + 1;
+    }
+  }
+
+  // 如果没有该列，追加到最后
+  if (insertIdx === 0) {
+    insertIdx = cards.length;
+  }
+
+  cards.splice(insertIdx, 0, card);
+}
+
+function moveCardToNewColumn(card, position) {
+  cards = cards.filter(c => c.id !== card.id);
+
+  if (position === 0) {
+    cards.unshift(card);
+  } else {
+    cards.push(card);
+  }
+}
+
+function moveTabToCard(tab, fromCard, toCard) {
+  // 从原卡片移除
+  fromCard.tabs = fromCard.tabs.filter(t => t.id !== tab.id);
+
+  // 如果原卡片没有标签页了，删除卡片
+  if (fromCard.tabs.length === 0) {
+    cards = cards.filter(c => c.id !== fromCard.id);
+  } else if (!fromCard.tabs.some(t => t.active)) {
+    fromCard.tabs[0].active = true;
+  }
+
+  // 添加到目标卡片
+  toCard.tabs.forEach(t => t.active = false);
+  tab.active = true;
+  toCard.tabs.push(tab);
+}
+
+// ==================== 键盘快捷键 ====================
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (dragState) {
+      dragState.clone.remove();
+      dragState.cardEl.style.opacity = '1';
+      dragState = null;
+      hideSnapIndicator();
+    }
+    if (tabDragState) {
+      tabDragState.clone.remove();
+      tabDragState = null;
+    }
+  }
+});
+</script>
+
+</body>
+</html>
