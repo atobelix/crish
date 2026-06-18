@@ -133,7 +133,6 @@ export class AgentSessionLoop {
   private readonly providerConsumer: ProviderResponseConsumer;
   private readonly compressionGate: ContextCompressionGate;
   private readonly singleToolExecutor: SingleToolExecutor;
-  private currentRecorder: SessionRecorder | null = null;
 
   constructor(
     private readonly options: AgentRuntimeOptions,
@@ -514,55 +513,50 @@ export class AgentSessionLoop {
     tools: AgentTool[],
     recorder: SessionRecorder
   ): AsyncGenerator<AgentEvent, ToolResultBlock[]> {
-    this.currentRecorder = recorder;
-    try {
-      const self = this;
-      const executeOne: ToolExecuteHook = async function* (toolCall, _tools, _sessionId, _cwd, signal, batchId) {
-        return yield* self.executeSingleTool(toolCall, _tools, batchId, signal);
-      };
+    const self = this;
+    const executeOne: ToolExecuteHook = async function* (toolCall, _tools, _sessionId, _cwd, signal, batchId) {
+      return yield* self.executeSingleTool(toolCall, _tools, batchId, signal, recorder);
+    };
 
-      const batchResults: ToolBatchResult[] = yield* relayAndRecord(
-        this.toolExecutor.executeBatchWithEvents(
-          toolCalls,
-          tools,
-          this.sessionId,
-          this.options.cwd,
-          this.abortController.signal,
-          executeOne
-        ),
-        recorder
-      );
+    const batchResults: ToolBatchResult[] = yield* relayAndRecord(
+      this.toolExecutor.executeBatchWithEvents(
+        toolCalls,
+        tools,
+        this.sessionId,
+        this.options.cwd,
+        this.abortController.signal,
+        executeOne
+      ),
+      recorder
+    );
 
-      return batchResults.map(
-        (result): ToolResultBlock => ({
-          type: "tool-result",
-          toolCallId: result.id,
-          toolName: result.toolName,
-          output: result.output,
-          isError: result.isError,
-        })
-      );
-    } finally {
-      this.currentRecorder = null;
-    }
+    return batchResults.map(
+      (result): ToolResultBlock => ({
+        type: "tool-result",
+        toolCallId: result.id,
+        toolName: result.toolName,
+        output: result.output,
+        isError: result.isError,
+      })
+    );
   }
 
   private async *executeSingleTool(
     toolCall: ToolCallBlock,
     tools: AgentTool[],
     batchId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    recorder: SessionRecorder
   ): AsyncGenerator<AgentEvent, ToolBatchResult> {
-    const recorder = this.currentRecorder!;
     const startedAt = Date.now();
     const call = this.toBatchCall(toolCall, tools);
 
-    yield* this.recordEvent({ type: "tool-start", sessionId: this.sessionId, batchId, call, timestamp: nowIso() }, recorder);
+    yield* this.emitEvent({ type: "tool-start", sessionId: this.sessionId, batchId, call, timestamp: nowIso() });
 
     const tool = tools.find((candidate) => candidate.name === toolCall.toolName);
     if (!tool) {
       const result = this.toToolBatchResult(call, startedAt, { text: `Tool not found: ${toolCall.toolName}` }, true);
-      yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
       return result;
     }
 
@@ -575,26 +569,25 @@ export class AgentSessionLoop {
         { text: [`Tool input validation failed:`, ...validationErrors.map((error) => `- ${error}`), ...advice].join("\n") },
         true
       );
-      yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
       return result;
     }
 
-    const permission = yield* this.resolvePermission(tool, toolCall.input, recorder);
+    const permission = yield* this.resolvePermission(tool, toolCall.input);
     if (permission.behavior !== "allow") {
       if (isExpiredApprovalDecision(permission)) {
-        yield* this.recordEvent(
+        yield* this.emitEvent(
           {
             type: "runtime-error",
             sessionId: this.sessionId,
             timestamp: nowIso(),
             error: permission.reason ?? "Approval expired"
-          },
-          recorder
+          }
         );
         throw new Error(permission.reason ?? "Approval expired");
       }
       const result = this.toToolBatchResult(call, startedAt, { text: permission.reason ?? "Tool execution denied" }, true);
-      yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
       return result;
     }
 
@@ -617,7 +610,7 @@ export class AgentSessionLoop {
           { text: beforeResult.reason ?? `Tool call blocked by hook: ${toolCall.toolName}` },
           true
         );
-        yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+        yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
         return result;
       }
       if (beforeResult.modifiedInput) {
@@ -632,10 +625,15 @@ export class AgentSessionLoop {
         { text: isToolTimeoutCause(cause) ? `Tool execution timed out` : `Tool execution cancelled` }
       );
       const result = this.toToolBatchResult(call, startedAt, output, true);
-      yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
       return result;
     }
 
+    type ToolExecutionItem =
+      | { type: "event"; event: AgentEvent }
+      | { type: "result"; result: Awaited<ReturnType<SingleToolExecutor["execute"]>> };
+
+    const toolEventQueue = new ProgressEventQueue<ToolExecutionItem>();
     const context: ToolExecutionContext = {
       toolCallId: toolCall.id,
       sessionId: this.sessionId,
@@ -669,7 +667,7 @@ export class AgentSessionLoop {
         const afterResult = await this.composedHooks.afterToolCall(hookCtx);
         if (afterResult.terminate) {
           const result = this.toToolBatchResult(call, startedAt, afterResult.modifiedOutput ?? materializedOutput, false);
-          yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+          yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
           this.abortController.abort(afterResult.terminateReason ?? "Terminated by afterToolCall hook");
           return result;
         }
@@ -679,7 +677,7 @@ export class AgentSessionLoop {
       }
 
       const result = this.toToolBatchResult(call, startedAt, materializedOutput, false);
-      yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
       yield* this.recordToolCheckpointEvents(result, recorder);
       return result;
     }
@@ -696,7 +694,7 @@ export class AgentSessionLoop {
       { text: causeText, ...(structuredJson ? { json: structuredJson } : {}) }
     );
     const result = this.toToolBatchResult(call, startedAt, errorOutput, true);
-    yield* this.recordEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() }, recorder);
+    yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
     return result;
   }
 
@@ -706,8 +704,7 @@ export class AgentSessionLoop {
 
   private async *resolvePermission(
     tool: AgentTool,
-    input: JsonObject,
-    recorder: SessionRecorder
+    input: JsonObject
   ): AsyncGenerator<AgentEvent, PermissionDecision> {
     const request: RuntimePermissionRequest = {
       id: createId("approval"),
@@ -721,16 +718,15 @@ export class AgentSessionLoop {
     // Yield event with serialized-only tool data (strip functions like isReadOnly/summarize/execute)
     // The live `tool` reference is preserved in `request` for the internal permission flow below.
     const serializableRequest = stripNonSerializable(request) as unknown as PermissionRequest;
-    yield* this.recordEvent({ type: "approval-requested", sessionId: this.sessionId, request: serializableRequest, timestamp: nowIso() }, recorder);
+    yield* this.emitEvent({ type: "approval-requested", sessionId: this.sessionId, request: serializableRequest, timestamp: nowIso() });
 
     let decision = await this.options.permissionPolicy!.decide(request);
     if (decision.behavior === "ask" && this.options.approvalHandler) {
       decision = await this.options.approvalHandler.requestApproval(serializableRequest);
     }
 
-    yield* this.recordEvent(
+    yield* this.emitEvent(
       { type: "approval-resolved", sessionId: this.sessionId, requestId: request.id, decision, timestamp: nowIso() },
-      recorder
     );
     return decision;
   }
@@ -739,27 +735,25 @@ export class AgentSessionLoop {
     for (const checkpoint of checkpointRecordsFromToolResult(result)) {
       await recorder.recordCheckpoint(checkpoint.label, checkpoint as unknown as JsonObject);
       await this.options.contextCompression?.contextState?.recordCheckpoint?.(checkpoint);
-      yield* this.recordEvent(
+      yield* this.emitEvent(
         {
           type: "checkpoint-created",
           sessionId: this.sessionId,
           timestamp: nowIso(),
           checkpoint
-        },
-        recorder
+        }
       );
     }
 
     const restore = checkpointRestoreRecordFromToolResult(result);
     if (restore) {
-      yield* this.recordEvent(
+      yield* this.emitEvent(
         {
           type: "checkpoint-restored",
           sessionId: this.sessionId,
           timestamp: nowIso(),
           restore
-        },
-        recorder
+        }
       );
     }
   }
@@ -815,6 +809,10 @@ export class AgentSessionLoop {
 
   private async *recordEvent(event: AgentEvent, recorder: SessionRecorder): AsyncGenerator<AgentEvent> {
     await recorder.recordEvent(event);
+    yield event;
+  }
+
+  private async *emitEvent(event: AgentEvent): AsyncGenerator<AgentEvent> {
     yield event;
   }
 
@@ -891,7 +889,7 @@ async function* relayAndRecord<T>(
       done = true;
       break;
     }
-    void recorder.recordEvent(next.value);
+    await recorder.recordEvent(next.value);
     yield next.value;
   }
 

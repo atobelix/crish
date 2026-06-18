@@ -287,7 +287,7 @@ export class AgentOrchestrator {
     this.runs.set(run.id, run);
 
     const queue = new AsyncQueue<OrchestratorEvent>();
-    const active: ActiveRun = { run, queue, pendingEmits: new Set() };
+    const active: ActiveRun = { run, queue, pendingEmits: new Set(), emitChain: Promise.resolve() };
     this.activeRuns.set(run.id, active);
 
     this.emitToRun(active, "run-queued", { run: run as unknown as JsonObject });
@@ -744,7 +744,11 @@ export class AgentOrchestrator {
       });
       return;
     }
-    const task = this.persistAndBroadcast(active, event).finally(() => {
+    const task = active.emitChain.then(() => this.persistAndBroadcast(active, event));
+    active.emitChain = task.catch(() => undefined);
+    void task.then(() => {
+      active.pendingEmits.delete(task);
+    }, () => {
       active.pendingEmits.delete(task);
     });
     active.pendingEmits.add(task);
@@ -1555,6 +1559,7 @@ interface ActiveRun {
   run: OrchestratorRunRecord;
   queue: AsyncQueue<OrchestratorEvent>;
   pendingEmits: Set<Promise<void>>;
+  emitChain: Promise<void>;
   engine?: RunEngine;
   lastProviderFailure?: JsonObject;
   persistenceFailed?: boolean;

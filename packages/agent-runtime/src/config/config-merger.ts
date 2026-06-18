@@ -427,9 +427,9 @@ export const PROVIDER_CONFIG_SCHEMA: ConfigSchema = {
     systemPromptWireMode: {
       mergeStrategy: "override",
       required: false,
-      defaultValue: "system-message",
-      validate: (v) => ["system-message", "developer-message", "top-user-message"].includes(v as string),
-      validateMessage: "systemPromptWireMode must be system-message, developer-message, or top-user-message",
+      defaultValue: "native-system-role",
+      validate: (v) => ["native-system-role", "user-prefix"].includes(v as string),
+      validateMessage: "systemPromptWireMode must be native-system-role or user-prefix",
     },
     requestTimeoutMs: {
       mergeStrategy: "override",

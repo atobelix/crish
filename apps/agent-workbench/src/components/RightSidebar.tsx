@@ -64,7 +64,6 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
   let dragging = false;
   let ghost: HTMLDivElement | null = null;
   let snapLine: HTMLDivElement | null = null;
-  let rects: Array<{ id: string; r: DOMRect; el: HTMLElement }> = [];
   let lastKey = '';
 
   const clearSnap = () => {
@@ -95,8 +94,6 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
       dragging = true;
       document.body.style.cursor = 'grabbing';
       document.body.style.userSelect = 'none';
-      rects = (Array.from(document.querySelectorAll('.repl-rs-tab-panel[data-panel-id]')) as HTMLElement[])
-        .map(el => ({ id: el.dataset.panelId as string, r: el.getBoundingClientRect(), el }));
       ghost = (sourcePanelEl ? sourcePanelEl.cloneNode(true) : document.createElement('div')) as HTMLDivElement;
       ghost.classList.add('repl-rs-window-ghost');
       if (sourcePanelEl) {
@@ -111,19 +108,66 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
       ghost.style.left = `${ev.clientX + 14}px`;
       ghost.style.top = `${ev.clientY + 14}px`;
     }
-    const hit = rects.find(({ r }) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom);
-    if (!hit) { if (lastKey) { lastKey = ''; appState.clearDragPreview(); clearSnap(); } return; }
-    const r = hit.r;
-    const fx = (ev.clientX - r.left) / r.width;
-    const fy = (ev.clientY - r.top) / r.height;
-    let zone: 'top' | 'bottom' | 'left' | 'right' | 'center';
-    if (fx > 0.3 && fx < 0.7 && fy > 0.3 && fy < 0.7) {
-      zone = 'center';
-    } else {
-      const dist = { left: fx, right: 1 - fx, top: fy, bottom: 1 - fy };
-      zone = (Object.keys(dist) as Array<'left' | 'right' | 'top' | 'bottom'>)
-        .reduce((a, b) => (dist[b] < dist[a] ? b : a), 'left');
+
+    const currentRects = (Array.from(document.querySelectorAll('.repl-rs-tab-panel[data-panel-id]')) as HTMLElement[])
+      .map(el => ({ id: el.dataset.panelId as string, r: el.getBoundingClientRect(), el }));
+    const hitRects = currentRects.filter(item => item.id !== newPanelId);
+
+    let hit = hitRects.find(({ r }) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom);
+    let zone: 'top' | 'bottom' | 'left' | 'right' | 'center' = 'center';
+
+    if (hit) {
+      const r = hit.r;
+      const fx = (ev.clientX - r.left) / r.width;
+      const fy = (ev.clientY - r.top) / r.height;
+      if (fx > 0.3 && fx < 0.7 && fy > 0.3 && fy < 0.7) {
+        zone = 'center';
+      } else {
+        const dist = { left: fx, right: 1 - fx, top: fy, bottom: 1 - fy };
+        zone = (Object.keys(dist) as Array<'left' | 'right' | 'top' | 'bottom'>)
+          .reduce((a, b) => (dist[b] < dist[a] ? b : a), 'left');
+      }
+    } else if (hitRects.length > 0) {
+      // Horizontal closest column detection and boundary extension with 15px horizontal tolerance
+      const cols: { left: number; right: number; panels: typeof hitRects }[] = [];
+      for (const item of hitRects) {
+        let foundCol = cols.find(c => Math.abs(c.left - item.r.left) < 15);
+        if (!foundCol) {
+          foundCol = { left: item.r.left, right: item.r.right, panels: [] };
+          cols.push(foundCol);
+        }
+        foundCol.panels.push(item);
+        foundCol.left = Math.min(foundCol.left, item.r.left);
+        foundCol.right = Math.max(foundCol.right, item.r.right);
+      }
+      for (const col of cols) {
+        col.panels.sort((a, b) => a.r.top - b.r.top);
+      }
+
+      const matchedCol = cols.find(c => ev.clientX >= c.left && ev.clientX <= c.right) 
+        || cols.reduce((closest, c) => {
+             const distC = Math.min(Math.abs(ev.clientX - c.left), Math.abs(ev.clientX - c.right));
+             const distClosest = Math.min(Math.abs(ev.clientX - closest.left), Math.abs(ev.clientX - closest.right));
+             return distC < distClosest ? c : closest;
+           }, cols[0]);
+
+      if (matchedCol) {
+        const panels = matchedCol.panels;
+        if (ev.clientY < panels[0].r.top) {
+          hit = panels[0];
+          zone = 'top';
+        } else if (ev.clientY > panels[panels.length - 1].r.bottom) {
+          hit = panels[panels.length - 1];
+          zone = 'bottom';
+        }
+      }
     }
+
+    if (!hit) {
+      if (lastKey) { lastKey = ''; appState.clearDragPreview(); clearSnap(); }
+      return;
+    }
+    const r = hit.r;
     if (hit.id === sourcePanelId && (sourceTabCount <= 1 || zone === 'center')) {
       if (lastKey) { lastKey = ''; appState.clearDragPreview(); clearSnap(); }
       return;
@@ -131,8 +175,8 @@ function beginTabDrag(e: MouseEvent, tabId: string, sourcePanelId: string, label
     const key = `${hit.id}:${zone}`;
     if (key !== lastKey) {
       lastKey = key;
-      appState.setDragPreview(sourcePanelId, tabId, hit.id, zone, newPanelId, newGroupId);
-      if (zone !== 'center') showSnap(r, zone);
+      const applied = appState.setDragPreview(sourcePanelId, tabId, hit.id, zone, newPanelId, newGroupId);
+      if (applied && zone !== 'center') showSnap(r, zone);
       else clearSnap();
     }
   };
@@ -418,7 +462,7 @@ function PanelGroupRenderer({ group, tabs, ghostPanelId }: { group: PanelGroup; 
   useEffect(() => {
     setSizes(group.sizes);
     sizesRef.current = group.sizes;
-  }, [group.id, group.children.length]);
+  }, [group.id, group.children.length, group.sizes.join(',')]);
 
   function handleResize(index: number, deltaPx: number) {
     const el = groupRef.current;

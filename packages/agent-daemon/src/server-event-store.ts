@@ -12,7 +12,7 @@ export class DaemonEventStore implements OrchestratorEventStore {
   private readonly delegate: FileOrchestratorEventStore;
   private _failure: OrchestratorEventStoreError | undefined;
 
-  constructor(eventLogPath: string) {
+  constructor(private readonly eventLogPath: string) {
     this.delegate = new FileOrchestratorEventStore(eventLogPath);
   }
 
@@ -50,7 +50,7 @@ export class DaemonEventStore implements OrchestratorEventStore {
   }
 
   private delegatePath(): string {
-    return this.delegate instanceof Object ? (this.delegate as any).eventLogPath ?? "unknown" : "unknown";
+    return this.eventLogPath;
   }
 }
 

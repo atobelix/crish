@@ -2039,7 +2039,7 @@
     color: var(--color-text-primary);
     background: var(--color-bg-elevated);
     border: 1px solid var(--color-border-card);
-    border-radius: var(--radius-lg);
+    border-radius: 0 !important;
     box-shadow: var(--shadow-md);
     opacity: 0.7;
 }
@@ -2065,7 +2065,7 @@
     opacity: 0.5;
     overflow: hidden;
     border: 1px solid var(--color-border-card);
-    border-radius: var(--radius-2xl);
+    border-radius: 0 !important;
     box-shadow: var(--shadow-md);
     background: var(--color-bg-sidebar);
 }

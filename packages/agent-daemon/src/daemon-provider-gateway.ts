@@ -101,11 +101,11 @@ const DEFAULT_AUTH_HEADER: OpenAICompatibleAuthHeader = "authorization";
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_FIRST_BYTE_TIMEOUT_MS = 30_000;
 export const DAEMON_PROVIDER_CONFIG_PRECEDENCE = [
-  "runtime-update",
+  "default",
   "workspace-config",
   "user-config",
   "env",
-  "default",
+  "runtime-update",
 ] as const;
 
 /**
@@ -407,7 +407,7 @@ function layerPriority(source: DaemonProviderRuntimeConfigSourceName): ConfigSou
     case "workspace-config": return 100 as const;
     case "user-config": return 200 as const;
     case "env": return 300 as const;
-    case "runtime-update": return 400 as const;
+    case "runtime-update": return 500 as const;
     default: return 0 as const;
   }
 }

@@ -1,15 +1,13 @@
 import type { PermissionDecision, PermissionRequest } from "@crish/shared-types";
-import { PermissionEngine, HardlineBlockRule } from "@crish/decision-engine";
+import { HardlineBlockRule } from "@crish/decision-engine";
 import type { RuntimePermissionRequest } from "@crish/agent-runtime";
 
 export type DaemonPermissionMode = "ask" | "full-access";
 
 export class DaemonPermissionPolicy {
-  private readonly engine: PermissionEngine;
+  private readonly hardlineRule = new HardlineBlockRule();
 
-  constructor(mode: DaemonPermissionMode = "ask") {
-    this.engine = new PermissionEngine([new HardlineBlockRule()]);
-  }
+  constructor(private readonly mode: DaemonPermissionMode = "ask") {}
 
   decide(request: RuntimePermissionRequest): PermissionDecision {
     const converted: PermissionRequest = {
@@ -28,6 +26,43 @@ export class DaemonPermissionPolicy {
       },
       metadata: request.metadata,
     };
-    return this.engine.decide(converted);
+
+    const hardlineDecision = this.hardlineRule.evaluate(converted);
+    if (hardlineDecision) return withDaemonPermissionMetadata(hardlineDecision, this.mode);
+
+    if (this.mode === "full-access") {
+      return {
+        behavior: "allow",
+        reason: "Daemon full-access mode allows non-hardline tool execution",
+        metadata: { permissionMode: this.mode, matchedRule: "daemon-full-access" },
+      };
+    }
+
+    if (converted.toolMetadata.isReadOnly === true) {
+      return {
+        behavior: "allow",
+        reason: "Daemon ask mode allows read-only tool execution",
+        metadata: { permissionMode: this.mode, matchedRule: "daemon-ask-readonly" },
+      };
+    }
+
+    return {
+      behavior: "ask",
+      reason: "Daemon ask mode requires approval for mutating tool execution",
+      metadata: { permissionMode: this.mode, matchedRule: "daemon-ask-mutating" },
+    };
   }
+}
+
+function withDaemonPermissionMetadata(
+  decision: PermissionDecision,
+  mode: DaemonPermissionMode
+): PermissionDecision {
+  return {
+    ...decision,
+    metadata: {
+      ...(decision.metadata ?? {}),
+      permissionMode: mode,
+    },
+  };
 }

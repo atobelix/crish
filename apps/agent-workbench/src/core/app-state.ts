@@ -2783,19 +2783,44 @@ export class AppState {
     if (root.kind === 'panel') {
       return root.id === panelId ? null : root;
     }
-    const newChildren = root.children
-      .map(c => this.removePanel(c, panelId))
-      .filter(Boolean) as PanelNode[];
+    const newChildren: PanelNode[] = [];
+    const newSizes: number[] = [];
+    for (let i = 0; i < root.children.length; i++) {
+      const child = root.children[i];
+      const cleaned = this.removePanel(child, panelId);
+      if (cleaned) {
+        newChildren.push(cleaned);
+        newSizes.push(root.sizes[i] ?? (100 / root.children.length));
+      }
+    }
     if (newChildren.length === 0) return null;
     if (newChildren.length === 1) return newChildren[0];
-    const rawSizes = root.sizes.slice(0, newChildren.length);
-    const total = rawSizes.reduce((a, b) => a + b, 0) || 1;
-    const sizes = rawSizes.map(s => (s / total) * 100);
+    const total = newSizes.reduce((a, b) => a + b, 0) || 1;
+    const sizes = newSizes.map(s => (s / total) * 100);
     return {
       ...root,
       children: newChildren,
       sizes,
     };
+  }
+
+  private serializeLayoutStructure(node: PanelNode): any {
+    if (node.kind === 'panel') {
+      return {
+        kind: 'panel',
+        tabs: [...node.tabIds],
+        active: node.activeTabId,
+      };
+    }
+    return {
+      kind: 'group',
+      direction: node.direction,
+      children: node.children.map(c => this.serializeLayoutStructure(c)),
+    };
+  }
+
+  private isLayoutEquivalent(l1: PanelNode, l2: PanelNode): boolean {
+    return JSON.stringify(this.serializeLayoutStructure(l1)) === JSON.stringify(this.serializeLayoutStructure(l2));
   }
 
   private replaceNode(root: PanelNode, targetId: string, replacement: PanelNode): PanelNode {
@@ -2958,7 +2983,7 @@ export class AppState {
       }));
       const otherCol: PanelNode = otherPanels.length === 1
         ? otherPanels[0]
-        : { kind: 'group', id: `group-col-${ts}`, direction: 'vertical', children: otherPanels, sizes: otherPanels.map(() => Math.round(100 / otherPanels.length)) };
+        : { kind: 'group', id: `group-col-${ts}`, direction: 'vertical', children: otherPanels, sizes: otherPanels.map(() => 100 / otherPanels.length) };
       layout = chatTabs.length === 0
         ? otherCol
         : { kind: 'group', id: `group-root-${ts}`, direction: 'horizontal', children: [chatPanel, otherCol], sizes: [60, 40] };
@@ -3095,14 +3120,18 @@ export class AppState {
     sourcePanelId: string, tabId: string, targetPanelId: string | null,
     zone: 'top' | 'bottom' | 'left' | 'right' | 'center' | null,
     newPanelId: string, newGroupId: string
-  ): void {
-    if (!targetPanelId || !zone) { this.clearDragPreview(); return; }
+  ): boolean {
+    if (!targetPanelId || !zone) { this.clearDragPreview(); return false; }
     const result = this.computeDropLayout(sourcePanelId, tabId, targetPanelId, zone, newPanelId, newGroupId);
-    if (!result) { this.clearDragPreview(); return; }
+    if (!result || this.isLayoutEquivalent(result.layout, this.state.panelLayout)) {
+      this.clearDragPreview();
+      return false;
+    }
     this.state.panelLayoutPreview = result.layout;
     this.state.previewGhostPanelId = result.ghostPanelId;
     this.notify('panelLayoutPreview', result.layout);
     this.notify('previewGhostPanelId', result.ghostPanelId);
+    return true;
   }
 
   clearDragPreview(): void {

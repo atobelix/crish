@@ -314,6 +314,10 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   }
 
   async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+    if (!this.byteIndexLoaded) {
+      await this.tryLoadByteOffsetIndex();
+    }
+
     // ── 三层策略：优先使用字节偏移索引（tier 2）─
     if (this.byteIndexLoaded && this.byteOffsetIndex.has(sessionId)) {
       const events = await this.readSessionViaByteIndex(sessionId, afterSequence);
@@ -339,9 +343,9 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   async listSessionSummaries(): Promise<OrchestratorSessionEventSummary[]> {
     await this.flush();
-    if (!this.sessionSummaryCacheReady) {
-      // 优先使用尾部启动，避免全量读取大日志
-      await this.bootstrapFromTail();
+    if (!this.sessionSummaryCacheReady && !(await this.tryLoadSessionSummaryIndex())) {
+      // Product session lists must be complete; tail bootstrap is diagnostic-only.
+      await this.ensureEventCache();
     }
     return [...this.cachedSessionSummaries.values()]
       .map(toOrchestratorSessionEventSummary)
@@ -448,7 +452,16 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       if (
         !isRecord(parsed) ||
         parsed.type !== "orchestrator-byte-offset-index" ||
+        parsed.version !== 1 ||
         !Array.isArray(parsed.entries)
+      ) {
+        return false;
+      }
+      await this.ensureHeader();
+      if (
+        !this.metadata ||
+        parsed.eventLogId !== this.metadata.eventLogId ||
+        parsed.generation !== this.metadata.generation
       ) {
         return false;
       }
@@ -700,20 +713,37 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   async flushIndex(): Promise<boolean> {
     if (!this.indexDirty) return false;
 
+    const needsSummaryIndexWrite = this.sessionSummaryCacheReady && this.metadata !== undefined;
+    const needsByteIndexWrite = this.byteIndexLoaded && this.metadata !== undefined;
+    let summaryIndexSynced = !needsSummaryIndexWrite;
+    let byteIndexSynced = !needsByteIndexWrite;
     let anyWritten = false;
 
-    await this.writeSessionSummaryIndex().catch((cause) => {
-      this.indexWriteFailureCount++;
-      this.lastIndexWriteError = cause instanceof Error ? cause : new Error(String(cause));
-    });
-    anyWritten = true;
+    if (needsSummaryIndexWrite) {
+      await this.writeSessionSummaryIndex()
+        .then(() => {
+          summaryIndexSynced = true;
+          anyWritten = true;
+        })
+        .catch((cause) => {
+          this.indexWriteFailureCount++;
+          this.lastIndexWriteError = cause instanceof Error ? cause : new Error(String(cause));
+        });
+    }
 
-    await this.writeByteOffsetIndex().catch((cause) => {
-      this.indexWriteFailureCount++;
-      this.lastIndexWriteError = cause instanceof Error ? cause : new Error(String(cause));
-    });
+    if (needsByteIndexWrite) {
+      await this.writeByteOffsetIndex()
+        .then(() => {
+          byteIndexSynced = true;
+          anyWritten = true;
+        })
+        .catch((cause) => {
+          this.indexWriteFailureCount++;
+          this.lastIndexWriteError = cause instanceof Error ? cause : new Error(String(cause));
+        });
+    }
 
-    if (this.indexWriteFailureCount === 0 || anyWritten) {
+    if (summaryIndexSynced && byteIndexSynced) {
       this.indexDirty = false;
       this.lastIndexFlushTime = Date.now();
     }
@@ -1108,5 +1138,3 @@ function isOrchestratorEvent(value: unknown): value is OrchestratorEvent {
     isRecord(value.payload)
   );
 }
-
-
