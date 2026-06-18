@@ -56,6 +56,9 @@ reference/ui-replica-refactored/dist/
 !reference/newui/
 !reference/newui/**
 
+# crish-desktop (exclude React/TS desktop project folder from git tracking)
+reference/crish-desktop/
+
 # Agent runtime data
 .agent-runtime/
 .codex-tool-scratch/
