@@ -1392,102 +1392,193 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {(settings.packages || []).map((pkg, idx) => {
                   const isObj = typeof pkg !== 'string';
                   const name = isObj ? (pkg as PackageSource).source : (pkg as string);
-                  const filters = isObj ? [
-                    (pkg as PackageSource).extensions ? `文件后缀: ${(pkg as PackageSource).extensions?.join(',')}` : null,
-                    (pkg as PackageSource).skills ? `绑定技能: ${(pkg as PackageSource).skills?.join(',')}` : null
-                  ].filter(Boolean).join(' | ') : '';
+                  const filters = isObj
+                    ? [
+                        (pkg as PackageSource).extensions
+                          ? `后缀 ${(pkg as PackageSource).extensions?.join(',')}`
+                          : null,
+                        (pkg as PackageSource).skills
+                          ? `技能 ${(pkg as PackageSource).skills?.join(',')}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : '';
 
                   return (
-                    <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Lucide.Blocks size={13} style={{ color:  'var(--text-secondary)'  }} />
-                          <span style={{ fontSize: '11.5px', color:  'var(--text-primary)' , fontFamily: 'var(--font-mono)' }}>{name}</span>
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 0',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: 'var(--text-primary)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          {name}
                         </div>
-                        {filters && <span style={{ fontSize: '8.5px', color:  'var(--text-tertiary)'  }}>{filters}</span>}
+                        {filters && (
+                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            {filters}
+                          </div>
+                        )}
                       </div>
                       <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost danger"
                         onClick={() => handleRemovePackage(idx)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
                         title="卸载"
                       >
-                        <Lucide.Trash2 size={12} />
+                        <Lucide.X size={13} />
                       </button>
                     </div>
                   );
                 })}
                 {(settings.packages || []).length === 0 && (
-                  <div style={{ fontSize: '11px', color:  'var(--text-tertiary)' , textAlign: 'center', padding: '24px', border: '1px dashed #ededed', borderRadius: '8px' }}>暂无安装的插件包，点击右上角按钮开始安装。</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '16px 0' }}>
+                    还没有插件。点击「安装」添加。
+                  </div>
                 )}
               </div>
             </>
           )}
-          {/* TAB 5: SKILLS */}
+
           {activeTab === 'skills' && (
             <>
-              <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color:  'var(--text-primary)' , margin: 0 }}>智能体系统技能</h4>
-                <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>技能是一组指令集合。配置智能体运行加载技能的本地路径。</p>
+              <div style={{ marginBottom: 4 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  技能
+                </h4>
+                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 12px' }}>
+                  加载本地技能目录
+                </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 16px', background: 'var(--bg-primary)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span className="settings-field-label">开启技能指令映射</span>
-                  <span style={{ fontSize: '9.5px', color:  'var(--text-tertiary)'  }}>是否将加载的技能注册为 `/skill:name` 形式的快捷命令。</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 0 14px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  marginBottom: 8,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    注册为快捷命令
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    输入框可用 /skill:name
+                  </div>
                 </div>
-                {/* Switch toggle */}
-                <label className="switch-toggle" style={{ position: 'relative', display: 'inline-block', width: '32px', height: '18px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={settings.enableSkillCommands || false} 
-                    onChange={(e) => handleUpdateSettings({ enableSkillCommands: e.target.checked })} 
-                    style={{ opacity: 0, width: 0, height: 0 }} 
+                <label
+                  style={{
+                    position: 'relative',
+                    display: 'inline-block',
+                    width: 32,
+                    height: 18,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.enableSkillCommands || false}
+                    onChange={(e) =>
+                      handleUpdateSettings({ enableSkillCommands: e.target.checked })
+                    }
+                    style={{ opacity: 0, width: 0, height: 0 }}
                   />
-                  <span style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: settings.enableSkillCommands ?  'var(--accent-green)'  :  'var(--border-color)' ,
-                    borderRadius: '18px', transition: '0.2s',
-                  }}>
-                    <span style={{
-                      position: 'absolute', height: '14px', width: '14px',
-                      left: settings.enableSkillCommands ? '16px' : '2px', bottom: '2px',
-                      backgroundColor: 'white', borderRadius: '50%', transition: '0.2s',
-                    }} />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundColor: settings.enableSkillCommands
+                        ? 'var(--accent-green)'
+                        : 'var(--border-color)',
+                      borderRadius: 18,
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        height: 14,
+                        width: 14,
+                        left: settings.enableSkillCommands ? 16 : 2,
+                        bottom: 2,
+                        backgroundColor: 'white',
+                        borderRadius: '50%',
+                      }}
+                    />
                   </span>
                 </label>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 12 }}>
                 {(settings.skills || []).map((skPath, idx) => (
-                  <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                      <Lucide.GraduationCap size={13} style={{ color:  'var(--text-secondary)'  }} />
-                      <span style={{ fontSize: '11px', color:  'var(--text-primary)' , textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={skPath}>
-                        {skPath}
-                      </span>
-                    </div>
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontFamily: 'var(--font-mono)',
+                        color: 'var(--text-secondary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                      title={skPath}
+                    >
+                      {skPath}
+                    </span>
                     <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost danger"
                       onClick={() => handleRemoveSkill(idx)}
-                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
                       title="移除"
                     >
-                      <Lucide.Trash2 size={12} />
+                      <Lucide.X size={13} />
                     </button>
                   </div>
                 ))}
+                {(settings.skills || []).length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 0' }}>
+                    还没有技能路径
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   type="text"
-                  placeholder="添加技能目录的绝对路径"
+                  placeholder="技能目录绝对路径"
                   value={newSkillPath}
-                  onChange={e => setNewSkillPath(e.target.value)}
-                  className="settings-field-input" style={{ flex: 1, padding: "6px 10px" }}
+                  onChange={(e) => setNewSkillPath(e.target.value)}
+                  className="settings-field-input"
+                  style={{ flex: 1 }}
                 />
                 <button
                   type="button"

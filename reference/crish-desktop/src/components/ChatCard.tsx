@@ -167,6 +167,14 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [goalText, setGoalText] = useState('自动完成系统的交互式升级与界面美化工作，包括状态栏 Ribbon、浏览器和终端模拟器的对接及验证。');
   const [goalActive, setGoalActive] = useState(true);
 
+  // Composer extras
+  const [permissionMode, setPermissionMode] = useState<'full' | 'ask'>('full');
+  const [attachments, setAttachments] = useState<string[]>([]);
+
+  const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks') => {
+    handleGlobalTabClick(panelId);
+  };
+
   // Smart auto-scroll refs
   const chatFlowRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
@@ -282,6 +290,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         if (name === 'run_command') {
           addTerminalLine(`\norange@Windows-PC MINGW64 /c/Software/conex`);
           addTerminalLine(`$ ${args}`);
+          // Linkage: command tools surface terminal on the right
+          openSidePanel('terminal');
         }
       },
       onToolPendingApproval: (toolId, name, args, explanation) => {
@@ -297,6 +307,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         if (name === 'run_command') {
           addTerminalLine(`\norange@Windows-PC MINGW64 /c/Software/conex`);
           addTerminalLine(`$ ${args}`);
+          openSidePanel('terminal');
         }
       },
       onTerminalLine: (line) => {
@@ -312,23 +323,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         const name = toolNames[toolId];
         if (name === 'run_command' && output) {
           output.split('\n').forEach(addTerminalLine);
+          openSidePanel('terminal');
         }
 
         if (diffs && diffs.length > 0) {
           setActiveDiffSource(diffs[0]);
-          useLayoutStore.setState((state) => {
-            const targetWs = state.workspaces.find((w) => w.id === wsId);
-            if (targetWs) {
-              for (const col of targetWs.columns) {
-                for (const gp of col.groups) {
-                  if (gp.cards.some(c => c.id === 'diff')) {
-                    gp.activeCardId = 'diff';
-                    break;
-                  }
-                }
-              }
-            }
-          });
+          // Linkage: file edits open Diff panel for full review
+          openSidePanel('diff');
         }
       },
       onToolError: (toolId, error) => {
@@ -1219,15 +1220,74 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </div>
         </div>
 
+        {attachments.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 4px' }}>
+            {attachments.map((name) => (
+              <span key={name} className="ui-badge" style={{ padding: '4px 8px', fontSize: 11.5 }}>
+                <Lucide.Paperclip size={11} style={{ marginRight: 4 }} />
+                {name}
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost"
+                  style={{ width: 18, height: 18, marginLeft: 2 }}
+                  onClick={() => setAttachments((prev) => prev.filter((a) => a !== name))}
+                >
+                  <Lucide.X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Toolbar outside the input field */}
         <div className="footer-actions">
           <div className="left-actions">
-            <div className="bypass-link" title="当前将跳过部分权限确认">
-              <span className="orange-dot" />
-              <span className="bypass-text">完全访问</span>
+            <button
+              type="button"
+              className="bypass-link"
+              title="点击切换权限模式"
+              onClick={() => {
+                setPermissionMode((m) => {
+                  const next = m === 'full' ? 'ask' : 'full';
+                  onShowToast(
+                    next === 'full'
+                      ? '已切换为完全访问（减少确认）'
+                      : '已切换为需确认（敏感操作会询问）',
+                  );
+                  return next;
+                });
+              }}
+              style={{ border: 'none', background: 'transparent', fontFamily: 'inherit' }}
+            >
+              <span
+                className="orange-dot"
+                style={{
+                  background:
+                    permissionMode === 'full' ? 'var(--accent-orange)' : 'var(--text-tertiary)',
+                }}
+              />
+              <span
+                className="bypass-text"
+                style={{
+                  color:
+                    permissionMode === 'full' ? 'var(--accent-orange)' : 'var(--text-secondary)',
+                }}
+              >
+                {permissionMode === 'full' ? '完全访问' : '需确认'}
+              </span>
               <Lucide.ChevronDown size={11} style={{ opacity: 0.5 }} />
-            </div>
-            <button type="button" className="plus-btn" title="添加文件">
+            </button>
+            <button
+              type="button"
+              className="plus-btn"
+              title="添加文件"
+              onClick={() => {
+                // Demo attach — real file picker would hook here
+                const demo = `附件-${attachments.length + 1}.txt`;
+                setAttachments((prev) => [...prev, demo]);
+                onShowToast(`已添加 ${demo}（演示）`);
+              }}
+            >
               <Lucide.Plus size={14} />
             </button>
           </div>

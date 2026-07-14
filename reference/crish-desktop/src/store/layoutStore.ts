@@ -120,6 +120,7 @@ interface LayoutStore {
   closeTabInGroup: (wsId: string, groupId: string, cardId: string) => void;
 
   // Sidebar Actions
+  createSession: (opts?: { title?: string; folder?: string }) => string;
   pinSession: (sessionId: string) => void;
   unpinSession: (sessionId: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -682,12 +683,42 @@ export const useLayoutStore = create<LayoutStore>()(
     setPanelsDropdownCoords: (coords) => set((state) => { state.panelsDropdownCoords = coords; }),
     setShowSettingsOverlay: (show) => set((state) => { state.showSettingsOverlay = show; }),
 
+    createSession: (opts) => {
+      const id = `sess-${Date.now()}`;
+      set((state) => {
+        const sess: SessionState = {
+          id,
+          title: opts?.title || '新会话',
+          folder: opts?.folder || '常规会话',
+          isPinned: false,
+          isArchived: false,
+          timestamp: '刚刚',
+          messages: [],
+        };
+        state.sessions.unshift(sess);
+        if (!state.folderOrder.includes(sess.folder)) {
+          state.folderOrder.push(sess.folder);
+        }
+        state.activeSessionId = id;
+      });
+      return id;
+    },
+
     togglePanel: (wsId, key, isVisible) => set((state) => {
       const ws = state.workspaces.find((w) => w.id === wsId);
       if (!ws) return;
 
       const cardId = key;
-      const cardTitle = key.charAt(0).toUpperCase() + key.slice(1);
+      const titleMap: Record<string, string> = {
+        preview: '预览',
+        diff: '变更',
+        terminal: '终端',
+        tasks: '任务',
+        'pi-runtime': '运行状态',
+        chat: '对话',
+        settings: '设置',
+      };
+      const cardTitle = titleMap[key] || key;
 
       if (isVisible) {
         // Check if card already exists anywhere in this workspace
