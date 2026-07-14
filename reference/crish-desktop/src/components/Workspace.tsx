@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { WorkspaceState, CardGroupState, ColumnState } from '../store/layoutStore';
 import { CardPanel } from './CardPanel';
+import { ProjectTrustModal } from './ProjectTrustModal';
 import * as Lucide from 'lucide-react';
 
 interface WorkspaceProps {
@@ -10,7 +11,7 @@ interface WorkspaceProps {
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
-  const { resizeColumns, resizeGroups, closeWorkspace, workspaces } = useLayoutStore();
+  const { resizeColumns, resizeGroups, closeWorkspace, workspaces, currentProjectTrusted, setFolderTrust, sessions, activeSessionId } = useLayoutStore();
   const draggedTab = useLayoutStore((state) => state.draggedTab);
   const dropPreview = useLayoutStore((state) => state.dropPreview);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -215,6 +216,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
     return baseCols;
   }, [ws.columns, draggedTab, dropPreview, ws.id]);
 
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const rawFolder = activeSession?.folder || 'c:/Software/conex';
+  const cwd = (rawFolder.includes('/') || rawFolder.includes('\\')) 
+    ? rawFolder 
+    : `c:/Software/conex/${rawFolder}`;
+
   return (
     <div
       ref={containerRef}
@@ -227,6 +234,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
         flex: 1,
       }}
     >
+      {!currentProjectTrusted && (
+        <ProjectTrustModal
+          cwd={cwd}
+          onTrust={async (decision) => {
+            await setFolderTrust(cwd, decision);
+            if (decision !== 'never') {
+              onShowToast('项目已成功授权，已解除限制');
+            } else {
+              onShowToast('已拒绝授权，输入与自动命令已被锁定');
+            }
+          }}
+        />
+      )}
       {/* Workspace top close controls (for split views) */}
       {workspaces.length > 1 && (
         <div
@@ -319,7 +339,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
                             display: 'flex',
                             flexDirection: 'column',
                             minHeight: 0,
-                            border: '1.5px dashed var(--accent-color, #374151)',
+                            border: '1.5px dashed var(--accent-color, #333333)',
                             background: 'rgba(55, 65, 81, 0.03)',
                             justifyContent: 'center',
                             alignItems: 'center',

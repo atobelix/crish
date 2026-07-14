@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { piClientApi } from '../api/piClientApi';
+import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/piClientApi';
 
 export interface CardState {
   id: string; // 'plan' | 'preview' | 'diff' | 'tasks' | 'terminal'
@@ -24,6 +26,40 @@ export interface WorkspaceState {
   columns: ColumnState[];
 }
 
+export interface DiffChange {
+  type: 'addition' | 'deletion' | 'normal';
+  lineNum?: number;
+  content: string;
+}
+
+export interface FileDiff {
+  filePath: string;
+  additions: number;
+  deletions: number;
+  changes: DiffChange[];
+}
+
+export interface MessageToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+  status: 'running' | 'success' | 'error' | 'pending_approval';
+  output?: string;
+  diffs?: FileDiff[];
+  explanation?: string;
+}
+
+export interface SessionMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  text?: string;
+  timestamp: number;
+  toolCalls?: MessageToolCall[];
+  status?: 'queued' | 'processing' | 'completed';
+  blocks?: { type: 'text' | 'tool_call'; id?: string; content?: string }[];
+  thinkingTime?: number;
+}
+
 export interface SessionState {
   id: string;
   title: string;
@@ -32,6 +68,7 @@ export interface SessionState {
   isArchived: boolean;
   branchParentId?: string;
   timestamp: string;
+  messages: SessionMessage[];
 }
 
 export interface DropPreviewState {
@@ -59,6 +96,7 @@ interface LayoutStore {
   draggedTab: DraggedTabState | null;
   dropPreview: DropPreviewState | null;
   panelsDropdownCoords: { x: number; y: number } | null;
+  showSettingsOverlay: boolean;
 
   // UI Settings Actions
   setDropPreview: (preview: DropPreviewState | null) => void;
@@ -67,6 +105,7 @@ interface LayoutStore {
   setTabModeEnabled: (enabled: boolean) => void;
   setActiveSessionId: (id: string) => void;
   setPanelsDropdownCoords: (coords: { x: number; y: number } | null) => void;
+  setShowSettingsOverlay: (show: boolean) => void;
 
   // Workspace Actions
   togglePanel: (wsId: string, key: string, isVisible: boolean) => void;
@@ -92,14 +131,212 @@ interface LayoutStore {
   moveFolderRealtime: (folderName: string, targetFolderName: string | null) => void;
   pinFolderSessions: (folderName: string) => void;
   unpinFolderSessions: (folderName: string) => void;
+
+  // Chat Actions
+  activeDiffSource: FileDiff | null;
+  setActiveDiffSource: (diff: FileDiff | null) => void;
+  addMessage: (wsId: string, sessionId: string, message: SessionMessage) => void;
+  withdrawMessage: (wsId: string, sessionId: string, messageId: string) => void;
+  respondToApproval: (wsId: string, sessionId: string, messageId: string, toolCallId: string, status: 'success' | 'error') => void;
+  setSessions: (sessions: SessionState[]) => void;
+  updateMessageText: (sessionId: string, messageId: string, text: string) => void;
+  addMessageToolCall: (sessionId: string, messageId: string, toolCall: MessageToolCall) => void;
+  updateMessageToolCall: (sessionId: string, messageId: string, toolCallId: string, updates: Partial<MessageToolCall>) => void;
+  setSessionMessageStatus: (sessionId: string, messageId: string, status: 'queued' | 'processing' | 'completed', thinkingTime?: number) => void;
+
+
+  // Plan Mode & Permissions
+  planModeEnabled: boolean;
+  setPlanModeEnabled: (enabled: boolean) => void;
+  planApproved: boolean;
+  setPlanApproved: (approved: boolean) => void;
+  commandPermissions: string[];
+  addCommandPermission: (cmd: string) => void;
+
+  // Pi Settings & Telemetry
+  piSettings: Settings | null;
+  scheduledTasks: CronJob[];
+  mcpServers: McpServer[];
+  trustedFolders: string[];
+  currentProjectTrusted: boolean;
+  activeWorkers: { id: string; taskName: string; elapsedSeconds: number }[];
+  tokenUsage: { input: number; inputMax: number; output: number; outputMax: number; cost: number };
+  killedWorkerIds: string[];
+  providers: ProviderInfo[];
+  setProviders: (providers: ProviderInfo[]) => void;
+  setPiSettings: (settings: Settings | null) => void;
+  setScheduledTasks: (tasks: CronJob[]) => void;
+  setMcpServers: (servers: McpServer[]) => void;
+  checkFolderTrust: (cwd: string) => Promise<void>;
+  setFolderTrust: (cwd: string, decision: 'always' | 'session' | 'never') => Promise<void>;
+  syncTelemetryData: (data: any) => void;
+
+  // New Primitives & Linkages
+  terminalLines: string[];
+  addTerminalLine: (line: string) => void;
+  clearTerminalLines: () => void;
+  manuallyTriggeredWorkers: { id: string; taskName: string; elapsedSeconds: number }[];
+  triggerCronJobNow: (prompt: string) => void;
+  killWorker: (id: string, taskName: string) => void;
+  applyLayoutPreset: (preset: 'developer-split' | 'full-chat' | 'telemetry-focus') => void;
 }
 
 const DEFAULT_SESSIONS: SessionState[] = [
-  { id: 'sess-1', title: '分析酒馆对话主界面问题', folder: '审计与代码分析', isPinned: false, isArchived: false, timestamp: '10分钟前' },
-  { id: 'sess-2', title: '审计三个项目的代码统一性问题', folder: '审计与代码分析', isPinned: false, isArchived: false, timestamp: '1小时前' },
-  { id: 'sess-3', title: 'Fix voice playback timing and overla', folder: '语音与播控', isPinned: false, isArchived: false, timestamp: '3天前' },
-  { id: 'sess-4', title: '定制菜单与滚动区域优化', folder: '常规会话', isPinned: false, isArchived: false, timestamp: '5天前' },
-  { id: 'sess-5', title: '添加终端与主题扩展', folder: '常规会话', isPinned: false, isArchived: false, timestamp: '1周前' },
+  { 
+    id: 'sess-1', 
+    title: '分析酒馆对话主界面问题', 
+    folder: '审计与代码分析', 
+    isPinned: false, 
+    isArchived: false, 
+    timestamp: '10分钟前',
+    messages: [
+      { id: 'm1-1', sender: 'assistant', text: '你好！有什么关于酒馆对话界面的问题我可以帮您分析的？', timestamp: Date.now() - 600000 }
+    ]
+  },
+  { 
+    id: 'sess-2', 
+    title: '审计三个项目的代码统一性问题', 
+    folder: '审计与代码分析', 
+    isPinned: false, 
+    isArchived: false, 
+    timestamp: '1小时前',
+    messages: [
+      {
+        id: 'msg-1',
+        sender: 'user',
+        text: 'Let me try directly creating a test trigger to isolate the issue.',
+        timestamp: Date.now() - 3600000
+      },
+      {
+        id: 'msg-2',
+        sender: 'assistant',
+        text: 'The inline button DOES exist (1 found)! Let me find where it is:',
+        timestamp: Date.now() - 3500000,
+        toolCalls: [
+          {
+            id: 'tc-grep-1',
+            name: 'grep_search',
+            arguments: 'data-flowbit-inline="1"',
+            status: 'success',
+            explanation: '在工作区搜索冲突的行内按钮标签 data-flowbit-inline="1"',
+            output: 'Searching pattern "data-flowbit-inline=\\"1\\""...\nFound 1 match in trigger-injector.ts:\nLine 42: <button data-flowbit-inline="1">F</button>'
+          },
+          {
+            id: 'tc-read-1',
+            name: 'read_file',
+            arguments: 'trigger-injector.ts',
+            status: 'success',
+            explanation: '读取 trigger-injector.ts 以分析按钮挂载逻辑',
+            output: 'Reading file "trigger-injector.ts"...\nFile size: 1042 bytes.\nFile contents read successfully.'
+          }
+        ]
+      },
+      {
+        id: 'msg-3',
+        sender: 'assistant',
+        text: 'Found the culprit! Another extension is creating `<button data-flowbit-inline="1">F</button>`, and our code reuses it. Let me find which extension:',
+        timestamp: Date.now() - 3400000,
+        toolCalls: [
+          {
+            id: 'tc-grep-2',
+            name: 'grep_search',
+            arguments: 'flowbit-inline-style',
+            status: 'success',
+            explanation: '在整个工作区搜索 flowbit-inline-style 样式以排除命名冲突',
+            output: 'Searching pattern "flowbit-inline-style"...\nFound 0 matches in workspace.'
+          }
+        ]
+      },
+      {
+        id: 'msg-4',
+        sender: 'assistant',
+        text: '找到根源了！另一个扩展创建了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 找到并重用它，但没有覆盖它的 `innerHTML`，所以按钮只显示 "F"，而非 SVG 图标。',
+        timestamp: Date.now() - 3200000,
+        toolCalls: [
+          {
+            id: 'tc-edit-1',
+            name: 'write_to_file',
+            arguments: 'trigger-injector.ts',
+            status: 'success',
+            explanation: '修改 trigger-injector.ts，在 acquireInlineBtn 中重新创建并注入 SVG 按钮内容',
+            diffs: [
+              {
+                filePath: 'trigger-injector.ts',
+                additions: 12,
+                deletions: 5,
+                changes: [
+                  { type: 'normal', content: 'function acquireInlineBtn() {' },
+                  { type: 'deletion', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
+                  { type: 'deletion', content: '  return btn;' },
+                  { type: 'addition', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
+                  { type: 'addition', content: '  if (btn && btn.innerHTML !== SVG_ICON) {' },
+                  { type: 'addition', content: '    btn.innerHTML = SVG_ICON;' },
+                  { type: 'addition', content: '  }' },
+                  { type: 'addition', content: '  return btn;' },
+                  { type: 'normal', content: '}' }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'msg-5',
+        sender: 'assistant',
+        text: 'Now rebuild and reload:',
+        timestamp: Date.now() - 3000000,
+        toolCalls: [
+          {
+            id: 'tc-build-1',
+            name: 'run_command',
+            arguments: 'npm run dev',
+            status: 'success',
+            explanation: '运行打包命令 npm run dev 以验证编译与变更',
+            output: 'vite v8.0.16 building client environment for production...\ntransforming...\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.46 kB │ gzip:  0.29 kB\ndist/assets/index-2PqGUG_A.css   30.11 kB │ gzip:  5.57 kB\ndist/assets/index-C068c687.js   270.20 kB │ gzip: 83.06 kB\n\n✓ built in 389ms'
+          }
+        ]
+      },
+      {
+        id: 'msg-6',
+        sender: 'assistant',
+        text: '我已经追踪到这个问题的根源了，总结一下发现：\n\n**当前状态：**\n- 扩展已加载，service worker 正常\n- 内容脚本已注入 (overlay 面板创建成功)\n  - 但 `mountTrigger()` 函数没有正常执行——`flowbit-inline-style` style 元素没有被创建，触发按钮也没有生成\n\n**根源：** 还有一个其他扩展（如 "All API Hub" 或 "HiSider"）在页面上注入了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 会找到并重用这个按钮，但不会覆盖它的 `innerHTML`，导致按钮只显示 "F" 而不是 SVG 图标。\n\n我已经修复了 `acquireInlineBtn` 让它检测到外部按钮时重新创建。\n\n但现在有一个更基础的问题：在新加载 of 页面上，`mountTrigger` 根本没有被触发（连 `<style>` 元素都没有），这说明内容脚本执行到 `showFlowbitFab()` 时可能抛出了异常，被 `bootstrap()` 的 `try-catch` 吞掉了。\n\n需要你手动做：\n1. 打开 `chrome://extensions`\n2. 找到 "Chat Sync Bridge"，点 移除\n3. 点击 **加载已解压的扩展程序** ➔ 选择 `C:\\Software\\codex_chatHistory\\apps\\browser-extension\\dist`\n4. 刷新 Claude 或 ChatGPT 页面\n\n这次移除再重新加载会触发全新的内容脚本注册，应该能解决 `mountTrigger` 不触发的问题。',
+        timestamp: Date.now() - 2800000
+      }
+    ]
+  },
+  { 
+    id: 'sess-3', 
+    title: 'Fix voice playback timing and overla', 
+    folder: '语音与播控', 
+    isPinned: false, 
+    isArchived: false, 
+    timestamp: '3天前',
+    messages: [
+      { id: 'm3-1', sender: 'assistant', text: '你好！这里可以帮您调试和修复语音播控的相关延时问题。', timestamp: Date.now() - 250000000 }
+    ]
+  },
+  { 
+    id: 'sess-4', 
+    title: '定制菜单与滚动区域优化', 
+    folder: '常规会话', 
+    isPinned: false, 
+    isArchived: false, 
+    timestamp: '5天前',
+    messages: [
+      { id: 'm4-1', sender: 'assistant', text: '你好！我可以协助您进行前端自定义菜单和隐藏滚动条样式的优化设计。', timestamp: Date.now() - 400000000 }
+    ]
+  },
+  { 
+    id: 'sess-5', 
+    title: '添加终端与主题扩展', 
+    folder: '常规会话', 
+    isPinned: false, 
+    isArchived: false, 
+    timestamp: '1周前',
+    messages: [
+      { id: 'm5-1', sender: 'assistant', text: '你好！想了解如何为开发面板新增本地终端视图或实现主题切换配置吗？', timestamp: Date.now() - 600000000 }
+    ]
+  },
 ];
 
 function createDefaultWorkspace(id: string): WorkspaceState {
@@ -123,16 +360,10 @@ function createDefaultWorkspace(id: string): WorkspaceState {
         widthRatio: 0.31,
         groups: [
           {
-            id: `group-plan-${id}`,
-            activeCardId: 'plan',
-            cards: [{ id: 'plan', title: 'Plan' }],
-            heightRatio: 0.45,
-          },
-          {
             id: `group-preview-${id}`,
             activeCardId: 'preview',
             cards: [{ id: 'preview', title: 'Preview' }],
-            heightRatio: 0.55,
+            heightRatio: 1.0,
           },
         ],
       },
@@ -144,18 +375,33 @@ function createDefaultWorkspace(id: string): WorkspaceState {
             id: `group-diff-${id}`,
             activeCardId: 'diff',
             cards: [{ id: 'diff', title: 'Diff' }],
-            heightRatio: 0.5,
-          },
-          {
-            id: `group-tasks-${id}`,
-            activeCardId: 'tasks',
-            cards: [{ id: 'tasks', title: 'Tasks' }],
-            heightRatio: 0.5,
+            heightRatio: 1.0,
           },
         ],
       },
     ],
   };
+}
+
+function populateBlocksForSessions(sessions: SessionState[]): SessionState[] {
+  return sessions.map(sess => ({
+    ...sess,
+    messages: sess.messages.map(msg => {
+      if (msg.sender === 'assistant' && !msg.blocks) {
+        const blocks: { type: 'text' | 'tool_call'; id?: string; content?: string }[] = [];
+        if (msg.text) {
+          blocks.push({ type: 'text', content: msg.text });
+        }
+        if (msg.toolCalls) {
+          msg.toolCalls.forEach(tc => {
+            blocks.push({ type: 'tool_call', id: tc.id });
+          });
+        }
+        return { ...msg, blocks };
+      }
+      return msg;
+    })
+  }));
 }
 
 export const useLayoutStore = create<LayoutStore>()(
@@ -165,12 +411,268 @@ export const useLayoutStore = create<LayoutStore>()(
     tabModeEnabled: false,
     uiSize: 'medium',
     sidebarCollapsed: false,
-    sessions: DEFAULT_SESSIONS,
+    sessions: populateBlocksForSessions(DEFAULT_SESSIONS),
     folderOrder: ['审计与代码分析', '语音与播控', '常规会话'],
     activeSessionId: 'sess-2',
     draggedTab: null,
     dropPreview: null,
     panelsDropdownCoords: null,
+    showSettingsOverlay: false,
+
+    activeDiffSource: null,
+    setActiveDiffSource: (diff) => set((state) => {
+      state.activeDiffSource = diff;
+    }),
+    planModeEnabled: false,
+    setPlanModeEnabled: (enabled) => set((state) => {
+      state.planModeEnabled = enabled;
+    }),
+    planApproved: false,
+    setPlanApproved: (approved) => set((state) => {
+      state.planApproved = approved;
+    }),
+    commandPermissions: [],
+    addCommandPermission: (cmd) => set((state) => {
+      if (!state.commandPermissions.includes(cmd)) {
+        state.commandPermissions.push(cmd);
+      }
+    }),
+    piSettings: null,
+    providers: [],
+    scheduledTasks: [],
+    mcpServers: [],
+    trustedFolders: [],
+    currentProjectTrusted: true,
+    activeWorkers: [],
+    tokenUsage: { input: 115482, inputMax: 160000, output: 24930, outputMax: 40000, cost: 0.345 },
+    killedWorkerIds: [],
+    
+    // New Initial States
+    terminalLines: [
+      'orange@Windows-PC MINGW64 /c/Software/conex',
+      '$ npm run dev',
+      '> zennav-server@1.0.0 dev',
+      '> node server.js',
+      '',
+      '[ready] Server started on http://localhost:3000',
+      '[ready] Database connection established.'
+    ],
+    manuallyTriggeredWorkers: [],
+
+    setProviders: (providers) => set((state) => {
+      state.providers = providers;
+    }),
+    setPiSettings: (settings) => set((state) => {
+      state.piSettings = settings;
+    }),
+    setScheduledTasks: (tasks) => set((state) => {
+      state.scheduledTasks = tasks;
+    }),
+    setMcpServers: (servers) => set((state) => {
+      state.mcpServers = servers;
+    }),
+    checkFolderTrust: async (cwd: string) => {
+      const list = await piClientApi.getTrustedFolders();
+      const normalizedCwd = cwd.replace(/\\/g, '/').toLowerCase();
+      const isTrusted = list.some(p => p.replace(/\\/g, '/').toLowerCase() === normalizedCwd);
+      set((state) => {
+        state.trustedFolders = list;
+        state.currentProjectTrusted = isTrusted;
+      });
+    },
+    setFolderTrust: async (cwd: string, decision: 'always' | 'session' | 'never') => {
+      const normalizedCwd = cwd.replace(/\\/g, '/');
+      if (decision === 'always') {
+        const list = await piClientApi.addTrustedFolder(normalizedCwd);
+        set((state) => {
+          state.trustedFolders = list;
+          state.currentProjectTrusted = true;
+        });
+      } else if (decision === 'session') {
+        set((state) => {
+          const lowerList = state.trustedFolders.map(f => f.toLowerCase());
+          if (!lowerList.includes(normalizedCwd.toLowerCase())) {
+            state.trustedFolders.push(normalizedCwd);
+          }
+          state.currentProjectTrusted = true;
+        });
+      } else {
+        const list = await piClientApi.removeTrustedFolder(normalizedCwd);
+        set((state) => {
+          state.trustedFolders = list;
+          state.currentProjectTrusted = false;
+        });
+      }
+    },
+    syncTelemetryData: (data: any) => set((state) => {
+      if (data.tokenUsage) {
+        state.tokenUsage = data.tokenUsage;
+      }
+      
+      // Increment elapsedSeconds for manual workers by 2 seconds on every sync
+      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map(w => ({
+        ...w,
+        elapsedSeconds: w.elapsedSeconds + 2
+      }));
+
+      if (data.activeWorkers) {
+        state.activeWorkers = [
+          ...data.activeWorkers.filter((w: any) => !state.killedWorkerIds.includes(w.id)),
+          ...state.manuallyTriggeredWorkers
+        ];
+      }
+      if (data.mcpServers) {
+        state.mcpServers = data.mcpServers;
+      }
+      if (data.cronJobs) {
+        state.scheduledTasks = data.cronJobs;
+      }
+    }),
+    addTerminalLine: (line: string) => set((state) => {
+      state.terminalLines.push(line);
+    }),
+    clearTerminalLines: () => set((state) => {
+      state.terminalLines = [];
+    }),
+    triggerCronJobNow: (prompt: string) => set((state) => {
+      const newWorker = {
+        id: `worker-manual-${Date.now()}`,
+        taskName: `Cron: ${prompt}`,
+        elapsedSeconds: 0
+      };
+      state.manuallyTriggeredWorkers.push(newWorker);
+      state.activeWorkers.push(newWorker);
+    }),
+    killWorker: (id: string, _taskName: string) => set((state) => {
+      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter(w => w.id !== id);
+      state.activeWorkers = state.activeWorkers.filter(w => w.id !== id);
+      if (!state.killedWorkerIds.includes(id)) {
+        state.killedWorkerIds.push(id);
+      }
+      // Deduct token usage as a simulated result of termination
+      state.tokenUsage.input = Math.max(0, state.tokenUsage.input - 1500);
+      state.tokenUsage.cost = Math.max(0, parseFloat((state.tokenUsage.cost - 0.0045).toFixed(4)));
+    }),
+    addMessage: (_wsId, sessionId, message) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess) {
+        if (!sess.messages) sess.messages = [];
+        
+        // Auto-approve whitelisted commands
+        if (message.toolCalls) {
+          message.toolCalls.forEach((tc) => {
+            if (tc.status === 'pending_approval') {
+              const isWhitelisted = state.commandPermissions.some(allowed => 
+                tc.arguments.startsWith(allowed) || allowed.startsWith(tc.arguments)
+              );
+              if (isWhitelisted) {
+                tc.status = 'success';
+                tc.output = `[自动授权成功] 正在执行命令:\n$ ${tc.arguments}\nvite v8.0.16 building client environment for production...\ntransforming...\n✓ built in 389ms`;
+              }
+            }
+          });
+        }
+        
+        const newMsg = {
+          ...message,
+          blocks: message.blocks || []
+        };
+        if (newMsg.blocks.length === 0) {
+          if (newMsg.text) {
+            newMsg.blocks.push({ type: 'text' as const, content: newMsg.text });
+          }
+          if (newMsg.toolCalls) {
+            newMsg.toolCalls.forEach(tc => {
+              newMsg.blocks.push({ type: 'tool_call' as const, id: tc.id });
+            });
+          }
+        }
+        
+        sess.messages.push(newMsg);
+      }
+    }),
+    withdrawMessage: (_wsId, sessionId, messageId) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const idx = sess.messages.findIndex(m => m.id === messageId);
+        if (idx !== -1) {
+          sess.messages = sess.messages.slice(0, idx);
+        }
+      }
+    }),
+    respondToApproval: (_wsId, sessionId, messageId, toolCallId, status) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const msg = sess.messages.find(m => m.id === messageId);
+        if (msg && msg.toolCalls) {
+          const tc = msg.toolCalls.find(t => t.id === toolCallId);
+          if (tc) {
+            tc.status = status;
+            if (status === 'success') {
+              tc.output = "权限已批准。正在执行命令:\n$ npm run build\nvite v8.0.16 building client environment for production...\ntransforming...\nrendering chunks...\n✓ built in 389ms";
+            } else {
+              tc.output = "权限被拒绝。\nError: Command permission rejected by user.";
+            }
+          }
+        }
+      }
+    }),
+    setSessions: (sessions) => set((state) => {
+      state.sessions = sessions;
+    }),
+    updateMessageText: (sessionId, messageId, text) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const msg = sess.messages.find(m => m.id === messageId);
+        if (msg) {
+          msg.text = text;
+          if (!msg.blocks) msg.blocks = [];
+          
+          const lastBlock = msg.blocks[msg.blocks.length - 1];
+          if (lastBlock && lastBlock.type === 'text' && text.startsWith(lastBlock.content || '')) {
+            lastBlock.content = text;
+          } else {
+            msg.blocks.push({ type: 'text' as const, content: text });
+          }
+        }
+      }
+    }),
+    addMessageToolCall: (sessionId, messageId, toolCall) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const msg = sess.messages.find(m => m.id === messageId);
+        if (msg) {
+          if (!msg.toolCalls) msg.toolCalls = [];
+          msg.toolCalls.push(toolCall);
+          if (!msg.blocks) msg.blocks = [];
+          msg.blocks.push({ type: 'tool_call' as const, id: toolCall.id });
+        }
+      }
+    }),
+    updateMessageToolCall: (sessionId, messageId, toolCallId, updates) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const msg = sess.messages.find(m => m.id === messageId);
+        if (msg && msg.toolCalls) {
+          const tc = msg.toolCalls.find(t => t.id === toolCallId);
+          if (tc) {
+            Object.assign(tc, updates);
+          }
+        }
+      }
+    }),
+    setSessionMessageStatus: (sessionId, messageId, status, thinkingTime) => set((state) => {
+      const sess = state.sessions.find(s => s.id === sessionId);
+      if (sess && sess.messages) {
+        const msg = sess.messages.find(m => m.id === messageId);
+        if (msg) {
+          msg.status = status;
+          if (thinkingTime !== undefined) {
+            msg.thinkingTime = thinkingTime;
+          }
+        }
+      }
+    }),
 
     setDropPreview: (preview) => set((state) => { state.dropPreview = preview; }),
     setUiSize: (size) => set((state) => { state.uiSize = size; }),
@@ -178,6 +680,7 @@ export const useLayoutStore = create<LayoutStore>()(
     setTabModeEnabled: (enabled) => set((state) => { state.tabModeEnabled = enabled; }),
     setActiveSessionId: (id) => set((state) => { state.activeSessionId = id; }),
     setPanelsDropdownCoords: (coords) => set((state) => { state.panelsDropdownCoords = coords; }),
+    setShowSettingsOverlay: (show) => set((state) => { state.showSettingsOverlay = show; }),
 
     togglePanel: (wsId, key, isVisible) => set((state) => {
       const ws = state.workspaces.find((w) => w.id === wsId);
@@ -650,10 +1153,12 @@ export const useLayoutStore = create<LayoutStore>()(
         isArchived: false,
         branchParentId: sessionId,
         timestamp: '刚刚',
+        messages: original.messages ? JSON.parse(JSON.stringify(original.messages)) : [],
       };
       // Insert branch right after the original session
       const idx = state.sessions.findIndex((s) => s.id === sessionId);
       state.sessions.splice(idx + 1, 0, newSess);
+      state.activeSessionId = newSess.id; // Auto focus newly branched session
     }),
 
     splitScreenWorkspace: (_sessionId) => set((state) => {
@@ -721,6 +1226,94 @@ export const useLayoutStore = create<LayoutStore>()(
           s.isPinned = false;
         }
       });
+    }),
+
+    applyLayoutPreset: (preset) => set((state) => {
+      const ws = state.workspaces[state.activeWorkspaceIndex];
+      if (!ws) return;
+
+      if (preset === 'developer-split') {
+        ws.columns = [
+          {
+            id: `col-chat-${ws.id}`,
+            widthRatio: 0.38,
+            groups: [
+              {
+                id: `group-chat-${ws.id}`,
+                activeCardId: 'chat',
+                cards: [{ id: 'chat', title: 'Chat' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+          {
+            id: `col-1-${ws.id}`,
+            widthRatio: 0.31,
+            groups: [
+              {
+                id: `group-preview-${ws.id}`,
+                activeCardId: 'preview',
+                cards: [{ id: 'preview', title: 'Preview' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+          {
+            id: `col-2-${ws.id}`,
+            widthRatio: 0.31,
+            groups: [
+              {
+                id: `group-diff-${ws.id}`,
+                activeCardId: 'diff',
+                cards: [{ id: 'diff', title: 'Diff' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+        ];
+      } else if (preset === 'full-chat') {
+        ws.columns = [
+          {
+            id: `col-chat-${ws.id}`,
+            widthRatio: 1.0,
+            groups: [
+              {
+                id: `group-chat-${ws.id}`,
+                activeCardId: 'chat',
+                cards: [{ id: 'chat', title: 'Chat' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+        ];
+      } else if (preset === 'telemetry-focus') {
+        ws.columns = [
+          {
+            id: `col-chat-${ws.id}`,
+            widthRatio: 0.5,
+            groups: [
+              {
+                id: `group-chat-${ws.id}`,
+                activeCardId: 'chat',
+                cards: [{ id: 'chat', title: 'Chat' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+          {
+            id: `col-runtime-${ws.id}`,
+            widthRatio: 0.5,
+            groups: [
+              {
+                id: `group-runtime-${ws.id}`,
+                activeCardId: 'pi-runtime',
+                cards: [{ id: 'pi-runtime', title: 'Pi Telemetry' }],
+                heightRatio: 1.0,
+              },
+            ],
+          },
+        ];
+      }
     }),
   }))
 );
