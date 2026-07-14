@@ -127,18 +127,18 @@ describe("background command manager", () => {
     expect(events.at(-1)).toBe("task-end");
   });
 
-  it("exposes start, get, list, wait, and cancel tools", async () => {
+  it("exposes clear AI tools: run_background, wait_for_task, check_task, list_tasks, stop_task", async () => {
     await writeFile(join(workspaceRoot, "bg-tool.js"), "setTimeout(() => console.log('done'), 30000);", "utf8");
     const manager = new BackgroundCommandManager({
       workspaceRoot,
       defaultTimeoutMs: 5_000
     });
     const tools = createBackgroundCommandTools(manager);
-    const start = tools.find((tool) => tool.name === "start_background_command")!;
-    const get = tools.find((tool) => tool.name === "get_background_command")!;
-    const wait = tools.find((tool) => tool.name === "wait_for_background_command")!;
-    const list = tools.find((tool) => tool.name === "list_background_commands")!;
-    const cancel = tools.find((tool) => tool.name === "cancel_background_command")!;
+    const start = tools.find((tool) => tool.name === "run_background")!;
+    const get = tools.find((tool) => tool.name === "check_task")!;
+    const wait = tools.find((tool) => tool.name === "wait_for_task")!;
+    const list = tools.find((tool) => tool.name === "list_tasks")!;
+    const cancel = tools.find((tool) => tool.name === "stop_task")!;
 
     expect(wait).toBeTruthy();
 
@@ -163,27 +163,7 @@ describe("background command manager", () => {
     expect(cancelled.terminationDiagnostics.length).toBeGreaterThan(0);
   }, 15_000);
 
-  it("waitUntilDone blocks until the background command finishes", async () => {
-    await writeFile(
-      join(workspaceRoot, "quick.js"),
-      "setTimeout(() => console.log('ok'), 40);",
-      "utf8",
-    );
-    const manager = new BackgroundCommandManager({
-      workspaceRoot,
-      defaultTimeoutMs: 10_000,
-    });
-    const tools = createBackgroundCommandTools(manager);
-    const start = tools.find((tool) => tool.name === "start_background_command")!;
-    const output = await start.execute(
-      { command: "node quick.js", waitUntilDone: true },
-      context(),
-    );
-    expect(output.text).toMatch(/结束|succeeded|ok/i);
-    expect((output.json as { state: string }).state).toBe("succeeded");
-  }, 15_000);
-
-  it("wait soft-timeout does not cancel a still-running process", async () => {
+  it("wait_for_task soft-timeout does not cancel a still-running process", async () => {
     await writeFile(
       join(workspaceRoot, "slow.js"),
       "setTimeout(() => console.log('late'), 2000);",
@@ -194,8 +174,8 @@ describe("background command manager", () => {
       defaultTimeoutMs: 30_000,
     });
     const tools = createBackgroundCommandTools(manager);
-    const start = tools.find((tool) => tool.name === "start_background_command")!;
-    const wait = tools.find((tool) => tool.name === "wait_for_background_command")!;
+    const start = tools.find((tool) => tool.name === "run_background")!;
+    const wait = tools.find((tool) => tool.name === "wait_for_task")!;
     const started = await start.execute({ command: "node slow.js" }, context());
     const taskId = (started.json as { id: string }).id;
     const waited = await wait.execute({ taskId, timeoutMs: 80 }, context());

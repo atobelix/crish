@@ -326,6 +326,17 @@ export interface BackgroundCommandToolsOptions {
   policy?: ScriptWaitPolicy;
 }
 
+/**
+ * Clear AI-facing task tools (single surface — do not also put background APIs on shell_command).
+ *
+ * Mental model for the model:
+ *   shell_command     → run & wait (default for short work)
+ *   run_background    → start long work, get taskId
+ *   wait_for_task     → block until done (preferred)
+ *   check_task        → peek (rarely)
+ *   stop_task         → only if user asks / clearly stuck
+ *   list_tasks        → see what's running
+ */
 export function createBackgroundCommandTools(
   manager: BackgroundCommandManager,
   options: BackgroundCommandToolsOptions = {},
@@ -334,24 +345,20 @@ export function createBackgroundCommandTools(
 
   return [
     defineTool({
-      name: "start_background_command",
-      label: "后台运行命令",
+      name: "run_background",
+      label: "后台运行",
       description:
-        "在后台启动较长命令并立即返回任务 id。短命令可设 waitUntilDone=true 直接等到结束；需要结果时优先用 wait_for_background_command，不要短间隔反复 get。",
+        "Start a long-running command without blocking (build/test/install/dev server). Returns taskId. " +
+        "When you need the result, call wait_for_task. Do not call check_task every few seconds. " +
+        "For short commands, prefer shell_command instead.",
       category: "terminal",
       concurrency: "parallel",
       inputSchema: {
         type: "object",
         properties: {
-          command: { type: "string" },
-          cwd: { type: "string" },
-          timeoutMs: { type: "number" },
-          maxOutputBytes: { type: "number" },
-          heartbeatIntervalMs: { type: "number" },
-          waitUntilDone: {
-            type: "boolean",
-            description: "true = 等命令结束后再返回（适合短命令）；false = 立即返回（默认）",
-          },
+          command: { type: "string", description: "Command to run." },
+          cwd: { type: "string", description: "Working directory relative to the project." },
+          timeoutMs: { type: "number", description: "Max lifetime of the process (ms)." },
         },
         required: ["command"],
         additionalProperties: false,
@@ -361,33 +368,25 @@ export function createBackgroundCommandTools(
         return command ? classifyTerminalCommand(command).risk === "read" : false;
       },
       summarize(input) {
-        return `start background command: ${stringField(input, "command") ?? "<missing command>"}`;
+        return `run_background: ${stringField(input, "command") ?? "?"}`;
       },
       async execute(input) {
         const command = requireNonEmptyString(input.command, "command");
-        const waitUntilDone = booleanField(input, "waitUntilDone") === true;
-        const mode: ScriptRunMode = waitUntilDone ? "wait" : "continue";
         const task = await manager.start({
           command,
           cwd: stringField(input, "cwd"),
           timeoutMs: numberField(input, "timeoutMs"),
-          maxOutputBytes: numberField(input, "maxOutputBytes"),
-          heartbeatIntervalMs: numberField(input, "heartbeatIntervalMs"),
         });
-        const meta = policy.registerStart(task.id, command, mode);
-        if (waitUntilDone) {
-          const finished = await manager.waitForTask(task.id);
-          policy.registerEnd(task.id, finished.durationMs);
-          return backgroundTaskOutput("命令已结束", finished, policy.startGuidance(meta));
-        }
-        return backgroundTaskOutput("后台命令已启动", task, policy.startGuidance(meta));
+        const meta = policy.registerStart(task.id, command, "continue");
+        return backgroundTaskOutput("后台任务已启动", task, policy.startGuidance(meta));
       },
     }),
     defineTool({
-      name: "wait_for_background_command",
-      label: "等待后台命令",
+      name: "wait_for_task",
+      label: "等待任务",
       description:
-        "阻塞直到指定后台命令结束（或到达可选超时）。这是获取长任务结果的首选方式；超时只会结束等待，不会杀掉仍在运行的正常进程。",
+        "Wait until a background task finishes (or optional timeout). Prefer this over repeated check_task. " +
+        "A wait timeout only stops waiting — it does NOT kill a healthy process.",
       category: "terminal",
       concurrency: "parallel",
       inputSchema: {
@@ -396,7 +395,7 @@ export function createBackgroundCommandTools(
           taskId: { type: "string" },
           timeoutMs: {
             type: "number",
-            description: "最长等待毫秒数；省略则尽量等到任务自身超时预算。",
+            description: "Optional max wait (ms). Omit to wait up to the task's own budget.",
           },
         },
         required: ["taskId"],
@@ -404,29 +403,28 @@ export function createBackgroundCommandTools(
       },
       isReadOnly: () => true,
       summarize(input) {
-        return `wait for background command: ${stringField(input, "taskId") ?? "<missing task id>"}`;
+        return `wait_for_task: ${stringField(input, "taskId") ?? "?"}`;
       },
       async execute(input) {
         const taskId = requireNonEmptyString(input.taskId, "taskId");
         const finished = await manager.waitForTask(taskId, numberField(input, "timeoutMs"));
         if (isTerminalState(finished.state)) {
           policy.registerEnd(taskId, finished.durationMs);
-          return backgroundTaskOutput("命令已结束", finished);
+          return backgroundTaskOutput("任务已结束", finished);
         }
-        // Soft timeout: still running
         return backgroundTaskOutput(
-          "等待超时，命令仍在运行",
+          "等待超时，任务仍在运行",
           finished,
-          "进程未被终止。可以稍后再 wait，或处理其它不依赖该输出的工作。",
+          "进程未被终止。可稍后再 wait_for_task，或先做不依赖该结果的其它工作。",
         );
       },
     }),
     defineTool({
-      name: "get_background_command",
-      label: "查看后台命令",
+      name: "check_task",
+      label: "查看任务",
       description:
-        "查看后台命令当前状态与输出预览。不要用它做高频轮询；需要完整结果请用 wait_for_background_command。",
-      category: "internal",
+        "Peek at status/output of a background task. Use sparingly. Prefer wait_for_task when you need the final result.",
+      category: "terminal",
       concurrency: "parallel",
       inputSchema: {
         type: "object",
@@ -438,29 +436,28 @@ export function createBackgroundCommandTools(
       },
       isReadOnly: () => true,
       summarize(input) {
-        return `get background command: ${stringField(input, "taskId") ?? "<missing task id>"}`;
+        return `check_task: ${stringField(input, "taskId") ?? "?"}`;
       },
       async execute(input) {
         const taskId = requireNonEmptyString(input.taskId, "taskId");
         let task = manager.get(taskId);
-        if (!task) throw new Error(`Background command not found: ${taskId}`);
+        if (!task) throw new Error(`Task not found: ${taskId}`);
 
         if (isTerminalState(task.state)) {
           policy.registerEnd(taskId, task.durationMs);
-          return backgroundTaskOutput("命令状态", task);
+          return backgroundTaskOutput("任务状态", task);
         }
 
         const runningMs = task.durationMs ?? 0;
         const advice = policy.recordPoll(taskId, runningMs);
 
         if (advice.forceWait) {
-          // Convert noisy polling into one real wait (does not kill process on soft timeout)
           const finished = await manager.waitForTask(taskId);
           if (isTerminalState(finished.state)) {
             policy.registerEnd(taskId, finished.durationMs);
           }
           return backgroundTaskOutput(
-            isTerminalState(finished.state) ? "命令已结束" : "等待后仍在运行",
+            isTerminalState(finished.state) ? "任务已结束" : "等待后仍在运行",
             finished,
             advice.hint,
           );
@@ -468,16 +465,16 @@ export function createBackgroundCommandTools(
 
         const soft =
           runningMs >= PARALLEL_SOFT_LIMIT_MS
-            ? `已运行 ${formatDuration(runningMs)}。若还要结果，请 wait 而不是继续频繁查看。`
+            ? `已运行 ${formatDuration(runningMs)}。若需要结果请 wait_for_task，不要继续频繁 check。`
             : advice.hint;
-        return backgroundTaskOutput("命令仍在运行", task, soft);
+        return backgroundTaskOutput("任务仍在运行", task, soft);
       },
     }),
     defineTool({
-      name: "list_background_commands",
-      label: "列出后台命令",
-      description: "列出当前进程内的后台命令。",
-      category: "internal",
+      name: "list_tasks",
+      label: "任务列表",
+      description: "List background tasks in this workspace/process.",
+      category: "terminal",
       concurrency: "parallel",
       inputSchema: {
         type: "object",
@@ -486,7 +483,7 @@ export function createBackgroundCommandTools(
       },
       isReadOnly: () => true,
       summarize() {
-        return "list background commands";
+        return "list_tasks";
       },
       async execute() {
         const tasks = manager.list();
@@ -494,16 +491,17 @@ export function createBackgroundCommandTools(
           text:
             tasks.length > 0
               ? tasks.map(formatBackgroundCommandLine).join("\n")
-              : "当前没有后台命令。",
+              : "当前没有后台任务。",
           json: { tasks: tasks as unknown as JsonValue },
         };
       },
     }),
     defineTool({
-      name: "cancel_background_command",
-      label: "取消后台命令",
+      name: "stop_task",
+      label: "停止任务",
       description:
-        "取消仍在运行的后台命令。仅在用户要求停止、或命令确认卡死时使用；不要为了继续对话而取消正常进程。",
+        "Stop a running background task. Only when the user asks to stop, or the process is clearly stuck. " +
+        "Never stop a healthy long job just so you can keep chatting.",
       category: "terminal",
       concurrency: "exclusive",
       inputSchema: {
@@ -516,16 +514,19 @@ export function createBackgroundCommandTools(
       },
       isReadOnly: () => false,
       summarize(input) {
-        return `cancel background command: ${stringField(input, "taskId") ?? "<missing task id>"}`;
+        return `stop_task: ${stringField(input, "taskId") ?? "?"}`;
       },
       async execute(input) {
         const task = manager.cancel(requireNonEmptyString(input.taskId, "taskId"));
         policy.registerEnd(task.id, task.durationMs);
-        return backgroundTaskOutput("已请求取消命令", task);
+        return backgroundTaskOutput("已请求停止任务", task);
       },
     }),
   ];
 }
+
+/** @deprecated Use createBackgroundCommandTools (clear names: run_background / wait_for_task / …). */
+export const createBackgroundCommandToolsLegacy = createBackgroundCommandTools;
 
 function backgroundTaskOutput(
   title: string,

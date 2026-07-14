@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createApplyWorkspaceEditsTool,
+  createBackgroundCommandTools,
   createEditTool,
   GitCliVersioningService,
   createListDirectoryTool,
@@ -16,12 +17,14 @@ import {
   createRestoreWorkspaceCheckpointTool,
   createSearchFilesTool,
   createTerminalCommandTool,
+  BackgroundCommandManager,
   WorkspaceMutationCoordinator,
   createWorkspaceCheckpointTool,
   createWriteFileTool
 } from ".";
 import { encodeTextBuffer } from "./encoding";
 import type { ToolExecutionContext } from "@crish/shared-types";
+import type { AgentTool } from "./types";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,15 +49,35 @@ function context(overrides: Partial<ToolExecutionContext> = {}): ToolExecutionCo
   };
 }
 
-async function waitForBackgroundTaskState(tool: ReturnType<typeof createTerminalCommandTool>, taskId: string, state: string): Promise<{ state?: string }> {
+async function waitForBackgroundTaskState(
+  check: AgentTool,
+  taskId: string,
+  state: string,
+): Promise<{ state?: string }> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const output = await tool.execute({ backgroundAction: "get", taskId }, context());
+    const output = await check.execute({ taskId }, context());
     const json = output.json as { state?: string };
     if (json.state === state) return json;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Timed out waiting for background command ${taskId} to reach ${state}`);
+}
+
+function taskTools(workspaceRoot: string) {
+  const manager = new BackgroundCommandManager({
+    workspaceRoot,
+    defaultTimeoutMs: 10_000,
+  });
+  const tools = createBackgroundCommandTools(manager);
+  return {
+    manager,
+    run: tools.find((t) => t.name === "run_background")!,
+    wait: tools.find((t) => t.name === "wait_for_task")!,
+    check: tools.find((t) => t.name === "check_task")!,
+    list: tools.find((t) => t.name === "list_tasks")!,
+    stop: tools.find((t) => t.name === "stop_task")!,
+  };
 }
 
 async function git(args: string[]): Promise<void> {
@@ -174,28 +197,31 @@ describe("local workspace tools", () => {
     }
   });
 
-  it("runs background command lifecycle through shell_command", async () => {
+  it("runs background lifecycle through clear task tools", async () => {
     await writeFile(join(workspaceRoot, "bg-tool.js"), "setTimeout(() => console.log('done'), 30000);", "utf8");
-    const tool = createTerminalCommandTool({
-      workspaceRoot,
-      defaultTimeoutMs: 10_000,
-      backgroundDefaultTimeoutMs: 10_000
-    });
+    const { run, list, check, stop } = taskTools(workspaceRoot);
 
-    const started = await tool.execute({ command: "node bg-tool.js", background: true }, context());
+    const started = await run.execute({ command: "node bg-tool.js" }, context());
     const taskId = (started.json as { id: string }).id;
-    const listed = await tool.execute({ backgroundAction: "list" }, context());
-    const status = await tool.execute({ backgroundAction: "get", taskId }, context());
-    const cancel = await tool.execute({ backgroundAction: "cancel", taskId }, context());
-    const cancelled = await waitForBackgroundTaskState(tool, taskId, "cancelled");
+    const listed = await list.execute({}, context());
+    const status = await check.execute({ taskId }, context());
+    const cancel = await stop.execute({ taskId }, context());
+    const cancelled = await waitForBackgroundTaskState(check, taskId, "cancelled");
 
-    expect(started.text).toMatch(/后台命令已启动|Background command started/);
+    expect(started.text).toMatch(/后台任务已启动|后台/);
     expect(taskId).toMatch(/^bgcmd-/);
     expect(listed.text).toContain(taskId);
     expect(status.text).toContain(taskId);
-    expect(cancel.text).toMatch(/已请求取消|cancellation/i);
+    expect(cancel.text).toMatch(/停止|取消/);
     expect(cancelled).toMatchObject({ state: "cancelled" });
   }, 15_000);
+
+  it("shell_command redirects legacy background=true to run_background", async () => {
+    const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000 });
+    const output = await tool.execute({ command: "echo hi", background: true } as any, context());
+    expect(output.text).toMatch(/run_background/);
+    expect((output.json as { redirected?: boolean }).redirected).toBe(true);
+  });
 
   it("does not lock read-only shell commands even when a workspace lease is active", async () => {
     const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
@@ -242,33 +268,40 @@ describe("local workspace tools", () => {
     expect(mutationCoordinator.listLeases()).toEqual([]);
   });
 
-  it("does not leak leases for background shell start, list, get, or cancel", async () => {
+  it("background task tools do not hold workspace leases", async () => {
     const mutationCoordinator = new WorkspaceMutationCoordinator({ workspaceRoot });
-    const tool = createTerminalCommandTool({
-      workspaceRoot,
-      mutationCoordinator,
-      defaultTimeoutMs: 10_000,
-      backgroundDefaultTimeoutMs: 10_000
-    });
+    // leases are only for mutating foreground shell; task tools are separate
+    const { run, list, check, stop } = taskTools(workspaceRoot);
 
-    const started = await tool.execute(
-      { command: 'node -e "setTimeout(() => {}, 30000)" > bg-leased.txt', backgroundAction: "start" },
-      context()
+    const started = await run.execute(
+      { command: 'node -e "setTimeout(() => {}, 30000)"' },
+      context(),
     );
     const taskId = (started.json as { id: string }).id;
     expect(mutationCoordinator.listLeases()).toEqual([]);
 
-    await tool.execute({ backgroundAction: "list" }, context());
+    await list.execute({}, context());
     expect(mutationCoordinator.listLeases()).toEqual([]);
 
-    await tool.execute({ backgroundAction: "get", taskId }, context());
+    await check.execute({ taskId }, context());
     expect(mutationCoordinator.listLeases()).toEqual([]);
 
-    await tool.execute({ backgroundAction: "cancel", taskId }, context());
+    await stop.execute({ taskId }, context());
     expect(mutationCoordinator.listLeases()).toEqual([]);
-    await waitForBackgroundTaskState(tool, taskId, "cancelled");
+    await waitForBackgroundTaskState(check, taskId, "cancelled");
     expect(mutationCoordinator.listLeases()).toEqual([]);
   }, 15_000);
+
+  it("createLocalWorkspaceTools exposes both shell_command and task tools", () => {
+    const tools = createLocalWorkspaceTools({ workspaceRoot });
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("shell_command");
+    expect(names).toContain("run_background");
+    expect(names).toContain("wait_for_task");
+    expect(names).toContain("check_task");
+    expect(names).toContain("stop_task");
+    expect(names).toContain("list_tasks");
+  });
 
   it("reads, writes, lists, and searches files inside the workspace", async () => {
     const write = createWriteFileTool({ workspaceRoot });
