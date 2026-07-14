@@ -189,7 +189,7 @@ describe("local workspace tools", () => {
     const cancel = await tool.execute({ backgroundAction: "cancel", taskId }, context());
     const cancelled = await waitForBackgroundTaskState(tool, taskId, "cancelled");
 
-    expect(started.text).toContain("Background command started");
+    expect(started.text).toMatch(/后台命令已启动|Background command started/);
     expect(taskId).toMatch(/^bgcmd-/);
     expect(listed.text).toContain(taskId);
     expect(status.text).toContain(taskId);
