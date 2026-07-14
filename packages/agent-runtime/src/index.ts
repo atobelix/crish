@@ -2,6 +2,7 @@ export * from "./runtime";
 export * from "./runtime-defaults";
 export * from "./runtime-metrics";
 export * from "./background-command";
+export * from "./script-wait-policy";
 export * from "./blob-externalization";
 export * from "./checkpoints";
 export * from "./checkpoint-manifest";
@@ -37,7 +38,6 @@ export * from "./preview-queue";
 export * from "./plugin-registry";
 export * from "./rich-read";
 export * from "./resource-uri";
-export * from "./secrets-obfuscation";
 export * from "./lsp-tools";
 export * from "./scoped-context";
 export * from "./scoped-context-resources";
@@ -66,8 +66,6 @@ export {
   type CheckpointMiddlewareOptions,
   OutputMaterializationMiddleware,
   type OutputMaterializationMiddlewareOptions,
-  SecretRedactionMiddleware,
-  type SecretRedactionMiddlewareOptions,
   MiddlewarePipeline,
 } from "./tools/index";
 export * from "./types";

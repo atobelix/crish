@@ -17,6 +17,13 @@ import {
 import { defineTool } from "./tools";
 import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 import type { AgentTool } from "./types";
+import {
+  formatDuration,
+  getSharedScriptWaitPolicy,
+  type ScriptRunMode,
+  type ScriptWaitPolicy,
+  PARALLEL_SOFT_LIMIT_MS,
+} from "./script-wait-policy";
 
 export type BackgroundCommandState = "running" | "succeeded" | "failed" | "cancelled" | "timed-out";
 
@@ -206,16 +213,27 @@ export class BackgroundCommandManager {
     return this.toSnapshot(record);
   }
 
-  waitForTask(taskId: string, timeoutMs = 60_000): Promise<BackgroundCommandSnapshot> {
+  /**
+   * Wait until the task ends, or until timeoutMs elapses.
+   * Default timeout uses remaining task budget (not a tiny 60s) so long builds work.
+   */
+  waitForTask(taskId: string, timeoutMs?: number): Promise<BackgroundCommandSnapshot> {
     const existing = this.get(taskId);
     if (!existing) return Promise.reject(new Error(`Background command not found: ${taskId}`));
     if (isTerminalState(existing.state)) return Promise.resolve(existing);
 
+    const startedMs = Date.parse(existing.startedAt) || Date.now();
+    const remaining = Math.max(1_000, existing.timeoutMs - (Date.now() - startedMs));
+    const waitBudget = Math.max(1_000, timeoutMs ?? remaining);
+
     return new Promise((resolveWait, reject) => {
       const timeout = setTimeout(() => {
         unsubscribe();
-        reject(new Error(`Timed out waiting for background command: ${taskId}`));
-      }, timeoutMs);
+        // Soft timeout: return current snapshot, do NOT kill the process
+        const current = this.get(taskId);
+        if (current) resolveWait(current);
+        else reject(new Error(`Timed out waiting for background command: ${taskId}`));
+      }, waitBudget);
       const unsubscribe = this.subscribe((event) => {
         if (event.task.id !== taskId || event.type !== "task-end") return;
         clearTimeout(timeout);
@@ -243,7 +261,14 @@ export class BackgroundCommandManager {
     record.error = input.error;
     record.finishedAt = Date.now();
     record.updatedAt = record.finishedAt;
-    this.emit({ type: "task-end", timestamp: nowIso(), task: this.toSnapshot(record) });
+    const snapshot = this.toSnapshot(record);
+    this.emit({ type: "task-end", timestamp: nowIso(), task: snapshot });
+    // Feed duration stats for simple wait hints (shared policy)
+    try {
+      getSharedScriptWaitPolicy().registerEnd(record.id, snapshot.durationMs);
+    } catch {
+      // never break process lifecycle on policy bookkeeping
+    }
   }
 
   private requireRecord(taskId: string): BackgroundCommandRecord {
@@ -296,12 +321,23 @@ export class BackgroundCommandManager {
   }
 }
 
-export function createBackgroundCommandTools(manager: BackgroundCommandManager): AgentTool[] {
+export interface BackgroundCommandToolsOptions {
+  /** Optional policy instance; defaults to process-shared policy. */
+  policy?: ScriptWaitPolicy;
+}
+
+export function createBackgroundCommandTools(
+  manager: BackgroundCommandManager,
+  options: BackgroundCommandToolsOptions = {},
+): AgentTool[] {
+  const policy = options.policy ?? getSharedScriptWaitPolicy();
+
   return [
     defineTool({
       name: "start_background_command",
-      label: "Start background command",
-      description: "Start a long-running local command and return immediately with a task id.",
+      label: "后台运行命令",
+      description:
+        "在后台启动较长命令并立即返回任务 id。短命令可设 waitUntilDone=true 直接等到结束；需要结果时优先用 wait_for_background_command，不要短间隔反复 get。",
       category: "terminal",
       concurrency: "parallel",
       inputSchema: {
@@ -311,10 +347,14 @@ export function createBackgroundCommandTools(manager: BackgroundCommandManager):
           cwd: { type: "string" },
           timeoutMs: { type: "number" },
           maxOutputBytes: { type: "number" },
-          heartbeatIntervalMs: { type: "number" }
+          heartbeatIntervalMs: { type: "number" },
+          waitUntilDone: {
+            type: "boolean",
+            description: "true = 等命令结束后再返回（适合短命令）；false = 立即返回（默认）",
+          },
         },
         required: ["command"],
-        additionalProperties: false
+        additionalProperties: false,
       },
       isReadOnly(input) {
         const command = stringField(input, "command");
@@ -324,50 +364,125 @@ export function createBackgroundCommandTools(manager: BackgroundCommandManager):
         return `start background command: ${stringField(input, "command") ?? "<missing command>"}`;
       },
       async execute(input) {
+        const command = requireNonEmptyString(input.command, "command");
+        const waitUntilDone = booleanField(input, "waitUntilDone") === true;
+        const mode: ScriptRunMode = waitUntilDone ? "wait" : "continue";
         const task = await manager.start({
-          command: requireNonEmptyString(input.command, "command"),
+          command,
           cwd: stringField(input, "cwd"),
           timeoutMs: numberField(input, "timeoutMs"),
           maxOutputBytes: numberField(input, "maxOutputBytes"),
-          heartbeatIntervalMs: numberField(input, "heartbeatIntervalMs")
+          heartbeatIntervalMs: numberField(input, "heartbeatIntervalMs"),
         });
-        return backgroundTaskOutput("Background command started", task);
-      }
+        const meta = policy.registerStart(task.id, command, mode);
+        if (waitUntilDone) {
+          const finished = await manager.waitForTask(task.id);
+          policy.registerEnd(task.id, finished.durationMs);
+          return backgroundTaskOutput("命令已结束", finished, policy.startGuidance(meta));
+        }
+        return backgroundTaskOutput("后台命令已启动", task, policy.startGuidance(meta));
+      },
+    }),
+    defineTool({
+      name: "wait_for_background_command",
+      label: "等待后台命令",
+      description:
+        "阻塞直到指定后台命令结束（或到达可选超时）。这是获取长任务结果的首选方式；超时只会结束等待，不会杀掉仍在运行的正常进程。",
+      category: "terminal",
+      concurrency: "parallel",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string" },
+          timeoutMs: {
+            type: "number",
+            description: "最长等待毫秒数；省略则尽量等到任务自身超时预算。",
+          },
+        },
+        required: ["taskId"],
+        additionalProperties: false,
+      },
+      isReadOnly: () => true,
+      summarize(input) {
+        return `wait for background command: ${stringField(input, "taskId") ?? "<missing task id>"}`;
+      },
+      async execute(input) {
+        const taskId = requireNonEmptyString(input.taskId, "taskId");
+        const finished = await manager.waitForTask(taskId, numberField(input, "timeoutMs"));
+        if (isTerminalState(finished.state)) {
+          policy.registerEnd(taskId, finished.durationMs);
+          return backgroundTaskOutput("命令已结束", finished);
+        }
+        // Soft timeout: still running
+        return backgroundTaskOutput(
+          "等待超时，命令仍在运行",
+          finished,
+          "进程未被终止。可以稍后再 wait，或处理其它不依赖该输出的工作。",
+        );
+      },
     }),
     defineTool({
       name: "get_background_command",
-      label: "Get background command",
-      description: "Read the current status and output preview of a background command.",
+      label: "查看后台命令",
+      description:
+        "查看后台命令当前状态与输出预览。不要用它做高频轮询；需要完整结果请用 wait_for_background_command。",
       category: "internal",
       concurrency: "parallel",
       inputSchema: {
         type: "object",
         properties: {
-          taskId: { type: "string" }
+          taskId: { type: "string" },
         },
         required: ["taskId"],
-        additionalProperties: false
+        additionalProperties: false,
       },
       isReadOnly: () => true,
       summarize(input) {
         return `get background command: ${stringField(input, "taskId") ?? "<missing task id>"}`;
       },
       async execute(input) {
-        const task = manager.get(requireNonEmptyString(input.taskId, "taskId"));
-        if (!task) throw new Error(`Background command not found: ${input.taskId}`);
-        return backgroundTaskOutput("Background command status", task);
-      }
+        const taskId = requireNonEmptyString(input.taskId, "taskId");
+        let task = manager.get(taskId);
+        if (!task) throw new Error(`Background command not found: ${taskId}`);
+
+        if (isTerminalState(task.state)) {
+          policy.registerEnd(taskId, task.durationMs);
+          return backgroundTaskOutput("命令状态", task);
+        }
+
+        const runningMs = task.durationMs ?? 0;
+        const advice = policy.recordPoll(taskId, runningMs);
+
+        if (advice.forceWait) {
+          // Convert noisy polling into one real wait (does not kill process on soft timeout)
+          const finished = await manager.waitForTask(taskId);
+          if (isTerminalState(finished.state)) {
+            policy.registerEnd(taskId, finished.durationMs);
+          }
+          return backgroundTaskOutput(
+            isTerminalState(finished.state) ? "命令已结束" : "等待后仍在运行",
+            finished,
+            advice.hint,
+          );
+        }
+
+        const soft =
+          runningMs >= PARALLEL_SOFT_LIMIT_MS
+            ? `已运行 ${formatDuration(runningMs)}。若还要结果，请 wait 而不是继续频繁查看。`
+            : advice.hint;
+        return backgroundTaskOutput("命令仍在运行", task, soft);
+      },
     }),
     defineTool({
       name: "list_background_commands",
-      label: "List background commands",
-      description: "List all background commands in this runtime process.",
+      label: "列出后台命令",
+      description: "列出当前进程内的后台命令。",
       category: "internal",
       concurrency: "parallel",
       inputSchema: {
         type: "object",
         properties: {},
-        additionalProperties: false
+        additionalProperties: false,
       },
       isReadOnly: () => true,
       summarize() {
@@ -376,24 +491,28 @@ export function createBackgroundCommandTools(manager: BackgroundCommandManager):
       async execute() {
         const tasks = manager.list();
         return {
-          text: tasks.length > 0 ? tasks.map(formatBackgroundCommandLine).join("\n") : "No background commands.",
-          json: { tasks: tasks as unknown as JsonValue }
+          text:
+            tasks.length > 0
+              ? tasks.map(formatBackgroundCommandLine).join("\n")
+              : "当前没有后台命令。",
+          json: { tasks: tasks as unknown as JsonValue },
         };
-      }
+      },
     }),
     defineTool({
       name: "cancel_background_command",
-      label: "Cancel background command",
-      description: "Cancel a running background command.",
+      label: "取消后台命令",
+      description:
+        "取消仍在运行的后台命令。仅在用户要求停止、或命令确认卡死时使用；不要为了继续对话而取消正常进程。",
       category: "terminal",
       concurrency: "exclusive",
       inputSchema: {
         type: "object",
         properties: {
-          taskId: { type: "string" }
+          taskId: { type: "string" },
         },
         required: ["taskId"],
-        additionalProperties: false
+        additionalProperties: false,
       },
       isReadOnly: () => false,
       summarize(input) {
@@ -401,22 +520,38 @@ export function createBackgroundCommandTools(manager: BackgroundCommandManager):
       },
       async execute(input) {
         const task = manager.cancel(requireNonEmptyString(input.taskId, "taskId"));
-        return backgroundTaskOutput("Background command cancellation requested", task);
-      }
-    })
+        policy.registerEnd(task.id, task.durationMs);
+        return backgroundTaskOutput("已请求取消命令", task);
+      },
+    }),
   ];
 }
 
-function backgroundTaskOutput(title: string, task: BackgroundCommandSnapshot): ToolOutput {
+function backgroundTaskOutput(
+  title: string,
+  task: BackgroundCommandSnapshot,
+  hint?: string,
+): ToolOutput {
+  const lines = [
+    title,
+    formatBackgroundCommandLine(task),
+    hint ? `提示: ${hint}` : "",
+    "",
+    task.outputPreview,
+  ].filter((line, i, arr) => line !== "" || (i > 0 && arr[i - 1] !== ""));
   return {
-    text: [title, formatBackgroundCommandLine(task), "", task.outputPreview].filter(Boolean).join("\n"),
-    json: task as unknown as JsonObject
+    text: lines.join("\n").trim(),
+    json: {
+      ...(task as unknown as JsonObject),
+      ...(hint ? { hint } : {}),
+    },
   };
 }
 
 function formatBackgroundCommandLine(task: BackgroundCommandSnapshot): string {
-  const exit = task.exitCode === undefined ? "" : ` exit=${task.exitCode}`;
-  return `${task.id} ${task.state}${exit} ${(task.durationMs ?? 0) / 1000}s ${task.command}`;
+  const exit = task.exitCode === undefined || task.exitCode === null ? "" : ` exit=${task.exitCode}`;
+  const dur = formatDuration(task.durationMs ?? 0);
+  return `${task.id} · ${task.state}${exit} · ${dur} · ${task.command}`;
 }
 
 function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -444,6 +579,11 @@ function requireNonEmptyString(value: unknown, key: string): string {
     throw new Error(`${key} must be a non-empty string`);
   }
   return value;
+}
+
+function booleanField(input: JsonObject, key: string): boolean | undefined {
+  const value = input[key];
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function stringField(input: JsonObject, key: string): string | undefined {
