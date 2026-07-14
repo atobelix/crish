@@ -1195,8 +1195,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   title="排队等待当前任务结束后发送"
                   onClick={() => handleSendChat(false)}
                 >
-                  <Lucide.ListOrdered size={13} />
-                  <span>排队</span>
+                  排队
                 </button>
                 <button
                   type="button"
@@ -1204,8 +1203,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   title="优先发送"
                   onClick={() => handleSendChat(true)}
                 >
-                  <Lucide.Send size={13} />
-                  <span>发送</span>
+                  发送
                 </button>
               </>
             ) : (
@@ -1215,7 +1213,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 title="发送 (Enter)"
                 onClick={() => handleSendChat(false)}
               >
-                <Lucide.Send size={15} />
+                <Lucide.CornerDownLeft size={15} />
               </button>
             )}
           </div>
@@ -1227,6 +1225,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             <div className="bypass-link" title="当前将跳过部分权限确认">
               <span className="orange-dot" />
               <span className="bypass-text">完全访问</span>
+              <Lucide.ChevronDown size={11} style={{ opacity: 0.5 }} />
             </div>
             <button type="button" className="plus-btn" title="添加文件">
               <Lucide.Plus size={14} />

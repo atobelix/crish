@@ -17,13 +17,14 @@
   --accent-hover: #000000;
   --accent-soft: #ebebeb;
 
-  /* Status colors — use only when meaning requires it */
-  --accent-orange: #c27803;
-  --accent-orange-light: #faf6f0;
-  --accent-green: #1a7f37;
-  --accent-green-light: #f3faf5;
-  --accent-red: #cf222e;
-  --accent-red-light: #fdf4f4;
+  /* Status / success — bright emerald (settings CTAs, available badges) */
+  --accent-orange: #f59e0b;
+  --accent-orange-light: #fffbeb;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --accent-green-light: #ecfdf5;
+  --accent-red: #ef4444;
+  --accent-red-light: #fef2f2;
   --accent-blue: #666666; /* neutralized — do not use as brand */
   --accent-blue-light: #f5f5f5;
   --accent-violet: #666666;
@@ -1298,11 +1299,11 @@ body {
   color: var(--accent-color);
 }
 .chat-input-overlay-banner .action-btn.approve {
-  background: var(--accent-color);
+  background: var(--accent-green);
   color: #fff;
 }
 .chat-input-overlay-banner .action-btn.approve:hover {
-  background: var(--accent-hover);
+  background: var(--accent-green-hover);
   color: #fff;
 }
 .chat-input-overlay-banner .action-btn.reject {
@@ -1435,27 +1436,28 @@ body {
   padding-bottom: 1px;
 }
 
-/* Send — brand color only primary CTA (avoid black) */
+/* Send — compact icon, no heavy pill (matches classic input chrome) */
 .send-btn {
-  background: var(--accent-color);
+  background: none;
   border: none;
   cursor: pointer;
-  color: #ffffff;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  color: var(--text-tertiary);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.12s, color 0.12s;
   flex-shrink: 0;
+  padding: 0;
 }
 .send-btn:hover {
-  background: var(--accent-hover);
-  color: #ffffff;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .send-btn:active {
-  transform: scale(0.96);
+  transform: none;
 }
 .send-btn svg {
   width: 15px;
@@ -1464,46 +1466,66 @@ body {
 
 .send-btn.queue-btn {
   width: auto;
-  height: 30px;
-  padding: 0 10px;
-  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  gap: 3px;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: 5px;
+  font-family: var(--font-sans);
 }
 .send-btn.queue-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 .send-btn.queue-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
+/* Only the “send now while busy” action gets a light green chip */
 .send-btn.insert-btn,
 .send-btn.send-label-btn {
   width: auto;
-  height: 30px;
-  padding: 0 12px;
-  gap: 4px;
-  background: var(--accent-color);
-  color: #ffffff;
-  font-size: 12px;
+  height: 24px;
+  padding: 0 8px;
+  gap: 3px;
+  background: var(--accent-green-light);
+  color: var(--accent-green);
+  font-size: 11.5px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 5px;
   font-family: var(--font-sans);
 }
 .send-btn.insert-btn:hover,
 .send-btn.send-label-btn:hover {
-  background: var(--accent-hover);
-  color: #ffffff;
+  background: #d1fae5;
+  color: var(--accent-green-hover);
 }
 .send-btn.insert-btn svg,
 .send-btn.send-label-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
+}
+
+/* Settings / success primary (bright green, not charcoal) */
+.ui-btn-success {
+  background: var(--accent-green-light);
+  color: var(--accent-green);
+}
+.ui-btn-success:hover {
+  background: #d1fae5;
+  color: var(--accent-green-hover);
+}
+.ui-btn-success-solid {
+  background: var(--accent-green);
+  color: #ffffff;
+}
+.ui-btn-success-solid:hover {
+  background: var(--accent-green-hover);
+  color: #ffffff;
 }
 
 /* Toolbar row BELOW the input (permissions / attach / model) */
@@ -2990,8 +3012,8 @@ body.dragging-card * {
   flex-shrink: 0;
 }
 
-.git-diff-add { color: #059669; }
-.git-diff-del { color: #dc2626; }
+.git-diff-add { color: var(--accent-green); }
+.git-diff-del { color: var(--accent-red); }
 
 .git-diff-lines-container {
   display: flex;
@@ -3008,11 +3030,11 @@ body.dragging-card * {
 }
 
 .git-diff-line-row.addition {
-  background-color: #f0fdf6;
+  background-color: #ecfdf5;
 }
 
 .git-diff-line-row.deletion {
-  background-color: #fef5f5;
+  background-color: #fef2f2;
 }
 
 .line-num-col {
@@ -3027,12 +3049,12 @@ body.dragging-card * {
 }
 
 .git-diff-line-row.addition .line-num-col {
-  color: #059669;
+  color: var(--accent-green);
   background-color: transparent;
 }
 
 .git-diff-line-row.deletion .line-num-col {
-  color: #dc2626;
+  color: var(--accent-red);
   background-color: transparent;
 }
 
@@ -3576,8 +3598,8 @@ body.dragging-card * {
 }
 /* --- PREMIUM SETTINGS BUTTONS --- */
 .settings-btn-primary {
-  background-color: var(--accent-color) !important;
-  color: #ffffff !important;
+  background-color: var(--accent-green-light) !important;
+  color: var(--accent-green) !important;
   border: none !important;
   transition: all 0.15s ease;
   font-weight: 600;
@@ -3591,8 +3613,8 @@ body.dragging-card * {
   justify-content: center;
 }
 .settings-btn-primary:hover {
-  background-color: var(--accent-hover) !important;
-  color: #ffffff !important;
+  background-color: #d1fae5 !important;
+  color: var(--accent-green-hover) !important;
 }
 
 .settings-btn-secondary {
@@ -4442,10 +4464,36 @@ select.ui-input {
 .status-badge.available {
   background: var(--accent-green-light);
   color: var(--accent-green);
+  border: none;
 }
 
 .status-badge.available .status-dot {
   background: var(--accent-green);
+}
+
+/* Model chips when enabled */
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+}
+.model-chip:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+.model-chip.on {
+  background: var(--accent-green-light);
+  color: var(--accent-green);
+  font-weight: 500;
 }
 
 .status-badge.unconfigured {

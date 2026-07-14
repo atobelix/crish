@@ -621,177 +621,259 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                 </button>
               </div>
 
-              {/* Providers list cards */}
-              <div className="settings-fields-stack">
+              {/* Providers — configured ones show models inline (no extra click) */}
+              <div className="settings-fields-stack" style={{ gap: 10 }}>
                 {providers.map((p) => {
-                  const isConfiguring = configuringProviderId === p.id;
                   const isEnabled = settings.defaultProvider === p.id;
                   const hasKey = !!p.apiKey;
-                  
+                  // Unconfigured: always show key field. Configured: key only when user opens 密钥.
+                  const showKeyEditor = !hasKey || configuringProviderId === p.id;
+                  // Configured providers always list models inline (no extra “配置” click).
+                  const showModels = hasKey;
+
                   return (
                     <div key={p.id} className="settings-card-row">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Lucide.Cpu size={13} style={{ color: isEnabled ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {p.name === 'OpenAI' ? 'OpenAI GPT-5.5' : p.name === 'Anthropic' ? 'Anthropic Claude 3.5 Sonnet' : p.name === 'Google' ? 'Google Gemini 1.5 Pro' : p.name}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {p.name === 'OpenAI'
+                              ? 'OpenAI'
+                              : p.name === 'Anthropic'
+                                ? 'Anthropic'
+                                : p.name === 'Google'
+                                  ? 'Google Gemini'
+                                  : p.name}
                           </span>
                           <span className={`status-badge ${hasKey ? 'available' : 'unconfigured'}`}>
-                            <span className="status-dot" style={{ width: '4px', height: '4px', borderRadius: '50%' }} />
+                            <span className="status-dot" style={{ width: 5, height: 5, borderRadius: '50%' }} />
                             {hasKey ? '可用' : '未配置'}
                           </span>
                         </div>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <button 
-                            onClick={() => setConfiguringProviderId(isConfiguring ? null : p.id)}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {hasKey && (
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-ghost ui-btn-sm"
+                              title="编辑密钥"
+                              onClick={() =>
+                                setConfiguringProviderId(
+                                  configuringProviderId === p.id ? null : p.id,
+                                )
+                              }
+                            >
+                              <Lucide.KeyRound size={13} />
+                            </button>
+                          )}
+                          <label
+                            className="switch-toggle"
                             style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 10px',
-                              borderRadius: '6px',
-                              fontSize: '10.5px',
+                              position: 'relative',
+                              display: 'inline-block',
+                              width: 32,
+                              height: 18,
+                              cursor: 'pointer',
                             }}
-                            className="settings-btn-flat"
+                            title={isEnabled ? '当前默认服务商' : '设为默认'}
                           >
-                            <Lucide.Settings size={10} />
-                            <span>配置</span>
-                          </button>
-                          
-                          {/* Toggle switch */}
-                          <label className="switch-toggle" style={{ position: 'relative', display: 'inline-block', width: '32px', height: '18px', cursor: 'pointer' }}>
-                            <input 
-                              type="checkbox" 
-                                checked={isEnabled} 
-                                onChange={() => {
-                                  handleUpdateSettings({ defaultProvider: isEnabled ? '' : p.id });
-                                }} 
-                                style={{ opacity: 0, width: 0, height: 0 }} 
+                            <input
+                              type="checkbox"
+                              checked={isEnabled}
+                              onChange={() => {
+                                handleUpdateSettings({
+                                  defaultProvider: isEnabled ? '' : p.id,
+                                });
+                              }}
+                              style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                backgroundColor: isEnabled
+                                  ? 'var(--accent-green)'
+                                  : 'var(--border-color)',
+                                borderRadius: 18,
+                                transition: '0.2s',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  height: 14,
+                                  width: 14,
+                                  left: isEnabled ? 16 : 2,
+                                  bottom: 2,
+                                  backgroundColor: 'white',
+                                  borderRadius: '50%',
+                                  transition: '0.2s',
+                                }}
                               />
-                              <span style={{
-                                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                                backgroundColor: isEnabled ? 'var(--accent-color)' : 'var(--border-color)',
-                                borderRadius: '18px', transition: '0.2s',
-                              }}>
-                                <span style={{
-                                  position: 'absolute', height: '14px', width: '14px',
-                                  left: isEnabled ? '16px' : '2px', bottom: '2px',
-                                  backgroundColor: 'white', borderRadius: '50%', transition: '0.2s',
-                                }} />
-                              </span>
-                            </label>
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Key form: always for unconfigured; toggle for configured */}
+                      {showKeyEditor && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            marginTop: 10,
+                            paddingTop: hasKey ? 10 : 4,
+                            borderTop: hasKey ? '1px solid var(--border-subtle)' : 'none',
+                          }}
+                        >
+                          <label className="settings-field-label">API 密钥</label>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              type={visibleKeyProvider === p.id ? 'text' : 'password'}
+                              placeholder="粘贴你的密钥"
+                              value={
+                                draftApiKeys[p.id] !== undefined
+                                  ? draftApiKeys[p.id]
+                                  : p.apiKey || ''
+                              }
+                              onChange={(e) =>
+                                setDraftApiKeys((prev) => ({ ...prev, [p.id]: e.target.value }))
+                              }
+                              className="settings-field-input"
+                              style={{ flex: 1 }}
+                            />
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-ghost"
+                              onClick={() =>
+                                setVisibleKeyProvider(
+                                  visibleKeyProvider === p.id ? null : p.id,
+                                )
+                              }
+                            >
+                              {visibleKeyProvider === p.id ? (
+                                <Lucide.EyeOff size={14} />
+                              ) : (
+                                <Lucide.Eye size={14} />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-sm ui-btn-success-solid"
+                              onClick={() => {
+                                const val =
+                                  draftApiKeys[p.id] !== undefined
+                                    ? draftApiKeys[p.id]
+                                    : p.apiKey || '';
+                                handleSaveApiKey(p.id, val.trim());
+                              }}
+                            >
+                              保存
+                            </button>
                           </div>
                         </div>
-                        
-                        {/* Expanded Configuration Form */}
-                        {isConfiguring && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 6, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              <label className="settings-field-label">API 密钥</label>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <input
-                                  type={visibleKeyProvider === p.id ? 'text' : 'password'}
-                                  placeholder="粘贴你的密钥"
-                                  value={draftApiKeys[p.id] !== undefined ? draftApiKeys[p.id] : (p.apiKey || '')}
-                                  onChange={(e) => setDraftApiKeys((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                                  className="settings-field-input"
-                                  style={{ flex: 1 }}
-                                />
-                                <button
-                                  type="button"
-                                  className="ui-btn ui-btn-ghost"
-                                  onClick={() => setVisibleKeyProvider(visibleKeyProvider === p.id ? null : p.id)}
-                                >
-                                  {visibleKeyProvider === p.id ? <Lucide.EyeOff size={14} /> : <Lucide.Eye size={14} />}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ui-btn ui-btn-primary ui-btn-sm"
-                                  onClick={() => {
-                                    const val = draftApiKeys[p.id] !== undefined ? draftApiKeys[p.id] : (p.apiKey || '');
-                                    handleSaveApiKey(p.id, val.trim());
-                                  }}
-                                >
-                                  保存
-                                </button>
-                              </div>
-                            </div>
+                      )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <label className="settings-field-label">可用模型</label>
-                                <button
-                                  type="button"
-                                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                                  onClick={() => handleFetchModels(p.id)}
-                                  disabled={fetchingModelsProviderId === p.id}
-                                >
-                                  <Lucide.RefreshCw size={12} className={fetchingModelsProviderId === p.id ? 'spin' : ''} />
-                                  {fetchingModelsProviderId === p.id ? '获取中…' : '刷新列表'}
-                                </button>
-                              </div>
-
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {p.models.map((model) => {
-                                  const isChecked = enabledModels.includes(model);
-                                  return (
-                                    <button
-                                      key={model}
-                                      type="button"
-                                      onClick={() => handleToggleModelEnabled(model)}
-                                      className="ui-badge"
-                                      style={{
-                                        cursor: 'pointer',
-                                        padding: '5px 10px',
-                                        fontSize: 12,
-                                        background: isChecked ? 'var(--accent-light)' : 'var(--bg-primary)',
-                                        color: isChecked ? 'var(--accent-color)' : 'var(--text-secondary)',
-                                      }}
-                                    >
-                                      {isChecked && <Lucide.Check size={11} style={{ marginRight: 4 }} />}
-                                      {model}
-                                      <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDeleteModelFromProvider(p.id, model);
-                                        }}
-                                        style={{ marginLeft: 6, opacity: 0.5, display: 'inline-flex' }}
-                                      >
-                                        <Lucide.X size={11} />
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                                {p.models.length === 0 && (
-                                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>
-                                    暂无模型，点击「刷新列表」或在下方添加
-                                  </div>
-                                )}
-                              </div>
-
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <input
-                                  type="text"
-                                  className="settings-field-input"
-                                  placeholder="手动添加模型名称"
-                                  value={manualModelName[p.id] || ''}
-                                  onChange={(e) => setManualModelName((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                                  style={{ flex: 1 }}
-                                />
-                                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => handleAddManualModel(p.id)}>
-                                  添加
-                                </button>
-                              </div>
-                            </div>
+                      {/* Models always visible once configured */}
+                      {showModels && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            marginTop: 12,
+                            paddingTop: 10,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <label className="settings-field-label">模型</label>
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-success ui-btn-sm"
+                              onClick={() => handleFetchModels(p.id)}
+                              disabled={fetchingModelsProviderId === p.id}
+                            >
+                              <Lucide.RefreshCw
+                                size={12}
+                                className={fetchingModelsProviderId === p.id ? 'spin' : ''}
+                              />
+                              {fetchingModelsProviderId === p.id ? '获取中…' : '刷新'}
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {p.models.map((model) => {
+                              const isChecked = enabledModels.includes(model);
+                              return (
+                                <button
+                                  key={model}
+                                  type="button"
+                                  className={`model-chip ${isChecked ? 'on' : ''}`}
+                                  onClick={() => handleToggleModelEnabled(model)}
+                                >
+                                  {isChecked && <Lucide.Check size={11} />}
+                                  {model}
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteModelFromProvider(p.id, model);
+                                    }}
+                                    style={{
+                                      marginLeft: 2,
+                                      opacity: 0.45,
+                                      display: 'inline-flex',
+                                    }}
+                                    title="移除"
+                                  >
+                                    <Lucide.X size={11} />
+                                  </span>
+                                </button>
+                              );
+                            })}
+                            {p.models.length === 0 && (
+                              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                暂无模型，点「刷新」或下方添加
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              type="text"
+                              className="settings-field-input"
+                              placeholder="手动添加模型名称"
+                              value={manualModelName[p.id] || ''}
+                              onChange={(e) =>
+                                setManualModelName((prev) => ({
+                                  ...prev,
+                                  [p.id]: e.target.value,
+                                }))
+                              }
+                              style={{ flex: 1 }}
+                            />
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-secondary ui-btn-sm"
+                              onClick={() => handleAddManualModel(p.id)}
+                            >
+                              添加
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
               {/* Consumer-friendly response preference (hides raw transport / concurrency tech) */}
               <div className="settings-card-row" style={{ marginTop: 4 }}>
@@ -1192,7 +1274,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                               width: 32,
                               height: 18,
                               borderRadius: 9,
-                              backgroundColor: isEnabled ? 'var(--accent-color)' : 'var(--border-color)',
+                              backgroundColor: isEnabled ? 'var(--accent-green)' : 'var(--border-color)',
                               padding: 2,
                               cursor: 'pointer',
                               display: 'flex',
@@ -1251,7 +1333,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                           </div>
                           <button
                             type="button"
-                            className="ui-btn ui-btn-primary ui-btn-sm"
+                            className="ui-btn ui-btn-success-solid ui-btn-sm"
                             style={{ alignSelf: 'flex-end' }}
                             onClick={() => {
                               const cmdEl = document.getElementById(`mcp-cmd-${srv.id}`) as HTMLInputElement;
@@ -1367,7 +1449,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                   />
                   <span style={{
                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: settings.enableSkillCommands ?  'var(--accent-blue)'  :  'var(--border-color)' ,
+                    backgroundColor: settings.enableSkillCommands ?  'var(--accent-green)'  :  'var(--border-color)' ,
                     borderRadius: '18px', transition: '0.2s',
                   }}>
                     <span style={{
@@ -1408,10 +1490,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                   className="settings-field-input" style={{ flex: 1, padding: "6px 10px" }}
                 />
                 <button
+                  type="button"
                   onClick={handleAddSkill}
-                  style={{ background:  'var(--accent-blue-light)' , color:  'var(--accent-blue)' , border: 'none', padding: '6px 16px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                  className="ui-btn ui-btn-success-solid ui-btn-sm"
                 >
-                  添加路径
+                  添加
                 </button>
               </div>
             </>
@@ -1428,38 +1511,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                 
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
+                    type="button"
                     onClick={() => setEditingRuleFileType('global')}
-                    style={{
-                      background:  'var(--accent-blue-light)' ,
-                      color:  'var(--accent-blue)' ,
-                      border: 'none',
-                      padding: '0 12px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      height: '30px',
-                      boxSizing: 'border-box'
-                    }}
+                    className="ui-btn ui-btn-success ui-btn-sm"
                   >
-                    编辑全局规则 (AGENTS.md)
+                    全局规则
                   </button>
                   <button
+                    type="button"
                     onClick={() => setEditingRuleFileType('project')}
-                    style={{
-                      background:  'var(--accent-blue-light)' ,
-                      color:  'var(--accent-blue)' ,
-                      border: 'none',
-                      padding: '0 12px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      height: '30px',
-                      boxSizing: 'border-box'
-                    }}
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
                   >
-                    编辑项目特定规则
+                    项目规则
                   </button>
                 </div>
               </div>
@@ -1503,10 +1566,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                     style={{ flex: 1, height: '30px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '11px', background: 'var(--bg-primary)', outline: 'none', boxSizing: 'border-box' }}
                   />
                   <button
+                    type="button"
                     onClick={handleAddCustomRule}
-                    style={{ background:  'var(--accent-blue-light)' , color:  'var(--accent-blue)' , border: 'none', padding: '0 16px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 600, height: '30px', boxSizing: 'border-box' }}
+                    className="ui-btn ui-btn-success-solid ui-btn-sm"
                   >
-                    添加规则
+                    添加
                   </button>
                 </div>
               </div>
@@ -1620,7 +1684,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                         position: 'absolute',
                         inset: 0,
                         backgroundColor:
-                          (settings.terminal?.showImages ?? true) ? 'var(--accent-color)' : 'var(--border-color)',
+                          (settings.terminal?.showImages ?? true) ? 'var(--accent-green)' : 'var(--border-color)',
                         borderRadius: 18,
                       }}
                     >

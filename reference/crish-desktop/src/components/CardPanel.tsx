@@ -70,26 +70,37 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     });
   };
 
+  /** Open or focus a tool panel in the right area (preview/diff/terminal/tasks/…) */
   const handleGlobalTabClick = (cardId: string) => {
-    useLayoutStore.setState((state) => {
-      const targetWs = state.workspaces.find((w) => w.id === wsId);
-      if (!targetWs) return;
-      let found = false;
-      for (const col of targetWs.columns) {
-        for (const g of col.groups) {
-          if (g.cards.some(c => c.id === cardId)) {
-            g.activeCardId = cardId;
-            found = true;
-            break;
-          }
+    const targetWs = useLayoutStore.getState().workspaces.find((w) => w.id === wsId);
+    if (!targetWs) return;
+
+    let found = false;
+    for (const c of targetWs.columns) {
+      for (const g of c.groups) {
+        if (g.cards.some((card) => card.id === cardId)) {
+          found = true;
+          break;
         }
-        if (found) break;
       }
-      if (!found) {
-        const targetCol = targetWs.columns[colIdx];
-        const targetGroup = targetCol?.groups[groupIdx];
-        if (targetGroup) {
-          targetGroup.activeCardId = cardId;
+      if (found) break;
+    }
+
+    if (!found) {
+      // Panel not mounted — open it as a real workspace column/group via store
+      useLayoutStore.getState().togglePanel(wsId, cardId, true);
+    }
+
+    // Focus the card wherever it lives
+    useLayoutStore.setState((state) => {
+      const ws2 = state.workspaces.find((w) => w.id === wsId);
+      if (!ws2) return;
+      for (const c of ws2.columns) {
+        for (const g of c.groups) {
+          if (g.cards.some((card) => card.id === cardId)) {
+            g.activeCardId = cardId;
+            return;
+          }
         }
       }
     });
