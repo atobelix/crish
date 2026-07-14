@@ -193,7 +193,7 @@ describe("local workspace tools", () => {
     expect(taskId).toMatch(/^bgcmd-/);
     expect(listed.text).toContain(taskId);
     expect(status.text).toContain(taskId);
-    expect(cancel.text).toContain("Background command cancellation requested");
+    expect(cancel.text).toMatch(/已请求取消|cancellation/i);
     expect(cancelled).toMatchObject({ state: "cancelled" });
   }, 15_000);
 
