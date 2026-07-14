@@ -25,6 +25,7 @@ function App() {
     togglePanel,
     showSettingsOverlay,
     setShowSettingsOverlay,
+    settingsActiveTab,
     setPiSettings,
     setProviders,
   } = useLayoutStore();
@@ -603,6 +604,7 @@ function App() {
               wsId={activeWorkspace?.id || 'ws-0'}
               onShowToast={handleShowToast}
               onClose={() => setShowSettingsOverlay(false)}
+              initialTab={settingsActiveTab as any}
             />
           </div>
         </div>

@@ -145,9 +145,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }));
   };
 
-  const handleOpenSettings = (tabHint?: string) => {
-    useLayoutStore.getState().setShowSettingsOverlay(true);
-    onShowToast(tabHint ? `已打开设置 · ${tabHint}` : '已打开设置');
+  const handleOpenSettings = (tab?: string) => {
+    useLayoutStore.getState().openSettings(tab);
+    const labels: Record<string, string> = {
+      appearance: '外观',
+      models: '模型',
+      profile: '账户',
+      security: '安全',
+    };
+    onShowToast(tab ? `已打开设置 · ${labels[tab] || tab}` : '已打开设置');
   };
 
   const handleNewSession = () => {
@@ -546,7 +552,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={(e) => {
               e.preventDefault();
               setActiveNav('customize');
-              handleOpenSettings('外观');
+              handleOpenSettings('appearance');
             }}
           >
             <Lucide.Sliders size={15} className="nav-icon" />

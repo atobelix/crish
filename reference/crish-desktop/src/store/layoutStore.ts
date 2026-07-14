@@ -97,6 +97,8 @@ interface LayoutStore {
   dropPreview: DropPreviewState | null;
   panelsDropdownCoords: { x: number; y: number } | null;
   showSettingsOverlay: boolean;
+  settingsActiveTab: string;
+  permissionMode: 'full' | 'ask';
 
   // UI Settings Actions
   setDropPreview: (preview: DropPreviewState | null) => void;
@@ -106,6 +108,10 @@ interface LayoutStore {
   setActiveSessionId: (id: string) => void;
   setPanelsDropdownCoords: (coords: { x: number; y: number } | null) => void;
   setShowSettingsOverlay: (show: boolean) => void;
+  setSettingsActiveTab: (tab: string) => void;
+  openSettings: (tab?: string) => void;
+  setPermissionMode: (mode: 'full' | 'ask') => void;
+  renameSession: (sessionId: string, title: string) => void;
 
   // Workspace Actions
   togglePanel: (wsId: string, key: string, isVisible: boolean) => void;
@@ -419,6 +425,8 @@ export const useLayoutStore = create<LayoutStore>()(
     dropPreview: null,
     panelsDropdownCoords: null,
     showSettingsOverlay: false,
+    settingsActiveTab: 'profile',
+    permissionMode: 'full',
 
     activeDiffSource: null,
     setActiveDiffSource: (diff) => set((state) => {
@@ -563,12 +571,14 @@ export const useLayoutStore = create<LayoutStore>()(
         if (message.toolCalls) {
           message.toolCalls.forEach((tc) => {
             if (tc.status === 'pending_approval') {
-              const isWhitelisted = state.commandPermissions.some(allowed => 
-                tc.arguments.startsWith(allowed) || allowed.startsWith(tc.arguments)
+              const isWhitelisted = state.commandPermissions.some(
+                (allowed) =>
+                  tc.arguments.startsWith(allowed) || allowed.startsWith(tc.arguments),
               );
-              if (isWhitelisted) {
+              // full permission mode auto-approves sensitive tools at ingest time too
+              if (isWhitelisted || state.permissionMode === 'full') {
                 tc.status = 'success';
-                tc.output = `[自动授权成功] 正在执行命令:\n$ ${tc.arguments}\nvite v8.0.16 building client environment for production...\ntransforming...\n✓ built in 389ms`;
+                tc.output = `[自动授权] 正在执行:\n$ ${tc.arguments}\nvite v8.0.16 building client environment for production...\ntransforming...\n✓ built in 389ms`;
               }
             }
           });
@@ -682,6 +692,19 @@ export const useLayoutStore = create<LayoutStore>()(
     setActiveSessionId: (id) => set((state) => { state.activeSessionId = id; }),
     setPanelsDropdownCoords: (coords) => set((state) => { state.panelsDropdownCoords = coords; }),
     setShowSettingsOverlay: (show) => set((state) => { state.showSettingsOverlay = show; }),
+    setSettingsActiveTab: (tab) => set((state) => { state.settingsActiveTab = tab; }),
+    openSettings: (tab) => set((state) => {
+      if (tab) state.settingsActiveTab = tab;
+      state.showSettingsOverlay = true;
+    }),
+    setPermissionMode: (mode) => set((state) => { state.permissionMode = mode; }),
+    renameSession: (sessionId, title) => set((state) => {
+      const sess = state.sessions.find((s) => s.id === sessionId);
+      if (sess) {
+        sess.title = title.slice(0, 48) || sess.title;
+        sess.timestamp = '刚刚';
+      }
+    }),
 
     createSession: (opts) => {
       const id = `sess-${Date.now()}`;

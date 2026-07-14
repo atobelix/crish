@@ -4,16 +4,54 @@ import { piClientApi } from '../api/piClientApi';
 import type { Settings, ProviderInfo, CronJob, McpServer, PackageSource } from '../api/piClientApi';
 import { useLayoutStore } from '../store/layoutStore';
 
+type TabType = 'profile' | 'appearance' | 'models' | 'rules' | 'shortcuts' | 'skills' | 'mcp' | 'plugins' | 'security';
+
 interface SettingsPanelProps {
   wsId: string;
   onShowToast: (msg: string) => void;
   onClose?: () => void;
+  initialTab?: TabType;
 }
 
-type TabType = 'profile' | 'appearance' | 'models' | 'rules' | 'shortcuts' | 'skills' | 'mcp' | 'plugins' | 'security';
+const TAB_IDS: TabType[] = [
+  'profile',
+  'appearance',
+  'models',
+  'rules',
+  'shortcuts',
+  'skills',
+  'mcp',
+  'plugins',
+  'security',
+];
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onShowToast, onClose }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({
+  wsId: _wsId,
+  onShowToast,
+  onClose,
+  initialTab,
+}) => {
+  const storeTab = useLayoutStore((s) => s.settingsActiveTab);
+  const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
+
+  const resolveTab = (raw?: string | null): TabType => {
+    if (raw && (TAB_IDS as string[]).includes(raw)) return raw as TabType;
+    return 'profile';
+  };
+
+  const [activeTab, setActiveTab] = useState<TabType>(() =>
+    resolveTab(initialTab || storeTab),
+  );
+
+  // Deep-link: follow store when settings open with a target tab
+  useEffect(() => {
+    setActiveTab(resolveTab(initialTab || storeTab));
+  }, [initialTab, storeTab]);
+
+  const selectTab = (tab: TabType) => {
+    setActiveTab(tab);
+    setSettingsActiveTab(tab);
+  };
   const [settings, setSettings] = useState<Settings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -511,7 +549,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => selectTab(tab.id)}
                 className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
               >
                 <Icon size={14} style={{ color: isTabActive ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />

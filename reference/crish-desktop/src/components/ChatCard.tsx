@@ -167,12 +167,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [goalText, setGoalText] = useState('自动完成系统的交互式升级与界面美化工作，包括状态栏 Ribbon、浏览器和终端模拟器的对接及验证。');
   const [goalActive, setGoalActive] = useState(true);
 
-  // Composer extras
-  const [permissionMode, setPermissionMode] = useState<'full' | 'ask'>('full');
+  // Composer extras — permission mode is global so chatApi can read it
+  const permissionMode = useLayoutStore((s) => s.permissionMode);
+  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
+  const renameSession = useLayoutStore((s) => s.renameSession);
   const [attachments, setAttachments] = useState<string[]>([]);
 
   const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks') => {
     handleGlobalTabClick(panelId);
+  };
+
+  const deriveSessionTitle = (text: string) => {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return '新会话';
+    return cleaned.length > 28 ? `${cleaned.slice(0, 28)}…` : cleaned;
   };
 
   // Smart auto-scroll refs
@@ -352,26 +360,47 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
   const handleSendChat = (isInsert: boolean = false) => {
     if (!chatInput.trim() || !activeSessionId) return;
-    const input = chatInput.trim();
+    const rawInput = chatInput.trim();
+    // Fold attachments into the prompt so the model path sees them
+    const attachBlock =
+      attachments.length > 0
+        ? `\n\n[附件]\n${attachments.map((a) => `- ${a}`).join('\n')}`
+        : '';
+    const input = rawInput + attachBlock;
+    const displayText =
+      attachments.length > 0
+        ? `${rawInput}\n\n📎 ${attachments.join('、')}`
+        : rawInput;
+
     setChatInput('');
     setSlashMenuOpen(false);
+    setAttachments([]);
 
     const userMsgId = `user-msg-${Date.now()}`;
-    const isAiBusy = messages.some(m => m.status === 'processing');
+    const isAiBusy = messages.some((m) => m.status === 'processing');
+
+    // Auto-title empty / default sessions from first user turn
+    const priorUserMsgs = messages.filter((m) => m.sender === 'user').length;
+    if (priorUserMsgs === 0) {
+      const sess = useLayoutStore.getState().sessions.find((s) => s.id === activeSessionId);
+      if (sess && (!sess.title || sess.title === '新会话' || sess.title.startsWith('新会话'))) {
+        renameSession(activeSessionId, deriveSessionTitle(rawInput));
+      }
+    }
 
     useLayoutStore.setState((state) => {
-      const sess = state.sessions.find(s => s.id === activeSessionId);
+      const sess = state.sessions.find((s) => s.id === activeSessionId);
       if (sess && sess.messages) {
         const newMsg: SessionMessage = {
           id: userMsgId,
           sender: 'user',
-          text: input,
+          text: displayText,
           timestamp: Date.now(),
-          status: isAiBusy ? 'queued' : 'processing'
+          status: isAiBusy ? 'queued' : 'processing',
         };
 
         if (isInsert && isAiBusy) {
-          const processingIdx = sess.messages.findIndex(m => m.status === 'processing');
+          const processingIdx = sess.messages.findIndex((m) => m.status === 'processing');
           if (processingIdx !== -1) {
             sess.messages.splice(processingIdx + 1, 0, newMsg);
           } else {
@@ -380,6 +409,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         } else {
           sess.messages.push(newMsg);
         }
+        sess.timestamp = '刚刚';
       }
     });
 
@@ -387,9 +417,9 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       runStreamingAssistant(input, userMsgId);
     } else {
       if (isInsert) {
-        onShowToast('消息已插队，将在当前AI回复后优先执行');
+        onShowToast('消息已插队，将在当前回复后优先执行');
       } else {
-        onShowToast('消息已加入队列排队中');
+        onShowToast('消息已加入队列');
       }
     }
   };
@@ -1247,15 +1277,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               className="bypass-link"
               title="点击切换权限模式"
               onClick={() => {
-                setPermissionMode((m) => {
-                  const next = m === 'full' ? 'ask' : 'full';
-                  onShowToast(
-                    next === 'full'
-                      ? '已切换为完全访问（减少确认）'
-                      : '已切换为需确认（敏感操作会询问）',
-                  );
-                  return next;
-                });
+                const next = permissionMode === 'full' ? 'ask' : 'full';
+                setPermissionMode(next);
+                onShowToast(
+                  next === 'full'
+                    ? '已切换为完全访问（敏感命令自动执行）'
+                    : '已切换为需确认（敏感命令会询问你）',
+                );
               }}
               style={{ border: 'none', background: 'transparent', fontFamily: 'inherit' }}
             >
