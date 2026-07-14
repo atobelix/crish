@@ -136,7 +136,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
-  const [prVisible, setPrVisible] = useState(true);
+  const [prVisible] = useState(true);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
 
@@ -577,49 +577,90 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       )}
       <div className="chat-doc-flow" ref={chatFlowRef} style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
         {messages.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '24px', color: 'var(--text-secondary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(79, 70, 229, 0.08)', color: 'var(--accent-color)', marginBottom: '16px' }}>
-              <Lucide.Cpu size={24} />
-            </div>
-            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>开始使用 Conex Co-work Agent</h3>
-            <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginBottom: '24px', maxWidth: '320px' }}>
-              智能体已准备就绪。选择下方快捷操作，或直接在输入框中输入命令开始开发。
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              padding: '32px 24px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                margin: '0 0 8px',
+              }}
+            >
+              有什么可以帮你？
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--text-tertiary)',
+                textAlign: 'center',
+                marginBottom: 28,
+                maxWidth: 360,
+                lineHeight: 1.5,
+              }}
+            >
+              直接在下方输入，或点选一个起点开始。
             </p>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', maxWidth: '480px' }}>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                width: '100%',
+                maxWidth: 400,
+              }}
+            >
               {[
-                { icon: Lucide.SearchCode, label: '分析当前项目结构', prompt: '分析当前工作区项目结构，梳理核心依赖与潜在的代码统一性风险' },
-                { icon: Lucide.GitBranch, label: '检查 Git 差异比对', prompt: '运行 git status 与 git diff，列出当前工作区修改的文件' },
-                { icon: Lucide.Server, label: '查看 MCP 服务状态', prompt: '获取当前连接的所有的 Model Context Protocol (MCP) 服务及其工具列表' },
-                { icon: Lucide.ShieldAlert, label: '检查已授权信任目录', prompt: '显示当前 Conex 信任的项目文件夹列表，并展示安全白名单配置' }
+                { label: '分析项目结构', prompt: '分析当前工作区项目结构，梳理核心模块与依赖关系' },
+                { label: '查看代码改动', prompt: '运行 git status 与 git diff，总结当前工作区修改' },
+                { label: '检查开发服务', prompt: '检查本地开发服务器与相关工具是否正常运行' },
               ].map((item, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => {
                     setChatInput(item.prompt);
-                    const textInputEl = document.querySelector('.input-container textarea') as HTMLTextAreaElement;
+                    const textInputEl = document.querySelector(
+                      '.input-container textarea',
+                    ) as HTMLTextAreaElement;
                     if (textInputEl) textInputEl.focus();
                   }}
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
                     textAlign: 'left',
-                    padding: '12px',
-                    background: 'var(--bg-secondary)',
+                    padding: '12px 14px',
+                    background: 'transparent',
                     border: 'none',
-                    borderRadius: '8px',
+                    borderRadius: 8,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    gap: '6px'
+                    color: 'var(--text-secondary)',
+                    fontSize: 13,
+                    fontFamily: 'var(--font-sans)',
                   }}
                   className="quick-prompt-card"
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                  }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)' }}>
-                    <item.icon size={13} style={{ color: 'var(--accent-color)' }} />
-                    <span style={{ fontSize: '11px', fontWeight: 600 }}>{item.label}</span>
-                  </div>
-                  <span style={{ fontSize: '9.5px', color: 'var(--text-tertiary)', lineHeight: 1.4 }}>{item.prompt}</span>
+                  <span>{item.label}</span>
+                  <Lucide.ArrowRight size={14} style={{ opacity: 0.4 }} />
                 </button>
               ))}
             </div>
@@ -773,7 +814,35 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           <button
                             className="meta-action-btn"
                             title="重新生成"
-                            onClick={() => onShowToast('已请求重新生成')}
+                            onClick={() => {
+                              // Find the last user message before this assistant reply and re-run
+                              const idx = messages.findIndex((m) => m.id === msg.id);
+                              let userText = '';
+                              for (let i = idx - 1; i >= 0; i--) {
+                                if (messages[i].sender === 'user') {
+                                  userText = messages[i].text || '';
+                                  break;
+                                }
+                              }
+                              if (!userText.trim()) {
+                                onShowToast('没有可重新生成的内容');
+                                return;
+                              }
+                              if (messages.some((m) => m.status === 'processing')) {
+                                onShowToast('请等待当前回复完成');
+                                return;
+                              }
+                              const userMsgId = `user-msg-${Date.now()}`;
+                              useLayoutStore.getState().addMessage(wsId, activeSessionId, {
+                                id: userMsgId,
+                                sender: 'user',
+                                text: userText,
+                                timestamp: Date.now(),
+                                status: 'processing',
+                              });
+                              runStreamingAssistant(userText, userMsgId);
+                              onShowToast('正在重新生成…');
+                            }}
                           >
                             <Lucide.RefreshCw size={13} />
                           </button>
@@ -807,16 +876,21 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       </div>
 
       <div className="chat-footer">
-        {/* Core status chips — minimal, expandable for details / right-panel deep dive */}
+        {/* Status chips: panel-linked ones open right sidebar; only approval/goal expand inline when needed */}
         <div className="chat-context-ribbon">
           {prVisible && (
             <button
               type="button"
-              className={`context-pill git ${activePill === 'git' ? 'active' : ''}`}
-              onClick={() => setActivePill(activePill === 'git' ? null : 'git')}
+              className="context-pill git"
+              title="在右侧查看代码变更"
+              onClick={() => {
+                handleGlobalTabClick('diff');
+                setActivePill(null);
+                onShowToast('已在右侧打开变更');
+              }}
             >
               <Lucide.GitBranch size={12} />
-              <span>分支 · schedule</span>
+              <span>变更 · schedule</span>
             </button>
           )}
 
@@ -833,11 +907,30 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
           <button
             type="button"
-            className={`context-pill server ${activePill === 'server' ? 'active' : ''}`}
-            onClick={() => setActivePill(activePill === 'server' ? null : 'server')}
+            className="context-pill server"
+            title="在右侧打开预览"
+            onClick={() => {
+              handleGlobalTabClick('preview');
+              setActivePill(null);
+              onShowToast('已在右侧打开预览');
+            }}
           >
             <Lucide.Globe size={12} />
-            <span>本地预览</span>
+            <span>预览</span>
+          </button>
+
+          <button
+            type="button"
+            className="context-pill"
+            title="在右侧打开终端"
+            onClick={() => {
+              handleGlobalTabClick('terminal');
+              setActivePill(null);
+              onShowToast('已在右侧打开终端');
+            }}
+          >
+            <Lucide.Terminal size={12} />
+            <span>终端</span>
           </button>
 
           {goalActive && (
@@ -852,222 +945,156 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           )}
         </div>
 
-        {activePill && (
+        {/* Inline expand only when user decision is required (approval) or no side panel (goal) */}
+        {activePill === 'approval' && pendingApprovalTc && (
           <div className="context-details-drawer">
-            {activePill === 'git' && prVisible && (
-              <div className="chat-input-overlay-banner pr-banner">
-                <div className="pr-info" style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0 }}>
-                  <Lucide.GitBranch size={14} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
-                  <span className="branch-text" style={{ fontSize: 12, fontWeight: 500 }} title="schedule-enhancements">
-                    schedule-enhancements
-                  </span>
-                  <span className="pr-badge plus-minus">+16k −863</span>
+            <div className="chat-input-overlay-banner approval-banner">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0 }}>
+                <Lucide.ShieldAlert size={14} style={{ color: 'var(--accent-orange)', flexShrink: 0 }} />
+                <span style={{ fontSize: 12 }}>
+                  需要确认：
+                  <code>{pendingApprovalTc.arguments}</code>
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="action-btn approve"
+                  onClick={() => {
+                    respondToApproval(
+                      wsId,
+                      activeSessionId,
+                      pendingApprovalMsgId,
+                      pendingApprovalTc.id,
+                      'success',
+                    );
+                    setActivePill(null);
+                    onShowToast('已批准并执行');
+                  }}
+                >
+                  批准
+                </button>
+                <button
+                  type="button"
+                  className="action-btn reject"
+                  onClick={() => {
+                    respondToApproval(
+                      wsId,
+                      activeSessionId,
+                      pendingApprovalMsgId,
+                      pendingApprovalTc.id,
+                      'error',
+                    );
+                    setActivePill(null);
+                    onShowToast('已拒绝');
+                  }}
+                >
+                  拒绝
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activePill === 'goal' && goalActive && (
+          <div className="context-details-drawer">
+            <div
+              className="drawer-expand-content goal-drawer-content"
+              style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>当前目标</span>
+                  <span className="ui-badge">{goalPaused ? '已暂停' : '进行中 · 45%'}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                   <button
                     type="button"
-                    className="action-btn"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
                     onClick={() => {
-                      handleGlobalTabClick('diff');
-                      setActivePill(null);
-                      onShowToast('已在右侧打开变更对比');
+                      const next = !goalPaused;
+                      setGoalPaused(next);
+                      onShowToast(next ? '目标已暂停' : '目标已继续');
                     }}
                   >
-                    查看变更
+                    {goalPaused ? <Lucide.Play size={12} /> : <Lucide.Pause size={12} />}
+                    {goalPaused ? '继续' : '暂停'}
                   </button>
                   <button
                     type="button"
-                    className="action-btn"
+                    className="ui-btn ui-btn-ghost"
+                    title="停止"
                     onClick={() => {
-                      setPrVisible(false);
+                      setGoalActive(false);
                       setActivePill(null);
-                      onShowToast('已创建 Pull Request');
+                      onShowToast('目标已停止');
                     }}
                   >
-                    创建 PR
+                    <Lucide.Square size={12} />
                   </button>
-                  <button type="button" className="close-btn" onClick={() => setActivePill(null)}>
+                  <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
                     <Lucide.X size={14} />
                   </button>
                 </div>
               </div>
-            )}
 
-            {activePill === 'approval' && pendingApprovalTc && (
-              <div className="chat-input-overlay-banner approval-banner">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0 }}>
-                  <Lucide.ShieldAlert size={14} style={{ color: 'var(--accent-orange)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12 }}>
-                    需要确认后执行：
-                    <code>{pendingApprovalTc.arguments}</code>
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                  <button
-                    type="button"
-                    className="action-btn approve"
-                    onClick={() => {
-                      respondToApproval(wsId, activeSessionId, pendingApprovalMsgId, pendingApprovalTc.id, 'success');
-                      setActivePill(null);
-                      onShowToast('已批准并执行');
-                    }}
-                  >
-                    批准
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn reject"
-                    onClick={() => {
-                      respondToApproval(wsId, activeSessionId, pendingApprovalMsgId, pendingApprovalTc.id, 'error');
-                      setActivePill(null);
-                      onShowToast('已拒绝');
-                    }}
-                  >
-                    拒绝
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activePill === 'server' && (
-              <div className="chat-input-overlay-banner server-banner">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                  <Lucide.Globe size={14} style={{ color: 'var(--accent-color)' }} />
-                  <span style={{ fontSize: 12 }}>
-                    本地服务运行中 <code>localhost:5174</code>
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => {
-                      handleGlobalTabClick('preview');
-                      setActivePill(null);
-                      onShowToast('已在右侧打开预览');
-                    }}
-                  >
-                    打开预览
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => {
-                      handleGlobalTabClick('terminal');
-                      setActivePill(null);
-                      onShowToast('已在右侧打开终端');
-                    }}
-                  >
-                    打开终端
-                  </button>
-                  <button type="button" className="close-btn" onClick={() => setActivePill(null)}>
-                    <Lucide.X size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activePill === 'goal' && goalActive && (
-              <div className="drawer-expand-content goal-drawer-content" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>当前目标</span>
-                    <span
-                      className="ui-badge"
-                      style={{
-                        background: goalPaused ? 'var(--accent-orange-light)' : 'var(--accent-light)',
-                        color: goalPaused ? '#c27803' : 'var(--accent-color)',
-                      }}
-                    >
-                      {goalPaused ? '已暂停' : '进行中 · 45%'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {goalEditMode ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <textarea
+                    className="ui-input"
+                    value={goalText}
+                    onChange={(e) => setGoalText((e.target as HTMLTextAreaElement).value)}
+                    rows={2}
+                    style={{ resize: 'none', minHeight: 56, background: 'var(--bg-secondary)' }}
+                    autoFocus
+                  />
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                     <button
                       type="button"
                       className="ui-btn ui-btn-secondary ui-btn-sm"
-                      onClick={() => {
-                        const next = !goalPaused;
-                        setGoalPaused(next);
-                        onShowToast(next ? '目标已暂停' : '目标已继续');
-                      }}
+                      onClick={() => setGoalEditMode(false)}
                     >
-                      {goalPaused ? <Lucide.Play size={12} /> : <Lucide.Pause size={12} />}
-                      {goalPaused ? '继续' : '暂停'}
+                      取消
                     </button>
                     <button
                       type="button"
-                      className="ui-btn ui-btn-ghost danger"
-                      title="停止目标"
+                      className="ui-btn ui-btn-primary ui-btn-sm"
                       onClick={() => {
-                        setGoalActive(false);
-                        setActivePill(null);
-                        onShowToast('目标已停止');
+                        setGoalEditMode(false);
+                        onShowToast('目标已更新');
                       }}
                     >
-                      <Lucide.Square size={12} />
-                    </button>
-                    <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
-                      <Lucide.X size={14} />
+                      保存
                     </button>
                   </div>
                 </div>
-
-                {goalEditMode ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <textarea
-                      className="ui-input"
-                      value={goalText}
-                      onChange={(e) => setGoalText((e.target as HTMLTextAreaElement).value)}
-                      rows={2}
-                      style={{ resize: 'none', minHeight: 56 }}
-                      autoFocus
-                    />
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setGoalEditMode(false)}>
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-primary ui-btn-sm"
-                        onClick={() => {
-                          setGoalEditMode(false);
-                          onShowToast('目标已更新');
-                        }}
-                      >
-                        保存
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => setGoalEditMode(true)}
-                    style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'text' }}
-                  >
-                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1, fontSize: 12.5 }}>
-                      {goalText}
-                    </span>
-                    <Lucide.Pencil size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 3 }} />
-                  </div>
-                )}
-
-                <div style={{ height: 4, background: 'var(--bg-tertiary)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: '45%',
-                      background: goalPaused ? 'var(--accent-orange)' : 'var(--accent-color)',
-                      borderRadius: 99,
-                      transition: 'width 0.3s ease',
-                    }}
-                  />
+              ) : (
+                <div
+                  onClick={() => setGoalEditMode(true)}
+                  style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'text' }}
+                >
+                  <span style={{ color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1, fontSize: 12.5 }}>
+                    {goalText}
+                  </span>
+                  <Lucide.Pencil size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 3 }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  <span>已运行 4h22m</span>
-                  <span>预计剩余约 1 天</span>
-                </div>
+              )}
+
+              <div style={{ height: 3, background: 'var(--bg-tertiary)', borderRadius: 99, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: '45%',
+                    background: 'var(--text-secondary)',
+                    borderRadius: 99,
+                  }}
+                />
               </div>
-            )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <span>已运行 4h22m</span>
+                <span>预计剩余约 1 天</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1199,10 +1226,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           <div className="left-actions">
             <div className="bypass-link" title="当前将跳过部分权限确认">
               <span className="orange-dot" />
-              <span className="bypass-text">快捷模式</span>
+              <span className="bypass-text">完全访问</span>
             </div>
             <button type="button" className="plus-btn" title="添加文件">
-              <Lucide.Paperclip size={14} />
+              <Lucide.Plus size={14} />
             </button>
           </div>
           <div className="right-actions">
@@ -1211,7 +1238,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               className="model-badge"
               onClick={() => setShowModelDropdown((prev) => !prev)}
             >
-              <Lucide.Sparkles size={13} style={{ color: 'var(--accent-color)' }} />
               <span className="model-text">
                 {getModelDisplayName(piSettings?.defaultModel || 'gemini-1.5-flash')}
               </span>

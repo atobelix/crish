@@ -39,7 +39,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
   const [draftApiKeys, setDraftApiKeys] = useState<Record<string, string>>({});
   
   // Scope states
-  const [scope, setScope] = useState<'global' | 'project'>('global');
+  const [scope] = useState<'global' | 'project'>('global');
   const [trustedFoldersList, setTrustedFoldersList] = useState<string[]>([]);
 
   // Form states
@@ -479,18 +479,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
       {/* Main Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left Tabs Sidebar */}
-        <div style={{ width: 176, borderRight: '1px solid var(--border-subtle)', padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--bg-secondary)', flexShrink: 0 }}>
-          {([
-            { id: 'profile', label: '账户', icon: Lucide.User },
-            { id: 'appearance', label: '外观', icon: Lucide.Palette },
-            { id: 'models', label: '模型', icon: Lucide.Sparkles },
-            { id: 'rules', label: '规范', icon: Lucide.FileText },
-            { id: 'shortcuts', label: '快捷键', icon: Lucide.Keyboard },
-            { id: 'skills', label: '技能', icon: Lucide.GraduationCap },
-            { id: 'mcp', label: '扩展服务', icon: Lucide.Server },
-            { id: 'plugins', label: '插件', icon: Lucide.Blocks },
-            { id: 'security', label: '安全', icon: Lucide.Shield }
-          ] as const).map((tab) => {
+        <div
+          style={{
+            width: 168,
+            borderRight: '1px solid var(--border-subtle)',
+            padding: '12px 8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            background: '#fafafa',
+            flexShrink: 0,
+          }}
+        >
+          {(
+            [
+              { id: 'profile', label: '账户', icon: Lucide.User },
+              { id: 'appearance', label: '外观', icon: Lucide.Palette },
+              { id: 'models', label: '模型', icon: Lucide.Cpu },
+              { id: 'rules', label: '规范', icon: Lucide.FileText },
+              { id: 'shortcuts', label: '快捷键', icon: Lucide.Keyboard },
+              { id: 'skills', label: '技能', icon: Lucide.GraduationCap },
+              { id: 'mcp', label: '扩展服务', icon: Lucide.Server },
+              { id: 'plugins', label: '插件', icon: Lucide.Blocks },
+              { id: 'security', label: '安全', icon: Lucide.Shield },
+            ] as const
+          ).map((tab) => {
             const isTabActive = activeTab === tab.id;
             const Icon = tab.icon;
 
@@ -501,7 +514,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                 onClick={() => setActiveTab(tab.id)}
                 className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
               >
-                <Icon size={14} style={{ color: isTabActive ? 'var(--accent-color)' : 'var(--text-tertiary)' }} />
+                <Icon size={14} style={{ color: isTabActive ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -511,8 +524,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
             <button
               type="button"
               onClick={onClose}
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              style={{ width: '100%', marginTop: 'auto' }}
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              style={{ width: '100%', marginTop: 'auto', justifyContent: 'flex-start', color: 'var(--text-secondary)' }}
             >
               <Lucide.ArrowLeft size={13} />
               <span>返回</span>
@@ -529,51 +542,42 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
           )}
           
           {/* Scope Selector (Only on profile, models, appearance) */}
-          {(activeTab === 'profile' || activeTab === 'appearance' || activeTab === 'models') && (
-            <div className="settings-scope-selector">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>生效范围</span>
-              </div>
-              <div className="settings-scope-toggle-group">
-                <button
-                  type="button"
-                  onClick={() => setScope('global')}
-                  className={`settings-scope-toggle-btn ${scope === 'global' ? 'active' : ''}`}
-                >
-                  全部项目
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScope('project')}
-                  className={`settings-scope-toggle-btn ${scope === 'project' ? 'active' : ''}`}
-                >
-                  仅当前项目
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* TAB 1: PROFILE */}
           {activeTab === 'profile' && (
             <>
-              <div className="settings-section-header">
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>个人开发账户</h4>
-                <p style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', margin: 0 }}>展示智能体关联的主机资料与工作存储空间配置。</p>
+              <div className="settings-section-header" style={{ marginBottom: 8 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>账户</h4>
+                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                  本地身份与数据存放位置
+                </p>
               </div>
-              
-              <div className="settings-profile-card">
-                <div className="settings-profile-avatar">
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0 16px' }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    background: 'var(--bg-tertiary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    fontSize: 14,
+                  }}
+                >
                   O
                 </div>
-                <div className="settings-profile-info">
-                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>开发者 orange</span>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>本地主机: orange@Windows-PC | 工作目录: {cwd}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>orange</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{cwd}</div>
                 </div>
               </div>
 
-              <div className="settings-fields-stack">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="settings-field-label">会话存储根目录</label>
+              <div className="settings-fields-stack" style={{ gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label className="settings-field-label">会话保存目录</label>
                   <input
                     type="text"
                     value={settings.sessionDir || ''}
@@ -581,12 +585,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                     className="settings-field-input"
                   />
                 </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="settings-field-label">HTTP 网络代理</label>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label className="settings-field-label">网络代理（可选）</label>
                   <input
                     type="text"
-                    placeholder="例如: http://127.0.0.1:7890"
+                    placeholder="http://127.0.0.1:7890"
                     value={settings.httpProxy || ''}
                     onChange={(e) => handleUpdateSettings({ httpProxy: e.target.value })}
                     className="settings-field-input"
@@ -1130,107 +1134,105 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
             </>
           )}
 
-          {/* TAB 3: MCP PROTOCOL */}
+          {/* TAB 3: MCP */}
           {activeTab === 'mcp' && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 600, color:  'var(--text-primary)' , margin: 0 }}>MCP 服务</h4>
-                  <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>连接并配置基于 MCP 协议的外部工具和上下文服务器。</p>
+                  <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>扩展服务</h4>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                    管理已连接的外部工具服务
+                  </p>
                 </div>
-                <button
-                  onClick={() => setShowAddMcpModal(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background:  'var(--accent-blue-light)' ,
-                    border: 'none',
-                    color:  'var(--accent-blue)' ,
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    height: '30px',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <Lucide.Plus size={11} />
-                  <span>注册 MCP 服务</span>
+                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddMcpModal(true)}>
+                  <Lucide.Plus size={13} />
+                  添加
                 </button>
               </div>
 
-              {/* MCP Servers List */}
-              <div className="settings-fields-stack">
+              <div className="settings-fields-stack" style={{ gap: 8 }}>
                 {mcpServers.map((srv) => {
                   const isExpanded = !!expandedMcpServerIds[srv.id];
                   const isEnabled = enabledMcpServers[srv.id] !== false;
-                  const statusColor = isEnabled ? 'var(--accent-blue)' : 'var(--text-tertiary)';
-                  const statusText = isEnabled ? '已启用' : '未启用';
 
                   return (
                     <div key={srv.id} className="settings-card-row">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusColor }} />
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{srv.name}</span>
-                          <span style={{ fontSize: '9px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '1px 6px', borderRadius: '3px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isEnabled ? 'var(--accent-blue)' : 'var(--text-tertiary)' }} />
-                            {statusText} · {srv.type === 'stdio' ? '本地 stdio' : '远程 sse'}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: isEnabled ? 'var(--accent-green)' : 'var(--text-tertiary)',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{srv.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            {isEnabled ? '已启用' : '已关闭'}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <button
-                            onClick={() => setExpandedMcpServerIds(prev => ({ ...prev, [srv.id]: !isExpanded }))}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text-secondary)',
-                              padding: '4px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              height: '24px'
-                            }}
+                            type="button"
+                            className="ui-btn ui-btn-ghost"
+                            title="配置"
+                            onClick={() =>
+                              setExpandedMcpServerIds((prev) => ({ ...prev, [srv.id]: !isExpanded }))
+                            }
                           >
-                            <Lucide.Settings size={12} />
+                            <Lucide.Settings size={13} />
                           </button>
-                          
-                          {/* Toggle Switch */}
                           <div
-                            onClick={() => setEnabledMcpServers(prev => ({ ...prev, [srv.id]: !isEnabled }))}
+                            onClick={() =>
+                              setEnabledMcpServers((prev) => ({ ...prev, [srv.id]: !isEnabled }))
+                            }
                             style={{
-                              width: '32px',
-                              height: '18px',
-                              borderRadius: '9px',
-                              backgroundColor: isEnabled ? 'var(--accent-blue)' : 'var(--border-color)',
-                              padding: '2px',
+                              width: 32,
+                              height: 18,
+                              borderRadius: 9,
+                              backgroundColor: isEnabled ? 'var(--accent-color)' : 'var(--border-color)',
+                              padding: 2,
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: isEnabled ? 'flex-end' : 'flex-start',
-                              transition: 'all 0.2s ease-out'
                             }}
                           >
-                            <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'var(--bg-primary)', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                            <div
+                              style={{
+                                width: 14,
+                                height: 14,
+                                borderRadius: '50%',
+                                backgroundColor: '#fff',
+                              }}
+                            />
                           </div>
-
                           <button
-                            onClick={() => handleDeleteMcpServer(srv.id, srv.name)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                            type="button"
+                            className="ui-btn ui-btn-ghost danger"
                             title="删除"
+                            onClick={() => handleDeleteMcpServer(srv.id, srv.name)}
                           >
-                            <Lucide.Trash2 size={12} />
+                            <Lucide.Trash2 size={13} />
                           </button>
                         </div>
                       </div>
 
                       {isExpanded && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label className="settings-field-label">执行程序 (Command)</label>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 10,
+                            marginTop: 8,
+                            paddingTop: 12,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <label className="settings-field-label">启动命令</label>
                             <input
                               type="text"
                               defaultValue={srv.command || ''}
@@ -1238,8 +1240,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                               className="settings-field-input"
                             />
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label className="settings-field-label">启动参数</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <label className="settings-field-label">参数（逗号分隔）</label>
                             <input
                               type="text"
                               defaultValue={srv.args?.join(', ') || ''}
@@ -1247,32 +1249,34 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                               className="settings-field-input"
                             />
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label className="settings-field-label">环境变量</label>
-                            <input
-                              type="text"
-                              defaultValue="PATH=%PATH%;"
-                              id={`mcp-env-${srv.id}`}
-                              className="settings-field-input"
-                            />
-                          </div>
                           <button
+                            type="button"
+                            className="ui-btn ui-btn-primary ui-btn-sm"
+                            style={{ alignSelf: 'flex-end' }}
                             onClick={() => {
                               const cmdEl = document.getElementById(`mcp-cmd-${srv.id}`) as HTMLInputElement;
-                              const argsEl = document.getElementById(`mcp-args-${srv.id}`) as HTMLInputElement;
+                              const argsEl = document.getElementById(
+                                `mcp-args-${srv.id}`,
+                              ) as HTMLInputElement;
                               if (cmdEl) {
-                                piClientApi.saveMcpServer({
-                                  ...srv,
-                                  command: cmdEl.value.trim(),
-                                  args: argsEl ? argsEl.value.split(',').map(a => a.trim()).filter(Boolean) : []
-                                }).then(list => {
-                                  setMcpServers(list);
-                                  onShowToast(`已保存 MCP 服务配置: ${srv.name}`);
-                                  setExpandedMcpServerIds(prev => ({ ...prev, [srv.id]: false }));
-                                });
+                                piClientApi
+                                  .saveMcpServer({
+                                    ...srv,
+                                    command: cmdEl.value.trim(),
+                                    args: argsEl
+                                      ? argsEl.value
+                                          .split(',')
+                                          .map((a) => a.trim())
+                                          .filter(Boolean)
+                                      : [],
+                                  })
+                                  .then((list) => {
+                                    setMcpServers(list);
+                                    onShowToast(`已保存：${srv.name}`);
+                                    setExpandedMcpServerIds((prev) => ({ ...prev, [srv.id]: false }));
+                                  });
                               }
                             }}
-                            style={{ alignSelf: 'flex-end', background: 'var(--accent-blue-light)', color: 'var(--accent-blue)', border: 'none', padding: '0 12px', borderRadius: '6px', fontSize: '10.5px', cursor: 'pointer', fontWeight: 600, height: '30px', boxSizing: 'border-box' }}
                           >
                             保存
                           </button>
@@ -1282,39 +1286,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
                   );
                 })}
                 {mcpServers.length === 0 && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '24px', border: '1px dashed #ededed', borderRadius: '8px' }}>暂无注册的 MCP 服务，点击右上角按钮进行添加。</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '20px 0' }}>
+                    还没有扩展服务。点击「添加」连接一个工具。
+                  </div>
                 )}
               </div>
             </>
           )}
+
           {/* TAB 4: PLUGINS */}
           {activeTab === 'plugins' && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 600, color:  'var(--text-primary)' , margin: 0 }}>拓展包与插件中心</h4>
-                  <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>管理 Conex 外部加载的扩展插件与 npm / Git 依赖包。</p>
+                  <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>插件</h4>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                    已安装的扩展包
+                  </p>
                 </div>
-                <button
-                  onClick={() => setShowAddPluginModal(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background:  'var(--accent-blue-light)' ,
-                    border: 'none',
-                    color:  'var(--accent-blue)' ,
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    height: '30px',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <Lucide.Plus size={11} />
-                  <span>安装新插件</span>
+                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddPluginModal(true)}>
+                  <Lucide.Plus size={13} />
+                  安装
                 </button>
               </div>
 
@@ -1564,64 +1556,88 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
           {/* TAB 7: APPEARANCE */}
           {activeTab === 'appearance' && (
             <>
-              <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color:  'var(--text-primary)' , margin: 0 }}>外观、主题与布局</h4>
-                <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>定义 Conex 前端控制台主题、渲染字体以及代码块样式参数。</p>
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
+                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>主题与阅读偏好</p>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="settings-field-label">界面主题</label>
+              <div className="settings-fields-stack" style={{ gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label className="settings-field-label">主题</label>
                   <select
                     value={settings.theme || 'default'}
                     onChange={(e) => handleUpdateSettings({ theme: e.target.value })}
                     className="settings-field-input"
                   >
-                    <option value="default">默认炫白</option>
-                    <option value="dark">极客黑夜</option>
-                    <option value="glass">毛玻璃渐变</option>
+                    <option value="default">浅色</option>
+                    <option value="dark">深色</option>
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label className="settings-field-label">代码缩进</label>
                   <select
                     value={settings.markdown?.codeBlockIndent || '  '}
-                    onChange={(e) => handleUpdateSettings({ markdown: { ...settings.markdown, codeBlockIndent: e.target.value } })}
+                    onChange={(e) =>
+                      handleUpdateSettings({
+                        markdown: { ...settings.markdown, codeBlockIndent: e.target.value },
+                      })
+                    }
                     className="settings-field-input"
                   >
                     <option value="  ">2 空格</option>
                     <option value="    ">4 空格</option>
-                    <option value="	">Tab 键缩进</option>
+                    <option value="	">Tab</option>
                   </select>
                 </div>
-              </div>
 
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span className="settings-field-label">终端内联图片渲染</span>
-                  <span style={{ fontSize: '9.5px', color:  'var(--text-tertiary)'  }}>允许终端组件直接在命令行中解析并绘制 SVG/PNG 图形。</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 0',
+                    borderTop: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>终端显示图片</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>在终端输出中渲染图片</div>
+                  </div>
+                  <label style={{ position: 'relative', display: 'inline-block', width: 32, height: 18, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={settings.terminal?.showImages ?? true}
+                      onChange={(e) =>
+                        handleUpdateSettings({
+                          terminal: { ...settings.terminal, showImages: e.target.checked },
+                        })
+                      }
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backgroundColor:
+                          (settings.terminal?.showImages ?? true) ? 'var(--accent-color)' : 'var(--border-color)',
+                        borderRadius: 18,
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          height: 14,
+                          width: 14,
+                          left: (settings.terminal?.showImages ?? true) ? 16 : 2,
+                          bottom: 2,
+                          backgroundColor: 'white',
+                          borderRadius: '50%',
+                        }}
+                      />
+                    </span>
+                  </label>
                 </div>
-                {/* Switch toggle */}
-                <label className="switch-toggle" style={{ position: 'relative', display: 'inline-block', width: '32px', height: '18px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={settings.terminal?.showImages ?? true} 
-                    onChange={(e) => handleUpdateSettings({ terminal: { ...settings.terminal, showImages: e.target.checked } })} 
-                    style={{ opacity: 0, width: 0, height: 0 }} 
-                  />
-                  <span style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: (settings.terminal?.showImages ?? true) ?  'var(--accent-blue)'  :  'var(--border-color)' ,
-                    borderRadius: '18px', transition: '0.2s',
-                  }}>
-                    <span style={{
-                      position: 'absolute', height: '14px', width: '14px',
-                      left: (settings.terminal?.showImages ?? true) ? '16px' : '2px', bottom: '2px',
-                      backgroundColor: 'white', borderRadius: '50%', transition: '0.2s',
-                    }} />
-                  </span>
-                </label>
               </div>
             </>
           )}
@@ -1629,92 +1645,142 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ wsId: _wsId, onSho
           {/* TAB 8: SECURITY */}
           {activeTab === 'security' && (
             <>
-              <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color:  'var(--text-primary)' , margin: 0 }}>安全机制与项目授权白名单</h4>
-                <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>配置工作区访问白名单与命令前缀自动授权规则。</p>
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>安全</h4>
+                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                  项目信任与自动批准规则
+                </p>
               </div>
 
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span className="settings-field-label">默认项目信任机制</span>
-                  <span style={{ fontSize: '9.5px', color:  'var(--text-tertiary)'  }}>对新加载的本地工作区脚本默认信任策略。</span>
+              <div className="settings-fields-stack" style={{ gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label className="settings-field-label">打开新项目时</label>
+                  <select
+                    value={settings.defaultProjectTrust || 'ask'}
+                    onChange={(e) =>
+                      handleUpdateSettings({ defaultProjectTrust: e.target.value as any })
+                    }
+                    className="settings-field-input"
+                  >
+                    <option value="ask">每次询问</option>
+                    <option value="always">默认信任</option>
+                    <option value="never">默认拒绝</option>
+                  </select>
                 </div>
-                <select
-                  value={settings.defaultProjectTrust || 'ask'}
-                  onChange={(e) => handleUpdateSettings({ defaultProjectTrust: e.target.value as any })}
-                  className="settings-field-input"
-                >
-                  <option value="ask">总是询问</option>
-                  <option value="always">始终信任</option>
-                  <option value="never">从不信任并静默</option>
-                </select>
-              </div>
 
-              {/* Whitelisted Projects List (trust manager) */}
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span className="settings-field-label">已授权的可信任项目目录</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {trustedFoldersList.map((path) => (
-                    <div key={path} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color:  'var(--text-secondary)' , wordBreak: 'break-all' }}>{path}</span>
-                      <button
-                        onClick={() => handleRevokeTrust(path)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '10px', display: 'flex', alignItems: 'center' }}
-                        title="撤销授权"
+                <div>
+                  <div className="settings-field-label" style={{ marginBottom: 8 }}>
+                    已信任的项目
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {trustedFoldersList.map((path) => (
+                      <div
+                        key={path}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 0',
+                          borderBottom: '1px solid var(--border-subtle)',
+                        }}
                       >
-                        <Lucide.ShieldOff size={13} />
-                      </button>
-                    </div>
-                  ))}
-                  {trustedFoldersList.length === 0 && (
-                    <span style={{ fontSize: '10.5px', color:  'var(--text-tertiary)' , textAlign: 'center', padding: '10px 0' }}>暂无已授权项目</span>
-                  )}
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-secondary)',
+                            wordBreak: 'break-all',
+                            paddingRight: 12,
+                          }}
+                        >
+                          {path}
+                        </span>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost danger"
+                          title="撤销信任"
+                          onClick={() => handleRevokeTrust(path)}
+                        >
+                          <Lucide.X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    {trustedFoldersList.length === 0 && (
+                      <span style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 0' }}>
+                        暂无已信任项目
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Whitelist Commands */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span className="settings-field-label">自动批准运行白名单前缀</span>
-                
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {(useLayoutStore.getState().commandPermissions || ['git status', 'git diff', 'npm run test:unit']).map((cmd) => (
-                    <span key={cmd} style={{ fontSize: '10.5px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', color:  'var(--text-secondary)'  }}>
+              <div style={{ marginTop: 20 }}>
+                <div className="settings-field-label" style={{ marginBottom: 8 }}>
+                  自动批准的命令
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {(
+                    useLayoutStore.getState().commandPermissions || [
+                      'git status',
+                      'git diff',
+                      'npm run test:unit',
+                    ]
+                  ).map((cmd) => (
+                    <span
+                      key={cmd}
+                      className="ui-badge"
+                      style={{
+                        padding: '5px 8px',
+                        fontSize: 12,
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
                       {cmd}
                       <button
+                        type="button"
                         onClick={() => {
-                          useLayoutStore.setState(state => ({
-                            commandPermissions: state.commandPermissions.filter(c => c !== cmd)
+                          useLayoutStore.setState((state) => ({
+                            commandPermissions: state.commandPermissions.filter((c) => c !== cmd),
                           }));
-                          onShowToast(`已移除白名单命令: ${cmd}`);
+                          onShowToast(`已移除：${cmd}`);
                         }}
-                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', color:  'var(--text-tertiary)' , fontSize: '10px', display: 'flex', alignItems: 'center' }}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color: 'var(--text-tertiary)',
+                          display: 'inline-flex',
+                          marginLeft: 4,
+                          padding: 0,
+                        }}
                       >
-                        <Lucide.X size={10} />
+                        <Lucide.X size={11} />
                       </button>
                     </span>
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', gap: 6 }}>
                   <input
                     type="text"
-                    placeholder="添加自动授权 of 命令前缀，例如: npm run build"
+                    placeholder="例如：npm run build"
                     value={newWhitelistCmd}
-                    onChange={e => setNewWhitelistCmd(e.target.value)}
-                    className="settings-field-input" style={{ flex: 1, padding: "6px 10px" }}
+                    onChange={(e) => setNewWhitelistCmd(e.target.value)}
+                    className="settings-field-input"
+                    style={{ flex: 1 }}
                   />
                   <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
                     onClick={() => {
                       if (!newWhitelistCmd.trim()) return;
                       const cmd = newWhitelistCmd.trim();
-                      useLayoutStore.setState(state => ({
-                        commandPermissions: [...(state.commandPermissions || []), cmd]
+                      useLayoutStore.setState((state) => ({
+                        commandPermissions: [...(state.commandPermissions || []), cmd],
                       }));
-                      onShowToast(`已添加自动批准白名单: ${cmd}`);
+                      onShowToast(`已添加：${cmd}`);
                       setNewWhitelistCmd('');
                     }}
-                    style={{ padding: '6px 16px', borderRadius: '6px', fontSize: '11px' }}
-                    className="settings-btn-flat"
                   >
                     添加
                   </button>

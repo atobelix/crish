@@ -157,9 +157,7 @@ export const PiRuntimePanel: React.FC<PiRuntimePanelProps> = ({ wsId: _wsId, onS
             </div>
             <div className="rt-stat-row is-total">
               <span className="rt-stat-label">费用估算</span>
-              <span className="rt-stat-value" style={{ color: 'var(--accent-color)' }}>
-                ${tokenUsage.cost.toFixed(3)}
-              </span>
+              <span className="rt-stat-value">${tokenUsage.cost.toFixed(3)}</span>
             </div>
           </div>
         </div>

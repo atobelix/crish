@@ -1,44 +1,44 @@
-/* --- CONEX UI SLEEK COLOR SYSTEM & TOKENS --- */
+/* --- CONEX UI — pure neutral grays (no blue/purple tint) --- */
 :root {
-  /* Lively but soft product palette — avoid dead black surfaces */
   --bg-primary: #ffffff;
-  --bg-secondary: #f6f7fb;
-  --bg-tertiary: #eef0f7;
-  --bg-hover: #f0f2f8;
-  --bg-active: #e6e9f4;
-  --text-primary: #1c1f2e;
-  --text-secondary: #5b6178;
-  --text-tertiary: #9499ad;
-  --border-color: #e6e8f0;
-  --border-subtle: #eef0f6;
+  --bg-secondary: #f7f7f7; /* barely gray, no hue */
+  --bg-tertiary: #f0f0f0;
+  --bg-hover: #f5f5f5;
+  --bg-active: #ebebeb;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-color: #e8e8e8;
+  --border-subtle: #f0f0f0;
   
-  /* Brand: soft indigo — primary interactive color (NOT black) */
-  --accent-color: #5b6cff;
-  --accent-light: #eef0ff;
-  --accent-hover: #4a59e8;
-  --accent-soft: #dfe3ff;
+  /* Primary action only: near-black charcoal (not colorful) */
+  --accent-color: #222222;
+  --accent-light: #f5f5f5;
+  --accent-hover: #000000;
+  --accent-soft: #ebebeb;
 
-  --accent-orange: #f59e0b;
-  --accent-orange-light: #fff8eb;
-  --accent-green: #10b981;
-  --accent-green-light: #ecfdf5;
-  --accent-red: #ef4444;
-  --accent-red-light: #fef2f2;
-  --accent-blue: #3b82f6;
-  --accent-blue-light: #eff6ff;
-  --accent-violet: #8b5cf6;
-  --accent-violet-light: #f5f3ff;
+  /* Status colors — use only when meaning requires it */
+  --accent-orange: #c27803;
+  --accent-orange-light: #faf6f0;
+  --accent-green: #1a7f37;
+  --accent-green-light: #f3faf5;
+  --accent-red: #cf222e;
+  --accent-red-light: #fdf4f4;
+  --accent-blue: #666666; /* neutralized — do not use as brand */
+  --accent-blue-light: #f5f5f5;
+  --accent-violet: #666666;
+  --accent-violet-light: #f5f5f5;
 
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(28, 31, 46, 0.04);
-  --shadow-md: 0 4px 12px -2px rgba(28, 31, 46, 0.06), 0 2px 4px -2px rgba(28, 31, 46, 0.03);
-  --shadow-lg: 0 12px 28px -8px rgba(28, 31, 46, 0.1), 0 4px 10px -4px rgba(28, 31, 46, 0.04);
-  --shadow-drag: 0 20px 25px -5px rgba(28, 31, 46, 0.08), 0 10px 10px -5px rgba(28, 31, 46, 0.03);
-  --shadow-2xl: 0 24px 48px -12px rgba(28, 31, 46, 0.16);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.08), 0 4px 10px -4px rgba(0, 0, 0, 0.03);
+  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
+  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.12);
 
   /* Font Families */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -294,7 +294,7 @@ body {
 /* --- SIDEBAR --- */
 .sidebar {
   width: var(--sidebar-width);
-  background-color: #fbfbfc;
+  background-color: #fafafa;
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -346,8 +346,8 @@ body {
 }
 
 .nav-item.active {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
+  background-color: var(--bg-active);
+  color: var(--text-primary);
 }
 
 .nav-icon {
@@ -541,8 +541,8 @@ body {
 }
 
 .session-item.active {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
+  background-color: var(--bg-active);
+  color: var(--text-primary);
 }
 
 .session-text {
@@ -1191,12 +1191,12 @@ body {
   flex-shrink: 0;
 }
 
-/* Context status chips — compact, airy, no stacked boxes */
+/* Context chips — text-like, no colored blocks */
 .chat-context-ribbon {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-height: 0;
   padding: 0 2px;
 }
@@ -1205,65 +1205,64 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 26px;
-  padding: 0 10px;
+  height: 24px;
+  padding: 0 8px;
   border: none;
-  border-radius: 999px;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
   font-size: 11.5px;
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
-  max-width: 220px;
+  max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .context-pill svg {
   flex-shrink: 0;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 .context-pill:hover {
-  background: var(--bg-active);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 .context-pill.active {
-  background: var(--accent-light);
-  color: var(--accent-color);
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 .context-pill.active svg {
   opacity: 1;
-  color: var(--accent-color);
+  color: var(--text-primary);
 }
 .context-pill.approval {
-  background: var(--accent-orange-light);
-  color: #c27803;
+  color: var(--accent-orange);
 }
+.context-pill.approval:hover,
 .context-pill.approval.active {
-  background: #ffe8c2;
-  color: #b45309;
+  background: var(--accent-orange-light);
+  color: var(--accent-orange);
 }
-.context-pill.goal {
-  background: var(--accent-violet-light);
-  color: #7c3aed;
-}
-.context-pill.goal.active {
-  background: #ebe4ff;
-}
+.context-pill.goal,
+.context-pill.goal.active,
 .context-pill.goal.paused {
-  background: var(--bg-tertiary);
   color: var(--text-secondary);
+  background: transparent;
+}
+.context-pill.goal:hover,
+.context-pill.goal.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
-/* Expandable detail card under chips */
+/* Only used for necessary inline expand (approval / goal) */
 .context-details-drawer {
-  background: var(--bg-secondary);
-  border: none;
-  border-radius: var(--radius-lg);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  animation: sheetIn 0.14s ease-out;
 }
 
 .chat-input-overlay-banner {
@@ -1391,20 +1390,21 @@ body {
   border-color: var(--text-tertiary);
 }
 
-/* Composer shell — one soft field; tools live OUTSIDE */
+/* Composer — white field, light edge only */
 .input-container {
   display: flex;
   align-items: flex-end;
-  background-color: var(--bg-secondary);
-  border: none;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 10px 10px 10px 14px;
   gap: 8px;
-  transition: box-shadow 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .input-container:focus-within {
   background-color: #ffffff;
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-color: #cccccc;
+  box-shadow: none;
 }
 
 .input-container textarea {
@@ -1613,10 +1613,10 @@ body {
 .user-meta-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  padding: 2px;
+  gap: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 0;
 }
 .meta-action-btn {
   width: 26px;
@@ -1632,8 +1632,8 @@ body {
   transition: background 0.12s, color 0.12s;
 }
 .meta-action-btn:hover {
-  background: var(--bg-primary);
-  color: var(--accent-color);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .bubble-time {
   font-size: 11px;
@@ -2715,8 +2715,8 @@ body.dragging-card * {
 }
 
 .cpu-icon-wrapper {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   width: 22px;
   height: 22px;
   border-radius: 6px;
@@ -2773,7 +2773,7 @@ body.dragging-card * {
   margin-bottom: 6px;
 }
 .tool-command-inline .prompt-char {
-  color: var(--accent-color);
+  color: var(--text-tertiary);
   font-weight: 600;
 }
 .tool-command-inline .cmd-name {
@@ -2956,7 +2956,7 @@ body.dragging-card * {
 }
 
 .git-diff-card-header:hover {
-  background-color: var(--accent-light);
+  background-color: var(--bg-hover);
 }
 
 .git-diff-file-info {
@@ -2976,7 +2976,7 @@ body.dragging-card * {
 
 .git-diff-preview-tag {
   font-size: 11px;
-  color: var(--accent-color);
+  color: var(--text-tertiary);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -3050,17 +3050,18 @@ body.dragging-card * {
 
 .git-diff-more-indicator {
   padding: 8px 12px;
-  background-color: var(--bg-secondary);
-  color: var(--accent-color);
+  background-color: transparent;
+  color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 500;
   text-align: center;
-  border-top: none;
+  border-top: 1px solid var(--border-subtle);
   user-select: none;
   cursor: pointer;
 }
 .git-diff-more-indicator:hover {
-  background-color: var(--accent-light);
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* --- STICKY FLOATING APPROVAL BANNER --- */
@@ -3729,18 +3730,19 @@ body.dragging-card * {
 .ui-input {
   width: 100%;
   padding: 7px 10px;
-  border: none;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  background: var(--bg-tertiary);
+  background: #ffffff;
   color: var(--text-primary);
   outline: none;
-  transition: box-shadow 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease;
 }
 .ui-input:focus {
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 2px rgba(31, 31, 35, 0.08);
+  background: #ffffff;
+  border-color: #cccccc;
+  box-shadow: none;
 }
 .ui-input::placeholder {
   color: var(--text-tertiary);
@@ -3792,9 +3794,9 @@ select.ui-input {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 14px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
+  padding: 4px 0 8px;
+  background: transparent;
+  border-radius: 0;
 }
 
 .rt-ring {
@@ -3958,9 +3960,13 @@ select.ui-input {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 10px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  padding: 10px 0;
+  border-radius: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.rt-cron-card:last-child {
+  border-bottom: none;
 }
 
 .rt-cron-top {
@@ -4292,10 +4298,10 @@ select.ui-input {
 .settings-field-input {
   height: 34px;
   padding: 0 12px;
-  border: none;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   font-size: var(--font-size-sm);
-  background: var(--bg-tertiary);
+  background: #ffffff;
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -4375,32 +4381,25 @@ select.ui-input {
   color: var(--text-primary) !important;
 }
 .settings-sidebar-tab.active {
-  background: var(--accent-light) !important;
-  color: var(--accent-color) !important;
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
 }
 .settings-sidebar-tab.active svg {
-  color: var(--accent-color) !important;
+  color: var(--text-primary) !important;
 }
 
 .settings-card-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
-  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: #ffffff;
 }
 
 .settings-scope-selector {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: none;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
+  display: none; /* removed from UI — confuses consumers */
 }
 
 .settings-scope-toggle-group {
@@ -4424,9 +4423,9 @@ select.ui-input {
 }
 
 .settings-scope-toggle-btn.active {
-  background: var(--accent-light);
-  color: var(--accent-color);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-active);
+  color: var(--text-primary);
+  box-shadow: none;
 }
 
 /* --- STATUS BADGES --- */
