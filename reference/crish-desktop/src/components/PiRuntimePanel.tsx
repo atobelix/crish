@@ -109,7 +109,7 @@ export const PiRuntimePanel: React.FC<PiRuntimePanelProps> = ({ wsId: _wsId, onS
     <div className="rt-panel">
       {/* Usage */}
       <section className="rt-section">
-        <h4 className="rt-section-title">用量</h4>
+        <h4 className="rt-section-title">本次用量</h4>
         <div className="rt-usage">
           <div className="rt-ring">
             <svg viewBox="0 0 56 56" aria-hidden>
@@ -117,8 +117,8 @@ export const PiRuntimePanel: React.FC<PiRuntimePanelProps> = ({ wsId: _wsId, onS
                 cx="28"
                 cy="28"
                 r="24"
-                stroke="var(--border-color)"
-                strokeWidth="4"
+                stroke="var(--bg-tertiary)"
+                strokeWidth="4.5"
                 fill="transparent"
               />
               <circle
@@ -126,7 +126,7 @@ export const PiRuntimePanel: React.FC<PiRuntimePanelProps> = ({ wsId: _wsId, onS
                 cy="28"
                 r="24"
                 stroke="var(--accent-color)"
-                strokeWidth="4"
+                strokeWidth="4.5"
                 fill="transparent"
                 strokeDasharray="150"
                 strokeDashoffset={dashOffset}
@@ -140,18 +140,26 @@ export const PiRuntimePanel: React.FC<PiRuntimePanelProps> = ({ wsId: _wsId, onS
             <div className="rt-stat-row">
               <span className="rt-stat-label">输入</span>
               <span className="rt-stat-value">
-                {tokenUsage.input.toLocaleString()} / {tokenUsage.inputMax.toLocaleString()}
+                {tokenUsage.input.toLocaleString()}
+                <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                  {' '}/ {tokenUsage.inputMax.toLocaleString()}
+                </span>
               </span>
             </div>
             <div className="rt-stat-row">
               <span className="rt-stat-label">输出</span>
               <span className="rt-stat-value">
-                {tokenUsage.output.toLocaleString()} / {tokenUsage.outputMax.toLocaleString()}
+                {tokenUsage.output.toLocaleString()}
+                <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                  {' '}/ {tokenUsage.outputMax.toLocaleString()}
+                </span>
               </span>
             </div>
             <div className="rt-stat-row is-total">
-              <span className="rt-stat-label">会话花费</span>
-              <span className="rt-stat-value">${tokenUsage.cost.toFixed(3)}</span>
+              <span className="rt-stat-label">费用估算</span>
+              <span className="rt-stat-value" style={{ color: 'var(--accent-color)' }}>
+                ${tokenUsage.cost.toFixed(3)}
+              </span>
             </div>
           </div>
         </div>
