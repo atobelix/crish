@@ -189,6 +189,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [editingRuleFileType, setEditingRuleFileType] = useState<'global' | 'project' | null>(null);
   const [newRuleText, setNewRuleText] = useState('');
 
+  // 全覆盖设置：Esc 返回工作区（二级弹层打开时不抢）
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showAddMcpModal || editingRuleFileType || showAddPluginModal) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose, showAddMcpModal, editingRuleFileType, showAddPluginModal]);
+
   // Daemon endpoint (desktop product, developer only)
   const [daemonWsDraft, setDaemonWsDraft] = useState(() => {
     try {
@@ -667,32 +681,43 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   };
 
   return (
-    <div onWheel={handleRootWheel} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-primary)', color:  'var(--text-secondary)' , fontFamily: 'var(--font-sans)' }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
-        <span style={{ fontSize: '15px', fontWeight: 600, color:  'var(--text-primary)'  }}>设置</span>
-        {onClose && (
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)' , padding: '4px', display: 'flex', alignItems: 'center' }} title="关闭">
+    <div
+      className="settings-panel settings-panel--cover"
+      onWheel={handleRootWheel}
+    >
+      <header className="settings-cover-header">
+        <div className="settings-cover-header-left">
+          {onClose ? (
+            <button
+              type="button"
+              className="settings-back-btn"
+              onClick={onClose}
+              title="返回工作区"
+            >
+              <Lucide.ArrowLeft size={16} />
+              <span>返回</span>
+            </button>
+          ) : null}
+          <div className="settings-cover-title-block">
+            <h1 className="settings-cover-title">设置</h1>
+            <span className="settings-cover-subtitle">偏好与工作区配置</span>
+          </div>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            className="settings-cover-close"
+            onClick={onClose}
+            title="关闭"
+            aria-label="关闭设置"
+          >
             <Lucide.X size={16} />
           </button>
-        )}
-      </div>
+        ) : null}
+      </header>
 
-      {/* Main Body */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left Tabs Sidebar */}
-        <div
-          style={{
-            width: 168,
-            borderRight: '1px solid var(--border-subtle)',
-            padding: '12px 8px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            background: 'var(--bg-secondary)',
-            flexShrink: 0,
-          }}
-        >
+      <div className="settings-cover-body">
+        <nav className="settings-cover-nav" aria-label="设置分类">
           {(
             [
               { id: 'profile' as const, label: '账户', icon: Lucide.User, group: '通用' },
@@ -722,18 +747,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             return (
               <React.Fragment key={tab.id}>
                 {showGroup && (
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      letterSpacing: '0.04em',
-                      color: 'var(--text-tertiary)',
-                      padding: '10px 10px 4px',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {tab.group}
-                  </div>
+                  <div className="settings-nav-group">{tab.group}</div>
                 )}
                 <button
                   type="button"
@@ -746,29 +760,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </React.Fragment>
             );
           })}
+        </nav>
 
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="ui-btn ui-btn-ghost ui-btn-sm"
-              style={{ width: '100%', marginTop: 'auto', justifyContent: 'flex-start', color: 'var(--text-secondary)' }}
-            >
-              <Lucide.ArrowLeft size={16} />
-              <span>返回</span>
-            </button>
-          )}
-        </div>
-
-        {/* Right Content Area */}
-        <div ref={contentAreaRef} style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', background: 'var(--bg-primary)' }}>
+        <div ref={contentAreaRef} className="settings-cover-content">
           {loading && (
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2.5px', background: 'var(--border-color)', overflow: 'hidden', zIndex: 100 }}>
-              <div style={{ width: '30%', height: '100%', background: 'var(--accent-color)', borderRadius: '1px', animation: 'loading-bar 1.2s infinite linear' }} />
+            <div className="settings-loading-bar" aria-hidden>
+              <div className="settings-loading-bar-inner" />
             </div>
           )}
-          
-          {/* Scope Selector (Only on profile, models, appearance) */}
           {/* TAB 1: PROFILE */}
           {activeTab === 'profile' && (
             <>
@@ -2142,7 +2141,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <div style={{ marginBottom: 16 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  主题、间距、字体与阅读相关选项
+                  主题、密度、字体与阅读选项（全页设置，空间更宽）
                 </p>
               </div>
 

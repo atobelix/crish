@@ -654,46 +654,15 @@ function App() {
         </div>
       )}
 
-      {/* Full screen Settings overlay */}
+      {/* 设置：全覆盖工作区（非居中弹窗），便于留白与长表单 */}
       {showSettingsOverlay && (
-        <div
-          className="settings-overlay-backdrop"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 15, 18, 0.28)',
-            backdropFilter: 'blur(6px)',
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 40,
-          }}
-        >
-          <div
-            className="settings-overlay-window"
-            style={{
-              width: '100%',
-              maxWidth: 900,
-              height: '100%',
-              maxHeight: 650,
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 16,
-              boxShadow: 'var(--shadow-2xl)',
-              overflow: 'hidden',
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <SettingsPanel
-              wsId={activeWorkspace?.id || 'ws-0'}
-              onShowToast={handleShowToast}
-              onClose={() => setShowSettingsOverlay(false)}
-              initialTab={settingsActiveTab as any}
-            />
-          </div>
+        <div className="settings-cover" role="dialog" aria-modal="true" aria-label="设置">
+          <SettingsPanel
+            wsId={activeWorkspace?.id || 'ws-0'}
+            onShowToast={handleShowToast}
+            onClose={() => setShowSettingsOverlay(false)}
+            initialTab={settingsActiveTab as any}
+          />
         </div>
       )}
     </div>
