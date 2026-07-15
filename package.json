@@ -38,7 +38,9 @@
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck",
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
-    "test": "vitest run"
+    "test:desktop-helpers": "vitest run apps/crish-desktop/src/api apps/crish-desktop/src/store",
+    "test": "vitest run",
+    "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\" || true"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

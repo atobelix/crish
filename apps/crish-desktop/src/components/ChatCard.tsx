@@ -13,8 +13,6 @@ import {
   getActiveProfile,
   getActiveProfileId,
 } from '../api/providerProfiles';
-import { ComposePlusMenu } from './ComposePlusMenu';
-import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelPicker } from './ModelPicker';
 import { ChatMessageList } from './ChatMessageList';
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
@@ -34,6 +32,7 @@ import { ChatDemoChrome } from './ChatDemoChrome';
 import { onUiEvent } from '../api/uiEvents';
 import { downloadSessionMarkdown } from '../api/sessionExport';
 import { blobToImageAttachment, isImageFile } from '../api/imageProcessing';
+import { ChatComposer } from './ChatComposer';
 
 interface ChatCardProps {
   wsId: string;
@@ -830,343 +829,116 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           </button>
         ) : null}
 
-        <div
-          className="input-container"
-          style={{ position: 'relative', display: activeAgent ? 'none' : undefined }}
-        >
-          {slashMenuOpen && filteredCommands.length > 0 && (
-            <div
-              className="slash-commands-popover"
-              style={{
-                position: 'absolute',
-                bottom: 'calc(100% + 8px)',
-                left: 0,
-                width: 260,
-                background: 'var(--bg-primary)',
-                borderRadius: 12,
-                boxShadow: 'var(--shadow-lg)',
-                padding: 6,
-                zIndex: 15,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-              }}
-            >
-              {filteredCommands.map((c, i) => (
-                <div
-                  key={c.cmd}
-                  className={`slash-command-item ${i === slashSelectedIndex ? 'active' : ''}`}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '8px 10px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    background: i === slashSelectedIndex ? 'var(--accent-light)' : 'transparent',
-                    color: i === slashSelectedIndex ? 'var(--accent-color)' : 'var(--text-secondary)',
-                  }}
-                  onClick={() => {
-                    setSlashMenuOpen(false);
-                    if (c.cmd === '/schedule') {
-                      setChatInput('');
-                      setMainSurface('scheduled');
-                      onShowToast('已打开定时任务');
-                      return;
-                    }
-                    setChatInput(c.cmd + ' ');
-                  }}
-                  onMouseEnter={() => setSlashSelectedIndex(i)}
-                >
-                  <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{c.cmd}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{c.desc}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <textarea
-            placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
-            rows={1}
-            value={chatInput}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onChange={(e) => {
-              const val = (e.target as HTMLTextAreaElement).value;
-              setChatInput(val);
-              if (val.startsWith('/') && !val.includes(' ')) {
-                setSlashMenuOpen(true);
-                void loadSkillSlash();
-              } else {
-                setSlashMenuOpen(false);
-              }
-            }}
-            onPaste={(e) => {
-              void handlePasteImage(e);
-            }}
-            onKeyDown={(e) => {
-              if (isComposing) return;
-              if (slashMenuOpen && filteredCommands.length > 0) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setSlashSelectedIndex((prev) => (prev + 1) % filteredCommands.length);
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setSlashSelectedIndex(
-                    (prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length,
-                  );
-                } else if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const selectedCmd = filteredCommands[slashSelectedIndex].cmd;
-                  setSlashMenuOpen(false);
-                  if (selectedCmd === '/schedule') {
-                    setChatInput('');
-                    setMainSurface('scheduled');
-                    onShowToast('已打开定时任务');
-                    return;
+        {!activeAgent ? (
+          <ChatComposer
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            isComposing={isComposing}
+            setIsComposing={setIsComposing}
+            slashMenuOpen={slashMenuOpen}
+            setSlashMenuOpen={setSlashMenuOpen}
+            slashSelectedIndex={slashSelectedIndex}
+            setSlashSelectedIndex={setSlashSelectedIndex}
+            filteredCommands={filteredCommands}
+            loadSkillSlash={loadSkillSlash}
+            onPasteImage={handlePasteImage}
+            onSend={() => { void handleSendChat(false); }}
+            onStop={handleStopGeneration}
+            canSend={canSend}
+            isProcessing={messages.some((m) => m.status === 'processing')}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            fileInputRef={fileInputRef}
+            onFilesSelected={async (files) => {
+              const next: ChatAttachment[] = [];
+              for (const f of files) {
+                if (isImageFile(f)) {
+                  try {
+                    next.push(await blobToImageAttachment(f, f.name));
+                  } catch {
+                    next.push({ name: f.name, mime: f.type || undefined });
                   }
-                  setChatInput(selectedCmd + ' ');
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setSlashMenuOpen(false);
+                  continue;
                 }
-              } else if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendChat(false);
-              }
-            }}
-            style={{ flex: 1 }}
-          />
-
-          <div className="chat-input-buttons">
-            {messages.some((m) => m.status === 'processing') ? (
-              <>
-                <button
-                  type="button"
-                  className="send-btn queue-btn"
-                  title="加入队列，当前回复结束后发送"
-                  onClick={() => handleSendChat(false)}
-                  disabled={!canSend}
-                >
-                  排队
-                </button>
-                <button
-                  type="button"
-                  className="send-btn"
-                  title="停止生成"
-                  onClick={handleStopGeneration}
-                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                >
-                  <Lucide.Square size={16} fill="currentColor" />
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="send-btn"
-                title="发送 (Enter)"
-                onClick={() => handleSendChat(false)}
-                disabled={!canSend}
-              >
-                <Lucide.CornerDownLeft size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {attachments.length > 0 && (
-          <div className="chat-attach-strip" aria-label="附件">
-            {attachments.map((a) => (
-              <span
-                key={a.name}
-                className={`chat-attach-chip ${a.dataUrl ? 'chat-attach-chip--image' : ''}`}
-                title={a.name}
-              >
-                {a.dataUrl ? (
-                  <img src={a.dataUrl} alt={a.name} className="chat-attach-thumb" />
-                ) : (
-                  <Lucide.Paperclip size={14} className="chat-attach-icon" />
-                )}
-                <span className="chat-attach-name">{a.name}</span>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost chat-attach-remove"
-                  aria-label={`移除 ${a.name}`}
-                  onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
-                >
-                  <Lucide.X size={14} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          style={{ display: 'none' }}
-          onChange={async (e) => {
-            const files = Array.from(e.target.files || []);
-            e.target.value = '';
-            if (!files.length) return;
-            const next: ChatAttachment[] = [];
-            for (const f of files) {
-              if (isImageFile(f)) {
-                try {
-                  next.push(await blobToImageAttachment(f, f.name));
-                } catch {
-                  next.push({ name: f.name, mime: f.type || undefined });
-                }
-                continue;
-              }
-              // Text-ish files: include content for the model; binaries: name only
-              const isText =
-                f.type.startsWith('text/') ||
-                /\.(txt|md|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|yml|yaml|toml|xml|csv|log|sh|ps1)$/i.test(
-                  f.name,
-                );
-              if (isText && f.size < 512_000) {
-                try {
-                  const text = await f.text();
-                  next.push({ name: f.name, text });
-                } catch {
+                const isText =
+                  f.type.startsWith('text/') ||
+                  /\.(txt|md|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|yml|yaml|toml|xml|csv|log|sh|ps1)$/i.test(
+                    f.name,
+                  );
+                if (isText && f.size < 512_000) {
+                  try {
+                    const text = await f.text();
+                    next.push({ name: f.name, text });
+                  } catch {
+                    next.push({ name: f.name });
+                  }
+                } else {
                   next.push({ name: f.name });
                 }
-              } else {
-                next.push({ name: f.name });
               }
-            }
-            addAttachments(next);
-          }}
-        />
-
-        {/* Toolbar outside the input field */}
-        <div className="footer-actions">
-          <div className="left-actions" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              className={`plus-btn ${showPlusMenu ? 'is-open' : ''}`}
-              title="添加"
-              onClick={() => {
-                if (showPlusMenu) {
-                  setShowPlusMenu(false);
-                } else {
-                  setShowPlusMenu(true);
-                  setShowModelDropdown(false);
-                  setShowMoreMenu(false);
-                }
-              }}
-            >
-              <Lucide.Plus size={16} />
-            </button>
-            <ComposePlusMenu
-              open={showPlusMenu}
-              onClose={() => setShowPlusMenu(false)}
-              onAddFiles={() => fileInputRef.current?.click()}
-            />
-            <PermissionModeMenu
-              mode={permissionMode}
-              onChange={(m) => {
-                setPermissionMode(m);
-                setShowPlusMenu(false);
-                setShowModelDropdown(false);
-                setShowMoreMenu(false);
-              }}
-            />
-            {/* 次要动作：导出 / 本会话搜索 → ⋯ 菜单（侧栏也有导出） */}
-            <div className="chat-more-wrap" ref={moreMenuRef}>
-              <button
-                type="button"
-                className={`plus-btn${showMoreMenu ? ' is-open' : ''}${showMsgFilter ? ' is-on' : ''}`}
-                title="更多"
-                aria-label="更多"
-                aria-haspopup="menu"
-                aria-expanded={showMoreMenu}
-                onClick={() => {
-                  setShowMoreMenu((v) => !v);
-                  setShowPlusMenu(false);
-                  setShowModelDropdown(false);
-                }}
-              >
-                <Lucide.MoreHorizontal size={16} />
-              </button>
-              {showMoreMenu ? (
-                <div className="chat-more-menu" role="menu" aria-label="更多操作">
-                  <button
-                    type="button"
-                    className="chat-more-item"
-                    role="menuitem"
-                    aria-pressed={showMsgFilter}
-                    onClick={() => {
-                      setShowMsgFilter((v) => {
-                        const next = !v;
-                        if (!next) setLocalMsgFilter('');
-                        return next;
-                      });
-                      setShowMoreMenu(false);
+              addAttachments(next);
+            }}
+            showPlusMenu={showPlusMenu}
+            setShowPlusMenu={setShowPlusMenu}
+            showMoreMenu={showMoreMenu}
+            setShowMoreMenu={setShowMoreMenu}
+            showMsgFilter={showMsgFilter}
+            setShowMsgFilter={setShowMsgFilter}
+            setLocalMsgFilter={setLocalMsgFilter}
+            moreMenuRef={moreMenuRef}
+            permissionMode={permissionMode}
+            onPermissionChange={(m) => {
+              setPermissionMode(m);
+            }}
+            onExportMarkdown={handleExportMarkdown}
+            canExport={Boolean(activeSession)}
+            onOpenSchedule={() => {
+              setMainSurface('scheduled');
+              onShowToast('已打开定时任务');
+            }}
+            onShowToast={onShowToast}
+            onCloseSiblingMenus={() => setShowModelDropdown(false)}
+            rightActions={
+              showModelPicker ? (
+                <div
+                  ref={modelSelectorRef}
+                  className="model-badge"
+                  title={
+                    getActiveProfile()
+                      ? `${getActiveProfile()!.name} · ${engineModel || getActiveModelId() || '未选模型'}`
+                      : '选择服务商与模型'
+                  }
+                  onClick={() => {
+                    setShowModelDropdown((prev) => !prev);
+                    setShowPlusMenu(false);
+                  }}
+                >
+                  <span className="model-text">
+                    {getModelDisplayName(
+                      engineModel || getActiveModelId() || '选择模型',
+                    )}
+                  </span>
+                  <Lucide.ChevronDown size={14} style={{ opacity: 0.55 }} />
+                  <ModelPicker
+                    open={showModelDropdown}
+                    onClose={() => setShowModelDropdown(false)}
+                    engineModel={engineModel}
+                    busy={pickerBusy}
+                    error={pickerInlineError}
+                    onSelect={(profileId, modelId) => {
+                      void selectProfileModel(profileId, modelId);
                     }}
-                  >
-                    <Lucide.Search size={15} strokeWidth={1.75} />
-                    <span>{showMsgFilter ? '关闭搜索' : '搜索本会话'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="chat-more-item"
-                    role="menuitem"
-                    disabled={!activeSession}
-                    onClick={() => {
-                      handleExportMarkdown();
-                      setShowMoreMenu(false);
+                    onOpenSettings={() => {
+                      setShowModelDropdown(false);
+                      useLayoutStore.getState().openSettings('models');
                     }}
-                  >
-                    <Lucide.FileDown size={15} strokeWidth={1.75} />
-                    <span>导出 Markdown</span>
-                  </button>
+                    onToast={onShowToast}
+                  />
                 </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="right-actions">
-            {showModelPicker && (
-            <div
-              ref={modelSelectorRef}
-              className="model-badge"
-              title={
-                getActiveProfile()
-                  ? `${getActiveProfile()!.name} · ${engineModel || getActiveModelId() || '未选模型'}`
-                  : '选择服务商与模型'
-              }
-              onClick={() => {
-                setShowModelDropdown((prev) => !prev);
-                setShowPlusMenu(false);
-              }}
-            >
-              <span className="model-text">
-                {getModelDisplayName(
-                  engineModel || getActiveModelId() || '选择模型',
-                )}
-              </span>
-              <Lucide.ChevronDown size={14} style={{ opacity: 0.55 }} />
-
-              <ModelPicker
-                open={showModelDropdown}
-                onClose={() => setShowModelDropdown(false)}
-                engineModel={engineModel}
-                busy={pickerBusy}
-                error={pickerInlineError}
-                onSelect={(profileId, modelId) => {
-                  void selectProfileModel(profileId, modelId);
-                }}
-                onOpenSettings={() => {
-                  setShowModelDropdown(false);
-                  useLayoutStore.getState().openSettings('models');
-                }}
-                onToast={onShowToast}
-              />
-            </div>
-            )}
-          </div>
-        </div>
+              ) : null
+            }
+          />
+        ) : null}
       </div>
     </div>
   );
