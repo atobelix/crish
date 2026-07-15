@@ -2175,32 +2175,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
                 <div className="settings-row">
                   <div className="settings-row-label">
-                    <span className="settings-row-title">间距密度</span>
-                  </div>
-                  <div className="settings-row-control">
-                    <div className="ui-segment ui-segment--inline">
-                      {(
-                        [
-                          { id: 'small', label: '紧凑' },
-                          { id: 'medium', label: '标准' },
-                          { id: 'large', label: '宽松' },
-                        ] as const
-                      ).map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={`ui-segment-item ${useLayoutStore.getState().uiSize === opt.id ? 'active' : ''}`}
-                          onClick={() => useLayoutStore.getState().setUiSize(opt.id)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="settings-row">
-                  <div className="settings-row-label">
                     <span className="settings-row-title">代码缩进</span>
                   </div>
                   <div className="settings-row-control">

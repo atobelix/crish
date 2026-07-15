@@ -16,6 +16,7 @@ import {
 } from '../api/sessionTime';
 import { sessionListDisplayTitle } from '../api/sessionTitle';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
+import { isUpdateAvailable } from '../api/updateStore';
 
 interface SidebarProps {
   onShowToast: (message: string, onUndo?: () => void) => void;
@@ -108,6 +109,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 60_000);
     return () => clearInterval(t);
+  }, []);
+
+  // 侧栏宽独立于主题/密度；启动恢复用户拖拽宽度
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('crish_sidebar_width');
+      const n = raw ? parseInt(raw, 10) : NaN;
+      if (!Number.isNaN(n) && n >= 200 && n <= 360) {
+        document.documentElement.style.setProperty('--sidebar-width', `${n}px`);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const [updateAvailable, setUpdateAvailableState] = useState(() => isUpdateAvailable());
+  useEffect(() => {
+    const sync = () => setUpdateAvailableState(isUpdateAvailable());
+    window.addEventListener('crish-update-changed', sync);
+    return () => window.removeEventListener('crish-update-changed', sync);
   }, []);
 
   const menuRef = useRef<HTMLDivElement>(null);
@@ -299,6 +320,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'), 10) ||
       240;
     let isCurrentlyCollapsed = useLayoutStore.getState().sidebarCollapsed;
+    const persistWidth = (px: number) => {
+      try {
+        localStorage.setItem('crish_sidebar_width', String(px));
+      } catch {
+        /* ignore */
+      }
+    };
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       let newWidth = startWidth + dx;
@@ -328,6 +356,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         const capped = Math.min(Math.max(finalWidth, 200), 360);
         useLayoutStore.setState({ sidebarCollapsed: false });
         document.documentElement.style.setProperty('--sidebar-width', `${capped}px`);
+        persistWidth(capped);
       }
     };
     window.addEventListener('pointermove', handlePointerMove);
@@ -607,14 +636,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
         <div className="sidebar-footer-actions">
           <SettingsQuickMenu onShowToast={onShowToast} />
-          <button
-            type="button"
-            className="sidebar-footer-update"
-            title="检查更新"
-            onClick={() => onShowToast('当前已是最新版本')}
-          >
-            <Lucide.Download size={16} />
-          </button>
+          {updateAvailable ? (
+            <button
+              type="button"
+              className="sidebar-footer-update is-visible"
+              title="有新版本可用"
+              onClick={() => onShowToast('正在检查更新…')}
+            >
+              <Lucide.Download size={16} />
+            </button>
+          ) : null}
         </div>
       </div>
 

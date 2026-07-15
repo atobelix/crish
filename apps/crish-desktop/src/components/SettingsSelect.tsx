@@ -1,12 +1,11 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 
 export type SettingsSelectOption = {
   value: string;
   label: string;
-  /** 分组标题，同 group 连续显示 */
   group?: string;
-  /** 预览字体 */
   previewFamily?: string;
   hint?: string;
 };
@@ -17,21 +16,16 @@ interface Props {
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  /** 下拉最大高度 */
   maxHeight?: number;
   className?: string;
-  /** 列表底部插槽（自定义输入等） */
   footer?: React.ReactNode;
-  /** 触发器额外右侧内容（扫描图标等），在 chevron 前 */
   trailing?: React.ReactNode;
-  /** 打开时回调（可触发扫描） */
   onOpen?: () => void;
-  /** 预览当前选中用的 font-family */
   valuePreviewFamily?: string;
 }
 
 /**
- * 设置页自定义下拉：与主界面 cplus / panel-dropdown 气质一致，非系统原生 select。
+ * 设置下拉：portal + fixed 定位，上下翻转、水平钳制，避免被裁切。
  */
 export const SettingsSelect: React.FC<Props> = ({
   value,
@@ -47,16 +41,62 @@ export const SettingsSelect: React.FC<Props> = ({
   valuePreviewFamily,
 }) => {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxH: number;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   const selected = options.find((o) => o.value === value);
   const label = selected?.label || placeholder;
 
+  const place = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const width = Math.min(Math.max(r.width, 160), Math.min(280, window.innerWidth - 16));
+    let left = r.left;
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+    if (left < 8) left = 8;
+
+    const spaceBelow = window.innerHeight - r.bottom - 8;
+    const spaceAbove = r.top - 8;
+    const preferDown = spaceBelow >= 120 || spaceBelow >= spaceAbove;
+    const maxH = Math.min(maxHeight, preferDown ? spaceBelow : spaceAbove, 360);
+
+    if (preferDown) {
+      setPos({ top: r.bottom + 4, left, width, maxH: Math.max(120, maxH) });
+    } else {
+      setPos({
+        bottom: window.innerHeight - r.top + 4,
+        left,
+        width,
+        maxH: Math.max(120, maxH),
+      });
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    place();
+    onOpen?.();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -64,25 +104,89 @@ export const SettingsSelect: React.FC<Props> = ({
         setOpen(false);
       }
     };
+    const onReposition = () => place();
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
     return () => {
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
     };
   }, [open]);
 
   const toggle = () => {
     if (disabled) return;
-    setOpen((v) => {
-      const next = !v;
-      if (next) onOpen?.();
-      return next;
-    });
+    setOpen((v) => !v);
   };
 
-  // group options for rendering
   let lastGroup: string | undefined;
+
+  const menu =
+    open && pos
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className="settings-select-menu settings-select-menu--portal"
+            role="listbox"
+            id={listId}
+            style={{
+              position: 'fixed',
+              top: pos.top,
+              bottom: pos.bottom,
+              left: pos.left,
+              width: pos.width,
+              maxHeight: pos.maxH,
+              zIndex: 20050,
+            }}
+          >
+            <div className="settings-select-scroll" style={{ maxHeight: pos.maxH - (footer ? 48 : 8) }}>
+              {options.map((opt) => {
+                const showGroup = opt.group && opt.group !== lastGroup;
+                if (opt.group) lastGroup = opt.group;
+                const active = opt.value === value;
+                return (
+                  <React.Fragment key={opt.value}>
+                    {showGroup ? (
+                      <div className="settings-select-group">{opt.group}</div>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={`settings-select-item ${active ? 'is-active' : ''}`}
+                      onClick={() => {
+                        onChange(opt.value);
+                        setOpen(false);
+                      }}
+                    >
+                      <span
+                        className="settings-select-item-label"
+                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                      >
+                        {opt.label}
+                      </span>
+                      {opt.hint ? (
+                        <span className="settings-select-item-hint">{opt.hint}</span>
+                      ) : null}
+                      {active ? (
+                        <Lucide.Check size={14} className="settings-select-check" />
+                      ) : null}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+              {!options.length ? (
+                <div className="settings-select-empty">暂无选项</div>
+              ) : null}
+            </div>
+            {footer ? <div className="settings-select-footer">{footer}</div> : null}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div
@@ -91,6 +195,7 @@ export const SettingsSelect: React.FC<Props> = ({
     >
       <div className="settings-select-trigger-row">
         <button
+          ref={triggerRef}
           type="button"
           className="settings-select-trigger"
           disabled={disabled}
@@ -113,52 +218,7 @@ export const SettingsSelect: React.FC<Props> = ({
         </button>
         {trailing}
       </div>
-
-      {open && (
-        <div className="settings-select-menu" role="listbox" id={listId} style={{ maxHeight }}>
-          <div className="settings-select-scroll">
-            {options.map((opt) => {
-              const showGroup = opt.group && opt.group !== lastGroup;
-              if (opt.group) lastGroup = opt.group;
-              const active = opt.value === value;
-              return (
-                <React.Fragment key={opt.value}>
-                  {showGroup ? (
-                    <div className="settings-select-group">{opt.group}</div>
-                  ) : null}
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    className={`settings-select-item ${active ? 'is-active' : ''}`}
-                    onClick={() => {
-                      onChange(opt.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <span
-                      className="settings-select-item-label"
-                      style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
-                    >
-                      {opt.label}
-                    </span>
-                    {opt.hint ? (
-                      <span className="settings-select-item-hint">{opt.hint}</span>
-                    ) : null}
-                    {active ? (
-                      <Lucide.Check size={14} className="settings-select-check" />
-                    ) : null}
-                  </button>
-                </React.Fragment>
-              );
-            })}
-            {!options.length ? (
-              <div className="settings-select-empty">暂无选项</div>
-            ) : null}
-          </div>
-          {footer ? <div className="settings-select-footer">{footer}</div> : null}
-        </div>
-      )}
+      {menu}
     </div>
   );
 };

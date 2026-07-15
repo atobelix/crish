@@ -1,22 +1,40 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import { readStoredTheme, setTheme, type UiTheme } from '../api/themeStore';
+import { isUpdateAvailable } from '../api/updateStore';
 
 interface Props {
   onShowToast?: (msg: string) => void;
 }
 
 /**
- * 侧栏「设置」旁的快捷菜单：常用项先点这里，完整设置从菜单进入。
+ * 侧栏「设置」快捷菜单：主题 + 入口；不进全屏设置。
+ * 菜单 fixed 定位，避免挡住聊天气泡 / 被裁切。
  */
 export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [theme, setThemeLocal] = useState<UiTheme>(() => readStoredTheme());
-  const uiSize = useLayoutStore((s) => s.uiSize);
-  const setUiSize = useLayoutStore((s) => s.setUiSize);
+  const [menuPos, setMenuPos] = useState<{ left: number; bottom: number; width: number } | null>(
+    null,
+  );
   const openSettings = useLayoutStore((s) => s.openSettings);
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) {
+      setMenuPos(null);
+      return;
+    }
+    const r = btnRef.current.getBoundingClientRect();
+    const width = Math.min(260, Math.max(220, r.width));
+    let left = r.left;
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+    if (left < 8) left = 8;
+    const bottom = window.innerHeight - r.top + 6;
+    setMenuPos({ left, bottom, width });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -29,11 +47,14 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
         setOpen(false);
       }
     };
+    const onScroll = () => setOpen(false);
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onScroll);
     return () => {
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', onScroll);
     };
   }, [open]);
 
@@ -50,6 +71,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   return (
     <div className="sb-quick-wrap" ref={rootRef}>
       <button
+        ref={btnRef}
         type="button"
         className={`sidebar-footer-settings ${open ? 'is-open' : ''}`}
         title="快捷设置"
@@ -62,8 +84,16 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
         <Lucide.ChevronUp size={14} className="sb-quick-chev" />
       </button>
 
-      {open && (
-        <div className="sb-quick-menu" role="menu">
+      {open && menuPos && (
+        <div
+          className="sb-quick-menu"
+          role="menu"
+          style={{
+            left: menuPos.left,
+            bottom: menuPos.bottom,
+            width: menuPos.width,
+          }}
+        >
           <div className="sb-quick-section">
             <div className="sb-quick-label">主题</div>
             <div className="ui-segment ui-segment--inline sb-quick-segment">
@@ -84,35 +114,18 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             </div>
           </div>
 
-          <div className="sb-quick-section">
-            <div className="sb-quick-label">间距</div>
-            <div className="ui-segment ui-segment--inline sb-quick-segment">
-              {(
-                [
-                  { id: 'small' as const, label: '紧凑' },
-                  { id: 'medium' as const, label: '标准' },
-                  { id: 'large' as const, label: '宽松' },
-                ]
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ui-segment-item ${uiSize === opt.id ? 'active' : ''}`}
-                  onClick={() => setUiSize(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="sb-quick-divider" />
 
           <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go('models')}>
             <Lucide.Cpu size={16} />
             <span>模型与密钥</span>
           </button>
-          <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go('appearance')}>
+          <button
+            type="button"
+            className="sb-quick-item"
+            role="menuitem"
+            onClick={() => go('appearance')}
+          >
             <Lucide.Palette size={16} />
             <span>外观与字体</span>
           </button>
@@ -129,7 +142,9 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              onShowToast?.('当前已是最新版本');
+              onShowToast?.(
+                isUpdateAvailable() ? '正在检查更新…' : '当前已是最新版本',
+              );
             }}
           >
             <Lucide.RefreshCw size={16} />

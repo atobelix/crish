@@ -41,7 +41,8 @@ import {
   toolHasDisplayableResult,
   toolResultPreview,
   toolSummaryLabel,
-  truncateToolOutput,
+  fullToolOutput,
+  toolPathDisplayName,
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import {
@@ -893,34 +894,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     arguments?: string;
   }) => {
     const images = extractImageRefs(tc.output || '');
-    // 主对话里工具输出必须克制：长结果只给预览；完整内容走右侧文件/终端入口，不刷屏
     const raw = tc.output || '';
-    const lineCount = raw ? raw.split('\n').length : 0;
-    const long = raw.length > 360 || lineCount > 10;
-    const out = truncateToolOutput(raw, long ? 5 : 10, long ? 360 : 720);
+    const out = fullToolOutput(raw);
     const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
-    const filePath = extractFilePathFromToolArgs(tc.arguments || '');
     const shellTool = isShellToolName(tc.name || '');
-    // shell 长输出主入口：终端；读写工具带路径：文件面板
-    const showOpenFile = Boolean(filePath) && !shellTool;
-    const showOpenTerminal = shellTool && long;
+    const longShell = shellTool && (raw.length > 2000 || raw.split('\n').length > 80);
     if (!out && images.length === 0 && !hasDiffs) {
       if (tc.status === 'success') {
         return (
           <div className="tool-result-body">
             <pre className="tool-result-pre">完成</pre>
-            {showOpenFile && filePath ? (
-              <button
-                type="button"
-                className="tool-result-open-file"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openPathInFilesPanel(filePath);
-                }}
-              >
-                打开文件
-              </button>
-            ) : null}
           </div>
         );
       }
@@ -936,35 +919,18 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     return (
       <div className="tool-result-body">
         {out ? <pre className="tool-result-pre">{out}</pre> : null}
-        {long || showOpenFile || showOpenTerminal ? (
+        {longShell ? (
           <div className="tool-result-long-hint">
-            {long ? <span>输出较长，已截断</span> : null}
-            <span className="tool-result-long-actions">
-              {showOpenFile && filePath ? (
-                <button
-                  type="button"
-                  className="tool-result-hint-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openPathInFilesPanel(filePath);
-                  }}
-                >
-                  打开文件
-                </button>
-              ) : null}
-              {showOpenTerminal ? (
-                <button
-                  type="button"
-                  className="tool-result-hint-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openSidePanel('terminal');
-                  }}
-                >
-                  在终端查看
-                </button>
-              ) : null}
-            </span>
+            <button
+              type="button"
+              className="tool-result-hint-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSidePanel('terminal');
+              }}
+            >
+              在终端查看
+            </button>
           </div>
         ) : null}
         {images.length > 0 && (
@@ -1115,9 +1081,60 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     const canToggle = Boolean(body) || hasResult;
     const filePath = extractFilePathFromToolArgs(tc.arguments || '');
     const n = (tc.name || '').toLowerCase();
-    const showFileOpen =
+    const pathClickable =
       Boolean(filePath) &&
-      (isEditToolName(n) || n.includes('read') || n.includes('write') || n.includes('edit') || n.includes('glob'));
+      (isEditToolName(n) ||
+        n.includes('read') ||
+        n.includes('write') ||
+        n.includes('edit') ||
+        n.includes('glob'));
+    const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
+    // 摘要里把 basename 渲成可点链（路径即入口，去掉「打开文件」按钮）
+    const renderSummary = () => {
+      if (!pathClickable || !filePath || !pathLabel) {
+        return (
+          <span className="tool-row-summary" title={summary}>
+            {summary}
+          </span>
+        );
+      }
+      const idx = summary.lastIndexOf(pathLabel);
+      if (idx < 0) {
+        return (
+          <span className="tool-row-summary" title={filePath}>
+            {summary}{' '}
+            <button
+              type="button"
+              className="tool-path-link"
+              title={filePath}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPathInFilesPanel(filePath);
+              }}
+            >
+              {pathLabel}
+            </button>
+          </span>
+        );
+      }
+      return (
+        <span className="tool-row-summary" title={filePath}>
+          {summary.slice(0, idx)}
+          <button
+            type="button"
+            className="tool-path-link"
+            title={filePath}
+            onClick={(e) => {
+              e.stopPropagation();
+              openPathInFilesPanel(filePath);
+            }}
+          >
+            {pathLabel}
+          </button>
+          {summary.slice(idx + pathLabel.length)}
+        </span>
+      );
+    };
     return (
       <div className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`} key={key}>
         <button
@@ -1130,9 +1147,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
             </span>
           ) : null}
-          <span className="tool-row-summary" title="摘要">
-            {summary}
-          </span>
+          {renderSummary()}
           {cmd ? (
             <code className="tool-row-cmd" title="命令">
               {cmd}
@@ -1147,19 +1162,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
           ) : null}
         </button>
-        {showFileOpen && filePath ? (
-          <button
-            type="button"
-            className="tool-row-file-open"
-            title={filePath}
-            onClick={(e) => {
-              e.stopPropagation();
-              openPathInFilesPanel(filePath);
-            }}
-          >
-            打开文件
-          </button>
-        ) : null}
         {isOpen && body}
       </div>
     );

@@ -1,0 +1,2207 @@
+diff --git a/reference/crish-desktop/src/components/CardPanel.tsx b/reference/crish-desktop/src/components/CardPanel.tsx
+index 651319e2..2ef2280f 100644
+--- a/reference/crish-desktop/src/components/CardPanel.tsx
++++ b/reference/crish-desktop/src/components/CardPanel.tsx
+@@ -1,14 +1,92 @@
+ import React, { useState } from 'react';
+ import { useLayoutStore } from '../store/layoutStore';
++import type { SessionMessage, FileDiff } from '../store/layoutStore';
+ import * as Lucide from 'lucide-react';
+ 
++const parseMarkdownToHtml = (text: string): string => {
++  if (!text) return '';
++  
++  // 1. Escape HTML entities
++  let html = text
++    .replace(/&/g, '&amp;')
++    .replace(/</g, '&lt;')
++    .replace(/>/g, '&gt;');
++  
++  // 2. Fenced Code Blocks: ```lang\ncode\n```
++  html = html.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) => {
++    return `<pre class="md-code-block"><code class="language-${lang}">${code.trim()}</code></pre>`;
++  });
++  
++  // 3. Inline code: `code`
++  html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
++  
++  // 4. Bold text: **text**
++  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
++  
++  // 5. Headings: ### text, #### text
++  html = html.replace(/^(#{3,6})\s+(.+)$/gm, (_, hashes, content) => {
++    const level = hashes.length;
++    return `<h${level} class="md-h${level}">${content}</h${level}>`;
++  });
++  
++  // 6. Alert blocks: > [!NOTE] etc.
++  html = html.replace(/^>\s+\[!(NOTE|IMPORTANT|WARNING|TIP|CAUTION)\]\r?\n([\s\S]*?)(?=\r?\n\r?\n|\r?\n[^\s>])/g, (_, type, content) => {
++    return `<div class="md-alert md-alert-${type.toLowerCase()}"><strong class="md-alert-title">${type}</strong><p class="md-alert-content">${content.trim().replace(/^>\s*/gm, '')}</p></div>`;
++  });
++
++  // 7. Horizontal rule: ---
++  html = html.replace(/^---$/gm, '<hr class="md-hr" />');
++
++  // 8. Bullet lists with checkboxes or items
++  html = html.replace(/^(?:\s*)[-*]\s+\[ \]\s+(.+)$/gm, '<li class="md-li md-task-item"><input type="checkbox" disabled class="md-task-chk" /> $1</li>');
++  html = html.replace(/^(?:\s*)[-*]\s+\[x\]\s+(.+)$/gm, '<li class="md-li md-task-item"><input type="checkbox" checked disabled class="md-task-chk" /> $1</li>');
++  html = html.replace(/^(?:\s*)[-*]\s+(?!(?:\[ \]|\[x\]))\s*(.+)$/gm, '<li class="md-li">$1</li>');
++
++  // Wrap consecutive <li> tags in <ul>
++  html = html.replace(/(<li class="md-li">[\s\S]*?<\/li>|<li class="md-li md-task-item">[\s\S]*?<\/li>)/g, (match) => {
++    return `<ul class="md-ul">${match}</ul>`;
++  });
++  // Merge consecutive <ul> blocks
++  html = html.replace(/<\/ul>\s*<ul class="md-ul">/g, '');
++  
++  // 9. Tables: split by pipes |
++  html = html.replace(/(?:^|\n)(\|[^\n]+\|\r?\n\|[^\n]+\|\r?\n(?:\|[^\n]+\|\r?\n?)+)/g, (match) => {
++    const rows = match.trim().split('\n');
++    const parsedRows = rows.map((row, index) => {
++      const cells = row.split('|').map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
++      if (cells.every(c => /^:-*|-*:?|^-+$/.test(c))) {
++        return '';
++      }
++      const isHeader = index === 0;
++      const tag = isHeader ? 'th' : 'td';
++      const innerHTML = cells.map(c => `<${tag} class="md-${tag}">${c}</${tag}>`).join('');
++      return `<tr class="md-tr">${innerHTML}</tr>`;
++    }).filter(Boolean).join('');
++    return `<table class="md-table">${parsedRows}</table>`;
++  });
++
++  // 10. Paragraphs: split by double newlines, wrap non-block elements in <p>
++  const blocks = html.split(/\n\n+/);
++  html = blocks.map(block => {
++    const trimmed = block.trim();
++    if (!trimmed) return '';
++    if (trimmed.startsWith('<pre') || trimmed.startsWith('<ul') || trimmed.startsWith('<h') || trimmed.startsWith('<table') || trimmed.startsWith('<div class="md-alert')) {
++      return trimmed;
++    }
++    const formatted = trimmed.replace(/\n/g, '<br />');
++    return `<p class="md-p">${formatted}</p>`;
++  }).join('');
++  
++  return html;
++};
++
+ interface CardPanelProps {
+   wsId: string;
+   colIdx: number;
+   groupIdx: number;
+   onShowToast: (message: string) => void;
+   heightRatio?: number;
+ }
+ 
+ export const CardPanel: React.FC<CardPanelProps> = ({
+   wsId,
+@@ -20,29 +98,714 @@ export const CardPanel: React.FC<CardPanelProps> = ({
+   const {
+     workspaces,
+     sessions,
+     activeSessionId,
+     draggedTab,
+     setDraggedTab,
+     mergeTab,
+     detachTabToStandalone,
+     closeTabInGroup,
+     setPanelsDropdownCoords,
++    addMessage,
++    withdrawMessage,
++    activeDiffSource,
++    setActiveDiffSource,
++    planModeEnabled,
++    planApproved,
++    setPlanApproved,
++    addCommandPermission,
++    respondToApproval,
+   } = useLayoutStore();
+ 
+   const ws = workspaces.find((w) => w.id === wsId);
+   const col = ws?.columns[colIdx];
+   const group = col?.groups[groupIdx];
+   const activeSession = sessions.find((s) => s.id === activeSessionId);
++  const messages = activeSession?.messages || [];
++
++  // Scan active session messages for pending command approvals
++  let pendingApprovalTc: any = null;
++  let pendingApprovalMsgId = '';
++  for (const m of messages) {
++    if (m.toolCalls) {
++      const found = m.toolCalls.find(tc => tc.status === 'pending_approval');
++      if (found) {
++        pendingApprovalTc = found;
++        pendingApprovalMsgId = m.id;
++        break;
++      }
++    }
++  }
++
++
++  const formatTime = (ts?: number) => {
++    if (!ts) return '';
++    const date = new Date(ts);
++    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
++  };
++
++  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
++  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
++  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
++  const [prVisible, setPrVisible] = useState(true);
++  const [planDrawerExpanded, setPlanDrawerExpanded] = useState(false);
++
++  // Simulated Web Browser states
++  const [browserUrl, setBrowserUrl] = useState('http://localhost:3000/');
++  const [browserHistory, setBrowserHistory] = useState<string[]>(['http://localhost:3000/']);
++  const [historyIndex, setHistoryIndex] = useState(0);
++  const [isSWActive, setIsSWActive] = useState(true);
++  const [isScriptInjected, setIsScriptInjected] = useState(true);
++  const [mockPage, setMockPage] = useState<'app' | 'google' | 'github'>('app');
++
++  // Unified / Split Diff states
++  const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
++  const [diffSearchQuery, setDiffSearchQuery] = useState('');
++
++  // Simulated Terminal states
++  const [terminalInput, setTerminalInput] = useState('');
++  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
++  const [termHistIdx, setTermHistIdx] = useState(-1);
++  const [terminalLines, setTerminalLines] = useState<string[]>([
++    'orange@Windows-PC MINGW64 /c/Software/conex',
++    '$ npm run dev',
++    '> zennav-server@1.0.0 dev',
++    '> node server.js',
++    '',
++    '[ready] Server started on http://localhost:3000',
++    '[ready] Database connection established.'
++  ]);
++
++  // Tasks Panel states
++  const [tasksList, setTasksList] = useState<Array<{ id: string; text: string; done: boolean }>>([
++    { id: 't1', text: '读取并锁定 trigger-injector.ts', done: true },
++    { id: 't2', text: '重写 acquireInlineBtn 检测逻辑，覆盖 HTML', done: false },
++    { id: 't3', text: '执行 npm run build 进行开发包大小与编译校验', done: false }
++  ]);
++  const [newIncomingTask, setNewIncomingTask] = useState('');
++  const [isAddingTask, setIsAddingTask] = useState(false);
++
++  // Slash commands navigation states
++  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
++  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
++  const [activePill, setActivePill] = useState<string | null>(null);
++
++  // Sync tasks list completion state with planApproved
++  React.useEffect(() => {
++    setTasksList(prev => prev.map(t => {
++      if (t.id === 't2') return { ...t, done: planApproved };
++      return t;
++    }));
++  }, [planApproved]);
++
++  // Auto-focus approval pill when a new approval request comes in
++  React.useEffect(() => {
++    if (pendingApprovalTc) {
++      setActivePill('approval');
++    } else {
++      if (activePill === 'approval') {
++        setActivePill(null);
++      }
++    }
++  }, [pendingApprovalTc]);
++
++  // Auto-focus plan progress when planModeEnabled becomes true
++  React.useEffect(() => {
++    if (planModeEnabled) {
++      setActivePill('plan');
++    } else {
++      if (activePill === 'plan') {
++        setActivePill(null);
++      }
++    }
++  }, [planModeEnabled]);
++
++  const toggleGroup = (msgId: string) => {
++    setExpandedGroups(prev => ({ ...prev, [msgId]: !prev[msgId] }));
++  };
++
++  const toggleTool = (toolId: string) => {
++    setExpandedTools(prev => ({ ...prev, [toolId]: !prev[toolId] }));
++  };
++
++  // Helper for simulated browser preview URL sync
++  const updatePageFromUrl = (url: string) => {
++    const lower = url.toLowerCase();
++    if (lower.includes('github')) {
++      setMockPage('github');
++    } else if (lower.includes('google') || lower.includes('baidu')) {
++      setMockPage('google');
++    } else {
++      setMockPage('app');
++    }
++  };
++
++  // Helper for simulated terminal key down commands
++  const handleTerminalKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
++    if (e.key === 'Enter') {
++      const input = terminalInput.trim();
++      if (!input) return;
++
++      const newLines = [...terminalLines, `orange@Windows-PC MINGW64 /c/Software/conex`, `$ ${input}`];
++      
++      let response: string[] = [];
++      const cmd = input.split(' ')[0].toLowerCase();
++      
++      switch (cmd) {
++        case 'help':
++          response = [
++            '可用命令列表 (Available commands):',
++            '  help        - 显示帮助信息 (Show help)',
++            '  ls          - 列出工作区文件 (List workspace files)',
++            '  cat         - 查看文件内容 (View file content, e.g. cat package.json)',
++            '  git status  - 查看 Git 工作区状态 (Git status)',
++            '  npm run build - 运行构建与大小校验 (Run build check)',
++            '  clear       - 清空屏幕 (Clear terminal screen)'
++          ];
++          break;
++        case 'ls':
++          response = [
++            'apps/                  packages/              scripts/',
++            'package.json           README.md              Cargo.toml',
++            'DEVELOPMENT_LOG.md      0613-0553.md           data/'
++          ];
++          break;
++        case 'cat': {
++          const arg = input.split(' ').slice(1).join(' ');
++          if (arg === 'package.json') {
++            response = [
++              '{',
++              '  "name": "conex",',
++              '  "private": true,',
++              '  "workspaces": [',
++              '    "apps/agent-workbench",',
++              '    "packages/agent-runtime"',
++              '  ]',
++              '}'
++            ];
++          } else if (arg) {
++            response = [`cat: ${arg}: Permission denied or file not found`];
++          } else {
++            response = ['用法: cat <文件名> (Usage: cat <filename>)'];
++          }
++          break;
++        }
++        case 'git': {
++          const sub = input.split(' ')[1];
++          if (sub === 'status') {
++            response = [
++              'On branch feature/schedule-panel-enhancements',
++              'Your branch is up to date with \'origin/feature/schedule-panel-enhancements\'.',
++              '',
++              'Changes not staged for commit:',
++              '  (use "git add <file>..." to update what will be committed)',
++              '  (use "git restore <file>..." to discard changes in working directory)',
++              '        modified:   trigger-injector.ts',
++              '        modified:   src/components/CardPanel.tsx',
++              '',
++              'no changes added to commit (use "git add" and/or "git commit -a")'
++            ];
++          } else {
++            response = [`git: '${sub}' is not a simulated command. Try 'git status'`];
++          }
++          break;
++        }
++        case 'npm': {
++          const args = input.split(' ').slice(1).join(' ');
++          if (args === 'run build') {
++            response = [
++              'Building workspace components...',
++              '  tsc -b packages/shared-types ... Success [0.4s]',
++              '  tsc -b packages/agent-runtime ... Success [0.8s]',
++              '  vite build apps/agent-workbench ...',
++              '  dist/index.html                     0.45 kB │ gzip:  0.28 kB',
++              '  dist/assets/index-Bf6tG8.js       542.10 kB │ gzip: 168.20 kB',
++              '  dist/assets/index-C8g7v1.css       98.42 kB │ gzip:  22.15 kB',
++              '✓ built in 1.45s',
++              '✓ Development bundle size within constraints (542kB < 600kB limit).',
++              '✓ Verification build completed successfully!'
++            ];
++          } else {
++            response = [`npm: command run not supported. Try 'npm run build'`];
++          }
++          break;
++        }
++        case 'clear':
++          setTerminalLines([]);
++          setTerminalInput('');
++          return;
++        default:
++          response = [`bash: command not found: ${cmd}`];
++      }
++
++      setTerminalLines([...newLines, ...response]);
++      setTerminalHistory(prev => [...prev, input]);
++      setTermHistIdx(-1);
++      setTerminalInput('');
++    } else if (e.key === 'ArrowUp') {
++      e.preventDefault();
++      if (terminalHistory.length > 0) {
++        const nextIdx = termHistIdx === -1 ? terminalHistory.length - 1 : Math.max(0, termHistIdx - 1);
++        setTermHistIdx(nextIdx);
++        setTerminalInput(terminalHistory[nextIdx]);
++      }
++    } else if (e.key === 'ArrowDown') {
++      e.preventDefault();
++      if (termHistIdx !== -1) {
++        const nextIdx = termHistIdx + 1;
++        if (nextIdx >= terminalHistory.length) {
++          setTermHistIdx(-1);
++          setTerminalInput('');
++        } else {
++          setTermHistIdx(nextIdx);
++          setTerminalInput(terminalHistory[nextIdx]);
++        }
++      }
++    }
++  };
++
++  // Helper for adding tasks
++  const handleAddTask = () => {
++    if (!newIncomingTask.trim()) return;
++    setTasksList(prev => [...prev, { id: `t-${Date.now()}`, text: newIncomingTask.trim(), done: false }]);
++    setNewIncomingTask('');
++    setIsAddingTask(false);
++  };
++
++  // Process Tool Call auto-fold and batch auto-collapse
++  const processedToolCallsRef = React.useRef<Set<string>>(new Set());
++  const processedGroupsRef = React.useRef<Set<string>>(new Set());
++
++  // Helper to partition tool calls into sequential execution rounds
++  const getToolCallRounds = (toolCalls: any[]) => {
++    const hasExplicitRounds = toolCalls.some(tc => tc.round !== undefined);
++    if (hasExplicitRounds) {
++      const groups: Record<number, any[]> = {};
++      toolCalls.forEach(tc => {
++        const r = tc.round ?? 1;
++        if (!groups[r]) groups[r] = [];
++        groups[r].push(tc);
++      });
++      return Object.keys(groups).map(Number).sort((a, b) => a - b).map(r => ({
++        roundNum: r,
++        calls: groups[r]
++      }));
++    }
++
++    const rounds: { roundNum: number; calls: any[] }[] = [];
++    let currentRoundCalls: any[] = [];
++    let currentCategory = '';
++
++    const getToolCategory = (name: string) => {
++      const n = name.toLowerCase();
++      if (n.includes('read') || n.includes('grep') || n.includes('view') || n.includes('list')) return 'read';
++      if (n.includes('write') || n.includes('replace') || n.includes('edit')) return 'write';
++      if (n.includes('run') || n.includes('command') || n.includes('terminal')) return 'exec';
++      return 'other';
++    };
++
++    toolCalls.forEach((tc) => {
++      const category = getToolCategory(tc.name);
++      if (currentRoundCalls.length > 0 && category !== currentCategory && currentCategory !== 'other' && category !== 'read') {
++        rounds.push({
++          roundNum: rounds.length + 1,
++          calls: currentRoundCalls
++        });
++        currentRoundCalls = [tc];
++        currentCategory = category;
++      } else {
++        currentRoundCalls.push(tc);
++        if (currentCategory === '' || currentCategory === 'other') {
++          currentCategory = category;
++        }
++      }
++    });
++
++    if (currentRoundCalls.length > 0) {
++      rounds.push({
++        roundNum: rounds.length + 1,
++        calls: currentRoundCalls
++      });
++    }
++
++    return rounds;
++  };
++
++  React.useEffect(() => {
++    messages.forEach((msg) => {
++      if (!msg.toolCalls || msg.toolCalls.length === 0) return;
++
++      // 1. Tool Call Auto-Fold (5s)
++      msg.toolCalls.forEach((tc) => {
++        const isFinished = tc.status === 'success' || tc.status === 'error';
++        if (isFinished && !processedToolCallsRef.current.has(tc.id)) {
++          processedToolCallsRef.current.add(tc.id);
++          
++          // Ensure it starts expanded when finished
++          setExpandedTools(prev => ({ ...prev, [tc.id]: true }));
++
++          const delay = (window as any).AUTO_FOLD_DELAY ?? 5000;
++          if (delay > 0) {
++            setTimeout(() => {
++              setExpandedTools(prev => ({ ...prev, [tc.id]: false }));
++            }, delay);
++          }
++        }
++      });
++
++      // 2. Round completed auto-close
++      const rounds = getToolCallRounds(msg.toolCalls);
++      rounds.forEach((round) => {
++        const msgRoundId = `${msg.id}-round-${round.roundNum}`;
++        const allFinished = round.calls.every(tc => tc.status === 'success' || tc.status === 'error');
++        if (allFinished && !processedGroupsRef.current.has(msgRoundId)) {
++          processedGroupsRef.current.add(msgRoundId);
++          
++          const delay = (window as any).AUTO_FOLD_DELAY ?? 5000;
++          if (delay > 0) {
++            setTimeout(() => {
++              setExpandedGroups(prev => ({ ...prev, [msgRoundId]: false }));
++            }, delay + 500);
++          }
++        }
++      });
++    });
++  }, [messages]);
++
++  // Process message queue automatically
++  React.useEffect(() => {
++    if (!activeSessionId) return;
++    
++    const hasActiveProcessing = messages.some(m => m.status === 'processing');
++    if (!hasActiveProcessing) {
++      const nextQueued = messages.find(m => m.sender === 'user' && m.status === 'queued');
++      if (nextQueued) {
++        // Transition next queued message to 'processing'
++        useLayoutStore.setState((state) => {
++          const sess = state.sessions.find(s => s.id === activeSessionId);
++          if (sess && sess.messages) {
++            const msg = sess.messages.find(m => m.id === nextQueued.id);
++            if (msg) {
++              msg.status = 'processing';
++            }
++          }
++        });
++
++        // Trigger AI response simulation
++        setTimeout(() => {
++          const assistantMsgId = `assistant-msg-${Date.now()}`;
++          const input = nextQueued.text || '';
++          let aiText = `收到反馈！我们将围绕您的请求 "${input}" 展开深入的分析。`;
++          let toolCalls: any[] | undefined = undefined;
++
++          if (input.toLowerCase().includes('approve') || input.toLowerCase().includes('run') || input.toLowerCase().includes('build')) {
++            aiText = '好的，我需要执行构建编译命令以验证改动，请问是否批准？';
++            toolCalls = [
++              {
++                id: `tc-approval-${Date.now()}`,
++                name: 'run_command',
++                arguments: 'npm run build',
++                status: 'pending_approval'
++              }
++            ];
++          }
++
++          useLayoutStore.setState((state) => {
++            const sess = state.sessions.find(s => s.id === activeSessionId);
++            if (sess && sess.messages) {
++              const msg = sess.messages.find(m => m.id === nextQueued.id);
++              if (msg) msg.status = 'completed';
++              
++              sess.messages.push({
++                id: assistantMsgId,
++                sender: 'assistant',
++                text: aiText,
++                timestamp: Date.now(),
++                toolCalls
++              });
++            }
++          });
++        }, 1200);
++      }
++    }
++  }, [messages, activeSessionId]);
++
++  const renderGitDiff = (diff: FileDiff) => {
++    return (
++      <div className="git-diff-card" key={diff.filePath}>
++        <div 
++          className="git-diff-card-header"
++          onClick={() => {
++            setActiveDiffSource(diff);
++            useLayoutStore.setState((state) => {
++              const targetWs = state.workspaces.find((w) => w.id === wsId);
++              const targetCol = targetWs?.columns[colIdx];
++              const targetGroup = targetCol?.groups[groupIdx];
++              if (targetGroup) {
++                targetGroup.activeCardId = 'diff';
++              }
++            });
++            onShowToast(`Opened diff for ${diff.filePath}`);
++          }}
++        >
++          <div className="git-diff-file-info">
++            <Lucide.FileCode size={13} style={{ color: 'var(--text-secondary)' }} />
++            <span className="git-diff-filename">{diff.filePath}</span>
++            <span className="git-diff-preview-tag">(点击右栏预览完整改动)</span>
++          </div>
++          <div className="git-diff-badge">
++            <span className="git-diff-add">+{diff.additions}</span>
++            <span className="git-diff-del">-{diff.deletions}</span>
++          </div>
++        </div>
++        <div className="git-diff-lines-container">
++          {diff.changes.slice(0, 10).map((change, i) => (
++            <div key={i} className={`git-diff-line-row ${change.type}`}>
++              <div className="line-num-col">
++                {change.type === 'addition' ? '+' : change.type === 'deletion' ? '-' : ' '}
++              </div>
++              <pre className="line-content">{change.content}</pre>
++            </div>
++          ))}
++          {diff.changes.length > 10 && (
++            <div className="git-diff-more-indicator">
++              <span>... 还有 {diff.changes.length - 10} 行改动未显示 (点击头部在右栏查看完整 diff)</span>
++            </div>
++          )}
++        </div>
++      </div>
++    );
++  };
++
++  const [rememberPrefs, setRememberPrefs] = useState<Record<string, boolean>>({});
++
++  const renderCommandApproval = (msgId: string, tc: any) => {
++    const isChecked = rememberPrefs[tc.id] || false;
++    const setChecked = (val: boolean) => setRememberPrefs(prev => ({ ...prev, [tc.id]: val }));
++
++    return (
++      <div className="git-diff-card command-approval-card" key={tc.id} style={{ margin: '8px 0', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#ffffff' }}>
++        <div className="git-diff-card-header" style={{ padding: '8px 10px', background: '#f6f8fa', borderBottom: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++          <div className="git-diff-file-info" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++            <Lucide.Terminal size={13} style={{ color: 'var(--text-secondary)' }} />
++            <span className="git-diff-filename" style={{ fontWeight: 600, fontSize: '11px', color: 'var(--text-primary)' }}>命令执行安全审批</span>
++          </div>
++          <div className="git-diff-badge" style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>
++            等待授权
++          </div>
++        </div>
++        <div className="git-diff-lines-container" style={{ padding: '12px', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '10px' }}>
++          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
++            AI 正在申请执行以下本地命令，请确认安全性：
++          </div>
++          <div style={{ background: '#f9fafb', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px 12px' }}>
++            <code style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: '#111827', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{tc.arguments}</code>
++          </div>
++          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', gap: '8px', flexWrap: 'wrap' }}>
++            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
++              <input 
++                type="checkbox" 
++                checked={isChecked} 
++                onChange={(e) => setChecked(e.target.checked)}
++                style={{ cursor: 'pointer' }}
++              />
++              <span>记住选择，此后自动批准执行该命令</span>
++            </label>
++            <div style={{ display: 'flex', gap: '6px' }}>
++              <button 
++                style={{
++                  background: '#ffffff',
++                  border: '1px solid var(--border-color)',
++                  color: 'var(--text-primary)',
++                  padding: '4px 10px',
++                  borderRadius: '4px',
++                  fontSize: '10.5px',
++                  fontWeight: 600,
++                  cursor: 'pointer',
++                  transition: 'all 0.15s ease'
++                }}
++                onClick={(e) => {
++                  e.stopPropagation();
++                  if (isChecked) {
++                    addCommandPermission(tc.arguments);
++                  }
++                  respondToApproval(wsId, activeSessionId, msgId, tc.id, 'success');
++                  onShowToast(`已批准执行命令: ${tc.arguments}`);
++                }}
++              >
++                批准执行
++              </button>
++              <button 
++                style={{
++                  background: '#ffffff',
++                  border: '1px solid var(--border-color)',
++                  color: 'var(--text-secondary)',
++                  padding: '4px 10px',
++                  borderRadius: '4px',
++                  fontSize: '10.5px',
++                  fontWeight: 600,
++                  cursor: 'pointer',
++                  transition: 'all 0.15s ease'
++                }}
++                onClick={(e) => {
++                  e.stopPropagation();
++                  respondToApproval(wsId, activeSessionId, msgId, tc.id, 'error');
++                  onShowToast('已拒绝命令执行');
++                }}
++              >
++                拒绝
++              </button>
++            </div>
++          </div>
++        </div>
++      </div>
++    );
++  };
++
++  const renderToolCalls = (msg: SessionMessage) => {
++    const toolCalls = msg.toolCalls || [];
++    if (toolCalls.length === 0) return null;
++
++    const rounds = getToolCallRounds(toolCalls);
++
++    return (
++      <div className="tool-timeline-rounds-container" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
++        {rounds.map((round) => {
++          const roundCalls = round.calls;
++          const msgRoundId = `${msg.id}-round-${round.roundNum}`;
++          const isGroupExpanded = expandedGroups[msgRoundId] ?? roundCalls.some(tc => tc.status === 'running' || tc.status === 'pending_approval');
++          const toolNames = Array.from(new Set(roundCalls.map(tc => tc.name))).join(', ');
++
++          return (
++            <div className="tool-timeline-box" key={msgRoundId}>
++              <div className="tool-timeline-header" onClick={() => toggleGroup(msgRoundId)}>
++                <div className="tool-timeline-header-left">
++                  <div className="cpu-icon-wrapper">
++                    <Lucide.Cpu size={12} />
++                  </div>
++                  <span>[第 {round.roundNum} 轮] AI 调用了 {roundCalls.length} 个工具 ({toolNames})</span>
++                </div>
++                <div className="tool-timeline-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
++                  <div className="batch-btn-group" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
++                    <button 
++                      className="timeline-mini-btn"
++                      title="全部展开"
++                      onClick={() => {
++                        roundCalls.forEach(tc => {
++                          setExpandedTools(prev => ({ ...prev, [tc.id]: true }));
++                        });
++                        setExpandedGroups(prev => ({ ...prev, [msgRoundId]: true }));
++                      }}
++                    >
++                      展开
++                    </button>
++                    <span className="btn-divider">|</span>
++                    <button 
++                      className="timeline-mini-btn"
++                      title="全部折叠"
++                      onClick={() => {
++                        roundCalls.forEach(tc => {
++                          setExpandedTools(prev => ({ ...prev, [tc.id]: false }));
++                        });
++                      }}
++                    >
++                      折叠
++                    </button>
++                  </div>
++                  {isGroupExpanded ? <Lucide.ChevronDown size={12} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(msgRoundId)} /> : <Lucide.ChevronRight size={12} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(msgRoundId)} />}
++                </div>
++              </div>
++
++              {isGroupExpanded && (
++                <div className="tool-timeline-list">
++                  {roundCalls.map((tc) => {
++                    const isToolExpanded = expandedTools[tc.id] ?? (tc.status === 'running' || tc.status === 'pending_approval');
++                    const statusIcon = tc.status === 'success' 
++                      ? <Lucide.CheckCircle2 size={11} className="tool-status-icon" style={{ color: 'var(--accent-green)' }} /> 
++                      : tc.status === 'error'
++                      ? <Lucide.XCircle size={11} className="tool-status-icon" style={{ color: 'var(--accent-red)' }} />
++                      : tc.status === 'pending_approval'
++                      ? <Lucide.ShieldAlert size={11} className="tool-status-icon pulse-orange" />
++                      : <div className="loading-spinner tool-status-icon" style={{ width: '10px', height: '10px', borderWidth: '1.5px', margin: '0 2px' }} />;
++
++                    return (
++                      <div className="tool-timeline-item" key={tc.id}>
++                        {statusIcon}
++                        <div className="tool-timeline-item-header" onClick={() => toggleTool(tc.id)}>
++                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', flex: 1 }}>
++                            <span className="tool-name-tag">{tc.name}</span>
++                            {tc.explanation ? (
++                              <span style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '11px' }}>
++                                {tc.explanation}
++                              </span>
++                            ) : (
++                              <span className="tool-args-tag" title={tc.arguments}>{tc.arguments}</span>
++                            )}
++                          </div>
++                          {isToolExpanded ? <Lucide.ChevronDown size={11} /> : <Lucide.ChevronRight size={11} />}
++                        </div>
++
++                        {isToolExpanded && (
++                          <div className="tool-timeline-item-body">
++                            {tc.status === 'pending_approval' && renderCommandApproval(msg.id, tc)}
++
++                            {tc.output && (
++                              <div 
++                                className="console-scroll-box"
++                                style={{ 
++                                  padding: '6px 8px',
++                                  color: tc.status === 'success' ? '#16a34a' : tc.status === 'error' ? '#dc2626' : 'var(--text-secondary)', 
++                                  background: 'transparent',
++                                  border: 'none',
++                                  fontFamily: 'var(--font-mono)',
++                                  fontSize: '11px',
++                                  lineHeight: '1.5',
++                                  maxHeight: '240px',
++                                  overflowY: 'auto',
++                                  whiteSpace: 'pre-wrap',
++                                  wordBreak: 'break-all'
++                                }}
++                              >
++                                {tc.output}
++                              </div>
++                            )}
++
++                            {tc.diffs && tc.diffs.map(renderGitDiff)}
++                          </div>
++                        )}
++                      </div>
++                    );
++                  })}
++                </div>
++              )}
++            </div>
++          );
++        })}
++      </div>
++    );
++  };
+ 
+   const [chatInput, setChatInput] = useState('');
+-  const [chatMessages, setChatMessages] = useState<Array<{ text: string; sender: 'user' | 'assistant' }>>([]);
++
++  const SLASH_COMMANDS = [
++    { cmd: '/goal', desc: '执行长期自动迭代任务' },
++    { cmd: '/schedule', desc: '配置周期性定时或重复任务' },
++    { cmd: '/browser', desc: '启动模拟浏览器交互' },
++    { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
++    { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
++    { cmd: '/learn', desc: '记录最佳实践和对齐规则' }
++  ];
++
++  const filteredCommands = SLASH_COMMANDS.filter(c =>
++    c.cmd.toLowerCase().startsWith(chatInput.toLowerCase())
++  );
++
+ 
+   if (!ws || !col || !group) return null;
+ 
+   const activeCardId = group.activeCardId;
+ 
+   // Handle tab click switching
+   const handleTabClick = (cardId: string) => {
+     useLayoutStore.setState((state) => {
+       const targetWs = state.workspaces.find((w) => w.id === wsId);
+       const targetCol = targetWs?.columns[colIdx];
+@@ -198,21 +961,21 @@ export const CardPanel: React.FC<CardPanelProps> = ({
+ 
+         if (sourceCard) {
+           dragOverlay = sourceCard.cloneNode(true) as HTMLDivElement;
+           dragOverlay.className = 'drag-overlay-preview-card';
+           dragOverlay.removeAttribute('id');
+           dragOverlay.style.cssText = `
+             position: fixed;
+             width: ${startWidth}px;
+             height: ${startHeight}px;
+             overflow: hidden;
+-            box-shadow: 0 8px 28px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
++            box-shadow: 0 0 16px rgba(0,0,0,0.12);
+             border-radius: 0;
+             border: 1.5px solid rgba(55, 65, 81, 0.3);
+             background: var(--bg-card, #f8f9fa);
+             opacity: 0.92;
+             pointer-events: none;
+             z-index: 10000;
+             transition: width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+           `;
+           dragOverlay.querySelectorAll('input, textarea, button').forEach((el) => {
+             (el as HTMLInputElement).disabled = true;
+@@ -598,68 +1361,133 @@ export const CardPanel: React.FC<CardPanelProps> = ({
+       } else {
+         document.body.classList.remove('dragging-card');
+       }
+       // Middle-body real-time moves are already committed during drag
+     };
+ 
+     window.addEventListener('pointermove', handlePointerMove);
+     window.addEventListener('pointerup', handlePointerUp);
+   };
+ 
+-  const handleSendChat = () => {
+-    if (!chatInput.trim()) return;
+-    setChatMessages((prev) => [...prev, { sender: 'user', text: chatInput }]);
+-    const input = chatInput;
++  const handleSendChat = (isInsert: boolean = false) => {
++    if (!chatInput.trim() || !activeSessionId) return;
++    const input = chatInput.trim();
+     setChatInput('');
+ 
+-    setTimeout(() => {
+-      setChatMessages((prev) => [
+-        ...prev,
+-        { sender: 'assistant', text: `收到反馈！我们将围绕您的请求 "${input}" 展开深入的代码统一性审计。` },
+-      ]);
+-    }, 1000);
++    const userMsgId = `user-msg-${Date.now()}`;
++    const isAiBusy = messages.some(m => m.status === 'processing');
++
++    useLayoutStore.setState((state) => {
++      const sess = state.sessions.find(s => s.id === activeSessionId);
++      if (sess && sess.messages) {
++        const newMsg: SessionMessage = {
++          id: userMsgId,
++          sender: 'user',
++          text: input,
++          timestamp: Date.now(),
++          status: isAiBusy ? 'queued' : 'processing'
++        };
++
++        if (isInsert && isAiBusy) {
++          // Find the currently processing message
++          const processingIdx = sess.messages.findIndex(m => m.status === 'processing');
++          if (processingIdx !== -1) {
++            sess.messages.splice(processingIdx + 1, 0, newMsg);
++          } else {
++            sess.messages.push(newMsg);
++          }
++        } else {
++          sess.messages.push(newMsg);
++        }
++      }
++    });
++
++    // If AI is not busy, simulate immediate AI response
++    if (!isAiBusy) {
++      setTimeout(() => {
++        const assistantMsgId = `assistant-msg-${Date.now()}`;
++        let aiText = `收到反馈！我们将围绕您的请求 "${input}" 展开深入的分析。`;
++        let toolCalls: any[] | undefined = undefined;
++
++        if (input.toLowerCase().includes('approve') || input.toLowerCase().includes('run') || input.toLowerCase().includes('build')) {
++          aiText = '好的，我需要执行构建编译命令以验证改动，请问是否批准？';
++          toolCalls = [
++            {
++              id: `tc-approval-${Date.now()}`,
++              name: 'run_command',
++              arguments: 'npm run build',
++              status: 'pending_approval'
++            }
++          ];
++        }
++
++        useLayoutStore.setState((state) => {
++          const sess = state.sessions.find(s => s.id === activeSessionId);
++          if (sess && sess.messages) {
++            const msg = sess.messages.find(m => m.id === userMsgId);
++            if (msg) msg.status = 'completed';
++            
++            sess.messages.push({
++              id: assistantMsgId,
++              sender: 'assistant',
++              text: aiText,
++              timestamp: Date.now(),
++              toolCalls
++            });
++          }
++        });
++      }, 1200);
++    } else {
++      if (isInsert) {
++        onShowToast('消息已插队，将在当前AI回复后优先执行');
++      } else {
++        onShowToast('消息已加入队列排队中');
++      }
++    }
+   };
+ 
+   // Render icons corresponding to tabs
+   const renderCardIcon = (id: string) => {
+     switch (id) {
+       case 'chat': return <Lucide.MessageSquare size={13} />;
+       case 'plan': return <Lucide.Scroll size={13} />;
+       case 'preview': return <Lucide.Eye size={13} />;
+       case 'diff': return <Lucide.GitBranch size={13} />;
+       case 'tasks': return <Lucide.CheckSquare size={13} />;
+       case 'terminal': return <Lucide.Terminal size={13} />;
+       default: return <Lucide.Layout size={13} />;
+     }
+   };
+ 
+   const isDraggingThisGroup = draggedTab && draggedTab.sourceGroupId === group.id &&
+     (!draggedTab.isTabDrag || group.cards.length === 1);
+ 
++  // Removed duplicate scanner block
++
+   return (
+     <div
+       className={`workspace-card ${activeCardId === 'chat' ? 'flat-layout' : ''} ${isDraggingThisGroup ? 'drag-ghost-hidden' : ''}`}
+       data-group-id={group.id}
+       data-col-idx={colIdx}
+       data-group-idx={groupIdx}
+       style={{
+         height: `${(heightRatio !== undefined ? heightRatio : group.heightRatio) * 100}%`,
+         flex: '0 0 auto',
+         display: 'flex',
+         flexDirection: 'column',
+         minHeight: 0,
+       }}
+     >
+       {/* Tab Header Bar */}
+       <div className="card-header">
+         {activeCardId === 'chat' ? (
+-          <div className="card-header-left chat-breadcrumb-header">
++          <div className="card-header-left chat-breadcrumb-header" style={{ display: 'flex', alignItems: 'center' }}>
+             <span className="breadcrumb-item folder-trigger">
+               <Lucide.Folder size={12} className="folder-icon" />
+               <span className="folder-name-txt">{activeSession?.folder || '审计与代码分析'}</span>
+             </span>
+             <span className="breadcrumb-separator">/</span>
+             <span className="breadcrumb-item session-trigger">
+               <span className="session-name-txt">{activeSession?.title || '审计三个项目的代码统一性问题'}</span>
+               <Lucide.ChevronDown size={10} className="breadcrumb-chevron" />
+             </span>
+           </div>
+@@ -719,115 +1547,387 @@ export const CardPanel: React.FC<CardPanelProps> = ({
+           </button>
+         </div>
+       </div>
+ 
+       {/* Switch Panel Contents dynamically based on activeCardId */}
+       <div className="card-body">
+         {activeCardId === 'chat' && (
+           <>
+             <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+               <div className="chat-doc-flow" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+-                <p className="user-text">Let me try directly creating a test trigger to isolate the issue.</p>
+-
+-                <div className="tool-line">
+-                  <span className="tool-text">Searched code, read 2 files, used 3 tools</span>
+-                  <Lucide.ChevronRight size={12} className="tool-arrow" />
+-                </div>
+-
+-                <p className="assistant-text">The inline button DOES exist (1 found)! Let me find where it is:</p>
+-
+-                <div className="tool-line">
+-                  <span className="tool-text">Used 2 tools</span>
+-                  <Lucide.ChevronRight size={12} className="tool-arrow" />
+-                </div>
+-
+-                <p className="assistant-text">Found the culprit! Another extension is creating <code>&lt;button data-flowbit-inline="1"&gt;F&lt;/button&gt;</code>, and our code reuses it. Let me find which extension:</p>
+-
+-                <div className="tool-line">
+-                  <span className="tool-text">Searched code, used a tool</span>
+-                  <Lucide.ChevronRight size={12} className="tool-arrow" />
+-                </div>
+-
+-                <p className="assistant-text">找到根源了！另一个扩展创建了 <code>&lt;button data-flowbit-inline="1"&gt;F&lt;/button&gt;</code>，我们的 <code>acquireInlineBtn</code> 找到并重用它，但没有覆盖它的 <code>innerHTML</code>，所以按钮只显示 "F"，而非 SVG 图标。</p>
++                {messages.length === 0 ? (
++                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', opacity: 0.6 }}>
++                    <Lucide.MessageSquare size={24} style={{ marginBottom: '8px' }} />
++                    <span style={{ fontSize: '12px' }}>暂无消息，发送一条消息开始对话吧</span>
++                  </div>
++                ) : (
++                  messages.map((msg) => {
++                    if (msg.sender === 'user') {
++                      return (
++                        <div className="user-msg-container" key={msg.id}>
++                          <div className="user-text-bubble">
++                            <div className="user-text-content">{msg.text}</div>
++                            <div className="bubble-shadow-gradient"></div>
++                            <div className="bubble-meta-area">
++                              <span className="bubble-time" style={{ marginRight: '6px' }}>{formatTime(msg.timestamp)}</span>
++                              {msg.status === 'queued' && (
++                                <span className="msg-status-badge queued" style={{ fontSize: '9px', background: '#f3f4f6', color: '#4b5563', padding: '1px 4px', borderRadius: '3px', border: '1px solid #e5e7eb' }}>排队中</span>
++                              )}
++                              {msg.status === 'processing' && (
++                                <span className="msg-status-badge processing" style={{ fontSize: '9px', background: '#fff7ed', color: '#ea580c', padding: '1px 4px', borderRadius: '3px', border: '1px solid #fed7aa', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
++                                  <span className="dot-blink" style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#ea580c', display: 'inline-block' }}></span>处理中
++                                </span>
++                              )}
++                              {(msg.status === 'completed' || !msg.status) && (
++                                <Lucide.CheckCheck size={11} className="bubble-status-icon completed" style={{ color: '#10b981' }} />
++                              )}
++                            </div>
++
++                            {/* Understated Message Action Toolbar */}
++                            <div className="message-actions-toolbar user-actions">
++                              <button 
++                                className="toolbar-action-icon" 
++                                title="Copy Message"
++                                onClick={() => {
++                                  navigator.clipboard.writeText(msg.text || '');
++                                  setCopiedMsgId(msg.id);
++                                  setTimeout(() => setCopiedMsgId(null), 2000);
++                                  onShowToast('已复制文本');
++                                }}
++                              >
++                                {copiedMsgId === msg.id ? <Lucide.Check size={11} style={{ color: 'var(--accent-green)' }} /> : <Lucide.Copy size={11} />}
++                              </button>
++                              <button 
++                                className="toolbar-action-icon" 
++                                title="Withdraw Message"
++                                onClick={() => {
++                                  setChatInput(msg.text || '');
++                                  withdrawMessage(wsId, activeSessionId, msg.id);
++                                  onShowToast('已撤回消息并填充至输入框');
++                                }}
++                              >
++                                <Lucide.Undo size={11} />
++                         {/* Chat Bottom Control Area */}
++              <div className="chat-footer">
++                {/* Horizontal Context Status Ribbon */}
++                <div className="chat-context-ribbon">
++                  {prVisible && (
++                    <button 
++                      className={`context-pill git ${activePill === 'git' ? 'active' : ''}`}
++                      onClick={() => setActivePill(activePill === 'git' ? null : 'git')}
++                    >
++                      <Lucide.GitBranch size={10} />
++                      <span>git: schedule-enhancements</span>
++                    </button>
++                  )}
+ 
+-                <div className="tool-line diff-action-line">
+-                  <span className="tool-text">Edited <span className="file-hl">trigger-injector.ts</span> <span className="diff-add-count">+12</span> <span className="diff-remove-count">-5</span></span>
+-                  <Lucide.ChevronRight size={12} className="tool-arrow" />
+-                </div>
++                  {planModeEnabled && (
++                    <button 
++                      className={`context-pill plan ${activePill === 'plan' ? 'active' : ''}`}
++                      onClick={() => setActivePill(activePill === 'plan' ? null : 'plan')}
++                    >
++                      <Lucide.Sparkles size={10} />
++                      <span>Plan: {planApproved ? '75%' : '20%'}</span>
++                    </button>
++                  )}
+ 
+-                <p className="assistant-text">Now rebuild and reload:</p>
++                  {pendingApprovalTc && (
++                    <button 
++                      className={`context-pill approval ${activePill === 'approval' ? 'active' : ''}`}
++                      onClick={() => setActivePill(activePill === 'approval' ? null : 'approval')}
++                    >
++                      <Lucide.ShieldAlert size={10} />
++                      <span>Approve command</span>
++                    </button>
++                  )}
+ 
+-                <div className="tool-line">
+-                  <span className="tool-text">Ran 7 commands, searched code, read a file, edited a file, used 13 tools</span>
+-                  <Lucide.ChevronRight size={12} className="tool-arrow" />
+-                </div>
++                  {/* Persistent Local Dev Server Port Pill */}
++                  <button 
++                    className="context-pill server"
++                    onClick={() => {
++                      handleTabClick('preview');
++                      onShowToast('Switched to Web Browser preview tab');
++                    }}
++                  >
++                    <Lucide.Terminal size={10} />
++                    <span>⚡ localhost:5174</span>
++                  </button>
+ 
+-                <div className="assistant-report">
+-                  <p>我已经追踪到这个问题的根源了，总结一下发现：</p>
+-                  <p><strong>当前状态：</strong></p>
+-                  <ul>
+-                    <li>扩展已加载，service worker 正常</li>
+-                    <li>内容脚本已注入 (overlay 面板创建成功)
+-                      <ul>
+-                        <li>但 <code>mountTrigger()</code> 函数没有正常执行——<code>flowbit-inline-style</code> style 元素没有被创建，触发按钮也没有生成</li>
+-                      </ul>
+-                    </li>
+-                  </ul>
+-                  <p><strong>根源：</strong> 还有一个其他扩展（如 "All API Hub" 或 "HiSider"）在页面上注入了 <code>&lt;button data-flowbit-inline="1"&gt;F&lt;/button&gt;</code>，我们的 <code>acquireInlineBtn</code> 会找到并重用这个按钮，但不会覆盖它的 <code>innerHTML</code>，导致按钮只显示 "F" 而不是 SVG 图标。</p>
+-                  <p>我已经修复了 <code>acquireInlineBtn</code> 让它检测到外部按钮时重新创建。</p>
+-                  <p>但现在有一个更基础的问题：在新加载 of 页面上，<code>mountTrigger</code> 根本没有被触发（连 <code>&lt;style&gt;</code> 元素都没有），这说明内容脚本执行到 <code>showFlowbitFab()</code> 时可能抛出了异常，被 <code>bootstrap()</code> 的 <code>try-catch</code> 吞掉了。</p>
+-                  <p>需要你手动做：</p>
+-                  <ol>
+-                    <li>打开 <code>chrome://extensions</code></li>
+-                    <li>找到 "Chat Sync Bridge"，点 移除 <Lucide.Trash2 size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /></li>
+-                    <li>点击 <strong>加载已解压的扩展程序</strong> ➔ 选择 <code>C:\Software\codex_chatHistory\apps\browser-extension\dist</code></li>
+-                    <li>刷新 Claude 或 ChatGPT 页面</li>
+-                  </ol>
+-                  <p>这次移除再重新加载会触发全新的内容脚本注册，应该能解决 <code>mountTrigger</code> 不触发的问题。</p>
++                  {/* Persistent Long-Goal / Target Mode Pill */}
++                  <button 
++                    className="context-pill goal"
++                    onClick={() => {
++                      handleTabClick('tasks');
++                      onShowToast('Switched to Tasks checklist tab');
++                    }}
++                  >
++                    <Lucide.Target size={10} />
++                    <span>🎯 Goal: 1d 12h left</span>
++                  </button>
+                 </div>
+ 
+-                {chatMessages.map((msg, i) => (
+-                  <p key={i} className={msg.sender === 'user' ? 'user-text' : 'assistant-text'}>
+-                    {msg.text}
+-                  </p>
+-                ))}
++                {/* Context Details Drawer */}
++                {activePill && (
++                  <div className="context-details-drawer">
++                    {activePill === 'git' && prVisible && (
++                      <div className="chat-input-overlay-banner pr-banner">
++                        <div className="pr-info" style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
++                          <Lucide.GitBranch size={12} className="icon" />
++                          <span className="branch-text" style={{ fontSize: '11px', fontWeight: 500 }} title="feature/schedule-panel-enhancements ➔ feature/schedule-panel-enhancements">
++                            feature/schedule-panel-enhancements ➔ feature/schedule-panel-enhancements
++                          </span>
++                          <span className="pr-badge plus-minus">+16039 -863</span>
++                        </div>
++                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++                          <button 
++                            className="action-btn"
++                            onClick={() => {
++                              setPrVisible(false);
++                              setActivePill(null);
++                              onShowToast('PR created successfully!');
++                            }}
++                          >
++                            Create PR
++                          </button>
++                          <button 
++                            className="close-btn" 
++                            onClick={() => {
++                              setPrVisible(false);
++                              setActivePill(null);
++                            }}
++                          >
++                            <Lucide.X size={12} />
++                          </button>
++                        </div>
++                      </div>
++                    )}
++
++                    {activePill === 'approval' && pendingApprovalTc && (
++                      <div className="chat-input-overlay-banner approval-banner">
++                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
++                          <Lucide.ShieldAlert size={12} className="icon orange-color" />
++                          <span>待审批命令: <code>{pendingApprovalTc.arguments}</code></span>
++                        </div>
++                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
++                          <button 
++                            className="action-btn approve" 
++                            onClick={() => {
++                              respondToApproval(wsId, activeSessionId, pendingApprovalMsgId, pendingApprovalTc.id, 'success');
++                              setActivePill(null);
++                              onShowToast(`已批准执行命令: ${pendingApprovalTc.arguments}`);
++                            }}
++                          >
++                            批准并执行
++                          </button>
++                          <button 
++                            className="action-btn reject" 
++                            onClick={() => {
++                              respondToApproval(wsId, activeSessionId, pendingApprovalMsgId, pendingApprovalTc.id, 'error');
++                              setActivePill(null);
++                              onShowToast('已拒绝命令执行');
++                            }}
++                          >
++                            拒绝
++                          </button>
++                        </div>
++                      </div>
++                    )}
++
++                    {activePill === 'plan' && planModeEnabled && (
++                      <div className="drawer-expand-content">
++                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
++                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
++                            {planApproved ? '当前执行: 重写 acquireInlineBtn 检测逻辑...' : '等待批准执行修复计划'}
++                          </span>
++                          {!planApproved && (
++                            <button 
++                              className="btn-approve-plan" 
++                              onClick={() => {
++                                setPlanApproved(true);
++                                onShowToast('计划已批准，启动自动执行流程');
++                                setTimeout(() => {
++                                  addMessage(wsId, activeSessionId, {
++                                    id: `plan-exec-msg-${Date.now()}`,
++                                    sender: 'assistant',
++                                    text: '【计划审批通过 - 自动任务执行日志】\n$ npm run build\n✓ 成功 visual 修复并重写 acquireInlineBtn\n✓ 运行构建打包校验通过\n\n所有计划项已完成，请检查右栏 Preview/Diff。',
++                                    timestamp: Date.now()
++                                  });
++                                }, 1500);
++                              }}
++                            >
++                              同意并执行
++                            </button>
++                          )}
++                        </div>
++                        <div className="progress-track-bar">
++                          <div className="progress-track-fill" style={{ width: planApproved ? '75%' : '20%' }} />
++                        </div>
++                        <div className="plan-steps-list">
++                          <div className="plan-step-item done">
++                            <Lucide.CheckCircle2 size={13} />
++                            <span className="step-text">读取并锁定 trigger-injector.ts</span>
++                          </div>
++                          <div className={`plan-step-item ${planApproved ? 'active' : 'pending'}`}>
++                            {planApproved ? (
++                              <div className="loading-spinner" style={{ width: '10px', height: '10px', borderWidth: '1.5px', margin: '0 2px' }} />
++                            ) : (
++                              <span className="bullet-dot" />
++                            )}
++                            <span className="step-text">重写 acquireInlineBtn 检测逻辑，覆盖 HTML</span>
++                            {planApproved && <span className="step-badge-running">正在执行</span>}
++                          </div>
++                          <div className="plan-step-item pending">
++                            <span className="bullet-dot" />
++                            <span className="step-text">执行 npm run build 进行开发包大小与编译校验</span>
++                          </div>
++                        </div>
++                      </div>
++                    )}
++                )}
+               </div>
+-
+-              {/* Chat Bottom Control Area */}
+-              <div className="chat-footer">
+-                {/* PR Panel */}
+-                <div className="pr-banner">
+-                  <div className="pr-info">
+-                    <Lucide.GitBranch size={12} className="branch-icon" />
+-                    <span className="branch-text">feature/schedule-panel-enhancements ➔ feature/schedule-panel-enhancements</span>
+-                    <span className="pr-badge plus-minus">+16039 -863</span>
+-                  </div>
+-                  <button className="create-pr-btn">Create PR</button>
+-                </div>
+                 
+-                {/* Input Area */}
+-                <div className="input-container">
++              {/* Input Area */}
++                <div className="input-container" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
++                  {/* Slash command popover */}
++                  {slashMenuOpen && filteredCommands.length > 0 && (
++                    <div className="slash-commands-popover" style={{
++                      position: 'absolute',
++                      bottom: 'calc(100% + 6px)',
++                      left: '0',
++                      width: '240px',
++                      background: 'var(--bg-primary)',
++                      border: '1px solid var(--border-color)',
++                      borderRadius: '8px',
++                      boxShadow: '0 0 12px rgba(0,0,0,0.05)',
++                      padding: '4px',
++                      zIndex: 15,
++                      display: 'flex',
++                      flexDirection: 'column',
++                      gap: '2px'
++                    }}>
++                      {filteredCommands.map((c, i) => (
++                        <div
++                          key={c.cmd}
++                          className={`slash-command-item ${i === slashSelectedIndex ? 'active' : ''}`}
++                          style={{
++                            display: 'flex',
++                            flexDirection: 'column',
++                            padding: '6px 8px',
++                            borderRadius: '4px',
++                            cursor: 'pointer',
++                            background: i === slashSelectedIndex ? 'var(--bg-tertiary)' : 'transparent',
++                            color: i === slashSelectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)'
++                          }}
++                          onClick={() => {
++                            setChatInput(c.cmd + ' ');
++                            setSlashMenuOpen(false);
++                          }}
++                          onMouseEnter={() => setSlashSelectedIndex(i)}
++                        >
++                          <span style={{ fontWeight: 600, fontSize: '11px', color: 'var(--text-primary)' }}>{c.cmd}</span>
++                          <span style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>{c.desc}</span>
++                        </div>
++                      ))}
++                    </div>
++                  )}
++
+                   <textarea
+                     placeholder="Type / for commands"
+                     rows={1}
+                     value={chatInput}
+-                    onChange={(e) => setChatInput(e.target.value)}
++                    onChange={(e) => {
++                      const val = (e.target as HTMLTextAreaElement).value;
++                      setChatInput(val);
++                      if (val.startsWith('/') && !val.includes(' ')) {
++                        setSlashMenuOpen(true);
++                      } else {
++                        setSlashMenuOpen(false);
++                      }
++                    }}
+                     onKeyDown={(e) => {
+-                      if (e.key === 'Enter' && !e.shiftKey) {
+-                        e.preventDefault();
+-                        handleSendChat();
++                      if (slashMenuOpen && filteredCommands.length > 0) {
++                        if (e.key === 'ArrowDown') {
++                          e.preventDefault();
++                          setSlashSelectedIndex(prev => (prev + 1) % filteredCommands.length);
++                        } else if (e.key === 'ArrowUp') {
++                          e.preventDefault();
++                          setSlashSelectedIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
++                        } else if (e.key === 'Enter') {
++                          e.preventDefault();
++                          const selectedCmd = filteredCommands[slashSelectedIndex].cmd;
++                          setChatInput(selectedCmd + ' ');
++                          setSlashMenuOpen(false);
++                        } else if (e.key === 'Escape') {
++                          e.preventDefault();
++                          setSlashMenuOpen(false);
++                        }
++                      } else {
++                        if (e.key === 'Enter' && !e.shiftKey) {
++                          e.preventDefault();
++                          handleSendChat(false);
++                        }
+                       }
+                     }}
++                    style={{ flex: 1 }}
+                   />
+-                  <button className="send-btn" title="Send" onClick={handleSendChat}>
+-                    <Lucide.CornerDownLeft size={14} />
+-                  </button>
++                  
++                  {/* Standard or Queue/Insert Buttons */}
++                  <div className="chat-input-buttons" style={{ display: 'flex', gap: '4px', paddingRight: '8px' }}>
++                    {messages.some(m => m.status === 'processing') ? (
++                      <>
++                        <button 
++                          className="send-btn queue-btn" 
++                          title="排队发送" 
++                          onClick={() => handleSendChat(false)}
++                          style={{
++                            background: '#ffffff',
++                            border: '1px solid var(--border-color)',
++                            color: 'var(--text-secondary)',
++                            padding: '4px 8px',
++                            borderRadius: '4px',
++                            fontSize: '10px',
++                            cursor: 'pointer',
++                            display: 'flex',
++                            alignItems: 'center',
++                            gap: '4px'
++                          }}
++                        >
++                          <Lucide.Clock size={11} />
++                          <span>排队</span>
++                        </button>
++                        <button 
++                          className="send-btn insert-btn" 
++                          title="插队发送" 
++                          onClick={() => handleSendChat(true)}
++                          style={{
++                            background: '#ffffff',
++                            border: '1px solid var(--border-color)',
++                            color: 'var(--text-secondary)',
++                            padding: '4px 8px',
++                            borderRadius: '4px',
++                            fontSize: '10px',
++                            cursor: 'pointer',
++                            display: 'flex',
++                            alignItems: 'center',
++                            gap: '4px'
++                          }}
++                        >
++                          <Lucide.Sparkles size={11} />
++                          <span>插队</span>
++                        </button>
++                      </>
++                    ) : (
++                      <button className="send-btn" title="Send" onClick={() => handleSendChat(false)}>
++                        <Lucide.CornerDownLeft size={14} />
++                      </button>
++                    )}
++                  </div>
+                 </div>
+ 
+                 {/* Footer Controls */}
+                 <div className="footer-actions">
+                   <div className="left-actions">
+                     <div className="bypass-link">
+                       <span className="orange-dot"></span>
+                       <span className="bypass-text">Bypass permissions</span>
+                     </div>
+                     <button className="plus-btn" title="Add files"><Lucide.Plus size={14} /></button>
+@@ -841,146 +1941,680 @@ export const CardPanel: React.FC<CardPanelProps> = ({
+                 </div>
+               </div>
+             </div>
+           </>
+         )}
+ 
+         {activeCardId === 'plan' && (
+           <>
+             <div className="card-subheader plan-subheader">
+               <div className="subheader-left">
+-                <span className="plan-status-text">Drafting plan...</span>
++                <span className="plan-status-text">
++                  {planModeEnabled ? (planApproved ? '正在执行计划中...' : '计划生成完毕 - 等待用户审批') : '计划模式未开启'}
++                </span>
+               </div>
+               <div className="subheader-right" style={{ display: 'flex', gap: '4px' }}>
+                 <button className="sub-btn" title="Export Plan"><Lucide.Download size={13} /></button>
+                 <button className="sub-btn" title="Clear Plan"><Lucide.Trash2 size={13} /></button>
+               </div>
+             </div>
+-            <div className="plan-body centered-placeholder">
+-              <div className="placeholder-icon-wrapper">
+-                <svg viewBox="0 0 24 24" className="svg-placeholder-lines" fill="none" stroke="currentColor" strokeWidth="1.5">
+-                  <path d="M4 6h16M4 12h10M4 18h14" strokeLinecap="round"/>
+-                </svg>
++            
++            {!planModeEnabled ? (
++              <div className="plan-body centered-placeholder">
++                <div className="placeholder-icon-wrapper">
++                  <svg viewBox="0 0 24 24" className="svg-placeholder-lines" fill="none" stroke="currentColor" strokeWidth="1.5">
++                    <path d="M4 6h16M4 12h10M4 18h14" strokeLinecap="round"/>
++                  </svg>
++                </div>
++                <h4>计划模式未激活</h4>
++                <p>在顶部标题栏中开启“计划模式”以分析代码并自动生成实施方案。</p>
+               </div>
+-              <h4>No plan yet.</h4>
+-              <p>Claude writes the plan here as it explores. Keep chatting</p>
+-            </div>
++            ) : (
++              <div className="plan-container" style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
++                {/* Progress bar */}
++                <div className="plan-progress-card">
++                  <div className="plan-progress-header" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600 }}>
++                    <span className="progress-label">当前进度 (Overall Progress)</span>
++                    <span className="progress-value">{planApproved ? '75%' : '20%'}</span>
++                  </div>
++                  <div className="progress-bar-bg" style={{ height: '6px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
++                    <div className="progress-bar-fill" style={{ height: '100%', width: planApproved ? '75%' : '20%', background: '#10b981', borderRadius: '3px', transition: 'width 0.5s ease-in-out' }}></div>
++                  </div>
++                </div>
++
++                {/* Plan Details */}
++                <div className="plan-details-block" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', background: '#ffffff' }}>
++                  <h4 style={{ margin: '0 0 8px 0', fontSize: '12.5px', color: 'var(--text-primary)' }}>1. 代码读取与冲突分析</h4>
++                  <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
++                    已对项目下的 <code>trigger-injector.ts</code> 进行静态分析，发现冲突按钮 <code>data-flowbit-inline="1"</code> 没有正确覆盖 innerHTML。
++                  </p>
++
++                  <h4 style={{ margin: '0 0 8px 0', fontSize: '12.5px', color: 'var(--text-primary)' }}>2. 实施方案计划项 (Task List)</h4>
++                  <div className="plan-task-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
++                    <div className="plan-task-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}>
++                      <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green)' }} />
++                      <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>读取并锁定 trigger-injector.ts (自动完成)</span>
++                    </div>
++                    <div className="plan-task-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}>
++                      {planApproved ? (
++                        <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green)' }} />
++                      ) : (
++                        <span className="plan-dot-pending" style={{ width: '12px', height: '12px', borderRadius: '50%', border: '1.5px solid var(--border-color)', display: 'inline-block' }}></span>
++                      )}
++                      <span style={{ color: planApproved ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: planApproved ? 'line-through' : 'none' }}>
++                        重写 acquireInlineBtn 检测逻辑，覆盖 HTML
++                      </span>
++                    </div>
++                    <div className="plan-task-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}>
++                      {planApproved ? (
++                        <div className="loading-spinner" style={{ width: '10px', height: '10px', borderWidth: '1.5px' }} />
++                      ) : (
++                        <span className="plan-dot-pending" style={{ width: '12px', height: '12px', borderRadius: '50%', border: '1.5px solid var(--border-color)', display: 'inline-block' }}></span>
++                      )}
++                      <span style={{ color: 'var(--text-primary)', fontWeight: planApproved ? 600 : 400 }}>
++                        执行 npm run build 进行开发包大小与编译校验
++                      </span>
++                    </div>
++                  </div>
++                </div>
++
++                {/* User Confirmation Card */}
++                {!planApproved ? (
++                  <div className="plan-approval-card" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', background: '#ffffff', textAlign: 'center' }}>
++                    <h5 style={{ margin: '0 0 6px 0', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>确认开始执行修改计划？</h5>
++                    <p style={{ margin: '0 0 12px 0', fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
++                      点击同意后，AI 将自动按顺序执行上述修复方案，并运行构建。
++                    </p>
++                    <div className="plan-approval-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
++                      <button 
++                        className="plan-approve-btn"
++                        style={{
++                          background: '#ffffff',
++                          color: '#10b981',
++                          border: '1px solid #d1d5db',
++                          padding: '5px 14px',
++                          borderRadius: '4px',
++                          fontSize: '11px',
++                          fontWeight: 600,
++                          cursor: 'pointer'
++                        }}
++                        onClick={() => {
++                          setPlanApproved(true);
++                          onShowToast('计划已批准，启动自动执行流程');
++                          // Add simulated execution log to chat
++                          setTimeout(() => {
++                            addMessage(wsId, activeSessionId, {
++                              id: `plan-exec-msg-${Date.now()}`,
++                              sender: 'assistant',
++                              text: '【计划审批通过 - 自动任务执行日志】\n$ npm run build\n✓ 成功分析并重写 acquireInlineBtn\n✓ 运行构建打包校验通过\n\n所有计划项已完成，请检查右栏 Preview/Diff。',
++                              timestamp: Date.now()
++                            });
++                          }, 1500);
++                        }}
++                      >
++                        同意并执行
++                      </button>
++                      <button 
++                        className="plan-reject-btn"
++                        style={{
++                          background: '#ffffff',
++                          color: 'var(--text-secondary)',
++                          border: '1px solid var(--border-color)',
++                          padding: '5px 14px',
++                          borderRadius: '4px',
++                          fontSize: '11px',
++                          fontWeight: 600,
++                          cursor: 'pointer'
++                        }}
++                        onClick={() => {
++                          onShowToast('计划已拒绝');
++                        }}
++                      >
++                        拒绝计划
++                      </button>
++                    </div>
++                  </div>
++                ) : (
++                  <div className="plan-exec-completed" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', background: '#ffffff', display: 'flex', alignItems: 'center', gap: '10px' }}>
++                    <Lucide.CheckCircle2 size={16} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
++                    <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.4 }}>
++                      <strong>任务自动执行中 (Running Automatic Tasks)</strong><br />
++                      <span style={{ color: 'var(--text-secondary)' }}>方案正在顺序处理，实时状态将同步在左侧 Chat 对话流中。</span>
++                    </div>
++                  </div>
++                )}
++              </div>
++            )}
+           </>
+         )}
+ 
+         {activeCardId === 'preview' && (
+           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
+             <div className="card-subheader preview-subheader">
+               <div className="subheader-left" style={{ display: 'flex', gap: '2px' }}>
+-                <button className="sub-btn" title="Back"><Lucide.ChevronLeft size={13} /></button>
+-                <button className="sub-btn" title="Forward"><Lucide.ChevronRight size={13} /></button>
+-                <button className="sub-btn" title="Refresh"><Lucide.RotateCw size={13} /></button>
++                <button 
++                  className="sub-btn" 
++                  title="Back"
++                  disabled={historyIndex === 0}
++                  onClick={() => {
++                    if (historyIndex > 0) {
++                      const prevIdx = historyIndex - 1;
++                      setHistoryIndex(prevIdx);
++                      const url = browserHistory[prevIdx];
++                      setBrowserUrl(url);
++                      updatePageFromUrl(url);
++                    }
++                  }}
++                >
++                  <Lucide.ChevronLeft size={13} />
++                </button>
++                <button 
++                  className="sub-btn" 
++                  title="Forward"
++                  disabled={historyIndex === browserHistory.length - 1}
++                  onClick={() => {
++                    if (historyIndex < browserHistory.length - 1) {
++                      const nextIdx = historyIndex + 1;
++                      setHistoryIndex(nextIdx);
++                      const url = browserHistory[nextIdx];
++                      setBrowserUrl(url);
++                      updatePageFromUrl(url);
++                    }
++                  }}
++                >
++                  <Lucide.ChevronRight size={13} />
++                </button>
++                <button 
++                  className="sub-btn" 
++                  title="Refresh"
++                  onClick={() => {
++                    onShowToast('Refreshed simulated page');
++                  }}
++                >
++                  <Lucide.RotateCw size={13} />
++                </button>
+               </div>
+               <div className="url-bar">
+                 <Lucide.Lock size={11} className="lock-icon" />
+-                <input type="text" value="http://localhost:3000/" readOnly />
++                <input 
++                  type="text" 
++                  value={browserUrl} 
++                  onChange={(e) => setBrowserUrl(e.target.value)}
++                  onKeyDown={(e) => {
++                    if (e.key === 'Enter') {
++                      let url = browserUrl.trim();
++                      if (!url.startsWith('http://') && !url.startsWith('https://')) {
++                        url = 'http://' + url;
++                      }
++                      const newHist = browserHistory.slice(0, historyIndex + 1);
++                      newHist.push(url);
++                      setBrowserHistory(newHist);
++                      setHistoryIndex(newHist.length - 1);
++                      updatePageFromUrl(url);
++                    }
++                  }}
++                />
+               </div>
+               <div className="subheader-right">
+-                <button className="sub-btn" title="Open in browser"><Lucide.ExternalLink size={13} /></button>
++                <button className="sub-btn" title="Open in browser" onClick={() => onShowToast(`Opened ${browserUrl} in default browser`)}><Lucide.ExternalLink size={13} /></button>
+               </div>
+             </div>
+-            <div className="preview-body centered-placeholder">
+-              <div className="broken-image-box">
+-                <Lucide.Image size={24} className="broken-img-icon" />
+-              </div>
+-              <div className="setup-loading">
+-                <div className="loading-spinner"></div>
+-                <span>Setting up preview</span>
+-              </div>
++            
++            <div className="preview-body-content" style={{ flex: 1, overflowY: 'auto', background: '#ffffff', padding: '16px' }}>
++              {mockPage === 'app' && (
++                <div className="simulated-app-dashboard">
++                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
++                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isSWActive ? 'var(--accent-green)' : '#9ca3af' }} />
++                    <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Conex Diagnostics Agent Dashboard</h3>
++                  </div>
++
++                  <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '16px' }}>
++                    <div className="stat-card" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
++                      <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>SW Status</div>
++                      <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '2px' }}>{isSWActive ? 'Active' : 'Inactive'}</div>
++                    </div>
++                    <div className="stat-card" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
++                      <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Scripts Injected</div>
++                      <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '2px' }}>{isScriptInjected ? 'Yes' : 'No'}</div>
++                    </div>
++                    <div className="stat-card" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
++                      <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Active Connections</div>
++                      <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '2px' }}>1 Active</div>
++                    </div>
++                  </div>
++
++                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', marginBottom: '16px' }}>
++                    <h4 style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px' }}>Control Toggles</h4>
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
++                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', cursor: 'pointer' }}>
++                        <span>Enable Service Worker (SW)</span>
++                        <input type="checkbox" checked={isSWActive} onChange={() => setIsSWActive(!isSWActive)} />
++                      </label>
++                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', cursor: 'pointer' }}>
++                        <span>Inject Content Scripts</span>
++                        <input type="checkbox" checked={isScriptInjected} onChange={() => setIsScriptInjected(!isScriptInjected)} />
++                      </label>
++                    </div>
++                  </div>
++
++                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px' }}>
++                    <h4 style={{ fontSize: '11px', fontWeight: 600, marginBottom: '6px' }}>Diagnostics Log</h4>
++                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
++                      [11:04:12] [SW] Service worker registered successfully.<br />
++                      [11:04:13] [Inject] Content scripts loaded on tabs.<br />
++                      [11:05:01] [Bridge] Session synced with daemon.
++                    </div>
++                  </div>
++                </div>
++              )}
++
++              {mockPage === 'google' && (
++                <div className="simulated-google" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0' }}>
++                  <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '16px', letterSpacing: '-1px' }}>
++                    <span style={{ color: '#4285F4' }}>G</span>
++                    <span style={{ color: '#EA4335' }}>o</span>
++                    <span style={{ color: '#FBBC05' }}>o</span>
++                    <span style={{ color: '#4285F4' }}>g</span>
++                    <span style={{ color: '#34A853' }}>l</span>
++                    <span style={{ color: '#EA4335' }}>e</span>
++                  </h1>
++                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '24px', display: 'flex', alignItems: 'center', width: '80%', padding: '6px 14px', background: '#ffffff', boxShadow: 'none' }}>
++                    <Lucide.Search size={14} style={{ color: 'var(--text-tertiary)', marginRight: '8px' }} />
++                    <input type="text" placeholder="Search Google..." style={{ border: 'none', outline: 'none', width: '100%', fontSize: '12px' }} onKeyDown={(e) => {
++                      if (e.key === 'Enter') {
++                        onShowToast('Google search completed (Simulated)');
++                      }
++                    }} />
++                  </div>
++                </div>
++              )}
++
++              {mockPage === 'github' && (
++                <div className="simulated-github" style={{ fontSize: '12px' }}>
++                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderBottom: 'none', paddingBottom: '8px', marginBottom: '8px' }}>
++                    <Lucide.GitPullRequest size={14} style={{ color: 'var(--text-secondary)' }} />
++                    <strong style={{ fontSize: '13px' }}>orange / conex</strong>
++                  </div>
++                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 4px', borderBottom: 'none' }}>
++                      <span>📁 apps / agent-workbench</span>
++                      <span style={{ color: 'var(--text-tertiary)' }}>2 days ago</span>
++                    </div>
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 4px', borderBottom: 'none' }}>
++                      <span>📁 packages / agent-runtime</span>
++                      <span style={{ color: 'var(--text-tertiary)' }}>1 hour ago</span>
++                    </div>
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 4px', borderBottom: 'none' }}>
++                      <span>📄 trigger-injector.ts</span>
++                      <span style={{ color: 'var(--text-tertiary)' }}>15 mins ago</span>
++                    </div>
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 4px', borderBottom: 'none' }}>
++                      <span>📄 README.md</span>
++                      <span style={{ color: 'var(--text-tertiary)' }}>3 days ago</span>
++                    </div>
++                  </div>
++                </div>
++              )}
+             </div>
+           </div>
+         )}
+ 
+         {activeCardId === 'diff' && (
+-          <>
+-            <div className="card-subheader diff-subheader">
+-              <div className="subheader-left">
++          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
++            <div className="card-subheader diff-subheader" style={{ padding: '4px 8px', display: 'flex', justifyContent: 'space-between' }}>
++              <div className="subheader-left" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                 <Lucide.GitBranch size={12} className="branch-icon" />
+-                <span className="branch-text">feature/schedule-panel-enhancements ➔ working tree</span>
++                <span className="branch-text" style={{ fontSize: '11px' }}>工作区改动对比 (Workspace Diff)</span>
+               </div>
+-              <div className="subheader-right" style={{ display: 'flex', gap: '4px' }}>
+-                <button className="sub-btn" title="Stage All"><Lucide.Check size={13} /></button>
+-                <button className="sub-btn" title="Discard All"><Lucide.Trash2 size={13} /></button>
++              <div className="subheader-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
++                {/* Search query input */}
++                <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '1px 6px' }}>
++                  <Lucide.Search size={10} style={{ color: 'var(--text-tertiary)', marginRight: '4px' }} />
++                  <input 
++                    type="text" 
++                    placeholder="Filter diff..." 
++                    value={diffSearchQuery} 
++                    onChange={(e) => setDiffSearchQuery((e.target as HTMLInputElement).value)}
++                    style={{ border: 'none', outline: 'none', fontSize: '10px', width: '80px' }}
++                  />
++                </div>
++                {/* Toggle button */}
++                <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
++                  <button 
++                    onClick={() => setDiffViewMode('unified')} 
++                    style={{
++                      background: diffViewMode === 'unified' ? 'var(--bg-tertiary)' : '#ffffff',
++                      border: 'none',
++                      padding: '2px 6px',
++                      fontSize: '10px',
++                      cursor: 'pointer',
++                      fontWeight: diffViewMode === 'unified' ? 600 : 400
++                    }}
++                  >
++                    Unified
++                  </button>
++                  <button 
++                    onClick={() => setDiffViewMode('split')} 
++                    style={{
++                      background: diffViewMode === 'split' ? 'var(--bg-tertiary)' : '#ffffff',
++                      border: 'none',
++                      padding: '2px 6px',
++                      fontSize: '10px',
++                      cursor: 'pointer',
++                      fontWeight: diffViewMode === 'split' ? 600 : 400
++                    }}
++                  >
++                    Split
++                  </button>
++                </div>
+               </div>
+             </div>
+-            <div className="diff-body">
+-              <div className="diff-file-path">
+-                <Lucide.ChevronDown size={12} className="path-arrow" style={{ display: 'inline', marginRight: '4px' }} />
+-                <span className="filepath-text">zennav-server/.env.example</span>
+-                <span className="diff-green-red">+23 -0</span>
+-              </div>
+-              
+-              <div className="diff-unmodified-tag">
+-                <Lucide.ChevronUp size={11} className="unmodified-arrow" style={{ display: 'inline', marginRight: '4px' }} />
+-                <span>11 unmodified lines</span>
+-              </div>
+-
+-              {/* Code lines */}
+-              <div className="diff-code-block">
+-                <div className="code-line"><span className="line-num">12</span><span className="line-content"></span></div>
+-                <div className="code-line"><span className="line-num">13</span><span className="line-content"># Access/refresh token settings</span></div>
+-                <div className="code-line"><span className="line-num">14</span><span className="line-content">AUTH_TOKEN_SECRET=replace-with-a-long-random-secret</span></div>
+-                <div className="code-line added"><span className="line-num">15</span><span className="line-content">AI_CREDENTIAL_SECRET=replace-with-a-long-random-secret</span></div>
+-                <div className="code-line added"><span className="line-num">16</span><span className="line-content">AUTH_SERVICE_TOKEN=replace-with-a-long-random-secret-token</span></div>
+-                <div className="code-line"><span className="line-num">17</span><span className="line-content">ACCESS_TOKEN_TTL_SECONDS=900</span></div>
+-                <div className="code-line"><span className="line-num">18</span><span className="line-content">REFRESH_TOKEN_TTL_DAYS=30</span></div>
+-              </div>
++            
++            <div className="diff-body" style={{ overflowY: 'auto', flex: 1 }}>
++              {activeDiffSource ? (
++                <>
++                  <div className="diff-file-path" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 'none', background: '#fafafa' }}>
++                    <div style={{ display: 'flex', alignItems: 'center' }}>
++                      <Lucide.ChevronDown size={12} className="path-arrow" style={{ display: 'inline', marginRight: '4px' }} />
++                      <span className="filepath-text" style={{ fontWeight: 600, fontSize: '11.5px' }}>{activeDiffSource.filePath}</span>
++                      <span className="diff-green-red" style={{ color: '#1a7f37', fontWeight: 600, marginLeft: '8px', fontSize: '11px' }}>
++                        +{activeDiffSource.additions} -{activeDiffSource.deletions}
++                      </span>
++                    </div>
++                    {/* Interactive Action Toolbar */}
++                    <div className="diff-action-toolbar" style={{ display: 'flex', gap: '4px' }}>
++                      <button 
++                        className="toolbar-btn" 
++                        title="复制差异内容"
++                        onClick={() => {
++                          const diffText = activeDiffSource.changes.map(c => `${c.type === 'addition' ? '+' : c.type === 'deletion' ? '-' : ' '}${c.content}`).join('\n');
++                          navigator.clipboard.writeText(diffText);
++                          onShowToast('差异已复制到剪贴板');
++                        }}
++                      >
++                        <Lucide.Copy size={10} />
++                        <span>复制</span>
++                      </button>
++                      <button 
++                        className="toolbar-btn" 
++                        title="应用此改动"
++                        onClick={() => {
++                          onShowToast(`已成功将改动应用至 ${activeDiffSource.filePath}`);
++                        }}
++                      >
++                        <Lucide.Check size={10} />
++                        <span>应用</span>
++                      </button>
++                      <button 
++                        className="toolbar-btn" 
++                        title="忽略改动"
++                        onClick={() => {
++                          onShowToast('已忽略当前修改差异');
++                        }}
++                      >
++                        <Lucide.X size={10} />
++                        <span>忽略</span>
++                      </button>
++                    </div>
++                  </div>
++                  
++                  {diffViewMode === 'split' ? (
++                    <div className="diff-split-container" style={{
++                      display: 'grid',
++                      gridTemplateColumns: '1fr 1fr',
++                      gap: '8px',
++                      padding: '12px',
++                      background: '#fafafa',
++                      border: '1px solid var(--border-color)',
++                      borderRadius: '4px',
++                      margin: '0 12px 12px 12px',
++                      boxSizing: 'border-box'
++                    }}>
++                      <div className="diff-split-column original-file" style={{ minWidth: 0 }}>
++                        <div className="column-header" style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: '6px' }}>Original File</div>
++                        {activeDiffSource.changes
++                          .filter(c => (c.type === 'deletion' || c.type === 'normal') && c.content.toLowerCase().includes(diffSearchQuery.toLowerCase()))
++                          .map((change, idx) => (
++                            <div 
++                              key={idx} 
++                              style={{
++                                display: 'flex',
++                                backgroundColor: change.type === 'deletion' ? '#ffebe9' : 'transparent',
++                                color: change.type === 'deletion' ? '#cf222e' : 'inherit',
++                                padding: '2px 4px',
++                                fontFamily: 'var(--font-mono)',
++                                fontSize: '11px',
++                                whiteSpace: 'pre',
++                                overflowX: 'auto'
++                              }}
++                            >
++                              <span style={{ width: '20px', opacity: 0.5, userSelect: 'none', flexShrink: 0 }}>{idx + 1}</span>
++                              <span>{change.content}</span>
++                            </div>
++                          ))}
++                      </div>
++                      <div className="diff-split-column modified-file" style={{ minWidth: 0 }}>
++                        <div className="column-header" style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: '6px' }}>Modified File</div>
++                        {activeDiffSource.changes
++                          .filter(c => (c.type === 'addition' || c.type === 'normal') && c.content.toLowerCase().includes(diffSearchQuery.toLowerCase()))
++                          .map((change, idx) => (
++                            <div 
++                              key={idx} 
++                              style={{
++                                display: 'flex',
++                                backgroundColor: change.type === 'addition' ? '#e6ffec' : 'transparent',
++                                color: change.type === 'addition' ? '#1a7f37' : 'inherit',
++                                padding: '2px 4px',
++                                fontFamily: 'var(--font-mono)',
++                                fontSize: '11px',
++                                whiteSpace: 'pre',
++                                overflowX: 'auto'
++                              }}
++                            >
++                              <span style={{ width: '20px', opacity: 0.5, userSelect: 'none', flexShrink: 0 }}>{idx + 1}</span>
++                              <span>{change.content}</span>
++                            </div>
++                          ))}
++                      </div>
++                    </div>
++                  ) : (
++                    <div className="diff-code-block" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '12px', background: '#fafafa', border: '1px solid var(--border-color)', borderRadius: '4px', margin: '0 12px 12px 12px' }}>
++                      {activeDiffSource.changes
++                        .filter(c => c.content.toLowerCase().includes(diffSearchQuery.toLowerCase()))
++                        .map((change, idx) => (
++                          <div 
++                            key={idx} 
++                            style={{
++                              display: 'flex',
++                              backgroundColor: change.type === 'addition' ? '#e6ffec' : change.type === 'deletion' ? '#ffebe9' : 'transparent',
++                              color: change.type === 'addition' ? '#1a7f37' : change.type === 'deletion' ? '#cf222e' : 'inherit',
++                              padding: '2px 4px'
++                            }}
++                          >
++                            <span style={{ width: '24px', opacity: 0.5, userSelect: 'none' }}>
++                              {change.type === 'addition' ? '+' : change.type === 'deletion' ? '-' : ' '}
++                            </span>
++                            <span>{change.content}</span>
++                          </div>
++                        ))}
++                    </div>
++                  )}
++                </>
++              ) : (
++                <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
++                  <Lucide.GitPullRequest size={24} style={{ marginBottom: '8px', opacity: 0.6, display: 'inline' }} />
++                  <p style={{ fontSize: '12px' }}>点击对话中的代码改动文件以预览差异</p>
++                </div>
++              )}
+             </div>
+-          </>
++          </div>
+         )}
+ 
+         {activeCardId === 'tasks' && (
+-          <>
+-            <div className="card-subheader tasks-subheader">
+-              <div className="subheader-left">
+-                <span className="task-count-text">0/0 Tasks Completed</span>
++          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
++            <div className="card-subheader tasks-subheader" style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px' }}>
++              <div className="subheader-left" style={{ display: 'flex', alignItems: 'center' }}>
++                <span className="task-count-text" style={{ fontSize: '11px', fontWeight: 600 }}>
++                  {tasksList.filter(t => t.done).length}/{tasksList.length} Tasks Completed
++                </span>
+               </div>
+               <div className="subheader-right" style={{ display: 'flex', gap: '4px' }}>
+-                <button className="sub-btn" title="Add Task"><Lucide.Plus size={13} /></button>
+-                <button className="sub-btn" title="Filter Tasks"><Lucide.Filter size={13} /></button>
++                <button className="sub-btn" title="Add Task" onClick={() => setIsAddingTask(!isAddingTask)}><Lucide.Plus size={13} /></button>
+               </div>
+             </div>
+-            <div className="tasks-body centered-placeholder">
+-              <div className="tasks-placeholder-icon">
+-                <Lucide.CheckSquare size={32} className="task-placeholder-img" />
++
++            <div className="tasks-body" style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
++              {/* Radial SVG progress wheel */}
++              {tasksList.length > 0 && (
++                <div className="tasks-progress-wheel-container" style={{
++                  display: 'flex',
++                  alignItems: 'center',
++                  gap: '12px',
++                  padding: '12px',
++                  background: '#ffffff',
++                  border: '1px solid var(--border-color)',
++                  borderRadius: '6px'
++                }}>
++                  <svg width="50" height="50" style={{ transform: 'rotate(-90deg)' }}>
++                    <circle cx="25" cy="25" r="20" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
++                    <circle 
++                      cx="25" 
++                      cy="25" 
++                      r="20" 
++                      stroke="var(--accent-green)" 
++                      strokeWidth="4" 
++                      fill="transparent"
++                      strokeDasharray={2 * Math.PI * 20}
++                      strokeDashoffset={2 * Math.PI * 20 - (tasksList.filter(t => t.done).length / tasksList.length) * 2 * Math.PI * 20}
++                      strokeLinecap="round"
++                    />
++                  </svg>
++                  <div style={{ display: 'flex', flexDirection: 'column' }}>
++                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)' }}>实施任务清单</span>
++                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
++                      进度: {Math.round((tasksList.filter(t => t.done).length / tasksList.length) * 100)}% ({tasksList.filter(t => t.done).length}/{tasksList.length} 完成)
++                    </span>
++                  </div>
++                </div>
++              )}
++
++              {/* Add inline task form */}
++              {isAddingTask && (
++                <div style={{ display: 'flex', gap: '6px', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', background: '#ffffff' }}>
++                  <input 
++                    type="text" 
++                    placeholder="Enter new task title..." 
++                    value={newIncomingTask} 
++                    onChange={(e) => setNewIncomingTask((e.target as HTMLInputElement).value)}
++                    style={{ border: 'none', outline: 'none', fontSize: '11px', flex: 1 }}
++                    onKeyDown={(e) => {
++                      if (e.key === 'Enter') handleAddTask();
++                    }}
++                  />
++                  <button className="sub-btn" onClick={handleAddTask} style={{ padding: '2px 6px', fontSize: '10px' }}>Add</button>
++                </div>
++              )}
++
++              {/* Tasks List */}
++              <div className="tasks-list-block" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
++                {tasksList.map(task => (
++                  <div 
++                    key={task.id} 
++                    style={{
++                      display: 'flex',
++                      alignItems: 'center',
++                      justifyContent: 'space-between',
++                      padding: '8px 12px',
++                      background: '#ffffff',
++                      border: '1px solid var(--border-color)',
++                      borderRadius: '6px',
++                      fontSize: '11px'
++                    }}
++                  >
++                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
++                      <input 
++                        type="checkbox" 
++                        checked={task.done} 
++                        onChange={() => {
++                          setTasksList(prev => prev.map(t => t.id === task.id ? { ...t, done: !t.done } : t));
++                        }}
++                      />
++                      <span style={{ textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
++                        {task.text}
++                      </span>
++                    </label>
++                    <button 
++                      className="sub-btn" 
++                      onClick={() => setTasksList(prev => prev.filter(t => t.id !== task.id))}
++                      style={{ color: 'var(--accent-red)' }}
++                    >
++                      <Lucide.Trash2 size={11} />
++                    </button>
++                  </div>
++                ))}
+               </div>
+-              <h4>No tasks.</h4>
+             </div>
+-          </>
++          </div>
+         )}
+ 
+         {activeCardId === 'terminal' && (
+-          <>
++          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
+             <div className="card-subheader terminal-subheader">
+               <div className="subheader-left">
+                 <Lucide.Terminal size={12} className="term-icon" />
+                 <span className="term-title">bash (local)</span>
+               </div>
+               <div className="subheader-right" style={{ display: 'flex', gap: '4px' }}>
+-                <button className="sub-btn" title="New Terminal"><Lucide.Plus size={13} /></button>
+-                <button className="sub-btn" title="Clear Buffer"><Lucide.Trash2 size={13} /></button>
++                <button className="sub-btn" title="Clear Buffer" onClick={() => setTerminalLines([])}><Lucide.Trash2 size={13} /></button>
+               </div>
+             </div>
+-            <div className="terminal-body">
+-              <div className="terminal-output">
+-                <div className="terminal-line"><span className="term-prompt">orange@Windows-PC MINGW64 /c/Software/conex</span></div>
+-                <div className="terminal-line"><span className="term-command">$ npm run dev</span></div>
+-                <div className="terminal-line term-log"></div>
+-                <div className="terminal-line term-log">&gt; zennav-server@1.0.0 dev</div>
+-                <div className="terminal-line term-log">&gt; node server.js</div>
+-                <div className="terminal-line term-log"></div>
+-                <div className="terminal-line term-success">[ready] Server started on http://localhost:3000</div>
+-                <div className="terminal-line term-success">[ready] Database connection established.</div>
+-                <div className="terminal-line"><span className="term-cursor">█</span></div>
++            <div className="terminal-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#0f172a', padding: '12px', overflow: 'hidden' }} onClick={() => {
++              const inputEl = document.getElementById('term-input-element');
++              if (inputEl) inputEl.focus();
++            }}>
++              <div className="terminal-output" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
++                {terminalLines.map((line, index) => {
++                  let className = 'term-log';
++                  if (line.startsWith('orange@')) className = 'term-prompt-line';
++                  else if (line.startsWith('$ ')) className = 'term-command-line';
++                  else if (line.startsWith('✓') || line.startsWith('[ready]')) className = 'term-success-line';
++                  else if (line.startsWith('bash:') || line.startsWith('cat:')) className = 'term-error-line';
++
++                  return (
++                    <div key={index} className={className} style={{
++                      color: className === 'term-success-line' ? '#10b981' : className === 'term-error-line' ? '#f87171' : 'inherit'
++                    }}>
++                      {line}
++                    </div>
++                  );
++                })}
++
++                <div className="terminal-prompt-input-line" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++                  <span className="term-prompt" style={{ color: '#38bdf8' }}>orange@Windows-PC MINGW64 /c/Software/conex</span>
++                  <span className="term-symbol" style={{ color: '#a78bfa' }}>$</span>
++                  <input 
++                    id="term-input-element"
++                    type="text"
++                    value={terminalInput}
++                    onChange={(e) => setTerminalInput((e.target as HTMLInputElement).value)}
++                    onKeyDown={handleTerminalKeyDown}
++                    style={{
++                      flex: 1,
++                      background: 'transparent',
++                      border: 'none',
++                      outline: 'none',
++                      color: '#ffffff',
++                      fontFamily: 'var(--font-mono)',
++                      fontSize: '11px',
++                      caretColor: 'white'
++                    }}
++                    autoFocus
++                  />
++                </div>
+               </div>
+             </div>
+-          </>
++          </div>
+         )}
+       </div>
+     </div>
+   );
+ };

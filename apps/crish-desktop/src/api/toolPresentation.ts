@@ -123,6 +123,7 @@ export function toolCommandPreview(tc: MessageToolCall, max = 48): string {
   return one.length <= max ? one : one.slice(0, max - 1) + '…';
 }
 
+/** 折叠行预览可截断；展开区请用 fullToolOutput */
 export function truncateToolOutput(output: string, maxLines = 16, maxChars = 1600): string {
   if (!output) return '';
   // 运行中占位不展示；「完成」允许作为结果预览
@@ -139,6 +140,23 @@ export function truncateToolOutput(output: string, maxLines = 16, maxChars = 160
     return lines.slice(0, maxLines).join('\n') + `\n…（共 ${lines.length} 行）`;
   }
   return text;
+}
+
+/** 展开区完整正文（仅清洗，不截断） */
+export function fullToolOutput(output: string): string {
+  if (!output) return '';
+  if (/^(执行中|运行中)…?$/.test(output.trim())) return '';
+  const text = sanitizeToolDisplayOutput(output);
+  if (!text) {
+    if (/^(完成|OK|ok|失败|failed)$/i.test(output.trim())) return output.trim();
+    return '';
+  }
+  return text;
+}
+
+/** 从工具参数取可点路径展示名（basename） */
+export function toolPathDisplayName(filePath: string): string {
+  return basename(filePath);
 }
 
 export function isInspectTool(tc: MessageToolCall): boolean {

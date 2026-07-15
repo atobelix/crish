@@ -23,12 +23,12 @@ html[data-theme="light"] {
 
   --accent-orange: #f59e0b;
   --accent-orange-light: #fffbeb;
-  /* 点缀色对：高饱和绿 + 浅绿底（忌蓝紫） */
-  --accent-green: #19b36b;
-  --accent-green-hover: #15965a;
+  /* 点缀：亮黄绿（高 G 略黄压蓝）；仅开关开态/成功/关键 CTA */
+  --accent-green: #2dbe6c;
+  --accent-green-hover: #25a85e;
   --accent-green-light: #f0fdf4;
-  --accent-green-soft: #dcfce7;
-  --accent-green-muted: #bbf7d0;
+  --accent-green-soft: #e8faf0;
+  --accent-green-muted: #c6f0d6;
   --accent-red: #ef4444;
   --accent-red-light: #fef2f2;
   --accent-blue: #666666;
@@ -114,11 +114,11 @@ html[data-theme="dark"] {
   --accent-soft: #3a3a3a;
   --accent-orange: #d97706;
   --accent-orange-light: #2a2010;
-  --accent-green: #34d399;
-  --accent-green-hover: #19b36b;
-  --accent-green-light: #14241c;
-  --accent-green-soft: #1a2e24;
-  --accent-green-muted: #234032;
+  --accent-green: #3dd68c;
+  --accent-green-hover: #2dbe6c;
+  --accent-green-light: #1a2a22;
+  --accent-green-soft: #1e3228;
+  --accent-green-muted: #2a4034;
   --accent-red: #f87171;
   --accent-red-light: #2a1414;
   --accent-blue: #a3a3a3;
@@ -225,6 +225,7 @@ html[data-theme="dark"] .card-tab.active {
 }
 
 /* UI Size Gear — 相对 14px 基准缩放；small 不低于 11px 元信息 */
+/* 密度只改字号/控件高，不改侧栏宽（侧栏宽独立 token + 用户拖拽持久化） */
 [data-ui-size="small"] {
   --dropdown-padding: 5px;
   --dropdown-gap: 2px;
@@ -233,7 +234,6 @@ html[data-theme="dark"] .card-tab.active {
   --item-radius: 7px;
   --item-font-size: 13px;
   --header-height: 40px;
-  --sidebar-width: 220px;
 
   /* 紧凑档：底 13，元信息不低于 11 */
   --font-size-xxs: 11px;
@@ -258,7 +258,6 @@ html[data-theme="dark"] .card-tab.active {
   --item-radius: 8px;
   --item-font-size: var(--font-size-base);
   --header-height: 44px;
-  --sidebar-width: 240px;
 
   --font-size-xxs: 11px;
   --font-size-xs: 12px;
@@ -282,7 +281,6 @@ html[data-theme="dark"] .card-tab.active {
   --item-radius: 9px;
   --item-font-size: var(--font-size-lg);
   --header-height: 48px;
-  --sidebar-width: 260px;
 
   --font-size-xxs: 12px;
   --font-size-xs: 13px;
@@ -2487,12 +2485,12 @@ body {
   font-weight: var(--font-weight-normal);
 }
 
-/* 外观/快捷菜单：选中带浅绿点缀 */
+/* 分段选中：中性 pill，不用整片绿 */
 .settings-row .ui-segment-item.active,
 .sb-quick-segment .ui-segment-item.active {
-  background: var(--accent-green-light);
-  color: var(--accent-green-hover);
-  box-shadow: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Legacy aliases */
@@ -4636,19 +4634,20 @@ select.settings-field-input {
   background: var(--bg-hover) !important;
   color: var(--text-primary) !important;
 }
+/* 导航选中：中性底，不用大面积绿 */
 .settings-sidebar-tab.active {
-  background: var(--accent-green-light) !important;
-  color: var(--accent-green-hover) !important;
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
 }
 .settings-sidebar-tab.active svg {
-  color: var(--accent-green) !important;
+  color: var(--text-primary) !important;
 }
 html[data-theme="dark"] .settings-sidebar-tab.active {
-  background: var(--accent-green-soft) !important;
-  color: var(--accent-green) !important;
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
 }
 html[data-theme="dark"] .settings-sidebar-tab.active svg {
-  color: var(--accent-green) !important;
+  color: var(--text-primary) !important;
 }
 
 .settings-card-row {
@@ -5012,10 +5011,11 @@ html[data-theme="dark"] .settings-sidebar-tab.active svg {
   padding-left: 18px;
 }
 
-/* Composer stack — 与上方 .chat-footer 合并，避免双重定义 */
+/* Composer：与消息列同宽居中 */
 .chat-footer {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 6px;
   padding: 6px 14px 12px;
   border-top: 1px solid var(--border-subtle);
@@ -5024,6 +5024,10 @@ html[data-theme="dark"] .settings-sidebar-tab.active svg {
   z-index: 5;
   flex-shrink: 0;
   margin-top: 0;
+}
+.chat-footer > * {
+  width: 100%;
+  max-width: min(760px, 100%);
 }
 
 /* 回到最新：对话区右下角悬浮图标；低于审批条避免挡按钮 */
@@ -5050,14 +5054,14 @@ html[data-theme="dark"] .settings-sidebar-tab.active svg {
   border-color: var(--text-tertiary);
 }
 
-/* 工具调用：比正文更紧凑，无圆点、无 hover 底 */
+/* 工具调用：不套娃限高，由各工具结果区内滚 */
 .tool-stack {
   display: flex;
   flex-direction: column;
   gap: 0;
   margin: 2px 0 4px;
-  max-height: 200px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   padding: 0;
 }
 .msg-timeline-tools {
@@ -5163,22 +5167,48 @@ html[data-theme="dark"] .settings-sidebar-tab.active svg {
   transform: rotate(90deg);
 }
 .tool-result-body {
-  margin: 0 0 4px 0;
-  padding: 0 0 2px;
-  max-height: 140px;
+  margin: 4px 0 6px 0;
+  padding: 8px 10px;
+  max-height: min(40vh, 320px);
   overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-tertiary) 70%, transparent) 0%,
+    color-mix(in srgb, var(--bg-secondary) 35%, transparent) 100%
+  );
 }
 .tool-result-pre {
   margin: 0;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
   background: transparent;
   border: none;
   padding: 0;
+  font-weight: var(--font-weight-normal);
+}
+.tool-path-link {
+  display: inline;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 3px;
+}
+.tool-path-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: var(--bg-hover);
 }
 .tool-result-images,
 .msg-inline-images {
@@ -7340,13 +7370,10 @@ html[data-theme="dark"] .session-agent-item.active {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* 快捷设置菜单：浮在侧栏上方，无黑描边 */
+/* 快捷设置：fixed 定位由 JS 写入，避免挡住气泡且不裁切 */
 .sb-quick-menu {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 6px);
-  z-index: 80;
+  position: fixed;
+  z-index: 5000;
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -7355,7 +7382,15 @@ html[data-theme="dark"] .session-agent-item.active {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 200px;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 16px));
+  box-sizing: border-box;
+}
+.sidebar-footer-update {
+  display: none;
+}
+.sidebar-footer-update.is-visible {
+  display: inline-flex;
 }
 .sb-quick-section {
   display: flex;
@@ -7468,13 +7503,17 @@ html[data-theme="dark"] .session-agent-item.active {
 .app-mode-normal .chat-context-ribbon .context-pill.server {
   display: none;
 }
-/* ===== Message layout (ChatGPT-like, Crish-tuned) ===== */
+/* ===== Message layout：内容列居中 ===== */
 .chat-doc-flow {
   max-width: none !important;
   margin: 0 !important;
   width: 100% !important;
   padding: 14px 20px 8px !important;
   gap: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
 }
 
 .msg-row {
@@ -7482,10 +7521,10 @@ html[data-theme="dark"] .session-agent-item.active {
   flex-direction: column;
   width: 100%;
   margin-bottom: 14px;
-  max-width: min(920px, 100%);
+  max-width: min(760px, 100%);
 }
 .msg-row-assistant {
-  max-width: min(920px, 100%);
+  max-width: min(760px, 100%);
 }
 .msg-row-assistant .msg-assistant-meta {
   margin-top: 4px;
@@ -9117,7 +9156,8 @@ html[data-theme="dark"] th {
 }
 
 .tool-stack {
-  max-height: min(240px, 40vh);
+  max-height: none;
+  overflow: visible;
   margin: 4px 0 6px;
 }
 .tool-row-head {
@@ -9269,8 +9309,8 @@ html[data-theme="dark"] th {
   padding: 0 12px 0 10px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--accent-green-light);
-  color: var(--accent-green-hover);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
@@ -9279,12 +9319,12 @@ html[data-theme="dark"] th {
   box-shadow: none;
 }
 .settings-back-btn:hover {
-  background: var(--accent-green-soft);
-  border-color: var(--accent-green-muted);
+  background: var(--bg-hover);
+  border-color: var(--border-color);
 }
 html[data-theme="dark"] .settings-back-btn {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   border-color: var(--border-subtle);
 }
 .settings-cover-title-block {
@@ -9353,13 +9393,14 @@ html[data-theme="dark"] .settings-back-btn {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 28px 40px 48px;
+  overflow-x: hidden;
+  padding: 24px 32px 40px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   position: relative;
   background: var(--bg-primary);
-  max-width: 920px;
+  max-width: 740px;
 }
 .settings-loading-bar {
   position: absolute;
@@ -9566,7 +9607,8 @@ html[data-theme="dark"] .crish-sidebar {
 }
 html[data-theme="dark"] .settings-switch,
 html[data-theme="dark"] .settings-toggle-row input[type="checkbox"] {
-  background: #4a4a4a;
+  /* 关态轨偏浅，与深色底可区分又不过曝 */
+  background: #6a6a6a;
 }
 html[data-theme="dark"] .settings-switch:checked,
 html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
@@ -9665,13 +9707,8 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
   opacity: 0.45;
   cursor: default;
 }
-.settings-select-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
-  min-width: 220px;
-  z-index: 50;
+.settings-select-menu,
+.settings-select-menu--portal {
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -9680,6 +9717,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
 }
 .settings-select-scroll {
   overflow-y: auto;
@@ -9714,8 +9752,8 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
   background: var(--bg-hover);
 }
 .settings-select-item.is-active {
-  background: var(--accent-green-light);
-  color: var(--accent-green-hover);
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 .settings-select-item-label {
   flex: 1;
@@ -9734,8 +9772,8 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
   color: var(--accent-green);
 }
 html[data-theme="dark"] .settings-select-item.is-active {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 .settings-select-empty {
   padding: 12px 10px;
