@@ -6342,7 +6342,7 @@ select.ui-input {
   color: #555;
 }
 .preview-quick-chip:hover {
-  border-color: #c5cff7;
+  border-color: var(--text-tertiary);
   color: var(--text-primary);
 }
 .preview-hist-panel {
@@ -6967,7 +6967,7 @@ select.ui-input {
   border: none;
   background: transparent;
   font-size: 11px;
-  color: #4a5ad4;
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: inherit;
   padding: 2px 0;
@@ -7039,15 +7039,15 @@ select.ui-input {
 }
 .agent-card-textarea:focus {
   outline: none;
-  border-color: #a8b4f0;
+  border-color: var(--text-tertiary);
 }
 .agent-card-send {
   width: 36px;
   height: 36px;
   border: none;
   border-radius: 10px;
-  background: var(--accent-color, #4f6ef7);
-  color: #fff;
+  background: var(--accent-color);
+  color: var(--bg-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
