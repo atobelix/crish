@@ -14,13 +14,18 @@ import type {
   SessionMessage,
   SessionState,
 } from './types';
+import {
+  getSessionById,
+  getSessionIndex,
+  reindexSessionsById,
+  type SessionsIndexed,
+} from './sessionIndex';
 
 /**
  * 会话域 action 需要读写的 store 切片（避免与 layoutStore 循环 import）。
- * 字段名/形状须与 LayoutStore 对齐。
+ * 字段名/形状须与 LayoutStore 对齐；LayoutStore 必须 extends 本切片。
  */
-interface SessionStoreSlice {
-  sessions: SessionState[];
+export interface SessionStoreSlice extends SessionsIndexed {
   folderOrder: string[];
   activeSessionId: string;
   activeAgentId: string | null;
@@ -105,27 +110,14 @@ export interface SessionActions {
   unpinMessage: (sessionId: string, messageId: string) => void;
 }
 
-/** immer set：recipe 可原地改 draft */
-type ImmerSet = (recipe: (state: SessionStoreSlice) => void) => void;
-type StoreGet = () => SessionStoreSlice;
-
-type SessionsHolder = { sessions: SessionState[] };
-
 /**
- * 会话 / 消息查找 helpers。
- * 仍是 O(n) 线性扫描；Map 索引与 immer draft 不友好，故用集中 helper 减少重复双 find。
- * 热路径（流式 update*）经 getSessionMessage 一次拿到 session+message。
+ * immer set / get：用泛型 T extends SessionStoreSlice，
+ * 使 layoutStore 的 set/get（T = 完整 LayoutStore draft）无需 `as any` 即可传入。
  */
-function getSessionById(
-  state: SessionsHolder,
-  sessionId: string,
-): SessionState | undefined {
-  return state.sessions.find((s) => s.id === sessionId);
-}
-
-function getSessionIndex(state: SessionsHolder, sessionId: string): number {
-  return state.sessions.findIndex((s) => s.id === sessionId);
-}
+export type SessionImmerSet<T extends SessionStoreSlice = SessionStoreSlice> = (
+  recipe: (state: T) => void,
+) => void;
+export type SessionStoreGet<T extends SessionStoreSlice = SessionStoreSlice> = () => T;
 
 function getMessageById(
   messages: SessionMessage[] | undefined,
@@ -135,7 +127,7 @@ function getMessageById(
 }
 
 function getSessionMessage(
-  state: SessionsHolder,
+  state: SessionsIndexed,
   sessionId: string,
   messageId: string,
 ): { session: SessionState; message: SessionMessage } | undefined {
@@ -155,8 +147,12 @@ function getSessionAgent(
 
 /**
  * 创建会话域 actions，供 layoutStore 的 immer((set,get)=>({...})) 展开。
+ * @typeParam T 完整 store 状态（须包含 SessionStoreSlice 字段）
  */
-export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActions {
+export function createSessionActions<T extends SessionStoreSlice>(
+  set: SessionImmerSet<T>,
+  get: SessionStoreGet<T>,
+): SessionActions {
   return {
     addMessage: (_wsId, sessionId, message) => set((state) => {
       const sess = getSessionById(state, sessionId);
@@ -217,6 +213,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     setSessions: (sessions) => set((state) => {
       // 合并远程后补默认标题（有消息则推导）
       state.sessions = fillDefaultSessionTitles(sessions);
+      reindexSessionsById(state);
       // 合并远程会话后补齐侧栏分组顺序
       for (const s of state.sessions) {
         if (s.folder && !state.folderOrder.includes(s.folder)) {
@@ -224,7 +221,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         }
       }
       // 活动会话若已被移除则清空（回到空态）
-      if (state.activeSessionId && !state.sessions.some((s) => s.id === state.activeSessionId)) {
+      if (state.activeSessionId && !state.sessionsById[state.activeSessionId]) {
         state.activeSessionId = '';
       }
     }),
@@ -508,6 +505,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
           messages: [],
         };
         state.sessions.unshift(sess);
+        state.sessionsById[sess.id] = sess;
         if (!state.folderOrder.includes(sess.folder)) {
           state.folderOrder.unshift(sess.folder);
         }
@@ -556,6 +554,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       // 分叉会话紧插在原会话之后
       const idx = getSessionIndex(state, sessionId);
       state.sessions.splice(idx + 1, 0, newSess);
+      state.sessionsById[newSess.id] = newSess;
       state.activeSessionId = newSess.id; // 自动聚焦新分叉
     }),
 
@@ -577,6 +576,8 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       } else {
         state.sessions.push(sess);
       }
+      // 重排后引用仍是 sess，补索引（删除后 push 可能丢 id）
+      state.sessionsById[sess.id] = sess;
     }),
 
     moveFolderRealtime: (folderName, targetFolderName) => set((state) => {

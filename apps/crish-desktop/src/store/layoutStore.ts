@@ -31,6 +31,7 @@ import {
   type WorkspaceActions,
   type DraggedTabState,
 } from './workspaceActions';
+import { buildSessionsById } from './sessionIndex';
 
 // 保持旧 import 路径可用：`from '../store/layoutStore'`
 export type {
@@ -57,6 +58,8 @@ interface LayoutStore extends SessionActions, WorkspaceActions {
   uiSize: 'small' | 'medium' | 'large';
   sidebarCollapsed: boolean;
   sessions: SessionState[];
+  /** 会话 id → 引用，热路径 O(1)；与 sessions 同步 */
+  sessionsById: Record<string, SessionState>;
   folderOrder: string[];
   activeSessionId: string;
   /** 当前聚焦的子 agent（null = 看主对话） */
@@ -132,6 +135,7 @@ export const useLayoutStore = create<LayoutStore>()(
     uiSize: 'medium',
     sidebarCollapsed: false,
     sessions: _seed.sessions,
+    sessionsById: buildSessionsById(_seed.sessions),
     folderOrder: _seed.folderOrder,
     activeSessionId: _seed.activeSessionId,
     activeAgentId: null,
@@ -306,11 +310,11 @@ export const useLayoutStore = create<LayoutStore>()(
       state.tokenUsage.cost = Math.max(0, parseFloat((state.tokenUsage.cost - 0.0045).toFixed(4)));
     }),
 
-    // 会话 / 消息 / agent 域（实现见 sessionActions.ts）
-    ...createSessionActions(set as any, get as any),
+    // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
+    ...createSessionActions(set, get),
 
     // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
-    ...createWorkspaceActions(set as any, get as any),
+    ...createWorkspaceActions(set, get),
 
     setUiSize: (size) => set((state) => { state.uiSize = size; }),
     setSidebarCollapsed: (collapsed) => set((state) => { state.sidebarCollapsed = collapsed; }),
@@ -381,6 +385,7 @@ export function initLayoutStorePersistence(): () => void {
         if (cur.sessions.length > 0) return;
         useLayoutStore.setState((state) => {
           state.sessions = restored.sessions;
+          state.sessionsById = buildSessionsById(restored.sessions);
           state.activeSessionId = restored.activeSessionId;
           state.folderOrder = restored.folderOrder;
         });

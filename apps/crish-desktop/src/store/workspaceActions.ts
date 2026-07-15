@@ -30,9 +30,9 @@ export interface DraggedTabState {
 
 /**
  * 工作区域 action 需要读写的 store 切片（避免与 layoutStore 循环 import）。
- * 字段名/形状须与 LayoutStore 对齐。
+ * 字段名/形状须与 LayoutStore 对齐；LayoutStore 必须 extends 本切片。
  */
-interface WorkspaceStoreSlice {
+export interface WorkspaceStoreSlice {
   workspaces: WorkspaceState[];
   activeWorkspaceIndex: number;
   tabModeEnabled: boolean;
@@ -58,14 +58,21 @@ export interface WorkspaceActions {
   applyWorkspaceLayout: (snapshot: LayoutSnapshot) => void;
 }
 
-/** immer set：recipe 可原地改 draft */
-type ImmerSet = (recipe: (state: WorkspaceStoreSlice) => void) => void;
-type StoreGet = () => WorkspaceStoreSlice;
+/**
+ * immer set / get：泛型 T extends WorkspaceStoreSlice，避免 layoutStore 侧 `as any`。
+ */
+export type WorkspaceImmerSet<T extends WorkspaceStoreSlice = WorkspaceStoreSlice> = (
+  recipe: (state: T) => void,
+) => void;
+export type WorkspaceStoreGet<T extends WorkspaceStoreSlice = WorkspaceStoreSlice> = () => T;
 
 /**
  * 创建工作区域 actions，供 layoutStore 的 immer((set,get)=>({...})) 展开。
  */
-export function createWorkspaceActions(set: ImmerSet, _get: StoreGet): WorkspaceActions {
+export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
+  set: WorkspaceImmerSet<T>,
+  _get: WorkspaceStoreGet<T>,
+): WorkspaceActions {
   return {
     setDropPreview: (preview) => set((state) => { state.dropPreview = preview; }),
 

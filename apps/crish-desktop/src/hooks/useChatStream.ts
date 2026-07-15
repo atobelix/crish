@@ -46,53 +46,15 @@ import {
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { rulesLinesToText, syncRulesToDaemon } from '../api/rulesApi';
-import { parseMarkdownChecklist } from '../components/TasksCard';
-import type { SessionGoalMode, SessionGoalTask } from '../store/types';
-
-/** /goal 默认自动续写轮次上限 */
-const GOAL_DEFAULT_MAX_ITERATIONS = 5;
-
-/** 助手回复是否声明目标已完成 */
-function replyLooksGoalDone(text: string): boolean {
-  const t = (text || '').trim();
-  if (!t) return false;
-  return /\bDONE\b/i.test(t) || /目标已完成/.test(t);
-}
-
-/** 将 goalMode.tasks 中未完成项注入续写提示 */
-function formatOpenGoalTasksForPrompt(tasks: SessionGoalTask[] | undefined): string {
-  const open = (tasks || []).filter((t) => t && !t.done && (t.text || '').trim());
-  if (!open.length) return '';
-  return [
-    '当前未完成任务清单（请继续推进；每轮结束用 markdown checklist 更新 `- [ ]` / `- [x]`）：',
-    ...open.map((t) => `- [ ] ${t.text.trim()}`),
-    '',
-  ].join('\n');
-}
-
-/** 构造目标模式注入到模型的前缀（不展示在用户气泡） */
-function buildGoalModePrefix(
-  goal: string,
-  iteration: number,
-  maxIterations: number,
-  tasks?: SessionGoalTask[],
-): string {
-  const openBlock = formatOpenGoalTasksForPrompt(tasks);
-  return [
-    '[目标模式 · 系统指令]',
-    `你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。`,
-    `目标：${goal}`,
-    `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在 8 轮内完成）。`,
-    '请工作直至目标实质完成；不要半途停下或只列计划而不执行。',
-    '请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。',
-    '若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。',
-    openBlock ? openBlock.trimEnd() : '',
-    '---',
-    '',
-  ]
-    .filter((line, i, arr) => line !== '' || (i > 0 && arr[i - 1] !== ''))
-    .join('\n');
-}
+import {
+  buildGoalModePrefix,
+  createInitialGoalMode,
+  decideGoalContinuation,
+  GOAL_DEFAULT_MAX_ITERATIONS,
+  mergeGoalTasksFromAssistantText,
+} from '../api/goalModeController';
+import { SessionStreamManager } from '../api/sessionStreamManager';
+import type { SessionGoalMode } from '../store/types';
 
 /** 从助手正文解析 checklist 并写回 session.goalMode.tasks */
 function syncGoalTasksFromAssistantText(
@@ -100,14 +62,8 @@ function syncGoalTasksFromAssistantText(
   assistantText: string,
   gm: SessionGoalMode,
 ): SessionGoalMode {
-  const items = parseMarkdownChecklist(assistantText);
-  if (!items.length) return gm;
-  const tasks: SessionGoalTask[] = items.map((it) => ({
-    id: it.id,
-    text: it.text,
-    done: it.done,
-  }));
-  const next: SessionGoalMode = { ...gm, tasks };
+  const next = mergeGoalTasksFromAssistantText(gm, assistantText);
+  if (next === gm) return gm;
   useLayoutStore.getState().patchSession(sid, { goalMode: next });
   return next;
 }
@@ -248,23 +204,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
   const renameSession = useLayoutStore((s) => s.renameSession);
 
-  /**
-   * 按会话隔离流式 run：多会话可并行，互不覆盖 cancel。
-   * key = sessionId
-   */
-  const streamsBySessionRef = useRef(
-    new Map<
-      string,
-      {
-        cancel: () => void;
-        userMsgId: string;
-        assistantMsgId: string;
-        runId: string | null;
-      }
-    >(),
-  );
-  /** 防止同会话 onComplete 重入 drain */
-  const drainingSessionsRef = useRef(new Set<string>());
+  /** 按会话隔离流式 run：cancel / drain / 防幽灵 run */
+  const streamManagerRef = useRef<SessionStreamManager | null>(null);
+  if (!streamManagerRef.current) {
+    streamManagerRef.current = new SessionStreamManager();
+  }
   /** 用户点停止后的会话：跳过 /goal 自动续写，避免 cancel 仍触发 onComplete 时继续 */
   const goalCancelledSessionsRef = useRef(new Set<string>());
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
@@ -305,91 +249,60 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
    * @returns true 表示已启动续写，调用方勿再 drain 排队
    */
   const maybeContinueGoalMode = (sid: string, assistantMsgId: string): boolean => {
-    if (goalCancelledSessionsRef.current.has(sid)) {
-      goalCancelledSessionsRef.current.delete(sid);
-      return false;
-    }
+    const cancelled = goalCancelledSessionsRef.current.has(sid);
+    if (cancelled) goalCancelledSessionsRef.current.delete(sid);
     const st = useLayoutStore.getState();
-    const sess = st.sessions.find((s) => s.id === sid);
-    let gm = sess?.goalMode;
-    if (!gm?.active) return false;
-
-    // 有用户排队消息时优先 drain，不抢目标续写
-    const hasQueued = sess?.messages?.some(
-      (m) => m.sender === 'user' && m.status === 'queued',
-    );
-    if (hasQueued) return false;
-
+    const sess = st.sessionsById[sid] || st.sessions.find((s) => s.id === sid);
     const asstText =
       sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
-    // 助手 checklist → 更新 goal 进度
-    gm = syncGoalTasksFromAssistantText(sid, asstText, gm);
+    // 先同步 checklist 到 store，再决策
+    if (sess?.goalMode?.active) {
+      syncGoalTasksFromAssistantText(sid, asstText, sess.goalMode);
+    }
+    const liveSess =
+      useLayoutStore.getState().sessionsById[sid] ||
+      useLayoutStore.getState().sessions.find((s) => s.id === sid);
+    const decision = decideGoalContinuation({
+      cancelled,
+      session: liveSess,
+      assistantText: asstText,
+    });
 
-    const allTasksDone =
-      Array.isArray(gm.tasks) &&
-      gm.tasks.length > 0 &&
-      gm.tasks.every((t) => t.done);
-
-    if (replyLooksGoalDone(asstText) || allTasksDone) {
-      st.patchSession(sid, {
-        goalMode: { ...gm, active: false },
-      });
-      onShowToast('目标已完成');
+    if (decision.action === 'stop') {
+      if (decision.reason === 'done' || decision.reason === 'max_iter') {
+        st.patchSession(sid, { goalMode: decision.goalMode });
+      }
+      if (decision.toast) onShowToast(decision.toast);
       return false;
     }
 
-    const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
-    const nextIter = (gm.iteration ?? 0) + 1;
-    if (nextIter >= maxIter) {
-      st.patchSession(sid, {
-        goalMode: { ...gm, active: false, iteration: nextIter },
-      });
-      onShowToast(`目标模式已达上限（${maxIter} 轮），已停止自动续写`);
-      return false;
-    }
-
-    const nextGm: SessionGoalMode = {
-      ...gm,
-      active: true,
-      iteration: nextIter,
-      maxIterations: maxIter,
-    };
-    st.patchSession(sid, { goalMode: nextGm });
-
-    const contDisplay = '继续推进目标，若已完成请明确说明 DONE';
-    const contModel = [
-      buildGoalModePrefix(gm.goal, nextIter, maxIter, nextGm.tasks),
-      contDisplay,
-    ].join('\n');
-
+    st.patchSession(sid, { goalMode: decision.goalMode });
     const userMsgId = `user-msg-goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     useLayoutStore.setState((state) => {
-      const s = state.sessions.find((x) => x.id === sid);
+      const s = state.sessionsById[sid] || state.sessions.find((x) => x.id === sid);
       if (!s) return;
       if (!s.messages) s.messages = [];
       s.messages.push({
         id: userMsgId,
         sender: 'user',
-        text: contDisplay,
+        text: decision.displayText,
         timestamp: Date.now(),
         status: 'processing',
       });
     });
 
-    // 下一帧再开流，避开 onComplete 同步栈
     setTimeout(() => {
-      runStreamingAssistantRef.current(contModel, userMsgId, sid);
+      runStreamingAssistantRef.current(decision.modelText, userMsgId, sid);
     }, 0);
     return true;
   };
 
   const drainQueuedAfterComplete = (sid: string) => {
-    if (drainingSessionsRef.current.has(sid)) return;
-    drainingSessionsRef.current.add(sid);
+    const mgr = streamManagerRef.current!;
+    if (!mgr.beginDrain(sid)) return;
     try {
       const st = useLayoutStore.getState();
-      const sess = st.sessions.find((s) => s.id === sid);
-      // 同会话仍有在跑的助手时不抢跑排队消息
+      const sess = st.sessionsById[sid] || st.sessions.find((s) => s.id === sid);
       const stillBusy = sess?.messages?.some(
         (m) => m.sender === 'assistant' && m.status === 'processing',
       );
@@ -397,9 +310,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       const next = sess?.messages.find((m) => m.sender === 'user' && m.status === 'queued');
       if (next?.text) {
         st.setSessionMessageStatus(sid, next.id, 'processing');
-        // 排队消息的 text 即当时展示文案（含附件摘要）；作为下一轮 prompt
-        // 经 ref 调最新实现，避免 drain 闭包里的函数身份过期
-        // 排队文案不含目标前缀：若仍在目标模式，补前缀
         let prompt = next.text;
         const gm = sess?.goalMode;
         if (gm?.active && gm.goal) {
@@ -409,10 +319,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         runStreamingAssistantRef.current(prompt, next.id, sid);
       }
     } finally {
-      // 下一帧再允许，避免与本次 onComplete 叠压
-      setTimeout(() => {
-        drainingSessionsRef.current.delete(sid);
-      }, 0);
+      mgr.endDrainNextTick(sid);
     }
   };
 
@@ -427,9 +334,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     if (!sid) return;
 
     // 同会话已有流：先 cancel，避免旧 cancel 句柄被覆盖后幽灵 run
-    const prevStream = streamsBySessionRef.current.get(sid);
+    const prevStream = streamManagerRef.current!.get(sid);
     if (prevStream) {
-      streamsBySessionRef.current.delete(sid);
+      streamManagerRef.current!.delete(sid);
       // 刷出旧流 pending 正文，再 cancel
       textBatcherRef.current?.flushNow();
       try {
@@ -500,7 +407,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const cancel = streamAssistantResponseApi(input, {
       onRunMeta: ({ runId }) => {
         localRunId = runId;
-        const entry = streamsBySessionRef.current.get(sid);
+        const entry = streamManagerRef.current!.get(sid);
         if (entry && entry.assistantMsgId === assistantMsgId) {
           entry.runId = runId;
         }
@@ -738,9 +645,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         }
         st.setSessionMessageStatus(sid, userMsgId, 'completed');
         st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
-        const curStream = streamsBySessionRef.current.get(sid);
+        const curStream = streamManagerRef.current!.get(sid);
         if (curStream?.assistantMsgId === assistantMsgId) {
-          streamsBySessionRef.current.delete(sid);
+          streamManagerRef.current!.delete(sid);
         }
         // H3：优先 run snapshot 真实 usage；无样本再字数估算
         void (async () => {
@@ -797,7 +704,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       }
     }, sid, assistantMsgId, streamOptions);
 
-    streamsBySessionRef.current.set(sid, {
+    streamManagerRef.current!.set(sid, {
       cancel,
       userMsgId,
       assistantMsgId,
@@ -811,7 +718,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     // 只停当前会话，其它会话的并行 run 继续
     const sid = activeSessionId;
     if (!sid) return;
-    const cur = streamsBySessionRef.current.get(sid);
+    const cur = streamManagerRef.current!.get(sid);
     if (!cur) return;
     // 停止前刷出批合并中的正文
     textBatcherRef.current?.flushNow();
@@ -844,7 +751,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         }
       }
     });
-    streamsBySessionRef.current.delete(sid);
+    streamManagerRef.current!.delete(sid);
     cur.cancel();
   };
 
@@ -977,24 +884,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         return;
       }
       goalCancelledSessionsRef.current.delete(sessionId);
-      const seedTasks: SessionGoalTask[] = [
-        {
-          id: `goal-task-${Date.now()}`,
-          text: goal,
-          done: false,
-        },
-      ];
-      useLayoutStore.getState().patchSession(sessionId, {
-        goalMode: {
-          active: true,
-          goal,
-          iteration: 0,
-          maxIterations: GOAL_DEFAULT_MAX_ITERATIONS,
-          tasks: seedTasks,
-        },
-      });
+      const gm = createInitialGoalMode(goal, GOAL_DEFAULT_MAX_ITERATIONS);
+      useLayoutStore.getState().patchSession(sessionId, { goalMode: gm });
       displayText = `/goal ${goal}`;
-      modelText = `${buildGoalModePrefix(goal, 0, GOAL_DEFAULT_MAX_ITERATIONS, seedTasks)}${goal}`;
+      modelText = `${buildGoalModePrefix(goal, 0, gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS, gm.tasks)}${goal}`;
       onShowToast('已进入目标模式');
     }
 
