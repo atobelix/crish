@@ -1,8 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { bootstrapTheme } from './api/themeStore'
+import { bootstrapFonts } from './api/fontStore'
 
 bootstrapTheme()
+bootstrapFonts()
 import './index.css'
 import App from './App.tsx'
 

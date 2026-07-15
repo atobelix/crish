@@ -66,6 +66,13 @@ export interface Settings {
   defaultModel?: string;
   defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   theme?: string;
+  /** UI / mono font preferences (mirrored in crish_fonts) */
+  fonts?: {
+    uiFont?: string;
+    monoFont?: string;
+    monoLigatures?: boolean;
+    v?: number;
+  };
   compaction?: CompactionSettings;
   branchSummary?: BranchSummarySettings;
   retry?: RetrySettings;
@@ -137,6 +144,7 @@ const DEFAULT_SETTINGS: Settings = {
   defaultModel: '',
   defaultThinkingLevel: 'medium',
   theme: 'default',
+  fonts: { uiFont: 'auto', monoFont: 'auto', monoLigatures: false, v: 1 },
   hideThinkingBlock: false,
   quietStartup: true,
   enableSkillCommands: true,

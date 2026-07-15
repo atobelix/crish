@@ -96,8 +96,9 @@ function App() {
 
   // Initial load theme & settings sync
   useEffect(() => {
-    // 同步本地主题（settings 异步前就已在 main/html 里 bootstrap）
+    // 同步本地主题/字体（settings 异步前就已在 main/html 里 bootstrap）
     void import('./api/themeStore').then(({ bootstrapTheme }) => bootstrapTheme());
+    void import('./api/fontStore').then(({ bootstrapFonts }) => bootstrapFonts());
     const initApp = async () => {
       try {
         const settings = await clientApi.getSettings();
@@ -108,6 +109,10 @@ function App() {
             const t = normalizeTheme(settings.theme);
             applyTheme(t);
             persistTheme(t);
+          }
+          if (settings.fonts) {
+            const { setFontPreferences, normalizeFontPrefs } = await import('./api/fontStore');
+            await setFontPreferences(normalizeFontPrefs(settings.fonts));
           }
         }
         const provs = await clientApi.getProviders();

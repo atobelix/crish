@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>crish-desktop</title>
-    <!-- 首屏前应用主题，避免闪白；与 themeStore 同源 key -->
+    <!-- 首屏前应用主题/字体栈，避免闪白；与 themeStore / fontStore 同源 key -->
     <script>
       (function () {
         try {
@@ -24,6 +24,22 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'default');
         }
+        /* 字体：仅打标记，完整栈由 fontStore bootstrap 设置（避免内联维护双份栈） */
+        try {
+          var fr = localStorage.getItem('crish_fonts');
+          if (!fr) {
+            var raw2 = localStorage.getItem('crish_settings') || localStorage.getItem('conex_pi_settings');
+            if (raw2) {
+              var s2 = JSON.parse(raw2);
+              if (s2 && s2.fonts) fr = JSON.stringify(s2.fonts);
+            }
+          }
+          if (fr) {
+            var f = JSON.parse(fr);
+            if (f && f.uiFont) document.documentElement.setAttribute('data-ui-font', String(f.uiFont).indexOf('local:') === 0 ? 'local' : f.uiFont);
+            if (f && f.monoFont) document.documentElement.setAttribute('data-mono-font', String(f.monoFont).indexOf('local:') === 0 ? 'local' : f.monoFont);
+          }
+        } catch (e2) {}
       })();
     </script>
   </head>

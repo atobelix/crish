@@ -24,6 +24,7 @@ import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { isDemoMode } from '../api/appMode';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
+import { FontSettingsSection } from './FontSettingsSection';
 import {
   createWorkflow,
   defaultTimezone,
@@ -388,7 +389,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const handleUpdateSettings = async (updates: Partial<Settings>) => {
     if (!settings) return;
     try {
-      const targetScope = updates.theme ? 'global' : scope;
+      const targetScope = updates.theme || updates.fonts ? 'global' : scope;
       const merged = await clientApi.saveSettingsEx(cwd, targetScope, updates);
       setSettings(merged);
       // Silent save — errors still toast
@@ -397,6 +398,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       if (updates.theme) {
         const { setTheme } = await import('../api/themeStore');
         setTheme(updates.theme);
+      }
+      // 字体：立即应用（FontSettingsSection 也会走 fontStore；此处兼容其它入口）
+      if (updates.fonts) {
+        const { setFontPreferences, normalizeFontPrefs } = await import('../api/fontStore');
+        await setFontPreferences(normalizeFontPrefs(updates.fonts));
       }
     } catch (err) {
       onShowToast('更新设置失败：' + String(err));
@@ -2136,7 +2142,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <div style={{ marginBottom: 16 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  主题、间距与阅读相关选项
+                  主题、间距、字体与阅读相关选项
                 </p>
               </div>
 
@@ -2205,6 +2211,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <option value="	">Tab</option>
                   </select>
                 </div>
+
+                <FontSettingsSection
+                  onShowToast={onShowToast}
+                  onPersistSettings={(fonts) =>
+                    handleUpdateSettings({
+                      fonts: {
+                        uiFont: fonts.uiFont,
+                        monoFont: fonts.monoFont,
+                        monoLigatures: fonts.monoLigatures,
+                        v: 1,
+                      },
+                    })
+                  }
+                />
 
                 <label className="settings-toggle-row">
                   <div>
