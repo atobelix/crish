@@ -31,7 +31,7 @@ export interface ChatMessageListProps {
   onProjectChanged: () => void;
   onSetChatInput: (text: string) => void;
   onWithdraw: (msgId: string, text: string) => void;
-  onRegenerate: (userText: string) => void;
+  onRegenerate: (userText: string, assistantMsgId: string) => void;
   onBranch: () => void;
   onShowToast: (message: string) => void;
   approvalBusy: boolean;
@@ -397,7 +397,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                         onShowToast('请等待当前回复完成');
                         return;
                       }
-                      onRegenerate(userText);
+                      onRegenerate(userText, msg.id);
                     }}
                   >
                     <Lucide.RefreshCw size={16} />

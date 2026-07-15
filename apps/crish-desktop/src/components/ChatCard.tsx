@@ -668,15 +668,27 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               setChatInput(text);
               withdrawMessage(wsId, activeSessionId, msgId);
             }}
-            onRegenerate={(userText) => {
-              const userMsgId = `user-msg-${Date.now()}`;
-              useLayoutStore.getState().addMessage(wsId, activeSessionId, {
-                id: userMsgId,
-                sender: 'user',
-                text: userText,
-                timestamp: Date.now(),
-                status: 'processing',
-              });
+            onRegenerate={(userText, assistantMsgId) => {
+              // 从该助手消息截断，保留用户提问，不叠第二轮用户气泡
+              withdrawMessage(wsId, activeSessionId, assistantMsgId);
+              const msgs =
+                useLayoutStore.getState().sessions.find((s) => s.id === activeSessionId)
+                  ?.messages || [];
+              let userMsgId = [...msgs].reverse().find((m) => m.sender === 'user')?.id;
+              if (!userMsgId) {
+                userMsgId = `user-msg-${Date.now()}`;
+                useLayoutStore.getState().addMessage(wsId, activeSessionId, {
+                  id: userMsgId,
+                  sender: 'user',
+                  text: userText,
+                  timestamp: Date.now(),
+                  status: 'processing',
+                });
+              } else {
+                useLayoutStore
+                  .getState()
+                  .setSessionMessageStatus(activeSessionId, userMsgId, 'processing');
+              }
               runStreamingAssistant(userText, userMsgId);
               onShowToast('正在重新生成…');
             }}
