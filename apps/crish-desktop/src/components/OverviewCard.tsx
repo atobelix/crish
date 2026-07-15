@@ -13,6 +13,7 @@ import {
   type GitStatusResult,
 } from '../api/gitApi';
 import { getWorkspacePath } from '../api/projectStore';
+import { toolHumanLabel } from '../api/toolPresentation';
 
 type Props = {
   wsId: string;
@@ -219,21 +220,27 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
 
             {runningTools.length > 0 ? (
               <ul className="overview-list">
-                {runningTools.slice(0, 6).map((t) => (
-                  <li key={t.id}>
-                    <span className="overview-dot live" />
-                    {t.status === 'pending_approval' ? '待确认' : '进行中'} · {t.name || '工具'}
-                  </li>
-                ))}
+                {runningTools.slice(0, 6).map((t) => {
+                  const label = toolHumanLabel(t);
+                  return (
+                    <li key={t.id} title={label}>
+                      <span className="overview-dot live" />
+                      {t.status === 'pending_approval' ? '待确认' : '进行中'} · {label}
+                    </li>
+                  );
+                })}
               </ul>
             ) : completedToolsRecent.length > 0 ? (
               <ul className="overview-list">
-                {completedToolsRecent.map((t) => (
-                  <li key={t.id}>
-                    <span className={`overview-dot ${t.status === 'error' ? '' : 'live'}`} />
-                    {t.status === 'error' ? '失败' : '完成'} · {t.name || '工具'}
-                  </li>
-                ))}
+                {completedToolsRecent.map((t) => {
+                  const label = toolHumanLabel(t);
+                  return (
+                    <li key={t.id} title={label}>
+                      <span className={`overview-dot ${t.status === 'error' ? '' : 'live'}`} />
+                      {t.status === 'error' ? '失败' : '完成'} · {label}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="overview-empty">

@@ -2263,6 +2263,182 @@
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
+
+/* 任务面板（与 overview 同系 token，不另起视觉风格） */
+.tasks-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  background: var(--bg-primary);
+  min-height: 0;
+}
+.tasks-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+.tasks-card-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tasks-card-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.tasks-card-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+.tasks-card-body {
+  padding: 12px 14px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.tasks-plan-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.tasks-plan-banner-t {
+  flex: 1;
+  min-width: 140px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.tasks-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: 24px;
+  line-height: 1.6;
+}
+.tasks-empty-sub {
+  font-size: var(--font-size-xs);
+  line-height: 1.55;
+  max-width: 280px;
+  color: var(--text-tertiary);
+}
+.tasks-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.tasks-progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+.tasks-progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.2s;
+}
+.tasks-section-h {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+.tasks-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tasks-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.tasks-step.is-live {
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+.tasks-step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+}
+.tasks-step-dot.live {
+  background: var(--accent-green, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-green, #22c55e) 22%, transparent);
+}
+.tasks-step-dot.err {
+  background: var(--accent-red, #ef4444);
+}
+.tasks-step-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tasks-step-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tasks-step.is-done .tasks-step-label {
+  color: var(--text-secondary);
+}
+.tasks-step.is-error .tasks-step-label {
+  color: var(--text-primary);
+}
+.tasks-step-meta {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+.tasks-memo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tasks-memo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.tasks-memo-item span.is-done {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
 .git-badge {
   display: inline-flex;
   align-items: center;

@@ -14,6 +14,7 @@ import {
   truncateToolOutput,
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import { openAgentInNewWindow } from './AgentCard';
 import {
   sendToSubagent,
@@ -125,16 +126,67 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           }
         });
       },
-      onToolSuccess: (toolId, output) => {
+      onToolSuccess: (toolId, output, diffs) => {
         patchAsst((m) => {
           const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (tc) { tc.status = 'success'; tc.output = output || '完成'; }
+          if (!tc) return;
+          const displayOut = sanitizeToolDisplayOutput(output || '');
+          const resolved = resolveToolDiffs({
+            name: tc.name || '',
+            args: tc.arguments,
+            output: displayOut,
+            structuredDiffs: diffs,
+          });
+          tc.status = 'success';
+          tc.output = displayOut || output || '完成';
+          if (resolved.length) {
+            tc.diffs = resolved;
+            const push = useLayoutStore.getState().pushDiffFile;
+            if (push) resolved.forEach((d) => push(d));
+          }
         });
       },
       onToolError: (toolId, err) => {
         patchAsst((m) => {
           const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (tc) { tc.status = 'error'; tc.output = err || '失败'; }
+          if (tc) {
+            tc.status = 'error';
+            tc.output = sanitizeToolDisplayOutput(err || '') || err || '失败';
+          }
+        });
+      },
+      onToolPendingApproval: (toolId, name, args, explanation) => {
+        patchAsst((m) => {
+          if (!m.toolCalls) m.toolCalls = [];
+          if (!m.blocks) m.blocks = [];
+          const existing = m.toolCalls.find((t) => t.id === toolId);
+          if (existing) {
+            existing.status = 'pending_approval';
+            existing.arguments = args || existing.arguments;
+            if (explanation) existing.explanation = explanation;
+          } else {
+            m.toolCalls.push({
+              id: toolId,
+              name,
+              arguments: args,
+              explanation,
+              status: 'pending_approval',
+            });
+            m.blocks.push({ type: 'tool_call', id: toolId });
+          }
+        });
+      },
+      onApprovalResolved: (toolId, decision) => {
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (!tc) return;
+          if (decision === 'allow') {
+            tc.status = 'running';
+            tc.output = '执行中…';
+          } else {
+            tc.status = 'error';
+            tc.output = '未获批准';
+          }
         });
       },
       onComplete: () => {

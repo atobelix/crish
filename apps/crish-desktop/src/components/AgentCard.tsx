@@ -14,6 +14,7 @@ import {
   truncateToolOutput,
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import {
   getSubagentStatus,
   sendToSubagent,
@@ -225,12 +226,23 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             }
           });
         },
-        onToolSuccess: (toolId, output) => {
+        onToolSuccess: (toolId, output, diffs) => {
           patchAsst((m) => {
             const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (tc) {
-              tc.status = 'success';
-              tc.output = output || '完成';
+            if (!tc) return;
+            const displayOut = sanitizeToolDisplayOutput(output || '');
+            const resolved = resolveToolDiffs({
+              name: tc.name || '',
+              args: tc.arguments,
+              output: displayOut,
+              structuredDiffs: diffs,
+            });
+            tc.status = 'success';
+            tc.output = displayOut || output || '完成';
+            if (resolved.length) {
+              tc.diffs = resolved;
+              const push = useLayoutStore.getState().pushDiffFile;
+              if (push) resolved.forEach((d) => push(d));
             }
           });
         },
@@ -239,7 +251,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             const tc = m.toolCalls?.find((t) => t.id === toolId);
             if (tc) {
               tc.status = 'error';
-              tc.output = error || '失败';
+              tc.output = sanitizeToolDisplayOutput(error || '') || error || '失败';
             }
           });
         },

@@ -149,19 +149,32 @@ export function parseUnifiedDiffs(text: string): FileDiff[] {
   return files;
 }
 
-/** 从工具参数字符串里尽量抽出路径 */
-export function pathFromToolArgs(args: string): string | null {
+/** 解析工具 arguments（支持 parameters/input 嵌套） */
+function parseToolArgsObject(args: string): Record<string, unknown> | null {
   if (!args?.trim()) return null;
   try {
     const parsed = JSON.parse(args);
-    if (parsed && typeof parsed === 'object') {
-      for (const key of ['path', 'filePath', 'file', 'target_file', 'filename']) {
-        const v = (parsed as Record<string, unknown>)[key];
-        if (typeof v === 'string' && v.trim()) return v.trim();
-      }
+    if (!parsed || typeof parsed !== 'object') return null;
+    const o = parsed as Record<string, unknown>;
+    const inner = o.parameters ?? o.input;
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+      return { ...o, ...(inner as Record<string, unknown>) };
     }
+    return o;
   } catch {
-    /* 非 JSON */
+    return null;
+  }
+}
+
+/** 从工具参数字符串里尽量抽出路径 */
+export function pathFromToolArgs(args: string): string | null {
+  if (!args?.trim()) return null;
+  const parsed = parseToolArgsObject(args);
+  if (parsed) {
+    for (const key of ['path', 'filePath', 'file', 'target_file', 'filename']) {
+      const v = parsed[key];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
   }
   // path=... 或纯路径
   const m = args.match(/(?:^|[\s,"'])([A-Za-z]:[\\/][^\s"']+|(?:\.\/|\/)?[\w./\\-]+\.\w{1,8})/);
@@ -172,8 +185,62 @@ export function pathFromToolArgs(args: string): string | null {
 }
 
 /**
- * 综合结构化 diffs、统一 diff 文本、编辑工具参数，得到最佳 FileDiff 列表。
+ * 从编辑类工具参数合成 FileDiff（old_string/new_string、content 全量写入等）。
+ * 引擎未回结构化 diffs 时，保证「改动总览」仍能出现。
  */
+export function fileDiffFromEditArgs(args: string): FileDiff | null {
+  const path = pathFromToolArgs(args);
+  if (!path) return null;
+  const parsed = parseToolArgsObject(args);
+  if (!parsed) return null;
+
+  const oldStr =
+    (typeof parsed.old_string === 'string' && parsed.old_string) ||
+    (typeof parsed.oldString === 'string' && parsed.oldString) ||
+    (typeof parsed.old_str === 'string' && parsed.old_str) ||
+    '';
+  const newStr =
+    (typeof parsed.new_string === 'string' && parsed.new_string) ||
+    (typeof parsed.newString === 'string' && parsed.newString) ||
+    (typeof parsed.new_str === 'string' && parsed.new_str) ||
+    '';
+  const content =
+    (typeof parsed.content === 'string' && parsed.content) ||
+    (typeof parsed.contents === 'string' && parsed.contents) ||
+    (typeof parsed.text === 'string' && parsed.text) ||
+    '';
+
+  // search_replace / str_replace 风格
+  if (oldStr || newStr) {
+    const delLines = oldStr ? oldStr.replace(/\r\n/g, '\n').split('\n') : [];
+    const addLines = newStr ? newStr.replace(/\r\n/g, '\n').split('\n') : [];
+    const changes: DiffChange[] = [
+      ...delLines.slice(0, 200).map((c) => ({ type: 'deletion' as const, content: c })),
+      ...addLines.slice(0, 200).map((c) => ({ type: 'addition' as const, content: c })),
+    ];
+    if (!changes.length) return null;
+    return {
+      filePath: path,
+      additions: addLines.length,
+      deletions: delLines.length,
+      changes: changes.slice(0, 400),
+    };
+  }
+
+  // write / create 全量内容
+  if (content) {
+    const lines = content.replace(/\r\n/g, '\n').split('\n');
+    return {
+      filePath: path,
+      additions: lines.length,
+      deletions: 0,
+      changes: lines.slice(0, 400).map((c) => ({ type: 'addition' as const, content: c })),
+    };
+  }
+
+  return null;
+}
+
 /**
  * 只对「真·编辑类工具」或带 git/unified diff 头的输出解析 diff。
  * 绝不可把 dir / Get-ChildItem 的 d----- 行当成 diff（会误开变更面板）。
@@ -197,12 +264,24 @@ export function resolveToolDiffs(opts: {
     if (fromText.length) return fromText;
   }
 
-  // 编辑工具且无 unified diff：用简短预览，勿把整段 shell 日志当地图
+  // 编辑工具：优先从参数还原 diff（改动总览/变更面板有内容）
   if (isEditToolName(opts.name) && !isShellToolName(opts.name)) {
+    const fromArgs = fileDiffFromEditArgs(opts.args || '');
+    if (fromArgs) return [fromArgs];
+
     const path = pathFromToolArgs(opts.args || '') || '文件';
     const preview = sanitizeToolDisplayOutput(out).trim();
-    if (!preview) return [];
-    // 只有像「写入成功」的短结果才合成预览行，避免 dir 列表
+    // 成功但无内容时仍记一笔路径，便于总览「改了哪些文件」
+    if (!preview || /^(完成|OK|ok|success|写入成功|已写入|已保存)$/i.test(preview)) {
+      return [
+        {
+          filePath: path,
+          additions: 0,
+          deletions: 0,
+          changes: [{ type: 'normal', content: preview || '文件已更新' }],
+        },
+      ];
+    }
     if (preview.split('\n').length > 40) return [];
     const lines = preview
       .split('\n')

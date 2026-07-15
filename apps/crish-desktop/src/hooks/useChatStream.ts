@@ -8,7 +8,6 @@ import { useLayoutStore } from '../store/layoutStore';
 import type { SessionMessage } from '../store/layoutStore';
 import { streamAssistantResponseApi } from '../api/chatApi';
 import {
-  isEditToolName,
   isShellToolName,
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
@@ -287,17 +286,14 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
             ?.messages?.find((m) => m.id === assistantMsgId)
             ?.toolCalls?.find((t) => t.id === toolId)?.arguments || '';
 
-        // 展示用清洗结果；shell 查看类绝不解析成 diff
+        // 展示用清洗；diff：有引擎结构化结果就保留，否则仅 edit / unified diff 才解析
         const displayOut = sanitizeToolDisplayOutput(output || '');
-        const resolvedDiffs =
-          isEditToolName(name) && !isShellToolName(name)
-            ? resolveToolDiffs({
-                name,
-                args,
-                output: displayOut,
-                structuredDiffs: diffs,
-              })
-            : [];
+        const resolvedDiffs = resolveToolDiffs({
+          name,
+          args,
+          output: displayOut,
+          structuredDiffs: diffs,
+        });
 
         store.updateMessageToolCall(sid, assistantMsgId, toolId, {
           status: 'success',
@@ -310,12 +306,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           displayOut.split('\n').slice(0, 80).forEach((line) => addTerminalLine(line, sid));
         }
 
-        // 仅真实编辑 diff 才推右侧变更；不自动抢焦点展开
-        if (resolvedDiffs.length > 0 && isEditToolName(name)) {
+        // 有可展示 diff 才推右侧变更；不自动抢焦点展开
+        if (resolvedDiffs.length > 0) {
           const push = useLayoutStore.getState().pushDiffFile;
           if (push) resolvedDiffs.forEach((d) => push(d));
           else setActiveDiffSource(resolvedDiffs[0]);
-          // 不自动 openSidePanel('diff')，避免「看了下目录就弹变更」
         }
       },
       onToolError: (toolId, error) => {
