@@ -49,7 +49,7 @@ export interface SessionActions {
   ) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   renameSession: (sessionId: string, title: string) => void;
-  createSession: (opts?: { title?: string; folder?: string }) => string;
+  createSession: (opts?: { title?: string; folder?: string; id?: string }) => string;
   pinSession: (sessionId: string) => void;
   unpinSession: (sessionId: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -409,8 +409,18 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     createSession: (opts) => {
-      const id = `sess-${Date.now()}`;
+      const id =
+        (opts?.id && String(opts.id).trim()) || `sess-${Date.now()}`;
       set((state) => {
+        // 已存在则仅激活（定时 workflow 复用引擎 sessionId）
+        const existing = state.sessions.find((s) => s.id === id);
+        if (existing) {
+          state.activeSessionId = id;
+          if (opts?.title && existing.title === '新会话') {
+            existing.title = opts.title;
+          }
+          return;
+        }
         const projectId = getActiveProjectId();
         const defaultFolder = isDemoMode()
           ? '常规会话'

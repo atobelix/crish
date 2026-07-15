@@ -162,7 +162,7 @@ export async function deleteWorkflow(
 
 export async function triggerWorkflow(
   workflowId: string,
-): Promise<{ ok: boolean; error?: string; runId?: string }> {
+): Promise<{ ok: boolean; error?: string; runId?: string; sessionId?: string }> {
   const client = await ensureClient();
   if (!client) return { ok: false, error: 'not_connected' };
   try {
@@ -171,17 +171,90 @@ export async function triggerWorkflow(
       'workflow-triggered',
       15_000,
     )) as Record<string, unknown>;
+    const accepted = (res as { accepted?: Record<string, unknown> }).accepted;
+    const run =
+      (res as { run?: Record<string, unknown> }).run ||
+      (accepted && typeof accepted === 'object' ? (accepted as { run?: Record<string, unknown> }).run : undefined);
     const runId =
       typeof res.runId === 'string'
         ? res.runId
-        : typeof (res as { accepted?: { runId?: string } }).accepted?.runId === 'string'
-          ? (res as { accepted: { runId: string } }).accepted.runId
+        : typeof accepted?.runId === 'string'
+          ? (accepted.runId as string)
+          : typeof run?.runId === 'string'
+            ? (run.runId as string)
+            : undefined;
+    const sessionId =
+      typeof run?.sessionId === 'string'
+        ? (run.sessionId as string)
+        : typeof accepted?.sessionId === 'string'
+          ? (accepted.sessionId as string)
           : undefined;
-    return { ok: true, runId };
+    return { ok: true, runId, sessionId };
   } catch (e) {
     logInternalError('triggerWorkflow', e);
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** 引擎 workflow 运行历史 */
+export type WorkflowRunEntry = {
+  workflowId: string;
+  runId: string;
+  sessionId?: string;
+  scheduledFor?: string;
+  startedAt?: string;
+  status?: string;
+  error?: string;
+};
+
+export async function listWorkflowRuns(
+  workflowId?: string,
+): Promise<WorkflowRunEntry[]> {
+  const client = await ensureClient();
+  if (!client) return [];
+  try {
+    const res = (await client.request(
+      {
+        type: 'list-workflow-runs',
+        ...(workflowId ? { workflowId } : {}),
+      },
+      'workflow-runs-listed',
+      10_000,
+    )) as Record<string, unknown>;
+    const list = res.runs;
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((r) => {
+        if (!r || typeof r !== 'object') return null;
+        const o = r as Record<string, unknown>;
+        const id = typeof o.runId === 'string' ? o.runId : typeof o.id === 'string' ? o.id : '';
+        const wf =
+          typeof o.workflowId === 'string' ? o.workflowId : workflowId || '';
+        if (!id) return null;
+        return {
+          workflowId: wf,
+          runId: id,
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : undefined,
+          scheduledFor: typeof o.scheduledFor === 'string' ? o.scheduledFor : undefined,
+          startedAt: typeof o.startedAt === 'string' ? o.startedAt : undefined,
+          status: typeof o.status === 'string' ? o.status : undefined,
+          error: typeof o.error === 'string' ? o.error : undefined,
+        } satisfies WorkflowRunEntry;
+      })
+      .filter(Boolean) as WorkflowRunEntry[];
+  } catch (e) {
+    logInternalError('listWorkflowRuns', e);
+    return [];
+  }
+}
+
+export function workflowRunStatusLabel(status?: string): string {
+  const s = (status || '').toLowerCase();
+  if (s === 'running' || s === 'accepted' || s === 'pending') return '运行中';
+  if (s === 'completed' || s === 'success' || s === 'succeeded') return '已完成';
+  if (s === 'failed' || s === 'error') return '失败';
+  if (s === 'cancelled' || s === 'canceled') return '已取消';
+  return status || '未知';
 }
 
 export function defaultTimezone(): string {

@@ -8,13 +8,17 @@ import {
   createWorkflow,
   defaultTimezone,
   deleteWorkflow,
+  listWorkflowRuns,
   listWorkflows,
   scheduleLabel,
   triggerWorkflow,
   updateWorkflow,
+  workflowRunStatusLabel,
   type WorkflowDefinition,
+  type WorkflowRunEntry,
   type WorkflowSchedule,
 } from '../api/workflowApi';
+import { useLayoutStore } from '../store/layoutStore';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -23,6 +27,7 @@ type Props = {
 
 export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat }) => {
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [runs, setRuns] = useState<WorkflowRunEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,12 +44,41 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
   const refresh = async () => {
     setLoading(true);
     try {
-      setWorkflows(await listWorkflows());
+      const [wfs, rs] = await Promise.all([listWorkflows(), listWorkflowRuns()]);
+      setWorkflows(wfs);
+      // 最近优先
+      setRuns(
+        [...rs].sort((a, b) => {
+          const ta = Date.parse(a.startedAt || a.scheduledFor || '') || 0;
+          const tb = Date.parse(b.startedAt || b.scheduledFor || '') || 0;
+          return tb - ta;
+        }),
+      );
     } catch (e) {
       setError(networkUserMessage(e) || '无法加载定时任务');
     } finally {
       setLoading(false);
     }
+  };
+
+  const openRunSession = (run: WorkflowRunEntry) => {
+    if (!run.sessionId) {
+      onShowToast('该次运行暂无关联会话');
+      return;
+    }
+    const st = useLayoutStore.getState();
+    // 若本地尚无此会话，先建占位，便于从侧栏看到
+    const exists = st.sessions.some((s) => s.id === run.sessionId);
+    if (!exists) {
+      st.createSession({
+        id: run.sessionId,
+        title: `定时 · ${workflows.find((w) => w.id === run.workflowId)?.name || '任务'}`,
+      });
+    }
+    st.setActiveSessionId(run.sessionId);
+    st.setActiveAgentId(null);
+    onBackToChat();
+    onShowToast('已打开该次运行对应会话');
   };
 
   useEffect(() => {
@@ -222,9 +256,19 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
                   onClick={() => {
                     setBusy(true);
                     void triggerWorkflow(w.id)
-                      .then(() => {
-                        onShowToast('已触发');
-                        setOk('已触发运行');
+                      .then((res) => {
+                        onShowToast(res.ok ? '已触发' : res.error || '触发失败');
+                        setOk(res.ok ? `已触发运行${res.runId ? ` · ${res.runId.slice(0, 8)}` : ''}` : '');
+                        if (res.ok && res.sessionId) {
+                          const st = useLayoutStore.getState();
+                          if (!st.sessions.some((s) => s.id === res.sessionId)) {
+                            st.createSession({
+                              id: res.sessionId,
+                              title: `定时 · ${w.name}`,
+                            });
+                          }
+                        }
+                        return refresh();
                       })
                       .catch((e) => setError(networkUserMessage(e) || '触发失败'))
                       .finally(() => setBusy(false));
@@ -270,6 +314,48 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
           ))}
         </ul>
       )}
+
+      {runs.length > 0 ? (
+        <div className="sched-runs">
+          <div className="sched-runs-h">最近运行</div>
+          <ul className="sched-list sched-runs-list">
+            {runs.slice(0, 12).map((r) => {
+              const wfName = workflows.find((w) => w.id === r.workflowId)?.name || r.workflowId;
+              const when = r.startedAt || r.scheduledFor || '';
+              const whenLabel = when
+                ? new Date(when).toLocaleString(undefined, {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : '—';
+              return (
+                <li key={`${r.workflowId}-${r.runId}`} className="sched-item sched-run-item">
+                  <div className="sched-item-main">
+                    <div className="sched-item-name">{wfName}</div>
+                    <div className="sched-item-meta">
+                      {workflowRunStatusLabel(r.status)} · {whenLabel}
+                      {r.error ? ` · ${r.error.slice(0, 40)}` : ''}
+                    </div>
+                  </div>
+                  <div className="sched-item-actions">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      title={r.sessionId ? '打开会话' : '无关联会话'}
+                      disabled={!r.sessionId}
+                      onClick={() => openRunSession(r)}
+                    >
+                      <Lucide.MessageSquare size={16} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 };

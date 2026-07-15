@@ -18,6 +18,7 @@ import {
   openBackgroundTaskInTerminal,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
+import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 
 interface RuntimePanelProps {
   wsId: string;
@@ -166,12 +167,20 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const handleApprovalClick = (a: PendingApprovalInfo) => {
     const toolCallId = a.toolCallId;
     let found = toolCallId
-      ? sessions.find((s) =>
-          (s.messages || []).some((m) =>
-            (m.toolCalls || []).some(
-              (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+      ? sessions.find(
+          (s) =>
+            (s.messages || []).some((m) =>
+              (m.toolCalls || []).some(
+                (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+              ),
+            ) ||
+            (s.agents || []).some((ag) =>
+              (ag.messages || []).some((m) =>
+                (m.toolCalls || []).some(
+                  (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+                ),
+              ),
             ),
-          ),
         )
       : undefined;
     if (!found && a.runId) {
@@ -184,6 +193,62 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     } else {
       onShowToast('请在当前对话中确认');
     }
+  };
+
+  const markLocalTool = (
+    toolCallId: string | undefined,
+    status: 'running' | 'error',
+    output: string,
+  ) => {
+    if (!toolCallId) return;
+    useLayoutStore.setState((state) => {
+      for (const s of state.sessions) {
+        for (const m of s.messages || []) {
+          const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+          if (tc) {
+            tc.status = status;
+            tc.output = output;
+          }
+        }
+        for (const ag of s.agents || []) {
+          for (const m of ag.messages || []) {
+            const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+            if (tc) {
+              tc.status = status;
+              tc.output = output;
+            }
+          }
+        }
+      }
+    });
+  };
+
+  const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const id = a.toolCallId;
+    if (!id) {
+      onShowToast('缺少工具 id，无法批准');
+      return;
+    }
+    markLocalTool(id, 'running', '执行中…');
+    void daemonApproveTool(id).then(() => {
+      onShowToast('已允许');
+      setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+    });
+  };
+
+  const handleApprovalDeny = (a: PendingApprovalInfo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const id = a.toolCallId;
+    if (!id) {
+      onShowToast('缺少工具 id，无法拒绝');
+      return;
+    }
+    markLocalTool(id, 'error', '已拒绝');
+    void daemonDenyTool(id).then(() => {
+      onShowToast('已拒绝');
+      setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+    });
   };
 
   const modelId = getActiveModelId() || 'unknown';
@@ -394,7 +459,24 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>
                   </div>
                 </div>
-                <Lucide.ChevronRight size={16} className="rt-row-chevron" />
+                <div className="rt-row-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-primary ui-btn-sm"
+                    title="允许"
+                    onClick={(e) => handleApprovalAllow(a, e)}
+                  >
+                    允许
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    title="拒绝"
+                    onClick={(e) => handleApprovalDeny(a, e)}
+                  >
+                    拒绝
+                  </button>
+                </div>
               </div>
             ))}
           </div>
