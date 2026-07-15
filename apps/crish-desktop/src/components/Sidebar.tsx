@@ -385,7 +385,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     handleContextMenu(e as unknown as React.MouseEvent, s.id);
                   }}
                 >
-                  <Lucide.MoreHorizontal size={13} />
+                  <Lucide.MoreHorizontal size={16} />
                 </button>
               </>
             )}
@@ -428,7 +428,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     });
                   }}
                 >
-                  <Lucide.Bot size={11} className="session-agent-icon" />
+                  <Lucide.Bot size={14} className="session-agent-icon" />
                   <span className="session-agent-text">
                     {ag.description || ag.mode || 'agent'}
                   </span>
@@ -460,7 +460,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Primary actions — soft CTA, not Claude-black brand stack */}
         <div className="sidebar-top-actions">
           <button type="button" className="sb-new-btn" onClick={handleNewSession}>
-            <Lucide.Plus size={15} strokeWidth={2.25} />
+            <Lucide.Plus size={16} strokeWidth={2.25} />
             <span>新对话</span>
           </button>
           <button
@@ -468,7 +468,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`sb-nav-link ${activeNav === 'scheduled' ? 'active' : ''}`}
             onClick={handleOpenScheduled}
           >
-            <Lucide.Clock size={15} />
+            <Lucide.Clock size={16} />
             <span>定时任务</span>
           </button>
         </div>
@@ -483,7 +483,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
             >
               <span>置顶</span>
-              <Lucide.ChevronDown size={12} className={pinnedCollapsed ? 'chev-collapsed' : ''} />
+              <Lucide.ChevronDown size={14} className={pinnedCollapsed ? 'chev-collapsed' : ''} />
             </button>
             {!pinnedCollapsed && (
               <div
@@ -509,7 +509,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <span>项目</span>
               <Lucide.ChevronDown
-                size={12}
+                size={14}
                 className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
               />
             </button>
@@ -532,7 +532,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
                         }
                       >
-                        <Lucide.Folder size={13} />
+                        <Lucide.Folder size={16} />
                         <span className="folder-name">{p.name}</span>
                         <span className="folder-count">{sess.length}</span>
                         <span
@@ -542,7 +542,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }));
                           }}
                         >
-                          <Lucide.ChevronDown size={12} className={open ? '' : 'chev-collapsed'} />
+                          <Lucide.ChevronDown size={14} className={open ? '' : 'chev-collapsed'} />
                         </span>
                       </button>
                       {open && (
@@ -569,10 +569,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => setGeneralCollapsed(!generalCollapsed)}
               >
                 <span>对话</span>
-                <Lucide.ChevronDown size={12} className={generalCollapsed ? 'chev-collapsed' : ''} />
+                <Lucide.ChevronDown size={14} className={generalCollapsed ? 'chev-collapsed' : ''} />
               </button>
               <button type="button" className="sort-btn" title="排序" onClick={handleSortBtnClick}>
-                <Lucide.ArrowUpDown size={12} />
+                <Lucide.ArrowUpDown size={14} />
               </button>
             </div>
             {!generalCollapsed && (
@@ -610,7 +610,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="设置"
           onClick={() => handleOpenSettings()}
         >
-          <Lucide.Settings size={15} />
+          <Lucide.Settings size={16} />
           <span>设置</span>
         </button>
       </div>
@@ -637,7 +637,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setAgentMenu(null);
             }}
           >
-            <Lucide.MessageSquare size={13} />
+            <Lucide.MessageSquare size={16} />
             <span>在主区打开</span>
           </button>
           <button
@@ -654,7 +654,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setAgentMenu(null);
             }}
           >
-            <Lucide.PanelRight size={13} />
+            <Lucide.PanelRight size={16} />
             <span>在右侧打开</span>
           </button>
           <button
@@ -672,7 +672,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setAgentMenu(null);
             }}
           >
-            <Lucide.ExternalLink size={13} />
+            <Lucide.ExternalLink size={16} />
             <span>新窗口打开</span>
           </button>
           <div className="context-menu-divider" />
@@ -692,7 +692,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setAgentMenu(null);
             }}
           >
-            <Lucide.Copy size={13} />
+            <Lucide.Copy size={16} />
             <span>复制摘要</span>
           </button>
         </div>
@@ -705,31 +705,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{ left: contextMenu.x, top: contextMenu.y, position: 'fixed' }}
         >
           <button type="button" className="context-menu-item" onClick={() => handleAction('open-current')}>
-            <Lucide.MessageSquare size={13} />
+            <Lucide.MessageSquare size={16} />
             <span>打开</span>
           </button>
           <button type="button" className="context-menu-item" onClick={() => handleAction('open-split')}>
-            <Lucide.Columns size={13} />
+            <Lucide.Columns size={16} />
             <span>拆分打开</span>
           </button>
           <div className="context-menu-divider" />
           {sessions.find((s) => s.id === contextMenu.sessionId)?.isPinned ? (
             <button type="button" className="context-menu-item" onClick={() => handleAction('unpin')}>
-              <Lucide.PinOff size={13} />
+              <Lucide.PinOff size={16} />
               <span>取消固定</span>
             </button>
           ) : (
             <button type="button" className="context-menu-item" onClick={() => handleAction('pin')}>
-              <Lucide.Pin size={13} />
+              <Lucide.Pin size={16} />
               <span>固定</span>
             </button>
           )}
           <button type="button" className="context-menu-item" onClick={() => handleAction('archive')}>
-            <Lucide.Archive size={13} />
+            <Lucide.Archive size={16} />
             <span>归档</span>
           </button>
           <button type="button" className="context-menu-item" onClick={() => handleAction('branch')}>
-            <Lucide.GitBranch size={13} />
+            <Lucide.GitBranch size={16} />
             <span>分支</span>
           </button>
         </div>

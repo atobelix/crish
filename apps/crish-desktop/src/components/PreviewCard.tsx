@@ -122,7 +122,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
           disabled={stackIdx <= 0}
           onClick={goBack}
         >
-          <Lucide.ChevronLeft size={15} />
+          <Lucide.ChevronLeft size={16} />
         </button>
         <button
           type="button"
@@ -131,10 +131,10 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
           disabled={stackIdx >= stack.length - 1}
           onClick={goForward}
         >
-          <Lucide.ChevronRight size={15} />
+          <Lucide.ChevronRight size={16} />
         </button>
         <button type="button" className="preview-nav-btn" title="刷新" onClick={reload}>
-          <Lucide.RotateCw size={13} />
+          <Lucide.RotateCw size={16} />
         </button>
         <form
           className="preview-url-form"
@@ -143,7 +143,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             navigate(urlInput || 'about:blank');
           }}
         >
-          <Lucide.Globe size={13} className="preview-url-ico" />
+          <Lucide.Globe size={16} className="preview-url-ico" />
           <input
             className="preview-url-input"
             value={urlInput}
@@ -162,7 +162,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             onShowToast(on ? '已加入书签' : '已移除书签');
           }}
         >
-          <Lucide.Star size={13} fill={bookmarked ? 'currentColor' : 'none'} />
+          <Lucide.Star size={16} fill={bookmarked ? 'currentColor' : 'none'} />
         </button>
         <button
           type="button"
@@ -170,7 +170,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
           title="历史"
           onClick={() => setShowHist((v) => !v)}
         >
-          <Lucide.History size={13} />
+          <Lucide.History size={16} />
         </button>
         <button
           type="button"
@@ -184,7 +184,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             }
           }}
         >
-          <Lucide.ExternalLink size={13} />
+          <Lucide.ExternalLink size={16} />
         </button>
       </div>
 

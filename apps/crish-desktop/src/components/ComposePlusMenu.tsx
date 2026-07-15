@@ -96,7 +96,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
           }}
         >
           <span className="cplus-item-icon">
-            <Lucide.Paperclip size={15} strokeWidth={1.75} />
+            <Lucide.Paperclip size={16} strokeWidth={1.75} />
           </span>
           <span className="cplus-item-text">
             <span className="cplus-item-title">添加文件</span>
@@ -111,13 +111,13 @@ export const ComposePlusMenu: React.FC<Props> = ({
           onClick={() => setPanel(panel === 'collaborator' ? 'root' : 'collaborator')}
         >
           <span className="cplus-item-icon">
-            <Lucide.Users size={15} strokeWidth={1.75} />
+            <Lucide.Users size={16} strokeWidth={1.75} />
           </span>
           <span className="cplus-item-text">
             <span className="cplus-item-title">协作者</span>
             <span className="cplus-item-desc">并行子代理</span>
           </span>
-          <Lucide.ChevronRight size={14} className="cplus-item-chev" />
+          <Lucide.ChevronRight size={16} className="cplus-item-chev" />
         </button>
 
         <button
@@ -127,13 +127,13 @@ export const ComposePlusMenu: React.FC<Props> = ({
           onClick={() => setPanel(panel === 'permission' ? 'root' : 'permission')}
         >
           <span className="cplus-item-icon">
-            <Lucide.Shield size={15} strokeWidth={1.75} />
+            <Lucide.Shield size={16} strokeWidth={1.75} />
           </span>
           <span className="cplus-item-text">
             <span className="cplus-item-title">权限模式</span>
             <span className="cplus-item-desc">{permMeta.shortLabel}</span>
           </span>
-          <Lucide.ChevronRight size={14} className="cplus-item-chev" />
+          <Lucide.ChevronRight size={16} className="cplus-item-chev" />
         </button>
       </div>
 
@@ -156,13 +156,13 @@ export const ComposePlusMenu: React.FC<Props> = ({
                   }}
                 >
                   <span className="cplus-fly-icon">
-                    <Lucide.CircleDot size={14} strokeWidth={1.75} />
+                    <Lucide.CircleDot size={16} strokeWidth={1.75} />
                   </span>
                   <span className="cplus-fly-text">
                     <span className="cplus-fly-title">{m.label}</span>
                     <span className="cplus-fly-desc">{m.description}</span>
                   </span>
-                  {active ? <Lucide.Check size={14} className="cplus-fly-check" /> : null}
+                  {active ? <Lucide.Check size={16} className="cplus-fly-check" /> : null}
                 </button>
               );
             })}
@@ -188,18 +188,18 @@ export const ComposePlusMenu: React.FC<Props> = ({
                 >
                   <span className="cplus-fly-icon">
                     {m.id === 'research' ? (
-                      <Lucide.Search size={14} strokeWidth={1.75} />
+                      <Lucide.Search size={16} strokeWidth={1.75} />
                     ) : m.id === 'implement' ? (
-                      <Lucide.Code2 size={14} strokeWidth={1.75} />
+                      <Lucide.Code2 size={16} strokeWidth={1.75} />
                     ) : (
-                      <Lucide.CheckCircle2 size={14} strokeWidth={1.75} />
+                      <Lucide.CheckCircle2 size={16} strokeWidth={1.75} />
                     )}
                   </span>
                   <span className="cplus-fly-text">
                     <span className="cplus-fly-title">{m.label}</span>
                     <span className="cplus-fly-desc">{m.hint}</span>
                   </span>
-                  {active ? <Lucide.Check size={14} className="cplus-fly-check" /> : null}
+                  {active ? <Lucide.Check size={16} className="cplus-fly-check" /> : null}
                 </button>
               );
             })}

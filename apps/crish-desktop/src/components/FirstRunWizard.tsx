@@ -219,7 +219,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                       }
                     }}
                   >
-                    <Lucide.FolderInput size={15} />
+                    <Lucide.FolderInput size={16} />
                     选择文件夹
                   </button>
                   <label className="first-run-label">或输入路径</label>

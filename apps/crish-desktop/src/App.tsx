@@ -315,14 +315,14 @@ function App() {
 
   const renderCardIcon = (id: string) => {
     switch (id) {
-      case 'chat': return <Lucide.MessageSquare size={13} />;
-      case 'plan': return <Lucide.Scroll size={13} />;
-      case 'files': return <Lucide.FolderTree size={13} />;
-      case 'preview': return <Lucide.Globe size={13} />;
-      case 'diff': return <Lucide.GitBranch size={13} />;
-      case 'tasks': return <Lucide.CheckSquare size={13} />;
-      case 'terminal': return <Lucide.Terminal size={13} />;
-      default: return <Lucide.Layout size={13} />;
+      case 'chat': return <Lucide.MessageSquare size={16} />;
+      case 'plan': return <Lucide.Scroll size={16} />;
+      case 'files': return <Lucide.FolderTree size={16} />;
+      case 'preview': return <Lucide.Globe size={16} />;
+      case 'diff': return <Lucide.GitBranch size={16} />;
+      case 'tasks': return <Lucide.CheckSquare size={16} />;
+      case 'terminal': return <Lucide.Terminal size={16} />;
+      default: return <Lucide.Layout size={16} />;
     }
   };
 
@@ -373,11 +373,11 @@ function App() {
             title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           >
-            <Lucide.PanelLeft size={15} />
+            <Lucide.PanelLeft size={16} />
           </button>
 
           <div className="search-bar no-drag" data-tauri-drag-region="false">
-            <Lucide.Search className="search-icon" size={13} />
+            <Lucide.Search className="search-icon" size={16} />
             <input
               type="text"
               placeholder="搜索会话…"
@@ -395,7 +395,7 @@ function App() {
             onClick={() => setShowCheatsheet(true)}
             title="快捷键与帮助"
           >
-            <Lucide.HelpCircle size={15} />
+            <Lucide.HelpCircle size={16} />
           </button>
 
           <button
@@ -404,18 +404,18 @@ function App() {
             title="运行状态"
             onClick={() => setRuntimeFloatOpen((v) => !v)}
           >
-            <Lucide.Activity size={15} />
+            <Lucide.Activity size={16} />
           </button>
 
           <div className="window-controls">
             <button type="button" className="win-btn" title="最小化" onClick={() => void winCtl('minimize')}>
-              <Lucide.Minus size={14} />
+              <Lucide.Minus size={16} />
             </button>
             <button type="button" className="win-btn" title="最大化" onClick={() => void winCtl('toggleMaximize')}>
-              <Lucide.Square size={11} />
+              <Lucide.Square size={14} />
             </button>
             <button type="button" className="win-btn close" title="关闭" onClick={() => void winCtl('close')}>
-              <Lucide.X size={14} />
+              <Lucide.X size={16} />
             </button>
           </div>
         </div>
@@ -433,14 +433,14 @@ function App() {
           }}
         >
           <div className="dropdown-header">
-            <Lucide.LayoutGrid size={13} />
+            <Lucide.LayoutGrid size={16} />
             <span>面板</span>
             <button
               type="button"
               className="dropdown-close-btn"
               onClick={() => setPanelsDropdownCoords(null)}
             >
-              <Lucide.X size={12} />
+              <Lucide.X size={14} />
             </button>
           </div>
 
@@ -479,7 +479,7 @@ function App() {
               onClick={() => setTabModeEnabled(!tabModeEnabled)}
             >
               <span className={`custom-chk ${tabModeEnabled ? 'checked' : ''}`} />
-              <Lucide.Layers size={13} style={{ color: 'var(--text-tertiary)' }} />
+              <Lucide.Layers size={16} style={{ color: 'var(--text-tertiary)' }} />
               <span>优先合并为标签页</span>
             </label>
           </div>

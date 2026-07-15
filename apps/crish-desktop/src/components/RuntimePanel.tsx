@@ -304,7 +304,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">已运行 {wk.elapsedSeconds} 秒</span>
                   </div>
                 </div>
-                {wk.sessionId ? <Lucide.ChevronRight size={13} className="rt-row-chevron" /> : null}
+                {wk.sessionId ? <Lucide.ChevronRight size={16} className="rt-row-chevron" /> : null}
               </div>
             ))}
           </div>
@@ -354,7 +354,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                 }}
               >
                 <div className="rt-row-main">
-                  <Lucide.Terminal size={13} className="rt-row-ico" />
+                  <Lucide.Terminal size={16} className="rt-row-ico" />
                   <div className="rt-row-text">
                     <span className="rt-row-title">{t.label}</span>
                     <span className="rt-row-meta">
@@ -364,7 +364,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     </span>
                   </div>
                 </div>
-                <Lucide.ChevronRight size={13} className="rt-row-chevron" />
+                <Lucide.ChevronRight size={16} className="rt-row-chevron" />
               </div>
             ))}
           </div>
@@ -397,7 +397,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>
                   </div>
                 </div>
-                <Lucide.ChevronRight size={13} className="rt-row-chevron" />
+                <Lucide.ChevronRight size={16} className="rt-row-chevron" />
               </div>
             ))}
           </div>

@@ -314,7 +314,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
       {/* 精简顶栏：全屏主区时不放「右侧/新窗口」（那些在主对话内联块上） */}
       <header className={`agent-card-header ${embedded ? 'agent-card-header--slim' : ''}`}>
         <div className="agent-card-title-row">
-          <Lucide.Bot size={14} />
+          <Lucide.Bot size={16} />
           <span className="agent-card-title" title={agent.description}>
             {agent.description || '协作 agent'}
           </span>
@@ -331,22 +331,22 @@ export const AgentCard: React.FC<AgentCardProps> = ({
               title="停止"
               onClick={handleStop}
             >
-              <Lucide.Square size={12} fill="currentColor" />
+              <Lucide.Square size={14} fill="currentColor" />
             </button>
           ) : null}
           {!embedded && onOpenRight ? (
             <button type="button" className="agent-card-btn" title="在右侧打开" onClick={onOpenRight}>
-              <Lucide.PanelRight size={13} />
+              <Lucide.PanelRight size={16} />
             </button>
           ) : null}
           {!embedded && onOpenWindow ? (
             <button type="button" className="agent-card-btn" title="新窗口" onClick={onOpenWindow}>
-              <Lucide.ExternalLink size={13} />
+              <Lucide.ExternalLink size={16} />
             </button>
           ) : null}
           {onClose ? (
             <button type="button" className="agent-card-btn" title="关闭" onClick={onClose}>
-              <Lucide.X size={13} />
+              <Lucide.X size={16} />
             </button>
           ) : null}
         </div>
@@ -407,7 +407,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             {sending ? (
               <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
             ) : (
-              <Lucide.Send size={14} />
+              <Lucide.Send size={16} />
             )}
           </button>
         </div>

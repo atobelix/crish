@@ -42,7 +42,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <Lucide.FileDiff size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+          <Lucide.FileDiff size={16} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
             代码变更
           </span>
@@ -60,7 +60,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
               padding: '3px 8px',
             }}
           >
-            <Lucide.Search size={12} style={{ color: 'var(--text-tertiary)', marginRight: 4 }} />
+            <Lucide.Search size={14} style={{ color: 'var(--text-tertiary)', marginRight: 4 }} />
             <input
               type="text"
               placeholder="筛选…"
@@ -105,7 +105,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
                 setActiveDiffSource(null);
               }}
             >
-              <Lucide.Trash2 size={13} />
+              <Lucide.Trash2 size={16} />
             </button>
           )}
         </div>
@@ -224,7 +224,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
                       onShowToast('已复制路径');
                     }}
                   >
-                    <Lucide.Link size={13} />
+                    <Lucide.Link size={16} />
                   </button>
                   <button
                     type="button"
@@ -241,7 +241,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
                       onShowToast('已复制差异');
                     }}
                   >
-                    <Lucide.Copy size={13} />
+                    <Lucide.Copy size={16} />
                   </button>
                   <button
                     type="button"
@@ -251,7 +251,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
                       setActiveDiffSource(null);
                     }}
                   >
-                    <Lucide.X size={13} />
+                    <Lucide.X size={16} />
                   </button>
                 </div>
               </div>

@@ -92,7 +92,7 @@ export const TerminalCard: React.FC = () => {
   return (
     <div className="term-panel">
       <div className="files-bar term-bar">
-        <Lucide.Terminal size={14} className="files-path-ico" />
+        <Lucide.Terminal size={16} className="files-path-ico" />
         <div className="files-path-form">
           <span className="files-path-crumbs files-path-crumbs--grow" title={getWorkspacePath() || ''}>
             {cwdLabel} · 命令输出
@@ -104,7 +104,7 @@ export const TerminalCard: React.FC = () => {
           title="清空"
           onClick={() => clearTerminalLines(activeSessionId || undefined)}
         >
-          <Lucide.Trash2 size={13} />
+          <Lucide.Trash2 size={16} />
         </button>
       </div>
       <div className="term-body">

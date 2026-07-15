@@ -311,7 +311,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             } else goUp();
           }}
         >
-          <Lucide.ArrowLeft size={15} />
+          <Lucide.ArrowLeft size={16} />
         </button>
         <button
           type="button"
@@ -322,14 +322,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             else void refresh();
           }}
         >
-          <Lucide.RotateCw size={13} />
+          <Lucide.RotateCw size={16} />
         </button>
 
         <div className="files-path-form">
           {view === 'browse' ? (
             filterMode || filter ? (
               <>
-                <Lucide.Search size={13} className="files-path-ico" />
+                <Lucide.Search size={16} className="files-path-ico" />
                 <input
                   ref={filterInputRef}
                   className="files-path-input"
@@ -353,12 +353,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     setFilterMode(false);
                   }}
                 >
-                  <Lucide.X size={12} />
+                  <Lucide.X size={14} />
                 </button>
               </>
             ) : (
               <>
-                <Lucide.Folder size={13} className="files-path-ico" />
+                <Lucide.Folder size={16} className="files-path-ico" />
                 <div className="files-path-crumbs files-path-crumbs--grow" title={cwd}>
                   {breadcrumbs.map((b, i) => (
                     <React.Fragment key={b.path}>
@@ -385,13 +385,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     requestAnimationFrame(() => filterInputRef.current?.focus());
                   }}
                 >
-                  <Lucide.Search size={12} />
+                  <Lucide.Search size={14} />
                 </button>
               </>
             )
           ) : (
             <>
-              <Lucide.File size={13} className="files-path-ico" />
+              <Lucide.File size={16} className="files-path-ico" />
               <div className="files-path-crumbs files-path-crumbs--grow" title={selected || ''}>
                 {selected ? pathRelativeToRoot(selected, root) : ''}
               </div>
@@ -412,7 +412,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             title="更多"
             onClick={() => setMoreOpen((v) => !v)}
           >
-            <Lucide.MoreHorizontal size={15} />
+            <Lucide.MoreHorizontal size={16} />
           </button>
           {moreOpen ? (
             <div className="files-more-menu">
@@ -477,7 +477,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   setSelText('');
                 }}
               >
-                <Lucide.Pencil size={12} />
+                <Lucide.Pencil size={14} />
                 编辑
               </button>
             ) : null}
@@ -489,7 +489,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   disabled={!dirty}
                   onClick={() => void saveFile()}
                 >
-                  <Lucide.Save size={12} />
+                  <Lucide.Save size={14} />
                   保存
                 </button>
                 <button
@@ -564,14 +564,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   >
                     {e.isDir ? (
                       expanded[e.path] ? (
-                        <Lucide.ChevronDown size={12} />
+                        <Lucide.ChevronDown size={14} />
                       ) : (
-                        <Lucide.ChevronRight size={12} />
+                        <Lucide.ChevronRight size={14} />
                       )
                     ) : null}
                   </button>
                   {e.isDir ? (
-                    <Lucide.Folder size={14} className="files-row-ico dir" />
+                    <Lucide.Folder size={16} className="files-row-ico dir" />
                   ) : (
                     <FileIcon name={e.name} />
                   )}
@@ -694,13 +694,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
 
 function FileIcon({ name }: { name: string }) {
   const k = detectFileKind(name);
-  if (k === 'image') return <Lucide.Image size={14} className="files-row-ico" />;
-  if (k === 'pdf') return <Lucide.FileText size={14} className="files-row-ico" />;
-  if (k === 'table') return <Lucide.Table size={14} className="files-row-ico" />;
+  if (k === 'image') return <Lucide.Image size={16} className="files-row-ico" />;
+  if (k === 'pdf') return <Lucide.FileText size={16} className="files-row-ico" />;
+  if (k === 'table') return <Lucide.Table size={16} className="files-row-ico" />;
   if (/\.(ts|tsx|js|jsx|mjs|rs|py|go)$/i.test(name)) {
-    return <Lucide.FileCode size={14} className="files-row-ico" />;
+    return <Lucide.FileCode size={16} className="files-row-ico" />;
   }
-  return <Lucide.File size={14} className="files-row-ico" />;
+  return <Lucide.File size={16} className="files-row-ico" />;
 }
 
 function formatSize(n: number): string {

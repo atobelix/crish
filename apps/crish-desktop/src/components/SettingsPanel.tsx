@@ -734,7 +734,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   onClick={() => selectTab(tab.id)}
                   className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
                 >
-                  <Icon size={14} style={{ color: isTabActive ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />
+                  <Icon size={16} style={{ color: isTabActive ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />
                   <span>{tab.label}</span>
                 </button>
               </React.Fragment>
@@ -748,7 +748,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               className="ui-btn ui-btn-ghost ui-btn-sm"
               style={{ width: '100%', marginTop: 'auto', justifyContent: 'flex-start', color: 'var(--text-secondary)' }}
             >
-              <Lucide.ArrowLeft size={13} />
+              <Lucide.ArrowLeft size={16} />
               <span>返回</span>
             </button>
           )}
@@ -905,7 +905,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     setProfileInlineOk('');
                   }}
                 >
-                  <Lucide.Plus size={13} />
+                  <Lucide.Plus size={16} />
                   添加服务商
                 </button>
               </div>
@@ -1026,7 +1026,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                               setProfileInlineError('');
                             }}
                           >
-                            <Lucide.Trash2 size={13} />
+                            <Lucide.Trash2 size={16} />
                           </button>
                         )}
                       </div>
@@ -1299,7 +1299,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </p>
                 </div>
                 <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddMcpModal(true)}>
-                  <Lucide.Plus size={13} />
+                  <Lucide.Plus size={16} />
                   添加
                 </button>
               </div>
@@ -1336,7 +1336,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                               setExpandedMcpServerIds((prev) => ({ ...prev, [srv.id]: !isExpanded }))
                             }
                           >
-                            <Lucide.Settings size={13} />
+                            <Lucide.Settings size={16} />
                           </button>
                           <div
                             onClick={() =>
@@ -1369,7 +1369,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                             title="删除"
                             onClick={() => handleDeleteMcpServer(srv.id, srv.name)}
                           >
-                            <Lucide.Trash2 size={13} />
+                            <Lucide.Trash2 size={16} />
                           </button>
                         </div>
                       </div>
@@ -1459,7 +1459,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </p>
                 </div>
                 <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddPluginModal(true)}>
-                  <Lucide.Plus size={13} />
+                  <Lucide.Plus size={16} />
                   安装
                 </button>
               </div>
@@ -1516,7 +1516,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         onClick={() => handleRemovePackage(idx)}
                         title="卸载"
                       >
-                        <Lucide.X size={13} />
+                        <Lucide.X size={16} />
                       </button>
                     </div>
                   );
@@ -1632,7 +1632,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       onClick={() => handleRemoveSkill(idx)}
                       title="移除"
                     >
-                      <Lucide.X size={13} />
+                      <Lucide.X size={16} />
                     </button>
                   </div>
                 ))}
@@ -1795,7 +1795,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     setWfOk('');
                   }}
                 >
-                  <Lucide.Plus size={13} />
+                  <Lucide.Plus size={16} />
                   新建
                 </button>
               </div>
@@ -1935,7 +1935,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                             }
                           }}
                         >
-                          {w.enabled === false ? <Lucide.Play size={13} /> : <Lucide.Pause size={13} />}
+                          {w.enabled === false ? <Lucide.Play size={16} /> : <Lucide.Pause size={16} />}
                         </button>
                         <button
                           type="button"
@@ -1950,7 +1950,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                             else setWfOk('已触发执行');
                           }}
                         >
-                          <Lucide.Zap size={13} />
+                          <Lucide.Zap size={16} />
                         </button>
                         <button
                           type="button"
@@ -1968,7 +1968,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                             }
                           }}
                         >
-                          <Lucide.Trash2 size={13} />
+                          <Lucide.Trash2 size={16} />
                         </button>
                       </div>
                     </div>
@@ -2054,7 +2054,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         style={{ marginLeft: 12, flexShrink: 0 }}
                         title="删除规则"
                       >
-                        <Lucide.Trash2 size={12} />
+                        <Lucide.Trash2 size={14} />
                       </button>
                     </div>
                   ))}
@@ -2433,7 +2433,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                           padding: 0,
                         }}
                       >
-                        <Lucide.X size={11} />
+                        <Lucide.X size={14} />
                       </button>
                     </span>
                   ))}
@@ -2486,7 +2486,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
               <span className="settings-modal-title">注册新 MCP 服务</span>
               <button onClick={() => setShowAddMcpModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)'  }}>
-                <Lucide.X size={15} />
+                <Lucide.X size={16} />
               </button>
             </div>
             
@@ -2590,7 +2590,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
               <span className="settings-modal-title">安装新插件扩展</span>
               <button onClick={() => setShowAddPluginModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)'  }}>
-                <Lucide.X size={15} />
+                <Lucide.X size={16} />
               </button>
             </div>
             
@@ -2669,7 +2669,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 {editingRuleFileType === 'global' ? '编辑全局规则' : '编辑当前项目规则'}
               </span>
               <button onClick={() => setEditingRuleFileType(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)'  }}>
-                <Lucide.X size={15} />
+                <Lucide.X size={16} />
               </button>
             </div>
             

@@ -180,10 +180,10 @@ export const ModelPicker: React.FC<Props> = ({
                     disabled={busy}
                   >
                     <Lucide.ChevronRight
-                      size={14}
+                      size={16}
                       className={`mpick-chev ${isOpen ? 'open' : ''}`}
                     />
-                    <Lucide.Server size={14} className="mpick-provider-ico" />
+                    <Lucide.Server size={16} className="mpick-provider-ico" />
                     <span className="mpick-provider-text">
                       <span className="mpick-provider-name">{p.name}</span>
                       <span className="mpick-provider-meta">
@@ -204,7 +204,7 @@ export const ModelPicker: React.FC<Props> = ({
                       {scanBusy === p.id ? (
                         <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />
                       ) : (
-                        <Lucide.Radar size={13} />
+                        <Lucide.Radar size={16} />
                       )}
                     </button>
                     <button
@@ -213,7 +213,7 @@ export const ModelPicker: React.FC<Props> = ({
                       title={providerDisabled ? '启用提供商' : '禁用提供商'}
                       onClick={() => toggleProviderEnabled(p)}
                     >
-                      {providerDisabled ? <Lucide.EyeOff size={13} /> : <Lucide.Eye size={13} />}
+                      {providerDisabled ? <Lucide.EyeOff size={16} /> : <Lucide.Eye size={16} />}
                     </button>
                   </div>
                 </div>
@@ -280,7 +280,7 @@ export const ModelPicker: React.FC<Props> = ({
                                     : 'ctx —'}
                               </span>
                               {selected ? (
-                                <Lucide.Check size={13} className="mpick-check" />
+                                <Lucide.Check size={16} className="mpick-check" />
                               ) : null}
                             </button>
                             <div className="mpick-model-actions">
@@ -325,7 +325,7 @@ export const ModelPicker: React.FC<Props> = ({
                                     );
                                   }}
                                 >
-                                  <Lucide.Ruler size={12} />
+                                  <Lucide.Ruler size={14} />
                                 </button>
                               )}
                               <button
@@ -347,9 +347,9 @@ export const ModelPicker: React.FC<Props> = ({
                                     style={{ width: 11, height: 11, borderWidth: 1.5 }}
                                   />
                                 ) : meta.lastTest?.ok ? (
-                                  <Lucide.Activity size={12} />
+                                  <Lucide.Activity size={14} />
                                 ) : (
-                                  <Lucide.Zap size={12} />
+                                  <Lucide.Zap size={14} />
                                 )}
                               </button>
                               <button
@@ -362,9 +362,9 @@ export const ModelPicker: React.FC<Props> = ({
                                 }}
                               >
                                 {meta.enabled === false ? (
-                                  <Lucide.ToggleLeft size={14} />
+                                  <Lucide.ToggleLeft size={16} />
                                 ) : (
-                                  <Lucide.ToggleRight size={14} />
+                                  <Lucide.ToggleRight size={16} />
                                 )}
                               </button>
                               <button
@@ -376,7 +376,7 @@ export const ModelPicker: React.FC<Props> = ({
                                   refresh();
                                 }}
                               >
-                                <Lucide.Trash2 size={12} />
+                                <Lucide.Trash2 size={14} />
                               </button>
                             </div>
                           </div>
@@ -421,7 +421,7 @@ export const ModelPicker: React.FC<Props> = ({
             onOpenSettings();
           }}
         >
-          <Lucide.Settings size={13} />
+          <Lucide.Settings size={16} />
           管理服务商与密钥
         </button>
       </div>

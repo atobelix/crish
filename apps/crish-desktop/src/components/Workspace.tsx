@@ -244,11 +244,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Lucide.Columns size={10} />
+            <Lucide.Columns size={12} />
             <span>拆分工作区: {ws.id.replace('ws-', '')}</span>
           </div>
           <button className="workspace-close-btn" onClick={() => closeWorkspace(ws.id)}>
-            <Lucide.X size={12} />
+            <Lucide.X size={14} />
           </button>
         </div>
       )}

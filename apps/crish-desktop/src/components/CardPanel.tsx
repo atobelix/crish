@@ -78,17 +78,17 @@ export const CardPanel: React.FC<CardPanelProps> = ({
   // Render icons corresponding to tabs
   const renderCardIcon = (id: string) => {
     switch (id) {
-      case 'chat': return <Lucide.MessageSquare size={13} />;
-      case 'plan': return <Lucide.Scroll size={13} />;
-      case 'preview': return <Lucide.Globe size={13} />;
-      case 'files': return <Lucide.FolderTree size={13} />;
-      case 'diff': return <Lucide.GitBranch size={13} />;
-      case 'tasks': return <Lucide.CheckSquare size={13} />;
-      case 'terminal': return <Lucide.Terminal size={13} />;
-      case 'settings': return <Lucide.Settings size={13} />;
-      case 'runtime': return <Lucide.Gauge size={13} />;
-      case 'agent': return <Lucide.Bot size={13} />;
-      default: return <Lucide.Layout size={13} />;
+      case 'chat': return <Lucide.MessageSquare size={16} />;
+      case 'plan': return <Lucide.Scroll size={16} />;
+      case 'preview': return <Lucide.Globe size={16} />;
+      case 'files': return <Lucide.FolderTree size={16} />;
+      case 'diff': return <Lucide.GitBranch size={16} />;
+      case 'tasks': return <Lucide.CheckSquare size={16} />;
+      case 'terminal': return <Lucide.Terminal size={16} />;
+      case 'settings': return <Lucide.Settings size={16} />;
+      case 'runtime': return <Lucide.Gauge size={16} />;
+      case 'agent': return <Lucide.Bot size={16} />;
+      default: return <Lucide.Layout size={16} />;
     }
   };
 
@@ -667,13 +667,13 @@ export const CardPanel: React.FC<CardPanelProps> = ({
         {activeCardId === 'chat' ? (
           <div className="card-header-left chat-breadcrumb-header" style={{ display: 'flex', alignItems: 'center' }}>
             <span className="breadcrumb-item folder-trigger">
-              <Lucide.Folder size={12} className="folder-icon" />
+              <Lucide.Folder size={14} className="folder-icon" />
               <span className="folder-name-txt">{activeSession?.folder || '审计与代码分析'}</span>
             </span>
             <span className="breadcrumb-separator">/</span>
             <span className="breadcrumb-item session-trigger">
               <span className="session-name-txt">{activeSession?.title || '审计三个项目的代码统一性问题'}</span>
-              <Lucide.ChevronDown size={10} className="breadcrumb-chevron" />
+              <Lucide.ChevronDown size={12} className="breadcrumb-chevron" />
             </span>
           </div>
         ) : (
@@ -701,7 +701,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
                         closeTabInGroup(wsId, group.id, c.id);
                       }}
                     >
-                      <Lucide.X size={10} />
+                      <Lucide.X size={12} />
                     </button>
                   )}
                 </div>
@@ -732,7 +732,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
               });
             }}
           >
-            <Lucide.Layout size={14} />
+            <Lucide.Layout size={16} />
           </button>
         </div>
       </div>

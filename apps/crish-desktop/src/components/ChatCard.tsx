@@ -851,7 +851,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       <div className="git-diff-card" key={diff.filePath}>
         <div className="git-diff-card-header" onClick={() => openDiffInRightPanel(diff)}>
           <div className="git-diff-file-info">
-            <Lucide.FileCode size={14} style={{ color: 'var(--accent-color)' }} />
+            <Lucide.FileCode size={16} style={{ color: 'var(--accent-color)' }} />
             <span className="git-diff-filename">{diff.filePath}</span>
             <span className="git-diff-preview-tag">在右侧查看</span>
           </div>
@@ -1144,7 +1144,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </span>
           ) : null}
           {canToggle ? (
-            <Lucide.ChevronRight size={11} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+            <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
           ) : null}
         </button>
         {showFileOpen && filePath ? (
@@ -1199,7 +1199,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   {groupPreview}
                 </span>
               ) : null}
-              <Lucide.ChevronRight size={11} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+              <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
             </button>
             {isOpen && (
               <div className="tool-group-body">
@@ -1336,7 +1336,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               className="agent-inline-back"
               onClick={() => setActiveAgentId(null)}
             >
-              <Lucide.ArrowLeft size={13} />
+              <Lucide.ArrowLeft size={16} />
               返回主对话
             </button>
             <span className="agent-inline-hint">{activeAgent.description || '协作 agent'}</span>
@@ -1371,7 +1371,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   className="chat-empty-project-btn"
                   onClick={() => setShowProjectPicker((v) => !v)}
                 >
-                  <Lucide.Folder size={14} />
+                  <Lucide.Folder size={16} />
                   <span>
                     {activeProject
                       ? activeProject.name
@@ -1379,7 +1379,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                         ? '当前目录'
                         : '选择项目'}
                   </span>
-                  <Lucide.ChevronDown size={13} style={{ opacity: 0.5 }} />
+                  <Lucide.ChevronDown size={16} style={{ opacity: 0.5 }} />
                 </button>
                 {showProjectPicker && (
                   <ProjectPickerMenu
@@ -1422,7 +1422,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   }}
                 >
                   <span>{item.label}</span>
-                  <Lucide.ArrowRight size={14} style={{ opacity: 0.4 }} />
+                  <Lucide.ArrowRight size={16} style={{ opacity: 0.4 }} />
                 </button>
               ))}
             </div>
@@ -1465,7 +1465,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           navigator.clipboard.writeText(msg.text || '');
                         }}
                       >
-                        <Lucide.Copy size={13} />
+                        <Lucide.Copy size={16} />
                       </button>
                       <button
                         type="button"
@@ -1476,7 +1476,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           withdrawMessage(wsId, activeSessionId, msg.id);
                         }}
                       >
-                        <Lucide.Undo2 size={13} />
+                        <Lucide.Undo2 size={16} />
                       </button>
                     </div>
                   </div>
@@ -1600,7 +1600,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           onShowToast('已复制');
                         }}
                       >
-                        <Lucide.Copy size={14} />
+                        <Lucide.Copy size={16} />
                       </button>
                       <button
                         type="button"
@@ -1635,7 +1635,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           onShowToast('正在重新生成…');
                         }}
                       >
-                        <Lucide.RefreshCw size={14} />
+                        <Lucide.RefreshCw size={16} />
                       </button>
                       <button
                         type="button"
@@ -1647,7 +1647,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           onShowToast(`已创建分支：${newTitle}`);
                         }}
                       >
-                        <Lucide.GitFork size={14} />
+                        <Lucide.GitFork size={16} />
                       </button>
                     </div>
                   )}
@@ -1719,7 +1719,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   setActivePill(null);
                 }}
               >
-                <Lucide.GitBranch size={12} />
+                <Lucide.GitBranch size={14} />
                 <span>变更</span>
               </button>
             )}
@@ -1729,7 +1729,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               title="终端"
               onClick={() => handleGlobalTabClick('terminal')}
             >
-              <Lucide.Terminal size={12} />
+              <Lucide.Terminal size={14} />
               <span>终端</span>
             </button>
           </div>
@@ -1756,7 +1756,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                       onShowToast(next ? '目标已暂停' : '目标已继续');
                     }}
                   >
-                    {goalPaused ? <Lucide.Play size={12} /> : <Lucide.Pause size={12} />}
+                    {goalPaused ? <Lucide.Play size={14} /> : <Lucide.Pause size={14} />}
                     {goalPaused ? '继续' : '暂停'}
                   </button>
                   <button
@@ -1769,10 +1769,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                       onShowToast('目标已停止');
                     }}
                   >
-                    <Lucide.Square size={12} />
+                    <Lucide.Square size={14} />
                   </button>
                   <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
-                    <Lucide.X size={14} />
+                    <Lucide.X size={16} />
                   </button>
                 </div>
               </div>
@@ -1815,7 +1815,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   <span style={{ color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1, fontSize: 12.5 }}>
                     {goalText}
                   </span>
-                  <Lucide.Pencil size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 3 }} />
+                  <Lucide.Pencil size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 3 }} />
                 </div>
               )}
 
@@ -1964,7 +1964,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   onClick={handleStopGeneration}
                   style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                 >
-                  <Lucide.Square size={13} fill="currentColor" />
+                  <Lucide.Square size={16} fill="currentColor" />
                 </button>
               </>
             ) : (
@@ -1975,7 +1975,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 onClick={() => handleSendChat(false)}
                 disabled={!chatInput.trim()}
               >
-                <Lucide.CornerDownLeft size={15} />
+                <Lucide.CornerDownLeft size={16} />
               </button>
             )}
           </div>
@@ -1985,7 +1985,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 4px' }}>
             {attachments.map((a) => (
               <span key={a.name} className="ui-badge" style={{ padding: '4px 8px', fontSize: 11.5 }}>
-                <Lucide.Paperclip size={11} style={{ marginRight: 4 }} />
+                <Lucide.Paperclip size={14} style={{ marginRight: 4 }} />
                 {a.name}
                 <button
                   type="button"
@@ -1993,7 +1993,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   style={{ width: 18, height: 18, marginLeft: 2 }}
                   onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
                 >
-                  <Lucide.X size={11} />
+                  <Lucide.X size={14} />
                 </button>
               </span>
             ))}
@@ -2052,7 +2052,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 }
               }}
             >
-              <Lucide.Plus size={14} />
+              <Lucide.Plus size={16} />
             </button>
             <ComposePlusMenu
               open={showPlusMenu}
@@ -2110,7 +2110,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   engineModel || getActiveModelId() || '选择模型',
                 )}
               </span>
-              <Lucide.ChevronDown size={12} style={{ opacity: 0.55 }} />
+              <Lucide.ChevronDown size={14} style={{ opacity: 0.55 }} />
 
               <ModelPicker
                 open={showModelDropdown}

@@ -68,7 +68,7 @@ export const TasksCard: React.FC = () => {
           title="添加任务"
           onClick={() => setIsAddingTask(!isAddingTask)}
         >
-          <Lucide.Plus size={14} />
+          <Lucide.Plus size={16} />
         </button>
       </div>
 

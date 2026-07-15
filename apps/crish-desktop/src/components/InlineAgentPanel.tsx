@@ -154,7 +154,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
             <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
           </span>
         ) : (
-          <Lucide.Bot size={12} className="inline-agent-ico" />
+          <Lucide.Bot size={14} className="inline-agent-ico" />
         )}
         <span className="inline-agent-label">
           协作 · {live.description || live.mode || 'agent'}
@@ -165,7 +165,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           {(live.messages || []).length} 条
           {live.summary ? ` · ${live.summary.slice(0, 36)}` : ''}
         </span>
-        <Lucide.ChevronRight size={12} className={`tool-row-chevron ${open ? 'rot' : ''}`} />
+        <Lucide.ChevronRight size={14} className={`tool-row-chevron ${open ? 'rot' : ''}`} />
       </button>
 
       {open ? (
@@ -327,7 +327,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
               disabled={!input.trim() || sending}
               onClick={() => void handleSend()}
             >
-              <Lucide.CornerDownLeft size={14} />
+              <Lucide.CornerDownLeft size={16} />
             </button>
           </div>
         </div>

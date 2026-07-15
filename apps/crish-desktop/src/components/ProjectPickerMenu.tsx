@@ -110,7 +110,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
         <>
           {projects.length > 3 && (
             <div className="pp-search">
-              <Lucide.Search size={13} strokeWidth={1.75} />
+              <Lucide.Search size={16} strokeWidth={1.75} />
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -134,14 +134,14 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                       onClose();
                     }}
                   >
-                    <Lucide.Folder size={14} className="pp-row-icon" />
+                    <Lucide.Folder size={16} className="pp-row-icon" />
                     <span className="pp-row-text">
                       <span className="pp-row-title">{p.name}</span>
                       <span className="pp-row-path" title={p.path}>
                         {p.path}
                       </span>
                     </span>
-                    {selected && <Lucide.Check size={13} className="pp-check" />}
+                    {selected && <Lucide.Check size={16} className="pp-check" />}
                   </button>
                   <button
                     type="button"
@@ -154,7 +154,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                       onChanged?.();
                     }}
                   >
-                    <Lucide.X size={12} />
+                    <Lucide.X size={14} />
                   </button>
                 </div>
               );
@@ -189,7 +189,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 }
               }}
             >
-              <Lucide.Plus size={14} />
+              <Lucide.Plus size={16} />
               <span>添加项目</span>
             </button>
             <button
@@ -201,7 +201,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 onClose();
               }}
             >
-              <Lucide.MessageSquare size={14} />
+              <Lucide.MessageSquare size={16} />
               <span>不在项目中</span>
             </button>
           </div>
@@ -210,7 +210,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
         <div className="pp-add">
           <div className="pp-add-header">
             <button type="button" className="pp-back" onClick={() => setView('list')} title="返回">
-              <Lucide.ArrowLeft size={14} />
+              <Lucide.ArrowLeft size={16} />
             </button>
             <span className="pp-add-title">输入路径</span>
           </div>

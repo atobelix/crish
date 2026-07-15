@@ -30,11 +30,11 @@ export const RuntimeFloatPanel: React.FC<RuntimeFloatPanelProps> = ({
       <div className="runtime-float-sheet runtime-float-sheet--compact">
         <div className="runtime-float-header">
           <div className="runtime-float-title">
-            <Lucide.Activity size={14} />
+            <Lucide.Activity size={16} />
             <span>运行状态</span>
           </div>
           <button type="button" className="header-btn" title="关闭" onClick={onClose}>
-            <Lucide.X size={15} />
+            <Lucide.X size={16} />
           </button>
         </div>
         <div className="runtime-float-body">
