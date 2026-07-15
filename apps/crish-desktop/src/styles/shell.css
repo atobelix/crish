@@ -2933,6 +2933,30 @@ select.ui-input {
   border-color: var(--border-color);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
+.agent-launch-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agent-launch-profile {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.agent-launch-profile:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.agent-launch-profile.is-on {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
 .agent-launch-actions {
   display: flex;
   flex-wrap: wrap;

@@ -261,9 +261,24 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           description: info.description || '协作 agent',
           mode: info.mode || 'research',
           status: 'running',
-          messages: [],
+          messages: [
+            {
+              id: `agent-sys-${Date.now().toString(36)}`,
+              sender: 'user',
+              text: `（主 agent 已拉起协作：${info.description || info.mode || '任务'}）`,
+              timestamp: Date.now(),
+              status: 'completed',
+            },
+          ],
           startedAt: Date.now(),
         });
+        // 父工具行标为进行中，便于时间线与子 agent 对齐
+        if (info.parentToolCallId) {
+          store.updateMessageToolCall(sid, assistantMsgId, info.parentToolCallId, {
+            status: 'running',
+            output: '协作进行中…',
+          });
+        }
       },
       onSubagentEvent: (info) => {
         if (!info.subagentId) return;
@@ -276,6 +291,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       },
       onSubagentEnded: (info) => {
         if (!info.subagentId) return;
+        let parentToolCallId: string | undefined;
+        let summary = info.summary || '';
         useLayoutStore.setState((state) => {
           const sess = state.sessions.find((s) => s.id === sid);
           const ag = sess?.agents?.find((a) => a.id === info.subagentId);
@@ -283,10 +300,27 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           ag.status = info.status;
           if (info.summary) ag.summary = info.summary;
           ag.endedAt = Date.now();
+          parentToolCallId = ag.parentToolCallId;
+          if (!summary) summary = ag.summary || '';
           for (const m of ag.messages || []) {
             if (m.status === 'processing') m.status = 'completed';
           }
+          // 把结论写回父工具调用，主时间线可见协作结果
+          const toolId = ag.parentToolCallId;
+          if (toolId && sess?.messages) {
+            for (const m of sess.messages) {
+              const tc = m.toolCalls?.find((t) => t.id === toolId);
+              if (!tc) continue;
+              const failed = /fail|error|cancel/i.test(String(info.status || ''));
+              tc.status = failed ? 'error' : 'success';
+              const body =
+                summary.trim() ||
+                (failed ? '协作未完成' : '协作已完成');
+              tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
+            }
+          }
         });
+        void parentToolCallId;
       },
       onTerminalLine: (line) => {
         addTerminalLine(line, sid);

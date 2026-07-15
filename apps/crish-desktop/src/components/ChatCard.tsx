@@ -20,8 +20,6 @@ import { ChatMessageList } from './ChatMessageList';
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { toolHumanLabel } from '../api/toolPresentation';
-import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
-import { publishToolDiffs } from '../api/publishToolDiffs';
 import {
   getSkillSlashCommandsCached,
   type SkillSlashCommand,
@@ -29,12 +27,6 @@ import {
 import { clientApi } from '../api/clientApi';
 import { openFileInPanel } from '../api/workspaceFsApi';
 import { AgentCard } from './AgentCard';
-import {
-  buildCollaboratorPrompt,
-  COLLABORATOR_MODES,
-  streamCollaboratorRun,
-  type CollaboratorMode,
-} from '../api/subagentApi';
 import { useChatStream } from '../hooks/useChatStream';
 import { ChatDemoChrome } from './ChatDemoChrome';
 
@@ -58,8 +50,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     activeSessionId,
     activeAgentId,
     setActiveAgentId,
-    upsertSessionAgent,
-    // patchSessionAgent reserved for future agent edits
     withdrawMessage,
     setActiveDiffSource,
     appSettings,
@@ -78,10 +68,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const modelSelectorRef = useRef<HTMLDivElement>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
-  const [collabMode, setCollabMode] = useState<CollaboratorMode>('research');
-  const [collabDesc, setCollabDesc] = useState('');
-  const [collabTask, setCollabTask] = useState('');
-  const [collabBusy, setCollabBusy] = useState(false);
 
   const modelChoices = flattenModelChoices();
 
@@ -453,168 +439,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     sessions
       .find((s) => s.id === activeSessionId)
       ?.agents?.find((a) => a.id === activeAgentId);
-
-  const handleSpawnCollaborator = () => {
-    const sid = activeSessionId || useLayoutStore.getState().createSession({ title: '新会话' });
-    if (!sid) return;
-    const task = collabTask.trim();
-    if (!task) {
-      onShowToast('请填写协作任务');
-      return;
-    }
-    const desc = collabDesc.trim() || COLLABORATOR_MODES.find((m) => m.id === collabMode)?.label || '协作者';
-    const agentId = `collab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    setCollabBusy(true);
-    upsertSessionAgent(sid, {
-      id: agentId,
-      subagentRunId: '',
-      parentSessionId: sid,
-      parentRunId: '',
-      description: desc,
-      mode: collabMode,
-      status: 'running',
-      messages: [
-        {
-          id: `agent-user-${Date.now()}`,
-          sender: 'user',
-          text: task,
-          timestamp: Date.now(),
-          status: 'completed',
-        },
-      ],
-      startedAt: Date.now(),
-    });
-    setShowPlusMenu(false);
-    setCollabTask('');
-    setActiveAgentId(agentId);
-
-    const prompt = buildCollaboratorPrompt({
-      mode: collabMode,
-      description: desc,
-      task,
-      parentSessionTitle: sessions.find((s) => s.id === sid)?.title,
-    });
-    const asstId = `agent-asst-${Date.now().toString(36)}`;
-    useLayoutStore.getState().appendSessionAgentMessage(sid, agentId, {
-      id: asstId,
-      sender: 'assistant',
-      text: '',
-      thinking: '正在处理…',
-      timestamp: Date.now(),
-      status: 'processing',
-      toolCalls: [],
-      blocks: [],
-    });
-
-    const patchAsst = (fn: (m: import('../store/layoutStore').SessionMessage) => void) => {
-      useLayoutStore.setState((state) => {
-        const ag = state.sessions.find((s) => s.id === sid)?.agents?.find((a) => a.id === agentId);
-        const m = ag?.messages?.find((x) => x.id === asstId);
-        if (m) fn(m);
-      });
-    };
-
-    const cancel = streamCollaboratorRun(prompt, agentId, {
-      onRunMeta: ({ runId }) => {
-        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
-          subagentRunId: runId,
-          parentRunId: runId,
-          status: 'running',
-        });
-      },
-      onRunError: (message) => {
-        setRunNotice({ text: message, kind: 'collab' });
-        onShowToast(message);
-      },
-      onThought: (t) => patchAsst((m) => { m.thinking = t; }),
-      onChunk: (c) => patchAsst((m) => { m.text = c; if (m.thinking === '正在处理…') m.thinking = ''; }),
-      onToolStart: (toolId, name, args, explanation) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          if (!m.toolCalls.some((t) => t.id === toolId)) {
-            m.toolCalls.push({ id: toolId, name, arguments: args, explanation, status: 'running' });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onToolSuccess: (toolId, output, diffs) => {
-        let resolved: import('../store/layoutStore').FileDiff[] = [];
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          const displayOut = sanitizeToolDisplayOutput(output || '');
-          resolved = resolveToolDiffs({
-            name: tc.name || '',
-            args: tc.arguments,
-            output: displayOut,
-            structuredDiffs: diffs,
-          });
-          tc.status = 'success';
-          tc.output = displayOut || output || '完成';
-          if (resolved.length) tc.diffs = resolved;
-        });
-        // 必须在 immer set 外推右侧变更，嵌套 set 会被丢弃
-        publishToolDiffs(resolved);
-      },
-      onToolError: (toolId, error) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (tc) {
-            tc.status = 'error';
-            tc.output = sanitizeToolDisplayOutput(error || '') || error || '失败';
-          }
-        });
-      },
-      onToolPendingApproval: (toolId, name, args, explanation) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          const existing = m.toolCalls.find((t) => t.id === toolId);
-          if (existing) {
-            existing.status = 'pending_approval';
-            existing.arguments = args || existing.arguments;
-            if (explanation) existing.explanation = explanation;
-          } else {
-            m.toolCalls.push({
-              id: toolId,
-              name,
-              arguments: args,
-              explanation,
-              status: 'pending_approval',
-            });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onApprovalResolved: (toolId, decision) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          if (decision === 'allow') {
-            tc.status = 'running';
-            tc.output = '执行中…';
-          } else {
-            tc.status = 'error';
-            tc.output = '未获批准';
-          }
-        });
-      },
-      onComplete: () => {
-        patchAsst((m) => {
-          m.status = 'completed';
-          if (m.thinking === '正在处理…') m.thinking = '';
-        });
-        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
-          status: 'completed',
-          endedAt: Date.now(),
-        });
-        setCollabBusy(false);
-      },
-    });
-    void cancel;
-    onShowToast(`已拉起协作者：${desc}`);
-  };
 
   return (
     <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
@@ -1064,14 +888,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               open={showPlusMenu}
               onClose={() => setShowPlusMenu(false)}
               onAddFiles={() => fileInputRef.current?.click()}
-              collabMode={collabMode}
-              onCollabMode={setCollabMode}
-              collabDesc={collabDesc}
-              onCollabDesc={setCollabDesc}
-              collabTask={collabTask}
-              onCollabTask={setCollabTask}
-              collabBusy={collabBusy}
-              onSpawnCollaborator={handleSpawnCollaborator}
             />
             <PermissionModeMenu
               mode={permissionMode}

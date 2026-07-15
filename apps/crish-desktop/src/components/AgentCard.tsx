@@ -24,6 +24,7 @@ import {
   streamCollaboratorRun,
 } from '../api/subagentApi';
 import { getWorkspacePath } from '../api/projectStore';
+import { loadAgentProfiles, type AgentProfile } from '../api/agentProfiles';
 import { ApprovalAskCard } from './ApprovalAskCard';
 
 /** 右侧 Agent 默认落地：新建协作对话（继承上下文 / 临时分析） */
@@ -44,6 +45,8 @@ function AgentLaunchPad({
   const agents = parent?.agents || [];
   const [task, setTask] = useState('');
   const [busy, setBusy] = useState(false);
+  const [profiles] = useState<AgentProfile[]>(() => loadAgentProfiles());
+  const [profileId, setProfileId] = useState(() => loadAgentProfiles()[0]?.id || 'research');
 
   const recentContext = useMemo(() => {
     const msgs = parent?.messages || [];
@@ -65,32 +68,38 @@ function AgentLaunchPad({
     if (!q) return;
     setBusy(true);
     const agentId = `collab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const profile = profiles.find((p) => p.id === profileId) || profiles[0];
     const desc =
-      kind === 'inherit' ? '继承上下文' : '临时分析';
+      kind === 'inherit'
+        ? profile?.name || '继承上下文'
+        : `临时·${profile?.name || '分析'}`;
+    const roleHint = profile?.hint || '';
     const taskBody =
       kind === 'inherit'
         ? [
-            '请基于主对话近期上下文协助决策或继续任务。',
+            roleHint ? `角色：${roleHint}` : '请基于主对话近期上下文协助决策或继续任务。',
             recentContext ? `【主对话摘要】\n${recentContext}` : '',
             `【用户问题】\n${q}`,
           ]
             .filter(Boolean)
             .join('\n\n')
         : [
-            '你是临时分析助手：解释主 agent 为何这样改、评估风险与替代方案，默认不直接大改仓库。',
+            roleHint ||
+              '你是临时分析助手：解释主 agent 为何这样改、评估风险与替代方案，默认不直接大改仓库。',
             recentContext ? `【主对话片段】\n${recentContext}` : '',
             `【用户问题】\n${q}`,
           ]
             .filter(Boolean)
             .join('\n\n');
 
+    const mode = profile?.mode || (kind === 'inherit' ? 'implement' : 'research');
     upsertSessionAgent(sid, {
       id: agentId,
       subagentRunId: '',
       parentSessionId: sid,
       parentRunId: '',
       description: desc,
-      mode: kind === 'inherit' ? 'implement' : 'research',
+      mode,
       status: 'running',
       messages: [
         {
@@ -107,7 +116,7 @@ function AgentLaunchPad({
     setActiveAgentId(null);
 
     const prompt = buildCollaboratorPrompt({
-      mode: kind === 'inherit' ? 'implement' : 'research',
+      mode,
       description: desc,
       task: taskBody,
       parentSessionTitle: parent?.title,
@@ -269,7 +278,7 @@ function AgentLaunchPad({
 
       <div className="agent-launch-body">
         <p className="agent-launch-lead">
-          新建独立协作区：继承主会话上下文继续任务，或开临时窗口追问「主 agent 为何这样改」。
+          日常协作由主 AI 自动拉起。这里用于查看已有智能体，或临时追问决策；不必在输入框下手动「协作者」。
         </p>
         <textarea
           className="agent-launch-input"
@@ -279,6 +288,23 @@ function AgentLaunchPad({
           disabled={busy}
           onChange={(e) => setTask(e.target.value)}
         />
+        {profiles.length > 0 ? (
+          <div className="agent-launch-profiles" role="listbox" aria-label="智能体角色">
+            {profiles.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="option"
+                aria-selected={profileId === p.id}
+                className={`agent-launch-profile ${profileId === p.id ? 'is-on' : ''}`}
+                title={p.hint}
+                onClick={() => setProfileId(p.id)}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="agent-launch-actions">
           <button
             type="button"
