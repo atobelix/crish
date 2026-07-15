@@ -185,11 +185,11 @@ describe("daemon protocol registry", () => {
     }
   });
 
-  it("marks subagent control as explicit unsupported capability", () => {
-    expect(DAEMON_INBOUND_MESSAGE_REGISTRY["send-to-subagent"].state).toBe("unsupported");
-    expect(DAEMON_INBOUND_MESSAGE_REGISTRY["get-subagent-status"].state).toBe("unsupported");
-    expect(DAEMON_OUTBOUND_MESSAGE_REGISTRY["subagent-message-sent"].state).toBe("unsupported");
-    expect(DAEMON_OUTBOUND_MESSAGE_REGISTRY["subagent-status"].state).toBe("unsupported");
+  it("marks subagent control as implemented collaborative capability", () => {
+    expect(DAEMON_INBOUND_MESSAGE_REGISTRY["send-to-subagent"].state).toBe("implemented");
+    expect(DAEMON_INBOUND_MESSAGE_REGISTRY["get-subagent-status"].state).toBe("implemented");
+    expect(DAEMON_OUTBOUND_MESSAGE_REGISTRY["subagent-message-sent"].state).toBe("implemented");
+    expect(DAEMON_OUTBOUND_MESSAGE_REGISTRY["subagent-status"].state).toBe("implemented");
   });
 
   it("covers every daemon capability related message type with registry metadata", () => {

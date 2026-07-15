@@ -1,3 +1,5 @@
+> **【已废弃 / 非产品真相】** 产品 UI 为 `apps/crish-desktop`。Tauri 不加载 workbench Preact。请以根目录 `README.md` 与 `ARCHITECTURE.md` 为准。本文仅作历史参考。
+
 # Crish 项目架构与路线图
 
 ## 架构概览

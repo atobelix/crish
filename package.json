@@ -16,7 +16,6 @@
   "scripts": {
     "dev:desktop": "npm --workspace @crish/crish-desktop run dev",
     "dev:workbench": "npm --workspace @crish/agent-workbench run tauri -- dev",
-    "dev:workbench:legacy-ui": "npm --workspace @crish/agent-workbench run dev:legacy-ui",
     "dev:cli": "npm --workspace @crish/agent-workbench run cli",
     "build:desktop": "npm --workspace @crish/crish-desktop run build",
     "build:workbench": "npm --workspace @crish/crish-desktop run build",

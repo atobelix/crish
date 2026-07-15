@@ -138,14 +138,14 @@ export class PermissionMiddleware implements ToolMiddleware {
     input: JsonObject,
     ctx: ToolExecutionContext
   ): Promise<MiddlewareBeforeResult> {
-    const request = {
+    const request: RuntimePermissionRequest = {
       id: createId("perm"),
       sessionId: ctx.sessionId,
       cwd: ctx.cwd,
       tool,
       input,
       summary: tool.summarize(input),
-    } satisfies RuntimePermissionRequest;
+    };
 
     const events: AgentEvent[] = [];
 

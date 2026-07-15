@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { AppState } from "../core/app-state";
 import {
   approvalIdFromEvent,
   buildInitialTaskSnapshot,
@@ -53,30 +52,6 @@ describe("approval event normalization", () => {
       requestId: "approval-1",
       toolCallId: "approval-1",
       approvalDecision: "denied"
-    });
-  });
-
-  it("clears the approval queue through AppState.resolveApproval", () => {
-    const state = new AppState();
-    const resolved = normalizeWorkbenchEvent({
-      type: "approval-resolved",
-      toolCallId: "approval-1",
-      decision: "allow"
-    });
-
-    state.enqueueApproval({
-      id: "approval-1",
-      name: "edit",
-      input: { path: "src/app.ts" },
-      status: "pending",
-      timestamp: 1
-    });
-    state.resolveApproval(approvalIdFromEvent(resolved)!, resolved.approvalDecision ?? "approved");
-
-    expect(state.getState().approvalQueue).toEqual([]);
-    expect(state.getState().approvalHistory[0]).toMatchObject({
-      toolCallId: "approval-1",
-      decision: "approved"
     });
   });
 

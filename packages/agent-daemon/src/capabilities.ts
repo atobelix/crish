@@ -213,8 +213,8 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
   {
     id: "subagent.control",
     title: "Subagent direct control",
-    state: "unsupported",
-    reason: "Subagent execution is available as a runtime tool, but daemon direct send/status control has no durable routing API.",
+    state: "implemented",
+    reason: "Daemon steerRun routes send-to-subagent and get-subagent-status for collaborative subagent control.",
     owner: "agent-daemon",
     relatedMessageTypes: [
       "send-to-subagent",
@@ -259,10 +259,10 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
       "checkpoint-restored",
       "checkpoint-diff",
     ],
+    // Restore stays off the default product Tauri surface until a restore adapter is wired.
     relatedTauriCommands: [
       "workbench_list_checkpoints",
       "workbench_get_checkpoint_diff",
-      "workbench_restore_checkpoint",
     ],
   },
 ];
