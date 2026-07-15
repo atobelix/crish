@@ -1284,8 +1284,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
   min-width: 0;
+  flex: 1;
 }
 .tool-row-chevron-slot {
   flex: 0 0 18px;
@@ -1304,11 +1304,13 @@
   background: transparent;
   color: var(--text-primary);
 }
-.tool-row-head:hover .tool-row-summary,
-.tool-row-head:hover .tool-row-cmd {
+.tool-row-head:hover .tool-row-summary {
   color: var(--text-primary);
-  /* 保持 medium，避免 hover 变「大又细」 */
   font-weight: var(--font-weight-medium);
+}
+.tool-row-head:hover .tool-row-cmd {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
 }
 .tool-status-icon--muted {
   display: none;
@@ -1316,20 +1318,29 @@
 .tool-dot-muted {
   display: none;
 }
+/* 人话主行 + 技术命令副行 */
+.tool-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  align-items: flex-start;
+}
 .tool-row-summary {
   flex-shrink: 1;
+  max-width: 100%;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  max-width: 42%;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tool-row-cmd {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-size-sm);
+  display: block;
+  max-width: 100%;
+  font-size: var(--font-size-xs);
   font-family: var(--font-mono);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
@@ -1339,6 +1350,7 @@
   background: transparent;
   border: none;
   padding: 0;
+  opacity: 0.85;
 }
 /* 摘要行不再右侧塞结果预览；展开后在 body 看全文 */
 .tool-row-result-preview {
@@ -4361,25 +4373,26 @@
 .sched-item-actions { display: flex; gap: 2px; flex-shrink: 0; }
 
 
-/* 短思考：不折叠，平铺展示 */
+/* 短思考：不折叠；无背景无边框，弱化显示 */
 .msg-thinking-plain {
-  margin: 0 0 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  margin: 0 0 6px;
+  padding: 0;
   max-width: 720px;
+  background: transparent;
+  border: none;
 }
 .msg-thinking-plain-label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  opacity: 0.85;
 }
 .msg-thinking-plain-body {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.55;
+  color: var(--text-tertiary);
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  opacity: 0.9;
 }

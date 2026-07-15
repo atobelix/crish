@@ -9,11 +9,12 @@ import { InlineAgentPanel } from './InlineAgentPanel';
 import { isEditToolName, isShellToolName } from '../api/toolFeedback';
 import {
   extractImageRefs,
+  extractToolCommand,
   fullToolOutput,
   toolCommandPreview,
   toolHasDisplayableResult,
+  toolHumanLabel,
   toolPathDisplayName,
-  toolSummaryLabel,
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import { extractFilePathFromToolArgs } from '../api/workspaceFsApi';
@@ -215,15 +216,15 @@ function CompactToolRow({
     );
   }
   if (tc.status === 'pending_approval') {
-    const summary = toolSummaryLabel(tc);
-    const cmd = toolCommandPreview(tc);
+    const summary = toolHumanLabel(tc);
+    const tech = extractToolCommand(tc.arguments || '') || toolCommandPreview(tc, 72);
     const mid = msgId || pendingApprovalMsgId;
     return (
       <ApprovalAskCard
         key={rowKey}
         msgId={mid}
         summary={summary}
-        cmd={cmd}
+        cmd={tech && tech !== summary ? tech : toolCommandPreview(tc)}
         busy={approvalBusy}
         onAllow={(note) => {
           if (note.trim()) {
@@ -245,8 +246,9 @@ function CompactToolRow({
   const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, tc.id)
     ? expandedTools[tc.id]
     : defaultOpen;
-  const summary = toolSummaryLabel(tc);
-  const cmd = toolCommandPreview(tc);
+  const human = toolHumanLabel(tc);
+  const techFull = extractToolCommand(tc.arguments || '');
+  const cmd = toolCommandPreview(tc, 64) || (techFull && techFull !== human ? techFull.slice(0, 64) : '');
   const running = tc.status === 'running';
   const canToggle = Boolean(body) || hasResult;
   const filePath = extractFilePathFromToolArgs(tc.arguments || '');
@@ -259,7 +261,6 @@ function CompactToolRow({
       n.includes('edit') ||
       n.includes('glob'));
   const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
-  // 摘要里把 basename 渲成可点链（路径即入口，去掉「打开文件」按钮）
   const pathActions =
     pathClickable && filePath ? (
       <span className="tool-path-actions" onClick={(e) => e.stopPropagation()}>
@@ -287,15 +288,21 @@ function CompactToolRow({
       </span>
     ) : null;
 
+  /** 主行：人话说明；路径名可点 */
   const renderSummary = () => {
-    if (!pathClickable || !filePath || !pathLabel) {
+    if (!pathClickable || !filePath || !pathLabel || !human.includes(pathLabel)) {
       return (
-        <span className="tool-row-summary" title={summary}>
-          {summary}
+        <span className="tool-row-summary" title={human}>
+          {human}
+          {pathClickable && filePath && pathActions ? (
+            <span className="tool-path-wrap" style={{ marginLeft: 6 }}>
+              {pathActions}
+            </span>
+          ) : null}
         </span>
       );
     }
-    const idx = summary.lastIndexOf(pathLabel);
+    const idx = human.lastIndexOf(pathLabel);
     const link = (
       <span className="tool-path-wrap">
         <button
@@ -315,15 +322,15 @@ function CompactToolRow({
     if (idx < 0) {
       return (
         <span className="tool-row-summary" title={filePath}>
-          {summary} {link}
+          {human} {link}
         </span>
       );
     }
     return (
       <span className="tool-row-summary" title={filePath}>
-        {summary.slice(0, idx)}
+        {human.slice(0, idx)}
         {link}
-        {summary.slice(idx + pathLabel.length)}
+        {human.slice(idx + pathLabel.length)}
       </span>
     );
   };
@@ -380,12 +387,14 @@ function CompactToolRow({
       >
         <span className="tool-row-head-main">
           {toolIcon}
-          {renderSummary()}
-          {cmd ? (
-            <code className="tool-row-cmd" title="命令">
-              {cmd}
-            </code>
-          ) : null}
+          <span className="tool-row-text">
+            {renderSummary()}
+            {cmd ? (
+              <code className="tool-row-cmd" title={techFull || cmd}>
+                {cmd}
+              </code>
+            ) : null}
+          </span>
         </span>
         <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
           {canToggle ? (

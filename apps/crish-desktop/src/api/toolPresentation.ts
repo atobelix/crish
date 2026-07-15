@@ -55,30 +55,138 @@ function basename(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
+/** 是否像「人能读」的中文说明（非命令、非 JSON） */
+function isHumanExplanation(text: string, toolName: string): boolean {
+  const t = text.trim();
+  if (!t || t === toolName || t === '需要确认') return false;
+  if (t.startsWith('{') || t.startsWith('[')) return false;
+  if (/^[\w./\\:-]+\s+[\w./\\:-]+/.test(t) && !/[\u4e00-\u9fff]/.test(t)) return false;
+  // 含中文或完整句子
+  if (/[\u4e00-\u9fff]/.test(t)) return t.length <= 96;
+  // 短英文说明
+  if (/^[A-Za-z][A-Za-z0-9 ,.'-]{4,80}$/.test(t) && !/[\\/]/.test(t)) return true;
+  return false;
+}
+
 /**
- * 折叠行主文案：优先可读命令/路径，不用含糊 explanation 盖住真实命令。
+ * 把终端/shell 命令翻译成用户一眼能懂的说明。
+ * 技术原文仍由 toolCommandPreview / tool-row-cmd 展示。
  */
-export function toolSummaryLabel(tc: MessageToolCall): string {
+export function humanizeShellCommand(cmd: string): string {
+  const raw = cmd.replace(/\s+/g, ' ').trim();
+  if (!raw) return '运行命令';
+  const lower = raw.toLowerCase();
+
+  // 包管理 / 脚本
+  if (/\b(npm|pnpm|yarn)\s+i(nstall)?(\s|$)/i.test(raw) && !/\s-/.test(raw.split(/\s+/).slice(0, 3).join(' '))) {
+    return '安装项目依赖';
+  }
+  if (/\b(npm|pnpm|yarn)\s+(install|i)\s+/i.test(raw)) {
+    const pkg = raw.replace(/^.*\b(?:install|i)\s+/i, '').split(/\s+/)[0];
+    return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
+  }
+  if (/\b(npm|pnpm|yarn)\s+run\s+([\w:-]+)/i.test(raw) || /\b(npm|pnpm|yarn)\s+([\w:-]+)\b/i.test(raw)) {
+    const m = raw.match(/\b(?:npm|pnpm|yarn)\s+(?:run\s+)?([\w:-]+)/i);
+    const script = m?.[1]?.toLowerCase();
+    if (script === 'build' || script === 'prod') return '构建项目';
+    if (script === 'dev' || script === 'start') return '启动开发服务';
+    if (script === 'test' || script?.startsWith('test:')) return '运行测试';
+    if (script === 'lint' || script?.startsWith('lint')) return '检查代码规范';
+    if (script === 'typecheck' || script === 'tsc') return '检查类型';
+    if (script) return `运行脚本 ${script}`;
+  }
+  if (/\bnpx\s+/i.test(raw)) {
+    const tool = raw.replace(/^.*\bnpx\s+/i, '').split(/\s+/)[0];
+    return tool ? `运行工具 ${tool}` : '运行命令行工具';
+  }
+
+  // Git
+  if (/\bgit\s+status\b/i.test(raw)) return '查看代码变更状态';
+  if (/\bgit\s+diff\b/i.test(raw)) return '查看文件差异';
+  if (/\bgit\s+log\b/i.test(raw)) return '查看提交历史';
+  if (/\bgit\s+add\b/i.test(raw)) return '暂存改动';
+  if (/\bgit\s+commit\b/i.test(raw)) return '创建提交';
+  if (/\bgit\s+push\b/i.test(raw)) return '推送到远程';
+  if (/\bgit\s+pull\b/i.test(raw)) return '拉取远程更新';
+  if (/\bgit\s+checkout\b|\bgit\s+switch\b/i.test(raw)) return '切换分支';
+  if (/\bgit\s+branch\b/i.test(raw)) return '查看或管理分支';
+  if (/\bgit\s+/i.test(raw)) return '执行 Git 操作';
+
+  // 编译 / 检查
+  if (/\btsc\b/i.test(raw) || /\btypescript\b/i.test(raw)) return '检查 TypeScript 类型';
+  if (/\beslint\b/i.test(raw)) return '运行 ESLint 检查';
+  if (/\bprettier\b/i.test(raw)) return '格式化代码';
+  if (/\bvitest\b|\bjest\b|\bpytest\b/i.test(raw)) return '运行测试';
+  if (/\bcargo\s+(build|check|test)\b/i.test(raw)) {
+    if (/test/i.test(raw)) return '运行 Rust 测试';
+    if (/check/i.test(raw)) return '检查 Rust 编译';
+    return '构建 Rust 项目';
+  }
+  if (/\bpython\b|\bpy\b/i.test(lower) && /\.py\b/i.test(raw)) return '运行 Python 脚本';
+  if (/\bnode\b/i.test(lower) && /\.m?js\b/i.test(raw)) return '运行 Node 脚本';
+
+  // 文件浏览
+  if (/^(ls|dir|ll|Get-ChildItem|gci)\b/i.test(raw) || /\bls\s+/i.test(raw)) {
+    return '列出目录内容';
+  }
+  if (/^(cat|type|Get-Content|gc|head|tail)\b/i.test(raw)) {
+    const file = raw.split(/\s+/).find((p) => /[./\\]/.test(p) && !p.startsWith('-'));
+    return file ? `查看 ${basename(file)}` : '查看文件内容';
+  }
+  if (/^(rm|del|Remove-Item|ri)\b/i.test(raw)) return '删除文件或目录';
+  if (/^(cp|copy|Copy-Item)\b/i.test(raw)) return '复制文件';
+  if (/^(mv|move|Move-Item|ren)\b/i.test(raw)) return '移动或重命名';
+  if (/^(mkdir|md|New-Item)\b/i.test(raw)) return '创建目录';
+  if (/\bcd\b|\bSet-Location\b/i.test(raw)) return '切换工作目录';
+  if (/\brg\b|\bgrep\b|\bfindstr\b|\bfind\b/i.test(raw)) {
+    const q = raw.match(/['"]([^'"]{1,40})['"]/) || raw.match(/\s(-e\s+)?(\S{2,40})\s*$/);
+    const term = q?.[1] || q?.[2];
+    return term && !term.startsWith('-') ? `搜索「${term}」` : '搜索代码';
+  }
+  if (/\bcurl\b|\bwget\b|\binvoke-webrequest\b/i.test(raw)) return '请求网络资源';
+  if (/\bdocker\b/i.test(raw)) return '运行 Docker 相关命令';
+
+  return '运行命令';
+}
+
+/**
+ * 人话主文案：用户扫一眼就知道 AI 在做什么。
+ * 技术命令放到 toolCommandPreview / 折叠详情。
+ */
+export function toolHumanLabel(tc: MessageToolCall): string {
   const name = (tc.name || 'tool').toLowerCase();
   const cmd = extractToolCommand(tc.arguments || '');
+  const exp = (tc.explanation || '').trim();
 
-  if (isShellToolName(name)) {
-    if (cmd) return cmd.length > 64 ? cmd.slice(0, 63) + '…' : cmd;
-    return tc.name || '命令';
+  if (exp && isHumanExplanation(exp, tc.name || '')) {
+    return exp.length > 72 ? exp.slice(0, 71) + '…' : exp;
   }
-  if (isEditToolName(name)) {
-    return cmd ? `编辑 ${basename(cmd)}` : '编辑文件';
+
+  if (isShellToolName(name) || name.includes('bash') || name.includes('shell') || name.includes('exec') || name.includes('powershell')) {
+    return cmd ? humanizeShellCommand(cmd) : '运行终端命令';
   }
-  if (name.includes('read')) {
-    return cmd ? `读取 ${basename(cmd)}` : '读取文件';
+  if (isEditToolName(name) || name.includes('write') || name.includes('edit') || name.includes('patch') || name.includes('apply')) {
+    return cmd ? `正在修改 ${basename(cmd)}` : '正在修改文件';
   }
-  if (name.includes('list') || name.includes('glob')) {
-    return cmd ? `列出 ${cmd}` : '列出目录';
+  if (name.includes('read') || name.includes('cat') || name.includes('view') || name.includes('open_file')) {
+    return cmd ? `正在查看 ${basename(cmd)}` : '正在查看文件';
   }
-  if (name.includes('grep') || name.includes('search')) {
-    return cmd ? `搜索 ${cmd.slice(0, 40)}` : '搜索';
+  if (name.includes('list') || name.includes('glob') || name.includes('dir') || name.includes('ls')) {
+    if (cmd && cmd !== '.' && cmd !== './') {
+      const short = cmd.length > 36 ? '…' + cmd.slice(-34) : cmd;
+      return `正在浏览 ${short}`;
+    }
+    return '正在浏览目录';
   }
-  // 子 agent 协同：优先展示描述/模式
+  if (name.includes('grep') || name.includes('search') || name.includes('find') || name.includes('rg')) {
+    const q = cmd.replace(/^.*(?:pattern|query)["']?\s*[:=]\s*["']?/i, '').slice(0, 32);
+    if (cmd && cmd.length < 40) return `正在搜索 ${cmd}`;
+    if (q && !q.startsWith('{')) return `正在搜索「${q}」`;
+    return '正在搜索代码';
+  }
+  if (name.includes('web') || name.includes('fetch') || name.includes('http') || name.includes('browser')) {
+    return '正在访问网络';
+  }
   if (name === 'run_subagent' || name.includes('subagent')) {
     try {
       const parsed = tc.arguments?.trim().startsWith('{')
@@ -86,40 +194,52 @@ export function toolSummaryLabel(tc: MessageToolCall): string {
         : null;
       const desc =
         (typeof parsed?.description === 'string' && parsed.description.trim()) ||
-        (typeof parsed?.prompt === 'string' && parsed.prompt.trim().slice(0, 48)) ||
+        (typeof parsed?.prompt === 'string' && parsed.prompt.trim().slice(0, 40)) ||
         '';
-      const mode = typeof parsed?.mode === 'string' ? parsed.mode : '';
-      if (desc) return mode ? `子代理·${mode} · ${desc}` : `子代理 · ${desc}`;
+      if (desc) return `协作子任务：${desc.length > 40 ? desc.slice(0, 39) + '…' : desc}`;
     } catch {
       /* plain */
     }
-    const exp0 = (tc.explanation || '').trim();
-    if (exp0 && exp0 !== name) return `子代理 · ${exp0.slice(0, 48)}`;
-    return '子代理';
+    if (exp && isHumanExplanation(exp, tc.name || '')) return `协作子任务：${exp.slice(0, 40)}`;
+    return '启动协作子任务';
   }
+  if (name.includes('git')) {
+    return cmd ? humanizeShellCommand(cmd.startsWith('git') ? cmd : `git ${cmd}`) : '执行 Git 操作';
+  }
+  if (name.includes('mcp')) return '调用扩展服务';
+  if (name.includes('memory')) return '读写记忆';
+  if (name.includes('todo') || name.includes('plan')) return '更新任务计划';
 
-  // 其它：explanation 若像命令则用；否则 name + cmd
-  const exp = (tc.explanation || '').trim();
-  if (exp && !exp.startsWith('{') && exp !== name && exp !== '需要确认' && exp.length <= 72) {
-    // 避免纯中文叙述盖住命令：若有 cmd 且 exp 不含路径特征，拼一下
-    if (cmd && !exp.includes(basename(cmd)) && cmd.length < 48) {
-      return `${exp} · ${cmd}`;
-    }
-    return exp;
+  if (cmd) {
+    // 无更好文案时，用「操作 + 短目标」
+    const short = basename(cmd);
+    if (short && short !== cmd && short.length < 48) return `使用工具处理 ${short}`;
   }
-  if (cmd) return cmd.length > 64 ? cmd.slice(0, 63) + '…' : cmd;
-  return tc.name || '工具';
+  const n = tc.name || '工具';
+  // 把 snake_case 工具名收成稍可读
+  const pretty = n.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return pretty ? `调用 ${pretty}` : '调用工具';
 }
 
-/** 右侧次要预览：与主摘要重复则空 */
-export function toolCommandPreview(tc: MessageToolCall, max = 48): string {
+/**
+ * 折叠行主文案：人话优先（扫一眼知意图）。
+ * @deprecated 语义等同 toolHumanLabel，保留别名避免大面积改调用方
+ */
+export function toolSummaryLabel(tc: MessageToolCall): string {
+  return toolHumanLabel(tc);
+}
+
+/**
+ * 次要技术预览：真实命令/路径，与人话主文案区分开。
+ * 即使与摘要部分重叠也尽量展示，方便进阶用户核对。
+ */
+export function toolCommandPreview(tc: MessageToolCall, max = 56): string {
   const cmd = extractToolCommand(tc.arguments || '');
   if (!cmd) return '';
-  const summary = toolSummaryLabel(tc);
-  if (summary === cmd || summary.includes(cmd) || cmd.includes(summary.replace(/^(读取|编辑|列出|搜索)\s+/, ''))) {
-    return '';
-  }
+  const human = toolHumanLabel(tc);
   const one = cmd.replace(/\s+/g, ' ').trim();
+  // 人话已等于完整命令时不再重复
+  if (human === one) return '';
   return one.length <= max ? one : one.slice(0, max - 1) + '…';
 }
 
@@ -329,7 +449,7 @@ export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderIt
         kind: 'group',
         id: `grp-${buf[0].id}`,
         tools: [...buf],
-        label: `${toolSummaryLabel(last)} · ${n} 步`,
+        label: `${toolHumanLabel(last)} · ${n} 步`,
       });
     }
     buf = [];

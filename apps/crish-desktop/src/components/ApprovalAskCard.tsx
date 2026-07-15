@@ -18,19 +18,26 @@ type Props = {
 function plainQuestion(summary: string, cmd?: string): string {
   const s = (summary || '').trim();
   const c = (cmd || '').trim();
-  if (/读|read/i.test(s) && !/写|删|edit|write|rm/i.test(s)) {
+  // summary 已是人话时，直接问「是否允许…」
+  if (/[\u4e00-\u9fff]/.test(s) && s.length <= 48 && !/^[\w./\\-]+$/.test(s)) {
+    if (/^是否允许/.test(s)) return s;
+    if (/正在|查看|修改|搜索|运行|安装|构建|列出|浏览/.test(s)) {
+      return `是否允许：${s.replace(/^正在/, '')}？`.replace(/？？$/, '？');
+    }
+  }
+  if (/读|查看|read/i.test(s) && !/写|删|edit|write|rm|修改/i.test(s)) {
     return '是否允许查看相关文件或信息？';
   }
-  if (/写|编辑|edit|write|patch/i.test(s)) {
+  if (/写|编辑|修改|edit|write|patch/i.test(s)) {
     return '是否允许修改项目中的文件？';
   }
   if (/删|rm |remove|delete/i.test(s) || /删|rm |delete/i.test(c)) {
     return '是否允许删除文件或执行有风险的清理？';
   }
-  if (/git |push|commit/i.test(c) || /git/i.test(s)) {
+  if (/git |push|commit/i.test(c) || /Git|git/i.test(s)) {
     return '是否允许执行 Git 相关操作？';
   }
-  if (/npm |pnpm |yarn |pip |cargo /i.test(c)) {
+  if (/npm |pnpm |yarn |pip |cargo |安装|构建/i.test(c + s)) {
     return '是否允许运行安装或构建类命令？';
   }
   if (c) {
