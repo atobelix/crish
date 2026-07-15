@@ -686,12 +686,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       className="settings-panel settings-panel--cover"
       onWheel={handleRootWheel}
     >
-      <header className="settings-cover-header">
-        <div className="settings-cover-header-left">
+      <header className="settings-cover-header" data-tauri-drag-region>
+        <div className="settings-cover-header-left" data-tauri-drag-region>
           {onClose ? (
             <button
               type="button"
-              className="settings-back-btn"
+              className="settings-back-btn no-drag"
+              data-tauri-drag-region="false"
               onClick={onClose}
               title="返回工作区"
             >
@@ -699,7 +700,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <span>返回</span>
             </button>
           ) : null}
-          <div className="settings-cover-title-block">
+          <div className="settings-cover-title-block" data-tauri-drag-region>
             <h1 className="settings-cover-title">设置</h1>
             <span className="settings-cover-subtitle">偏好与工作区配置</span>
           </div>
@@ -707,7 +708,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         {onClose ? (
           <button
             type="button"
-            className="settings-cover-close"
+            className="settings-cover-close no-drag"
+            data-tauri-drag-region="false"
             onClick={onClose}
             title="关闭"
             aria-label="关闭设置"
@@ -2232,9 +2234,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   }
                 />
 
-                <label className="settings-row settings-row--toggle">
+                <label className="settings-row settings-row--toggle settings-row--rich">
                   <div className="settings-row-label">
                     <span className="settings-row-title">隐藏思考过程</span>
+                    <span className="settings-row-desc">关闭后对话中不展示「思考中」状态</span>
                   </div>
                   <div className="settings-row-control">
                     <input

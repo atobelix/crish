@@ -330,36 +330,20 @@ export function isFontInstalled(family: string): boolean {
 export type LocalFontEntry = { family: string; fullName?: string; style?: string };
 
 /**
- * 扫描本机字体。优先 Local Font Access API，失败则回退精选列表探测。
+ * 扫描本机字体（产品友好）：
+ * - 不用 Local Font Access API（会弹出 localhost 权限框，正式版不可接受）
+ * - 用 canvas 探测各平台精选字体 + 用户手动输入
  */
 export async function listLocalFonts(): Promise<LocalFontEntry[]> {
   const map = new Map<string, LocalFontEntry>();
-
-  // Chromium Local Font Access API
-  try {
-    const w = window as Window & {
-      queryLocalFonts?: () => Promise<Array<{ family: string; fullName?: string; style?: string }>>;
-    };
-    if (typeof w.queryLocalFonts === 'function') {
-      const fonts = await w.queryLocalFonts();
-      for (const f of fonts) {
-        const fam = (f.family || '').trim();
-        if (!fam) continue;
-        if (!map.has(fam)) map.set(fam, { family: fam, fullName: f.fullName, style: f.style });
-      }
-    }
-  } catch {
-    /* 权限拒绝或不可用 */
+  const curated = curatedLocalFonts();
+  const all = [...new Set([...curated.ui, ...curated.mono])];
+  for (const fam of all) {
+    if (!fam || fam.startsWith('-')) continue;
+    if (isFontInstalled(fam)) map.set(fam, { family: fam });
   }
-
-  if (map.size === 0) {
-    const curated = curatedLocalFonts();
-    const all = [...new Set([...curated.ui, ...curated.mono])];
-    for (const fam of all) {
-      if (isFontInstalled(fam)) map.set(fam, { family: fam });
-    }
-  }
-
+  // 微任务让 UI 可先响应用户点击（避免扫描卡顿）
+  await Promise.resolve();
   return Array.from(map.values()).sort((a, b) =>
     a.family.localeCompare(b.family, 'zh-CN', { sensitivity: 'base' }),
   );

@@ -38,10 +38,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
 
   useEffect(() => {
     setPrefs(readStoredFonts());
-    // 首次静默尝试列本机（失败忽略）
-    void listLocalFonts()
-      .then((list) => setLocalFonts(list.map((f) => f.family)))
-      .catch(() => undefined);
+    // 不在挂载时扫描，避免多余工作；用户点扫描图标再列本机字体
   }, []);
 
   const apply = useCallback(

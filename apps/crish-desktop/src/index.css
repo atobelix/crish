@@ -23,9 +23,12 @@ html[data-theme="light"] {
 
   --accent-orange: #f59e0b;
   --accent-orange-light: #fffbeb;
-  --accent-green: #10b981;
-  --accent-green-hover: #059669;
-  --accent-green-light: #ecfdf5;
+  /* 点缀色对：高饱和绿 + 浅绿底（忌蓝紫） */
+  --accent-green: #19b36b;
+  --accent-green-hover: #15965a;
+  --accent-green-light: #f0fdf4;
+  --accent-green-soft: #dcfce7;
+  --accent-green-muted: #bbf7d0;
   --accent-red: #ef4444;
   --accent-red-light: #fef2f2;
   --accent-blue: #666666;
@@ -112,8 +115,10 @@ html[data-theme="dark"] {
   --accent-orange: #d97706;
   --accent-orange-light: #2a2010;
   --accent-green: #34d399;
-  --accent-green-hover: #10b981;
-  --accent-green-light: #10241c;
+  --accent-green-hover: #19b36b;
+  --accent-green-light: #14241c;
+  --accent-green-soft: #1a2e24;
+  --accent-green-muted: #234032;
   --accent-red: #f87171;
   --accent-red-light: #2a1414;
   --accent-blue: #a3a3a3;
@@ -2443,29 +2448,32 @@ body {
   padding-left: 2px;
 }
 
-/* Segmented control — filled track, solid active chip, no outlines */
+/* Segmented control — modern track + soft green active (三选滑块感) */
 .ui-segment {
   display: flex;
   gap: 2px;
   padding: 3px;
   background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
+  border-radius: 999px;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
 
 .ui-segment-item {
   flex: 1;
   background: transparent;
   border: none;
-  padding: 5px 6px;
-  border-radius: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
   font-size: var(--font-size-xs);
   font-family: var(--font-sans);
   height: auto;
-  min-height: 26px;
+  min-height: 28px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
+  box-shadow: none;
 }
 
 .ui-segment-item:hover {
@@ -2477,6 +2485,14 @@ body {
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
   font-weight: var(--font-weight-normal);
+}
+
+/* 外观/快捷菜单：选中带浅绿点缀 */
+.settings-row .ui-segment-item.active,
+.sb-quick-segment .ui-segment-item.active {
+  background: var(--accent-green-light);
+  color: var(--accent-green-hover);
+  box-shadow: none;
 }
 
 /* Legacy aliases */
@@ -4621,11 +4637,18 @@ select.settings-field-input {
   color: var(--text-primary) !important;
 }
 .settings-sidebar-tab.active {
-  background: var(--bg-active) !important;
-  color: var(--text-primary) !important;
+  background: var(--accent-green-light) !important;
+  color: var(--accent-green-hover) !important;
 }
 .settings-sidebar-tab.active svg {
-  color: var(--text-primary) !important;
+  color: var(--accent-green) !important;
+}
+html[data-theme="dark"] .settings-sidebar-tab.active {
+  background: var(--accent-green-soft) !important;
+  color: var(--accent-green) !important;
+}
+html[data-theme="dark"] .settings-sidebar-tab.active svg {
+  color: var(--accent-green) !important;
 }
 
 .settings-card-row {
@@ -4774,9 +4797,27 @@ select.settings-field-input {
   app-region: no-drag;
 }
 
+/* 设置全覆盖顶栏也可拖动窗口；交互控件排除 */
+.settings-cover-header {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.settings-cover-header .no-drag,
+.settings-cover-header button,
+.settings-cover-header a,
+.settings-cover-header input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 [data-tauri-drag-region] {
   -webkit-app-region: drag;
   app-region: drag;
+}
+[data-tauri-drag-region="false"],
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Sidebar brand (not Claude-like workspace pill) */
@@ -7771,42 +7812,7 @@ html[data-theme="dark"] .session-agent-item.active {
   color: var(--text-tertiary);
   margin-top: 2px;
 }
-/* 静音开关：中性灰轨道，不用系统绿/蓝 */
-.settings-toggle-row input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 32px;
-  height: 18px;
-  margin: 0;
-  border-radius: 9px;
-  background: var(--border-color);
-  position: relative;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-.settings-toggle-row input[type="checkbox"]::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--bg-primary);
-  top: 2px;
-  left: 2px;
-  transition: transform 0.15s ease;
-  box-shadow: var(--shadow-sm);
-}
-.settings-toggle-row input[type="checkbox"]:checked {
-  background: var(--text-secondary);
-}
-.settings-toggle-row input[type="checkbox"]:checked::after {
-  transform: translateX(14px);
-}
-.settings-toggle-row input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--border-color);
-  outline-offset: 2px;
-}
+/* 开关样式见文末 .settings-switch（高饱和绿开态） */
 /* Project picker + empty chat */
 .chat-empty-state {
   display: flex;
@@ -8805,15 +8811,7 @@ html[data-theme="dark"] .settings-card-row.is-active {
   border-color: var(--border-color);
   box-shadow: 0 0 0 1px var(--border-color);
 }
-html[data-theme="dark"] .settings-toggle-row input[type="checkbox"] {
-  background: var(--bg-active);
-}
-html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
-  background: var(--text-secondary);
-}
-html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
-  background: var(--bg-primary);
-}
+/* dark switch overrides: unified under .settings-switch block */
 html[data-theme="dark"] .shortcut-key-btn {
   background: var(--bg-tertiary);
   color: var(--text-primary);
@@ -9269,18 +9267,25 @@ html[data-theme="dark"] th {
   gap: 6px;
   height: var(--control-height);
   padding: 0 12px 0 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--accent-green-light);
+  color: var(--accent-green-hover);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   flex-shrink: 0;
+  box-shadow: none;
 }
 .settings-back-btn:hover {
-  background: var(--bg-hover);
+  background: var(--accent-green-soft);
+  border-color: var(--accent-green-muted);
+}
+html[data-theme="dark"] .settings-back-btn {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+  border-color: var(--border-subtle);
 }
 .settings-cover-title-block {
   display: flex;
@@ -9439,6 +9444,21 @@ html[data-theme="dark"] .crish-sidebar {
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   line-height: 1.3;
+  display: block;
+}
+.settings-row-desc {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+.settings-row--rich {
+  min-height: 52px;
+  align-items: center;
+}
+.settings-row--rich .settings-row-label {
+  max-width: 70%;
 }
 .settings-row-meta {
   font-size: var(--font-size-xs);
@@ -9501,36 +9521,60 @@ html[data-theme="dark"] .crish-sidebar {
   width: auto;
   max-width: none;
 }
-.settings-switch {
+/* 二选一开关：参考现代 iOS/产品开关，开=高饱和绿 */
+.settings-switch,
+.settings-toggle-row input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 32px;
-  height: 18px;
+  width: 40px;
+  height: 22px;
   margin: 0;
-  border-radius: 9px;
-  background: var(--border-color);
+  border-radius: 999px;
+  background: #d4d4d4;
   position: relative;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease;
+  border: none;
+  box-shadow: none;
+  transition: background 0.18s ease;
 }
-.settings-switch::after {
+.settings-switch::after,
+.settings-toggle-row input[type="checkbox"]::after {
   content: '';
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: var(--bg-primary);
+  background: #ffffff;
   top: 2px;
   left: 2px;
-  transition: transform 0.15s ease;
-  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.settings-switch:checked {
-  background: var(--text-secondary);
+.settings-switch:checked,
+.settings-toggle-row input[type="checkbox"]:checked {
+  background: var(--accent-green);
 }
-.settings-switch:checked::after {
-  transform: translateX(14px);
+.settings-switch:checked::after,
+.settings-toggle-row input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+}
+.settings-switch:focus-visible,
+.settings-toggle-row input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent-green-muted);
+  outline-offset: 2px;
+}
+html[data-theme="dark"] .settings-switch,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"] {
+  background: #4a4a4a;
+}
+html[data-theme="dark"] .settings-switch:checked,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
+  background: var(--accent-green);
+}
+html[data-theme="dark"] .settings-switch::after,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
+  background: #f5f5f5;
 }
 
 /* ===== SettingsSelect：主界面风格菜单 ===== */
@@ -9670,7 +9714,8 @@ html[data-theme="dark"] .crish-sidebar {
   background: var(--bg-hover);
 }
 .settings-select-item.is-active {
-  background: var(--bg-active);
+  background: var(--accent-green-light);
+  color: var(--accent-green-hover);
 }
 .settings-select-item-label {
   flex: 1;
@@ -9686,7 +9731,11 @@ html[data-theme="dark"] .crish-sidebar {
 }
 .settings-select-check {
   flex-shrink: 0;
-  color: var(--text-secondary);
+  color: var(--accent-green);
+}
+html[data-theme="dark"] .settings-select-item.is-active {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
 }
 .settings-select-empty {
   padding: 12px 10px;
