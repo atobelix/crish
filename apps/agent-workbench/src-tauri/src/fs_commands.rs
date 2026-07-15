@@ -22,6 +22,7 @@ const ERR_NOT_FILE: &str = "not_file";
 const ERR_OUTSIDE_WORKSPACE: &str = "outside_workspace";
 const ERR_READ_DIRECTORY: &str = "read_directory_failed";
 const ERR_READ_FILE: &str = "read_file_failed";
+const ERR_WRITE_FILE: &str = "write_file_failed";
 const ERR_FILE_TOO_LARGE: &str = "file_too_large";
 const ERR_BINARY_FILE: &str = "binary_file";
 const ERR_UNSUPPORTED_ENCODING: &str = "unsupported_encoding";
@@ -75,8 +76,11 @@ pub(crate) struct ListDirectoryResult {
 }
 
 #[tauri::command]
-pub(crate) fn list_directory(path: String) -> Result<ListDirectoryResult, FileCommandError> {
-    let guard = WorkspaceFsGuard::for_default_workspace()?;
+pub(crate) fn list_directory(
+    path: String,
+    workspace_root: Option<String>,
+) -> Result<ListDirectoryResult, FileCommandError> {
+    let guard = WorkspaceFsGuard::from_optional_root(workspace_root.as_deref())?;
     list_directory_with_guard(&guard, &path)
 }
 
@@ -139,9 +143,53 @@ pub(crate) struct ReadFileContentResult {
 pub(crate) fn read_file_content(
     path: String,
     max_lines: Option<usize>,
+    workspace_root: Option<String>,
 ) -> Result<ReadFileContentResult, FileCommandError> {
-    let guard = WorkspaceFsGuard::for_default_workspace()?;
+    let guard = WorkspaceFsGuard::from_optional_root(workspace_root.as_deref())?;
     read_file_content_with_guard(&guard, &path, ReadPolicy::for_preview(max_lines))
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriteFileContentResult {
+    path: String,
+    bytes_written: usize,
+}
+
+/// 在工作区内写入文本文件（供右侧文件管理器编辑保存）。
+#[tauri::command]
+pub(crate) fn write_file_content(
+    path: String,
+    content: String,
+    workspace_root: Option<String>,
+) -> Result<WriteFileContentResult, FileCommandError> {
+    let guard = WorkspaceFsGuard::from_optional_root(workspace_root.as_deref())?;
+    write_file_content_with_guard(&guard, &path, &content)
+}
+
+fn write_file_content_with_guard(
+    guard: &WorkspaceFsGuard,
+    path: &str,
+    content: &str,
+) -> Result<WriteFileContentResult, FileCommandError> {
+    let file_path = guard.resolve_for_write(path)?;
+    if let Some(parent) = file_path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                FileCommandError::new(ERR_WRITE_FILE, format!("Failed to create parent dirs: {e}"))
+            })?;
+        }
+    }
+    if content.len() > MAX_TEXT_FILE_BYTES {
+        return Err(file_too_large_error(content.len() as u64, MAX_TEXT_FILE_BYTES));
+    }
+    std::fs::write(&file_path, content.as_bytes()).map_err(|e| {
+        FileCommandError::new(ERR_WRITE_FILE, format!("Failed to write file: {e}"))
+    })?;
+    Ok(WriteFileContentResult {
+        path: file_path.to_string_lossy().to_string(),
+        bytes_written: content.len(),
+    })
 }
 
 fn read_file_content_with_guard(
@@ -182,6 +230,14 @@ impl WorkspaceFsGuard {
         Self::new(host_paths::workspace_root(&app_dir))
     }
 
+    /// 优先使用前端传入的项目工作区根；未传则回退 monorepo 默认根。
+    fn from_optional_root(workspace_root: Option<&str>) -> Result<Self, FileCommandError> {
+        match workspace_root {
+            Some(root) if !root.trim().is_empty() => Self::new(Path::new(root.trim())),
+            _ => Self::for_default_workspace(),
+        }
+    }
+
     fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         let root = root.as_ref().canonicalize().map_err(|e| {
             FileCommandError::new(
@@ -219,6 +275,78 @@ impl WorkspaceFsGuard {
 
         Ok(canonical)
     }
+
+    /// 解析可写路径：文件可不存在，但必须落在工作区根下。
+    fn resolve_for_write(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
+        let requested = Path::new(requested_path);
+        if requested.as_os_str().is_empty() {
+            return Err(FileCommandError::new(ERR_NOT_FILE, "Path is empty."));
+        }
+        let candidate = if requested.is_absolute() {
+            requested.to_path_buf()
+        } else {
+            self.root.join(requested)
+        };
+
+        if candidate.exists() {
+            let canonical = candidate.canonicalize().map_err(|e| {
+                FileCommandError::new(ERR_WRITE_FILE, format!("Failed to resolve path: {e}"))
+            })?;
+            if !path_is_same_or_child(&canonical, &self.root) {
+                return Err(FileCommandError::new(
+                    ERR_OUTSIDE_WORKSPACE,
+                    "Path is outside the allowed workspace root.",
+                ));
+            }
+            return Ok(canonical);
+        }
+
+        // 文件尚不存在：校验已存在的最近祖先在工作区内，并词法消除 `..`
+        let lexical = lexically_normalize(&candidate);
+        if !path_is_same_or_child(&lexical, &self.root) {
+            return Err(FileCommandError::new(
+                ERR_OUTSIDE_WORKSPACE,
+                "Path is outside the allowed workspace root.",
+            ));
+        }
+
+        let mut ancestor = lexical.clone();
+        while !ancestor.exists() {
+            if !ancestor.pop() {
+                return Err(FileCommandError::new(
+                    ERR_WRITE_FILE,
+                    "Cannot resolve write path parent.",
+                ));
+            }
+        }
+        let ancestor_canon = ancestor.canonicalize().map_err(|e| {
+            FileCommandError::new(ERR_WRITE_FILE, format!("Failed to resolve parent: {e}"))
+        })?;
+        if !path_is_same_or_child(&ancestor_canon, &self.root) {
+            return Err(FileCommandError::new(
+                ERR_OUTSIDE_WORKSPACE,
+                "Path is outside the allowed workspace root.",
+            ));
+        }
+
+        Ok(lexical)
+    }
+}
+
+/// 词法规范化路径（不访问磁盘），用于尚未创建的文件写路径。
+fn lexically_normalize(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::ParentDir => {
+                let _ = out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }
 
 fn path_is_same_or_child(path: &Path, root: &Path) -> bool {

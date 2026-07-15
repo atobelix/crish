@@ -62,6 +62,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     reason: "The frontend bridge references this desktop shell command, but the current Tauri backend does not register it.",
   },
   { command: "read_file_content", status: "implemented", feature: "workspace file preview" },
+  { command: "write_file_content", status: "implemented", feature: "workspace file editor save" },
   { command: "save_api_config", status: "implemented", feature: "provider config save" },
   { command: "select_folder", status: "implemented", feature: "workspace folder picker" },
   { command: "update_daemon_config", status: "implemented", feature: "daemon provider config update" },

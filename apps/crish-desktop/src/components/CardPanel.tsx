@@ -8,6 +8,7 @@ import { DiffCard } from './DiffCard';
 import { TasksCard } from './TasksCard';
 import { TerminalCard } from './TerminalCard';
 import { AgentCard } from './AgentCard';
+import { FilesCard } from './FilesCard';
 
 interface CardPanelProps {
   wsId: string;
@@ -48,6 +49,16 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
+  // 文件管理器：外部请求打开某路径时，先展开右侧「文件」面板
+  React.useEffect(() => {
+    const onOpenFile = () => {
+      handleGlobalTabClick('files');
+    };
+    window.addEventListener('crish-open-file', onOpenFile);
+    return () => window.removeEventListener('crish-open-file', onOpenFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsId]);
+
   const ws = workspaces.find((w) => w.id === wsId);
   const col = ws?.columns[colIdx];
   const group = col?.groups[groupIdx];
@@ -62,7 +73,8 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     switch (id) {
       case 'chat': return <Lucide.MessageSquare size={13} />;
       case 'plan': return <Lucide.Scroll size={13} />;
-      case 'preview': return <Lucide.Eye size={13} />;
+      case 'preview': return <Lucide.Globe size={13} />;
+      case 'files': return <Lucide.FolderTree size={13} />;
       case 'diff': return <Lucide.GitBranch size={13} />;
       case 'tasks': return <Lucide.CheckSquare size={13} />;
       case 'terminal': return <Lucide.Terminal size={13} />;
@@ -730,6 +742,9 @@ export const CardPanel: React.FC<CardPanelProps> = ({
             wsId={wsId} 
             onShowToast={onShowToast} 
           />
+        )}
+        {activeCardId === 'files' && (
+          <FilesCard onShowToast={onShowToast} />
         )}
         {activeCardId === 'diff' && (
           <DiffCard 

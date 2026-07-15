@@ -73,6 +73,7 @@ macro_rules! common_commands {
             config::update_daemon_config,
             fs_commands::list_directory,
             fs_commands::read_file_content,
+            fs_commands::write_file_content,
         ]
     };
 }
@@ -139,6 +140,7 @@ fn main() {
         config::update_daemon_config,
         fs_commands::list_directory,
         fs_commands::read_file_content,
+        fs_commands::write_file_content,
         // 开发专用命令
         cli_bridge::workbench_dev_cli_probe,
         cli_bridge::workbench_dev_cli_task_snapshot,

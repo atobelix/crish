@@ -44,6 +44,10 @@ import {
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import {
+  extractFilePathFromToolArgs,
+  openFileInPanel,
+} from '../api/workspaceFsApi';
+import {
   applyUsageDelta,
   fetchRunSnapshotUsage,
 } from '../api/sessionEventHydrate';
@@ -281,7 +285,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [goalText, setGoalText] = useState('自动完成系统的交互式升级与界面美化工作，包括状态栏 Ribbon、浏览器和终端模拟器的对接及验证。');
   const [goalActive, setGoalActive] = useState(() => isDemoMode());
 
-  const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks') => {
+  const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => {
     handleGlobalTabClick(panelId);
   };
 
@@ -836,6 +840,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     onShowToast(`已在右侧打开完整改动：${diff.filePath}`);
   };
 
+  /** 在右侧文件管理器中打开路径（按需预览，不刷屏） */
+  const openPathInFilesPanel = (filePath: string) => {
+    openSidePanel('files');
+    openFileInPanel(filePath);
+    onShowToast(`已在文件面板打开：${filePath.replace(/^.*[\\/]/, '')}`);
+  };
+
   const renderGitDiff = (diff: FileDiff) => {
     return (
       <div className="git-diff-card" key={diff.filePath}>
@@ -880,16 +891,32 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     diffs?: FileDiff[];
     name?: string;
     status?: string;
+    arguments?: string;
   }) => {
     const images = extractImageRefs(tc.output || '');
-    const out = truncateToolOutput(tc.output || '');
+    // 主对话里工具输出必须克制：长结果只给预览；完整内容走右侧文件/终端入口，不刷屏
+    const raw = tc.output || '';
+    const long = raw.length > 360 || raw.split('\n').length > 10;
+    const out = truncateToolOutput(raw, long ? 5 : 10, long ? 360 : 720);
     const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
+    const filePath = extractFilePathFromToolArgs(tc.arguments || '');
     if (!out && images.length === 0 && !hasDiffs) {
-      // 空成功/失败也给可见终态，避免「展开了什么都没有」
       if (tc.status === 'success') {
         return (
           <div className="tool-result-body">
             <pre className="tool-result-pre">完成</pre>
+            {filePath ? (
+              <button
+                type="button"
+                className="tool-result-open-file"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openPathInFilesPanel(filePath);
+                }}
+              >
+                在文件面板打开
+              </button>
+            ) : null}
           </div>
         );
       }
@@ -905,6 +932,37 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     return (
       <div className="tool-result-body">
         {out ? <pre className="tool-result-pre">{out}</pre> : null}
+        {long || filePath ? (
+          <div className="tool-result-long-hint">
+            {long ? <span>输出较长，已截断</span> : null}
+            <span className="tool-result-long-actions">
+              {filePath ? (
+                <button
+                  type="button"
+                  className="tool-result-hint-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPathInFilesPanel(filePath);
+                  }}
+                >
+                  文件面板
+                </button>
+              ) : null}
+              {long && isShellToolName(tc.name || '') ? (
+                <button
+                  type="button"
+                  className="tool-result-hint-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openSidePanel('terminal');
+                  }}
+                >
+                  终端
+                </button>
+              ) : null}
+            </span>
+          </div>
+        ) : null}
         {images.length > 0 && (
           <div className="tool-result-images">
             {images.map((src) => (
@@ -917,7 +975,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     );
   };
 
-  /** 短结果默认展开；长输出折叠 + 行内预览 */
+  /** 默认折叠长输出，避免主对话刷屏；错误可默认展开；长结果永不默认撑开 */
   const shouldDefaultOpenTool = (tc: {
     status?: string;
     output?: string;
@@ -925,12 +983,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   }) => {
     if (tc.status === 'running') return false;
     if (tc.status === 'pending_approval') return false;
-    if (tc.status === 'error') return true;
-    if (tc.diffs && tc.diffs.length > 0) return true;
+    if (tc.status === 'error') {
+      const o = (tc.output || '').trim();
+      return o.length > 0 && o.length < 200;
+    }
+    if (tc.diffs && tc.diffs.length > 0) return false; // diff 摘要行即可，完整看右侧
     const raw = (tc.output || '').trim();
     if (!raw || /^(执行中|运行中)…?$/.test(raw)) return false;
     const lines = raw.split('\n').filter((l) => l.trim());
-    return lines.length <= 4 && raw.length <= 360;
+    // 更克制：只有极短结果才默认展开
+    return lines.length <= 3 && raw.length <= 240;
   };
 
   const handleApprovalAllow = (toolId: string, msgId: string) => {
@@ -1047,6 +1109,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     const cmd = toolCommandPreview(tc);
     const running = tc.status === 'running';
     const canToggle = Boolean(body) || hasResult;
+    const filePath = extractFilePathFromToolArgs(tc.arguments || '');
+    const n = (tc.name || '').toLowerCase();
+    const showFileOpen =
+      Boolean(filePath) &&
+      (isEditToolName(n) || n.includes('read') || n.includes('write') || n.includes('edit') || n.includes('glob'));
     return (
       <div className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`} key={key}>
         <button
@@ -1076,6 +1143,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             <Lucide.ChevronRight size={11} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
           ) : null}
         </button>
+        {showFileOpen && filePath ? (
+          <button
+            type="button"
+            className="tool-row-file-open"
+            title="在文件面板预览"
+            onClick={(e) => {
+              e.stopPropagation();
+              openPathInFilesPanel(filePath);
+            }}
+          >
+            <Lucide.FolderTree size={11} />
+            打开文件
+          </button>
+        ) : null}
         {isOpen && body}
       </div>
     );

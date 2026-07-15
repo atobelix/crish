@@ -312,7 +312,8 @@ function App() {
     switch (id) {
       case 'chat': return <Lucide.MessageSquare size={13} />;
       case 'plan': return <Lucide.Scroll size={13} />;
-      case 'preview': return <Lucide.Eye size={13} />;
+      case 'files': return <Lucide.FolderTree size={13} />;
+      case 'preview': return <Lucide.Globe size={13} />;
       case 'diff': return <Lucide.GitBranch size={13} />;
       case 'tasks': return <Lucide.CheckSquare size={13} />;
       case 'terminal': return <Lucide.Terminal size={13} />;
@@ -439,9 +440,10 @@ function App() {
           </div>
 
           <div className="dropdown-group" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
-            {(['preview', 'diff', 'terminal', 'tasks'] as const).map((key) => {
+            {(['files', 'preview', 'diff', 'terminal', 'tasks'] as const).map((key) => {
               const labels: Record<string, string> = {
-                preview: '预览 / 浏览器',
+                files: '文件',
+                preview: '浏览器',
                 diff: '差异',
                 terminal: '终端',
                 tasks: '任务',

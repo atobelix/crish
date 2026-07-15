@@ -1100,7 +1100,8 @@ export const useLayoutStore = create<LayoutStore>()(
       const cardId = key === 'browser' ? 'preview' : key;
       const titleMap: Record<string, string> = {
         agent: '协作 Agent',
-        preview: '预览',
+        files: '文件',
+        preview: '浏览器',
         diff: '变更',
         terminal: '终端',
         tasks: '任务',
