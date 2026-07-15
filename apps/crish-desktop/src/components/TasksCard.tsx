@@ -30,7 +30,13 @@ export const TasksCard: React.FC = () => {
   const session = sessions.find((s) => s.id === activeSessionId);
 
   const engineSteps = useMemo(() => {
-    const tools = session?.messages?.flatMap((m) => m.toolCalls || []) || [];
+    // 主会话 + 协作 agent 工具步骤
+    const tools: MessageToolCall[] = [
+      ...(session?.messages?.flatMap((m) => m.toolCalls || []) || []),
+      ...(session?.agents || []).flatMap((a) =>
+        (a.messages || []).flatMap((m) => m.toolCalls || []),
+      ),
+    ];
     // 最近步骤倒序，去重 id，最多 40
     const seen = new Set<string>();
     const list: MessageToolCall[] = [];
@@ -42,7 +48,7 @@ export const TasksCard: React.FC = () => {
       if (list.length >= 40) break;
     }
     return list;
-  }, [session?.messages]);
+  }, [session?.messages, session?.agents]);
 
   const [memos, setMemos] = useState<MemoTask[]>(() =>
     demo
