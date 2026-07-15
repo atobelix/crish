@@ -1,21 +1,61 @@
-import React, { useState, useMemo, useCallback } from 'react';
+/**
+ * 右侧变更面板：Git 工作区变更 + 本会话 AI 回合汇总（下拉）。
+ * 工具栏以图标为主，保持功能行紧凑。
+ */
+import React, { useCallback, useMemo, useState } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
+import type { FileDiff, SessionMessage } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
 import { fetchGitDiff, fetchGitStatus } from '../api/gitApi';
+import { collectMessageDiffs } from './ChangeOverviewCard';
 
 interface DiffCardProps {
   onShowToast: (message: string) => void;
 }
 
+type SourceMode = 'session' | 'git' | 'list';
+
+function basename(p: string): string {
+  return p.replace(/^.*[\\/]/, '') || p;
+}
+
+function assistantTurnLabel(msg: SessionMessage, index: number): string {
+  const files = collectMessageDiffs(msg);
+  const n = files.length;
+  const t = new Date(msg.timestamp || Date.now());
+  const time = `${t.getHours().toString().padStart(2, '0')}:${t
+    .getMinutes()
+    .toString()
+    .padStart(2, '0')}`;
+  if (n === 0) return `回合 ${index + 1} · ${time}`;
+  return `回合 ${index + 1} · ${n} 个文件 · ${time}`;
+}
+
 const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
   const diffFiles = useLayoutStore((s) => s.diffFiles);
+  const sessions = useLayoutStore((s) => s.sessions);
+  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
   const pushDiffFile = useLayoutStore((s) => s.pushDiffFile);
+
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
   const [diffSearchQuery, setDiffSearchQuery] = useState('');
   const [gitLoading, setGitLoading] = useState(false);
+  const [sourceMode, setSourceMode] = useState<SourceMode>('list');
+  const [turnKey, setTurnKey] = useState('');
+
+  const session = sessions.find((s) => s.id === activeSessionId);
+  const aiTurns = useMemo(() => {
+    const msgs = (session?.messages || []).filter(
+      (m) => m.sender === 'assistant' && m.status !== 'processing',
+    );
+    return msgs
+      .map((m, i) => ({ msg: m, index: i, files: collectMessageDiffs(m) }))
+      .filter((t) => t.files.length > 0)
+      .reverse();
+  }, [session?.messages]);
 
   const fileList = useMemo(() => {
     if (diffFiles.length > 0) return diffFiles;
@@ -23,6 +63,15 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   }, [diffFiles, activeDiffSource]);
 
   const current = activeDiffSource || fileList[0] || null;
+
+  const applyFiles = useCallback(
+    (files: FileDiff[], mode: SourceMode) => {
+      setDiffFiles(files);
+      setActiveDiffSource(files[0] || null);
+      setSourceMode(mode);
+    },
+    [setActiveDiffSource, setDiffFiles],
+  );
 
   const loadFromGit = useCallback(async () => {
     setGitLoading(true);
@@ -32,8 +81,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         onShowToast(status.found ? '工作区无未提交变更' : '无法读取 Git 状态');
         return;
       }
-      const collected: typeof diffFiles = [];
-      // 优先批量 unstaged；失败则逐文件
+      const collected: FileDiff[] = [];
       const batch = await fetchGitDiff({});
       if (batch.files.length > 0) {
         for (const f of batch.files) {
@@ -50,26 +98,65 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         }
       }
       if (collected.length > 0) {
-        setActiveDiffSource(collected[0]);
-        onShowToast(`已载入 ${collected.length} 个 Git 变更`);
+        applyFiles(collected, 'git');
+        setTurnKey('');
+        onShowToast(`Git · ${collected.length} 个文件`);
       } else {
-        // 占位列表
         const placeholders = status.files.slice(0, 20).map((gf) => ({
           filePath: gf.path,
           additions: 0,
           deletions: 0,
           changes: [{ type: 'normal' as const, content: `（${gf.status}）暂无行级 diff` }],
         }));
-        setDiffFiles(placeholders);
-        setActiveDiffSource(placeholders[0] || null);
-        onShowToast(`已列出 ${placeholders.length} 个变更文件`);
+        applyFiles(placeholders, 'git');
+        setTurnKey('');
+        onShowToast(`Git · 列出 ${placeholders.length} 个文件`);
       }
     } catch {
       onShowToast('从 Git 载入失败');
     } finally {
       setGitLoading(false);
     }
-  }, [onShowToast, pushDiffFile, setActiveDiffSource, setDiffFiles]);
+  }, [applyFiles, onShowToast, pushDiffFile]);
+
+  const loadSessionAll = useCallback(() => {
+    const map = new Map<string, FileDiff>();
+    for (const t of aiTurns) {
+      for (const f of t.files) {
+        const prev = map.get(f.filePath);
+        if (!prev) map.set(f.filePath, f);
+        else {
+          map.set(f.filePath, {
+            ...f,
+            additions: (prev.additions || 0) + (f.additions || 0),
+            deletions: (prev.deletions || 0) + (f.deletions || 0),
+            changes: [...(prev.changes || []), ...(f.changes || [])].slice(0, 400),
+          });
+        }
+      }
+    }
+    const files = [...map.values()];
+    if (!files.length) {
+      onShowToast('本会话尚无 AI 文件改动');
+      return;
+    }
+    applyFiles(files, 'session');
+    setTurnKey('__all__');
+    onShowToast(`本会话 · ${files.length} 个文件`);
+  }, [aiTurns, applyFiles, onShowToast]);
+
+  const onTurnSelect = (key: string) => {
+    setTurnKey(key);
+    if (key === '') return;
+    if (key === '__all__') {
+      loadSessionAll();
+      return;
+    }
+    const turn = aiTurns.find((t) => t.msg.id === key);
+    if (!turn) return;
+    applyFiles(turn.files, 'session');
+    onShowToast(assistantTurnLabel(turn.msg, turn.index));
+  };
 
   const filteredChanges = useMemo(() => {
     if (!current) return [];
@@ -79,330 +166,162 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   }, [current, diffSearchQuery]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, background: 'var(--bg-primary)' }}>
-      <div
-        className="card-subheader diff-subheader"
-        style={{
-          padding: '8px 12px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-primary)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <Lucide.FileDiff size={16} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-            代码变更
+    <div className="diff-panel">
+      <div className="diff-toolbar">
+        <div className="diff-toolbar-left">
+          <Lucide.FileDiff size={16} className="diff-toolbar-ico" />
+          <span className="diff-toolbar-title">
+            {sourceMode === 'git' ? 'Git' : sourceMode === 'session' ? '会话' : '变更'}
           </span>
-          {fileList.length > 0 && (
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{fileList.length} 个文件</span>
-          )}
+          {fileList.length > 0 ? (
+            <span className="diff-toolbar-meta">{fileList.length}</span>
+          ) : null}
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: 'var(--bg-secondary)',
-              borderRadius: 6,
-              padding: '3px 8px',
-            }}
+        <div className="diff-toolbar-actions">
+          <select
+            className="diff-turn-select"
+            value={turnKey}
+            title="本会话 AI 改动汇总"
+            onChange={(e) => onTurnSelect(e.target.value)}
           >
-            <Lucide.Search size={14} style={{ color: 'var(--text-tertiary)', marginRight: 4 }} />
-            <input
-              type="text"
-              placeholder="筛选…"
-              value={diffSearchQuery}
-              onChange={(e) => setDiffSearchQuery((e.target as HTMLInputElement).value)}
-              style={{
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                fontSize: 12,
-                width: 90,
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-              }}
-            />
-          </div>
-          <div className="ui-segment" style={{ padding: 2 }}>
-            <button
-              type="button"
-              className={`ui-segment-item ${diffViewMode === 'unified' ? 'active' : ''}`}
-              style={{ minHeight: 22, fontSize: 11, padding: '2px 8px' }}
-              onClick={() => setDiffViewMode('unified')}
-            >
-              合并
-            </button>
-            <button
-              type="button"
-              className={`ui-segment-item ${diffViewMode === 'split' ? 'active' : ''}`}
-              style={{ minHeight: 22, fontSize: 11, padding: '2px 8px' }}
-              onClick={() => setDiffViewMode('split')}
-            >
-              分栏
-            </button>
-          </div>
+            <option value="">AI 回合…</option>
+            <option value="__all__">本会话全部改动</option>
+            {aiTurns.map((t) => (
+              <option key={t.msg.id} value={t.msg.id}>
+                {assistantTurnLabel(t.msg, t.index)}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            title="从 Git 刷新"
+            className="diff-icon-btn"
+            title="载入 Git 未提交变更"
             disabled={gitLoading}
             onClick={() => void loadFromGit()}
           >
-            <Lucide.RefreshCw size={16} className={gitLoading ? 'spin' : ''} />
+            <Lucide.GitBranch size={16} className={gitLoading ? 'spin' : ''} />
           </button>
-          {fileList.length > 0 && (
+          <button
+            type="button"
+            className="diff-icon-btn"
+            title="本会话全部 AI 改动"
+            onClick={loadSessionAll}
+          >
+            <Lucide.Layers size={16} />
+          </button>
+          <button
+            type="button"
+            className={`diff-icon-btn ${diffViewMode === 'unified' ? 'is-on' : ''}`}
+            title="合并视图"
+            onClick={() => setDiffViewMode('unified')}
+          >
+            <Lucide.List size={16} />
+          </button>
+          <button
+            type="button"
+            className={`diff-icon-btn ${diffViewMode === 'split' ? 'is-on' : ''}`}
+            title="分栏视图"
+            onClick={() => setDiffViewMode('split')}
+          >
+            <Lucide.Columns size={16} />
+          </button>
+          <div className="diff-search">
+            <Lucide.Search size={14} />
+            <input
+              type="text"
+              placeholder="筛选"
+              value={diffSearchQuery}
+              onChange={(e) => setDiffSearchQuery(e.target.value)}
+            />
+          </div>
+          {fileList.length > 0 ? (
             <button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              className="diff-icon-btn"
               title="清空列表"
               onClick={() => {
                 setDiffFiles([]);
                 setActiveDiffSource(null);
+                setTurnKey('');
+                setSourceMode('list');
               }}
             >
               <Lucide.Trash2 size={16} />
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* 多文件列表 */}
-        {fileList.length > 1 && (
-          <div
-            style={{
-              width: 160,
-              borderRight: '1px solid var(--border-subtle)',
-              overflowY: 'auto',
-              flexShrink: 0,
-              background: 'var(--bg-secondary)',
-            }}
-          >
+      <div className="diff-body-wrap">
+        {fileList.length > 1 ? (
+          <div className="diff-file-list">
             {fileList.map((f) => {
               const active = current?.filePath === f.filePath;
-              const base = f.filePath.replace(/\\/g, '/').split('/').pop() || f.filePath;
               return (
                 <button
                   key={f.filePath}
                   type="button"
+                  className={`diff-file-item ${active ? 'is-active' : ''}`}
                   onClick={() => setActiveDiffSource(f)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border-subtle)',
-                    background: active ? 'var(--bg-active)' : 'transparent',
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontWeight: active ? 600 : 400,
-                  }}
                   title={f.filePath}
                 >
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {base}
-                  </div>
-                  <div style={{ fontSize: 10, marginTop: 2 }}>
-                    <span style={{ color: 'var(--accent-green)' }}>+{f.additions}</span>{' '}
-                    <span style={{ color: 'var(--accent-red)' }}>-{f.deletions}</span>
-                  </div>
+                  <span className="diff-file-name">{basename(f.filePath)}</span>
+                  <span className="diff-file-stat">
+                    <span className="add">+{f.additions}</span>
+                    <span className="del">−{f.deletions}</span>
+                  </span>
                 </button>
               );
             })}
           </div>
-        )}
+        ) : null}
 
-        <div className="diff-body" style={{ overflowY: 'auto', flex: 1, background: 'var(--bg-primary)' }}>
+        <div className={`diff-body ${diffViewMode === 'split' ? 'is-split' : ''}`}>
           {!current ? (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                padding: 24,
-                color: 'var(--text-tertiary)',
-                fontSize: 13,
-                textAlign: 'center',
-                gap: 8,
-              }}
-            >
+            <div className="diff-empty">
               <Lucide.FileDiff size={28} style={{ opacity: 0.35 }} />
-              <div>暂无变更可查看</div>
-              <div style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 280 }}>
-                助手修改文件后会在此列出；也可从 Git 工作区载入未提交变更。
+              <div>暂无变更</div>
+              <div className="diff-empty-sub">
+                助手改文件后会出现在此；也可载入 Git 未提交变更，或从上方下拉查看本会话各回合汇总。
               </div>
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={gitLoading}
-                onClick={() => void loadFromGit()}
-                style={{ marginTop: 8 }}
-              >
-                {gitLoading ? '读取中…' : '从 Git 载入'}
-              </button>
+              <div className="diff-empty-actions">
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  disabled={gitLoading}
+                  onClick={() => void loadFromGit()}
+                >
+                  <Lucide.GitBranch size={15} />
+                  Git 变更
+                </button>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  onClick={loadSessionAll}
+                >
+                  <Lucide.Layers size={15} />
+                  会话汇总
+                </button>
+              </div>
             </div>
           ) : (
             <>
-              <div
-                style={{
-                  padding: '10px 14px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      color: 'var(--text-primary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={current.filePath}
-                  >
-                    {current.filePath}
-                  </span>
-                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-                    <span style={{ color: 'var(--accent-green)' }}>+{current.additions}</span>{' '}
-                    <span style={{ color: 'var(--accent-red)' }}>-{current.deletions}</span>
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="复制路径"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(current.filePath);
-                      onShowToast('已复制路径');
-                    }}
-                  >
-                    <Lucide.Link size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="复制差异"
-                    onClick={() => {
-                      const diffText = current.changes
-                        .map(
-                          (c) =>
-                            `${c.type === 'addition' ? '+' : c.type === 'deletion' ? '-' : ' '}${c.content}`,
-                        )
-                        .join('\n');
-                      void navigator.clipboard.writeText(diffText);
-                      onShowToast('已复制差异');
-                    }}
-                  >
-                    <Lucide.Copy size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="关闭"
-                    onClick={() => {
-                      setActiveDiffSource(null);
-                    }}
-                  >
-                    <Lucide.X size={16} />
-                  </button>
-                </div>
+              <div className="diff-current-path" title={current.filePath}>
+                {current.filePath}
               </div>
-
-              {diffViewMode === 'split' ? (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    borderTop: 'none',
-                  }}
-                >
-                  <div style={{ borderRight: '1px solid var(--border-subtle)' }}>
-                    <div
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: 11,
-                        color: 'var(--text-tertiary)',
-                        borderBottom: '1px solid var(--border-subtle)',
-                      }}
-                    >
-                      删除
-                    </div>
-                    {filteredChanges
-                      .filter((c) => c.type !== 'addition')
-                      .map((change, i) => (
-                        <div
-                          key={i}
-                          className={`git-diff-line-row ${change.type === 'deletion' ? 'deletion' : ''}`}
-                        >
-                          <div className="line-num-col">{change.type === 'deletion' ? '-' : ' '}</div>
-                          <pre className="line-content">{change.content}</pre>
-                        </div>
-                      ))}
+              <pre className="diff-lines">
+                {filteredChanges.map((c, i) => (
+                  <div
+                    key={i}
+                    className={`diff-line diff-line--${c.type}`}
+                  >
+                    <span className="diff-line-mark">
+                      {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
+                    </span>
+                    <span className="diff-line-text">{c.content}</span>
                   </div>
-                  <div>
-                    <div
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: 11,
-                        color: 'var(--text-tertiary)',
-                        borderBottom: '1px solid var(--border-subtle)',
-                      }}
-                    >
-                      新增
-                    </div>
-                    {filteredChanges
-                      .filter((c) => c.type !== 'deletion')
-                      .map((change, i) => (
-                        <div
-                          key={i}
-                          className={`git-diff-line-row ${change.type === 'addition' ? 'addition' : ''}`}
-                        >
-                          <div className="line-num-col">{change.type === 'addition' ? '+' : ' '}</div>
-                          <pre className="line-content">{change.content}</pre>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="git-diff-lines-container">
-                  {filteredChanges.map((change, i) => (
-                    <div key={i} className={`git-diff-line-row ${change.type}`}>
-                      <div className="line-num-col">
-                        {change.type === 'addition' ? '+' : change.type === 'deletion' ? '-' : ' '}
-                      </div>
-                      <pre className="line-content">{change.content}</pre>
-                    </div>
-                  ))}
-                  {filteredChanges.length === 0 && (
-                    <div
-                      style={{
-                        padding: 16,
-                        fontSize: 12,
-                        color: 'var(--text-tertiary)',
-                        textAlign: 'center',
-                      }}
-                    >
-                      没有匹配的行
-                    </div>
-                  )}
-                </div>
-              )}
+                ))}
+              </pre>
             </>
           )}
         </div>

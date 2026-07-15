@@ -1,7 +1,7 @@
 /**
  * 协作 agent 面板：时间线 + 可交互输入（运行中 steer / 结束后新 run 续聊）。
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionAgent, SessionMessage } from '../store/layoutStore';
@@ -18,12 +18,268 @@ import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback
 import { publishToolDiffs } from '../api/publishToolDiffs';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import {
+  buildCollaboratorPrompt,
   getSubagentStatus,
   sendToSubagent,
   streamCollaboratorRun,
 } from '../api/subagentApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { ApprovalAskCard } from './ApprovalAskCard';
+
+/** 右侧 Agent 默认落地：新建协作对话（继承上下文 / 临时分析） */
+function AgentLaunchPad({
+  parentSessionId,
+  onClose,
+}: {
+  parentSessionId?: string | null;
+  onClose?: () => void;
+}) {
+  const sessions = useLayoutStore((s) => s.sessions);
+  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
+  const setPanelAgentId = useLayoutStore((s) => s.setPanelAgentId);
+  const setActiveAgentId = useLayoutStore((s) => s.setActiveAgentId);
+  const parentId = parentSessionId || activeSessionId;
+  const parent = sessions.find((s) => s.id === parentId);
+  const agents = parent?.agents || [];
+  const [task, setTask] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const recentContext = useMemo(() => {
+    const msgs = parent?.messages || [];
+    const slice = msgs.slice(-6);
+    return slice
+      .map((m) => {
+        const who = m.sender === 'user' ? '用户' : '助手';
+        const text = (m.text || '').trim().slice(0, 280);
+        return text ? `${who}：${text}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }, [parent?.messages]);
+
+  const startAgent = (kind: 'inherit' | 'scratch') => {
+    const sid = parentId || useLayoutStore.getState().createSession({ title: '新会话' });
+    if (!sid) return;
+    const q = task.trim();
+    if (!q) return;
+    setBusy(true);
+    const agentId = `collab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const desc =
+      kind === 'inherit' ? '继承上下文' : '临时分析';
+    const taskBody =
+      kind === 'inherit'
+        ? [
+            '请基于主对话近期上下文协助决策或继续任务。',
+            recentContext ? `【主对话摘要】\n${recentContext}` : '',
+            `【用户问题】\n${q}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n')
+        : [
+            '你是临时分析助手：解释主 agent 为何这样改、评估风险与替代方案，默认不直接大改仓库。',
+            recentContext ? `【主对话片段】\n${recentContext}` : '',
+            `【用户问题】\n${q}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n');
+
+    upsertSessionAgent(sid, {
+      id: agentId,
+      subagentRunId: '',
+      parentSessionId: sid,
+      parentRunId: '',
+      description: desc,
+      mode: kind === 'inherit' ? 'implement' : 'research',
+      status: 'running',
+      messages: [
+        {
+          id: `agent-user-${Date.now()}`,
+          sender: 'user',
+          text: q,
+          timestamp: Date.now(),
+          status: 'completed',
+        },
+      ],
+      startedAt: Date.now(),
+    });
+    setPanelAgentId(agentId);
+    setActiveAgentId(null);
+
+    const prompt = buildCollaboratorPrompt({
+      mode: kind === 'inherit' ? 'implement' : 'research',
+      description: desc,
+      task: taskBody,
+      parentSessionTitle: parent?.title,
+    });
+    const asstId = `agent-asst-${Date.now().toString(36)}`;
+    useLayoutStore.getState().appendSessionAgentMessage(sid, agentId, {
+      id: asstId,
+      sender: 'assistant',
+      text: '',
+      thinking: '正在处理…',
+      timestamp: Date.now(),
+      status: 'processing',
+      toolCalls: [],
+      blocks: [],
+    });
+
+    const patchAsst = (fn: (m: SessionMessage) => void) => {
+      useLayoutStore.setState((state) => {
+        const ag = state.sessions.find((s) => s.id === sid)?.agents?.find((a) => a.id === agentId);
+        const m = ag?.messages?.find((x) => x.id === asstId);
+        if (m) fn(m);
+      });
+    };
+
+    streamCollaboratorRun(prompt, agentId, {
+      onRunMeta: ({ runId }) => {
+        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
+          subagentRunId: runId,
+          parentRunId: runId,
+          status: 'running',
+        });
+      },
+      onThought: (t) =>
+        patchAsst((m) => {
+          m.thinking = t;
+        }),
+      onChunk: (c) =>
+        patchAsst((m) => {
+          m.text = c;
+          if (m.thinking === '正在处理…') m.thinking = '';
+        }),
+      onToolStart: (toolId, name, args, explanation) => {
+        patchAsst((m) => {
+          if (!m.toolCalls) m.toolCalls = [];
+          if (!m.blocks) m.blocks = [];
+          if (!m.toolCalls.some((t) => t.id === toolId)) {
+            m.toolCalls.push({
+              id: toolId,
+              name,
+              arguments: args,
+              explanation,
+              status: 'running',
+            });
+            m.blocks.push({ type: 'tool_call', id: toolId });
+          }
+        });
+      },
+      onToolSuccess: (toolId, output, diffs) => {
+        let resolved: import('../store/layoutStore').FileDiff[] = [];
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (!tc) return;
+          const displayOut = sanitizeToolDisplayOutput(output || '');
+          resolved = resolveToolDiffs({
+            name: tc.name || '',
+            args: tc.arguments,
+            output: displayOut,
+            structuredDiffs: diffs,
+          });
+          tc.status = 'success';
+          tc.output = displayOut || output || '完成';
+          if (resolved.length) tc.diffs = resolved;
+        });
+        publishToolDiffs(resolved);
+      },
+      onToolError: (toolId, error) => {
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (tc) {
+            tc.status = 'error';
+            tc.output = sanitizeToolDisplayOutput(error || '') || error || '失败';
+          }
+        });
+      },
+      onComplete: () => {
+        patchAsst((m) => {
+          m.status = 'completed';
+          if (m.thinking === '正在处理…') m.thinking = '';
+        });
+        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
+          status: 'completed',
+          endedAt: Date.now(),
+        });
+        setBusy(false);
+      },
+    });
+  };
+
+  return (
+    <div className="agent-card agent-card--launch">
+      <header className="agent-card-header agent-card-header--slim">
+        <div className="agent-card-title-row">
+          <Lucide.Bot size={16} strokeWidth={1.75} />
+          <span className="agent-card-title">协作对话</span>
+        </div>
+        {onClose ? (
+          <button type="button" className="agent-card-btn" title="关闭" onClick={onClose}>
+            <Lucide.X size={16} />
+          </button>
+        ) : null}
+      </header>
+
+      <div className="agent-launch-body">
+        <p className="agent-launch-lead">
+          新建独立协作区：继承主会话上下文继续任务，或开临时窗口追问「主 agent 为何这样改」。
+        </p>
+        <textarea
+          className="agent-launch-input"
+          placeholder="描述你想让协作 agent 做什么…"
+          value={task}
+          rows={3}
+          disabled={busy}
+          onChange={(e) => setTask(e.target.value)}
+        />
+        <div className="agent-launch-actions">
+          <button
+            type="button"
+            className="ui-btn ui-btn-primary ui-btn-sm"
+            disabled={busy || !task.trim()}
+            title="带上主对话近期消息"
+            onClick={() => startAgent('inherit')}
+          >
+            <Lucide.GitBranch size={15} strokeWidth={1.75} />
+            继承上下文
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            disabled={busy || !task.trim()}
+            title="临时分析窗口"
+            onClick={() => startAgent('scratch')}
+          >
+            <Lucide.MessageCircleQuestion size={15} strokeWidth={1.75} />
+            临时分析
+          </button>
+        </div>
+
+        {agents.length > 0 ? (
+          <div className="agent-launch-list">
+            <div className="agent-launch-list-h">本会话已有协作</div>
+            {agents.slice(0, 8).map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className="agent-launch-item"
+                onClick={() => {
+                  setPanelAgentId(a.id);
+                }}
+              >
+                <Lucide.Bot size={14} strokeWidth={1.75} />
+                <span className="agent-launch-item-t">{a.description || a.mode || a.id}</span>
+                <span className={`agent-card-badge agent-card-badge--${a.status}`}>
+                  {a.status === 'running' ? '运行中' : a.status === 'failed' ? '失败' : '完成'}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 interface AgentCardProps {
   agentId?: string | null;
@@ -109,13 +365,10 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
   if (!agent || !sess) {
     return (
-      <div className="agent-card agent-card--empty">
-        <Lucide.Bot size={22} style={{ opacity: 0.35 }} />
-        <p>选择一个协作 agent 查看时间线</p>
-        <p className="agent-card-empty-hint">
-          主对话中模型调用 run_subagent，或点击「拉起协作者」即可创建
-        </p>
-      </div>
+      <AgentLaunchPad
+        parentSessionId={parentId}
+        onClose={onClose}
+      />
     );
   }
 

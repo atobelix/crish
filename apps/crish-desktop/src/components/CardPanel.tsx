@@ -156,8 +156,8 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     { id: 'terminal', label: '终端' },
     { id: 'tasks', label: '任务' },
     { id: 'preview', label: '预览' },
-    { id: 'runtime', label: '运行状态' },
-    { id: 'agent', label: 'Agent' },
+    { id: 'runtime', label: '运行' },
+    { id: 'agent', label: '协作' },
   ];
 
   const handleTabClick = (cardId: string) => {
@@ -252,7 +252,17 @@ export const CardPanel: React.FC<CardPanelProps> = ({
                 onClick={() => handleTabClick(c.id)}
                 onPointerDown={(e) => handleTabPointerDown(e, c.id)}
                 style={{ touchAction: 'none' }}
-                title={c.title}
+                title={
+                  c.id === 'diff'
+                    ? '变更 · Git 与 AI 改动'
+                    : c.id === 'agent'
+                      ? '协作 · 新建或查看 agent'
+                      : c.id === 'files'
+                        ? '文件 · 工作区浏览'
+                        : c.id === 'terminal'
+                          ? '终端 · 命令输出'
+                          : c.title
+                }
               >
                 <div className="tab-icon-container">{renderCardIcon(c.id)}</div>
                 <span className="tab-label">{c.title}</span>

@@ -37,9 +37,13 @@ html[data-theme="light"] {
   --accent-violet: #666666;
   --accent-violet-light: #f5f5f5;
 
-  --terminal-bg: #1a1a1a;
-  --terminal-fg: #d4d4d4;
-  --terminal-muted: #6a6a6a;
+  /* 白天跟随应用浅色，避免终端永远是黑底 */
+  --terminal-bg: var(--bg-primary);
+  --terminal-fg: var(--text-primary);
+  --terminal-muted: var(--text-tertiary);
+  --terminal-border: var(--border-subtle);
+  --terminal-cmd: var(--text-secondary);
+  --terminal-bar-fill: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
 
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -132,9 +136,12 @@ html[data-theme="dark"] {
   --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.4);
   --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.38);
   --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.45);
-  --terminal-bg: #161616;
+  --terminal-bg: #1a1a1a;
   --terminal-fg: #d4d4d4;
-  --terminal-muted: #6a6a6a;
+  --terminal-muted: #7a7a7a;
+  --terminal-border: rgba(255, 255, 255, 0.08);
+  --terminal-cmd: #b0b0b0;
+  --terminal-bar-fill: rgba(255, 255, 255, 0.04);
   color-scheme: dark;
 }
 

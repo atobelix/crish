@@ -395,22 +395,32 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             ) : (
               <>
                 <Lucide.Folder size={16} className="files-path-ico" />
-                <div className="files-path-crumbs files-path-crumbs--grow" title={cwd}>
-                  {breadcrumbs.map((b, i) => (
-                    <React.Fragment key={b.path}>
-                      {i > 0 ? <span className="files-bc-sep">/</span> : null}
-                      <button
-                        type="button"
-                        className="files-bc-chip"
-                        onClick={() => {
-                          setView('browse');
-                          void refresh(b.path);
-                        }}
-                      >
-                        {b.label}
-                      </button>
-                    </React.Fragment>
-                  ))}
+                {/* 地址栏：项目内相对路径面包屑，不是「功能区」路由 */}
+                <div
+                  className="files-path-crumbs files-path-crumbs--grow"
+                  title={cwd ? `工作区路径：${cwd}` : '项目根'}
+                  aria-label="当前文件夹"
+                >
+                  {breadcrumbs.length === 0 ? (
+                    <span className="files-bc-chip files-bc-chip--muted">项目根</span>
+                  ) : (
+                    breadcrumbs.map((b, i) => (
+                      <React.Fragment key={b.path}>
+                        {i > 0 ? <span className="files-bc-sep">/</span> : null}
+                        <button
+                          type="button"
+                          className={`files-bc-chip ${i === 0 ? 'files-bc-chip--root' : ''}`}
+                          title={i === 0 ? '项目根目录' : b.path}
+                          onClick={() => {
+                            setView('browse');
+                            void refresh(b.path);
+                          }}
+                        >
+                          {i === 0 ? '项目' : b.label}
+                        </button>
+                      </React.Fragment>
+                    ))
+                  )}
                 </div>
                 <button
                   type="button"
@@ -428,8 +438,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
           ) : (
             <>
               <Lucide.File size={16} className="files-path-ico" />
-              <div className="files-path-crumbs files-path-crumbs--grow" title={selected || ''}>
-                {selected ? pathRelativeToRoot(selected, root) : ''}
+              <div
+                className="files-path-crumbs files-path-crumbs--grow"
+                title={selected || ''}
+                aria-label="当前文件相对路径"
+              >
+                <span className="files-bc-chip files-bc-chip--muted">文件</span>
+                <span className="files-bc-sep">/</span>
+                <span className="files-bc-chip">
+                  {selected ? pathRelativeToRoot(selected, root) || pathBasename(selected) : ''}
+                </span>
               </div>
             </>
           )}

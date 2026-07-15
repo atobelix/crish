@@ -286,15 +286,24 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Product: never expose a "shell-only" workspace before engine is ready
+  // Product: 先画骨架壳，后台连引擎（避免空白「加载中」）
   if (productShell && !engineReady) {
     return (
-      <div className="app-container product-boot-gate">
-        <div className="product-boot-card">
-          <div className="product-boot-spinner" aria-hidden />
-          <div className="product-boot-title">Crish</div>
-          <div className="product-boot-sub">{productStartingMessage()}</div>
-        </div>
+      <div className="app-container app-boot-shell" role="status" aria-live="polite">
+        <aside className="app-boot-sidebar" aria-hidden>
+          <div className="app-boot-skel app-boot-skel--logo" />
+          <div className="app-boot-skel app-boot-skel--row" />
+          <div className="app-boot-skel app-boot-skel--row" />
+          <div className="app-boot-skel app-boot-skel--row" />
+          <div className="app-boot-skel app-boot-skel--row" style={{ width: '70%' }} />
+          <div style={{ flex: 1 }} />
+          <div className="app-boot-status">{productStartingMessage()}</div>
+        </aside>
+        <main className="app-boot-main" aria-hidden>
+          <div className="app-boot-skel app-boot-skel--title" />
+          <div className="app-boot-skel app-boot-skel--chat" />
+          <div className="app-boot-skel app-boot-skel--composer" />
+        </main>
       </div>
     );
   }
