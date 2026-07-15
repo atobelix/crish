@@ -5321,6 +5321,12 @@ html[data-theme="dark"] .settings-sidebar-tab.active svg {
 .inline-approval-btn.allow:hover:not(:disabled) {
   color: var(--text-primary);
 }
+.inline-approval-btn.allow-remember {
+  color: var(--text-secondary);
+}
+.inline-approval-btn.allow-remember:hover:not(:disabled) {
+  color: var(--text-primary);
+}
 
 .tool-row--pending {
   display: flex;

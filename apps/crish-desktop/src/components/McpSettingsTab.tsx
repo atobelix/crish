@@ -1,5 +1,7 @@
 /**
  * 设置 · 扩展服务（MCP）：列表 / 状态 / 启停 / 工具展开
+ * 正式：仅引擎 list；启停仅在 probe 允许时展示
+ * 演示：localStorage mock，不污染正式
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -7,6 +9,7 @@ import {
   listMcpServers,
   mcpStateKind,
   mcpStateLabel,
+  probeMcpControl,
   startMcpServer,
   stopMcpServer,
   type McpServerInfo,
@@ -21,6 +24,9 @@ type Props = {
   onAvailabilityChange?: (available: boolean) => void;
 };
 
+const START_STOP_HINT =
+  '当前引擎不支持从界面启停；MCP 通常随任务运行时连接';
+
 export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityChange }) => {
   const demo = isDemoMode();
   const [loading, setLoading] = useState(true);
@@ -30,6 +36,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  /** 正式：界面启停是否可用 */
+  const [canStartStop, setCanStartStop] = useState(false);
+  const [controlHint, setControlHint] = useState<string | undefined>();
 
   // demo 本地 mock
   const [demoServers, setDemoServers] = useState<McpServer[]>([]);
@@ -46,12 +55,20 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     setError(null);
     try {
       const r = await listMcpServers();
+      const probe = await probeMcpControl(r);
       setServers(r.servers);
       setStatus(r.status);
-      if (!r.ok && r.error) setError(r.error);
+      setCanStartStop(probe.canStartStop);
+      setControlHint(probe.message);
+      if (!r.ok && r.error) {
+        setError(r.error);
+      } else if (!probe.canList && probe.message) {
+        setError(probe.message);
+      }
       onAvailabilityChange?.(r.configured || r.servers.length > 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setCanStartStop(false);
       onAvailabilityChange?.(false);
     } finally {
       setLoading(false);
@@ -93,11 +110,24 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   }, [servers, filter]);
 
   const handleStart = async (id: string) => {
+    if (!canStartStop) {
+      onShowToast?.(controlHint || START_STOP_HINT);
+      return;
+    }
     setBusyId(id);
     try {
       const r = await startMcpServer(id);
-      if (!r.ok) onShowToast?.(r.error || '启动失败');
-      else onShowToast?.(`已请求启动 ${id}`);
+      if (!r.ok) {
+        onShowToast?.(r.error || '启动失败');
+        if (r.errorCode === 'unsupported') {
+          setCanStartStop(false);
+          setControlHint(r.error || START_STOP_HINT);
+        }
+        // 失败时仍刷新列表，但不假成功
+        await refreshLive();
+        return;
+      }
+      onShowToast?.(`已请求启动 ${id}`);
       await refreshLive();
     } finally {
       setBusyId(null);
@@ -105,11 +135,23 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   };
 
   const handleStop = async (id: string) => {
+    if (!canStartStop) {
+      onShowToast?.(controlHint || START_STOP_HINT);
+      return;
+    }
     setBusyId(id);
     try {
       const r = await stopMcpServer(id);
-      if (!r.ok) onShowToast?.(r.error || '停止失败');
-      else onShowToast?.(`已请求停止 ${id}`);
+      if (!r.ok) {
+        onShowToast?.(r.error || '停止失败');
+        if (r.errorCode === 'unsupported') {
+          setCanStartStop(false);
+          setControlHint(r.error || START_STOP_HINT);
+        }
+        await refreshLive();
+        return;
+      }
+      onShowToast?.(`已请求停止 ${id}`);
       await refreshLive();
     } finally {
       setBusyId(null);
@@ -295,7 +337,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         <div>
           <h4 className="mcp-tab-title">扩展服务</h4>
           <p className="mcp-tab-sub">
-            来自引擎 MCP 状态。可查看工具列表并请求启动 / 停止；配置文件由引擎侧管理。
+            展示引擎侧已配置的 MCP 状态与工具。服务配置由引擎管理，界面不写入引擎 MCP 配置。
           </p>
         </div>
         <button
@@ -317,6 +359,11 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           <span className="mcp-status-meta">就绪：{mcpStateLabel(status.readiness)}</span>
         ) : null}
         <span className="mcp-status-meta">服务 {servers.length}</span>
+        {!canStartStop ? (
+          <span className="mcp-status-meta" title={controlHint || START_STOP_HINT}>
+            启停：界面不可用
+          </span>
+        ) : null}
         <input
           className="settings-field-input mcp-search"
           placeholder="搜索服务或工具…"
@@ -326,6 +373,10 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       </div>
 
       {error ? <div className="mcp-banner warn">{error}</div> : null}
+
+      {!canStartStop && controlHint && servers.length > 0 ? (
+        <div className="mcp-banner">{controlHint || START_STOP_HINT}</div>
+      ) : null}
 
       <div className="mcp-list">
         {filtered.map((srv) => {
@@ -367,25 +418,48 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                     {isOpen ? <Lucide.ChevronUp size={14} /> : <Lucide.ChevronDown size={14} />}
                     工具
                   </button>
-                  {running ? (
-                    <button
-                      type="button"
-                      className="models-btn ghost"
-                      disabled={busyId === srv.id}
-                      onClick={() => void handleStop(srv.id)}
-                    >
-                      <Lucide.Square size={14} />
-                      停止
-                    </button>
+                  {canStartStop ? (
+                    running ? (
+                      <button
+                        type="button"
+                        className="models-btn ghost"
+                        disabled={busyId === srv.id}
+                        title="请求引擎停止该 MCP 服务"
+                        onClick={() => void handleStop(srv.id)}
+                      >
+                        <Lucide.Square size={14} />
+                        停止
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="models-btn"
+                        disabled={busyId === srv.id}
+                        title="请求引擎启动该 MCP 服务"
+                        onClick={() => void handleStart(srv.id)}
+                      >
+                        <Lucide.Play size={14} />
+                        启动
+                      </button>
+                    )
                   ) : (
                     <button
                       type="button"
-                      className="models-btn"
-                      disabled={busyId === srv.id}
-                      onClick={() => void handleStart(srv.id)}
+                      className="models-btn ghost"
+                      disabled
+                      title={controlHint || START_STOP_HINT}
                     >
-                      <Lucide.Play size={14} />
-                      启动
+                      {running ? (
+                        <>
+                          <Lucide.Square size={14} />
+                          停止
+                        </>
+                      ) : (
+                        <>
+                          <Lucide.Play size={14} />
+                          启动
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -422,10 +496,19 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           <div className="mcp-empty">
             {servers.length === 0 ? (
               <>
-                <div className="mcp-empty-title">引擎未报告 MCP 服务</div>
+                <div className="mcp-empty-title">暂无 MCP 服务</div>
                 <p>
-                  在引擎配置中登记 MCP 后，此处会列出服务并支持启停。配置路径与格式由当前引擎实现决定（常见为
-                  工作区或用户目录下的 MCP 配置文件）。
+                  MCP 由<strong>引擎侧配置</strong>（如启动 daemon 时的 mcpServers），本页不会写入引擎配置。
+                  默认引擎通常未注入 MCP，因此列表为空是正常现象。
+                </p>
+                <p>
+                  在引擎配置 MCP 并完成任务运行时连接后，此处才会列出服务与工具状态。
+                  {!canStartStop ? (
+                    <>
+                      {' '}
+                      {controlHint || START_STOP_HINT}
+                    </>
+                  ) : null}
                 </p>
               </>
             ) : (

@@ -295,6 +295,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Slash commands：固定 + 技能（enableSkillCommands）
+  // 正式模式仅保留已实现或有明确动作的命令；演示命令仅 demo
   const BASE_SLASH = useMemo(
     () => [
       ...(isDemoMode()
@@ -302,12 +303,12 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             { cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' },
             { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
             { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
+            { cmd: '/goal', desc: '执行长期自动迭代任务（演示）' },
+            { cmd: '/learn', desc: '记录最佳实践和对齐规则（演示）' },
           ]
         : []),
-      { cmd: '/goal', desc: '执行长期自动迭代任务' },
-      { cmd: '/schedule', desc: '配置周期性定时或重复任务' },
+      { cmd: '/schedule', desc: '打开设置中的定时任务' },
       { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
-      { cmd: '/learn', desc: '记录最佳实践和对齐规则' },
     ],
     [],
   );
@@ -781,6 +782,15 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     }
     const rawInput = chatInput.trim();
 
+    // /schedule → 打开设置「定时任务」页（不伪装为引擎内联调度命令）
+    if (/^\/schedule\b/i.test(rawInput)) {
+      setChatInput('');
+      setSlashMenuOpen(false);
+      useLayoutStore.getState().openSettings('schedule');
+      onShowToast('已打开定时任务设置');
+      return;
+    }
+
     // /browser [url] → 打开右侧内置预览浏览器
     if (/^\/browser\b/i.test(rawInput)) {
       const rest = rawInput.replace(/^\/browser\b/i, '').trim();
@@ -1037,10 +1047,25 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     return lines.length <= 3 && raw.length <= 240;
   };
 
-  const handleApprovalAllow = (toolId: string, msgId: string) => {
+  const handleApprovalAllow = (toolId: string, msgId: string, remember = false) => {
     // 乐观：立刻从 pending 摘掉，避免幽灵条卡住后续审批
     setApprovalBusy(true);
     const st = useLayoutStore.getState();
+    if (remember) {
+      const tc = st.sessions
+        .find((s) => s.id === activeSessionId)
+        ?.messages.find((m) => m.id === msgId)
+        ?.toolCalls?.find((t) => t.id === toolId);
+      const raw = (tc?.arguments || tc?.name || '').trim();
+      // 取命令首个 token 段作为可记忆前缀（至多前 3 段）
+      const line = raw.replace(/\r?\n/g, ' ').trim();
+      const parts = line.split(/\s+/).filter(Boolean);
+      const prefix = parts.slice(0, Math.min(3, parts.length)).join(' ');
+      if (prefix && !prefix.startsWith('{')) {
+        st.addCommandPermission(prefix);
+        onShowToast(`已加入白名单：${prefix}`);
+      }
+    }
     st.updateMessageToolCall(activeSessionId, msgId, toolId, {
       status: 'running',
       output: '执行中…',
@@ -1807,7 +1832,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </div>
         )}
 
-        {activePill === 'goal' && goalActive && (
+        {/* Goal 抽屉：正式模式无引擎目标能力，隐藏假进度/暂停 UI；仅演示模式保留 playground */}
+        {isDemoMode() && activePill === 'goal' && goalActive && (
           <div className="context-details-drawer">
             <div
               className="drawer-expand-content goal-drawer-content"
@@ -1921,7 +1947,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             }}
             busy={approvalBusy}
             queueRemaining={pendingQueueRemaining}
-            onAllow={() => handleApprovalAllow(pendingApprovalTc.id, pendingApprovalMsgId)}
+            onAllow={() => handleApprovalAllow(pendingApprovalTc.id, pendingApprovalMsgId, false)}
+            onAllowAndRemember={() =>
+              handleApprovalAllow(pendingApprovalTc.id, pendingApprovalMsgId, true)
+            }
             onDeny={() => handleApprovalDeny(pendingApprovalTc.id, pendingApprovalMsgId)}
           />
         )}

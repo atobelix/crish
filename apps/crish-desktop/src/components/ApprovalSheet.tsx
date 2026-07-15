@@ -18,6 +18,8 @@ type Props = {
   queueRemaining?: number;
   onAllow: () => void;
   onDeny: () => void;
+  /** 允许并加入命令白名单（可选，正式版增强） */
+  onAllowAndRemember?: () => void;
   variant?: 'inline' | 'sticky';
 };
 
@@ -37,6 +39,7 @@ export const ApprovalSheet: React.FC<Props> = ({
   queueRemaining = 0,
   onAllow,
   onDeny,
+  onAllowAndRemember,
   variant = 'inline',
 }) => {
   const summary = toolSummaryLabel({
@@ -77,6 +80,21 @@ export const ApprovalSheet: React.FC<Props> = ({
         >
           拒绝
         </button>
+        {onAllowAndRemember ? (
+          <button
+            type="button"
+            className="inline-approval-btn allow-remember"
+            disabled={busy}
+            title="允许并将此前缀加入白名单，下次同类命令自动放行"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAllowAndRemember();
+            }}
+          >
+            {busy ? '…' : '允许并记住'}
+          </button>
+        ) : null}
         <button
           type="button"
           className="inline-approval-btn allow"

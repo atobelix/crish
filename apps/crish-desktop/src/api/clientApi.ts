@@ -99,6 +99,8 @@ export interface Settings {
   sessionDir?: string;
   httpProxy?: string;
   httpIdleTimeoutMs?: number;
+  /** 回答风格（本机偏好；不强制进引擎协议） */
+  responseStyle?: 'minimal' | 'low' | 'medium' | 'high';
 }
 
 export interface ProviderInfo {
@@ -162,6 +164,7 @@ const DEFAULT_SETTINGS: Settings = {
   prompts: [],
   themes: [],
   sessionDir: '',
+  responseStyle: 'medium',
 };
 
 const DEFAULT_PROVIDERS: ProviderInfo[] = [
@@ -412,14 +415,18 @@ export const clientApi = {
     };
   },
 
-  // Providers & Keys Management
+  // Providers & Keys Management (legacy localStorage mock — formal path uses providerProfiles)
+  /** @deprecated use providerProfiles */
   getProviders: async (): Promise<ProviderInfo[]> => {
+    if (!isDemoMode()) return [];
     initDb();
     await new Promise(resolve => setTimeout(resolve, 100));
     return JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
   },
 
+  /** @deprecated use providerProfiles */
   updateProviderKey: async (id: string, apiKey: string): Promise<ProviderInfo[]> => {
+    if (!isDemoMode()) return [];
     initDb();
     await new Promise(resolve => setTimeout(resolve, 150));
     const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
@@ -428,7 +435,9 @@ export const clientApi = {
     return updated;
   },
 
+  /** @deprecated use providerProfiles */
   updateProviderModels: async (id: string, models: string[]): Promise<ProviderInfo[]> => {
+    if (!isDemoMode()) return [];
     initDb();
     await new Promise(resolve => setTimeout(resolve, 150));
     const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
@@ -437,7 +446,10 @@ export const clientApi = {
     return updated;
   },
 
+  /** @deprecated use providerProfiles */
   fetchLatestModels: async (id: string): Promise<string[]> => {
+    // Formal edition: no fake model catalog; ModelsSettingsTab + providerProfiles own config
+    if (!isDemoMode()) return [];
     await new Promise(resolve => setTimeout(resolve, 800)); // 模拟网络延迟
     if (id === 'google') {
       return ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-thinking', 'gemini-2.0-pro-exp', 'gemini-2.5-flash', 'gemini-2.5-pro'];

@@ -37,7 +37,6 @@ function App() {
     setShowSettingsOverlay,
     settingsActiveTab,
     setAppSettings,
-    setProviders,
   } = useLayoutStore();
 
   const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
@@ -115,10 +114,7 @@ function App() {
             await setFontPreferences(normalizeFontPrefs(settings.fonts));
           }
         }
-        const provs = await clientApi.getProviders();
-        if (provs) {
-          setProviders(provs);
-        }
+        // 模型/密钥走 providerProfiles，不再 seed 假 clientApi providers
       } catch (err) {
         console.error("Failed to load settings or providers on startup", err);
       }

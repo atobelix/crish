@@ -13,6 +13,10 @@ import { useLayoutStore } from '../store/layoutStore';
 import { parseUnifiedDiffs } from './toolFeedback';
 import { toDaemonPermissionMode } from './permissionModes';
 import {
+  commandMatchesWhitelist,
+  extractCommandForMatch,
+} from './commandPermissions';
+import {
   assistantBubbleForFailure,
   classifySoftFailure,
   logInternalError,
@@ -340,6 +344,29 @@ export function streamViaDaemon(
         // 防御：计划模式不应 ask；若不慎收到则记 running 不拦用户
         callbacks.onToolStart(toolCallId, toolName, args, explanation);
         return;
+      }
+
+      // 命令白名单：自动 approve，不伪造输出（等引擎 tool-end）
+      {
+        const st = useLayoutStore.getState();
+        const line = extractCommandForMatch(toolName, args);
+        if (commandMatchesWhitelist(line, st.commandPermissions || [])) {
+          callbacks.onToolStart(
+            toolCallId,
+            toolName,
+            args,
+            explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许',
+          );
+          void client
+            .send({ type: 'approve-tool', toolCallId, scope: 'project' })
+            .catch(() => {
+              pendingApprovals.add(toolCallId);
+              if (callbacks.onToolPendingApproval) {
+                callbacks.onToolPendingApproval(toolCallId, toolName, args, explanation);
+              }
+            });
+          return;
+        }
       }
 
       pendingApprovals.add(toolCallId);

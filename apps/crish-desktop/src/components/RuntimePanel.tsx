@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as Lucide from 'lucide-react';
-import { clientApi } from '../api/clientApi';
 import type { CronJob } from '../api/clientApi';
 import { useLayoutStore } from '../store/layoutStore';
 import { isDemoMode } from '../api/appMode';
@@ -88,12 +87,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     const loadData = async () => {
       try {
         setLoading(true);
-        const [crons, wfs] = await Promise.all([
-          clientApi.getScheduledTasks(),
-          listWorkflows(),
-        ]);
-        useLayoutStore.getState().setScheduledTasks(crons);
+        // 正式：仅引擎 workflow；不再混入 localStorage 假 cron
+        const wfs = await listWorkflows();
         setWorkflows(wfs);
+        useLayoutStore.getState().setScheduledTasks([]);
       } catch {
         if (demo) onShowToast('读取状态失败');
       } finally {

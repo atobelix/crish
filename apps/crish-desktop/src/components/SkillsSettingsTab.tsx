@@ -19,6 +19,7 @@ import {
   type DesktopSkill,
   type SkillActivation,
 } from '../api/skillsApi';
+import { skillStableId } from '../api/skillId';
 import { getWorkspacePath } from '../api/projectStore';
 import { parseMarkdownToHtml } from '../api/markdownRender';
 import { clientApi } from '../api/clientApi';
@@ -140,16 +141,22 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const setActivation = async (skill: DesktopSkill, activation: SkillActivation) => {
     setBusyId(skill.id);
     try {
-      await setSkillActivation(skill, activation);
+      const r = await setSkillActivation(skill, activation);
       setSkills((list) => list.map((s) => (s.id === skill.id ? { ...s, activation } : s)));
       invalidateSkillSlashCache();
-      onShowToast?.(
+      const base =
         activation === 'enabled'
           ? `已启用 ${skill.name}`
           : activation === 'disabled'
             ? `已禁用 ${skill.name}`
-            : `已设为推荐 ${skill.name}`,
-      );
+            : `已设为推荐 ${skill.name}`;
+      if (!r.daemonSynced) {
+        onShowToast?.(
+          `${base}（仅本机，引擎未同步${r.error ? `：${r.error}` : ''}）`,
+        );
+      } else {
+        onShowToast?.(base);
+      }
     } catch (e) {
       onShowToast?.(`更新失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -193,13 +200,19 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         onShowToast?.(r.error);
         return;
       }
+      // createProjectSkill writes frontmatter name as normalizeSlashName(opts.name)
+      const slug = createName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      const selectId = skillStableId(slug || createName.trim(), r.skillPath);
       onShowToast?.(`已创建 ${r.skillPath}`);
       setCreateOpen(false);
       setCreateName('');
       setCreateDesc('');
       await refresh();
-      const id = `skill-file:${r.skillPath.replace(/\\/g, '/').toLowerCase()}`;
-      setSelectedId(id);
+      setSelectedId(selectId);
     } finally {
       setCreateBusy(false);
     }

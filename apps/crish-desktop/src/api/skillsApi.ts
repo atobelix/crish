@@ -4,10 +4,14 @@
  * - 解析 frontmatter + markdown 正文
  * - 激活态：localStorage 覆盖 + 尽量同步 daemon scoped-context
  * - 斜杠命令：/skill:name 与 enableSkillCommands
+ *
+ * 契约：技能 activation → ENGINE-SCOPED + LS（id 必须与 agent-runtime stableId 一致）
+ * @see docs/plans/2026-07-product-trust-topdown.md §1.2 / §2
  */
 
 import { getWorkspacePath } from './projectStore';
 import { getDesktopDaemonClient } from './daemonClient';
+import { skillStableId } from './skillId';
 import {
   isAbsoluteFsPath,
   listDirectory,
@@ -68,8 +72,28 @@ function dirname(p: string): string {
   return i >= 0 ? n.slice(0, i) : n;
 }
 
-function skillIdFromPath(filePath: string): string {
+/** Legacy desktop id (pre-T1). Used only for localStorage migration. */
+function legacySkillIdFromPath(filePath: string): string {
   return `skill-file:${filePath.replace(/\\/g, '/').toLowerCase()}`;
+}
+
+/**
+ * Resolve activation for a skill id, migrating legacy `skill-file:...` keys
+ * onto runtime-compatible `skill_<hash>` when found by path.
+ */
+function resolveActivationFromMap(
+  map: Record<string, SkillActivation>,
+  id: string,
+  filePath: string,
+): { activation?: SkillActivation; migrated: boolean } {
+  if (map[id]) return { activation: map[id], migrated: false };
+  const legacyId = legacySkillIdFromPath(filePath);
+  if (legacyId !== id && map[legacyId]) {
+    map[id] = map[legacyId]!;
+    delete map[legacyId];
+    return { activation: map[id], migrated: true };
+  }
+  return { migrated: false };
 }
 
 function normalizeSlashName(name: string): string {
@@ -300,9 +324,12 @@ async function loadSkillFile(
   const fileActivation =
     skillActivation(parsed.data.activation) ||
     (opts?.system ? 'recommended' : 'recommended');
-  const id = skillIdFromPath(filePath);
+  // Must match agent-runtime: stableId("skill", `${name}:${filePath}`)
+  const id = skillStableId(name, filePath);
   const map = loadActivationMap();
-  const activation = opts?.activationOverride || map[id] || fileActivation;
+  const resolved = resolveActivationFromMap(map, id, filePath);
+  if (resolved.migrated) saveActivationMap(map);
+  const activation = opts?.activationOverride || resolved.activation || fileActivation;
   const isSystem =
     opts?.system ||
     /[/\\]\.system[/\\]/i.test(filePath) ||
@@ -441,21 +468,28 @@ export async function discoverSkills(opts?: {
   return { skills, roots: rootStatus };
 }
 
-async function upsertSkillToDaemon(skill: DesktopSkill, activation: SkillActivation): Promise<void> {
+export type SkillActivationResult = {
+  ok: boolean;
+  daemonSynced: boolean;
+  error?: string;
+};
+
+async function upsertSkillToDaemon(
+  skill: DesktopSkill,
+  activation: SkillActivation,
+): Promise<{ synced: boolean; error?: string }> {
   try {
     const client = getDesktopDaemonClient();
-    if (!client.isConnected()) return;
+    if (!client.isConnected()) {
+      return { synced: false, error: '引擎未连接' };
+    }
     if (activation === 'disabled') {
-      try {
-        await client.request(
-          { type: 'delete-scoped-context', id: skill.id },
-          'scoped-context-deleted',
-          8_000,
-        );
-      } catch {
-        /* ignore */
-      }
-      return;
+      await client.request(
+        { type: 'delete-scoped-context', id: skill.id },
+        'scoped-context-deleted',
+        8_000,
+      );
+      return { synced: true };
     }
     await client.request(
       {
@@ -482,19 +516,36 @@ async function upsertSkillToDaemon(skill: DesktopSkill, activation: SkillActivat
       'scoped-context-upserted',
       12_000,
     );
-  } catch {
-    /* daemon 不可用时仅本地保存 */
+    return { synced: true };
+  } catch (e) {
+    return {
+      synced: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
+/**
+ * 更新技能激活态：始终写入 localStorage；尽力同步 daemon scoped-context（同 id）。
+ * daemon 失败时仍 ok=true（本机已存），daemonSynced=false 供 UI 提示「仅本机」。
+ */
 export async function setSkillActivation(
   skill: DesktopSkill,
   activation: SkillActivation,
-): Promise<void> {
+): Promise<SkillActivationResult> {
   const map = loadActivationMap();
   map[skill.id] = activation;
+  const legacyId = legacySkillIdFromPath(skill.filePath);
+  if (legacyId !== skill.id && map[legacyId] !== undefined) {
+    delete map[legacyId];
+  }
   saveActivationMap(map);
-  await upsertSkillToDaemon(skill, activation);
+  const daemon = await upsertSkillToDaemon(skill, activation);
+  return {
+    ok: true,
+    daemonSynced: daemon.synced,
+    error: daemon.synced ? undefined : daemon.error,
+  };
 }
 
 /** 将当前启用 / 推荐技能批量同步到 daemon */
@@ -503,12 +554,9 @@ export async function syncSkillsToDaemon(skills: DesktopSkill[]): Promise<{ ok: 
   let fail = 0;
   for (const s of skills) {
     if (s.activation === 'disabled') continue;
-    try {
-      await upsertSkillToDaemon(s, s.activation);
-      ok += 1;
-    } catch {
-      fail += 1;
-    }
+    const r = await upsertSkillToDaemon(s, s.activation);
+    if (r.synced) ok += 1;
+    else fail += 1;
   }
   return { ok, fail };
 }

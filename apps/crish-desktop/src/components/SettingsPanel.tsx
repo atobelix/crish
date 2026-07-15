@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import { clientApi } from '../api/clientApi';
-import type { Settings, ProviderInfo, CronJob, PackageSource } from '../api/clientApi';
+import type { Settings, PackageSource } from '../api/clientApi';
 import { useLayoutStore } from '../store/layoutStore';
 import { ensureDaemonConnected } from '../api/daemonChatBridge';
 import { getDesktopDaemonClient } from '../api/daemonClient';
@@ -16,6 +16,8 @@ import { ModelsSettingsTab } from './ModelsSettingsTab';
 import { SkillsSettingsTab } from './SkillsSettingsTab';
 import { McpSettingsTab } from './McpSettingsTab';
 import { SettingsSelect } from './SettingsSelect';
+import { syncRulesToDaemon, textToRuleLines } from '../api/rulesApi';
+import { loadMirrorMeta } from '../api/sessionDiskMirror';
 import {
   createWorkflow,
   defaultTimezone,
@@ -27,8 +29,10 @@ import {
   type WorkflowDefinition,
   type WorkflowSchedule,
 } from '../api/workflowApi';
-import { listMcpServers } from '../api/mcpApi';
-import { loadMirrorMeta } from '../api/sessionDiskMirror';
+import {
+  getCachedCapabilities,
+  refreshProductCapabilities,
+} from '../api/capabilitiesStore';
 import { PERMISSION_MODES, type PermissionMode } from '../api/permissionModes';
 
 type TabType =
@@ -84,6 +88,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
   const permissionMode = useLayoutStore((s) => s.permissionMode);
   const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
+  const commandPermissions = useLayoutStore((s) => s.commandPermissions);
+  const addCommandPermissionStore = useLayoutStore((s) => s.addCommandPermission);
+  const removeCommandPermissionStore = useLayoutStore((s) => s.removeCommandPermission);
   const [mcpAvailable, setMcpAvailable] = useState(false);
 
   const resolveTab = (raw?: string | null): TabType => {
@@ -105,8 +112,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     setSettingsActiveTab(tab);
   };
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [_cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
 
   const contentAreaRef = useRef<HTMLDivElement>(null);
@@ -124,16 +129,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
   
-  // Temp draft states for keys
-  const [draftApiKeys, setDraftApiKeys] = useState<Record<string, string>>({});
-  
   // Scope states
   const [scope] = useState<'global' | 'project'>('global');
 
-  // Form states
-  const [visibleKeyProvider, setVisibleKeyProvider] = useState<string | null>(null);
-
-  // Expanded Plugin Package states
+  // Expanded Plugin Package states (demo plugins tab)
   const [newPkgSource, setNewPkgSource] = useState('');
   const [newPkgExtensions, setNewPkgExtensions] = useState('');
   const [newPkgSkills, setNewPkgSkills] = useState('');
@@ -144,24 +143,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [globalRules, setGlobalRules] = useState('');
   const [projectRules, setProjectRules] = useState('');
 
-  // Interactive mockup states for custom model dialog and expand layouts
-  const [configuringProviderId, setConfiguringProviderId] = useState<string | null>(null);
-  const [manualModelName, setManualModelName] = useState<Record<string, string>>({});
-  const [fetchingModelsProviderId, setFetchingModelsProviderId] = useState<string | null>(null);
-  const [showAddCustomModel, setShowAddCustomModel] = useState(false);
-
-  // Custom model form states
-  const [customType, setCustomType] = useState('openai');
-  const [customName, setCustomName] = useState('');
-  const [customUrl, setCustomUrl] = useState('');
-  const [customKey, setCustomKey] = useState('');
-  const [customModelsList, setCustomModelsList] = useState<{ id: string; name: string }[]>([]);
-  const [manualModelId, setManualModelId] = useState('');
-  const [manualModelDisplayName, setManualModelDisplayName] = useState('');
-  const [fetchingModelsInModal, setFetchingModelsInModal] = useState(false);
-  const [fetchedModels, setFetchedModels] = useState<{ id: string; name: string }[]>([]);
-  const [selectedFetchedModelIds, setSelectedFetchedModelIds] = useState<Record<string, boolean>>({});
-  const [testingConnection, setTestingConnection] = useState(false);
   const [showAddPluginModal, setShowAddPluginModal] = useState(false);
   const [editingRuleFileType, setEditingRuleFileType] = useState<'global' | 'project' | null>(null);
   const [newRuleText, setNewRuleText] = useState('');
@@ -209,9 +190,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [diskMeta, setDiskMeta] = useState(() => loadMirrorMeta());
 
   useEffect(() => {
-    // 启动时探测 MCP 配置（导航常驻，此处仅更新状态徽章等）
-    void listMcpServers().then((r) => {
-      setMcpAvailable(r.configured || r.servers.length > 0);
+    // T7：打开设置时探测 list-capabilities + MCP probe（60s 缓存，诚实状态）
+    void refreshProductCapabilities().then(() => {
+      const c = getCachedCapabilities();
+      setMcpAvailable(Boolean(c?.probe?.configured));
     });
   }, []);
 
@@ -323,18 +305,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const loadAll = async () => {
       try {
         setLoading(true);
-        const [sets, provs, crons] = await Promise.all([
-          clientApi.getSettingsEx(cwd),
-          clientApi.getProviders(),
-          clientApi.getScheduledTasks(),
-        ]);
+        // 模型/密钥走 ModelsSettingsTab + providerProfiles；调度走 workflow（schedule 页）
+        const sets = await clientApi.getSettingsEx(cwd);
         setSettings(sets);
         if (sets && sets.theme) {
           const { applyTheme, normalizeTheme } = await import('../api/themeStore');
           applyTheme(normalizeTheme(sets.theme));
         }
-        setProviders(provs);
-        setCronJobs(crons);
 
         // 规则正文：来自 settings.customRules；无则空模板
         const rulesJoined = (sets?.customRules || []).join('\n');
@@ -372,18 +349,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       }
     } catch (err) {
       onShowToast('更新设置失败：' + String(err));
-    }
-  };
-
-  const handleSaveApiKey = async (providerId: string, key: string) => {
-    try {
-      const updated = await clientApi.updateProviderKey(providerId, key);
-      setProviders(updated);
-      onShowToast('API 密钥已更新');
-      setVisibleKeyProvider(null);
-      setConfiguringProviderId(null);
-    } catch (err) {
-      onShowToast('密钥保存失败：' + String(err));
     }
   };
 
@@ -434,19 +399,32 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
-  const handleSaveRules = (scopeType: 'global' | 'project') => {
-    // 正式版：仅持久化到本地设置，不假装写入磁盘 AGENTS.md
+  const handleSaveRules = async (scopeType: 'global' | 'project') => {
+    // 本机备份 + 同步引擎 scoped-context（下次 run 生效）
     const text = scopeType === 'global' ? globalRules : projectRules;
-    const lines = text
-      .split('\n')
-      .map((l) => l.replace(/^[-*]\s*/, '').trim())
-      .filter((l) => l && !l.startsWith('#'));
-    void handleUpdateSettings({ customRules: lines });
-    onShowToast(
-      scopeType === 'global'
-        ? '全局规则已保存到本机设置'
-        : '项目规则已保存到本机设置（尚未写入仓库文件）',
-    );
+    const lines = textToRuleLines(text);
+    // 全局/项目：customRules 存当前编辑作用域的行（兼容旧结构）
+    await handleUpdateSettings({ customRules: lines });
+    const sync = await syncRulesToDaemon({
+      globalText: globalRules,
+      projectText: projectRules,
+    });
+    if (sync.daemonSynced) {
+      onShowToast(
+        scopeType === 'global'
+          ? '全局规则已保存并同步到引擎'
+          : '项目规则已保存并同步到引擎',
+      );
+    } else {
+      onShowToast(
+        sync.error
+          ? `规则已保存在本机；引擎未同步：${sync.error}`
+          : '规则已保存在本机；引擎未连接时仅本地生效',
+      );
+    }
+    if (sync.truncated) {
+      onShowToast('规则较长，同步到引擎时已截断（本机仍保留全文）');
+    }
   };
 
   if (!settings) {
@@ -457,69 +435,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </div>
     );
   }
-
-  const handleFetchModels = async (providerId: string) => {
-    setFetchingModelsProviderId(providerId);
-    try {
-      const latest = await clientApi.fetchLatestModels(providerId);
-      const list = await clientApi.updateProviderModels(providerId, latest);
-      setProviders(list);
-      onShowToast('模型列表已同步获取成功！');
-    } catch {
-      onShowToast('同步模型列表失败，请稍后重试');
-    } finally {
-      setFetchingModelsProviderId(null);
-    }
-  };
-
-  const handleAddManualModel = async (providerId: string) => {
-    const rawName = manualModelName[providerId] || '';
-    const name = rawName.trim();
-    if (!name) {
-      onShowToast('请输入有效的模型名称');
-      return;
-    }
-    const p = providers.find(prov => prov.id === providerId);
-    if (!p) return;
-    if (p.models.includes(name)) {
-      onShowToast('该模型已存在于列表中');
-      return;
-    }
-    const updatedModels = [...p.models, name];
-    try {
-      const list = await clientApi.updateProviderModels(providerId, updatedModels);
-      setProviders(list);
-      setManualModelName(prev => ({ ...prev, [providerId]: '' }));
-      onShowToast(`已添加模型: ${name}`);
-    } catch {
-      onShowToast('添加模型失败');
-    }
-  };
-
-  const handleDeleteModelFromProvider = async (providerId: string, modelName: string) => {
-    const p = providers.find(prov => prov.id === providerId);
-    if (!p) return;
-    const updatedModels = p.models.filter(m => m !== modelName);
-    try {
-      const list = await clientApi.updateProviderModels(providerId, updatedModels);
-      setProviders(list);
-      if (settings.enabledModels?.includes(modelName)) {
-        handleToggleModelEnabled(modelName);
-      }
-      onShowToast(`已从列表移除模型: ${modelName}`);
-    } catch {
-      onShowToast('移除模型失败');
-    }
-  };
-
-  void showAddCustomModel; void setShowAddCustomModel; void draftApiKeys; void setDraftApiKeys;
-  void visibleKeyProvider; void configuringProviderId; void fetchingModelsProviderId;
-  void customType; void setCustomType; void customName; void setCustomName; void customUrl; void setCustomUrl;
-  void customKey; void setCustomKey; void customModelsList; void setCustomModelsList;
-  void manualModelId; void setManualModelId; void manualModelDisplayName; void setManualModelDisplayName;
-  void fetchingModelsInModal; void setFetchingModelsInModal; void fetchedModels; void setFetchedModels;
-  void selectedFetchedModelIds; void setSelectedFetchedModelIds; void testingConnection; void setTestingConnection;
-  void handleSaveApiKey; void handleFetchModels; void handleAddManualModel; void handleDeleteModelFromProvider;
 
   const handleAddCustomRule = () => {
     const text = newRuleText.trim();
@@ -542,24 +457,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const updated = currentRules.filter((_, i) => i !== index);
     handleUpdateSettings({ customRules: updated });
     onShowToast('智能体规范规则已删除');
-  };
-
-  const currentProviderId = settings.defaultProvider || 'google';
-  const providerModels = providers.find(p => p.id === currentProviderId)?.models || [];
-  const enabledModels = settings.enabledModels || providerModels;
-
-  const handleToggleModelEnabled = async (model: string) => {
-    let nextEnabled = [...enabledModels];
-    if (nextEnabled.includes(model)) {
-      if (nextEnabled.length <= 1) {
-        onShowToast('至少需要启用一个模型');
-        return;
-      }
-      nextEnabled = nextEnabled.filter(m => m !== model);
-    } else {
-      nextEnabled.push(model);
-    }
-    await handleUpdateSettings({ enabledModels: nextEnabled });
   };
 
   return (
@@ -743,24 +640,36 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">会话保存目录</label>
+                  <label className="settings-field-label">会话数据位置</label>
                   <input
                     type="text"
-                    value={settings.sessionDir || ''}
-                    onChange={(e) => handleUpdateSettings({ sessionDir: e.target.value })}
+                    readOnly
+                    value={
+                      diskMeta?.lastPath ||
+                      (diskMeta?.mode === 'localStorage-only'
+                        ? '浏览器 localStorage（桌面壳可镜像到应用数据目录）'
+                        : '本机应用数据目录（自动管理）')
+                    }
                     className="settings-field-input"
+                    title="自定义目录尚未接入引擎；当前为只读展示"
                   />
+                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                    会话正文由本机保存；自定义路径尚未接入，故不可编辑以免无效配置。
+                  </p>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">网络代理（可选）</label>
+                  <label className="settings-field-label">网络代理</label>
                   <input
                     type="text"
-                    placeholder="http://127.0.0.1:7890"
+                    disabled
+                    placeholder="尚未接入引擎代理配置"
                     value={settings.httpProxy || ''}
-                    onChange={(e) => handleUpdateSettings({ httpProxy: e.target.value })}
                     className="settings-field-input"
                   />
+                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                    代理需在系统或引擎侧配置；此处暂不提供无效输入。
+                  </p>
                 </div>
               </div>
             </>
@@ -1462,13 +1371,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         { id: 'high', label: '深入' },
                       ] as const
                     ).map((opt) => {
-                      const current = (settings as any).responseStyle || 'medium';
+                      const current = settings.responseStyle || 'medium';
                       return (
                         <button
                           key={opt.id}
                           type="button"
                           className={`ui-segment-item ${current === opt.id ? 'active' : ''}`}
-                          onClick={() => handleUpdateSettings({ responseStyle: opt.id } as any)}
+                          onClick={() => handleUpdateSettings({ responseStyle: opt.id })}
                         >
                           {opt.label}
                         </button>
@@ -1595,16 +1504,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
               <div style={{ marginTop: 20 }}>
                 <div className="settings-field-label" style={{ marginBottom: 8 }}>
-                  自动批准的命令
+                  命令白名单（自动允许）
                 </div>
+                <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                  当引擎请求确认时，若命令以前缀匹配白名单，将自动批准并继续执行（不伪造结果）。
+                  建议只加只读/低风险命令，例如 <code>git status</code>、<code>npm test</code>。
+                  完全访问模式仍由引擎处理非极危操作；白名单是「需确认」下的顺手加速。
+                </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {(
-                    useLayoutStore.getState().commandPermissions || [
-                      'git status',
-                      'git diff',
-                      'npm run test:unit',
-                    ]
-                  ).map((cmd) => (
+                  {(commandPermissions || []).map((cmd) => (
                     <span
                       key={cmd}
                       className="ui-badge"
@@ -1618,9 +1526,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          useLayoutStore.setState((state) => ({
-                            commandPermissions: state.commandPermissions.filter((c) => c !== cmd),
-                          }));
+                          removeCommandPermissionStore(cmd);
                           onShowToast(`已移除：${cmd}`);
                         }}
                         style={{
@@ -1642,11 +1548,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input
                     type="text"
-                    placeholder="例如：npm run build"
+                    placeholder="例如：git status"
                     value={newWhitelistCmd}
                     onChange={(e) => setNewWhitelistCmd(e.target.value)}
                     className="settings-field-input"
                     style={{ flex: 1 }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newWhitelistCmd.trim()) {
+                        addCommandPermissionStore(newWhitelistCmd.trim());
+                        onShowToast(`已添加：${newWhitelistCmd.trim()}`);
+                        setNewWhitelistCmd('');
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -1654,9 +1567,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     onClick={() => {
                       if (!newWhitelistCmd.trim()) return;
                       const cmd = newWhitelistCmd.trim();
-                      useLayoutStore.setState((state) => ({
-                        commandPermissions: [...(state.commandPermissions || []), cmd],
-                      }));
+                      addCommandPermissionStore(cmd);
                       onShowToast(`已添加：${cmd}`);
                       setNewWhitelistCmd('');
                     }}

@@ -5,6 +5,12 @@ import { isDemoMode } from '../api/appMode';
 import { hydrateSessionsFromDisk, persistAllSessions } from '../api/sessionPersistence';
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import { normalizePermissionMode, type PermissionMode } from '../api/permissionModes';
+import {
+  addCommandPermission as persistAddCommandPermission,
+  loadCommandPermissions,
+  removeCommandPermission as persistRemoveCommandPermission,
+  saveCommandPermissions,
+} from '../api/commandPermissions';
 import { normalizeAssistantTimeline } from '../api/toolPresentation';
 import { fillDefaultSessionTitles, maybeAutoTitleFromMessages } from '../api/sessionTitle';
 
@@ -219,6 +225,8 @@ interface LayoutStore {
   setPlanApproved: (approved: boolean) => void;
   commandPermissions: string[];
   addCommandPermission: (cmd: string) => void;
+  removeCommandPermission: (cmd: string) => void;
+  setCommandPermissions: (list: string[]) => void;
 
   // App Settings & Telemetry
   appSettings: Settings | null;
@@ -635,12 +643,20 @@ export const useLayoutStore = create<LayoutStore>()(
     setPlanApproved: (approved) => set((state) => {
       state.planApproved = approved;
     }),
-    commandPermissions: [],
-    addCommandPermission: (cmd) => set((state) => {
-      if (!state.commandPermissions.includes(cmd)) {
-        state.commandPermissions.push(cmd);
-      }
-    }),
+    commandPermissions: loadCommandPermissions(),
+    addCommandPermission: (cmd) =>
+      set((state) => {
+        state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
+      }),
+    removeCommandPermission: (cmd: string) =>
+      set((state) => {
+        state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
+      }),
+    setCommandPermissions: (list: string[]) =>
+      set((state) => {
+        state.commandPermissions = list;
+        saveCommandPermissions(list);
+      }),
     appSettings: null,
     providers: [],
     scheduledTasks: [],
@@ -748,23 +764,7 @@ export const useLayoutStore = create<LayoutStore>()(
       if (sess) {
         if (!sess.messages) sess.messages = [];
         
-        // Auto-approve whitelisted commands
-        if (message.toolCalls) {
-          message.toolCalls.forEach((tc) => {
-            if (tc.status === 'pending_approval') {
-              const isWhitelisted = state.commandPermissions.some(
-                (allowed) =>
-                  tc.arguments.startsWith(allowed) || allowed.startsWith(tc.arguments),
-              );
-              // full permission mode auto-approves sensitive tools at ingest time too
-              if (isWhitelisted || state.permissionMode === 'full') {
-                tc.status = 'success';
-                tc.output = `[自动授权] 正在执行:\n$ ${tc.arguments}\nvite v8.0.16 building client environment for production...\ntransforming...\n✓ built in 389ms`;
-              }
-            }
-          });
-        }
-        
+        // 注意：正式审批由 daemonChatBridge 处理；此处不再伪造「自动授权成功」输出
         const newMsg = {
           ...message,
           blocks: message.blocks || []
