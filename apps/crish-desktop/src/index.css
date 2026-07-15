@@ -12,8 +12,9 @@ html[data-theme="light"] {
   --text-primary: #1a1a1a;
   --text-secondary: #666666;
   --text-tertiary: #999999;
-  --border-color: #e8e8e8;
-  --border-subtle: #f0f0f0;
+  /* 浅色描边：浅灰，不用黑线 */
+  --border-color: #e5e5e5;
+  --border-subtle: #efefef;
 
   --accent-color: #222222;
   --accent-light: #f5f5f5;
@@ -101,8 +102,9 @@ html[data-theme="dark"] {
   --text-primary: #ececec;
   --text-secondary: #b3b3b3;
   --text-tertiary: #8a8a8a;
-  --border-color: #3d3d3d;
-  --border-subtle: #323232;
+  /* 描边用中灰，禁止近黑/纯黑描边 */
+  --border-color: #4a4a4a;
+  --border-subtle: #3a3a3a;
   --accent-color: #ececec;
   --accent-light: #333333;
   --accent-hover: #ffffff;
@@ -4516,14 +4518,15 @@ select.ui-input {
 .settings-field-input {
   height: 34px;
   padding: 0 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
+  box-shadow: none;
 }
 .settings-field-input::placeholder {
   color: var(--text-tertiary);
@@ -4539,8 +4542,9 @@ select.settings-field-input {
   cursor: pointer;
 }
 .settings-field-input:focus {
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color);
   background: var(--bg-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .settings-field-hint {
   font-size: var(--font-size-sm);
@@ -7249,7 +7253,114 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .crish-sidebar .sidebar-footer-settings {
   flex: 1;
-  min-width: 100px;
+  min-width: 0;
+}
+.sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.sb-quick-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.sb-quick-wrap .sidebar-footer-settings {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sb-quick-chev {
+  margin-left: auto;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+.sidebar-footer-settings.is-open {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.sidebar-footer-update {
+  width: var(--control-height);
+  height: var(--control-height);
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sidebar-footer-update:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+/* 快捷设置菜单：浮在侧栏上方，无黑描边 */
+.sb-quick-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 80;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+}
+.sb-quick-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 8px;
+}
+.sb-quick-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 0 4px;
+}
+.sb-quick-segment {
+  width: 100%;
+}
+.sb-quick-segment .ui-segment-item {
+  flex: 1;
+}
+.sb-quick-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 2px;
+  border: none;
+}
+.sb-quick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+}
+.sb-quick-item:hover {
+  background: var(--bg-hover);
+}
+.sb-quick-item svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
 /* Hide legacy gateway chrome if any residual markup appears */
@@ -9275,11 +9386,20 @@ html[data-theme="dark"] .settings-cover-nav {
 }
 html[data-theme="dark"] .settings-select-menu {
   background: var(--bg-elevated) !important;
-  border-color: var(--border-color);
+  border-color: var(--border-subtle) !important;
+  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45);
 }
 html[data-theme="dark"] .settings-select-trigger {
   background: var(--bg-tertiary);
-  border-color: var(--border-color);
+  border-color: var(--border-subtle) !important;
+}
+html[data-theme="dark"] .settings-select.is-open .settings-select-trigger {
+  border-color: var(--border-color) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
+}
+html[data-theme="dark"] .sb-quick-menu {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-subtle) !important;
 }
 html[data-theme="dark"] .crish-sidebar {
   background: var(--bg-secondary);
@@ -9294,12 +9414,20 @@ html[data-theme="dark"] .crish-sidebar {
 }
 .settings-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 44px;
-  padding: 6px 0;
+  min-height: 40px;
+  height: auto;
+  padding: 4px 0;
   border-bottom: 1px solid var(--border-subtle);
+}
+.settings-row > * {
+  flex-shrink: 0;
+}
+.settings-row .settings-row-control {
+  flex-shrink: 1;
 }
 .settings-row-label {
   flex: 0 1 auto;
@@ -9426,23 +9554,31 @@ html[data-theme="dark"] .crish-sidebar {
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
   padding: 0 8px 0 10px;
-  border: 1px solid var(--border-color);
+  /* 浅描边，禁止黑框 */
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   text-align: left;
+  box-shadow: none;
+  outline: none;
 }
 .settings-select-trigger:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--border-color);
+  border-color: var(--border-subtle);
 }
 .settings-select.is-open .settings-select-trigger {
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color);
   background: var(--bg-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.settings-select-trigger:focus-visible {
+  border-color: var(--border-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 .settings-select-trigger:disabled {
   opacity: 0.5;
@@ -9493,7 +9629,7 @@ html[data-theme="dark"] .crish-sidebar {
   min-width: 220px;
   z-index: 50;
   background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   padding: 6px;
@@ -9572,7 +9708,7 @@ html[data-theme="dark"] .crish-sidebar {
   flex: 1;
   min-width: 0;
   height: 28px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 0 8px;
   font-size: var(--font-size-sm);
@@ -9580,9 +9716,11 @@ html[data-theme="dark"] .crish-sidebar {
   background: var(--bg-primary);
   color: var(--text-primary);
   outline: none;
+  box-shadow: none;
 }
 .settings-select-custom-input:focus {
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 @media (max-width: 720px) {

@@ -15,6 +15,7 @@ import {
   sessionLastActivityMs,
 } from '../api/sessionTime';
 import { sessionListDisplayTitle } from '../api/sessionTitle';
+import { SettingsQuickMenu } from './SettingsQuickMenu';
 
 interface SidebarProps {
   onShowToast: (message: string, onUndo?: () => void) => void;
@@ -604,15 +605,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isDemoMode() ? '演示' : '正式'}
           </button>
         )}
-        <button
-          type="button"
-          className="sidebar-footer-settings"
-          title="设置"
-          onClick={() => handleOpenSettings()}
-        >
-          <Lucide.Settings size={16} />
-          <span>设置</span>
-        </button>
+        <div className="sidebar-footer-actions">
+          <SettingsQuickMenu onShowToast={onShowToast} />
+          <button
+            type="button"
+            className="sidebar-footer-update"
+            title="检查更新"
+            onClick={() => onShowToast('当前已是最新版本')}
+          >
+            <Lucide.Download size={16} />
+          </button>
+        </div>
       </div>
 
       <div

@@ -2139,11 +2139,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {/* TAB: APPEARANCE */}
           {activeTab === 'appearance' && (
             <>
-              <div style={{ marginBottom: 16 }}>
+              <div className="settings-section-header" style={{ marginBottom: 4 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
-                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  主题、密度与字体
-                </p>
               </div>
 
               <div className="settings-rows">
