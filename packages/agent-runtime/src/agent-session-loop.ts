@@ -107,6 +107,26 @@ function normalizeToolExecutionOptions(options: AgentRuntimeOptions["toolExecuti
 /**
  * 最近一轮用户输入之后：用过工具，却几乎没有助手正文 → 需要强制收尾总结。
  */
+function isTransientProviderError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    /\b502\b/.test(m) ||
+    /\b503\b/.test(m) ||
+    /\b504\b/.test(m) ||
+    /\b520\b/.test(m) ||
+    /bad gateway/.test(m) ||
+    /gateway timeout/.test(m) ||
+    /rate.?limit/.test(m) ||
+    /timeout|timed out/.test(m) ||
+    /econnreset|enotfound|fetch failed|network|socket/.test(m) ||
+    /temporarily unavailable|overloaded|server error/.test(m)
+  );
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function conversationNeedsTextSynthesis(conversation: ConversationEngine): boolean {
   const messages = conversation.getMessages();
   if (messages.length === 0) return false;
@@ -163,6 +183,9 @@ export class AgentSessionLoop {
   private synthesisNudgeUsed = false;
   /** 本 run 是否执行过工具（比扫 messages 更稳） */
   private sawToolsThisRun = false;
+  /** 上游 502/网络等瞬时错误重试次数 */
+  private providerTransientRetries = 0;
+  private static readonly MAX_PROVIDER_TRANSIENT_RETRIES = 3;
 
   constructor(
     private readonly options: AgentRuntimeOptions,
@@ -397,13 +420,48 @@ export class AgentSessionLoop {
             if (this.abortController.signal.aborted) {
               endReason = "aborted";
               this.dispatch("ABORT");
-            } else {
-              endReason = "error";
-              endError = assistantResult.error ?? "Provider stream failed";
-              this.dispatch("PROVIDER_ERROR");
+              break;
             }
+            const errMsg = assistantResult.error ?? "Provider stream failed";
+            // 502 / 网络等瞬时错误：退避重试，不立刻杀死 agent
+            if (
+              isTransientProviderError(errMsg) &&
+              this.providerTransientRetries < AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES
+            ) {
+              this.providerTransientRetries += 1;
+              const waitMs = 600 * this.providerTransientRetries;
+              yield* this.emitEvent({
+                type: "provider-diagnostic",
+                sessionId: this.sessionId,
+                diagnostic: {
+                  phase: "retry",
+                  message: `Transient provider error, retry ${this.providerTransientRetries}/${AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES}: ${errMsg}`,
+                },
+                timestamp: nowIso(),
+              } as AgentEvent);
+              await sleepMs(waitMs);
+              this.dispatch("NO_PROGRESS_CONTINUE");
+              break;
+            }
+            // 仍有工具成果：软降级，让模型基于已有结果收尾，而不是整 run 失败
+            if (this.sawToolsThisRun && !this.synthesisNudgeUsed) {
+              this.synthesisNudgeUsed = true;
+              this.inputQueue.enqueue(
+                createTextMessage(
+                  "user",
+                  `【系统】上游模型暂时失败：${errMsg.slice(0, 240)}。请仅基于已完成的工具结果给出结论；不要再调用工具。若必须停止请说明原因。`,
+                ),
+              );
+              this.dispatch("INPUT_AVAILABLE");
+              break;
+            }
+            endReason = "error";
+            endError = errMsg;
+            this.dispatch("PROVIDER_ERROR");
             break;
           }
+          // 成功一轮后清零瞬时重试计数
+          this.providerTransientRetries = 0;
 
           if (assistantResult.type === "empty-response") {
             this.dispatch("STEERING_NEEDED");

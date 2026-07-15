@@ -120,7 +120,7 @@ describe("decideByTrustZone matrix", () => {
     ).toBe("deny");
   });
 
-  it("full-access: T1/T2 allow, T3 push ask, T4 ask", () => {
+  it("full-access: T1/T2/T3 allow, T4 ask", () => {
     expect(
       decideByTrustZone({
         mode: "full-access",
@@ -141,7 +141,7 @@ describe("decideByTrustZone matrix", () => {
         toolName: "shell_command",
         parameters: { command: "git push" },
       }).behavior,
-    ).toBe("ask");
+    ).toBe("allow");
     expect(
       decideByTrustZone({
         mode: "full-access",

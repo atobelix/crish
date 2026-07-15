@@ -284,14 +284,21 @@ async function consumeSubagentEvents(
 ): Promise<void> {
   for await (const orchestratorEvent of events) {
     if (orchestratorEvent.type === "run-failed") {
-      state.status = "failed";
-      state.error = stringPayload(orchestratorEvent.payload, "error") ?? "Sub-agent run failed";
+      const err = stringPayload(orchestratorEvent.payload, "error") ?? "Sub-agent run failed";
+      state.error = err;
+      // 有产出则软完成，便于父 agent 继续决策
+      if (state.toolUses > 0 || state.finalText?.trim()) {
+        state.status = "completed";
+      } else {
+        state.status = "failed";
+      }
       continue;
     }
 
     if (orchestratorEvent.type === "run-cancelled") {
-      state.status = "failed";
       state.error = "Sub-agent run was cancelled";
+      state.status =
+        state.toolUses > 0 || state.finalText?.trim() ? "completed" : "failed";
       continue;
     }
 
@@ -314,18 +321,35 @@ function observeSubagentEvent(event: AgentEvent, state: SubagentRunState): void 
   if (event.type === "tool-start") state.toolUses += 1;
   if (event.type === "turn-start") state.turns += 1;
   if (event.type === "message-end" && event.message.role === "assistant") {
-    state.finalText = extractAssistantText(event.message);
+    const text = extractAssistantText(event.message);
+    if (text) state.finalText = text;
   }
   if (event.type === "agent-end") {
     state.finalReason = event.reason;
     if (event.reason !== "stop") {
-      state.status = "failed";
-      state.error = event.error ?? `Sub-agent ended with ${event.reason}`;
+      // 已有工具/正文时软完成：把错误写进摘要，不把整次协作打成 failed
+      // （上游 502 等瞬时故障常见，父 agent 仍可基于 partial 结果继续）
+      const soft =
+        state.toolUses > 0 ||
+        Boolean(state.finalText?.trim()) ||
+        event.reason === "max-turns";
+      if (soft) {
+        state.status = "completed";
+        state.error = event.error ?? `ended with ${event.reason}`;
+      } else {
+        state.status = "failed";
+        state.error = event.error ?? `Sub-agent ended with ${event.reason}`;
+      }
     }
   }
   if (event.type === "runtime-error") {
-    state.status = "failed";
-    state.error = event.error;
+    if (state.toolUses > 0 || state.finalText?.trim()) {
+      state.status = "completed";
+      state.error = event.error;
+    } else {
+      state.status = "failed";
+      state.error = event.error;
+    }
   }
 }
 
@@ -344,16 +368,30 @@ function extractAssistantText(message: AgentMessage): string {
 }
 
 function buildCompletionSummary(description: string, mode: DaemonSubagentMode, state: SubagentRunState): string {
-  const outcome = state.status === "completed" ? "completed" : `failed: ${state.error ?? "unknown error"}`;
-  const text = state.finalText ? state.finalText.slice(0, 1_000) : "No final text response.";
-  return [`${description} ${outcome}.`, `mode=${mode}; turns=${state.turns}; tools=${state.toolUses}; events=${state.events}.`, text].join("\n");
+  const softNote = state.error && state.status === "completed" ? ` (note: ${state.error})` : "";
+  const outcome =
+    state.status === "completed"
+      ? `completed${softNote}`
+      : `failed: ${state.error ?? "unknown error"}`;
+  const text = state.finalText
+    ? state.finalText.slice(0, 1_500)
+    : state.toolUses > 0
+      ? "Tools ran; model did not return a final prose summary (upstream may have errored)."
+      : "No final text response.";
+  return [
+    `${description} ${outcome}.`,
+    `mode=${mode}; turns=${state.turns}; tools=${state.toolUses}; events=${state.events}.`,
+    text,
+  ].join("\n");
 }
 
 function buildDaemonSubagentBasePrompt(mode: DaemonSubagentMode): string {
   return [
     `You are a focused ${mode} sub-agent running inside the daemon backend.`,
     "Your prompt is self-contained; do not assume access to the parent conversation.",
-    "Report concrete findings, files, commands, and verification results. If you modify files, explain exactly what changed."
+    "Report concrete findings, files, commands, and verification results. If you modify files, explain exactly what changed.",
+    "If a tool fails for policy reasons, skip it and continue with alternatives; do not abort the whole task unless impossible.",
+    "Always leave a short Chinese summary at the end even if some steps failed.",
   ].join("\n\n");
 }
 

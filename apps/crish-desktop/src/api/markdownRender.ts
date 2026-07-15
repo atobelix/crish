@@ -102,8 +102,18 @@ function extractTables(text: string): { text: string; tables: string[] } {
 function applyInline(html: string): string {
   let s = html;
   s = s.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  // 粗体先于斜体；斜体仅同行、非空，避免未闭合 * 吞掉整段
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(
+    /(?<!\*)\*([^*\n]+?)\*(?!\*)/g,
+    (full, inner: string) => {
+      const t = inner.trim();
+      // 过长或像整句未闭合时不套 em（防止 * 与远处 * 配对）
+      if (!t || t.length > 80) return full;
+      if (/\s{2,}/.test(inner)) return full;
+      return `<em>${inner}</em>`;
+    },
+  );
   return s;
 }
 

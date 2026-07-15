@@ -35,10 +35,10 @@ export type TrustZoneResolution = {
  *
  * 产品约定（2026-07）：
  * - 只读 T0：始终自动
- * - 工作区写入 T1：需确认（edit / echo> / mkdir / git commit…）
- * - 网络/进程 T2：可自动（npm install / curl 等）
- * - 风险 T3：需确认（rm、git push、删分支、凭据…）
- * - 极危 T4：ask 拒绝；full 仍确认
+ * - 工作区写入 T1：ask 需确认；full 自动
+ * - 网络/进程 T2：可自动
+ * - 风险 T3：ask 需确认；full 自动（由系统提示约束极危操作）
+ * - 极危 T4：ask 拒绝；full 仍确认（不可静默）
  */
 export const TRUST_ZONE_MATRIX: Record<TrustPolicyMode, Record<TrustZone, TrustBehavior>> = {
   ask: {
@@ -59,7 +59,7 @@ export const TRUST_ZONE_MATRIX: Record<TrustPolicyMode, Record<TrustZone, TrustB
     T0: "allow",
     T1: "allow",
     T2: "allow",
-    T3: "ask",
+    T3: "allow",
     T4: "ask",
   },
   plan: {

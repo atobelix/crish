@@ -439,12 +439,9 @@ function App() {
           </div>
 
           <div className="dropdown-group" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
-            {((isDemoMode()
-              ? (['preview', 'diff', 'terminal', 'tasks'] as const)
-              : (['diff', 'terminal', 'tasks'] as const)
-            )).map((key) => {
+            {(['preview', 'diff', 'terminal', 'tasks'] as const).map((key) => {
               const labels: Record<string, string> = {
-                preview: '预览',
+                preview: '预览 / 浏览器',
                 diff: '差异',
                 terminal: '终端',
                 tasks: '任务',

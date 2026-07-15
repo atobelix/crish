@@ -50,7 +50,8 @@ import {
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { ApprovalSheet } from './ApprovalSheet';
-import { AgentCard, openAgentInNewWindow } from './AgentCard';
+import { AgentCard } from './AgentCard';
+import { InlineAgentPanel } from './InlineAgentPanel';
 import {
   PERMISSION_MODES,
   permissionModeMeta,
@@ -304,7 +305,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     { cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' },
     { cmd: '/goal', desc: '执行长期自动迭代任务' },
     { cmd: '/schedule', desc: '配置周期性定时或重复任务' },
-    { cmd: '/browser', desc: '启动模拟浏览器交互' },
+    { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
     { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
     { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
     { cmd: '/learn', desc: '记录最佳实践和对齐规则' }
@@ -735,6 +736,21 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       sessionId = useLayoutStore.getState().createSession({ title: '新会话' });
     }
     const rawInput = chatInput.trim();
+
+    // /browser [url] → 打开右侧内置预览浏览器
+    if (/^\/browser\b/i.test(rawInput)) {
+      const rest = rawInput.replace(/^\/browser\b/i, '').trim();
+      setChatInput('');
+      setSlashMenuOpen(false);
+      handleGlobalTabClick('preview');
+      if (rest) {
+        void import('../api/previewBrowserStore').then(({ normalizeBrowseUrl, setPreviewUrl }) => {
+          setPreviewUrl(normalizeBrowseUrl(rest));
+        });
+      }
+      onShowToast(rest ? `预览浏览器 → ${rest}` : '已打开预览浏览器');
+      return;
+    }
     // Fold attachments into the prompt so the model path sees them
     const attachBlock =
       attachments.length > 0
@@ -958,7 +974,37 @@ export const ChatCard: React.FC<ChatCardProps> = ({
    * - 展开体：仅清洗后的结果输出
    * - 待确认：行内可批，不依赖底部 sticky
    */
+  const findAgentForTool = (tc: { id?: string; name?: string; explanation?: string }) => {
+    const agents = sessions.find((s) => s.id === activeSessionId)?.agents || [];
+    if (!agents.length) return null;
+    const byTool = agents.find((a) => a.parentToolCallId && a.parentToolCallId === tc.id);
+    if (byTool) return byTool;
+    const n = (tc.name || '').toLowerCase();
+    if (n.includes('subagent') || n === 'run_subagent') {
+      // 最近启动且匹配描述
+      const exp = (tc.explanation || '').trim();
+      const byDesc = exp
+        ? agents.find((a) => a.description && exp.includes(a.description.slice(0, 24)))
+        : null;
+      if (byDesc) return byDesc;
+      return agents[0] || null;
+    }
+    return null;
+  };
+
   const renderCompactToolRow = (tc: any, key: string | number, msgId?: string) => {
+    // 子 agent：在主对话流中展示可展开协作面板（右侧/新窗口按钮在此）
+    const linkedAgent = findAgentForTool(tc);
+    if (linkedAgent && activeSessionId) {
+      return (
+        <InlineAgentPanel
+          key={String(key)}
+          agent={linkedAgent}
+          parentSessionId={activeSessionId}
+          defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
+        />
+      );
+    }
     if (tc.status === 'pending_approval') {
       const summary = toolSummaryLabel(tc);
       const cmd = toolCommandPreview(tc);
@@ -1088,11 +1134,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       .find((s) => s.id === activeSessionId)
       ?.agents?.find((a) => a.id === activeAgentId);
 
-  const openAgentRight = (agentId: string) => {
-    setPanelAgentId(agentId);
-    handleGlobalTabClick('agent');
-  };
-
   const handleSpawnCollaborator = () => {
     const sid = activeSessionId || useLayoutStore.getState().createSession({ title: '新会话' });
     if (!sid) return;
@@ -1214,14 +1255,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               <Lucide.ArrowLeft size={13} />
               返回主对话
             </button>
-            <span className="agent-inline-hint">协作 agent 视图（与主对话同结构）</span>
+            <span className="agent-inline-hint">{activeAgent.description || '协作 agent'}</span>
           </div>
+          {/* 已在主区全屏：不再显示「右侧/新窗口」（那些在时间线内联块上） */}
           <AgentCard
             agentId={activeAgent.id}
             embedded
             onClose={() => setActiveAgentId(null)}
-            onOpenRight={() => openAgentRight(activeAgent.id)}
-            onOpenWindow={() => openAgentInNewWindow(activeAgent)}
           />
         </div>
       ) : null}

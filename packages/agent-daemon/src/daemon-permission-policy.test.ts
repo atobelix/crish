@@ -125,7 +125,7 @@ describe("DaemonPermissionPolicy TrustZone (write ask, network auto)", () => {
     ).toMatchObject({ behavior: "deny", metadata: { trustZone: "T4", hardline: true } });
   });
 
-  it("full-access: edit allow, push still ask", () => {
+  it("full-access: edit and push allow, hardline still ask", () => {
     const policy = new DaemonPermissionPolicy("full-access");
     expect(
       policy.decide({
@@ -146,7 +146,7 @@ describe("DaemonPermissionPolicy TrustZone (write ask, network auto)", () => {
         input: { command: "git push" },
         summary: "push",
       }),
-    ).toMatchObject({ behavior: "ask", metadata: { trustZone: "T3" } });
+    ).toMatchObject({ behavior: "allow", metadata: { trustZone: "T3" } });
   });
 
   it("plan: T0 allow, write deny", () => {

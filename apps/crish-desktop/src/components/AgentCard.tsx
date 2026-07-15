@@ -311,14 +311,15 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
   return (
     <div className={`agent-card ${embedded ? 'agent-card--embedded' : ''}`}>
-      <header className="agent-card-header">
+      {/* 精简顶栏：全屏主区时不放「右侧/新窗口」（那些在主对话内联块上） */}
+      <header className={`agent-card-header ${embedded ? 'agent-card-header--slim' : ''}`}>
         <div className="agent-card-title-row">
           <Lucide.Bot size={14} />
           <span className="agent-card-title" title={agent.description}>
             {agent.description || '协作 agent'}
           </span>
           <span className={`agent-card-badge agent-card-badge--${agent.status}`}>
-            {running ? '运行中' : agent.status === 'failed' ? '已停止/失败' : '已完成'}
+            {running ? '运行中' : agent.status === 'failed' ? '失败' : '完成'}
           </span>
           {agent.mode ? <span className="agent-card-mode">{agent.mode}</span> : null}
         </div>
@@ -333,12 +334,12 @@ export const AgentCard: React.FC<AgentCardProps> = ({
               <Lucide.Square size={12} fill="currentColor" />
             </button>
           ) : null}
-          {onOpenRight ? (
+          {!embedded && onOpenRight ? (
             <button type="button" className="agent-card-btn" title="在右侧打开" onClick={onOpenRight}>
               <Lucide.PanelRight size={13} />
             </button>
           ) : null}
-          {onOpenWindow ? (
+          {!embedded && onOpenWindow ? (
             <button type="button" className="agent-card-btn" title="新窗口" onClick={onOpenWindow}>
               <Lucide.ExternalLink size={13} />
             </button>
@@ -351,7 +352,9 @@ export const AgentCard: React.FC<AgentCardProps> = ({
         </div>
       </header>
 
-      {agent.summary ? <div className="agent-card-summary">{agent.summary}</div> : null}
+      {agent.summary && !embedded ? (
+        <div className="agent-card-summary">{agent.summary}</div>
+      ) : null}
 
       <div className="agent-card-body" ref={bodyRef}>
         {(agent.messages || []).length === 0 ? (
@@ -436,9 +439,10 @@ async function getDesktopCancel(runId: string): Promise<void> {
 
 function AgentMessageRow({ msg }: { msg: SessionMessage }) {
   if (msg.sender === 'user') {
+    // 任务提示 / 用户输入：左侧对齐，与主对话用户气泡略有区别
     return (
-      <div className="msg-row msg-row-user agent-msg">
-        <div className="msg-user-bubble">{msg.text}</div>
+      <div className="msg-row msg-row-assistant agent-msg agent-msg--prompt">
+        <div className="agent-prompt-bubble">{msg.text}</div>
       </div>
     );
   }

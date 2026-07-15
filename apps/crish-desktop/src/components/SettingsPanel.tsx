@@ -2296,12 +2296,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     从对话区可随时打开；此处仅作说明。常用：变更、终端、任务。
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {((isDemoMode()
-                      ? (['preview', 'diff', 'terminal', 'tasks'] as const)
-                      : (['diff', 'terminal', 'tasks'] as const)
-                    )).map((key) => {
+                    {(['preview', 'diff', 'terminal', 'tasks'] as const).map((key) => {
                       const labels: Record<string, string> = {
-                        preview: '预览',
+                        preview: '预览 / 浏览器',
                         diff: '变更',
                         terminal: '终端',
                         tasks: '任务',

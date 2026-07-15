@@ -1096,18 +1096,19 @@ export const useLayoutStore = create<LayoutStore>()(
         return;
       }
 
-      const cardId = key;
+      // browser 与 preview 同一面板
+      const cardId = key === 'browser' ? 'preview' : key;
       const titleMap: Record<string, string> = {
         agent: '协作 Agent',
         preview: '预览',
         diff: '变更',
         terminal: '终端',
         tasks: '任务',
-        'runtime': '运行状态',
+        runtime: '运行状态',
         chat: '对话',
         settings: '设置',
       };
-      const cardTitle = titleMap[key] || key;
+      const cardTitle = titleMap[cardId] || cardId;
 
       if (isVisible) {
         let alreadyExists = false;
