@@ -1,5 +1,6 @@
 /**
  * 设置 · 技能：SKILL.md 发现 / 列表 / 预览 / 启用 / 创建 / 斜杠命令
+ * Design system v2：settings-page-* / settings-group / settings-feature / segment-pill
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -43,6 +44,16 @@ const SCOPE_LABEL: Record<string, string> = {
 type ScopeFilter = 'all' | 'project' | 'global';
 type ActFilter = 'all' | SkillActivation;
 
+/** 与 skillsApi.normalizeSlashName 对齐（未导出） */
+function skillSlashCmd(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `/skill:${slug || name.trim()}`;
+}
+
 export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [skills, setSkills] = useState<DesktopSkill[]>([]);
   const [roots, setRoots] = useState<
@@ -64,6 +75,9 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [createDesc, setCreateDesc] = useState('');
   const [createBusy, setCreateBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  /** 批量操作二次确认（无 browser alert，靠 toast） */
+  const [batchConfirm, setBatchConfirm] = useState<'enabled' | 'disabled' | null>(null);
   /** 自发现：尚未确认导入的技能（需用户同意） */
   const [discoverCandidates, setDiscoverCandidates] = useState<DesktopSkill[] | null>(null);
   const [discoverPick, setDiscoverPick] = useState<Record<string, boolean>>({});
@@ -158,6 +172,13 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     void refresh();
   }, [refresh]);
 
+  // 批量确认超时自动取消
+  useEffect(() => {
+    if (!batchConfirm) return;
+    const t = window.setTimeout(() => setBatchConfirm(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [batchConfirm]);
+
   const stats = useMemo(() => {
     const enabled = skills.filter((s) => s.activation === 'enabled').length;
     const recommended = skills.filter((s) => s.activation === 'recommended').length;
@@ -222,6 +243,58 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
+  const runBatchActivation = async (activation: 'enabled' | 'disabled') => {
+    const targets = filtered.filter((s) => s.activation !== activation);
+    if (targets.length === 0) {
+      onShowToast?.(
+        activation === 'enabled' ? '当前筛选结果均已启用' : '当前筛选结果均已禁用',
+      );
+      setBatchConfirm(null);
+      return;
+    }
+    // 二次确认：首次点击仅 toast，再次点击才执行（无 browser alert）
+    if (batchConfirm !== activation) {
+      setBatchConfirm(activation);
+      onShowToast?.(
+        activation === 'enabled'
+          ? `将启用当前筛选的 ${targets.length} 个技能，请再次点击「全部启用」确认`
+          : `将禁用当前筛选的 ${targets.length} 个技能，请再次点击「全部禁用」确认`,
+      );
+      return;
+    }
+    setBatchConfirm(null);
+    setBatchBusy(true);
+    let ok = 0;
+    let fail = 0;
+    const label = activation === 'enabled' ? '启用' : '禁用';
+    try {
+      onShowToast?.(`正在${label} 0/${targets.length}…`);
+      for (let i = 0; i < targets.length; i++) {
+        const s = targets[i]!;
+        try {
+          await setSkillActivation(s, activation);
+          ok += 1;
+          setSkills((list) =>
+            list.map((x) => (x.id === s.id ? { ...x, activation } : x)),
+          );
+        } catch {
+          fail += 1;
+        }
+        if ((i + 1) % 2 === 0 || i === targets.length - 1) {
+          onShowToast?.(`正在${label} ${i + 1}/${targets.length}…`);
+        }
+      }
+      invalidateSkillSlashCache();
+      onShowToast?.(
+        fail === 0
+          ? `已${label} ${ok} 个技能`
+          : `${label}完成：成功 ${ok}，失败 ${fail}`,
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const handleSyncAll = async () => {
     setSyncBusy(true);
     try {
@@ -276,6 +349,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
+  const copySlashCommand = async (name: string) => {
+    const cmd = skillSlashCmd(name);
+    try {
+      await navigator.clipboard.writeText(cmd);
+      onShowToast?.(`已复制 ${cmd}`);
+    } catch {
+      onShowToast?.('复制失败');
+    }
+  };
+
   const previewHtml = useMemo(() => {
     if (!selected) return '';
     if (showRaw) return '';
@@ -283,63 +366,84 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     return parseMarkdownToHtml(md);
   }, [selected, showRaw]);
 
+  const selectedSlash = selected ? skillSlashCmd(selected.name) : '';
+
   return (
     <div className="skills-tab">
-      <div className="skills-tab-head">
-        <div>
-          <h4 className="skills-tab-title">技能</h4>
-          <p className="skills-tab-sub">
-            扫描项目与全局 SKILL.md；预览正文、设置启用，并可注册为 /skill:name
-          </p>
-        </div>
-        <div className="skills-tab-actions">
-          <button
-            type="button"
-            className="models-btn ghost"
-            onClick={() => void handleSyncAll()}
-            disabled={syncBusy || skills.length === 0}
-            title="将启用/推荐技能同步到引擎上下文"
-          >
-            <Lucide.CloudUpload size={14} />
-            {syncBusy ? '同步中…' : '同步引擎'}
-          </button>
-          <button
-            type="button"
-            className="models-btn ghost"
-            onClick={() => setCreateOpen((v) => !v)}
-            title="在项目 .conex/skills 创建模板"
-          >
-            <Lucide.Plus size={14} />
-            新建
-          </button>
-          <button
-            type="button"
-            className="models-btn ghost"
-            onClick={() => void refresh({ promptNew: true })}
-            disabled={loading}
-            title="扫描路径并提示导入新发现的技能（需你确认）"
-          >
-            <Lucide.Search size={14} />
-            发现新技能
-          </button>
-          <button
-            type="button"
-            className="models-btn ghost"
-            onClick={() => void refresh()}
-            disabled={loading}
-          >
-            <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} />
-            {loading ? '扫描中…' : '刷新'}
-          </button>
-        </div>
+      <header className="settings-page-head">
+        <h2 className="settings-page-title">技能</h2>
+        <p className="settings-page-desc">
+          扫描项目与全局 SKILL.md；预览正文、设置启用，并可注册为 /skill:name
+        </p>
+      </header>
+
+      <div className="settings-feature-actions skills-tab-actions">
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={() => void handleSyncAll()}
+          disabled={syncBusy || skills.length === 0}
+          title="将启用/推荐技能同步到引擎上下文"
+        >
+          <Lucide.CloudUpload size={14} />
+          {syncBusy ? '同步中…' : '同步引擎'}
+        </button>
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={() => setCreateOpen((v) => !v)}
+          title="在项目 .conex/skills 创建模板"
+        >
+          <Lucide.Plus size={14} />
+          新建
+        </button>
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={() => void refresh({ promptNew: true })}
+          disabled={loading}
+          title="扫描路径并提示导入新发现的技能（需你确认）"
+        >
+          <Lucide.Search size={14} />
+          发现新技能
+        </button>
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
+          <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} />
+          {loading ? '扫描中…' : '刷新'}
+        </button>
+        <button
+          type="button"
+          className={`ui-btn ui-btn-ghost ui-btn-sm ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
+          onClick={() => void runBatchActivation('enabled')}
+          disabled={batchBusy || filtered.length === 0}
+          title="将当前筛选列表中的技能全部启用（需再次点击确认）"
+        >
+          <Lucide.CheckCheck size={14} />
+          {batchBusy && batchConfirm === null ? '处理中…' : '全部启用'}
+        </button>
+        <button
+          type="button"
+          className={`ui-btn ui-btn-ghost ui-btn-sm ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
+          onClick={() => void runBatchActivation('disabled')}
+          disabled={batchBusy || filtered.length === 0}
+          title="将当前筛选列表中的技能全部禁用（需再次点击确认）"
+        >
+          <Lucide.Ban size={14} />
+          全部禁用
+        </button>
       </div>
 
       {discoverCandidates && discoverCandidates.length > 0 ? (
-        <div className="skills-discover-panel" role="dialog" aria-label="导入新技能">
-          <div className="skills-discover-title">
+        <section className="settings-feature" role="dialog" aria-label="导入新技能">
+          <div className="settings-feature-title">
             发现 {discoverCandidates.length} 个新技能
           </div>
-          <p className="skills-discover-hint">
+          <p className="settings-feature-body">
             自发现不会自动启用。请选择要导入的技能（启用后可被模型 / 斜杠命令使用）。
           </p>
           <div className="skills-discover-list">
@@ -359,25 +463,37 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               </label>
             ))}
           </div>
-          <div className="skills-discover-actions">
-            <button type="button" className="models-btn ghost" onClick={() => void applyDiscoverImport('skip')}>
+          <div className="settings-feature-actions">
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={() => void applyDiscoverImport('skip')}
+            >
               暂不导入
             </button>
-            <button type="button" className="models-btn ghost" onClick={() => void applyDiscoverImport('all')}>
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={() => void applyDiscoverImport('all')}
+            >
               全部启用
             </button>
-            <button type="button" className="models-btn" onClick={() => void applyDiscoverImport('selected')}>
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() => void applyDiscoverImport('selected')}
+            >
               启用所选
             </button>
           </div>
-        </div>
+        </section>
       ) : null}
 
       {createOpen ? (
-        <div className="skills-create-box">
-          <div className="skills-create-title">新建项目技能</div>
-          <p className="skills-create-hint">
-            写入当前工作区 <code>.conex/skills/&lt;name&gt;/SKILL.md</code>
+        <section className="settings-feature" aria-label="新建项目技能">
+          <div className="settings-feature-title">新建项目技能</div>
+          <p className="settings-feature-body">
+            写入当前工作区 <code className="settings-kbd">.conex/skills/&lt;name&gt;/SKILL.md</code>
           </p>
           <div className="skills-create-row">
             <input
@@ -394,102 +510,102 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             />
             <button
               type="button"
-              className="models-btn"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
               disabled={!createName.trim() || createBusy}
               onClick={() => void handleCreate()}
             >
               {createBusy ? '创建中…' : '创建'}
             </button>
           </div>
-        </div>
+        </section>
       ) : null}
 
-      <div className="skills-stats">
-        <span>
-          共 <strong>{stats.total}</strong>
-        </span>
-        <span className="skills-stat-sep">·</span>
-        <span className="act-enabled">启用 {stats.enabled}</span>
-        <span className="skills-stat-sep">·</span>
-        <span className="act-recommended">推荐 {stats.recommended}</span>
-        <span className="skills-stat-sep">·</span>
-        <span className="act-disabled">禁用 {stats.disabled}</span>
-      </div>
+      <p className="settings-page-desc" style={{ marginTop: 0, maxWidth: 'none' }}>
+        共 <strong>{stats.total}</strong>
+        <span className="skills-stat-sep"> · </span>
+        启用 {stats.enabled}
+        <span className="skills-stat-sep"> · </span>
+        推荐 {stats.recommended}
+        <span className="skills-stat-sep"> · </span>
+        禁用 {stats.disabled}
+      </p>
 
-      <div className="skills-toolbar">
-        <label className="skills-enable-cmd">
-          <input
-            type="checkbox"
-            className="settings-switch"
-            checked={enableCommands}
-            onChange={(e) => {
-              const v = e.target.checked;
-              setEnableCommands(v);
-              void clientApi.saveSettingsEx(getWorkspacePath() || '', 'global', {
-                enableSkillCommands: v,
-              });
-            }}
-          />
-          <span>
-            <span className="skills-enable-title">注册为快捷命令</span>
-            <span className="skills-enable-desc">输入框可用 /skill:name</span>
-          </span>
-        </label>
-        <div className="skills-filters">
-          <div className="ui-segment ui-segment--inline">
-            {(
-              [
-                { id: 'all' as const, label: '全部' },
-                { id: 'project' as const, label: '项目' },
-                { id: 'global' as const, label: '全局' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={`ui-segment-item ${scopeFilter === opt.id ? 'active' : ''}`}
-                onClick={() => setScopeFilter(opt.id)}
-              >
-                {opt.label}
-              </button>
-            ))}
+      <section className="settings-group" aria-label="筛选与命令">
+        <div className="skills-toolbar" style={{ border: 'none', padding: 0, margin: 0 }}>
+          <label className="skills-enable-cmd">
+            <input
+              type="checkbox"
+              className="settings-switch"
+              checked={enableCommands}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setEnableCommands(v);
+                void clientApi.saveSettingsEx(getWorkspacePath() || '', 'global', {
+                  enableSkillCommands: v,
+                });
+              }}
+            />
+            <span>
+              <span className="skills-enable-title">注册为快捷命令</span>
+              <span className="skills-enable-desc">输入框可用 /skill:name</span>
+            </span>
+          </label>
+          <div className="skills-filters">
+            <div className="ui-segment ui-segment--inline settings-segment-pill">
+              {(
+                [
+                  { id: 'all' as const, label: '全部' },
+                  { id: 'project' as const, label: '项目' },
+                  { id: 'global' as const, label: '全局' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`ui-segment-item ${scopeFilter === opt.id ? 'active' : ''}`}
+                  onClick={() => setScopeFilter(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="ui-segment ui-segment--inline settings-segment-pill">
+              {(
+                [
+                  { id: 'all' as const, label: '状态' },
+                  { id: 'enabled' as const, label: '启用' },
+                  { id: 'recommended' as const, label: '推荐' },
+                  { id: 'disabled' as const, label: '禁用' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`ui-segment-item ${actFilter === opt.id ? 'active' : ''}`}
+                  onClick={() => setActFilter(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <input
+              className="settings-field-input skills-search"
+              placeholder="搜索技能…"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
           </div>
-          <div className="ui-segment ui-segment--inline">
-            {(
-              [
-                { id: 'all' as const, label: '状态' },
-                { id: 'enabled' as const, label: '启用' },
-                { id: 'recommended' as const, label: '推荐' },
-                { id: 'disabled' as const, label: '禁用' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={`ui-segment-item ${actFilter === opt.id ? 'active' : ''}`}
-                onClick={() => setActFilter(opt.id)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <input
-            className="settings-field-input skills-search"
-            placeholder="搜索技能…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
         </div>
-      </div>
+      </section>
 
       {!fsOk ? (
-        <div className="skills-banner">
+        <p className="settings-feature-body">
           当前环境无法读取本机技能目录（需桌面壳）。请在 Tauri 工作台中打开以扫描全局与项目技能。
-        </div>
+        </p>
       ) : null}
 
       {enableCommands && slashPreview.length > 0 ? (
-        <div className="skills-slash-preview">
+        <div className="skills-slash-preview" style={{ border: 'none', background: 'transparent' }}>
           <span className="skills-slash-label">快捷命令示例</span>
           {slashPreview.map((c) => (
             <code key={c.cmd} className="skills-slash-chip" title={c.desc}>
@@ -549,63 +665,75 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             ))}
           </div>
 
-          <div className="skills-extra">
-            <div className="skills-extra-label">额外目录</div>
-            {extraDirs.map((d) => (
-              <div key={d} className="skills-extra-row">
-                <span title={d}>{d}</span>
-                <button
-                  type="button"
-                  className="models-icon-btn danger"
-                  title="移除"
-                  onClick={() => {
-                    removeExtraSkillDir(d);
-                    setExtraDirs(getExtraSkillDirs());
-                    void refresh();
-                  }}
-                >
-                  <Lucide.X size={14} />
-                </button>
+          <section className="settings-group" aria-label="额外目录" style={{ padding: '12px 0 0' }}>
+            <div className="settings-group-label">额外目录</div>
+            <div className="settings-list">
+              {extraDirs.map((d) => (
+                <div key={d} className="settings-list-row">
+                  <div className="settings-list-copy">
+                    <div className="settings-list-sub settings-list-sub--mono" title={d}>
+                      {d}
+                    </div>
+                  </div>
+                  <div className="settings-list-control">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      title="移除"
+                      aria-label={`移除 ${d}`}
+                      onClick={() => {
+                        removeExtraSkillDir(d);
+                        setExtraDirs(getExtraSkillDirs());
+                        void refresh();
+                      }}
+                    >
+                      <Lucide.X size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="settings-list-row settings-list-row--stack">
+                <div className="settings-list-stack-actions">
+                  <input
+                    className="settings-field-input"
+                    placeholder="技能目录绝对路径"
+                    value={extraDir}
+                    onChange={(e) => setExtraDir(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && extraDir.trim()) {
+                        addExtraSkillDir(extraDir.trim());
+                        setExtraDir('');
+                        setExtraDirs(getExtraSkillDirs());
+                        void refresh();
+                      }
+                    }}
+                    style={{ flex: 1, minWidth: 120 }}
+                  />
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    title="浏览文件夹"
+                    onClick={() => void handlePickExtra()}
+                  >
+                    <Lucide.FolderOpen size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={!extraDir.trim()}
+                    onClick={() => {
+                      addExtraSkillDir(extraDir.trim());
+                      setExtraDir('');
+                      setExtraDirs(getExtraSkillDirs());
+                      void refresh();
+                    }}
+                  >
+                    添加
+                  </button>
+                </div>
               </div>
-            ))}
-            <div className="skills-extra-add">
-              <input
-                className="settings-field-input"
-                placeholder="技能目录绝对路径"
-                value={extraDir}
-                onChange={(e) => setExtraDir(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && extraDir.trim()) {
-                    addExtraSkillDir(extraDir.trim());
-                    setExtraDir('');
-                    setExtraDirs(getExtraSkillDirs());
-                    void refresh();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="models-btn ghost"
-                title="浏览文件夹"
-                onClick={() => void handlePickExtra()}
-              >
-                <Lucide.FolderOpen size={14} />
-              </button>
-              <button
-                type="button"
-                className="models-btn"
-                disabled={!extraDir.trim()}
-                onClick={() => {
-                  addExtraSkillDir(extraDir.trim());
-                  setExtraDir('');
-                  setExtraDirs(getExtraSkillDirs());
-                  void refresh();
-                }}
-              >
-                添加
-              </button>
             </div>
-          </div>
+          </section>
         </aside>
 
         <section className="skills-detail">
@@ -614,7 +742,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           ) : (
             <>
               <div className="skills-detail-top">
-                <div>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="skills-detail-name">{selected.name}</div>
                   <div className="skills-detail-meta">
                     <span className="skills-scope">{SCOPE_LABEL[selected.scope] || selected.scope}</span>
@@ -628,29 +756,58 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       </span>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    className="skills-detail-path skills-path-btn"
-                    title="在资源管理器中打开"
-                    onClick={() => {
-                      void revealSkillPath(selected.filePath).then((ok) => {
-                        if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
-                      });
-                    }}
+                  <div
+                    className="settings-list-stack-actions"
+                    style={{ marginTop: 8, alignItems: 'center' }}
                   >
-                    <Lucide.ExternalLink size={12} />
-                    {selected.filePath}
-                  </button>
+                    <code className="settings-kbd" title={selectedSlash}>
+                      {selectedSlash}
+                    </code>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      title="复制斜杠命令"
+                      onClick={() => void copySlashCommand(selected.name)}
+                    >
+                      <Lucide.Copy size={14} />
+                      复制命令
+                    </button>
+                  </div>
+                  <div
+                    className="settings-list-stack-actions"
+                    style={{ marginTop: 8, alignItems: 'flex-start' }}
+                  >
+                    <div
+                      className="settings-list-sub settings-list-sub--mono"
+                      style={{ flex: 1, minWidth: 0 }}
+                      title={selected.filePath}
+                    >
+                      {selected.filePath}
+                    </div>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      title="在资源管理器中打开"
+                      onClick={() => {
+                        void revealSkillPath(selected.filePath).then((ok) => {
+                          if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
+                        });
+                      }}
+                    >
+                      <Lucide.ExternalLink size={14} />
+                      打开位置
+                    </button>
+                  </div>
                 </div>
                 <div className="skills-detail-controls">
                   <div className="skills-activation">
-                    <div className="ui-segment ui-segment--inline">
+                    <div className="ui-segment ui-segment--inline settings-segment-pill">
                       {ACTIVATION_OPTIONS.map((opt) => (
                         <button
                           key={opt.id}
                           type="button"
                           className={`ui-segment-item ${selected.activation === opt.id ? 'active' : ''}`}
-                          disabled={busyId === selected.id}
+                          disabled={busyId === selected.id || batchBusy}
                           onClick={() => void setActivation(selected, opt.id)}
                         >
                           {opt.label}
@@ -660,7 +817,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   </div>
                   <button
                     type="button"
-                    className={`models-btn ghost ${showRaw ? 'is-active' : ''}`}
+                    className={`ui-btn ui-btn-ghost ui-btn-sm ${showRaw ? 'is-active' : ''}`}
                     onClick={() => setShowRaw((v) => !v)}
                   >
                     {showRaw ? '渲染预览' : '原文'}

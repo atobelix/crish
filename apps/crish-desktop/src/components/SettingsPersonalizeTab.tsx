@@ -56,6 +56,18 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
         <p className="settings-page-desc">交互习惯与默认权限，影响对话与右侧工具的打开方式。</p>
       </header>
 
+      <section className="settings-group" aria-label="说明">
+        <div className="settings-group-label">说明</div>
+        <div className="settings-list settings-list--spaced">
+          <div className="settings-feature">
+            <div className="settings-feature-title">个性化会影响什么？</div>
+            <div className="settings-feature-body">
+              这里的选项只改变本机交互习惯：默认权限决定助手能自动执行的操作范围；回答风格影响回复详略；标签合并与侧栏工具影响布局打开方式。不会改主题、字体或模型密钥。
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="settings-group" aria-label="权限与交互">
         <div className="settings-group-label">权限与交互</div>
         <div className="settings-list">
@@ -84,7 +96,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
           <div className="settings-list-row settings-list-row--stack">
             <div className="settings-list-copy">
               <div className="settings-list-title">回答风格</div>
-              <div className="settings-list-sub">回答风格属于交互偏好，放在个性化里更合适。</div>
+              <div className="settings-list-sub">简洁到深入，按你的阅读习惯选择默认详略。</div>
             </div>
             <div className="settings-list-stack-controls">
               <div className="ui-segment ui-segment--inline settings-segment-pill">
@@ -131,7 +143,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
 
       <section className="settings-group" aria-label="侧栏">
         <div className="settings-group-label">侧栏</div>
-        <div className="settings-list">
+        <div className="settings-list settings-list--spaced">
           <div className="settings-list-row settings-list-row--stack">
             <div className="settings-list-copy">
               <div className="settings-list-title">默认打开的侧栏工具</div>

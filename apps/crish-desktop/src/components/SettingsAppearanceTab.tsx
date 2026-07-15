@@ -12,6 +12,11 @@ type Props = {
   onShowToast: (msg: string) => void;
 };
 
+const THEME_LABELS: Record<string, string> = {
+  default: '浅色',
+  dark: '深色',
+};
+
 export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -55,6 +60,22 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
+  const handleResetAppearance = async () => {
+    if (!settings) return;
+    try {
+      const merged = await clientApi.saveSettingsEx(cwd, 'global', {
+        theme: 'default',
+        hideThinkingBlock: false,
+      });
+      setSettings(merged);
+      const { setTheme } = await import('../api/themeStore');
+      setTheme('default');
+      onShowToast('已重置外观为默认（浅色主题，显示思考过程）');
+    } catch (err) {
+      onShowToast('重置失败：' + String(err));
+    }
+  };
+
   if (!settings) {
     return (
       <div className="settings-pane settings-pane--loading">
@@ -67,13 +88,14 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   }
 
   const theme = settings.theme || 'default';
-  const hideThinking = Boolean((settings as { hideThinking?: boolean }).hideThinking);
+  const themeLabel = THEME_LABELS[theme] || theme;
+  const hideThinking = Boolean(settings.hideThinkingBlock);
 
   return (
     <div className="settings-pane settings-pane--modern">
       <header className="settings-page-head">
         <h2 className="settings-page-title">外观</h2>
-        <p className="settings-page-desc">主题、字体与阅读密度，影响整个应用的视觉感受。</p>
+        <p className="settings-page-desc">主题、字体与阅读偏好，影响整个应用的视觉感受。</p>
       </header>
 
       <section className="settings-group" aria-label="主题与布局">
@@ -82,7 +104,9 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
           <div className="settings-list-row">
             <div className="settings-list-copy">
               <div className="settings-list-title">主题</div>
-              <div className="settings-list-sub">浅色适合白天；深色适合弱光环境</div>
+              <div className="settings-list-sub">
+                当前主题：{themeLabel} · 浅色适合白天；深色适合弱光环境
+              </div>
             </div>
             <div className="settings-list-control">
               <div className="ui-segment ui-segment--inline settings-segment-pill">
@@ -141,8 +165,8 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                 checked={hideThinking}
                 onChange={(e) => {
                   void handleUpdateSettings({
-                    hideThinking: e.target.checked,
-                  } as Partial<Settings>);
+                    hideThinkingBlock: e.target.checked,
+                  });
                 }}
               />
             </div>
@@ -152,11 +176,36 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
 
       <section className="settings-group" aria-label="字体">
         <div className="settings-group-label">字体</div>
-        <div className="settings-list settings-list--flush">
+        <div className="settings-list settings-list--spaced settings-list--flush">
           <FontSettingsSection
             onShowToast={onShowToast}
             onPersistSettings={(fonts) => handleUpdateSettings({ fonts })}
           />
+        </div>
+      </section>
+
+      <section className="settings-group" aria-label="重置">
+        <div className="settings-group-label">重置</div>
+        <div className="settings-list settings-list--spaced">
+          <div className="settings-list-row">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">重置外观为默认</div>
+              <div className="settings-list-sub">
+                恢复浅色主题，并显示思考过程（不影响字体与代码缩进）
+              </div>
+            </div>
+            <div className="settings-list-control">
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                onClick={() => {
+                  void handleResetAppearance();
+                }}
+              >
+                重置
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>

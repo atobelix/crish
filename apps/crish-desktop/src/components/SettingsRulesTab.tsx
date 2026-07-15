@@ -1,5 +1,6 @@
 /**
  * 设置 · 规则：自定义规范列表 / 编辑全局或项目规则文件
+ * Design system v2：settings-pane--modern + group/list/feature
  */
 import React, { useEffect, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -13,13 +14,23 @@ type Props = {
   onBlockingOverlayChange?: (blocking: boolean) => void;
 };
 
+/** 一键添加的常用工程规范（与手动添加走同一路径） */
+const RULE_PRESETS: string[] = [
+  '修改前先说明方案并等待确认',
+  '保持既有代码风格，不随意重构无关代码',
+  '提交前确保通过 lint / 测试',
+  '不要提交密钥、token 或本地环境文件',
+  '优先最小改动，避免大范围无关修改',
+];
+
 export const SettingsRulesTab: React.FC<Props> = ({
   onShowToast,
   onBlockingOverlayChange,
 }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const hasWorkspace =
-    typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('crish_workspace'));
+  const workspacePath =
+    typeof localStorage !== 'undefined' ? localStorage.getItem('crish_workspace') : null;
+  const hasWorkspace = Boolean(workspacePath);
 
   const [customRules, setCustomRules] = useState<string[]>([]);
   const [globalRules, setGlobalRules] = useState('');
@@ -101,19 +112,29 @@ export const SettingsRulesTab: React.FC<Props> = ({
     }
   };
 
-  const handleAddCustomRule = () => {
-    const text = newRuleText.trim();
-    if (!text) {
+  const addRuleIfNew = (text: string, successMsg = '智能体规范规则已添加') => {
+    const trimmed = text.trim();
+    if (!trimmed) {
       onShowToast('请输入规则内容');
-      return;
+      return false;
     }
-    if (customRules.includes(text)) {
+    if (customRules.includes(trimmed)) {
       onShowToast('该规则已存在');
-      return;
+      return false;
     }
-    void persistCustomRules([...customRules, text]);
-    setNewRuleText('');
-    onShowToast('智能体规范规则已添加');
+    void persistCustomRules([...customRules, trimmed]);
+    onShowToast(successMsg);
+    return true;
+  };
+
+  const handleAddCustomRule = () => {
+    if (addRuleIfNew(newRuleText)) {
+      setNewRuleText('');
+    }
+  };
+
+  const handleAddPreset = (preset: string) => {
+    addRuleIfNew(preset, '已添加预设规范');
   };
 
   const handleDeleteCustomRule = (index: number) => {
@@ -123,78 +144,200 @@ export const SettingsRulesTab: React.FC<Props> = ({
   };
 
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-        <div>
-          <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            {hasWorkspace ? '当前项目规则' : '全局规则'}
-          </h4>
-          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-            {hasWorkspace
-              ? `作用于：${localStorage.getItem('crish_workspace')}`
-              : '尚未打开项目时，这里编辑的是全局规则'}
-          </p>
-        </div>
+    <div className="settings-pane settings-pane--modern">
+      <header className="settings-page-head">
+        <h2 className="settings-page-title">规则</h2>
+        <p className="settings-page-desc">
+          约束智能体的行为边界：编码风格、确认节奏、禁止操作等。短规则适合日常约定；长文规则可在下方编辑全文。
+        </p>
+      </header>
 
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button
-            type="button"
-            onClick={() => setEditingRuleFileType(hasWorkspace ? 'project' : 'global')}
-            className="ui-btn ui-btn-secondary ui-btn-sm"
-          >
-            编辑规则文件
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <span className="settings-field-label">已添加的规则规范列表</span>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {customRules.map((rule, idx) => (
-            <div key={idx} className="settings-card-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-primary)', lineHeight: '1.4' }}>{rule}</span>
+      {/* 作用域：工作区 + 打开全文编辑 */}
+      <section className="settings-group" aria-label="作用域">
+        <div className="settings-group-label">作用域</div>
+        <div className="settings-list settings-list--spaced">
+          <div className="settings-list-row settings-list-row--stack">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">
+                {hasWorkspace ? '当前工作区' : '全局（未打开项目）'}
               </div>
-              <button
-                type="button"
-                onClick={() => handleDeleteCustomRule(idx)}
-                className="ui-btn ui-btn-ghost danger"
-                style={{ marginLeft: 12, flexShrink: 0 }}
-                title="删除规则"
+              <div
+                className={
+                  hasWorkspace
+                    ? 'settings-list-sub settings-list-sub--mono'
+                    : 'settings-list-sub'
+                }
+                title={workspacePath || undefined}
               >
-                <Lucide.Trash2 size={14} />
-              </button>
+                {hasWorkspace
+                  ? workspacePath
+                  : '尚未打开项目时，短规则与全局规则文件作用于所有对话。'}
+              </div>
             </div>
-          ))}
-          {customRules.length === 0 && (
-            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '24px', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
-              暂无细化规范，请在下方输入框添加日常开发的零碎规范。
+            <div className="settings-list-stack-controls">
+              <div className="settings-list-stack-actions">
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  onClick={() => setEditingRuleFileType('global')}
+                >
+                  编辑全局规则
+                </button>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  onClick={() => {
+                    if (!hasWorkspace) {
+                      onShowToast('请先打开项目后再编辑项目规则');
+                      return;
+                    }
+                    setEditingRuleFileType('project');
+                  }}
+                  disabled={!hasWorkspace}
+                  title={
+                    hasWorkspace
+                      ? '编辑当前工作区的项目规则'
+                      : '打开项目后可编辑项目规则'
+                  }
+                >
+                  编辑项目规则
+                </button>
+              </div>
+              {!hasWorkspace ? (
+                <div className="settings-list-sub">
+                  项目规则需在工作区内生效；可在空对话页选择或打开项目。
+                </div>
+              ) : null}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="settings-card-row" style={{ gap: 10 }}>
-        <span className="settings-field-label">添加新规范</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            placeholder="输入规则内容，例如: 提交代码前确保完成 lint 测试"
-            value={newRuleText}
-            onChange={(e) => setNewRuleText(e.target.value)}
-            className="settings-field-input"
-            style={{ flex: 1 }}
-          />
-          <button
-            type="button"
-            onClick={handleAddCustomRule}
-            className="ui-btn ui-btn-secondary ui-btn-sm"
-          >
-            添加
-          </button>
+      {/* 自定义短规则列表 */}
+      <section className="settings-group" aria-label="短规则">
+        <div className="settings-group-label">短规则</div>
+        {customRules.length === 0 ? (
+          <p className="settings-list-sub" style={{ margin: 0 }}>
+            暂无细化规范。可从下方预设一键添加，或自行输入日常开发约定。
+          </p>
+        ) : (
+          <div className="settings-list">
+            {customRules.map((rule, idx) => (
+              <div key={`${idx}-${rule.slice(0, 24)}`} className="settings-list-row">
+                <div className="settings-list-copy">
+                  <div className="settings-list-title" style={{ fontWeight: 400 }}>
+                    {rule}
+                  </div>
+                </div>
+                <div className="settings-list-control">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCustomRule(idx)}
+                    className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                    title="删除规则"
+                    aria-label={`删除规则：${rule}`}
+                  >
+                    <Lucide.Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 快速预设 */}
+      <section className="settings-group" aria-label="快速添加">
+        <div className="settings-group-label">快速添加</div>
+        <div className="settings-list settings-list--spaced">
+          <div className="settings-list-row settings-list-row--stack">
+            <div className="settings-list-copy">
+              <div className="settings-list-sub" style={{ marginTop: 0 }}>
+                常用工程约定，点击即可加入短规则（已存在的不会重复添加）。
+              </div>
+            </div>
+            <div className="settings-list-stack-controls">
+              <div className="settings-list-stack-actions">
+                {RULE_PRESETS.map((preset) => {
+                  const exists = customRules.includes(preset);
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      onClick={() => handleAddPreset(preset)}
+                      disabled={exists}
+                      title={exists ? '已添加' : `添加：${preset}`}
+                      style={{
+                        maxWidth: '100%',
+                        whiteSpace: 'normal',
+                        height: 'auto',
+                        minHeight: 28,
+                        padding: '6px 10px',
+                        textAlign: 'left',
+                        lineHeight: 1.35,
+                        opacity: exists ? 0.45 : 1,
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* 手动添加 */}
+      <section className="settings-group" aria-label="添加规范">
+        <div className="settings-group-label">添加规范</div>
+        <div className="settings-list settings-list--spaced">
+          <div className="settings-list-row settings-list-row--stack">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">自定义短规则</div>
+              <div className="settings-list-sub">
+                一句话约束即可，例如：提交代码前确保完成 lint 测试
+              </div>
+            </div>
+            <div className="settings-list-stack-controls">
+              <div className="settings-list-stack-actions">
+                <input
+                  type="text"
+                  placeholder="输入规则内容…"
+                  value={newRuleText}
+                  onChange={(e) => setNewRuleText(e.target.value)}
+                  className="settings-field-input"
+                  style={{ flex: 1, minWidth: 160 }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddCustomRule();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomRule}
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                >
+                  添加
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 同步 / AGENTS.md 提示 */}
+      <section className="settings-group" aria-label="说明">
+        <div className="settings-group-label">说明</div>
+        <div className="settings-feature">
+          <div className="settings-feature-title">规则如何生效</div>
+          <div className="settings-feature-body">
+            保存全局 / 项目规则全文后，会写入本机设置，并在引擎已连接时同步为 scoped
+            context，供智能体在对话中遵循。引擎未连接时仅本机生效。正式版暂不自动写入仓库
+            AGENTS.md；若项目已有 AGENTS.md / Claude.md，引擎侧仍可按仓库约定读取。
+          </div>
+        </div>
+      </section>
 
       {editingRuleFileType && (
         <div
@@ -214,36 +357,76 @@ export const SettingsRulesTab: React.FC<Props> = ({
           }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-rules-modal-title"
             style={{
-              width: '580px',
+              width: 'min(580px, calc(100vw - 32px))',
               background: 'var(--bg-elevated, var(--bg-primary))',
-              borderRadius: '12px',
+              borderRadius: 12,
               boxShadow: 'var(--shadow-2xl)',
-              border: '1px solid var(--border-color)',
+              border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-              <span className="settings-modal-title">
-                {editingRuleFileType === 'global' ? '编辑全局规则' : '编辑当前项目规则'}
-              </span>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 16,
+                padding: '18px 20px 14px',
+                borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  id="settings-rules-modal-title"
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    fontWeight: 600,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {editingRuleFileType === 'global' ? '编辑全局规则' : '编辑项目规则'}
+                </div>
+                <p
+                  style={{
+                    margin: '6px 0 0',
+                    fontSize: 12.5,
+                    color: 'var(--text-tertiary)',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {editingRuleFileType === 'global'
+                    ? '适用于所有对话。保存后写入本机，并在引擎连接时同步（暂不自动写 AGENTS.md）。'
+                    : '适用于当前工作区。保存后写入本机设置，后续可对接项目文件。'}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setEditingRuleFileType(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                aria-label="关闭"
+                style={{ flexShrink: 0 }}
               >
                 <Lucide.X size={16} />
               </button>
             </div>
 
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', margin: 0 }}>
-                {editingRuleFileType === 'global'
-                  ? '修改全局规则文本。保存后写入本机设置（正式版暂不自动写仓库 AGENTS.md）。'
-                  : '修改当前工作区相关规则。保存后写入本机设置，后续可对接项目文件。'}
-              </p>
-
+            <div
+              style={{
+                padding: '16px 20px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+              }}
+            >
               <textarea
                 className="settings-field-input"
                 value={editingRuleFileType === 'global' ? globalRules : projectRules}
@@ -260,18 +443,24 @@ export const SettingsRulesTab: React.FC<Props> = ({
                   minHeight: 220,
                   height: 'auto',
                   padding: '10px 12px',
-                  fontSize: 11,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono)',
                   resize: 'vertical',
                   lineHeight: 1.5,
                 }}
               />
 
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  justifyContent: 'flex-end',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setEditingRuleFileType(null)}
-                  className="settings-btn-secondary"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
                 >
                   取消
                 </button>
@@ -281,15 +470,15 @@ export const SettingsRulesTab: React.FC<Props> = ({
                     void handleSaveRules(editingRuleFileType);
                     setEditingRuleFileType(null);
                   }}
-                  className="settings-btn-primary"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
                 >
-                  保存规则文件
+                  保存规则
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
