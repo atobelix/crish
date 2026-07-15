@@ -14,7 +14,6 @@ import {
   getActiveModelId,
   getActiveProfile,
   getActiveProfileId,
-  loadProfiles,
 } from '../api/providerProfiles';
 import {
   getActiveProject,
@@ -24,6 +23,7 @@ import {
 } from '../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 import { ComposePlusMenu } from './ComposePlusMenu';
+import { ModelPicker } from './ModelPicker';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
   isEditToolName,
@@ -2087,76 +2087,36 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               className="model-badge"
               title={
                 getActiveProfile()
-                  ? `${getActiveProfile()!.name} · ${engineModel || '未选模型'}`
+                  ? `${getActiveProfile()!.name} · ${engineModel || getActiveModelId() || '未选模型'}`
                   : '选择服务商与模型'
               }
-              onClick={() => setShowModelDropdown((prev) => !prev)}
+              onClick={() => {
+                setShowModelDropdown((prev) => !prev);
+                setShowPlusMenu(false);
+              }}
             >
               <span className="model-text">
                 {getModelDisplayName(
-                  engineModel || getActiveModelId() || appSettings?.defaultModel || '选择模型',
+                  engineModel || getActiveModelId() || '选择模型',
                 )}
               </span>
               <Lucide.ChevronDown size={12} style={{ opacity: 0.55 }} />
 
-              {showModelDropdown && (
-                <div className="model-picker-popover" onClick={(e) => e.stopPropagation()}>
-                  {pickerInlineError && (
-                    <div className="model-picker-error">{pickerInlineError}</div>
-                  )}
-                  {loadProfiles()
-                    .filter((p) => p.hasKey || Boolean(p.apiKey?.trim()))
-                    .map((p) => (
-                    <div key={p.id} className="model-picker-group">
-                      <div className="model-picker-group-label">
-                        {p.name}
-                      </div>
-                      {(p.models || []).length === 0 && (
-                        <div className="model-picker-empty" style={{ padding: '4px 10px' }}>
-                          无模型，请到设置添加
-                        </div>
-                      )}
-                      {(p.models || []).map((m) => {
-                        const isSelected =
-                          engineModel === m &&
-                          (activeProfileId === p.id || (!activeProfileId && engineModel === m));
-                        return (
-                          <button
-                            type="button"
-                            key={`${p.id}-${m}`}
-                            disabled={pickerBusy}
-                            className={`model-dropdown-item ${isSelected ? 'is-selected' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void selectProfileModel(p.id, m);
-                            }}
-                          >
-                            <span>{m}</span>
-                            {isSelected && <Lucide.Check size={11} />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  {loadProfiles().filter((p) => p.hasKey || Boolean(p.apiKey?.trim())).length === 0 && (
-                    <div className="model-picker-empty">尚未配置可用服务商</div>
-                  )}
-                  <div className="model-picker-footer">
-                    <button
-                      type="button"
-                      className="model-picker-link"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowModelDropdown(false);
-                        useLayoutStore.getState().openSettings('models');
-                      }}
-                    >
-                      <Lucide.Settings size={13} />
-                      <span>模型设置</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              <ModelPicker
+                open={showModelDropdown}
+                onClose={() => setShowModelDropdown(false)}
+                engineModel={engineModel}
+                busy={pickerBusy}
+                error={pickerInlineError}
+                onSelect={(profileId, modelId) => {
+                  void selectProfileModel(profileId, modelId);
+                }}
+                onOpenSettings={() => {
+                  setShowModelDropdown(false);
+                  useLayoutStore.getState().openSettings('models');
+                }}
+                onToast={onShowToast}
+              />
             </div>
             )}
           </div>
