@@ -1,4 +1,4 @@
-import type { PermissionDecision, PermissionRequest } from "@crish/shared-types";
+import type { JsonObject, PermissionDecision, PermissionRequest } from "@crish/shared-types";
 import { buildIntentKey, resolveTrustZone } from "@crish/decision-engine";
 import { ApprovalQueue } from "./approval-queue.js";
 
@@ -50,17 +50,20 @@ export class DaemonApprovalHandler {
 
     const allowlist = DaemonApprovalHandler.runIntentAllowlist.get(runId);
     if (allowlist?.has(intentKey)) {
+      const meta: JsonObject = {
+        matchedRule: "run-intent-allowlist",
+        autoApproved: true,
+        intentKey,
+        trustZone: resolution.zone,
+        risk: resolution.risk,
+      };
+      if (request.metadata?.permissionMode !== undefined) {
+        meta.permissionMode = request.metadata.permissionMode as JsonObject[string];
+      }
       return {
         behavior: "allow",
         reason: "Matching operation intent already approved in this run",
-        metadata: {
-          permissionMode: request.metadata?.permissionMode,
-          matchedRule: "run-intent-allowlist",
-          autoApproved: true,
-          intentKey,
-          trustZone: resolution.zone,
-          risk: resolution.risk,
-        },
+        metadata: meta,
       };
     }
 
@@ -86,15 +89,17 @@ export class DaemonApprovalHandler {
           }),
     });
 
-    const approvalMeta: Record<string, unknown> = {
+    const approvalMeta: JsonObject = {
       status: result.decision,
-      reason: result.reason,
+      reason: result.reason ?? null,
       createdAt: result.createdAt,
-      resolvedAt: result.resolvedAt,
+      resolvedAt: result.resolvedAt ?? null,
       intentKey,
       trustZone: resolution.zone,
-      ...(result.expiredAt !== undefined ? { expiredAt: result.expiredAt } : {}),
     };
+    if (result.expiredAt !== undefined) {
+      approvalMeta.expiredAt = result.expiredAt;
+    }
 
     if (result.decision === "approved") {
       let set = DaemonApprovalHandler.runIntentAllowlist.get(runId);
@@ -110,7 +115,11 @@ export class DaemonApprovalHandler {
       return {
         behavior: "allow",
         reason: result.reason ?? "Approved",
-        metadata: { approval: approvalMeta, intentKey, trustZone: resolution.zone },
+        metadata: {
+          approval: approvalMeta,
+          intentKey,
+          trustZone: resolution.zone,
+        } satisfies JsonObject,
       };
     }
 
@@ -126,7 +135,7 @@ export class DaemonApprovalHandler {
         softDeny: expired,
         intentKey,
         trustZone: resolution.zone,
-      },
+      } satisfies JsonObject,
     };
   }
 

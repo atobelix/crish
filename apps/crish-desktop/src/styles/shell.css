@@ -2250,35 +2250,50 @@ select.ui-input {
 .sidebar-top-actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   margin-bottom: 10px;
 }
-.sb-new-btn {
+/* 顶栏导航：默认安静，hover / 选中时才抬升（不再常亮描边） */
+.sb-nav-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   min-height: var(--control-height);
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   padding: 0 12px;
   border-radius: 10px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.sb-new-btn svg {
+.sb-nav-item svg {
   width: var(--icon-size);
   height: var(--icon-size);
+  flex-shrink: 0;
+  color: var(--text-tertiary);
 }
-.sb-new-btn:hover {
+.sb-nav-item:hover {
   background: var(--bg-hover);
-  border-color: var(--border-color);
-  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+.sb-nav-item:hover svg {
+  color: var(--text-secondary);
+}
+.sb-nav-item.is-active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+}
+.sb-nav-item.is-active svg {
+  color: var(--text-secondary);
 }
 .sb-nav-link {
   display: flex;
@@ -2324,8 +2339,44 @@ select.ui-input {
 .sb-section-label-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 2px;
+  justify-content: flex-start;
   padding-right: 2px;
+  min-height: 28px;
+}
+.sb-section-label-row .sb-section-label { flex: 1; min-width: 0; }
+.sb-section-label-row:hover .sb-section-new,
+.sb-section-label-row:focus-within .sb-section-new,
+.crish-sidebar .folder-header:hover .folder-new-session,
+.crish-sidebar .folder-header:focus-within .folder-new-session {
+  opacity: 1;
+  pointer-events: auto;
+}
+.sb-section-new,
+.crish-sidebar .folder-new-session {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.sb-section-new:hover,
+.crish-sidebar .folder-new-session:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.crish-sidebar .folder-count {
+  display: none !important;
 }
 .sb-section-label {
   display: flex;

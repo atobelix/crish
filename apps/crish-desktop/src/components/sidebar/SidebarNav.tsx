@@ -7,7 +7,7 @@ export interface SidebarNavProps {
   onOpenScheduled: () => void;
 }
 
-/** 顶部「新对话 / 定时任务」导航区 */
+/** 顶部「新对话 / 定时任务」：默认安静，hover 或选中时才抬升 */
 export const SidebarNav: React.FC<SidebarNavProps> = ({
   activeNav,
   onNewSession,
@@ -15,16 +15,20 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 }) => {
   return (
     <div className="sidebar-top-actions">
-      <button type="button" className="sb-new-btn" onClick={onNewSession}>
-        <Lucide.Plus size={16} strokeWidth={2.25} />
+      <button
+        type="button"
+        className={`sb-nav-item ${activeNav === 'chat' ? 'is-active' : ''}`}
+        onClick={onNewSession}
+      >
+        <Lucide.Plus size={16} strokeWidth={2} />
         <span>新对话</span>
       </button>
       <button
         type="button"
-        className={`sb-nav-link ${activeNav === 'scheduled' ? 'active' : ''}`}
+        className={`sb-nav-item ${activeNav === 'scheduled' ? 'is-active' : ''}`}
         onClick={onOpenScheduled}
       >
-        <Lucide.Clock size={16} />
+        <Lucide.Clock size={16} strokeWidth={1.75} />
         <span>定时任务</span>
       </button>
     </div>

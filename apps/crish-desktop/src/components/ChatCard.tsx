@@ -17,6 +17,7 @@ import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelPicker } from './ModelPicker';
 import { ChatMessageList } from './ChatMessageList';
+import { ScheduledTasksPanel } from './ScheduledTasksPanel';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { toolSummaryLabel } from '../api/toolPresentation';
 import {
@@ -68,6 +69,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [pickerInlineError, setPickerInlineError] = useState('');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  /** chat = 对话流；scheduled = 主区定时任务 */
+  const [mainSurface, setMainSurface] = useState<'chat' | 'scheduled'>('chat');
   const [projectTick, setProjectTick] = useState(0);
   const [engineHint, setEngineHint] = useState<EngineStatus | null>(null);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
@@ -83,11 +86,17 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   useEffect(() => {
     const onProj = () => setProjectTick((n) => n + 1);
     const onOpenPicker = () => setShowProjectPicker(true);
+    const onOpenScheduled = () => setMainSurface('scheduled');
+    const onBackChat = () => setMainSurface('chat');
     window.addEventListener('crish-project-changed', onProj);
     window.addEventListener('crish-open-project-picker', onOpenPicker);
+    window.addEventListener('crish-open-scheduled', onOpenScheduled);
+    window.addEventListener('crish-open-chat', onBackChat);
     return () => {
       window.removeEventListener('crish-project-changed', onProj);
       window.removeEventListener('crish-open-project-picker', onOpenPicker);
+      window.removeEventListener('crish-open-scheduled', onOpenScheduled);
+      window.removeEventListener('crish-open-chat', onBackChat);
     };
   }, []);
 
@@ -221,7 +230,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             { cmd: '/learn', desc: '记录最佳实践和对齐规则（演示）' },
           ]
         : []),
-      { cmd: '/schedule', desc: '打开设置中的定时任务' },
+      { cmd: '/schedule', desc: '打开主区定时任务' },
       { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
     ],
     [],
@@ -582,48 +591,56 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           display: activeAgent ? 'none' : undefined,
         }}
       >
-        <ChatMessageList
-          messages={messages}
-          agents={activeSession?.agents || []}
-          activeSessionId={activeSessionId || ''}
-          thinkingSeconds={thinkingSeconds}
-          showProjectPicker={showProjectPicker}
-          onShowProjectPicker={setShowProjectPicker}
-          onProjectChanged={() => setProjectTick((n) => n + 1)}
-          onSetChatInput={setChatInput}
-          onWithdraw={(msgId, text) => {
-            setChatInput(text);
-            withdrawMessage(wsId, activeSessionId, msgId);
-          }}
-          onRegenerate={(userText) => {
-            const userMsgId = `user-msg-${Date.now()}`;
-            useLayoutStore.getState().addMessage(wsId, activeSessionId, {
-              id: userMsgId,
-              sender: 'user',
-              text: userText,
-              timestamp: Date.now(),
-              status: 'processing',
-            });
-            runStreamingAssistant(userText, userMsgId);
-            onShowToast('正在重新生成…');
-          }}
-          onBranch={() => {
-            const newTitle = `${activeSession?.title || '会话'} - 分支`;
-            useLayoutStore.getState().branchSession(activeSessionId, newTitle);
-            onShowToast(`已创建分支：${newTitle}`);
-          }}
-          onShowToast={onShowToast}
-          approvalBusy={approvalBusy}
-          pendingApprovalMsgId={pendingApprovalMsgId}
-          onOpenDiff={openDiffInRightPanel}
-          onOpenPath={openPathInFilesPanel}
-          onOpenTerminal={() => openSidePanel('terminal')}
-          onApprovalAllow={handleApprovalAllow}
-          onApprovalDeny={handleApprovalDeny}
-        />
+        {mainSurface === 'scheduled' ? (
+          <ScheduledTasksPanel
+            onShowToast={onShowToast}
+            onBackToChat={() => setMainSurface('chat')}
+          />
+        ) : (
+          <ChatMessageList
+            messages={messages}
+            agents={activeSession?.agents || []}
+            activeSessionId={activeSessionId || ''}
+            thinkingSeconds={thinkingSeconds}
+            showProjectPicker={showProjectPicker}
+            onShowProjectPicker={setShowProjectPicker}
+            onProjectChanged={() => setProjectTick((n) => n + 1)}
+            onSetChatInput={setChatInput}
+            onWithdraw={(msgId, text) => {
+              setChatInput(text);
+              withdrawMessage(wsId, activeSessionId, msgId);
+            }}
+            onRegenerate={(userText) => {
+              const userMsgId = `user-msg-${Date.now()}`;
+              useLayoutStore.getState().addMessage(wsId, activeSessionId, {
+                id: userMsgId,
+                sender: 'user',
+                text: userText,
+                timestamp: Date.now(),
+                status: 'processing',
+              });
+              runStreamingAssistant(userText, userMsgId);
+              onShowToast('正在重新生成…');
+            }}
+            onBranch={() => {
+              const newTitle = `${activeSession?.title || '会话'} - 分支`;
+              useLayoutStore.getState().branchSession(activeSessionId, newTitle);
+              onShowToast(`已创建分支：${newTitle}`);
+            }}
+            onShowToast={onShowToast}
+            approvalBusy={approvalBusy}
+            pendingApprovalMsgId={pendingApprovalMsgId}
+            onOpenDiff={openDiffInRightPanel}
+            onOpenPath={openPathInFilesPanel}
+            onOpenTerminal={() => openSidePanel('terminal')}
+            onOpenDiffPanel={() => openSidePanel('diff')}
+            onApprovalAllow={handleApprovalAllow}
+            onApprovalDeny={handleApprovalDeny}
+          />
+        )}
       </div>
 
-      <div className="chat-footer">
+      <div className="chat-footer" style={{ display: mainSurface === 'scheduled' ? 'none' : undefined }}>
         {engineHint && engineHint.ok === false && (
           <div className="chat-soft-hint">
             <span>服务尚未就绪，请稍候或检查网络</span>
@@ -825,8 +842,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 } else if (e.key === 'Enter') {
                   e.preventDefault();
                   const selectedCmd = filteredCommands[slashSelectedIndex].cmd;
-                  setChatInput(selectedCmd + ' ');
                   setSlashMenuOpen(false);
+                  if (selectedCmd === '/schedule') {
+                    setChatInput('');
+                    setMainSurface('scheduled');
+                    return;
+                  }
+                  setChatInput(selectedCmd + ' ');
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
                   setSlashMenuOpen(false);

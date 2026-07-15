@@ -82,7 +82,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast: _onShowToast
         <div>
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>定时任务</h4>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-            引擎 workflow：手动 / 每天 / 间隔。与运行状态悬浮条分离——这里是计划，悬浮条是当前执行。
+            主入口在侧栏「定时任务」（主对话区展示）。此处为备用管理；引擎 workflow：手动 / 每天 / 间隔。
           </p>
         </div>
         <button

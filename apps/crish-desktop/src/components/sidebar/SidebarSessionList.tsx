@@ -40,6 +40,7 @@ export interface SidebarSessionListProps {
   onToggleProjectsSection: () => void;
   onOpenProject: (id: string) => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
+  onNewSession: () => void;
   onMoveSessionRealtime: (
     sessionId: string,
     targetSessionId: string | null,
@@ -75,6 +76,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   onToggleProjectsSection,
   onOpenProject,
   onSortBtnClick,
+  onNewSession,
   onMoveSessionRealtime,
 }) => {
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
@@ -315,17 +317,19 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
       {/* 2) 项目 */}
       <section className="sb-section">
-        <button
-          type="button"
-          className="sb-section-label"
-          onClick={onToggleProjectsSection}
-        >
-          <span>项目</span>
-          <Lucide.ChevronDown
-            size={14}
-            className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
-          />
-        </button>
+        <div className="sb-section-label-row">
+          <button
+            type="button"
+            className="sb-section-label"
+            onClick={onToggleProjectsSection}
+          >
+            <span>项目</span>
+            <Lucide.ChevronDown
+              size={14}
+              className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
+            />
+          </button>
+        </div>
         {!projectsSectionCollapsed && (
           <>
             {projects.map((p) => {
@@ -344,7 +348,19 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                   >
                     <Lucide.Folder size={16} />
                     <span className="folder-name">{p.name}</span>
-                    <span className="folder-count">{sess.length}</span>
+                    <button
+                      type="button"
+                      className="folder-new-session"
+                      title="在此项目新建对话"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openProject(p.id);
+                        onOpenProject(p.id);
+                        onNewSession();
+                      }}
+                    >
+                      <Lucide.Plus size={14} strokeWidth={2} />
+                    </button>
                     <span
                       className="folder-collapse-btn"
                       onClick={(e) => {
@@ -380,6 +396,17 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
           >
             <span>对话</span>
             <Lucide.ChevronDown size={14} className={generalCollapsed ? 'chev-collapsed' : ''} />
+          </button>
+          <button
+            type="button"
+            className="sb-section-new"
+            title="新建对话"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNewSession();
+            }}
+          >
+            <Lucide.Plus size={14} strokeWidth={2} />
           </button>
           <button type="button" className="sort-btn" title="排序" onClick={onSortBtnClick}>
             <Lucide.ArrowUpDown size={14} />

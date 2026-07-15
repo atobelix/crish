@@ -176,17 +176,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleNewSession = () => {
     createSession({ title: '新会话' });
     setActiveNav('chat');
+    window.dispatchEvent(new CustomEvent('crish-open-chat'));
   };
 
   const handleOpenScheduled = () => {
     setActiveNav('scheduled');
-    // Timed tasks live under settings (not the runtime float)
-    useLayoutStore.getState().openSettings('schedule');
+    // 主对话区展示定时任务，不进设置页
+    window.dispatchEvent(new CustomEvent('crish-open-scheduled'));
   };
 
   const handleSelectSession = (id: string) => {
     setActiveSessionId(id);
     setActiveAgentId(null);
+    setActiveNav('chat');
+    window.dispatchEvent(new CustomEvent('crish-open-chat'));
   };
 
   const handleSelectAgent = (sessionId: string, agentId: string) => {
@@ -325,6 +328,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onToggleProjectsSection={() => setProjectsSectionCollapsed((v) => !v)}
           onOpenProject={handleOpenProject}
           onSortBtnClick={handleSortBtnClick}
+          onNewSession={handleNewSession}
           onMoveSessionRealtime={moveSessionRealtime}
         />
       </div>

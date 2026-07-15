@@ -31,7 +31,8 @@ export interface DaemonSubagentToolOptions {
   cwd: string;
   depth: number;
   maxDepth?: number;
-  permissionMode: "ask" | "auto" | "full-access" | "plan";
+  /** 与 DaemonPermissionMode / TrustPolicyMode 对齐（含 unattended） */
+  permissionMode: "ask" | "auto" | "full-access" | "plan" | "unattended";
   maxTurns?: number;
   startRun(request: StartRunRequest): Promise<OrchestratorRunHandle>;
   cancelRun(runId: string, reason?: string): boolean;

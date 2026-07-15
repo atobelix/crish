@@ -19,6 +19,7 @@ import {
   extractImageRefs,
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { ChangeOverviewCard } from './ChangeOverviewCard';
 
 export interface ChatMessageListProps {
   messages: SessionMessage[];
@@ -38,6 +39,8 @@ export interface ChatMessageListProps {
   onOpenDiff: (diff: FileDiff) => void;
   onOpenPath: (filePath: string) => void;
   onOpenTerminal: () => void;
+  /** 打开右侧变更面板（可选） */
+  onOpenDiffPanel?: () => void;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
 }
@@ -66,6 +69,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onOpenDiff,
   onOpenPath,
   onOpenTerminal,
+  onOpenDiffPanel,
   onApprovalAllow,
   onApprovalDeny,
 }) => {
@@ -335,60 +339,67 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               })()}
             </div>
 
-            {/* 完成态助手消息都显示操作栏（不限最新一条） */}
+            {/* 完成态：改动总览（有文件 diff 时）+ 操作栏 */}
             {!isThinkingMsg && msg.status !== 'processing' && (
-              <div className="msg-assistant-meta">
-                <button
-                  type="button"
-                  className="msg-icon-btn"
-                  title="复制正文"
-                  onClick={() => {
-                    const text = assistantCopyText(msg);
-                    if (!text.trim()) {
-                      onShowToast('没有可复制的正文');
-                      return;
-                    }
-                    navigator.clipboard.writeText(text);
-                    onShowToast('已复制');
-                  }}
-                >
-                  <Lucide.Copy size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="msg-icon-btn"
-                  title="重新生成"
-                  onClick={() => {
-                    const idx = messages.findIndex((m) => m.id === msg.id);
-                    let userText = '';
-                    for (let i = idx - 1; i >= 0; i--) {
-                      if (messages[i].sender === 'user') {
-                        userText = messages[i].text || '';
-                        break;
+              <>
+                <ChangeOverviewCard
+                  message={msg}
+                  onOpenDiff={onOpenDiff}
+                  onOpenDiffPanel={onOpenDiffPanel}
+                />
+                <div className="msg-assistant-meta">
+                  <button
+                    type="button"
+                    className="msg-icon-btn"
+                    title="复制正文"
+                    onClick={() => {
+                      const text = assistantCopyText(msg);
+                      if (!text.trim()) {
+                        onShowToast('没有可复制的正文');
+                        return;
                       }
-                    }
-                    if (!userText.trim()) {
-                      onShowToast('没有可重新生成的内容');
-                      return;
-                    }
-                    if (messages.some((m) => m.status === 'processing')) {
-                      onShowToast('请等待当前回复完成');
-                      return;
-                    }
-                    onRegenerate(userText);
-                  }}
-                >
-                  <Lucide.RefreshCw size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="msg-icon-btn"
-                  title="分支继续"
-                  onClick={onBranch}
-                >
-                  <Lucide.GitFork size={16} />
-                </button>
-              </div>
+                      navigator.clipboard.writeText(text);
+                      onShowToast('已复制');
+                    }}
+                  >
+                    <Lucide.Copy size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="msg-icon-btn"
+                    title="重新生成"
+                    onClick={() => {
+                      const idx = messages.findIndex((m) => m.id === msg.id);
+                      let userText = '';
+                      for (let i = idx - 1; i >= 0; i--) {
+                        if (messages[i].sender === 'user') {
+                          userText = messages[i].text || '';
+                          break;
+                        }
+                      }
+                      if (!userText.trim()) {
+                        onShowToast('没有可重新生成的内容');
+                        return;
+                      }
+                      if (messages.some((m) => m.status === 'processing')) {
+                        onShowToast('请等待当前回复完成');
+                        return;
+                      }
+                      onRegenerate(userText);
+                    }}
+                  >
+                    <Lucide.RefreshCw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="msg-icon-btn"
+                    title="分支继续"
+                    onClick={onBranch}
+                  >
+                    <Lucide.GitFork size={16} />
+                  </button>
+                </div>
+              </>
             )}
           </div>
         );
