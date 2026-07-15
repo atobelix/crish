@@ -1157,14 +1157,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           <button
             type="button"
             className="tool-row-file-open"
-            title="在文件面板预览"
+            title={filePath}
             onClick={(e) => {
               e.stopPropagation();
               openPathInFilesPanel(filePath);
             }}
           >
-            <Lucide.FolderTree size={11} />
-            打开文件
+            打开
           </button>
         ) : null}
         {isOpen && body}
@@ -2162,11 +2161,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </button>
             <button
               type="button"
-              className="plus-btn collab-spawn-btn"
-              title="拉起协作者（并行 agent）"
+              className="plus-btn"
+              title="协作者"
               onClick={() => setShowSpawnCollab((v) => !v)}
             >
-              <Lucide.Bot size={14} />
+              <Lucide.Users size={14} />
             </button>
           </div>
           <div className="right-actions">
@@ -2194,12 +2193,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                     <div className="model-picker-error">{pickerInlineError}</div>
                   )}
                   {loadProfiles()
-                    .filter((p) => p.hasKey || p.apiKey || engineHint?.hasApiKey)
+                    .filter((p) => p.hasKey || Boolean(p.apiKey?.trim()))
                     .map((p) => (
                     <div key={p.id} className="model-picker-group">
                       <div className="model-picker-group-label">
                         {p.name}
-                        {' · 已就绪'}
                       </div>
                       {(p.models || []).length === 0 && (
                         <div className="model-picker-empty" style={{ padding: '4px 10px' }}>
@@ -2228,8 +2226,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                       })}
                     </div>
                   ))}
-                  {modelChoices.length === 0 && (
-                    <div className="model-picker-empty">请在设置中添加服务商与模型</div>
+                  {loadProfiles().filter((p) => p.hasKey || Boolean(p.apiKey?.trim())).length === 0 && (
+                    <div className="model-picker-empty">尚未配置可用服务商</div>
                   )}
                   <div className="model-picker-footer">
                     <button

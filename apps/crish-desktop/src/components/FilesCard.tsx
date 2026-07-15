@@ -1,5 +1,9 @@
 /**
- * 右侧文件管理器：中性色、两行工具栏、树形浏览、选区评论喂入下轮输入。
+ * 右侧文件管理器
+ * 布局对齐预览浏览器：
+ *  - 第 1 行：标签（由 CardPanel 负责）
+ *  - 第 2 行：稳定导航 + 路径/筛选一体（地址栏形态）
+ *  - 第 3 行：仅详情态，放随文件变化的操作；低频放「更多」
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -27,7 +31,6 @@ interface FilesCardProps {
 }
 
 type ViewMode = 'browse' | 'detail';
-
 type TreeNode = FsDirEntry & { depth: number };
 
 export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }) => {
@@ -50,13 +53,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   const [selText, setSelText] = useState('');
   const [commentDraft, setCommentDraft] = useState('');
   const [pendingCount, setPendingCount] = useState(() => countPendingFileAnnotations());
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [filterMode, setFilterMode] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
   const kind = selected ? detectFileKind(pathBasename(selected)) : 'binary';
 
-  const loadDir = useCallback(async (path: string): Promise<FsDirEntry[]> => {
-    return listDirectory(path);
-  }, []);
+  const loadDir = useCallback(async (path: string) => listDirectory(path), []);
 
   const refresh = useCallback(
     async (dir?: string) => {
@@ -71,8 +76,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
       setLoading(true);
       setError('');
       try {
-        const list = await loadDir(path);
-        setEntries(list);
+        setEntries(await loadDir(path));
         setCwd(path);
         setExpanded({});
       } catch (e) {
@@ -98,6 +102,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     setError('');
     setSelText('');
     setCommentDraft('');
+    setMoreOpen(false);
     const parent = pathDirname(filePath);
     if (parent) setCwd(parent);
     const k = detectFileKind(pathBasename(filePath));
@@ -148,6 +153,21 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     return () => window.removeEventListener('crish-open-file', onOpen);
   }, [openFile]);
 
+  useEffect(() => {
+    const onAnn = () => setPendingCount(countPendingFileAnnotations());
+    window.addEventListener('crish-file-annotations-changed', onAnn);
+    return () => window.removeEventListener('crish-file-annotations-changed', onAnn);
+  }, []);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [moreOpen]);
+
   const toggleExpand = async (dirPath: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (expanded[dirPath]) {
@@ -171,21 +191,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     const out: TreeNode[] = [];
     const walk = (list: FsDirEntry[], depth: number) => {
       for (const e of list) {
-        if (q && !e.name.toLowerCase().includes(q) && !e.isDir) continue;
-        if (q && e.isDir && !e.name.toLowerCase().includes(q) && !expanded[e.path]) {
-          // 仍显示匹配子树的父级：若展开后有匹配则保留
-        }
         out.push({ ...e, depth });
-        if (e.isDir && expanded[e.path]) {
-          walk(expanded[e.path], depth + 1);
-        }
+        if (e.isDir && expanded[e.path]) walk(expanded[e.path], depth + 1);
       }
     };
     walk(entries, 0);
-    if (q) {
-      return out.filter((n) => n.name.toLowerCase().includes(q) || (n.isDir && expanded[n.path]));
-    }
-    return out;
+    if (!q) return out;
+    return out.filter((n) => n.name.toLowerCase().includes(q));
   }, [entries, expanded, filter]);
 
   const goUp = () => {
@@ -212,10 +224,11 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   };
 
   const onTextSelect = () => {
-    const sel = window.getSelection()?.toString().trim() || '';
-    if (sel.length > 0) {
-      setSelText(sel.slice(0, 2000));
-    }
+    // 延迟一帧，确保 selection 已稳定
+    requestAnimationFrame(() => {
+      const sel = window.getSelection()?.toString().trim() || '';
+      if (sel.length > 0) setSelText(sel.slice(0, 2000));
+    });
   };
 
   const submitSelectionComment = () => {
@@ -228,7 +241,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     setPendingCount(countPendingFileAnnotations());
     setCommentDraft('');
     setSelText('');
-    onShowToast('批注已加入，将随下一条消息发给模型');
+    onShowToast('批注将随下一条消息发给模型');
   };
 
   const breadcrumbs = useMemo(() => {
@@ -247,164 +260,239 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     return items;
   }, [cwd, root]);
 
+  const copyPath = () => {
+    const p = selected || cwd;
+    if (!p) return;
+    void navigator.clipboard.writeText(p).then(
+      () => onShowToast('路径已复制'),
+      () => onShowToast(p),
+    );
+  };
+
   if (!root) {
     return (
       <div className="files-card">
-        <div className="files-no-root">请先在侧栏选择项目，再浏览文件</div>
+        <div className="files-empty">请先在侧栏选择项目</div>
       </div>
     );
   }
 
+  const canEdit = kind === 'text' || kind === 'table';
+
   return (
     <div className="files-card">
-      {/* 行 1：路径与导航 */}
-      <div className="files-toolbar">
-        <div className="files-toolbar-actions">
-          {view === 'detail' ? (
-            <button
-              type="button"
-              className="files-icon-btn"
-              title="返回列表"
-              onClick={() => {
-                setView('browse');
-                setSelText('');
-              }}
-            >
-              <Lucide.ArrowLeft size={14} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="files-icon-btn"
-              title="上级"
-              onClick={goUp}
-              disabled={!cwd || cwd === root}
-            >
-              <Lucide.CornerLeftUp size={13} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="files-icon-btn"
-            title="刷新"
-            onClick={() => void refresh()}
-          >
-            <Lucide.RefreshCw size={12} />
-          </button>
-        </div>
-        <div className="files-breadcrumbs" title={cwd}>
-          {breadcrumbs.map((b, i) => (
-            <React.Fragment key={b.path}>
-              {i > 0 ? <span className="files-bc-sep">/</span> : null}
-              <button
-                type="button"
-                className={`files-bc-item ${i === breadcrumbs.length - 1 ? 'is-current' : ''}`}
-                onClick={() => {
-                  setView('browse');
-                  setSelected(null);
-                  void refresh(b.path);
-                }}
-              >
-                {b.label}
-              </button>
-            </React.Fragment>
-          ))}
-        </div>
-        {pendingCount > 0 ? (
-          <span className="files-pending-badge" title="待发送给模型的批注">
-            批注 {pendingCount}
-          </span>
-        ) : null}
-      </div>
+      {/* 第 2 行：稳定导航 + 地址栏（与浏览器一致） */}
+      <div className="files-bar">
+        <button
+          type="button"
+          className="files-nav-btn"
+          title={view === 'detail' ? '返回列表' : '上级'}
+          disabled={view === 'browse' && (!cwd || cwd === root)}
+          onClick={() => {
+            if (view === 'detail') {
+              setView('browse');
+              setSelText('');
+              setEditing(false);
+            } else goUp();
+          }}
+        >
+          <Lucide.ArrowLeft size={15} />
+        </button>
+        <button
+          type="button"
+          className="files-nav-btn"
+          title="刷新"
+          onClick={() => {
+            if (view === 'detail' && selected) void openFile(selected);
+            else void refresh();
+          }}
+        >
+          <Lucide.RotateCw size={13} />
+        </button>
 
-      {/* 行 2：筛选 或 详情操作 */}
-      {view === 'browse' ? (
-        <div className="files-subbar">
-          <div className="files-filter-wrap">
-            <Lucide.Search size={12} className="files-filter-ico" />
-            <input
-              className="files-filter-input"
-              placeholder="筛选…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="files-subbar">
-          <span className="files-subbar-name" title={selected || ''}>
-            {selected ? pathBasename(selected) : ''}
-          </span>
-          {(kind === 'text' || kind === 'table') && (
-            <>
-              {!editing ? (
+        <div className="files-path-form">
+          {view === 'browse' ? (
+            filterMode || filter ? (
+              <>
+                <Lucide.Search size={13} className="files-path-ico" />
+                <input
+                  ref={filterInputRef}
+                  className="files-path-input"
+                  placeholder="筛选文件…"
+                  value={filter}
+                  autoFocus
+                  onChange={(e) => setFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setFilter('');
+                      setFilterMode(false);
+                    }
+                  }}
+                />
                 <button
                   type="button"
-                  className="files-chip-btn"
+                  className="files-nav-btn files-nav-btn--sm"
+                  title="关闭筛选"
+                  onClick={() => {
+                    setFilter('');
+                    setFilterMode(false);
+                  }}
+                >
+                  <Lucide.X size={12} />
+                </button>
+              </>
+            ) : (
+              <>
+                <Lucide.Folder size={13} className="files-path-ico" />
+                <div className="files-path-crumbs files-path-crumbs--grow" title={cwd}>
+                  {breadcrumbs.map((b, i) => (
+                    <React.Fragment key={b.path}>
+                      {i > 0 ? <span className="files-bc-sep">/</span> : null}
+                      <button
+                        type="button"
+                        className="files-bc-chip"
+                        onClick={() => {
+                          setView('browse');
+                          void refresh(b.path);
+                        }}
+                      >
+                        {b.label}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="files-nav-btn files-nav-btn--sm"
+                  title="筛选"
+                  onClick={() => {
+                    setFilterMode(true);
+                    requestAnimationFrame(() => filterInputRef.current?.focus());
+                  }}
+                >
+                  <Lucide.Search size={12} />
+                </button>
+              </>
+            )
+          ) : (
+            <>
+              <Lucide.File size={13} className="files-path-ico" />
+              <div className="files-path-crumbs files-path-crumbs--grow" title={selected || ''}>
+                {selected ? pathRelativeToRoot(selected, root) : ''}
+              </div>
+            </>
+          )}
+        </div>
+
+        {pendingCount > 0 ? (
+          <span className="files-pending-badge" title="待发送批注">
+            {pendingCount}
+          </span>
+        ) : null}
+
+        <div className="files-more-wrap" ref={moreRef}>
+          <button
+            type="button"
+            className="files-nav-btn"
+            title="更多"
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            <Lucide.MoreHorizontal size={15} />
+          </button>
+          {moreOpen ? (
+            <div className="files-more-menu">
+              <button
+                type="button"
+                className="files-more-item"
+                onClick={() => {
+                  copyPath();
+                  setMoreOpen(false);
+                }}
+              >
+                复制路径
+              </button>
+              <button
+                type="button"
+                className="files-more-item"
+                onClick={() => {
+                  const p = selected || cwd;
+                  if (p) {
+                    void revealInOs(p).catch((e) =>
+                      onShowToast(e instanceof Error ? e.message : '打开失败'),
+                    );
+                  }
+                  setMoreOpen(false);
+                }}
+              >
+                在资源管理器中显示
+              </button>
+              {view === 'detail' && canEdit && !editing ? (
+                <button
+                  type="button"
+                  className="files-more-item"
                   onClick={() => {
                     setEditing(true);
                     setEditBuf(content);
                     setSelText('');
+                    setMoreOpen(false);
                   }}
                 >
-                  <Lucide.Pencil size={11} /> 编辑
+                  编辑文件
                 </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="files-chip-btn primary"
-                    onClick={() => void saveFile()}
-                    disabled={!dirty}
-                  >
-                    <Lucide.Save size={11} /> 保存
-                  </button>
-                  <button
-                    type="button"
-                    className="files-chip-btn"
-                    onClick={() => {
-                      setEditing(false);
-                      setEditBuf(content);
-                      setDirty(false);
-                    }}
-                  >
-                    取消
-                  </button>
-                </>
-              )}
-            </>
-          )}
-          {selected ? (
-            <>
-              <button
-                type="button"
-                className="files-icon-btn"
-                title="复制路径"
-                onClick={() => {
-                  void navigator.clipboard.writeText(selected).then(
-                    () => onShowToast('路径已复制'),
-                    () => onShowToast(selected),
-                  );
-                }}
-              >
-                <Lucide.Copy size={12} />
-              </button>
-              <button
-                type="button"
-                className="files-icon-btn"
-                title="资源管理器"
-                onClick={() => {
-                  void revealInOs(selected).catch((e) =>
-                    onShowToast(e instanceof Error ? e.message : '打开失败'),
-                  );
-                }}
-              >
-                <Lucide.FolderOpen size={12} />
-              </button>
-            </>
+              ) : null}
+            </div>
           ) : null}
         </div>
-      )}
+      </div>
+
+      {/* 第 3 行：仅详情态，随文件变化的操作 */}
+      {view === 'detail' && selected ? (
+        <div className="files-context-bar">
+          <span className="files-context-name" title={selected}>
+            {pathBasename(selected)}
+          </span>
+          <div className="files-context-actions">
+            {canEdit && !editing ? (
+              <button
+                type="button"
+                className="files-soft-btn"
+                onClick={() => {
+                  setEditing(true);
+                  setEditBuf(content);
+                  setSelText('');
+                }}
+              >
+                <Lucide.Pencil size={12} />
+                编辑
+              </button>
+            ) : null}
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  className="files-soft-btn files-soft-btn--emphasis"
+                  disabled={!dirty}
+                  onClick={() => void saveFile()}
+                >
+                  <Lucide.Save size={12} />
+                  保存
+                </button>
+                <button
+                  type="button"
+                  className="files-soft-btn"
+                  onClick={() => {
+                    setEditing(false);
+                    setEditBuf(content);
+                    setDirty(false);
+                  }}
+                >
+                  取消
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="files-body">
         {view === 'browse' ? (
@@ -420,7 +508,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                 <div
                   key={e.path}
                   className={`files-row ${selected === e.path ? 'is-selected' : ''}`}
-                  style={{ paddingLeft: 6 + e.depth * 14 }}
+                  style={{ paddingLeft: 8 + e.depth * 14 }}
                   onClick={() => {
                     if (e.isDir) {
                       void (async () => {
@@ -432,17 +520,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                             /* ignore */
                           }
                         }
-                        setCwd(e.path);
                       })();
-                    } else {
-                      void openFile(e.path);
-                    }
+                    } else void openFile(e.path);
                   }}
                   onDoubleClick={() => {
-                    if (e.isDir) {
-                      setView('browse');
-                      void refresh(e.path);
-                    } else void openFile(e.path);
+                    if (e.isDir) void refresh(e.path);
+                    else void openFile(e.path);
                   }}
                   role="button"
                   tabIndex={0}
@@ -506,7 +589,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                       ))}
                     </tbody>
                   </table>
-                  {truncated ? <div className="files-trunc">已截断预览</div> : null}
+                  {truncated ? <div className="files-trunc">已截断</div> : null}
                 </div>
               ) : kind === 'text' || kind === 'table' ? (
                 editing ? (
@@ -532,16 +615,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                 )
               ) : (
                 <div className="files-empty">
-                  不支持预览的类型
+                  不支持预览
                   <div className="files-empty-sub">{selected}</div>
                 </div>
               )}
             </div>
 
-            {/* 仅选中文本时显示评论入口 */}
             {selText && !editing ? (
               <div className="files-sel-bar">
-                <div className="files-sel-preview" title={selText}>
+                <div className="files-sel-preview">
                   {selText.length > 120 ? `${selText.slice(0, 120)}…` : selText}
                 </div>
                 <div className="files-sel-form">
@@ -560,7 +642,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   />
                   <button
                     type="button"
-                    className="files-chip-btn primary"
+                    className="files-soft-btn files-soft-btn--emphasis"
                     disabled={!commentDraft.trim()}
                     onClick={submitSelectionComment}
                   >
@@ -568,7 +650,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   </button>
                   <button
                     type="button"
-                    className="files-link-btn"
+                    className="files-soft-btn"
                     onClick={() => {
                       setSelText('');
                       setCommentDraft('');
@@ -577,7 +659,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     取消
                   </button>
                 </div>
-                <div className="files-sel-hint">批注会随下一条用户消息发给模型</div>
+                <div className="files-sel-hint">批注随下一条消息发给模型</div>
               </div>
             ) : null}
           </div>
