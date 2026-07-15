@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/clientApi';
 import { isDemoMode } from '../api/appMode';
-import { hydrateSessionsFromDisk, persistAllSessions } from '../api/sessionPersistence';
+import { persistAllSessions } from '../api/sessionPersistence';
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import { normalizePermissionMode, type PermissionMode } from '../api/permissionModes';
 import {
@@ -11,115 +11,43 @@ import {
   removeCommandPermission as persistRemoveCommandPermission,
   saveCommandPermissions,
 } from '../api/commandPermissions';
-import { normalizeAssistantTimeline } from '../api/toolPresentation';
 import { fillDefaultSessionTitles, maybeAutoTitleFromMessages } from '../api/sessionTitle';
+import type {
+  CardState,
+  CardGroupState,
+  ColumnState,
+  WorkspaceState,
+  FileDiff,
+  MessageToolCall,
+  SessionMessage,
+  SessionAgent,
+  SessionState,
+  DropPreviewState,
+} from './types';
+import {
+  ensureChatColumn,
+  createDefaultWorkspace,
+  seedSessions,
+  getPanelTitle,
+  normalizeColumnWidths,
+  rebalanceGroupHeights,
+  filterEmptyColumnsKeepingChat,
+} from './layoutHelpers';
 
-export interface CardState {
-  id: string; // 'plan' | 'preview' | 'diff' | 'tasks' | 'terminal'
-  title: string;
-}
-
-export interface CardGroupState {
-  id: string;
-  activeCardId: string;
-  cards: CardState[];
-  heightRatio: number; // relative height ratio within the column
-}
-
-export interface ColumnState {
-  id: string;
-  widthRatio: number; // relative width ratio within the workspace
-  groups: CardGroupState[];
-}
-
-export interface WorkspaceState {
-  id: string;
-  columns: ColumnState[];
-}
-
-export interface DiffChange {
-  type: 'addition' | 'deletion' | 'normal';
-  lineNum?: number;
-  content: string;
-}
-
-export interface FileDiff {
-  filePath: string;
-  additions: number;
-  deletions: number;
-  changes: DiffChange[];
-}
-
-export interface MessageToolCall {
-  id: string;
-  name: string;
-  arguments: string;
-  status: 'running' | 'success' | 'error' | 'pending_approval';
-  output?: string;
-  diffs?: FileDiff[];
-  explanation?: string;
-}
-
-export interface SessionMessage {
-  id: string;
-  sender: 'user' | 'assistant';
-  text?: string;
-  /** 流式思考过程，与正式正文分离，避免互相覆盖 */
-  thinking?: string;
-  timestamp: number;
-  toolCalls?: MessageToolCall[];
-  status?: 'queued' | 'processing' | 'completed';
-  /**
-   * 时间线：按发生顺序交错 text / tool_call。
-   * 流式累计正文用 streamTextOffset 切分到当前 text 段。
-   */
-  blocks?: { type: 'text' | 'tool_call'; id?: string; content?: string }[];
-  /** 上一工具插入时 text 的长度，用于把累计正文切成段 */
-  streamTextOffset?: number;
-  thinkingTime?: number;
-}
-
-/** 主会话下的协作子 agent（run_subagent） */
-export interface SessionAgent {
-  id: string;
-  subagentRunId: string;
-  parentSessionId: string;
-  parentRunId: string;
-  parentToolCallId?: string;
-  description: string;
-  mode: string;
-  status: 'running' | 'completed' | 'failed';
-  summary?: string;
-  /** 子 agent 时间线（与主对话同结构，便于复用渲染） */
-  messages: SessionMessage[];
-  startedAt: number;
-  endedAt?: number;
-}
-
-export interface SessionState {
-  id: string;
-  title: string;
-  folder: string;
-  isPinned: boolean;
-  isArchived: boolean;
-  branchParentId?: string;
-  timestamp: string;
-  messages: SessionMessage[];
-  /** 本会话拉起的协作 agent 列表（侧栏嵌套展示） */
-  agents?: SessionAgent[];
-  /** 引擎事件游标（H2 水合 / H3 增量） */
-  engineCursor?: number;
-  /** 最近 runId，H3 可拉 snapshot usage */
-  engineLastRunId?: string;
-  /** 已从引擎补全过正文 */
-  hydratedFromEngine?: boolean;
-}
-
-export interface DropPreviewState {
-  colIdx: number;
-  groupIdx: number;
-  direction: 'top' | 'bottom' | 'left' | 'right' | 'merge';
-}
+// 保持旧 import 路径可用：`from '../store/layoutStore'`
+export type {
+  CardState,
+  CardGroupState,
+  ColumnState,
+  WorkspaceState,
+  DiffChange,
+  FileDiff,
+  MessageToolCall,
+  SessionMessage,
+  SessionAgent,
+  SessionState,
+  DropPreviewState,
+} from './types';
 
 interface DraggedTabState {
   cardId: string;
@@ -251,334 +179,6 @@ interface LayoutStore {
   triggerCronJobNow: (prompt: string) => void;
   killWorker: (id: string, taskName: string) => void;
   applyLayoutPreset: (preset: 'developer-split' | 'full-chat' | 'telemetry-focus') => void;
-}
-
-const DEFAULT_SESSIONS: SessionState[] = [
-  { 
-    id: 'sess-1', 
-    title: '分析酒馆对话主界面问题', 
-    folder: '审计与代码分析', 
-    isPinned: false, 
-    isArchived: false, 
-    timestamp: '10分钟前',
-    messages: [
-      { id: 'm1-1', sender: 'assistant', text: '你好！有什么关于酒馆对话界面的问题我可以帮您分析的？', timestamp: Date.now() - 600000 }
-    ]
-  },
-  { 
-    id: 'sess-2', 
-    title: '审计三个项目的代码统一性问题', 
-    folder: '审计与代码分析', 
-    isPinned: false, 
-    isArchived: false, 
-    timestamp: '1小时前',
-    messages: [
-      {
-        id: 'msg-1',
-        sender: 'user',
-        text: 'Let me try directly creating a test trigger to isolate the issue.',
-        timestamp: Date.now() - 3600000
-      },
-      {
-        id: 'msg-2',
-        sender: 'assistant',
-        text: 'The inline button DOES exist (1 found)! Let me find where it is:',
-        timestamp: Date.now() - 3500000,
-        toolCalls: [
-          {
-            id: 'tc-grep-1',
-            name: 'grep_search',
-            arguments: 'data-flowbit-inline="1"',
-            status: 'success',
-            explanation: '在工作区搜索冲突的行内按钮标签 data-flowbit-inline="1"',
-            output: 'Searching pattern "data-flowbit-inline=\\"1\\""...\nFound 1 match in trigger-injector.ts:\nLine 42: <button data-flowbit-inline="1">F</button>'
-          },
-          {
-            id: 'tc-read-1',
-            name: 'read_file',
-            arguments: 'trigger-injector.ts',
-            status: 'success',
-            explanation: '读取 trigger-injector.ts 以分析按钮挂载逻辑',
-            output: 'Reading file "trigger-injector.ts"...\nFile size: 1042 bytes.\nFile contents read successfully.'
-          }
-        ]
-      },
-      {
-        id: 'msg-3',
-        sender: 'assistant',
-        text: 'Found the culprit! Another extension is creating `<button data-flowbit-inline="1">F</button>`, and our code reuses it. Let me find which extension:',
-        timestamp: Date.now() - 3400000,
-        toolCalls: [
-          {
-            id: 'tc-grep-2',
-            name: 'grep_search',
-            arguments: 'flowbit-inline-style',
-            status: 'success',
-            explanation: '在整个工作区搜索 flowbit-inline-style 样式以排除命名冲突',
-            output: 'Searching pattern "flowbit-inline-style"...\nFound 0 matches in workspace.'
-          }
-        ]
-      },
-      {
-        id: 'msg-4',
-        sender: 'assistant',
-        text: '找到根源了！另一个扩展创建了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 找到并重用它，但没有覆盖它的 `innerHTML`，所以按钮只显示 "F"，而非 SVG 图标。',
-        timestamp: Date.now() - 3200000,
-        toolCalls: [
-          {
-            id: 'tc-edit-1',
-            name: 'write_to_file',
-            arguments: 'trigger-injector.ts',
-            status: 'success',
-            explanation: '修改 trigger-injector.ts，在 acquireInlineBtn 中重新创建并注入 SVG 按钮内容',
-            diffs: [
-              {
-                filePath: 'trigger-injector.ts',
-                additions: 12,
-                deletions: 5,
-                changes: [
-                  { type: 'normal', content: 'function acquireInlineBtn() {' },
-                  { type: 'deletion', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
-                  { type: 'deletion', content: '  return btn;' },
-                  { type: 'addition', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
-                  { type: 'addition', content: '  if (btn && btn.innerHTML !== SVG_ICON) {' },
-                  { type: 'addition', content: '    btn.innerHTML = SVG_ICON;' },
-                  { type: 'addition', content: '  }' },
-                  { type: 'addition', content: '  return btn;' },
-                  { type: 'normal', content: '}' }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        id: 'msg-5',
-        sender: 'assistant',
-        text: 'Now rebuild and reload:',
-        timestamp: Date.now() - 3000000,
-        toolCalls: [
-          {
-            id: 'tc-build-1',
-            name: 'run_command',
-            arguments: 'npm run dev',
-            status: 'success',
-            explanation: '运行打包命令 npm run dev 以验证编译与变更',
-            output: 'vite v8.0.16 building client environment for production...\ntransforming...\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.46 kB │ gzip:  0.29 kB\ndist/assets/index-2PqGUG_A.css   30.11 kB │ gzip:  5.57 kB\ndist/assets/index-C068c687.js   270.20 kB │ gzip: 83.06 kB\n\n✓ built in 389ms'
-          }
-        ]
-      },
-      {
-        id: 'msg-6',
-        sender: 'assistant',
-        text: '我已经追踪到这个问题的根源了，总结一下发现：\n\n**当前状态：**\n- 扩展已加载，service worker 正常\n- 内容脚本已注入 (overlay 面板创建成功)\n  - 但 `mountTrigger()` 函数没有正常执行——`flowbit-inline-style` style 元素没有被创建，触发按钮也没有生成\n\n**根源：** 还有一个其他扩展（如 "All API Hub" 或 "HiSider"）在页面上注入了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 会找到并重用这个按钮，但不会覆盖它的 `innerHTML`，导致按钮只显示 "F" 而不是 SVG 图标。\n\n我已经修复了 `acquireInlineBtn` 让它检测到外部按钮时重新创建。\n\n但现在有一个更基础的问题：在新加载 of 页面上，`mountTrigger` 根本没有被触发（连 `<style>` 元素都没有），这说明内容脚本执行到 `showFlowbitFab()` 时可能抛出了异常，被 `bootstrap()` 的 `try-catch` 吞掉了。\n\n需要你手动做：\n1. 打开 `chrome://extensions`\n2. 找到 "Chat Sync Bridge"，点 移除\n3. 点击 **加载已解压的扩展程序** ➔ 选择 `C:\\Software\\codex_chatHistory\\apps\\browser-extension\\dist`\n4. 刷新 Claude 或 ChatGPT 页面\n\n这次移除再重新加载会触发全新的内容脚本注册，应该能解决 `mountTrigger` 不触发的问题。',
-        timestamp: Date.now() - 2800000
-      }
-    ]
-  },
-  { 
-    id: 'sess-3', 
-    title: 'Fix voice playback timing and overla', 
-    folder: '语音与播控', 
-    isPinned: false, 
-    isArchived: false, 
-    timestamp: '3天前',
-    messages: [
-      { id: 'm3-1', sender: 'assistant', text: '你好！这里可以帮您调试和修复语音播控的相关延时问题。', timestamp: Date.now() - 250000000 }
-    ]
-  },
-  { 
-    id: 'sess-4', 
-    title: '定制菜单与滚动区域优化', 
-    folder: '常规会话', 
-    isPinned: false, 
-    isArchived: false, 
-    timestamp: '5天前',
-    messages: [
-      { id: 'm4-1', sender: 'assistant', text: '你好！我可以协助您进行前端自定义菜单和隐藏滚动条样式的优化设计。', timestamp: Date.now() - 400000000 }
-    ]
-  },
-  { 
-    id: 'sess-5', 
-    title: '添加终端与主题扩展', 
-    folder: '常规会话', 
-    isPinned: false, 
-    isArchived: false, 
-    timestamp: '1周前',
-    messages: [
-      { id: 'm5-1', sender: 'assistant', text: '你好！想了解如何为开发面板新增本地终端视图或实现主题切换配置吗？', timestamp: Date.now() - 600000000 }
-    ]
-  },
-];
-
-/** Chat column is always present and never removed. */
-function ensureChatColumn(ws: WorkspaceState): void {
-  let chatCol = ws.columns.find((c) => c.id.includes('chat'));
-  if (!chatCol) {
-    chatCol = {
-      id: `col-chat-${ws.id}`,
-      widthRatio: 0.5,
-      groups: [
-        {
-          id: `group-chat-${ws.id}`,
-          activeCardId: 'chat',
-          cards: [{ id: 'chat', title: '对话' }],
-          heightRatio: 1,
-        },
-      ],
-    };
-    ws.columns.unshift(chatCol);
-  } else {
-    // Ensure a chat card exists in the chat column
-    let hasChat = false;
-    for (const g of chatCol.groups) {
-      if (g.cards.some((c) => c.id === 'chat')) {
-        hasChat = true;
-        // Prefer chat as active when group is empty of other focus
-        if (!g.cards.some((c) => c.id === g.activeCardId)) {
-          g.activeCardId = 'chat';
-        }
-        break;
-      }
-    }
-    if (!hasChat) {
-      if (chatCol.groups.length === 0) {
-        chatCol.groups.push({
-          id: `group-chat-${ws.id}`,
-          activeCardId: 'chat',
-          cards: [{ id: 'chat', title: '对话' }],
-          heightRatio: 1,
-        });
-      } else {
-        chatCol.groups[0].cards.unshift({ id: 'chat', title: '对话' });
-        chatCol.groups[0].activeCardId = 'chat';
-      }
-    }
-  }
-  // Never drop the chat column
-  ws.columns = ws.columns.filter((c) => c.id.includes('chat') || c.groups.length > 0);
-  if (!ws.columns.some((c) => c.id.includes('chat'))) {
-    ws.columns.unshift(chatCol);
-  }
-}
-
-function createDefaultWorkspace(id: string): WorkspaceState {
-  // Always start with a dedicated chat column. Side tools open beside it, never replace it.
-  if (!isDemoMode()) {
-    return {
-      id,
-      columns: [
-        {
-          id: `col-chat-${id}`,
-          widthRatio: 1,
-          groups: [
-            {
-              id: `group-chat-${id}`,
-              activeCardId: 'chat',
-              cards: [{ id: 'chat', title: '对话' }],
-              heightRatio: 1,
-            },
-          ],
-        },
-      ],
-    };
-  }
-
-  // Demo: multi-panel playground (chat still locked in first column)
-  return {
-    id,
-    columns: [
-      {
-        id: `col-chat-${id}`,
-        widthRatio: 0.42,
-        groups: [
-          {
-            id: `group-chat-${id}`,
-            activeCardId: 'chat',
-            cards: [{ id: 'chat', title: '对话' }],
-            heightRatio: 1.0,
-          },
-        ],
-      },
-      {
-        id: `col-1-${id}`,
-        widthRatio: 0.29,
-        groups: [
-          {
-            id: `group-preview-${id}`,
-            activeCardId: 'preview',
-            cards: [{ id: 'preview', title: '预览' }],
-            heightRatio: 1.0,
-          },
-        ],
-      },
-      {
-        id: `col-2-${id}`,
-        widthRatio: 0.29,
-        groups: [
-          {
-            id: `group-diff-${id}`,
-            activeCardId: 'diff',
-            cards: [{ id: 'diff', title: '差异' }],
-            heightRatio: 0.5,
-          },
-          {
-            id: `group-tasks-${id}`,
-            activeCardId: 'tasks',
-            cards: [{ id: 'tasks', title: '任务' }],
-            heightRatio: 0.5,
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function seedSessions(): { sessions: SessionState[]; activeSessionId: string; folderOrder: string[] } {
-  if (isDemoMode()) {
-    return {
-      sessions: populateBlocksForSessions(DEFAULT_SESSIONS),
-      activeSessionId: 'sess-2',
-      folderOrder: ['审计与代码分析', '语音与播控', '常规会话'],
-    };
-  }
-
-  // 正式版：从本地索引 + JSONL 恢复；不自动新建会话
-  const disk = hydrateSessionsFromDisk();
-  if (disk.sessions.length > 0) {
-    // 有历史时恢复上次活动会话；若无效则不强制选中（空态可新建）
-    const active =
-      disk.activeSessionId && disk.sessions.some((s) => s.id === disk.activeSessionId)
-        ? disk.activeSessionId
-        : '';
-    const fromSessions = Array.from(new Set(disk.sessions.map((s) => s.folder)));
-    const folders =
-      disk.folderOrder && disk.folderOrder.length > 0
-        ? Array.from(new Set([...disk.folderOrder, ...fromSessions, GENERAL_FOLDER]))
-        : [GENERAL_FOLDER, ...fromSessions.filter((f) => f !== GENERAL_FOLDER)];
-    return {
-      sessions: populateBlocksForSessions(disk.sessions),
-      activeSessionId: active,
-      folderOrder: folders,
-    };
-  }
-
-  return {
-    sessions: [],
-    activeSessionId: '',
-    folderOrder: [GENERAL_FOLDER],
-  };
-}
-
-function populateBlocksForSessions(sessions: SessionState[]): SessionState[] {
-  const normalized = sessions.map((sess) => ({
-    ...sess,
-    messages: sess.messages.map((msg) =>
-      msg.sender === 'assistant' ? normalizeAssistantTimeline(msg) : msg,
-    ),
-  }));
-  // 磁盘/演示种子：默认标题且已有用户消息 → 补短标题
-  return fillDefaultSessionTitles(normalized);
 }
 
 const _seed = seedSessions();
@@ -1102,19 +702,7 @@ export const useLayoutStore = create<LayoutStore>()(
 
       // browser 与 preview 同一面板
       const cardId = key === 'browser' ? 'preview' : key;
-      const titleMap: Record<string, string> = {
-        agent: '协作 Agent',
-        overview: '总览',
-        files: '文件',
-        preview: '浏览器',
-        diff: '变更',
-        terminal: '终端',
-        tasks: '任务',
-        runtime: '运行状态',
-        chat: '对话',
-        settings: '设置',
-      };
-      const cardTitle = titleMap[cardId] || cardId;
+      const cardTitle = getPanelTitle(cardId);
 
       if (isVisible) {
         let alreadyExists = false;
@@ -1154,24 +742,16 @@ export const useLayoutStore = create<LayoutStore>()(
           return;
         }
 
-        const evenHeight = 1 / (toolCol.groups.length + 1);
-        toolCol.groups.forEach((g) => {
-          g.heightRatio = evenHeight;
-        });
         toolCol.groups.push({
           id: `group-${cardId}-${Date.now()}-${ws.id}`,
           activeCardId: cardId,
           cards: [{ id: cardId, title: cardTitle }],
-          heightRatio: evenHeight,
+          heightRatio: 1,
         });
+        rebalanceGroupHeights(toolCol);
 
         ensureChatColumn(ws);
-        {
-          const total = ws.columns.reduce((a, b) => a + b.widthRatio, 0) || 1;
-          ws.columns.forEach((c) => {
-            c.widthRatio /= total;
-          });
-        }
+        normalizeColumnWidths(ws);
       } else {
         ws.columns.forEach((col) => {
           // Never strip chat cards
@@ -1185,19 +765,11 @@ export const useLayoutStore = create<LayoutStore>()(
             }
           });
           col.groups = col.groups.filter((g) => g.cards.length > 0);
-          if (col.groups.length > 0) {
-            const evenHeight = 1 / col.groups.length;
-            col.groups.forEach((g) => {
-              g.heightRatio = evenHeight;
-            });
-          }
+          rebalanceGroupHeights(col);
         });
 
         ensureChatColumn(ws);
-        const sum = ws.columns.reduce((a, b) => a + b.widthRatio, 0) || 1;
-        ws.columns.forEach((c) => {
-          c.widthRatio /= sum;
-        });
+        normalizeColumnWidths(ws);
       }
     }),
 
@@ -1302,15 +874,11 @@ export const useLayoutStore = create<LayoutStore>()(
           const oldGroupsLength = col.groups.length;
           col.groups = col.groups.filter((g) => g.id !== sourceGroupId);
           if (col.groups.length > 0 && col.groups.length !== oldGroupsLength) {
-            const evenHeight = 1 / col.groups.length;
-            col.groups.forEach((g) => { g.heightRatio = evenHeight; });
+            rebalanceGroupHeights(col);
           }
         });
 
-        // Filter out empty columns
-        ws.columns = ws.columns.filter((c) => c.id.includes('chat') || c.groups.length > 0);
-        const sum = ws.columns.reduce((a, b) => a + b.widthRatio, 0);
-        ws.columns.forEach((c) => { c.widthRatio /= sum; });
+        filterEmptyColumnsKeepingChat(ws);
       } else if (sourceGroup) {
         // Switch active tab of source if the removed tab was active
         if ((sourceGroup as CardGroupState).activeCardId === cardId && (sourceGroup as CardGroupState).cards.length > 0) {
@@ -1378,27 +946,22 @@ export const useLayoutStore = create<LayoutStore>()(
       } else {
         // Add to existing column as a split group (top or bottom relative to targetGroupIdx)
         const col = ws.columns[colIdx];
-        const numGroups = col.groups.length + 1;
-        const evenHeight = 1 / numGroups;
-        col.groups.forEach((g) => { g.heightRatio = evenHeight; });
-
         const newGroup: CardGroupState = {
           id: newGroupId,
           activeCardId: cardId,
           cards: [{ id: cardId, title: cardTitle }],
-          heightRatio: evenHeight,
+          heightRatio: 1,
         };
 
         if (targetGroupIdx !== undefined && targetGroupIdx >= 0 && targetGroupIdx <= col.groups.length) {
           const insertIdx = direction === 'top' ? targetGroupIdx : targetGroupIdx + 1;
           col.groups.splice(insertIdx, 0, newGroup);
+        } else if (direction === 'top') {
+          col.groups.unshift(newGroup);
         } else {
-          if (direction === 'top') {
-            col.groups.unshift(newGroup);
-          } else {
-            col.groups.push(newGroup);
-          }
+          col.groups.push(newGroup);
         }
+        rebalanceGroupHeights(col);
       }
 
       // Clean up source group if empty
@@ -1407,8 +970,7 @@ export const useLayoutStore = create<LayoutStore>()(
           const oldGroupsLength = col.groups.length;
           col.groups = col.groups.filter((g) => g.id !== sourceGroupId);
           if (col.groups.length > 0 && col.groups.length !== oldGroupsLength) {
-            const evenHeight = 1 / col.groups.length;
-            col.groups.forEach((g) => { g.heightRatio = evenHeight; });
+            rebalanceGroupHeights(col);
           }
         });
       } else if (sourceGroup) {
@@ -1417,12 +979,7 @@ export const useLayoutStore = create<LayoutStore>()(
         }
       }
 
-      // Clean up empty columns (except Chat column)
-      ws.columns = ws.columns.filter((c) => c.id.includes('chat') || c.groups.length > 0);
-
-      // Normalize all widths
-      const sum = ws.columns.reduce((a, b) => a + b.widthRatio, 0);
-      ws.columns.forEach((c) => { c.widthRatio /= sum; });
+      filterEmptyColumnsKeepingChat(ws);
 
       // Keep dragged tab in sync
       if (state.draggedTab && state.draggedTab.cardId === cardId && state.draggedTab.sourceGroupId === sourceGroupId) {
@@ -1461,7 +1018,7 @@ export const useLayoutStore = create<LayoutStore>()(
       if (sourceGroup.cards.length === 0) {
         sourceCol.groups = sourceCol.groups.filter((g: any) => g.id !== sourceGroupId);
         if (sourceCol.groups.length > 0) {
-          const sum = sourceCol.groups.reduce((a: number, b: any) => a + b.heightRatio, 0);
+          const sum = sourceCol.groups.reduce((a: number, b: any) => a + b.heightRatio, 0) || 1;
           sourceCol.groups.forEach((g: any) => { g.heightRatio /= sum; });
         }
       } else {
@@ -1470,12 +1027,11 @@ export const useLayoutStore = create<LayoutStore>()(
         }
       }
 
-      // Clean up empty columns (except Chat column)
+      // Clean up empty columns (except Chat column); only re-normalize when count changes
       const oldColCount = ws.columns.length;
-      ws.columns = ws.columns.filter((c) => c.id.includes('chat') || c.groups.length > 0);
+      filterEmptyColumnsKeepingChat(ws, false);
       if (ws.columns.length !== oldColCount) {
-        const sum = ws.columns.reduce((a, b) => a + b.widthRatio, 0);
-        ws.columns.forEach((c) => { c.widthRatio /= sum; });
+        normalizeColumnWidths(ws);
       }
 
       // Bound targetColIdx
@@ -1495,9 +1051,7 @@ export const useLayoutStore = create<LayoutStore>()(
       const insertIdx = Math.min(Math.max(targetGroupIdx, 0), col.groups.length);
       col.groups.splice(insertIdx, 0, newGroup);
 
-      // Equidistribute heights in target column
-      const evenHeight = 1 / col.groups.length;
-      col.groups.forEach((g) => { g.heightRatio = evenHeight; });
+      rebalanceGroupHeights(col);
 
       // Keep dragged tab in sync
       if (state.draggedTab && state.draggedTab.cardId === cardId) {
@@ -1523,15 +1077,11 @@ export const useLayoutStore = create<LayoutStore>()(
         const oldGroupsLength = col.groups.length;
         col.groups = col.groups.filter((g) => g.cards.length > 0);
         if (col.groups.length > 0 && col.groups.length !== oldGroupsLength) {
-          const evenHeight = 1 / col.groups.length;
-          col.groups.forEach((g) => { g.heightRatio = evenHeight; });
+          rebalanceGroupHeights(col);
         }
       });
 
-      // Filter empty columns
-      ws.columns = ws.columns.filter((c) => c.id.includes('chat') || c.groups.length > 0);
-      const sum = ws.columns.reduce((a, b) => a + b.widthRatio, 0);
-      ws.columns.forEach((c) => { c.widthRatio /= sum; });
+      filterEmptyColumnsKeepingChat(ws);
     }),
 
     pinSession: (sessionId) => set((state) => {

@@ -4,6 +4,7 @@
  */
 
 import { loadProfiles, type ProviderProfile } from './providerProfiles';
+import { invokeResult } from './tauriInvoke';
 
 const META_KEY = 'crish_model_meta_v1';
 
@@ -176,47 +177,34 @@ async function httpRequest(
     delete headers['content-type'];
   }
 
-  // 1) 桌面壳原生 HTTP
-  try {
-    const core: any = await (Function(
-      'return import("@tauri-apps/api/core")',
-    )() as Promise<any>).catch(() => null);
-    const hasTauri =
-      typeof window !== 'undefined' &&
-      Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
-    if (core?.invoke && hasTauri) {
-      try {
-        const res = (await core.invoke('workbench_http_request', {
-          url,
-          method,
-          headers,
-          body: init.body ?? null,
-        })) as { ok?: boolean; status?: number; body?: string };
-        return {
-          ok: Boolean(res?.ok),
-          status: Number(res?.status) || 0,
-          text: String(res?.body ?? ''),
-        };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        // 命令未注册 → 继续代理；真网络错误 → 抛出
-        if (/network:/i.test(msg)) {
-          throw new Error(msg.replace(/^network:\s*/i, ''));
-        }
-        if (!/not found|unknown command|Command|ipc/i.test(msg)) {
-          if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
-            throw new Error(msg);
-          }
-        }
-        // fall through to vite proxy
-      }
+  // 1) 桌面壳原生 HTTP（命令未注册 / 非 Tauri → missing，fallthrough 代理）
+  const tauriRes = await invokeResult<{ ok?: boolean; status?: number; body?: string }>(
+    'workbench_http_request',
+    {
+      url,
+      method,
+      headers,
+      body: init.body ?? null,
+    },
+  );
+  if (tauriRes.status === 'ok') {
+    const res = tauriRes.data;
+    return {
+      ok: Boolean(res?.ok),
+      status: Number(res?.status) || 0,
+      text: String(res?.body ?? ''),
+    };
+  }
+  if (tauriRes.status === 'error') {
+    const msg = tauriRes.message;
+    // 真网络错误 → 抛出；其余（含命令/IPC 文案）→ 继续代理
+    if (/network:/i.test(msg)) {
+      throw new Error(msg.replace(/^network:\s*/i, ''));
     }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!/not found|unknown command|Cannot find module|Failed to fetch dynamically/i.test(msg)) {
-      // 仅在已判定为网络类时上抛
-      if (/dns|connect|timed out|timeout|refused|network/i.test(msg)) throw e;
+    if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
+      throw new Error(msg);
     }
+    // fall through to vite proxy
   }
 
   // 2) Vite 开发代理（origin 为 localhost:5174 时的正解）

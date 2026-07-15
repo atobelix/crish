@@ -1,0 +1,211 @@
+/* --- CONEX UI tokens — pure neutral grays (no blue/purple tint) --- */
+
+:root,
+html[data-theme="default"],
+html[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f7f7;
+  --bg-tertiary: #f0f0f0;
+  --bg-hover: #f5f5f5;
+  --bg-active: #ebebeb;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --text-primary: #141414;
+  --text-secondary: #4a4a4a;
+  --text-tertiary: #737373;
+  /* 浅色描边：浅灰，不用黑线 */
+  --border-color: #e5e5e5;
+  --border-subtle: #efefef;
+
+  --accent-color: #222222;
+  --accent-light: #f5f5f5;
+  --accent-hover: #000000;
+  --accent-soft: #ebebeb;
+
+  --accent-orange: #f59e0b;
+  --accent-orange-light: #fffbeb;
+  /* 点缀：亮黄绿（高 G 略黄压蓝）；仅开关开态/成功/关键 CTA */
+  --accent-green: #2dbe6c;
+  --accent-green-hover: #25a85e;
+  --accent-green-light: #f0fdf4;
+  --accent-green-soft: #e8faf0;
+  --accent-green-muted: #c6f0d6;
+  --accent-red: #ef4444;
+  --accent-red-light: #fef2f2;
+  --accent-blue: #666666;
+  --accent-blue-light: #f5f5f5;
+  --accent-violet: #666666;
+  --accent-violet-light: #f5f5f5;
+
+  --terminal-bg: #1a1a1a;
+  --terminal-fg: #d4d4d4;
+  --terminal-muted: #6a6a6a;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.08), 0 4px 10px -4px rgba(0, 0, 0, 0.03);
+  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
+  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.12);
+
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', 'JetBrains Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
+
+  --dropdown-padding: 6px;
+  --dropdown-gap: 2px;
+  --dropdown-radius: 12px;
+  --item-padding: 8px 12px;
+  --item-radius: 8px;
+  --item-font-size: var(--font-size-base);
+
+  --header-height: 44px;
+  --sidebar-width: 240px;
+
+  /*
+   * 文字层级（正文 14 为基准）
+   * xxs/xs 仅用于时间、角标等极密元信息，慎用
+   */
+  --font-size-xxs: 11px;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 17px;
+
+  /* 壳层略抬对比：标签/导航可用 medium，避免「灰而浮」 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 500;
+  --font-weight-content: 600;
+
+  /* 图标与控件热区 */
+  --icon-size: 16px;
+  --icon-size-sm: 14px;
+  --icon-size-lg: 18px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-pad-x: 10px;
+
+  color-scheme: light;
+}
+
+/* 深色：炭灰而非死黑；secondary 不低于 primary，避免侧栏「黑洞」
+ * 仅 CSS 变量赋值，组件覆盖见 theme-dark.css */
+html[data-theme="dark"] {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #262626;
+  --bg-tertiary: #2e2e2e;
+  --bg-hover: #333333;
+  --bg-active: #3a3a3a;
+  --bg-card: #222222;
+  --bg-elevated: #2a2a2a;
+  --text-primary: #f2f2f2;
+  --text-secondary: #c4c4c4;
+  --text-tertiary: #9a9a9a;
+  /* 描边用中灰，禁止近黑/纯黑描边 */
+  --border-color: #4a4a4a;
+  --border-subtle: #3a3a3a;
+  --accent-color: #ececec;
+  --accent-light: #333333;
+  --accent-hover: #ffffff;
+  --accent-soft: #3a3a3a;
+  --accent-orange: #d97706;
+  --accent-orange-light: #2a2010;
+  --accent-green: #3dd68c;
+  --accent-green-hover: #2dbe6c;
+  --accent-green-light: #1a2a22;
+  --accent-green-soft: #1e3228;
+  --accent-green-muted: #2a4034;
+  --accent-red: #f87171;
+  --accent-red-light: #2a1414;
+  --accent-blue: #a3a3a3;
+  --accent-blue-light: #333333;
+  --accent-violet: #a3a3a3;
+  --accent-violet-light: #333333;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.4);
+  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.38);
+  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.45);
+  --terminal-bg: #161616;
+  --terminal-fg: #d4d4d4;
+  --terminal-muted: #6a6a6a;
+  color-scheme: dark;
+}
+
+/* UI Size Gear — 相对 14px 基准缩放；small 不低于 11px 元信息 */
+/* 密度只改字号/控件高，不改侧栏宽（侧栏宽独立 token + 用户拖拽持久化） */
+[data-ui-size="small"] {
+  --dropdown-padding: 5px;
+  --dropdown-gap: 2px;
+  --dropdown-radius: 10px;
+  --item-padding: 6px 10px;
+  --item-radius: 7px;
+  --item-font-size: 13px;
+  --header-height: 40px;
+
+  /* 紧凑档：底 13，元信息不低于 11 */
+  --font-size-xxs: 11px;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 13px;
+  --font-size-md: 13px;
+  --font-size-lg: 14px;
+  --font-size-xl: 16px;
+
+  --icon-size: 15px;
+  --icon-size-sm: 14px;
+  --control-height: 30px;
+  --control-height-sm: 26px;
+}
+
+[data-ui-size="medium"] {
+  --dropdown-padding: 6px;
+  --dropdown-gap: 2px;
+  --dropdown-radius: 12px;
+  --item-padding: 8px 12px;
+  --item-radius: 8px;
+  --item-font-size: var(--font-size-base);
+  --header-height: 44px;
+
+  --font-size-xxs: 11px;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 17px;
+
+  --icon-size: 16px;
+  --icon-size-sm: 14px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+}
+
+[data-ui-size="large"] {
+  --dropdown-padding: 8px;
+  --dropdown-gap: 3px;
+  --dropdown-radius: 14px;
+  --item-padding: 9px 14px;
+  --item-radius: 9px;
+  --item-font-size: var(--font-size-lg);
+  --header-height: 48px;
+
+  --font-size-xxs: 12px;
+  --font-size-xs: 13px;
+  --font-size-sm: 14px;
+  --font-size-base: 15px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+
+  --icon-size: 17px;
+  --icon-size-sm: 15px;
+  --control-height: 34px;
+  --control-height-sm: 30px;
+}

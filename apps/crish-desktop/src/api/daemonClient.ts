@@ -8,6 +8,7 @@
  */
 
 import { isProductShell, isTauriShell } from './productMode';
+import { tryInvokeTauri } from './tauriInvoke';
 
 export type DaemonConnState =
   | 'disconnected'
@@ -42,16 +43,6 @@ function rid(prefix: string) {
 
 function matchesType(type: string, expected: string | string[]) {
   return typeof expected === 'string' ? type === expected : expected.includes(type);
-}
-
-async function tryInvokeTauri<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (!mod?.invoke) return null;
-    return (await mod.invoke(cmd, args)) as T;
-  } catch {
-    return null;
-  }
 }
 
 async function fetchShellEndpoint(): Promise<{ url: string | null; available: boolean }> {

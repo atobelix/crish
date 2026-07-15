@@ -10,25 +10,16 @@ import { estimateCostUsd, loadPrices, upsertPrice, type ModelPrice } from '../ap
 import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { isDemoMode } from '../api/appMode';
 import { networkUserMessage } from '../api/userFacingErrors';
-import { getWorkspacePath, listProjects } from '../api/projectStore';
+import { getWorkspacePath } from '../api/projectStore';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ModelsSettingsTab } from './ModelsSettingsTab';
 import { SkillsSettingsTab } from './SkillsSettingsTab';
 import { McpSettingsTab } from './McpSettingsTab';
+import { SettingsScheduleTab } from './SettingsScheduleTab';
+import { SettingsRulesTab } from './SettingsRulesTab';
+import { SettingsSecurityTab } from './SettingsSecurityTab';
 import { SettingsSelect } from './SettingsSelect';
-import { syncRulesToDaemon, textToRuleLines } from '../api/rulesApi';
 import { loadMirrorMeta } from '../api/sessionDiskMirror';
-import {
-  createWorkflow,
-  defaultTimezone,
-  deleteWorkflow,
-  listWorkflows,
-  scheduleLabel,
-  triggerWorkflow,
-  updateWorkflow,
-  type WorkflowDefinition,
-  type WorkflowSchedule,
-} from '../api/workflowApi';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,
@@ -88,10 +79,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
   const permissionMode = useLayoutStore((s) => s.permissionMode);
   const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const commandPermissions = useLayoutStore((s) => s.commandPermissions);
-  const addCommandPermissionStore = useLayoutStore((s) => s.addCommandPermission);
-  const removeCommandPermissionStore = useLayoutStore((s) => s.removeCommandPermission);
   const [mcpAvailable, setMcpAvailable] = useState(false);
+  const [rulesModalOpen, setRulesModalOpen] = useState(false);
 
   const resolveTab = (raw?: string | null): TabType => {
     if (raw && (allowedTabIds(mcpAvailable) as string[]).includes(raw)) return raw as TabType;
@@ -137,29 +126,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [newPkgExtensions, setNewPkgExtensions] = useState('');
   const [newPkgSkills, setNewPkgSkills] = useState('');
 
-  const [newWhitelistCmd, setNewWhitelistCmd] = useState('');
-
-  // Rules text states
-  const [globalRules, setGlobalRules] = useState('');
-  const [projectRules, setProjectRules] = useState('');
-
   const [showAddPluginModal, setShowAddPluginModal] = useState(false);
-  const [editingRuleFileType, setEditingRuleFileType] = useState<'global' | 'project' | null>(null);
-  const [newRuleText, setNewRuleText] = useState('');
 
   // 全覆盖设置：Esc 返回工作区（二级弹层打开时不抢）
   useEffect(() => {
     if (!onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (editingRuleFileType || showAddPluginModal) return;
+      if (rulesModalOpen || showAddPluginModal) return;
       e.preventDefault();
       e.stopPropagation();
       onClose();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, editingRuleFileType, showAddPluginModal]);
+  }, [onClose, rulesModalOpen, showAddPluginModal]);
 
   // Daemon endpoint (desktop product, developer only)
   const [daemonWsDraft, setDaemonWsDraft] = useState(() => {
@@ -174,19 +155,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
   const [priceList, setPriceList] = useState<ModelPrice[]>(() => loadPrices());
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [workflowsLoading, setWorkflowsLoading] = useState(false);
-  const [wfBusy, setWfBusy] = useState(false);
-  const [wfError, setWfError] = useState('');
-  const [wfOk, setWfOk] = useState('');
-  const [showWfForm, setShowWfForm] = useState(false);
-  const [wfDraft, setWfDraft] = useState({
-    name: '',
-    prompt: '',
-    scheduleType: 'manual' as 'manual' | 'daily' | 'intervalMinutes',
-    dailyTime: '09:00',
-    intervalMinutes: '30',
-  });
   const [diskMeta, setDiskMeta] = useState(() => loadMirrorMeta());
 
   useEffect(() => {
@@ -204,42 +172,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'schedule') return;
-    setWorkflowsLoading(true);
-    setWfError('');
-    void listWorkflows()
-      .then(setWorkflows)
-      .finally(() => setWorkflowsLoading(false));
-  }, [activeTab]);
-
-  useEffect(() => {
     if (activeTab !== 'profile') return;
     setDiskMeta(loadMirrorMeta());
   }, [activeTab]);
-
-  const refreshWorkflows = async () => {
-    setWorkflowsLoading(true);
-    try {
-      setWorkflows(await listWorkflows());
-    } finally {
-      setWorkflowsLoading(false);
-    }
-  };
-
-  const buildScheduleFromDraft = (): WorkflowSchedule => {
-    if (wfDraft.scheduleType === 'daily') {
-      return {
-        type: 'daily',
-        time: wfDraft.dailyTime.trim() || '09:00',
-        timezone: defaultTimezone(),
-      };
-    }
-    if (wfDraft.scheduleType === 'intervalMinutes') {
-      const n = Math.max(1, Number(wfDraft.intervalMinutes) || 30);
-      return { type: 'intervalMinutes', intervalMinutes: n };
-    }
-    return { type: 'manual' };
-  };
 
   // Custom shortcuts state
   const [customShortcuts, setCustomShortcuts] = useState<Record<string, string>>(() => {
@@ -305,21 +240,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const loadAll = async () => {
       try {
         setLoading(true);
-        // 模型/密钥走 ModelsSettingsTab + providerProfiles；调度走 workflow（schedule 页）
+        // 模型/密钥走 ModelsSettingsTab；规则/调度走各自 tab
         const sets = await clientApi.getSettingsEx(cwd);
         setSettings(sets);
         if (sets && sets.theme) {
           const { applyTheme, normalizeTheme } = await import('../api/themeStore');
           applyTheme(normalizeTheme(sets.theme));
         }
-
-        // 规则正文：来自 settings.customRules；无则空模板
-        const rulesJoined = (sets?.customRules || []).join('\n');
-        setGlobalRules(
-          rulesJoined ||
-            '# 全局规则\n\n- 在敏感修改前先征得确认\n- 保持既有代码风格与格式\n',
-        );
-        setProjectRules('# 项目规则\n\n（打开项目后可在此补充项目专属约定）\n');
       } catch (err) {
         onShowToast('读取设置失败：' + String(err));
       } finally {
@@ -399,34 +326,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
-  const handleSaveRules = async (scopeType: 'global' | 'project') => {
-    // 本机备份 + 同步引擎 scoped-context（下次 run 生效）
-    const text = scopeType === 'global' ? globalRules : projectRules;
-    const lines = textToRuleLines(text);
-    // 全局/项目：customRules 存当前编辑作用域的行（兼容旧结构）
-    await handleUpdateSettings({ customRules: lines });
-    const sync = await syncRulesToDaemon({
-      globalText: globalRules,
-      projectText: projectRules,
-    });
-    if (sync.daemonSynced) {
-      onShowToast(
-        scopeType === 'global'
-          ? '全局规则已保存并同步到引擎'
-          : '项目规则已保存并同步到引擎',
-      );
-    } else {
-      onShowToast(
-        sync.error
-          ? `规则已保存在本机；引擎未同步：${sync.error}`
-          : '规则已保存在本机；引擎未连接时仅本地生效',
-      );
-    }
-    if (sync.truncated) {
-      onShowToast('规则较长，同步到引擎时已截断（本机仍保留全文）');
-    }
-  };
-
   if (!settings) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
@@ -435,29 +334,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </div>
     );
   }
-
-  const handleAddCustomRule = () => {
-    const text = newRuleText.trim();
-    if (!text) {
-      onShowToast('请输入规则内容');
-      return;
-    }
-    const currentRules = settings?.customRules || [];
-    if (currentRules.includes(text)) {
-      onShowToast('该规则已存在');
-      return;
-    }
-    handleUpdateSettings({ customRules: [...currentRules, text] });
-    setNewRuleText('');
-    onShowToast('智能体规范规则已添加');
-  };
-
-  const handleDeleteCustomRule = (index: number) => {
-    const currentRules = settings?.customRules || [];
-    const updated = currentRules.filter((_, i) => i !== index);
-    handleUpdateSettings({ customRules: updated });
-    onShowToast('智能体规范规则已删除');
-  };
 
   return (
     <div
@@ -882,324 +758,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           )}
 
           {activeTab === 'schedule' && (
-            <>
-              <div
-                style={{
-                  marginBottom: 12,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>定时任务</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                    引擎 workflow：手动 / 每天 / 间隔。与运行状态悬浮条分离——这里是计划，悬浮条是当前执行。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  onClick={() => {
-                    setShowWfForm((v) => !v);
-                    setWfError('');
-                    setWfOk('');
-                  }}
-                >
-                  <Lucide.Plus size={16} />
-                  新建
-                </button>
-              </div>
-
-              {wfError && <div className="model-picker-error" style={{ marginBottom: 8 }}>{wfError}</div>}
-              {wfOk && (
-                <div className="chat-soft-hint" style={{ marginBottom: 8 }}>
-                  <span>{wfOk}</span>
-                </div>
-              )}
-
-              {showWfForm && (
-                <div className="settings-card-row" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>新建计划</div>
-                  <input
-                    className="settings-field-input"
-                    placeholder="名称，例如 每日代码体检"
-                    value={wfDraft.name}
-                    onChange={(e) => setWfDraft((d) => ({ ...d, name: e.target.value }))}
-                  />
-                  <textarea
-                    className="settings-field-input"
-                    style={{ minHeight: 72, resize: 'vertical', fontFamily: 'inherit' }}
-                    placeholder="任务提示词：引擎到点会按此 prompt 启动一轮对话"
-                    value={wfDraft.prompt}
-                    onChange={(e) => setWfDraft((d) => ({ ...d, prompt: e.target.value }))}
-                  />
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select
-                      className="settings-field-input"
-                      style={{ width: 140 }}
-                      value={wfDraft.scheduleType}
-                      onChange={(e) =>
-                        setWfDraft((d) => ({
-                          ...d,
-                          scheduleType: e.target.value as typeof d.scheduleType,
-                        }))
-                      }
-                    >
-                      <option value="manual">手动</option>
-                      <option value="daily">每天</option>
-                      <option value="intervalMinutes">间隔分钟</option>
-                    </select>
-                    {wfDraft.scheduleType === 'daily' && (
-                      <input
-                        className="settings-field-input"
-                        style={{ width: 100 }}
-                        type="time"
-                        value={wfDraft.dailyTime}
-                        onChange={(e) => setWfDraft((d) => ({ ...d, dailyTime: e.target.value }))}
-                      />
-                    )}
-                    {wfDraft.scheduleType === 'intervalMinutes' && (
-                      <input
-                        className="settings-field-input"
-                        style={{ width: 100 }}
-                        placeholder="分钟"
-                        value={wfDraft.intervalMinutes}
-                        onChange={(e) => setWfDraft((d) => ({ ...d, intervalMinutes: e.target.value }))}
-                      />
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setShowWfForm(false)}>
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-secondary ui-btn-sm"
-                      disabled={wfBusy}
-                      onClick={async () => {
-                        if (!wfDraft.name.trim() || !wfDraft.prompt.trim()) {
-                          setWfError('请填写名称与提示词');
-                          setWfOk('');
-                          return;
-                        }
-                        setWfBusy(true);
-                        setWfError('');
-                        const res = await createWorkflow({
-                          name: wfDraft.name,
-                          prompt: wfDraft.prompt,
-                          schedule: buildScheduleFromDraft(),
-                          cwd: getWorkspacePath() || undefined,
-                        });
-                        setWfBusy(false);
-                        if (!res.ok) {
-                          setWfError(
-                            res.error === 'not_connected'
-                              ? networkUserMessage()
-                              : '创建失败，请检查引擎是否就绪',
-                          );
-                          return;
-                        }
-                        setWfOk('已创建计划');
-                        setShowWfForm(false);
-                        setWfDraft({
-                          name: '',
-                          prompt: '',
-                          scheduleType: 'manual',
-                          dailyTime: '09:00',
-                          intervalMinutes: '30',
-                        });
-                        await refreshWorkflows();
-                      }}
-                    >
-                      {wfBusy ? '创建中…' : '创建'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {workflowsLoading && (
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>正在读取引擎计划…</div>
-                )}
-                {workflows.map((w) => (
-                  <div key={w.id} className="settings-card-row">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{w.name}</div>
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <span className={`status-badge ${w.enabled !== false ? 'available' : 'unconfigured'}`}>
-                          {w.enabled !== false ? '启用' : '关闭'}
-                        </span>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          title={w.enabled === false ? '启用' : '暂停'}
-                          disabled={wfBusy}
-                          onClick={async () => {
-                            setWfBusy(true);
-                            const res = await updateWorkflow(w.id, { enabled: w.enabled === false });
-                            setWfBusy(false);
-                            if (!res.ok) setWfError('更新失败');
-                            else {
-                              setWfOk(w.enabled === false ? '已启用' : '已暂停');
-                              await refreshWorkflows();
-                            }
-                          }}
-                        >
-                          {w.enabled === false ? <Lucide.Play size={16} /> : <Lucide.Pause size={16} />}
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          title="立即执行"
-                          disabled={wfBusy}
-                          onClick={async () => {
-                            setWfBusy(true);
-                            const res = await triggerWorkflow(w.id);
-                            setWfBusy(false);
-                            if (!res.ok) setWfError('触发失败');
-                            else setWfOk('已触发执行');
-                          }}
-                        >
-                          <Lucide.Zap size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          title="删除"
-                          disabled={wfBusy}
-                          onClick={async () => {
-                            setWfBusy(true);
-                            const res = await deleteWorkflow(w.id);
-                            setWfBusy(false);
-                            if (!res.ok) setWfError('删除失败');
-                            else {
-                              setWfOk('已删除');
-                              await refreshWorkflows();
-                            }
-                          }}
-                        >
-                          <Lucide.Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                      {scheduleLabel(w.schedule)}
-                    </div>
-                    {w.prompt && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.45 }}>
-                        {String(w.prompt).slice(0, 160)}
-                        {String(w.prompt).length > 160 ? '…' : ''}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {!workflowsLoading && workflows.length === 0 && (
-                  <div
-                    className="settings-card-row"
-                    style={{
-                      textAlign: 'center',
-                      padding: '28px 16px',
-                      color: 'var(--text-tertiary)',
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    <Lucide.Clock size={22} style={{ opacity: 0.35, marginBottom: 8 }} />
-                    <div>暂无计划任务</div>
-                    <div style={{ marginTop: 4 }}>点击右上角「新建」创建一条引擎调度。</div>
-                  </div>
-                )}
-              </div>
-            </>
+            <SettingsScheduleTab onShowToast={onShowToast} />
           )}
 
-          {/* TAB 6: RULES — contextual: no project → global only; with project → project rules */}
           {activeTab === 'rules' && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                <div>
-                  <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                    {(typeof localStorage !== 'undefined' && localStorage.getItem('crish_workspace'))
-                      ? '当前项目规则'
-                      : '全局规则'}
-                  </h4>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                    {(typeof localStorage !== 'undefined' && localStorage.getItem('crish_workspace'))
-                      ? `作用于：${localStorage.getItem('crish_workspace')}`
-                      : '尚未打开项目时，这里编辑的是全局规则'}
-                  </p>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingRuleFileType(
-                        (typeof localStorage !== 'undefined' && localStorage.getItem('crish_workspace'))
-                          ? 'project'
-                          : 'global',
-                      )
-                    }
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                  >
-                    编辑规则文件
-                  </button>
-                </div>
-              </div>
-
-              {/* Rules List (零碎的规范内容) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span className="settings-field-label">已添加的规则规范列表</span>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {(settings.customRules || []).map((rule, idx) => (
-                    <div key={idx} className="settings-card-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: '11.5px', color: 'var(--text-primary)', lineHeight: '1.4' }}>{rule}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCustomRule(idx)}
-                        className="ui-btn ui-btn-ghost danger"
-                        style={{ marginLeft: 12, flexShrink: 0 }}
-                        title="删除规则"
-                      >
-                        <Lucide.Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  {(settings.customRules || []).length === 0 && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '24px', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
-                      暂无细化规范，请在下方输入框添加日常开发的零碎规范。
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Add Custom Rule Form */}
-              <div className="settings-card-row" style={{ gap: 10 }}>
-                <span className="settings-field-label">添加新规范</span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="输入规则内容，例如: 提交代码前确保完成 lint 测试"
-                    value={newRuleText}
-                    onChange={e => setNewRuleText(e.target.value)}
-                    className="settings-field-input"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddCustomRule}
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                  >
-                    添加
-                  </button>
-                </div>
-              </div>
-            </>
+            <SettingsRulesTab
+              onShowToast={onShowToast}
+              onBlockingOverlayChange={setRulesModalOpen}
+            />
           )}
 
           {/* TAB 6.5: SHORTCUTS */}
@@ -1427,156 +993,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </>
           )}
 
-          {/* TAB: SECURITY */}
           {activeTab === 'security' && (
-            <>
-              <div style={{ marginBottom: 16 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>安全</h4>
-                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  命令权限与敏感操作（打开项目即表示信任该目录）
-                </p>
-              </div>
-
-              <div className="settings-fields-stack" style={{ gap: 16 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">默认权限</label>
-                  <div className="ui-segment" style={{ maxWidth: 420, flexWrap: 'wrap' }}>
-                    {PERMISSION_MODES.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`ui-segment-item ${permissionMode === opt.id ? 'active' : ''}`}
-                        onClick={() => setPermissionMode(opt.id as PermissionMode)}
-                        title={opt.description}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                    {PERMISSION_MODES.find((m) => m.id === permissionMode)?.description}
-                    {' '}极危命令在「自动 / 完全访问」下仍会征求确认；「计划」模式禁止改文件。
-                  </p>
-                </div>
-
-                <div>
-                  <div className="settings-field-label" style={{ marginBottom: 8 }}>
-                    当前工作目录
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {(getWorkspacePath()
-                      ? [getWorkspacePath()]
-                      : listProjects()
-                          .slice(0, 3)
-                          .map((p) => p.path)
-                    ).map((path) => (
-                      <div
-                        key={path}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '8px 0',
-                          borderBottom: '1px solid var(--border-subtle)',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontFamily: 'var(--font-mono)',
-                            color: 'var(--text-secondary)',
-                            wordBreak: 'break-all',
-                            paddingRight: 12,
-                          }}
-                        >
-                          {path}
-                        </span>
-                      </div>
-                    ))}
-                    {!getWorkspacePath() && listProjects().length === 0 && (
-                      <span style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 0' }}>
-                        尚未选择项目。可在空对话页的「选择项目」中添加。
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 20 }}>
-                <div className="settings-field-label" style={{ marginBottom: 8 }}>
-                  命令白名单（自动允许）
-                </div>
-                <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                  当引擎请求确认时，若命令以前缀匹配白名单，将自动批准并继续执行（不伪造结果）。
-                  建议只加只读/低风险命令，例如 <code>git status</code>、<code>npm test</code>。
-                  完全访问模式仍由引擎处理非极危操作；白名单是「需确认」下的顺手加速。
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {(commandPermissions || []).map((cmd) => (
-                    <span
-                      key={cmd}
-                      className="ui-badge"
-                      style={{
-                        padding: '5px 8px',
-                        fontSize: 12,
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      {cmd}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          removeCommandPermissionStore(cmd);
-                          onShowToast(`已移除：${cmd}`);
-                        }}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          color: 'var(--text-tertiary)',
-                          display: 'inline-flex',
-                          marginLeft: 4,
-                          padding: 0,
-                        }}
-                      >
-                        <Lucide.X size={14} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    type="text"
-                    placeholder="例如：git status"
-                    value={newWhitelistCmd}
-                    onChange={(e) => setNewWhitelistCmd(e.target.value)}
-                    className="settings-field-input"
-                    style={{ flex: 1 }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newWhitelistCmd.trim()) {
-                        addCommandPermissionStore(newWhitelistCmd.trim());
-                        onShowToast(`已添加：${newWhitelistCmd.trim()}`);
-                        setNewWhitelistCmd('');
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                    onClick={() => {
-                      if (!newWhitelistCmd.trim()) return;
-                      const cmd = newWhitelistCmd.trim();
-                      addCommandPermissionStore(cmd);
-                      onShowToast(`已添加：${cmd}`);
-                      setNewWhitelistCmd('');
-                    }}
-                  >
-                    添加
-                  </button>
-                </div>
-              </div>
-            </>
+            <SettingsSecurityTab onShowToast={onShowToast} />
           )}
 
         </div>
@@ -1659,77 +1077,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: EDIT AGENTS.MD RULES FILE (二级面板) */}
-      {editingRuleFileType && (
-        <div className="custom-modal-backdrop" style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 20000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            width: '580px', background: 'var(--bg-elevated, var(--bg-primary))', borderRadius: '12px',
-            boxShadow: 'var(--shadow-2xl)',
-            border: '1px solid var(--border-color)', overflow: 'hidden', display: 'flex', flexDirection: 'column'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-              <span className="settings-modal-title">
-                {editingRuleFileType === 'global' ? '编辑全局规则' : '编辑当前项目规则'}
-              </span>
-              <button onClick={() => setEditingRuleFileType(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)'  }}>
-                <Lucide.X size={16} />
-              </button>
-            </div>
-            
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ fontSize: '11px', color:  'var(--text-tertiary)' , margin: 0 }}>
-                {editingRuleFileType === 'global'
-                  ? '修改全局规则文本。保存后写入本机设置（正式版暂不自动写仓库 AGENTS.md）。'
-                  : '修改当前工作区相关规则。保存后写入本机设置，后续可对接项目文件。'}
-              </p>
-              
-              <textarea
-                className="settings-field-input"
-                value={editingRuleFileType === 'global' ? globalRules : projectRules}
-                onChange={e => {
-                  if (editingRuleFileType === 'global') {
-                    setGlobalRules(e.target.value);
-                  } else {
-                    setProjectRules(e.target.value);
-                  }
-                }}
-                rows={12}
-                style={{
-                  width: '100%',
-                  minHeight: 220,
-                  height: 'auto',
-                  padding: '10px 12px',
-                  fontSize: 11,
-                  fontFamily: 'var(--font-mono)',
-                  resize: 'vertical',
-                  lineHeight: 1.5,
-                }}
-              />
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setEditingRuleFileType(null)}
-                  className="settings-btn-secondary"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { handleSaveRules(editingRuleFileType); setEditingRuleFileType(null); }}
-                  className="settings-btn-primary"
-                >
-                  保存规则文件
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+

@@ -14,17 +14,10 @@ import {
   getActiveProfile,
   getActiveProfileId,
 } from '../api/providerProfiles';
-import {
-  getActiveProject,
-  getWorkspacePath,
-  listProjects,
-  openProject,
-} from '../api/projectStore';
-import { ProjectPickerMenu } from './ProjectPickerMenu';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelPicker } from './ModelPicker';
-import { ApprovalAskCard } from './ApprovalAskCard';
+import { ChatMessageList } from './ChatMessageList';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
   isEditToolName,
@@ -32,18 +25,10 @@ import {
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
 } from '../api/toolFeedback';
-import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { stripThoughtPlaceholders } from '../api/markdownRender';
 import {
-  assistantCopyText,
-  buildAssistantTimeline,
-  extractImageRefs,
   normalizeAssistantTimeline,
-  toolCommandPreview,
-  toolHasDisplayableResult,
   toolSummaryLabel,
-  fullToolOutput,
-  toolPathDisplayName,
-  type ToolRenderItem,
 } from '../api/toolPresentation';
 import {
   formatSkillInjection,
@@ -57,7 +42,6 @@ import {
   isDefaultSessionTitle,
 } from '../api/sessionTitle';
 import {
-  extractFilePathFromToolArgs,
   formatAnnotationsForModel,
   openFileInPanel,
   takePendingFileAnnotations,
@@ -69,9 +53,6 @@ import {
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { AgentCard } from './AgentCard';
-import { InlineAgentPanel } from './InlineAgentPanel';
-import {
-} from '../api/permissionModes';
 import {
   buildCollaboratorPrompt,
   COLLABORATOR_MODES,
@@ -143,7 +124,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [collabBusy, setCollabBusy] = useState(false);
 
   const modelChoices = flattenModelChoices();
-  const activeProject = getActiveProject();
 
   useEffect(() => {
     const onProj = () => setProjectTick((n) => n + 1);
@@ -231,14 +211,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     }
   }
 
-  const formatTime = (ts?: number) => {
-    if (!ts) return '';
-    const date = new Date(ts);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
-
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
-  const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
   /** 运行级错误横幅（不进 AI 正文） */
   const [runNotice, setRunNotice] = useState<{ text: string; kind?: string } | null>(null);
   // Demo-only decorative pills; product mode stays quiet until real signals exist
@@ -922,11 +894,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     }
   };
 
-  /** 切换展开；须传入当前展示态，避免 defaultOpen=true 时首次点击仍为 true */
-  const toggleTool = (toolId: string, currentlyOpen: boolean) => {
-    setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
-  };
-
   const openDiffInRightPanel = (diff: FileDiff) => {
     setActiveDiffSource(diff);
     handleGlobalTabClick('diff');
@@ -951,124 +918,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     openSidePanel('files');
     openFileInPanel(filePath);
     onShowToast(`已打开文件：${filePath.replace(/^.*[\\/]/, '')}`);
-  };
-
-  const renderGitDiff = (diff: FileDiff) => {
-    return (
-      <div className="git-diff-card" key={diff.filePath}>
-        <div className="git-diff-card-header" onClick={() => openDiffInRightPanel(diff)}>
-          <div className="git-diff-file-info">
-            <Lucide.FileCode size={16} style={{ color: 'var(--accent-color)' }} />
-            <span className="git-diff-filename">{diff.filePath}</span>
-            <span className="git-diff-preview-tag">在右侧查看</span>
-          </div>
-          <div className="git-diff-badge">
-            <span className="git-diff-add">+{diff.additions}</span>
-            <span className="git-diff-del">-{diff.deletions}</span>
-          </div>
-        </div>
-        <div className="git-diff-lines-container">
-          {diff.changes.slice(0, 8).map((change, i) => (
-            <div key={i} className={`git-diff-line-row ${change.type}`}>
-              <div className="line-num-col">
-                {change.type === 'addition' ? '+' : change.type === 'deletion' ? '-' : ' '}
-              </div>
-              <pre className="line-content">{change.content}</pre>
-            </div>
-          ))}
-          {diff.changes.length > 8 && (
-            <div
-              className="git-diff-more-indicator"
-              onClick={() => openDiffInRightPanel(diff)}
-            >
-              还有 {diff.changes.length - 8} 行 · 点击在右侧查看完整 diff
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-
-
-
-  const renderToolResultBody = (tc: {
-    output?: string;
-    diffs?: FileDiff[];
-    name?: string;
-    status?: string;
-    arguments?: string;
-  }) => {
-    const images = extractImageRefs(tc.output || '');
-    const raw = tc.output || '';
-    const out = fullToolOutput(raw);
-    const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
-    const shellTool = isShellToolName(tc.name || '');
-    const longShell = shellTool && (raw.length > 2000 || raw.split('\n').length > 80);
-    if (!out && images.length === 0 && !hasDiffs) {
-      if (tc.status === 'success') {
-        return (
-          <div className="tool-result-body">
-            <pre className="tool-result-pre">完成</pre>
-          </div>
-        );
-      }
-      if (tc.status === 'error') {
-        return (
-          <div className="tool-result-body">
-            <pre className="tool-result-pre">失败</pre>
-          </div>
-        );
-      }
-      return null;
-    }
-    return (
-      <div className="tool-result-body">
-        {out ? <pre className="tool-result-pre">{out}</pre> : null}
-        {longShell ? (
-          <div className="tool-result-long-hint">
-            <button
-              type="button"
-              className="tool-result-hint-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                openSidePanel('terminal');
-              }}
-            >
-              在终端查看
-            </button>
-          </div>
-        ) : null}
-        {images.length > 0 && (
-          <div className="tool-result-images">
-            {images.map((src) => (
-              <img key={src} src={src} alt="" className="tool-result-img" loading="lazy" />
-            ))}
-          </div>
-        )}
-        {tc.diffs?.map(renderGitDiff)}
-      </div>
-    );
-  };
-
-  /** 默认折叠长输出，避免主对话刷屏；错误可默认展开；长结果永不默认撑开 */
-  const shouldDefaultOpenTool = (tc: {
-    status?: string;
-    output?: string;
-    diffs?: FileDiff[];
-  }) => {
-    if (tc.status === 'running') return false;
-    if (tc.status === 'pending_approval') return false;
-    if (tc.status === 'error') {
-      const o = (tc.output || '').trim();
-      return o.length > 0 && o.length < 200;
-    }
-    if (tc.diffs && tc.diffs.length > 0) return false; // diff 摘要行即可，完整看右侧
-    const raw = (tc.output || '').trim();
-    if (!raw || /^(执行中|运行中)…?$/.test(raw)) return false;
-    const lines = raw.split('\n').filter((l) => l.trim());
-    // 更克制：只有极短结果才默认展开
-    return lines.length <= 3 && raw.length <= 240;
   };
 
   const handleApprovalAllow = (toolId: string, msgId: string, remember = false) => {
@@ -1119,277 +968,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       window.setTimeout(() => setApprovalBusy(false), 200);
     });
   };
-
-  /**
-   * 工具行分层：
-   * - 摘要（灰）：人读意图
-   * - 命令（等宽更浅）：真实命令/路径
-   * - 展开体：仅清洗后的结果输出
-   * - 待确认：行内可批，不依赖底部 sticky
-   */
-  const findAgentForTool = (tc: { id?: string; name?: string; explanation?: string }) => {
-    const agents = sessions.find((s) => s.id === activeSessionId)?.agents || [];
-    if (!agents.length) return null;
-    const byTool = agents.find((a) => a.parentToolCallId && a.parentToolCallId === tc.id);
-    if (byTool) return byTool;
-    const n = (tc.name || '').toLowerCase();
-    if (n.includes('subagent') || n === 'run_subagent') {
-      // 最近启动且匹配描述
-      const exp = (tc.explanation || '').trim();
-      const byDesc = exp
-        ? agents.find((a) => a.description && exp.includes(a.description.slice(0, 24)))
-        : null;
-      if (byDesc) return byDesc;
-      return agents[0] || null;
-    }
-    return null;
-  };
-
-  const renderCompactToolRow = (tc: any, key: string | number, msgId?: string) => {
-    // 子 agent：在主对话流中展示可展开协作面板（右侧/新窗口按钮在此）
-    const linkedAgent = findAgentForTool(tc);
-    if (linkedAgent && activeSessionId) {
-      return (
-        <InlineAgentPanel
-          key={String(key)}
-          agent={linkedAgent}
-          parentSessionId={activeSessionId}
-          defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
-        />
-      );
-    }
-    if (tc.status === 'pending_approval') {
-      const summary = toolSummaryLabel(tc);
-      const cmd = toolCommandPreview(tc);
-      const mid = msgId || pendingApprovalMsgId;
-      return (
-        <ApprovalAskCard
-          key={key}
-          msgId={mid}
-          summary={summary}
-          cmd={cmd}
-          busy={approvalBusy}
-          onAllow={(note) => {
-            if (note.trim()) {
-              onShowToast(`备注：${note.trim().slice(0, 80)}`);
-            }
-            handleApprovalAllow(tc.id, mid, false);
-          }}
-          onAllowRemember={(note) => {
-            if (note.trim()) onShowToast(`备注：${note.trim().slice(0, 80)}`);
-            handleApprovalAllow(tc.id, mid, true);
-          }}
-          onDeny={() => handleApprovalDeny(tc.id, mid)}
-        />
-      );
-    }
-    const body = renderToolResultBody(tc);
-    const hasResult = toolHasDisplayableResult(tc);
-    const defaultOpen = shouldDefaultOpenTool(tc);
-    const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, tc.id)
-      ? expandedTools[tc.id]
-      : defaultOpen;
-    const summary = toolSummaryLabel(tc);
-    const cmd = toolCommandPreview(tc);
-    const running = tc.status === 'running';
-    const canToggle = Boolean(body) || hasResult;
-    const filePath = extractFilePathFromToolArgs(tc.arguments || '');
-    const n = (tc.name || '').toLowerCase();
-    const pathClickable =
-      Boolean(filePath) &&
-      (isEditToolName(n) ||
-        n.includes('read') ||
-        n.includes('write') ||
-        n.includes('edit') ||
-        n.includes('glob'));
-    const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
-    // 摘要里把 basename 渲成可点链（路径即入口，去掉「打开文件」按钮）
-    const pathActions = pathClickable && filePath ? (
-      <span className="tool-path-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="tool-path-action"
-          title="在文件面板打开"
-          onClick={() => openPathInFilesPanel(filePath)}
-        >
-          <Lucide.PanelRightOpen size={14} />
-        </button>
-        <button
-          type="button"
-          className="tool-path-action"
-          title="复制路径"
-          onClick={() => {
-            void navigator.clipboard.writeText(filePath).then(
-              () => onShowToast('路径已复制'),
-              () => onShowToast(filePath),
-            );
-          }}
-        >
-          <Lucide.Copy size={14} />
-        </button>
-      </span>
-    ) : null;
-
-    const renderSummary = () => {
-      if (!pathClickable || !filePath || !pathLabel) {
-        return (
-          <span className="tool-row-summary" title={summary}>
-            {summary}
-          </span>
-        );
-      }
-      const idx = summary.lastIndexOf(pathLabel);
-      const link = (
-        <span className="tool-path-wrap">
-          <button
-            type="button"
-            className="tool-path-link"
-            title={filePath}
-            onClick={(e) => {
-              e.stopPropagation();
-              openPathInFilesPanel(filePath);
-            }}
-          >
-            {pathLabel}
-          </button>
-          {pathActions}
-        </span>
-      );
-      if (idx < 0) {
-        return (
-          <span className="tool-row-summary" title={filePath}>
-            {summary} {link}
-          </span>
-        );
-      }
-      return (
-        <span className="tool-row-summary" title={filePath}>
-          {summary.slice(0, idx)}
-          {link}
-          {summary.slice(idx + pathLabel.length)}
-        </span>
-      );
-    };
-    const toolIcon = (() => {
-      const n = (tc.name || '').toLowerCase();
-      const cls = 'tool-row-type-ico';
-      const sz = 15;
-      if (running) {
-        return (
-          <span className="tool-row-live" aria-hidden>
-            <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-          </span>
-        );
-      }
-      if (isShellToolName(n) || n.includes('bash') || n.includes('shell') || n.includes('exec')) {
-        return <Lucide.Terminal className={`${cls} ico-shell`} size={sz} strokeWidth={1.75} />;
-      }
-      if (n.includes('grep') || n.includes('search') || n.includes('find')) {
-        return <Lucide.Search className={`${cls} ico-search`} size={sz} strokeWidth={1.75} />;
-      }
-      if (n.includes('read') || n.includes('cat') || n.includes('view')) {
-        return <Lucide.FileText className={`${cls} ico-read`} size={sz} strokeWidth={1.75} />;
-      }
-      if (isEditToolName(n) || n.includes('write') || n.includes('edit') || n.includes('patch')) {
-        return <Lucide.Pencil className={`${cls} ico-edit`} size={sz} strokeWidth={1.75} />;
-      }
-      if (n.includes('list') || n.includes('glob') || n.includes('dir')) {
-        return <Lucide.FolderTree className={`${cls} ico-list`} size={sz} strokeWidth={1.75} />;
-      }
-      if (n.includes('web') || n.includes('fetch') || n.includes('http')) {
-        return <Lucide.Globe className={`${cls} ico-web`} size={sz} strokeWidth={1.75} />;
-      }
-      return <Lucide.CircleDot className={`${cls} ico-default`} size={sz} strokeWidth={1.75} />;
-    })();
-
-    return (
-      <div className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`} key={key}>
-        {/* 用 div 而非 button，避免路径操作按钮嵌套 button 报错 */}
-        <div
-          className="tool-row-head"
-          role={canToggle ? 'button' : undefined}
-          tabIndex={canToggle ? 0 : undefined}
-          onClick={() => canToggle && toggleTool(tc.id, isOpen)}
-          onKeyDown={(e) => {
-            if (!canToggle) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              toggleTool(tc.id, isOpen);
-            }
-          }}
-        >
-          <span className="tool-row-head-main">
-            {toolIcon}
-            {renderSummary()}
-            {cmd ? (
-              <code className="tool-row-cmd" title="命令">
-                {cmd}
-              </code>
-            ) : null}
-          </span>
-          <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
-            {canToggle ? (
-              <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
-            ) : null}
-          </span>
-        </div>
-        {isOpen && body}
-      </div>
-    );
-  };
-
-  const renderToolItems = (items: ToolRenderItem[], msgId?: string) => (
-    <div className="tool-stack">
-      {items.map((item) => {
-        if (item.kind === 'single') {
-          return renderCompactToolRow(item.tc, item.tc.id, msgId);
-        }
-        const gid = item.id;
-        const running = item.tools.some((t) => t.status === 'running');
-        const anyError = item.tools.some((t) => t.status === 'error');
-        const groupDefaultOpen = running || anyError;
-        const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, gid)
-          ? expandedTools[gid]
-          : groupDefaultOpen;
-        return (
-          <div
-            className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
-            key={gid}
-          >
-            <div
-              className="tool-row-head"
-              role="button"
-              tabIndex={0}
-              onClick={() => toggleTool(gid, isOpen)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleTool(gid, isOpen);
-                }
-              }}
-            >
-              <span className="tool-row-head-main">
-                {running ? (
-                  <span className="tool-row-live" aria-hidden>
-                    <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-                  </span>
-                ) : null}
-                <span className="tool-row-summary">{item.label}</span>
-              </span>
-              <span className="tool-row-chevron-slot is-toggle">
-                <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
-              </span>
-            </div>
-            {isOpen && (
-              <div className="tool-group-body">
-                {item.tools.map((tc) => renderCompactToolRow(tc, tc.id, msgId))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 
   const activeAgent =
     activeAgentId &&
@@ -1542,306 +1120,45 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           display: activeAgent ? 'none' : undefined,
         }}
       >
-        {messages.length === 0 ? (
-          <div className="chat-empty-state">
-            <h3 className="chat-empty-title">有什么可以帮你？</h3>
-            <p className="chat-empty-sub">先选择项目，或在无项目模式下直接开始对话。</p>
-
-            <div className="chat-empty-project-bar">
-              <div className="chat-empty-project-anchor">
-                <button
-                  type="button"
-                  className="chat-empty-project-btn"
-                  onClick={() => setShowProjectPicker((v) => !v)}
-                >
-                  <Lucide.Folder size={16} />
-                  <span>
-                    {activeProject
-                      ? activeProject.name
-                      : getWorkspacePath()
-                        ? '当前目录'
-                        : '选择项目'}
-                  </span>
-                  <Lucide.ChevronDown size={16} style={{ opacity: 0.5 }} />
-                </button>
-                {showProjectPicker && (
-                  <ProjectPickerMenu
-                    open
-                    onClose={() => setShowProjectPicker(false)}
-                    onChanged={() => setProjectTick((n) => n + 1)}
-                  />
-                )}
-              </div>
-              {listProjects().length > 0 && !activeProject && (
-                <button
-                  type="button"
-                  className="chat-empty-last-btn"
-                  onClick={() => {
-                    const last = listProjects()[0];
-                    if (last) {
-                      openProject(last.id);
-                      setProjectTick((n) => n + 1);
-                    }
-                  }}
-                >
-                  打开最近：{listProjects()[0]?.name}
-                </button>
-              )}
-            </div>
-
-            <div className="chat-empty-prompts">
-              {[
-                { label: '分析项目结构', prompt: '分析当前工作区项目结构，梳理核心模块与依赖关系' },
-                { label: '查看代码改动', prompt: '运行 git status 与 git diff，总结当前工作区修改' },
-                { label: '检查开发服务', prompt: '检查本地开发服务器与相关工具是否正常运行' },
-              ].map((item, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="quick-prompt-card"
-                  onClick={() => {
-                    setChatInput(item.prompt);
-                    document.querySelector<HTMLTextAreaElement>('.input-container textarea')?.focus();
-                  }}
-                >
-                  <span>{item.label}</span>
-                  <Lucide.ArrowRight size={16} style={{ opacity: 0.4 }} />
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (() => {
-          const thinkingMsgId = messages.find(m => m.sender === 'assistant' && m.status === 'processing')?.id;
-          return messages.map((msg, index) => {
-            const prevMsg = index > 0 ? messages[index - 1] : null;
-            const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
-            if (msg.sender === 'user') {
-              const isLong = (msg.text || '').length > 260;
-              const isExpanded = !!expandedUserMsgs[msg.id];
-              const displayText =
-                isLong && !isExpanded ? (msg.text || '').slice(0, 240) + '…' : msg.text;
-              return (
-                <div className="msg-row msg-row-user" key={msg.id}>
-                  <div className="msg-user-stack">
-                    <div
-                      className={`msg-user-bubble ${isExpanded ? 'expanded' : ''}`}
-                      onClick={() => {
-                        if (isLong) {
-                          setExpandedUserMsgs((prev) => ({ ...prev, [msg.id]: !prev[msg.id] }));
-                        }
-                      }}
-                      style={{ cursor: isLong ? 'pointer' : 'default' }}
-                    >
-                      <span className="msg-user-text">{displayText}</span>
-                      {msg.status === 'queued' && (
-                        <span className="msg-status-badge queued">排队中</span>
-                      )}
-                    </div>
-                    <div className="msg-user-meta">
-                      <span className="msg-time">{formatTime(msg.timestamp)}</span>
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title="复制"
-                        onClick={() => {
-                          navigator.clipboard.writeText(msg.text || '');
-                        }}
-                      >
-                        <Lucide.Copy size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title="撤回"
-                        onClick={() => {
-                          setChatInput(msg.text || '');
-                          withdrawMessage(wsId, activeSessionId, msg.id);
-                        }}
-                      >
-                        <Lucide.Undo2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            } else {
-              const isThinkingMsg = msg.id === thinkingMsgId;
-              return (
-                <div
-                  className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}`}
-                  key={msg.id}
-                >
-                  {/* 思考：浅色限高可滚；完成后可由用户展开，不强制 open 锁死 */}
-                  {(isThinkingMsg ||
-                    (msg.thinking &&
-                      msg.thinking.trim() &&
-                      msg.thinking !== '正在处理…' &&
-                      msg.thinking !== '正在思考中...')) && (
-                    <details
-                      className={`msg-thinking-fold ${isThinkingMsg ? 'is-live' : ''}`}
-                      key={`think-${msg.id}-${isThinkingMsg ? 'live' : 'done'}`}
-                      open={Boolean(isThinkingMsg) ? true : undefined}
-                    >
-                      <summary className="msg-thinking-fold-sum">
-                        {isThinkingMsg ? (
-                          <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-                        ) : null}
-                        <span className="msg-thinking-fold-label">
-                          {isThinkingMsg ? '思考中' : '思考'}
-                          {isThinkingMsg ? (
-                            <span className="msg-thinking-sec"> · {thinkingSeconds}s</span>
-                          ) : null}
-                        </span>
-                      </summary>
-                      <div className="msg-thinking-fold-body">
-                        {(msg.thinking &&
-                        msg.thinking !== '正在处理…' &&
-                        msg.thinking !== '正在思考中...'
-                          ? msg.thinking
-                          : '…'
-                        ).slice(0, 4000)}
-                      </div>
-                    </details>
-                  )}
-
-                  <div className="msg-assistant-body">
-                    {(() => {
-                      try {
-                        const timeline = buildAssistantTimeline(msg);
-                        if (!timeline.length) {
-                          const fallback = stripThoughtPlaceholders(msg.text || '');
-                          if (!fallback.trim()) return null;
-                          return (
-                            <div className="msg-timeline-text">
-                              <div
-                                className={`msg-assistant-text md-rendered ${isThinkingMsg ? 'is-streaming' : ''}`}
-                                dangerouslySetInnerHTML={{
-                                  __html: parseMarkdownToHtml(fallback),
-                                }}
-                              />
-                            </div>
-                          );
-                        }
-                        const textItems = timeline.filter((i) => i.kind === 'text');
-                        const lastTextKey = textItems.length
-                          ? textItems[textItems.length - 1]!.key
-                          : null;
-                        return timeline.map((item) => {
-                          if (item.kind === 'text') {
-                            const bodyText = stripThoughtPlaceholders(item.content || '');
-                            if (!bodyText.trim()) return null;
-                            const imgs = extractImageRefs(bodyText);
-                            const streaming = isThinkingMsg && item.key === lastTextKey;
-                            return (
-                              <div key={item.key} className="msg-timeline-text">
-                                <div
-                                  className={`msg-assistant-text md-rendered ${streaming ? 'is-streaming' : ''}`}
-                                  dangerouslySetInnerHTML={{
-                                    __html: parseMarkdownToHtml(bodyText),
-                                  }}
-                                />
-                                {imgs.length > 0 && (
-                                  <div className="msg-inline-images">
-                                    {imgs.map((src) => (
-                                      <img key={src} src={src} alt="" className="md-img" loading="lazy" />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          if (!item.items?.length) return null;
-                          return (
-                            <div key={item.key} className="msg-timeline-tools">
-                              {renderToolItems(item.items, msg.id)}
-                            </div>
-                          );
-                        });
-                      } catch (err) {
-                        console.error('[ChatCard] timeline render', err);
-                        const fallback = stripThoughtPlaceholders(msg.text || '');
-                        return fallback ? (
-                          <div className="msg-assistant-text md-rendered">
-                            {fallback}
-                          </div>
-                        ) : null;
-                      }
-                    })()}
-                  </div>
-
-                  {/* 完成态助手消息都显示操作栏（不限最新一条） */}
-                  {!isThinkingMsg && msg.status !== 'processing' && (
-                    <div className="msg-assistant-meta">
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title="复制正文"
-                        onClick={() => {
-                          const text = assistantCopyText(msg);
-                          if (!text.trim()) {
-                            onShowToast('没有可复制的正文');
-                            return;
-                          }
-                          navigator.clipboard.writeText(text);
-                          onShowToast('已复制');
-                        }}
-                      >
-                        <Lucide.Copy size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title="重新生成"
-                        onClick={() => {
-                          const idx = messages.findIndex((m) => m.id === msg.id);
-                          let userText = '';
-                          for (let i = idx - 1; i >= 0; i--) {
-                            if (messages[i].sender === 'user') {
-                              userText = messages[i].text || '';
-                              break;
-                            }
-                          }
-                          if (!userText.trim()) {
-                            onShowToast('没有可重新生成的内容');
-                            return;
-                          }
-                          if (messages.some((m) => m.status === 'processing')) {
-                            onShowToast('请等待当前回复完成');
-                            return;
-                          }
-                          const userMsgId = `user-msg-${Date.now()}`;
-                          useLayoutStore.getState().addMessage(wsId, activeSessionId, {
-                            id: userMsgId,
-                            sender: 'user',
-                            text: userText,
-                            timestamp: Date.now(),
-                            status: 'processing',
-                          });
-                          runStreamingAssistant(userText, userMsgId);
-                          onShowToast('正在重新生成…');
-                        }}
-                      >
-                        <Lucide.RefreshCw size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title="分支继续"
-                        onClick={() => {
-                          const newTitle = `${activeSession?.title || '会话'} - 分支`;
-                          useLayoutStore.getState().branchSession(activeSessionId, newTitle);
-                          onShowToast(`已创建分支：${newTitle}`);
-                        }}
-                      >
-                        <Lucide.GitFork size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-          });
-        })()}
+        <ChatMessageList
+          messages={messages}
+          agents={activeSession?.agents || []}
+          activeSessionId={activeSessionId || ''}
+          thinkingSeconds={thinkingSeconds}
+          showProjectPicker={showProjectPicker}
+          onShowProjectPicker={setShowProjectPicker}
+          onProjectChanged={() => setProjectTick((n) => n + 1)}
+          onSetChatInput={setChatInput}
+          onWithdraw={(msgId, text) => {
+            setChatInput(text);
+            withdrawMessage(wsId, activeSessionId, msgId);
+          }}
+          onRegenerate={(userText) => {
+            const userMsgId = `user-msg-${Date.now()}`;
+            useLayoutStore.getState().addMessage(wsId, activeSessionId, {
+              id: userMsgId,
+              sender: 'user',
+              text: userText,
+              timestamp: Date.now(),
+              status: 'processing',
+            });
+            runStreamingAssistant(userText, userMsgId);
+            onShowToast('正在重新生成…');
+          }}
+          onBranch={() => {
+            const newTitle = `${activeSession?.title || '会话'} - 分支`;
+            useLayoutStore.getState().branchSession(activeSessionId, newTitle);
+            onShowToast(`已创建分支：${newTitle}`);
+          }}
+          onShowToast={onShowToast}
+          approvalBusy={approvalBusy}
+          pendingApprovalMsgId={pendingApprovalMsgId}
+          onOpenDiff={openDiffInRightPanel}
+          onOpenPath={openPathInFilesPanel}
+          onOpenTerminal={() => openSidePanel('terminal')}
+          onApprovalAllow={handleApprovalAllow}
+          onApprovalDeny={handleApprovalDeny}
+        />
       </div>
 
       <div className="chat-footer">

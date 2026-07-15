@@ -1,0 +1,322 @@
+/* --- Dark theme component corrections ---
+ * Prefer CSS variables (tokens.css). Use !important only when a later
+ * component rule also uses !important, or an equal-specificity conflict remains.
+ * Selectors are moved from index.css; do not rename component classes.
+ */
+
+html[data-theme="dark"] body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* 壳层表面统一跟主题变量（覆盖历史硬编码白底）
+ * html[data-theme] 特异性已高于 .class；仅 flat-layout 等处有 !important 时才保留 */
+html[data-theme="dark"] .app-header,
+html[data-theme="dark"] .card-header,
+html[data-theme="dark"] .workspace-card,
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .crish-sidebar,
+html[data-theme="dark"] .app-container,
+html[data-theme="dark"] .workspace-canvas,
+html[data-theme="dark"] .card-body,
+html[data-theme="dark"] .settings-overlay,
+html[data-theme="dark"] .settings-cover,
+html[data-theme="dark"] .settings-panel,
+html[data-theme="dark"] .input-container,
+html[data-theme="dark"] .composer-shell,
+html[data-theme="dark"] .msg-bubble,
+html[data-theme="dark"] .panel-dropdown,
+html[data-theme="dark"] .pp-menu,
+html[data-theme="dark"] .cplus-main,
+html[data-theme="dark"] .cplus-flyout {
+  background-color: var(--bg-primary);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* flat-layout / chat 壳层在 index 内有 background !important，需对等覆盖 */
+html[data-theme="dark"] .workspace-card.flat-layout,
+html[data-theme="dark"] .workspace-card.flat-layout .card-body,
+html[data-theme="dark"] .workspace-card.flat-layout .card-header,
+html[data-theme="dark"] .chat-body,
+html[data-theme="dark"] .chat-doc-flow,
+html[data-theme="dark"] .chat-footer,
+html[data-theme="dark"] .breadcrumb-item {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .workspace-column,
+html[data-theme="dark"] .main-content,
+html[data-theme="dark"] .chat-flow {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .search-bar {
+  background-color: var(--bg-tertiary);
+}
+
+html[data-theme="dark"] .search-bar:focus-within {
+  background-color: var(--bg-hover);
+  border-color: var(--border-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+html[data-theme="dark"] .search-bar input {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+html[data-theme="dark"] .session-item,
+html[data-theme="dark"] .card-tab,
+html[data-theme="dark"] .header-btn {
+  color: var(--text-secondary);
+}
+
+/* Quiet active wins in .crish-sidebar; do not force !important on sessions */
+html[data-theme="dark"] .card-tab.active {
+  background-color: var(--bg-active) !important;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .tool-result-body {
+  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+}
+
+html[data-theme="dark"] .crish-sidebar .session-item.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .session-agent-item.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Settings surfaces — avoid white islands */
+html[data-theme="dark"] .settings-field-input,
+html[data-theme="dark"] textarea.settings-field-input,
+html[data-theme="dark"] select.settings-field-input {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+html[data-theme="dark"] .settings-card-row {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .settings-card-row.is-active {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+
+html[data-theme="dark"] .shortcut-key-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+/* .shortcut-key-btn.recording 在 index 使用 !important，需对等 */
+html[data-theme="dark"] .shortcut-key-btn.recording {
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
+}
+
+/* settings buttons 在 index 有 border !important */
+html[data-theme="dark"] .settings-btn-primary,
+html[data-theme="dark"] .settings-btn-secondary,
+html[data-theme="dark"] .settings-btn-flat {
+  border-color: var(--border-color) !important;
+}
+
+html[data-theme="dark"] .custom-modal-backdrop > div {
+  background: var(--bg-elevated);
+  border-color: var(--border-color);
+}
+
+/* Unified form / segment surfaces
+ * 与上方 settings-card-row 细调并存：此处 tertiary 覆盖用于 form 群组统一 */
+html[data-theme="dark"] .settings-card-row,
+html[data-theme="dark"] .settings-field-input,
+html[data-theme="dark"] textarea.settings-field-input,
+html[data-theme="dark"] select.settings-field-input,
+html[data-theme="dark"] .ui-input,
+html[data-theme="dark"] .chat-soft-hint,
+html[data-theme="dark"] .search-bar,
+html[data-theme="dark"] .ui-segment {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+html[data-theme="dark"] .settings-card-row.is-active {
+  background-color: var(--bg-active);
+}
+
+html[data-theme="dark"] .ui-segment-item.active {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .ui-badge {
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .settings-field-input:focus,
+html[data-theme="dark"] .ui-input:focus,
+html[data-theme="dark"] .search-bar:focus-within {
+  background-color: var(--bg-elevated);
+  border-color: var(--text-tertiary);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .status-badge.available,
+html[data-theme="dark"] .status-badge.unconfigured,
+html[data-theme="dark"] .model-chip,
+html[data-theme="dark"] .model-chip.on {
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+html[data-theme="dark"] .crish-sidebar {
+  background: var(--bg-secondary);
+}
+
+html[data-theme="dark"] .sb-new-btn {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .msg-assistant-text,
+html[data-theme="dark"] .msg-assistant-text p,
+html[data-theme="dark"] .chat-doc-flow p {
+  color: var(--text-primary);
+}
+
+/* assistant code 在 index 使用 background !important */
+html[data-theme="dark"] .msg-assistant-text code,
+html[data-theme="dark"] .chat-doc-flow p code,
+html[data-theme="dark"] .msg-assistant-text pre {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] table,
+html[data-theme="dark"] th,
+html[data-theme="dark"] td {
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: transparent;
+}
+
+html[data-theme="dark"] th {
+  background: var(--bg-tertiary);
+}
+
+html[data-theme="dark"] .settings-back-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+/* settings cover 壳层：index 内有 background !important 的扁平化规则 */
+html[data-theme="dark"] .settings-cover,
+html[data-theme="dark"] .settings-panel--cover,
+html[data-theme="dark"] .settings-cover-header,
+html[data-theme="dark"] .settings-cover-content {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .settings-cover-nav {
+  background: var(--bg-primary) !important;
+}
+
+/* pp-menu / menus 在 index 使用 background !important */
+html[data-theme="dark"] .settings-select-menu {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .settings-select-trigger {
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle) !important;
+}
+
+html[data-theme="dark"] .settings-select.is-open .settings-select-trigger {
+  border-color: var(--border-color) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .sb-quick-menu {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+html[data-theme="dark"] .settings-switch,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"] {
+  /* 关态轨偏浅，与深色底可区分又不过曝 */
+  background: #6a6a6a;
+}
+
+html[data-theme="dark"] .settings-switch:checked,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
+  background: var(--accent-green);
+}
+
+html[data-theme="dark"] .settings-switch::after,
+html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]::after {
+  background: #f5f5f5;
+}
+
+html[data-theme="dark"] .settings-select-item.is-active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/* highlight.js dark accents */
+html[data-theme="dark"] .hljs-keyword,
+html[data-theme="dark"] .hljs-selector-tag,
+html[data-theme="dark"] .hljs-literal {
+  color: #a78bfa;
+}
+
+html[data-theme="dark"] .hljs-string {
+  color: #5eead4;
+}
+
+html[data-theme="dark"] .hljs-number {
+  color: #fdba74;
+}
+
+html[data-theme="dark"] .hljs-title,
+html[data-theme="dark"] .hljs-name {
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .hljs-built_in {
+  color: #fde047;
+}
+
+html[data-theme="dark"] .hljs-attr {
+  color: #f9a8d4;
+}

@@ -4,6 +4,7 @@
  */
 
 import { getWorkspacePath } from './projectStore';
+import { invokeResult } from './tauriInvoke';
 
 export type FsDirEntry = {
   name: string;
@@ -19,48 +20,6 @@ export type FsReadResult = {
   truncated: boolean;
   path: string;
 };
-
-type InvokeResult<T> =
-  | { status: 'ok'; data: T }
-  | { status: 'missing' }
-  | { status: 'error'; message: string };
-
-function formatInvokeError(err: unknown): string {
-  if (err == null) return '未知错误';
-  if (typeof err === 'string') return err;
-  if (typeof err === 'object') {
-    const o = err as Record<string, unknown>;
-    if (typeof o.message === 'string') return o.message;
-    if (typeof o.code === 'string' && typeof o.message === 'string') {
-      return `${o.message} (${o.code})`;
-    }
-    try {
-      return JSON.stringify(err);
-    } catch {
-      return String(err);
-    }
-  }
-  return String(err);
-}
-
-async function invokeCmd<T = unknown>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<InvokeResult<T>> {
-  try {
-    const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (!mod?.invoke) return { status: 'missing' };
-    const data = (await mod.invoke(cmd, args)) as T;
-    return { status: 'ok', data };
-  } catch (err) {
-    // 命令未注册时通常也是 reject；区分 missing 与业务错误靠文案
-    const msg = formatInvokeError(err);
-    if (/not allowed|command .* not found|unknown command|not implemented/i.test(msg)) {
-      return { status: 'missing' };
-    }
-    return { status: 'error', message: msg };
-  }
-}
 
 function joinPath(base: string, name: string): string {
   if (!base) return name;
@@ -115,7 +74,7 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   const path = resolveWorkspacePath(dirPath || root);
   if (!path) throw new Error('未打开项目工作区，请先选择项目');
 
-  const res = await invokeCmd<{ items?: Array<Record<string, unknown>> }>('list_directory', {
+  const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>('list_directory', {
     path,
     workspaceRoot: workspaceRootArg(),
   });
@@ -140,7 +99,7 @@ export async function readTextFile(
   if (!filePath) throw new Error('路径为空');
   const path = resolveWorkspacePath(filePath);
 
-  const res = await invokeCmd<{
+  const res = await invokeResult<{
     content?: string;
     lineCount?: number;
     line_count?: number;
@@ -169,7 +128,7 @@ export async function readTextFile(
 
 export async function writeTextFile(filePath: string, content: string): Promise<void> {
   const path = resolveWorkspacePath(filePath);
-  const res = await invokeCmd('write_file_content', {
+  const res = await invokeResult('write_file_content', {
     path,
     content,
     workspaceRoot: workspaceRootArg(),
@@ -196,7 +155,7 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
 
 /** 在系统资源管理器中显示 */
 export async function revealInOs(filePath: string): Promise<void> {
-  const res = await invokeCmd('workbench_open_host_target', {
+  const res = await invokeResult('workbench_open_host_target', {
     openerId: 'system-file-manager',
     target: { type: 'path', path: filePath },
   });

@@ -6,6 +6,7 @@ import { getWorkspacePath } from './projectStore';
 import { getDesktopDaemonClient } from './daemonClient';
 import { parseUnifiedDiffs } from './toolFeedback';
 import type { FileDiff } from '../store/layoutStore';
+import { invokeCmd } from './tauriInvoke';
 
 export type GitFileStatusCode = 'A' | 'M' | 'D' | 'U' | 'R' | 'C' | '?' | '!' | 'mixed' | string;
 
@@ -31,19 +32,6 @@ export type GitStatusResult = {
   conflictedCount?: number;
   reason?: string;
 };
-
-async function invokeCmd<T = unknown>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T | null> {
-  try {
-    const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (!mod?.invoke) return null;
-    return (await mod.invoke(cmd, args)) as T;
-  } catch {
-    return null;
-  }
-}
 
 function asStatusFile(raw: unknown): GitStatusFile | null {
   if (!raw || typeof raw !== 'object') return null;

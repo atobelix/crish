@@ -3,6 +3,8 @@
  * 展示在运行状态；点击后在终端面板展开详情。
  */
 
+import { invokeCmd } from './tauriInvoke';
+
 export type BackgroundTaskInfo = {
   id: string;
   label: string;
@@ -11,16 +13,6 @@ export type BackgroundTaskInfo = {
   startedAt?: number;
   summary?: string;
 };
-
-async function invokeCmd<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  try {
-    const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (!mod?.invoke) return null;
-    return (await mod.invoke(cmd, args)) as T;
-  } catch {
-    return null;
-  }
-}
 
 function asTask(raw: Record<string, unknown>): BackgroundTaskInfo | null {
   const id = String(raw.id ?? raw.taskId ?? raw.task_id ?? '');

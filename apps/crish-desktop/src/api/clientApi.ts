@@ -1,3 +1,14 @@
+/**
+ * clientApi — localStorage-backed client preferences + demo-only mocks.
+ *
+ * 正式路径约定（勿走死轨）：
+ * - 勿用 getProviders / fetchLatestModels / updateProvider*（正式模型用 providerProfiles + ModelsSettingsTab）
+ * - 正式 MCP 用 mcpApi（本文件 getMcpServers* 仅为 demo/legacy localStorage）
+ * - Settings（getSettings / updateSettings / getSettingsEx / saveSettingsEx）仍为正式路径，SettingsPanel 在用
+ * - 正式 telemetry / scheduled tasks 不在此发明假数据；见下方 DEAD / HONEST-HIDE
+ *
+ * 兼容：`export const piClientApi = clientApi`（勿再新建 piClientApi.ts）
+ */
 import { isDemoMode } from './appMode';
 
 export interface CompactionSettings {
@@ -415,18 +426,18 @@ export const clientApi = {
     };
   },
 
-  // Providers & Keys Management (legacy localStorage mock — formal path uses providerProfiles)
-  /** @deprecated use providerProfiles */
+  // Providers & Keys — DEAD for formal path (use providerProfiles). Demo-only mock below.
+  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   getProviders: async (): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
+    if (!isDemoMode()) return []; // HONEST-HIDE formal
     initDb();
     await new Promise(resolve => setTimeout(resolve, 100));
     return JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
   },
 
-  /** @deprecated use providerProfiles */
+  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderKey: async (id: string, apiKey: string): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
+    if (!isDemoMode()) return []; // HONEST-HIDE formal
     initDb();
     await new Promise(resolve => setTimeout(resolve, 150));
     const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
@@ -435,9 +446,9 @@ export const clientApi = {
     return updated;
   },
 
-  /** @deprecated use providerProfiles */
+  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderModels: async (id: string, models: string[]): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
+    if (!isDemoMode()) return []; // HONEST-HIDE formal
     initDb();
     await new Promise(resolve => setTimeout(resolve, 150));
     const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
@@ -446,10 +457,9 @@ export const clientApi = {
     return updated;
   },
 
-  /** @deprecated use providerProfiles */
+  /** @deprecated DEAD formal — use providerProfiles / ModelsSettingsTab. HONEST-HIDE: formal returns []. */
   fetchLatestModels: async (id: string): Promise<string[]> => {
-    // Formal edition: no fake model catalog; ModelsSettingsTab + providerProfiles own config
-    if (!isDemoMode()) return [];
+    if (!isDemoMode()) return []; // HONEST-HIDE formal — no fake model catalog
     await new Promise(resolve => setTimeout(resolve, 800)); // 模拟网络延迟
     if (id === 'google') {
       return ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-thinking', 'gemini-2.0-pro-exp', 'gemini-2.5-flash', 'gemini-2.5-pro'];
@@ -465,8 +475,10 @@ export const clientApi = {
     return ['custom-model-v1', 'custom-model-v2'];
   },
 
-  // Cron / Scheduled Tasks Management
+  // Cron / Scheduled Tasks — formal: no invented cron list (demo may use localStorage)
+  /** HONEST-HIDE formal: returns []. Demo only reads localStorage mock. */
   getScheduledTasks: async (): Promise<CronJob[]> => {
+    if (!isDemoMode()) return []; // HONEST-HIDE formal
     initDb();
     await new Promise(resolve => setTimeout(resolve, 120));
     return JSON.parse(lsGet(CRON_KEY, CRON_KEY_LEGACY)!);
