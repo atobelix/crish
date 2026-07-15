@@ -163,6 +163,12 @@ export class DaemonServer {
       mcpStartupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs,
       startRun: (request) => this.startDurableRun(request),
       cancelRun: (runId, reason) => this.orchestrator.cancelRun(runId, reason),
+      steerRun: (runId, message) => this.orchestrator.steerRun(runId, message),
+      isRunActive: (runId) => this.orchestrator.isRunActive(runId),
+      getRunStatus: (runId) => {
+        const run = this.orchestrator.getRun(runId);
+        return run ? { status: run.status } : undefined;
+      },
     });
     if (this.pendingProviderFactory) {
       this.runtimeFactory.setProviderFactory(this.pendingProviderFactory);

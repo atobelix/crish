@@ -64,6 +64,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     y: number;
     sessionId: string;
   } | null>(null);
+  const [agentMenu, setAgentMenu] = useState<{
+    x: number;
+    y: number;
+    sessionId: string;
+    agentId: string;
+  } | null>(null);
 
   const [_collapsedFolders, _setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [activeNav, setActiveNav] = useState('chat');
@@ -101,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const handleOutsideClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
+        setAgentMenu(null);
       }
       if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
         const sortBtn = (e.target as HTMLElement).closest('.sort-btn');
@@ -112,6 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, []);
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
+    setAgentMenu(null);
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
   };
@@ -376,10 +384,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     e.stopPropagation();
                     setActiveSessionId(s.id);
                     setPanelAgentId(ag.id);
-                    // 右侧打开依赖工作区已有 agent 卡；由 CardPanel 全局 tab 逻辑补
                     window.dispatchEvent(
                       new CustomEvent('crish-open-agent-panel', { detail: { agentId: ag.id } }),
                     );
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    setAgentMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      sessionId: s.id,
+                      agentId: ag.id,
+                    });
                   }}
                 >
                   <Lucide.Bot size={11} className="session-agent-icon" />
@@ -572,6 +590,82 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onPointerDown={handleSidebarResizeStart}
         style={{ touchAction: 'none' }}
       />
+
+      {agentMenu && (
+        <div
+          ref={menuRef}
+          className="context-menu open"
+          style={{ left: agentMenu.x, top: agentMenu.y, position: 'fixed', zIndex: 9999 }}
+        >
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              setActiveSessionId(agentMenu.sessionId);
+              setActiveAgentId(agentMenu.agentId);
+              setAgentMenu(null);
+            }}
+          >
+            <Lucide.MessageSquare size={13} />
+            <span>在主区打开</span>
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              setActiveSessionId(agentMenu.sessionId);
+              setPanelAgentId(agentMenu.agentId);
+              window.dispatchEvent(
+                new CustomEvent('crish-open-agent-panel', {
+                  detail: { agentId: agentMenu.agentId },
+                }),
+              );
+              setAgentMenu(null);
+            }}
+          >
+            <Lucide.PanelRight size={13} />
+            <span>在右侧打开</span>
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              const ag = sessions
+                .find((s) => s.id === agentMenu.sessionId)
+                ?.agents?.find((a) => a.id === agentMenu.agentId);
+              if (ag) {
+                void import('./AgentCard').then(({ openAgentInNewWindow }) => {
+                  openAgentInNewWindow(ag);
+                });
+              }
+              setAgentMenu(null);
+            }}
+          >
+            <Lucide.ExternalLink size={13} />
+            <span>新窗口打开</span>
+          </button>
+          <div className="context-menu-divider" />
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              const ag = sessions
+                .find((s) => s.id === agentMenu.sessionId)
+                ?.agents?.find((a) => a.id === agentMenu.agentId);
+              if (ag) {
+                void navigator.clipboard.writeText(
+                  `${ag.description}\n${ag.summary || ''}\nrun:${ag.subagentRunId}`,
+                );
+                onShowToast('已复制 agent 摘要');
+              }
+              setAgentMenu(null);
+            }}
+          >
+            <Lucide.Copy size={13} />
+            <span>复制摘要</span>
+          </button>
+        </div>
+      )}
 
       {contextMenu && (
         <div

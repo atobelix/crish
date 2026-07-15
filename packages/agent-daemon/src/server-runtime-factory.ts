@@ -115,6 +115,11 @@ interface DaemonRuntimeFactoryOptions {
   mcpStartupGateTimeoutMs?: number;
   startRun(request: StartRunRequest): Promise<OrchestratorRunHandle>;
   cancelRun(runId: string, reason?: string): boolean;
+  /** 向活跃 run 注入 steer 消息；返回是否被接受 */
+  steerRun?(runId: string, message: string): boolean;
+  /** 查询 run 是否仍在跑 */
+  isRunActive?(runId: string): boolean;
+  getRunStatus?(runId: string): { status: string } | undefined;
 }
 
 /**
@@ -313,20 +318,30 @@ export class DaemonRuntimeFactory {
   }
 
   sendToSubagent(subagentRunId: string, message: string): boolean {
-    // Subagent messaging is handled through the orchestrator's run engine
-    // The bridge is created per-run, so we delegate through the active runs
-    throw new DaemonUnsupportedCapabilityError(
-      "subagent",
-      "Subagent message sending is not supported by the daemon protocol yet"
-    );
+    const text = message.trim();
+    if (!text) return false;
+    if (!this.options.steerRun) {
+      throw new DaemonUnsupportedCapabilityError(
+        "subagent",
+        "Subagent steer is not wired (missing steerRun on runtime factory)",
+      );
+    }
+    return this.options.steerRun(subagentRunId, text);
   }
 
-  getSubagentStatus(subagentRunId: string): { status: string; progress?: string; latestError?: string } {
-    // Subagent status is tracked within the parent run's snapshot
-    throw new DaemonUnsupportedCapabilityError(
-      "subagent",
-      `Subagent status query is not supported by the daemon protocol yet: ${subagentRunId}`
-    );
+  getSubagentStatus(subagentRunId: string): {
+    status: string;
+    progress?: string;
+    latestError?: string;
+  } {
+    if (this.options.isRunActive?.(subagentRunId)) {
+      return { status: "running", progress: "active" };
+    }
+    const rec = this.options.getRunStatus?.(subagentRunId);
+    if (rec) {
+      return { status: rec.status };
+    }
+    return { status: "unknown" };
   }
 
   startMcpServer(serverId: string): { state: string } {

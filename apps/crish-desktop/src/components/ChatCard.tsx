@@ -56,6 +56,12 @@ import {
   permissionModeMeta,
   type PermissionMode,
 } from '../api/permissionModes';
+import {
+  buildCollaboratorPrompt,
+  COLLABORATOR_MODES,
+  streamCollaboratorRun,
+  type CollaboratorMode,
+} from '../api/subagentApi';
 
 interface ChatCardProps {
   wsId: string;
@@ -116,6 +122,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
   const [approvalBusy, setApprovalBusy] = useState(false);
+  const [showSpawnCollab, setShowSpawnCollab] = useState(false);
+  const [collabMode, setCollabMode] = useState<CollaboratorMode>('research');
+  const [collabDesc, setCollabDesc] = useState('');
+  const [collabTask, setCollabTask] = useState('');
+  const [collabBusy, setCollabBusy] = useState(false);
 
   const modelChoices = flattenModelChoices();
   const activeProject = getActiveProject();
@@ -1082,6 +1093,114 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     handleGlobalTabClick('agent');
   };
 
+  const handleSpawnCollaborator = () => {
+    const sid = activeSessionId || useLayoutStore.getState().createSession({ title: '新会话' });
+    if (!sid) return;
+    const task = collabTask.trim();
+    if (!task) {
+      onShowToast('请填写协作任务');
+      return;
+    }
+    const desc = collabDesc.trim() || COLLABORATOR_MODES.find((m) => m.id === collabMode)?.label || '协作者';
+    const agentId = `collab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    setCollabBusy(true);
+    upsertSessionAgent(sid, {
+      id: agentId,
+      subagentRunId: '',
+      parentSessionId: sid,
+      parentRunId: '',
+      description: desc,
+      mode: collabMode,
+      status: 'running',
+      messages: [
+        {
+          id: `agent-user-${Date.now()}`,
+          sender: 'user',
+          text: task,
+          timestamp: Date.now(),
+          status: 'completed',
+        },
+      ],
+      startedAt: Date.now(),
+    });
+    setShowSpawnCollab(false);
+    setCollabTask('');
+    setActiveAgentId(agentId);
+
+    const prompt = buildCollaboratorPrompt({
+      mode: collabMode,
+      description: desc,
+      task,
+      parentSessionTitle: sessions.find((s) => s.id === sid)?.title,
+    });
+    const asstId = `agent-asst-${Date.now().toString(36)}`;
+    useLayoutStore.getState().appendSessionAgentMessage(sid, agentId, {
+      id: asstId,
+      sender: 'assistant',
+      text: '',
+      thinking: '正在处理…',
+      timestamp: Date.now(),
+      status: 'processing',
+      toolCalls: [],
+      blocks: [],
+    });
+
+    const patchAsst = (fn: (m: import('../store/layoutStore').SessionMessage) => void) => {
+      useLayoutStore.setState((state) => {
+        const ag = state.sessions.find((s) => s.id === sid)?.agents?.find((a) => a.id === agentId);
+        const m = ag?.messages?.find((x) => x.id === asstId);
+        if (m) fn(m);
+      });
+    };
+
+    const cancel = streamCollaboratorRun(prompt, agentId, {
+      onRunMeta: ({ runId }) => {
+        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
+          subagentRunId: runId,
+          parentRunId: runId,
+          status: 'running',
+        });
+      },
+      onThought: (t) => patchAsst((m) => { m.thinking = t; }),
+      onChunk: (c) => patchAsst((m) => { m.text = c; if (m.thinking === '正在处理…') m.thinking = ''; }),
+      onToolStart: (toolId, name, args, explanation) => {
+        patchAsst((m) => {
+          if (!m.toolCalls) m.toolCalls = [];
+          if (!m.blocks) m.blocks = [];
+          if (!m.toolCalls.some((t) => t.id === toolId)) {
+            m.toolCalls.push({ id: toolId, name, arguments: args, explanation, status: 'running' });
+            m.blocks.push({ type: 'tool_call', id: toolId });
+          }
+        });
+      },
+      onToolSuccess: (toolId, output) => {
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (tc) { tc.status = 'success'; tc.output = output || '完成'; }
+        });
+      },
+      onToolError: (toolId, error) => {
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (tc) { tc.status = 'error'; tc.output = error || '失败'; }
+        });
+      },
+      onComplete: () => {
+        patchAsst((m) => {
+          m.status = 'completed';
+          if (m.thinking === '正在处理…') m.thinking = '';
+        });
+        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
+          status: 'completed',
+          endedAt: Date.now(),
+        });
+        setCollabBusy(false);
+      },
+    });
+    void cancel;
+    onShowToast(`已拉起协作者：${desc}`);
+  };
+
   return (
     <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
       {activeAgent ? (
@@ -1615,6 +1734,66 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           className="input-container"
           style={{ position: 'relative', display: activeAgent ? 'none' : undefined }}
         >
+          {showSpawnCollab && (
+            <div className="collab-spawn-popover" role="dialog" aria-label="拉起协作者">
+              <div className="collab-spawn-head">
+                <Lucide.Bot size={14} />
+                <strong>拉起协作者</strong>
+                <button type="button" className="agent-card-btn" onClick={() => setShowSpawnCollab(false)}>
+                  <Lucide.X size={13} />
+                </button>
+              </div>
+              <p className="collab-spawn-desc">
+                在独立会话中启动协作 agent，结果出现在侧栏本对话下方；与主对话并行不抢上下文。
+              </p>
+              <label className="collab-field">
+                <span>模式</span>
+                <div className="collab-mode-row">
+                  {COLLABORATOR_MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`collab-mode-chip ${collabMode === m.id ? 'active' : ''}`}
+                      onClick={() => setCollabMode(m.id)}
+                      title={m.hint}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="collab-field">
+                <span>名称</span>
+                <input
+                  value={collabDesc}
+                  onChange={(e) => setCollabDesc(e.target.value)}
+                  placeholder="例如：读权限模块"
+                />
+              </label>
+              <label className="collab-field">
+                <span>任务</span>
+                <textarea
+                  rows={3}
+                  value={collabTask}
+                  onChange={(e) => setCollabTask(e.target.value)}
+                  placeholder="写清楚要协作完成的事…"
+                />
+              </label>
+              <div className="collab-spawn-actions">
+                <button type="button" className="collab-btn ghost" onClick={() => setShowSpawnCollab(false)}>
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="collab-btn primary"
+                  disabled={collabBusy || !collabTask.trim()}
+                  onClick={handleSpawnCollaborator}
+                >
+                  {collabBusy ? '启动中…' : '开始协作'}
+                </button>
+              </div>
+            </div>
+          )}
           {slashMenuOpen && filteredCommands.length > 0 && (
             <div
               className="slash-commands-popover"
@@ -1849,6 +2028,14 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               onClick={() => fileInputRef.current?.click()}
             >
               <Lucide.Plus size={14} />
+            </button>
+            <button
+              type="button"
+              className="plus-btn collab-spawn-btn"
+              title="拉起协作者（并行 agent）"
+              onClick={() => setShowSpawnCollab((v) => !v)}
+            >
+              <Lucide.Bot size={14} />
             </button>
           </div>
           <div className="right-actions">

@@ -584,10 +584,18 @@ describe("AgentOrchestrator", () => {
       createRunEngine: () => engine
     });
 
+    expect(orchestrator.steerRun("missing", "hello")).toBe(false);
+    expect(orchestrator.isRunActive("missing")).toBe(false);
+
     const handle = await orchestrator.startRun({ id: "run_c", sessionId: "session_c", cwd: "C:/tmp", input: "hello" });
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
+
+    expect(orchestrator.isRunActive("run_c")).toBe(true);
+    expect(orchestrator.steerRun("run_c", "nudge")).toBe(true);
+    expect(engine.steered).toHaveLength(1);
+    expect(engine.steered[0]?.blocks?.[0]).toMatchObject({ type: "text", text: "nudge" });
 
     expect(orchestrator.cancelRun("run_c")).toBe(true);
     engine.release();
@@ -1104,6 +1112,7 @@ class RecordingRunEngine extends FakeRunEngine {
 
 class BlockingRunEngine {
   abortReason?: string;
+  steered: AgentMessage[] = [];
   private releaseRun!: () => void;
   private readonly released = new Promise<void>((resolve) => {
     this.releaseRun = resolve;
@@ -1118,7 +1127,9 @@ class BlockingRunEngine {
     this.abortReason = reason;
   }
 
-  enqueueSteerInput(_message: AgentMessage): void {}
+  enqueueSteerInput(message: AgentMessage): void {
+    this.steered.push(message);
+  }
 
   release(): void {
     this.releaseRun();

@@ -312,6 +312,32 @@ export class AgentOrchestrator {
     return true;
   }
 
+  /**
+   * 向正在运行的 run 注入用户消息（steer）。
+   * 供子 agent 续聊：send-to-subagent → 此处 enqueueSteerInput。
+   */
+  steerRun(runId: string, text: string): boolean {
+    const active = this.activeRuns.get(runId);
+    if (!active?.engine) return false;
+    if (isTerminalRunStatus(active.run.status)) return false;
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    const message: AgentMessage = {
+      id: this.createId("user"),
+      role: "user",
+      createdAt: this.now(),
+      blocks: [{ type: "text", text: trimmed }],
+    };
+    active.engine.enqueueSteerInput(message);
+    return true;
+  }
+
+  /** 活跃 run 是否存在（含 engine） */
+  isRunActive(runId: string): boolean {
+    const active = this.activeRuns.get(runId);
+    return Boolean(active?.engine && !isTerminalRunStatus(active.run.status));
+  }
+
   async readSessionEvents(sessionId: string, afterSequence?: number, options?: OrchestratorEventReadOptions): Promise<OrchestratorEvent[]> {
     return this.eventStore.readSession(sessionId, afterSequence, options);
   }
