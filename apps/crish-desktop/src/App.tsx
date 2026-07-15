@@ -137,8 +137,13 @@ function App() {
         });
       }
     });
+    // 防止引擎长时间不可达时整窗空白：超时后仍进入主界面（引擎保持后台重连）
+    const gateTimer = window.setTimeout(() => {
+      setEngineReady(true);
+    }, productShell ? 12_000 : 0);
     return () => {
       unsub();
+      window.clearTimeout(gateTimer);
     };
   }, [productShell]);
 
