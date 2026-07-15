@@ -13,6 +13,10 @@ import {
   type GitStatusResult,
 } from '../api/gitApi';
 import { getWorkspacePath } from '../api/projectStore';
+import {
+  markLayoutCustomizedThisSession,
+  saveLayoutForProject,
+} from '../api/workspaceLayoutStore';
 import { toolHumanLabel } from '../api/toolPresentation';
 
 type Props = {
@@ -165,6 +169,23 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
   const fileCount = Math.max(gitFiles.length, convoFiles.length);
   const wsPath = getWorkspacePath();
 
+  const handleSaveLayout = () => {
+    const path = getWorkspacePath();
+    if (!path) {
+      onShowToast?.('请先打开项目后再保存布局');
+      return;
+    }
+    const st = useLayoutStore.getState();
+    const ws = st.workspaces[st.activeWorkspaceIndex];
+    if (!ws) {
+      onShowToast?.('当前无工作区可保存');
+      return;
+    }
+    const ok = saveLayoutForProject(path, ws);
+    if (ok) markLayoutCustomizedThisSession(path);
+    onShowToast?.(ok ? '布局已保存到本项目' : '布局保存失败');
+  };
+
   return (
     <div className="overview-card">
       <div className="overview-head">
@@ -182,6 +203,15 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
             {git?.found && git.branch ? ` · ${git.branch}` : ''}
           </div>
         </div>
+        <button
+          type="button"
+          className="overview-chip"
+          title="将当前分栏/标签布局保存到本项目"
+          onClick={handleSaveLayout}
+        >
+          <Lucide.LayoutPanelLeft size={13} strokeWidth={1.75} style={{ marginRight: 4 }} />
+          保存布局
+        </button>
       </div>
 
       <section className="overview-sec">
@@ -198,34 +228,47 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
         </button>
         {openSec.plan ? (
           <div className="overview-sec-b">
-            {planModeEnabled ? (
+            {(planModeEnabled || permissionMode === 'plan') ? (
               <div className="overview-plan-banner">
                 <div className="overview-plan-banner-t">
-                  当前为<strong>计划模式</strong>：只读分析，不改项目文件。
+                  计划模式：AI 只规划不改文件。审阅后可批准执行。
                 </div>
                 <div className="overview-plan-actions">
                   <button
                     type="button"
-                    className={`overview-chip ${planApproved ? 'active' : ''}`}
+                    className="overview-chip"
                     onClick={() => {
-                      setPlanApproved(!planApproved);
-                      onShowToast?.(
-                        planApproved ? '已取消计划确认' : '已标记计划确认（演示进度）',
-                      );
+                      onShowToast?.('继续计划：仍只规划不改文件');
                     }}
                   >
-                    {planApproved ? '已确认计划' : '确认计划'}
+                    继续计划
                   </button>
                   <button
                     type="button"
-                    className="overview-chip"
+                    className={`overview-chip ${planApproved ? 'active' : ''}`}
                     onClick={() => {
                       useLayoutStore.getState().setPermissionMode('ask');
-                      onShowToast?.('已切回需确认模式');
+                      setPlanApproved(true);
+                      onShowToast?.('已批准执行，已切回需确认模式');
                     }}
                   >
-                    退出计划模式
+                    批准执行
                   </button>
+                </div>
+              </div>
+            ) : null}
+
+            {(planModeEnabled || permissionMode === 'plan' || planApproved) ? (
+              <div className="overview-plan-status">
+                <div className="overview-plan-status-label">当前计划状态</div>
+                <div className="overview-plan-status-row">
+                  <span className={`overview-plan-status-dot ${planApproved ? 'is-yes' : ''}`} />
+                  <span>{planApproved ? '已批准' : '未批准'}</span>
+                  {planModeEnabled || permissionMode === 'plan' ? (
+                    <span className="overview-plan-status-meta">· 计划模式中</span>
+                  ) : planApproved ? (
+                    <span className="overview-plan-status-meta">· 可执行</span>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -256,7 +299,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
               </ul>
             ) : (
               <p className="overview-empty">
-                {planModeEnabled
+                {planModeEnabled || permissionMode === 'plan'
                   ? '计划模式下暂无工具步骤；可在对话中让助手拆解任务。'
                   : '暂无进行中的步骤；工具调用会出现在这里。'}
               </p>

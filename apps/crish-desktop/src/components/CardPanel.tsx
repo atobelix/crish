@@ -6,7 +6,7 @@ import { RuntimePanel } from './RuntimePanel';
 import { ChatCard } from './ChatCard';
 import { PreviewCard } from './PreviewCard';
 import { DiffCard } from './DiffCard';
-import { TasksCard } from './TasksCard';
+import { TasksCard, useSuggestOpenTasksOnChecklist } from './TasksCard';
 import { TerminalCard } from './TerminalCard';
 import { AgentCard } from './AgentCard';
 import { FilesCard } from './FilesCard';
@@ -48,7 +48,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
-  // 文件 / 终端：仍用未迁入 UiEventMap 的裸事件；总览走类型化总线
+  // 文件 / 终端：仍用未迁入 UiEventMap 的裸事件；总览/任务走类型化总线
   React.useEffect(() => {
     const onOpenFile = () => {
       handleGlobalTabClick('files');
@@ -61,13 +61,21 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
     const offOverview = onUiEvent('open-overview', () => {
       handleGlobalTabClick('overview');
     });
+    const offTasks = onUiEvent('open-tasks', () => {
+      handleGlobalTabClick('tasks');
+    });
     return () => {
       window.removeEventListener('crish-open-file', onOpenFile);
       window.removeEventListener('crish-open-terminal', onOpenTerm);
       offOverview();
+      offTasks();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
+
+  // 助手消息首次出现 checklist 时轻量建议打开任务板（每会话一次）
+  const activeSessionForTasks = sessions.find((s) => s.id === activeSessionId);
+  useSuggestOpenTasksOnChecklist(activeSessionForTasks);
 
   const ws = workspaces.find((w) => w.id === wsId);
   const col = ws?.columns[colIdx];

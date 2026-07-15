@@ -10,6 +10,7 @@ import { fillDefaultSessionTitles, maybeAutoTitleFromMessages } from '../api/ses
 import type {
   MessageToolCall,
   SessionAgent,
+  SessionGoalMode,
   SessionMessage,
   SessionState,
 } from './types';
@@ -74,6 +75,15 @@ export interface SessionActions {
     status: 'success' | 'error',
   ) => void;
   setSessions: (sessions: SessionState[]) => void;
+  /**
+   * 补丁会话级字段。goalMode 传 null 表示清除目标模式。
+   */
+  patchSession: (
+    sessionId: string,
+    patch: {
+      goalMode?: SessionGoalMode | null;
+    },
+  ) => void;
   updateMessageText: (sessionId: string, messageId: string, text: string) => void;
   updateMessageThinking: (sessionId: string, messageId: string, thinking: string) => void;
   addMessageToolCall: (sessionId: string, messageId: string, toolCall: MessageToolCall) => void;
@@ -89,6 +99,10 @@ export interface SessionActions {
     status: 'queued' | 'processing' | 'completed',
     thinkingTime?: number,
   ) => void;
+  /** 固定消息（会话级 id 列表） */
+  pinMessage: (sessionId: string, messageId: string) => void;
+  /** 取消固定消息 */
+  unpinMessage: (sessionId: string, messageId: string) => void;
 }
 
 /** immer set：recipe 可原地改 draft */
@@ -175,6 +189,12 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         const idx = sess.messages.findIndex((m) => m.id === messageId);
         if (idx !== -1) {
           sess.messages = sess.messages.slice(0, idx);
+          // 截断后清理已不存在的固定 id
+          if (sess.pinnedMessageIds?.length) {
+            const keep = new Set(sess.messages.map((m) => m.id));
+            sess.pinnedMessageIds = sess.pinnedMessageIds.filter((id) => keep.has(id));
+            if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
+          }
         }
       }
     }),
@@ -316,6 +336,23 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       }
     }),
 
+    pinMessage: (sessionId, messageId) => set((state) => {
+      const sess = getSessionById(state, sessionId);
+      if (!sess) return;
+      if (!getMessageById(sess.messages, messageId)) return;
+      if (!sess.pinnedMessageIds) sess.pinnedMessageIds = [];
+      if (!sess.pinnedMessageIds.includes(messageId)) {
+        sess.pinnedMessageIds.push(messageId);
+      }
+    }),
+
+    unpinMessage: (sessionId, messageId) => set((state) => {
+      const sess = getSessionById(state, sessionId);
+      if (!sess?.pinnedMessageIds?.length) return;
+      sess.pinnedMessageIds = sess.pinnedMessageIds.filter((id) => id !== messageId);
+      if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
+    }),
+
     setActiveAgentId: (id) => set((state) => {
       state.activeAgentId = id;
     }),
@@ -343,6 +380,18 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       const ag = getSessionAgent(sess, agentId);
       if (!ag) return;
       Object.assign(ag, patch);
+    }),
+
+    patchSession: (sessionId, patch) => set((state) => {
+      const sess = getSessionById(state, sessionId);
+      if (!sess) return;
+      if ('goalMode' in patch) {
+        if (patch.goalMode === null || patch.goalMode === undefined) {
+          delete sess.goalMode;
+        } else {
+          sess.goalMode = patch.goalMode;
+        }
+      }
     }),
 
     appendSessionAgentMessage: (sessionId, agentId, message) => set((state) => {
@@ -415,7 +464,8 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         state.permissionMode = mode;
         // 计划模式与侧栏「计划」进度状态对齐
         state.planModeEnabled = mode === 'plan';
-        if (mode !== 'plan') state.planApproved = false;
+        // 切换权限模式时重置确认；「批准执行」会在 setPermissionMode 之后再 setPlanApproved(true)
+        state.planApproved = false;
       });
       try {
         localStorage.setItem('crish_permission_mode', mode);
@@ -499,6 +549,9 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         branchParentId: sessionId,
         timestamp: '刚刚',
         messages: original.messages ? JSON.parse(JSON.stringify(original.messages)) : [],
+        pinnedMessageIds: original.pinnedMessageIds
+          ? [...original.pinnedMessageIds]
+          : undefined,
       };
       // 分叉会话紧插在原会话之后
       const idx = getSessionIndex(state, sessionId);

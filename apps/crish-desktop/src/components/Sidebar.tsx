@@ -8,6 +8,7 @@ import {
   type ProjectEntry,
 } from '../api/projectStore';
 import { sessionListDisplayTitle } from '../api/sessionTitle';
+import { downloadSessionMarkdown } from '../api/sessionExport';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 import { isUpdateAvailable } from '../api/updateStore';
 import { emitUiEvent, onUiEvent } from '../api/uiEvents';
@@ -25,7 +26,7 @@ interface SidebarProps {
   onHoverEnter?: () => void;
   onHoverLeave?: () => void;
   onOpenRuntime?: () => void;
-  /** Filter session titles (from top search). */
+  /** 顶栏搜索：过滤会话标题与消息正文等（见 sessionSearch）。 */
   searchQuery?: string;
 }
 
@@ -289,6 +290,15 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       case 'branch': {
         const newTitle = `${sessionListDisplayTitle(targetSession)} - 分支`;
         branchSession(sessionId, newTitle);
+        break;
+      }
+      case 'export': {
+        try {
+          downloadSessionMarkdown(targetSession);
+          onShowToast('已导出 Markdown');
+        } catch {
+          onShowToast('导出失败');
+        }
         break;
       }
       default:

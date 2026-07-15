@@ -654,6 +654,32 @@ select.settings-field-input {
   line-height: 1.55;
   max-width: 36em;
 }
+.settings-page-desc--muted {
+  font-size: 12.5px;
+  opacity: 0.92;
+  max-width: 42em;
+}
+/* 定时任务模板芯片（与主区 .sched-preset-chip 同形，设置页也可用） */
+.settings-list .sched-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.settings-list .sched-preset-chip {
+  font-size: var(--font-size-xs, 12px);
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1.3;
+}
+.settings-list .sched-preset-chip:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
 /* 分组：仅用上边距 + 小标题，不用包框 */
 .settings-group {
   display: flex;

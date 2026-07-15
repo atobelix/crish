@@ -88,6 +88,14 @@ export interface SessionAgent {
   endedAt?: number;
 }
 
+/** /goal 长期目标模式：自动多轮推进直至 DONE 或达上限 */
+export interface SessionGoalMode {
+  active: boolean;
+  goal: string;
+  iteration: number;
+  maxIterations?: number;
+}
+
 export interface SessionState {
   id: string;
   title: string;
@@ -97,6 +105,8 @@ export interface SessionState {
   branchParentId?: string;
   timestamp: string;
   messages: SessionMessage[];
+  /** 本会话固定的消息 id 列表（置顶快捷跳转） */
+  pinnedMessageIds?: string[];
   /** 本会话拉起的协作 agent 列表（侧栏嵌套展示） */
   agents?: SessionAgent[];
   /** 引擎事件游标（H2 水合 / H3 增量） */
@@ -105,6 +115,8 @@ export interface SessionState {
   engineLastRunId?: string;
   /** 已从引擎补全过正文 */
   hydratedFromEngine?: boolean;
+  /** /goal 目标模式状态（会话级） */
+  goalMode?: SessionGoalMode;
 }
 
 export interface DropPreviewState {

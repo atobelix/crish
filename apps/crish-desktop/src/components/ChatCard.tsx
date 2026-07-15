@@ -27,11 +27,109 @@ import {
 import { clientApi } from '../api/clientApi';
 import { openFileInPanel } from '../api/workspaceFsApi';
 import { AgentCard } from './AgentCard';
-import { useChatStream } from '../hooks/useChatStream';
+import { useChatStream, type ChatAttachment } from '../hooks/useChatStream';
 import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
 import { useThinkingTimer } from '../hooks/useThinkingTimer';
 import { ChatDemoChrome } from './ChatDemoChrome';
-import { emitUiEvent, onUiEvent } from '../api/uiEvents';
+import { onUiEvent } from '../api/uiEvents';
+import { downloadSessionMarkdown } from '../api/sessionExport';
+
+/** 图片 dataUrl 体积上限（约 1.5MB 原始字节） */
+const IMAGE_DATAURL_CAP = 1.5 * 1024 * 1024;
+const MAX_IMAGE_EDGE = 1600;
+
+function approxDataUrlBytes(dataUrl: string): number {
+  const b64 = dataUrl.split(',')[1] || '';
+  return Math.floor((b64.length * 3) / 4);
+}
+
+function readBlobAsDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** 过大时用 canvas 缩到最长边 1600，并降质量，避免 prompt 爆炸 */
+async function downscaleDataUrlIfNeeded(dataUrl: string, mime: string): Promise<string> {
+  if (approxDataUrlBytes(dataUrl) <= IMAGE_DATAURL_CAP) return dataUrl;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        resolve(dataUrl);
+        return;
+      }
+      const maxEdge = Math.max(w, h);
+      if (maxEdge > MAX_IMAGE_EDGE) {
+        const scale = MAX_IMAGE_EDGE / maxEdge;
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+      }
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      // PNG 截图通常很大，输出 jpeg 更省体积
+      const outMime =
+        mime === 'image/png' || mime === 'image/webp' || !mime ? 'image/jpeg' : mime;
+      let quality = 0.85;
+      const draw = () => {
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+        return canvas.toDataURL(outMime, quality);
+      };
+      let out = draw();
+      while (approxDataUrlBytes(out) > IMAGE_DATAURL_CAP && quality > 0.4) {
+        quality -= 0.1;
+        out = draw();
+      }
+      let guard = 0;
+      while (approxDataUrlBytes(out) > IMAGE_DATAURL_CAP && w > 400 && guard < 6) {
+        w = Math.max(1, Math.round(w * 0.7));
+        h = Math.max(1, Math.round(h * 0.7));
+        out = draw();
+        guard += 1;
+      }
+      resolve(out);
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function mimeToExt(mime: string): string {
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('gif')) return 'gif';
+  if (mime.includes('bmp')) return 'bmp';
+  return 'png';
+}
+
+async function blobToImageAttachment(
+  blob: Blob,
+  preferredName?: string,
+): Promise<ChatAttachment> {
+  const mime = blob.type || 'image/png';
+  const name =
+    preferredName ||
+    `截图-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${mimeToExt(mime)}`;
+  let dataUrl = await readBlobAsDataURL(blob);
+  dataUrl = await downscaleDataUrlIfNeeded(dataUrl, mime);
+  return { name, dataUrl, mime };
+}
+
+function isImageFile(f: File): boolean {
+  return f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name);
+}
 
 interface ChatCardProps {
   wsId: string;
@@ -69,6 +167,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const modelSelectorRef = useRef<HTMLDivElement>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  /** 本会话消息客户端过滤（搜索本会话） */
+  const [localMsgFilter, setLocalMsgFilter] = useState('');
+  const [showMsgFilter, setShowMsgFilter] = useState(false);
+  const msgFilterInputRef = useRef<HTMLInputElement>(null);
 
   const modelChoices = flattenModelChoices();
 
@@ -139,6 +241,53 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
+  /** /goal 目标模式进行中时展示停止 */
+  const goalModeActive = Boolean(activeSession?.goalMode?.active);
+
+  // 切换会话时收起过滤，避免串会话
+  useEffect(() => {
+    setLocalMsgFilter('');
+    setShowMsgFilter(false);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (showMsgFilter) {
+      // 打开后聚焦输入
+      window.requestAnimationFrame(() => msgFilterInputRef.current?.focus());
+    }
+  }, [showMsgFilter]);
+
+  /** 导出 Markdown：走 sessionExport（与侧栏/底栏导出一致） */
+  const handleExportMarkdown = useCallback(() => {
+    if (!activeSession) {
+      onShowToast('没有可导出的会话');
+      return;
+    }
+    try {
+      downloadSessionMarkdown(activeSession);
+      onShowToast('已导出 Markdown');
+    } catch {
+      onShowToast('导出失败');
+    }
+  }, [activeSession, onShowToast]);
+
+  /** 本会话文本过滤（仅影响展示；钉栏 / 页眉工具条始终可见） */
+  const displayMessages = useMemo(() => {
+    const q = localMsgFilter.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => {
+      const text = (m.text || '').toLowerCase();
+      const thinking = (m.thinking || '').toLowerCase();
+      if (text.includes(q) || thinking.includes(q)) return true;
+      // 工具名/参数也可命中
+      return (m.toolCalls || []).some((tc) => {
+        const name = (tc.name || '').toLowerCase();
+        const args = (tc.arguments || '').toLowerCase();
+        const out = (tc.output || '').toLowerCase();
+        return name.includes(q) || args.includes(q) || out.includes(q);
+      });
+    });
+  }, [messages, localMsgFilter]);
 
   // 当前会话待审批工具（主会话 + 协作 agent；时间线内联卡 + 底部 sticky 条）
   let pendingApprovalMsgId = '';
@@ -168,8 +317,57 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   // 状态须在依赖它的 useEffect 之前声明，避免 TDZ 白屏
   const permissionMode = useLayoutStore((s) => s.permissionMode);
   const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const [attachments, setAttachments] = useState<{ name: string; text?: string }[]>([]);
+  const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
+  const planApproved = useLayoutStore((s) => s.planApproved);
+  const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
+  const inPlanMode = permissionMode === 'plan' || planModeEnabled;
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addAttachments = useCallback((items: ChatAttachment[]) => {
+    if (!items.length) return;
+    setAttachments((prev) => {
+      const names = new Set(prev.map((p) => p.name));
+      const next = items.filter((n) => !names.has(n.name));
+      // 同名时给图片补唯一后缀，避免粘贴多张被吞
+      const uniqued = items
+        .filter((n) => names.has(n.name))
+        .map((n, i) => {
+          if (!n.dataUrl) return null;
+          const base = n.name.replace(/(\.[^.]+)?$/, '');
+          const ext = (n.name.match(/(\.[^.]+)$/) || [])[1] || '';
+          return { ...n, name: `${base}-${Date.now()}-${i}${ext}` };
+        })
+        .filter(Boolean) as ChatAttachment[];
+      return [...prev, ...next, ...uniqued];
+    });
+  }, []);
+
+  const handlePasteImage = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.items;
+      if (!items?.length) return;
+      const imageFiles: File[] = [];
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+      if (!imageFiles.length) return;
+      e.preventDefault();
+      try {
+        const next: ChatAttachment[] = [];
+        for (const f of imageFiles) {
+          next.push(await blobToImageAttachment(f, f.name || undefined));
+        }
+        addAttachments(next);
+        onShowToast('已粘贴图片');
+      } catch {
+        onShowToast('图片粘贴失败');
+      }
+    },
+    [addAttachments, onShowToast],
+  );
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -190,6 +388,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const [isComposing, setIsComposing] = useState(false); // IME Composition State
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  /** 有文字或附件（含截图）即可发送 */
+  const canSend = Boolean(chatInput.trim() || attachments.length > 0);
 
   const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => {
     handleGlobalTabClick(panelId);
@@ -203,20 +403,18 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const thinkingSeconds = useThinkingTimer(isProcessing);
 
   // Slash commands：固定 + 技能（enableSkillCommands）
-  // 正式模式仅保留已实现或有明确动作的命令；演示命令仅 demo
+  // 正式模式含已实现命令；纯演示命令仅 demo
   const BASE_SLASH = useMemo(
     () => [
-      ...(isDemoMode()
-        ? [
-            { cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' },
-            { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
-            { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
-            { cmd: '/goal', desc: '执行长期自动迭代任务（演示）' },
-            { cmd: '/learn', desc: '记录最佳实践和对齐规则（演示）' },
-          ]
-        : []),
+      { cmd: '/goal', desc: '长期目标模式：自动多轮推进直至完成' },
+      { cmd: '/learn', desc: '记住一条偏好/规则到全局设置' },
+      { cmd: '/grill-me', desc: '产品/技术对齐：只提问澄清，暂不实施' },
+      { cmd: '/teamwork-preview', desc: '打开多代理协作看板' },
       { cmd: '/schedule', desc: '打开主区定时任务' },
       { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
+      ...(isDemoMode()
+        ? [{ cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' }]
+        : []),
     ],
     [],
   );
@@ -416,6 +614,109 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           />
         </div>
       ) : null}
+
+      {/* 会话顶栏工具：贴近标题区，导出 / 搜索 / 目标停止 */}
+      {!activeAgent && mainSurface === 'chat' ? (
+        <div className="chat-session-toolbar" role="toolbar" aria-label="会话工具">
+          <div className="chat-session-toolbar-title" title={activeSession?.title || ''}>
+            <span className="chat-session-toolbar-kicker">本会话</span>
+            <span className="chat-session-toolbar-name">
+              {activeSession?.title || '新对话'}
+            </span>
+          </div>
+          <div className="chat-session-toolbar-actions">
+            {goalModeActive ? (
+              <button
+                type="button"
+                className="chat-session-tool-btn is-danger"
+                title="停止目标"
+                onClick={() => {
+                  handleStopGeneration();
+                  if (activeSessionId) {
+                    const gm = useLayoutStore
+                      .getState()
+                      .sessions.find((s) => s.id === activeSessionId)?.goalMode;
+                    useLayoutStore.getState().patchSession(activeSessionId, {
+                      goalMode: gm ? { ...gm, active: false } : null,
+                    });
+                  }
+                  onShowToast('已停止目标');
+                }}
+              >
+                <Lucide.Square size={13} fill="currentColor" />
+                <span>停止</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="chat-session-tool-btn"
+              title="导出 Markdown"
+              disabled={!activeSession}
+              onClick={handleExportMarkdown}
+            >
+              <Lucide.FileDown size={14} strokeWidth={1.75} />
+              <span className="chat-session-tool-label">导出</span>
+            </button>
+            <button
+              type="button"
+              className={`chat-session-tool-btn${showMsgFilter ? ' is-on' : ''}`}
+              title="搜索本会话"
+              aria-pressed={showMsgFilter}
+              onClick={() => {
+                setShowMsgFilter((v) => {
+                  const next = !v;
+                  if (!next) setLocalMsgFilter('');
+                  return next;
+                });
+              }}
+            >
+              <Lucide.Search size={14} strokeWidth={1.75} />
+              <span className="chat-session-tool-label">搜索</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 本会话消息过滤条：钉在消息列表上方，滚动时仍可见 */}
+      {!activeAgent && mainSurface === 'chat' && showMsgFilter ? (
+        <div className="chat-msg-filter-bar" role="search">
+          <Lucide.Search size={14} className="chat-msg-filter-icon" aria-hidden />
+          <input
+            ref={msgFilterInputRef}
+            type="search"
+            className="chat-msg-filter-input"
+            value={localMsgFilter}
+            placeholder="搜索本会话消息…"
+            aria-label="搜索本会话"
+            onChange={(e) => setLocalMsgFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setLocalMsgFilter('');
+                setShowMsgFilter(false);
+              }
+            }}
+          />
+          {localMsgFilter.trim() ? (
+            <span className="chat-msg-filter-count">
+              {displayMessages.length}/{messages.length}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="chat-msg-filter-clear"
+            title="关闭搜索"
+            aria-label="关闭搜索"
+            onClick={() => {
+              setLocalMsgFilter('');
+              setShowMsgFilter(false);
+            }}
+          >
+            <Lucide.X size={14} />
+          </button>
+        </div>
+      ) : null}
+
       <div
         className="chat-doc-flow"
         ref={chatFlowRef}
@@ -431,9 +732,21 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             onShowToast={onShowToast}
             onBackToChat={() => setMainSurface('chat')}
           />
+        ) : localMsgFilter.trim() && displayMessages.length === 0 && messages.length > 0 ? (
+          <div className="chat-msg-filter-empty" role="status">
+            <Lucide.SearchX size={22} strokeWidth={1.5} />
+            <p>本会话没有匹配「{localMsgFilter.trim()}」的消息</p>
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() => setLocalMsgFilter('')}
+            >
+              清除过滤
+            </button>
+          </div>
         ) : (
           <ChatMessageList
-            messages={messages}
+            messages={displayMessages}
             agents={activeSession?.agents || []}
             activeSessionId={activeSessionId || ''}
             thinkingSeconds={thinkingSeconds}
@@ -520,28 +833,66 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             </button>
           </div>
         )}
-        {permissionMode === 'plan' && (
+        {inPlanMode && (
           <div className="plan-mode-ribbon">
             <div className="plan-mode-ribbon-text">
               <strong>计划模式</strong>
-              ：只读分析，不改项目文件。进度与步骤见右侧总览。
+              ：AI 只规划不改文件。审阅后可批准执行。
+              {planApproved ? (
+                <span className="plan-mode-ribbon-status"> · 已批准</span>
+              ) : null}
             </div>
             <div className="plan-mode-ribbon-actions">
               <button
                 type="button"
                 className="ui-btn ui-btn-ghost ui-btn-sm"
                 onClick={() => {
-                  emitUiEvent('open-overview');
+                  onShowToast('继续计划：仍只规划不改文件');
                 }}
               >
-                总览
+                继续计划
               </button>
               <button
                 type="button"
                 className="ui-btn ui-btn-secondary ui-btn-sm"
-                onClick={() => setPermissionMode('ask')}
+                onClick={() => {
+                  // 先切模式（会清 planApproved），再标记已批准
+                  setPermissionMode('ask');
+                  setPlanApproved(true);
+                  onShowToast('已批准执行，已切回需确认模式');
+                }}
               >
-                退出
+                批准执行
+              </button>
+            </div>
+          </div>
+        )}
+        {activeSession?.goalMode?.active && (
+          <div className="plan-mode-ribbon goal-mode-ribbon" role="status">
+            <div className="plan-mode-ribbon-text">
+              <strong>目标模式</strong>
+              {` · 第 ${(activeSession.goalMode.iteration ?? 0) + 1} 轮`}
+              {activeSession.goalMode.goal
+                ? ` · ${
+                    activeSession.goalMode.goal.length > 48
+                      ? `${activeSession.goalMode.goal.slice(0, 48)}…`
+                      : activeSession.goalMode.goal
+                  }`
+                : ''}
+            </div>
+            <div className="plan-mode-ribbon-actions">
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                onClick={() => {
+                  if (!activeSessionId) return;
+                  useLayoutStore.getState().patchSession(activeSessionId, {
+                    goalMode: null,
+                  });
+                  onShowToast('已停止目标模式');
+                }}
+              >
+                停止
               </button>
             </div>
           </div>
@@ -673,8 +1024,14 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                     color: i === slashSelectedIndex ? 'var(--accent-color)' : 'var(--text-secondary)',
                   }}
                   onClick={() => {
-                    setChatInput(c.cmd + ' ');
                     setSlashMenuOpen(false);
+                    if (c.cmd === '/schedule') {
+                      setChatInput('');
+                      setMainSurface('scheduled');
+                      onShowToast('已打开定时任务');
+                      return;
+                    }
+                    setChatInput(c.cmd + ' ');
                   }}
                   onMouseEnter={() => setSlashSelectedIndex(i)}
                 >
@@ -686,7 +1043,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           )}
 
           <textarea
-            placeholder="输入消息，或键入 / 打开命令…"
+            placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
             rows={1}
             value={chatInput}
             onCompositionStart={() => setIsComposing(true)}
@@ -700,6 +1057,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
               } else {
                 setSlashMenuOpen(false);
               }
+            }}
+            onPaste={(e) => {
+              void handlePasteImage(e);
             }}
             onKeyDown={(e) => {
               if (isComposing) return;
@@ -719,6 +1079,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                   if (selectedCmd === '/schedule') {
                     setChatInput('');
                     setMainSurface('scheduled');
+                    onShowToast('已打开定时任务');
                     return;
                   }
                   setChatInput(selectedCmd + ' ');
@@ -742,7 +1103,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                   className="send-btn queue-btn"
                   title="加入队列，当前回复结束后发送"
                   onClick={() => handleSendChat(false)}
-                  disabled={!chatInput.trim()}
+                  disabled={!canSend}
                 >
                   排队
                 </button>
@@ -762,7 +1123,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 className="send-btn"
                 title="发送 (Enter)"
                 onClick={() => handleSendChat(false)}
-                disabled={!chatInput.trim()}
+                disabled={!canSend}
               >
                 <Lucide.CornerDownLeft size={16} />
               </button>
@@ -771,15 +1132,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         </div>
 
         {attachments.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 4px' }}>
+          <div className="chat-attach-strip" aria-label="附件">
             {attachments.map((a) => (
-              <span key={a.name} className="ui-badge" style={{ padding: '4px 8px', fontSize: 11.5 }}>
-                <Lucide.Paperclip size={14} style={{ marginRight: 4 }} />
-                {a.name}
+              <span
+                key={a.name}
+                className={`chat-attach-chip ${a.dataUrl ? 'chat-attach-chip--image' : ''}`}
+                title={a.name}
+              >
+                {a.dataUrl ? (
+                  <img src={a.dataUrl} alt={a.name} className="chat-attach-thumb" />
+                ) : (
+                  <Lucide.Paperclip size={14} className="chat-attach-icon" />
+                )}
+                <span className="chat-attach-name">{a.name}</span>
                 <button
                   type="button"
-                  className="ui-btn ui-btn-ghost"
-                  style={{ width: 18, height: 18, marginLeft: 2 }}
+                  className="ui-btn ui-btn-ghost chat-attach-remove"
+                  aria-label={`移除 ${a.name}`}
                   onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
                 >
                   <Lucide.X size={14} />
@@ -798,8 +1167,16 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             const files = Array.from(e.target.files || []);
             e.target.value = '';
             if (!files.length) return;
-            const next: { name: string; text?: string }[] = [];
+            const next: ChatAttachment[] = [];
             for (const f of files) {
+              if (isImageFile(f)) {
+                try {
+                  next.push(await blobToImageAttachment(f, f.name));
+                } catch {
+                  next.push({ name: f.name, mime: f.type || undefined });
+                }
+                continue;
+              }
               // Text-ish files: include content for the model; binaries: name only
               const isText =
                 f.type.startsWith('text/') ||
@@ -817,10 +1194,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 next.push({ name: f.name });
               }
             }
-            setAttachments((prev) => {
-              const names = new Set(prev.map((p) => p.name));
-              return [...prev, ...next.filter((n) => !names.has(n.name))];
-            });
+            addAttachments(next);
           }}
         />
 
@@ -855,6 +1229,27 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 setShowModelDropdown(false);
               }}
             />
+            <button
+              type="button"
+              className="plus-btn"
+              title="导出 Markdown"
+              aria-label="导出"
+              disabled={!activeSession}
+              onClick={() => {
+                if (!activeSession) {
+                  onShowToast('没有可导出的会话');
+                  return;
+                }
+                try {
+                  downloadSessionMarkdown(activeSession);
+                  onShowToast('已导出 Markdown');
+                } catch {
+                  onShowToast('导出失败');
+                }
+              }}
+            >
+              <Lucide.Download size={16} />
+            </button>
           </div>
           <div className="right-actions">
             {showModelPicker && (

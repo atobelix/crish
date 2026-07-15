@@ -26,6 +26,7 @@ import {
 import { getWorkspacePath } from '../api/projectStore';
 import { loadAgentProfiles, type AgentProfile } from '../api/agentProfiles';
 import { ApprovalAskCard } from './ApprovalAskCard';
+import { AgentTeamBoard } from './AgentTeamBoard';
 
 /** 右侧 Agent 默认落地：新建协作对话（继承上下文 / 临时分析） */
 function AgentLaunchPad({
@@ -276,6 +277,8 @@ function AgentLaunchPad({
         ) : null}
       </header>
 
+      {agents.length > 1 ? <AgentTeamBoard agents={agents} /> : null}
+
       <div className="agent-launch-body">
         <p className="agent-launch-lead">
           日常协作由主 AI 自动拉起。这里用于查看已有智能体，或临时追问决策；不必在输入框下手动「协作者」。
@@ -328,10 +331,11 @@ function AgentLaunchPad({
           </button>
         </div>
 
-        {agents.length > 0 ? (
+        {/* 仅 1 个 agent 时保留紧凑列表；多 agent 已由上方看板展示 */}
+        {agents.length === 1 ? (
           <div className="agent-launch-list">
             <div className="agent-launch-list-h">本会话已有协作</div>
-            {agents.slice(0, 8).map((a) => (
+            {agents.map((a) => (
               <button
                 key={a.id}
                 type="button"
@@ -397,9 +401,12 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  /** 聚焦单 agent 时是否展开顶部协作看板 */
+  const [showTeamBoard, setShowTeamBoard] = useState(true);
   const bodyRef = useRef<HTMLDivElement>(null);
   const followUpCancelRef = useRef<null | (() => void)>(null);
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const siblingAgents = sess?.agents || [];
 
   // 自动滚到底
   useEffect(() => {
@@ -687,6 +694,17 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           {agent.mode ? <span className="agent-card-mode">{agent.mode}</span> : null}
         </div>
         <div className="agent-card-actions">
+          {siblingAgents.length > 1 ? (
+            <button
+              type="button"
+              className={`agent-card-btn ${showTeamBoard ? 'is-on' : ''}`}
+              title={showTeamBoard ? '收起协作看板' : '展开协作看板'}
+              aria-pressed={showTeamBoard}
+              onClick={() => setShowTeamBoard((v) => !v)}
+            >
+              <Lucide.LayoutGrid size={15} strokeWidth={1.75} />
+            </button>
+          ) : null}
           {running ? (
             <button
               type="button"
@@ -714,6 +732,10 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           ) : null}
         </div>
       </header>
+
+      {siblingAgents.length > 1 && showTeamBoard ? (
+        <AgentTeamBoard agents={siblingAgents} activeId={agent.id} compact />
+      ) : null}
 
       {agent.summary && !embedded ? (
         <div className="agent-card-summary">{agent.summary}</div>

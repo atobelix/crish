@@ -85,14 +85,17 @@ async function upsertRule(opts: {
 
 /**
  * 将规则同步到引擎。localSaved 由调用方在 saveSettings 后设为 true。
+ * projectText 省略时仅更新全局规则，避免误删项目规则。
  */
 export async function syncRulesToDaemon(opts: {
   globalText: string;
-  projectText: string;
+  /** 省略则不同步项目规则 */
+  projectText?: string;
 }): Promise<SyncRulesResult> {
   const g = normalizeRuleBody(opts.globalText);
-  const p = normalizeRuleBody(opts.projectText);
-  const truncated = g.truncated || p.truncated;
+  const p =
+    opts.projectText !== undefined ? normalizeRuleBody(opts.projectText) : null;
+  const truncated = g.truncated || Boolean(p?.truncated);
 
   if (!(await ensureDaemon())) {
     return {
@@ -111,12 +114,14 @@ export async function syncRulesToDaemon(opts: {
       content: g.body,
       scope: 'global',
     });
-    await upsertRule({
-      id: RULE_ID_PROJECT,
-      title: '项目规则',
-      content: p.body,
-      scope: 'project',
-    });
+    if (p) {
+      await upsertRule({
+        id: RULE_ID_PROJECT,
+        title: '项目规则',
+        content: p.body,
+        scope: 'project',
+      });
+    }
     return { ok: true, localSaved: true, daemonSynced: true, truncated };
   } catch (e) {
     return {

@@ -34,8 +34,49 @@ import {
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { getActiveModelId } from '../api/providerProfiles';
+import { clientApi } from '../api/clientApi';
+import { getWorkspacePath } from '../api/projectStore';
+import { rulesLinesToText, syncRulesToDaemon } from '../api/rulesApi';
 
-export type ChatAttachment = { name: string; text?: string };
+/** /goal 默认自动续写轮次上限 */
+const GOAL_DEFAULT_MAX_ITERATIONS = 5;
+
+/** 助手回复是否声明目标已完成 */
+function replyLooksGoalDone(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  return /\bDONE\b/i.test(t) || /目标已完成/.test(t);
+}
+
+/** 构造目标模式注入到模型的前缀（不展示在用户气泡） */
+function buildGoalModePrefix(goal: string, iteration: number, maxIterations: number): string {
+  return [
+    '[目标模式 · 系统指令]',
+    `你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。`,
+    `目标：${goal}`,
+    `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在 8 轮内完成）。`,
+    '请工作直至目标实质完成；不要半途停下或只列计划而不执行。',
+    '若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。',
+    '---',
+    '',
+  ].join('\n');
+}
+
+const GRILL_ME_PREFIX = [
+  '[对齐模式 · 系统指令]',
+  '你是产品/技术对齐助手。针对用户主题只提问澄清（最多 5 个关键问题），暂不写代码、不改文件。',
+  '等用户确认方案后再实施。问题应具体、可回答，避免一次抛出过多细节。',
+  '---',
+  '',
+].join('\n');
+
+export type ChatAttachment = {
+  name: string;
+  text?: string;
+  /** data URL for images */
+  dataUrl?: string;
+  mime?: string;
+};
 
 export type RunNotice = { text: string; kind?: string };
 
@@ -107,6 +148,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   );
   /** 防止同会话 onComplete 重入 drain */
   const drainingSessionsRef = useRef(new Set<string>());
+  /** 用户点停止后的会话：跳过 /goal 自动续写，避免 cancel 仍触发 onComplete 时继续 */
+  const goalCancelledSessionsRef = useRef(new Set<string>());
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
   /**
@@ -119,6 +162,77 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
 
   /** 运行级错误横幅（不进 AI 正文） */
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);
+
+  /**
+   * /goal 自动续写：无排队消息时，若 goalMode 仍 active 且未 DONE，则注入续写提示。
+   * @returns true 表示已启动续写，调用方勿再 drain 排队
+   */
+  const maybeContinueGoalMode = (sid: string, assistantMsgId: string): boolean => {
+    if (goalCancelledSessionsRef.current.has(sid)) {
+      goalCancelledSessionsRef.current.delete(sid);
+      return false;
+    }
+    const st = useLayoutStore.getState();
+    const sess = st.sessions.find((s) => s.id === sid);
+    const gm = sess?.goalMode;
+    if (!gm?.active) return false;
+
+    // 有用户排队消息时优先 drain，不抢目标续写
+    const hasQueued = sess?.messages?.some(
+      (m) => m.sender === 'user' && m.status === 'queued',
+    );
+    if (hasQueued) return false;
+
+    const asstText =
+      sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
+    if (replyLooksGoalDone(asstText)) {
+      st.patchSession(sid, {
+        goalMode: { ...gm, active: false },
+      });
+      onShowToast('目标已完成');
+      return false;
+    }
+
+    const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
+    const nextIter = (gm.iteration ?? 0) + 1;
+    if (nextIter >= maxIter) {
+      st.patchSession(sid, {
+        goalMode: { ...gm, active: false, iteration: nextIter },
+      });
+      onShowToast(`目标模式已达上限（${maxIter} 轮），已停止自动续写`);
+      return false;
+    }
+
+    st.patchSession(sid, {
+      goalMode: { ...gm, active: true, iteration: nextIter, maxIterations: maxIter },
+    });
+
+    const contDisplay = '继续推进目标，若已完成请明确说明 DONE';
+    const contModel = [
+      buildGoalModePrefix(gm.goal, nextIter, maxIter),
+      contDisplay,
+    ].join('\n');
+
+    const userMsgId = `user-msg-goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    useLayoutStore.setState((state) => {
+      const s = state.sessions.find((x) => x.id === sid);
+      if (!s) return;
+      if (!s.messages) s.messages = [];
+      s.messages.push({
+        id: userMsgId,
+        sender: 'user',
+        text: contDisplay,
+        timestamp: Date.now(),
+        status: 'processing',
+      });
+    });
+
+    // 下一帧再开流，避开 onComplete 同步栈
+    setTimeout(() => {
+      runStreamingAssistantRef.current(contModel, userMsgId, sid);
+    }, 0);
+    return true;
+  };
 
   const drainQueuedAfterComplete = (sid: string) => {
     if (drainingSessionsRef.current.has(sid)) return;
@@ -136,7 +250,14 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         st.setSessionMessageStatus(sid, next.id, 'processing');
         // 排队消息的 text 即当时展示文案（含附件摘要）；作为下一轮 prompt
         // 经 ref 调最新实现，避免 drain 闭包里的函数身份过期
-        runStreamingAssistantRef.current(next.text, next.id, sid);
+        // 排队文案不含目标前缀：若仍在目标模式，补前缀
+        let prompt = next.text;
+        const gm = sess?.goalMode;
+        if (gm?.active && gm.goal) {
+          const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
+          prompt = `${buildGoalModePrefix(gm.goal, gm.iteration ?? 0, maxIter)}${next.text}`;
+        }
+        runStreamingAssistantRef.current(prompt, next.id, sid);
       }
     } finally {
       // 下一帧再允许，避免与本次 onComplete 叠压
@@ -500,7 +621,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
             /* ignore */
           }
         })();
-        drainQueuedAfterComplete(sid);
+        // 目标模式自动续写优先；否则 drain 排队
+        if (!maybeContinueGoalMode(sid, assistantMsgId)) {
+          drainQueuedAfterComplete(sid);
+        }
       }
     }, sid, assistantMsgId);
 
@@ -521,6 +645,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const cur = streamsBySessionRef.current.get(sid);
     if (!cur) return;
     const st = useLayoutStore.getState();
+    // 停止生成时中断目标自动续写
+    if (st.sessions.find((s) => s.id === sid)?.goalMode?.active) {
+      goalCancelledSessionsRef.current.add(sid);
+      st.patchSession(sid, { goalMode: null });
+    }
     const asst = st.sessions
       .find((s) => s.id === sid)
       ?.messages.find((m) => m.id === cur.assistantMsgId);
@@ -549,7 +678,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   };
 
   const handleSendChat = async (_isInsert: boolean = false) => {
-    if (!chatInput.trim()) return;
+    // 允许仅发附件（截图/图片），不要求必须有文字
+    if (!chatInput.trim() && attachments.length === 0) return;
 
     // 未配置密钥时软拦截
     if (needsKeySetup) {
@@ -566,7 +696,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const rawInput = chatInput.trim();
 
     // /schedule → 主对话区定时任务（与侧栏入口一致）
-    if (/^\/schedule\b/i.test(rawInput)) {
+    if (rawInput && /^\/schedule\b/i.test(rawInput)) {
       setChatInput('');
       setSlashMenuOpen(false);
       try {
@@ -578,8 +708,26 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       return;
     }
 
+    // /teamwork-preview → 打开协作 agent 面板（看板）
+    if (rawInput && /^\/teamwork-preview\b/i.test(rawInput)) {
+      setChatInput('');
+      setSlashMenuOpen(false);
+      useLayoutStore.getState().setPanelAgentId(null);
+      useLayoutStore.getState().setActiveAgentId(null);
+      handleGlobalTabClick('agent');
+      try {
+        window.dispatchEvent(
+          new CustomEvent('crish-open-agent-panel', { detail: {} }),
+        );
+      } catch {
+        /* ignore */
+      }
+      onShowToast('协作看板');
+      return;
+    }
+
     // /browser [url] → 打开右侧内置预览浏览器
-    if (/^\/browser\b/i.test(rawInput)) {
+    if (rawInput && /^\/browser\b/i.test(rawInput)) {
       const rest = rawInput.replace(/^\/browser\b/i, '').trim();
       setChatInput('');
       setSlashMenuOpen(false);
@@ -593,10 +741,100 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       return;
     }
 
+    // /learn <rule> → 持久化用户规则，短确认，不跑完整 agent
+    if (rawInput && /^\/learn\b/i.test(rawInput)) {
+      const ruleText = rawInput.replace(/^\/learn\b/i, '').trim();
+      setChatInput('');
+      setSlashMenuOpen(false);
+      if (!ruleText) {
+        onShowToast('用法：/learn <要记住的规则>');
+        return;
+      }
+      try {
+        const cwd = getWorkspacePath() || '__global__';
+        const sets = await clientApi.getSettingsEx(cwd);
+        const prev = Array.isArray(sets.customRules) ? sets.customRules : [];
+        if (prev.includes(ruleText)) {
+          onShowToast('该规则已存在');
+          return;
+        }
+        const next = [...prev, ruleText];
+        await clientApi.saveSettingsEx(cwd, 'global', { customRules: next });
+        // 仅同步全局规则，避免空 projectText 误删引擎侧项目规则
+        const globalText = rulesLinesToText(next, '# 全局规则');
+        void syncRulesToDaemon({ globalText });
+        onShowToast('已记住规则');
+
+        const userMsgId = `user-msg-${Date.now()}`;
+        const asstMsgId = `assistant-msg-${Date.now()}-learn`;
+        useLayoutStore.setState((state) => {
+          const sess = state.sessions.find((s) => s.id === sessionId);
+          if (!sess) return;
+          if (!sess.messages) sess.messages = [];
+          sess.messages.push({
+            id: userMsgId,
+            sender: 'user',
+            text: `/learn ${ruleText}`,
+            timestamp: Date.now(),
+            status: 'completed',
+          });
+          sess.messages.push({
+            id: asstMsgId,
+            sender: 'assistant',
+            text: `已记录用户偏好：${ruleText}`,
+            timestamp: Date.now() + 1,
+            status: 'completed',
+          });
+        });
+      } catch (e) {
+        onShowToast(`记住规则失败：${e instanceof Error ? e.message : String(e)}`);
+      }
+      return;
+    }
+
     // /skill:name [task] → 注入 SKILL.md 正文到模型上下文
     let modelText = rawInput;
     let displayText = rawInput;
-    if (skillCommandsEnabled && /^\/skill:/i.test(rawInput)) {
+
+    // /goal <task> → 会话目标模式 + 系统前缀
+    if (rawInput && /^\/goal\b/i.test(rawInput)) {
+      const goal = rawInput.replace(/^\/goal\b/i, '').trim();
+      if (!goal) {
+        setChatInput('');
+        setSlashMenuOpen(false);
+        onShowToast('用法：/goal <要完成的目标>');
+        return;
+      }
+      goalCancelledSessionsRef.current.delete(sessionId);
+      useLayoutStore.getState().patchSession(sessionId, {
+        goalMode: {
+          active: true,
+          goal,
+          iteration: 0,
+          maxIterations: GOAL_DEFAULT_MAX_ITERATIONS,
+        },
+      });
+      displayText = `/goal ${goal}`;
+      modelText = `${buildGoalModePrefix(goal, 0, GOAL_DEFAULT_MAX_ITERATIONS)}${goal}`;
+      onShowToast('已进入目标模式');
+    }
+
+    // /grill-me <topic> → 只提问澄清；切 plan 权限更安全
+    if (rawInput && /^\/grill-me\b/i.test(rawInput)) {
+      const topic = rawInput.replace(/^\/grill-me\b/i, '').trim();
+      if (!topic) {
+        setChatInput('');
+        setSlashMenuOpen(false);
+        onShowToast('用法：/grill-me <要对齐的主题>');
+        return;
+      }
+      useLayoutStore.getState().setPermissionMode('plan');
+      displayText = `/grill-me ${topic}`;
+      modelText = `${GRILL_ME_PREFIX}主题：${topic}`;
+      onShowToast('已进入对齐提问模式（计划权限）');
+    }
+
+    if (skillCommandsEnabled && rawInput && /^\/skill:/i.test(rawInput)) {
       try {
         const resolved = await resolveSkillSlash(rawInput);
         if (resolved) {
@@ -613,15 +851,31 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       }
     }
 
+    // 若已在目标模式且本条不是 /goal 命令本身：仍为后续普通消息注入前缀
+    if (rawInput && !/^\/goal\b/i.test(rawInput)) {
+      const liveGm = useLayoutStore
+        .getState()
+        .sessions.find((s) => s.id === sessionId)?.goalMode;
+      if (liveGm?.active && liveGm.goal) {
+        const maxIter = liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
+        modelText = `${buildGoalModePrefix(liveGm.goal, liveGm.iteration ?? 0, maxIter)}${modelText}`;
+      }
+    }
+
     // Fold attachments into the prompt so the model path sees them
     const attachBlock =
       attachments.length > 0
         ? `\n\n[附件]\n${attachments
-            .map((a) =>
-              a.text
-                ? `--- ${a.name} ---\n${a.text.slice(0, 80_000)}${a.text.length > 80_000 ? '\n…(截断)' : ''}`
-                : `- ${a.name}`,
-            )
+            .map((a) => {
+              if (a.dataUrl) {
+                const note = `用户粘贴了截图 ${a.name}，请结合 OCR/视觉理解分析`;
+                return `[图片附件: ${a.name}]\ndataUrl: ${a.dataUrl}\n${note}\n![${a.name}](${a.dataUrl})`;
+              }
+              if (a.text) {
+                return `--- ${a.name} ---\n${a.text.slice(0, 80_000)}${a.text.length > 80_000 ? '\n…(截断)' : ''}`;
+              }
+              return `- ${a.name}`;
+            })
             .join('\n\n')}`
         : '';
     // 文件面板选区批注：注入模型上下文；气泡只展示用户原文 + 轻量提示
@@ -634,6 +888,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         : `（${fileAnns.length} 条文件批注）`;
     }
     if (attachments.length > 0) {
+      // 气泡仅轻量展示附件名（图片不把 dataUrl 塞进消息正文）
       displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${attachments.map((a) => a.name).join('、')}`;
     }
 

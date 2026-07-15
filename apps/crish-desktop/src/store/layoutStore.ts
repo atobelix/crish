@@ -38,6 +38,7 @@ export type {
   MessageToolCall,
   SessionMessage,
   SessionAgent,
+  SessionGoalMode,
   SessionState,
   DropPreviewState,
 } from './types';

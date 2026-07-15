@@ -159,6 +159,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             <Lucide.GitBranch size={16} strokeWidth={1.75} />
             <span>分支</span>
           </button>
+          <div className="context-menu-divider" />
+          <button type="button" className="context-menu-item" onClick={() => onSessionAction('export')}>
+            <Lucide.Download size={16} strokeWidth={1.75} />
+            <span>导出</span>
+          </button>
         </div>
       )}
 

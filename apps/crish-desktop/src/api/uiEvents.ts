@@ -11,6 +11,7 @@ export type UiEventMap = {
   'open-scheduled': void;
   'open-chat': void;
   'open-overview': void;
+  'open-tasks': void;
   'pick-workspace': void;
   'open-agent-panel': { agentId?: string };
   'update-changed': void;

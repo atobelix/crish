@@ -340,6 +340,15 @@ body {
   flex-shrink: 0;
 }
 
+/* /goal 目标模式：复用 plan ribbon 布局，略强调 */
+.goal-mode-ribbon {
+  border-color: color-mix(in srgb, var(--accent-color, #6c8cff) 35%, var(--border-subtle));
+}
+.plan-mode-ribbon-status {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
 .navigation-arrows {
   display: flex;
   gap: 1px;
@@ -2654,12 +2663,40 @@ select.ui-input {
   font-weight: var(--font-weight-medium) !important;
   box-shadow: none;
 }
+.crish-sidebar .session-text-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
 .crish-sidebar .session-text {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+.crish-sidebar .session-search-snippet {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular, 400);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+  max-width: 100%;
+}
+.crish-sidebar .session-item.has-search-snippet {
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  min-height: auto;
+}
+.crish-sidebar .session-item.has-search-snippet .session-trailing {
+  margin-top: 2px;
 }
 /* 时间 / more 同槽位：默认时间，hover 换 more（均 absolute right 真正叠换） */
 .crish-sidebar .session-trailing {
@@ -2940,6 +2977,10 @@ select.ui-input {
 .agent-card-btn:hover {
   background: var(--bg-hover);
 }
+.agent-card-btn.is-on {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
 .agent-card-summary {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -3097,6 +3138,152 @@ select.ui-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 多代理协作看板（CI job 风格卡片网格） */
+.agent-team-board {
+  flex-shrink: 0;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+.agent-team-board--compact {
+  padding: 6px 8px 8px;
+}
+.agent-team-board-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
+}
+.agent-team-board-count {
+  margin-left: auto;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 0 6px;
+  border-radius: 999px;
+  line-height: 1.6;
+}
+.agent-team-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px;
+}
+.agent-team-board--compact .agent-team-board-grid {
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 5px;
+}
+.agent-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 8px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 0;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.agent-team-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+.agent-team-card.is-active {
+  border-color: var(--text-secondary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+.agent-team-card--running {
+  border-left: 2px solid var(--accent-green);
+}
+.agent-team-card--failed {
+  border-left: 2px solid var(--accent-red);
+}
+.agent-team-card--stopped {
+  border-left: 2px solid var(--text-tertiary);
+}
+.agent-team-card--completed {
+  border-left: 2px solid var(--border-color);
+}
+.agent-team-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.agent-team-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.agent-team-card-mode {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-team-card-summary {
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  min-height: 2.8em;
+}
+.agent-team-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+.agent-team-card-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+.agent-team-card-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+  transition: width 0.2s ease;
+}
+.agent-team-card-bar-fill--running {
+  background: var(--accent-green);
+}
+.agent-team-card-bar-fill--failed {
+  background: var(--accent-red);
+}
+.agent-team-card-bar-fill--completed {
+  background: var(--text-secondary);
+}
+.agent-team-card-bar-fill--stopped {
+  background: var(--text-tertiary);
+}
+.agent-team-card-tools {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .files-bc-chip--root {
   font-weight: 600;
   color: var(--text-primary);

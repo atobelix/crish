@@ -5,18 +5,23 @@ import React, { useEffect, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
+  WORKFLOW_SCHEDULE_CAPABILITY_NOTE,
+  WORKFLOW_SCHEDULE_PRESETS,
+  WORKFLOW_SCHEDULE_TYPES,
+  buildScheduleFromDraft,
   createWorkflow,
-  defaultTimezone,
   deleteWorkflow,
+  emptyWorkflowDraft,
   listWorkflowRuns,
   listWorkflows,
   scheduleLabel,
   triggerWorkflow,
   updateWorkflow,
+  watchTriggerHint,
   workflowRunStatusLabel,
   type WorkflowDefinition,
   type WorkflowRunEntry,
-  type WorkflowSchedule,
+  type WorkflowScheduleDraft,
 } from '../api/workflowApi';
 import { useLayoutStore } from '../store/layoutStore';
 
@@ -33,13 +38,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [draft, setDraft] = useState({
-    name: '',
-    prompt: '',
-    scheduleType: 'manual' as 'manual' | 'daily' | 'intervalMinutes',
-    dailyTime: '09:00',
-    intervalMinutes: '30',
-  });
+  const [draft, setDraft] = useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
 
   const refresh = async () => {
     setLoading(true);
@@ -85,19 +84,19 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
     void refresh();
   }, []);
 
-  const buildSchedule = (): WorkflowSchedule => {
-    if (draft.scheduleType === 'daily') {
-      return {
-        type: 'daily',
-        time: draft.dailyTime.trim() || '09:00',
-        timezone: defaultTimezone(),
-      };
-    }
-    if (draft.scheduleType === 'intervalMinutes') {
-      const n = Math.max(1, Number(draft.intervalMinutes) || 30);
-      return { type: 'intervalMinutes', intervalMinutes: n };
-    }
-    return { type: 'manual' };
+  const maybeWatchHint = (text: string) => {
+    const hint = watchTriggerHint(text);
+    if (hint) onShowToast(hint);
+  };
+
+  const applyPreset = (presetId: string) => {
+    const preset = WORKFLOW_SCHEDULE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setShowForm(true);
+    setError('');
+    setOk('');
+    setDraft({ ...preset.draft });
+    onShowToast(`已预填「${preset.label}」，可改后保存`);
   };
 
   return (
@@ -109,7 +108,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
         </button>
         <div className="sched-in-chat-titles">
           <h3>定时任务</h3>
-          <p>引擎 workflow：手动 / 每天 / 间隔。在此管理，不占用设置页主路径。</p>
+          <p>
+            引擎 workflow：
+            {WORKFLOW_SCHEDULE_TYPES.map((t) => t.label).join(' / ')}
+            。在此管理，不占用设置页主路径。
+          </p>
         </div>
         <button
           type="button"
@@ -123,6 +126,26 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
           <Lucide.Plus size={16} />
           新建
         </button>
+      </div>
+
+      <div className="sched-capability-note" role="note">
+        {WORKFLOW_SCHEDULE_CAPABILITY_NOTE}
+      </div>
+
+      <div className="sched-preset-row">
+        <span className="sched-preset-label">模板</span>
+        <div className="sched-preset-chips" role="group" aria-label="计划模板">
+          {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="sched-preset-chip"
+              onClick={() => applyPreset(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? <div className="model-picker-error" style={{ marginBottom: 8 }}>{error}</div> : null}
@@ -140,6 +163,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
             placeholder="名称，例如 每日代码体检"
             value={draft.name}
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            onBlur={() => maybeWatchHint(draft.name)}
           />
           <textarea
             className="settings-field-input"
@@ -156,14 +180,19 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               onChange={(e) =>
                 setDraft((d) => ({
                   ...d,
-                  scheduleType: e.target.value as typeof draft.scheduleType,
+                  scheduleType: e.target.value as WorkflowScheduleDraft['scheduleType'],
                 }))
               }
             >
-              <option value="manual">手动</option>
-              <option value="daily">每天</option>
-              <option value="intervalMinutes">间隔（分钟）</option>
+              {WORKFLOW_SCHEDULE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
             </select>
+          </div>
+          <div className="sched-form-hint">
+            {WORKFLOW_SCHEDULE_TYPES.find((t) => t.value === draft.scheduleType)?.hint}
           </div>
           {draft.scheduleType === 'daily' ? (
             <input
@@ -197,19 +226,14 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
                 void createWorkflow({
                   name: draft.name.trim(),
                   prompt: draft.prompt.trim(),
-                  schedule: buildSchedule(),
+                  schedule: buildScheduleFromDraft(draft),
                   enabled: true,
                 })
                   .then(() => {
                     setOk('已创建');
                     setShowForm(false);
-                    setDraft({
-                      name: '',
-                      prompt: '',
-                      scheduleType: 'manual',
-                      dailyTime: '09:00',
-                      intervalMinutes: '30',
-                    });
+                    maybeWatchHint(`${draft.name} ${draft.prompt}`);
+                    setDraft(emptyWorkflowDraft());
                     return refresh();
                   })
                   .catch((e) => setError(networkUserMessage(e) || '创建失败'))
@@ -231,7 +255,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
         <div className="sched-empty">
           <Lucide.Clock size={28} style={{ opacity: 0.35 }} />
           <div>暂无定时任务</div>
-          <div className="sched-empty-sub">创建可新建，或让助手在对话中帮你配置 workflow。</div>
+          <div className="sched-empty-sub">点上方模板快速创建，或让助手在对话中帮你配置 workflow。</div>
         </div>
       ) : (
         <ul className="sched-list">
@@ -283,8 +307,12 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
                   disabled={busy}
                   onClick={() => {
                     setBusy(true);
-                    void updateWorkflow(w.id, { enabled: w.enabled === false })
-                      .then(() => refresh())
+                    const enabling = w.enabled === false;
+                    void updateWorkflow(w.id, { enabled: enabling })
+                      .then(() => {
+                        if (enabling) maybeWatchHint(`${w.name} ${w.prompt || ''}`);
+                        return refresh();
+                      })
                       .catch((e) => setError(networkUserMessage(e) || '更新失败'))
                       .finally(() => setBusy(false));
                   }}

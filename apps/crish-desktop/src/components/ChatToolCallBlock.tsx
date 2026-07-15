@@ -22,10 +22,15 @@ import { extractFilePathFromToolArgs } from '../api/workspaceFsApi';
 export interface ChatToolStackProps {
   items: ToolRenderItem[];
   msgId?: string;
+  /** 本轮折叠态 key（通常 msgId）；缺省则不启用轮次折叠 */
+  roundKey?: string;
   agents: SessionAgent[];
   activeSessionId: string;
   expandedTools: Record<string, boolean>;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
+  /** 本轮工具组展开态（true=展开全部）；按 session 在 ChatMessageList 持久化 */
+  expandedRounds?: Record<string, boolean>;
+  onToggleRound?: (roundKey: string, currentlyOpen: boolean) => void;
   approvalBusy: boolean;
   pendingApprovalMsgId: string;
   onOpenDiff: (diff: FileDiff) => void;
@@ -34,6 +39,53 @@ export interface ChatToolStackProps {
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
   onShowToast: (message: string) => void;
+}
+
+/** 展平 single / group 得到本轮全部工具调用 */
+function flattenToolItems(items: ToolRenderItem[]): MessageToolCall[] {
+  const out: MessageToolCall[] = [];
+  for (const item of items) {
+    if (item.kind === 'single') out.push(item.tc);
+    else out.push(...item.tools);
+  }
+  return out;
+}
+
+/** 折叠时仅保留 running / pending_approval，避免藏审批与进行中 */
+function filterLiveToolItems(items: ToolRenderItem[]): ToolRenderItem[] {
+  const out: ToolRenderItem[] = [];
+  for (const item of items) {
+    if (item.kind === 'single') {
+      if (item.tc.status === 'running' || item.tc.status === 'pending_approval') {
+        out.push(item);
+      }
+      continue;
+    }
+    const live = item.tools.filter(
+      (t) => t.status === 'running' || t.status === 'pending_approval',
+    );
+    if (live.length === 0) continue;
+    if (live.length === 1) out.push({ kind: 'single', tc: live[0] });
+    else out.push({ ...item, tools: live });
+  }
+  return out;
+}
+
+function buildRoundSummary(tools: MessageToolCall[]): string {
+  const n = tools.length;
+  let done = 0;
+  let fail = 0;
+  let pending = 0;
+  let running = 0;
+  for (const t of tools) {
+    if (t.status === 'success') done += 1;
+    else if (t.status === 'error') fail += 1;
+    else if (t.status === 'pending_approval') pending += 1;
+    else if (t.status === 'running') running += 1;
+  }
+  const parts = [`本轮 ${n} 个工具`, `完成 ${done}`, `失败 ${fail}`, `待批 ${pending}`];
+  if (running > 0) parts.push(`进行中 ${running}`);
+  return parts.join(' · ');
 }
 
 /** 默认折叠长输出，避免主对话刷屏；错误可默认展开；长结果永不默认撑开 */
@@ -410,69 +462,128 @@ function CompactToolRow({
   );
 }
 
+function renderToolStackItems(
+  items: ToolRenderItem[],
+  msgId: string | undefined,
+  props: ChatToolStackProps,
+) {
+  const { expandedTools, onToggleTool } = props;
+  return items.map((item) => {
+    if (item.kind === 'single') {
+      return (
+        <CompactToolRow
+          key={item.tc.id}
+          tc={item.tc}
+          rowKey={item.tc.id}
+          msgId={msgId}
+          props={props}
+        />
+      );
+    }
+    const gid = item.id;
+    const running = item.tools.some((t) => t.status === 'running');
+    const anyError = item.tools.some((t) => t.status === 'error');
+    const groupDefaultOpen = running || anyError;
+    const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, gid)
+      ? expandedTools[gid]
+      : groupDefaultOpen;
+    return (
+      <div
+        className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
+        key={gid}
+      >
+        <div
+          className="tool-row-head"
+          role="button"
+          tabIndex={0}
+          onClick={() => onToggleTool(gid, isOpen)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onToggleTool(gid, isOpen);
+            }
+          }}
+        >
+          <span className="tool-row-head-main">
+            {running ? (
+              <span className="tool-row-live" aria-hidden>
+                <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+              </span>
+            ) : null}
+            <span className="tool-row-summary">{item.label}</span>
+          </span>
+          <span className="tool-row-chevron-slot is-toggle">
+            <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+          </span>
+        </div>
+        {isOpen && (
+          <div className="tool-group-body">
+            {item.tools.map((tc) => (
+              <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  });
+}
+
 export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {
-  const { items, msgId, expandedTools, onToggleTool } = props;
+  const { items, msgId, roundKey, expandedRounds, onToggleRound } = props;
+  const allTools = flattenToolItems(items);
+  const n = allTools.length;
+  /** ≥2 才显示本轮汇总行；单工具保持原样避免噪音 */
+  const useRoundGroup = Boolean(roundKey && onToggleRound && n >= 2);
+
+  if (!useRoundGroup || !roundKey) {
+    return <div className="tool-stack">{renderToolStackItems(items, msgId, props)}</div>;
+  }
+
+  const defaultExpanded = n < 4;
+  const isRoundOpen = Object.prototype.hasOwnProperty.call(expandedRounds || {}, roundKey)
+    ? Boolean(expandedRounds![roundKey])
+    : defaultExpanded;
+  const visibleItems = isRoundOpen ? items : filterLiveToolItems(items);
+  const summary = buildRoundSummary(allTools);
+  const hasLive = allTools.some(
+    (t) => t.status === 'running' || t.status === 'pending_approval',
+  );
 
   return (
-    <div className="tool-stack">
-      {items.map((item) => {
-        if (item.kind === 'single') {
-          return (
-            <CompactToolRow
-              key={item.tc.id}
-              tc={item.tc}
-              rowKey={item.tc.id}
-              msgId={msgId}
-              props={props}
-            />
-          );
-        }
-        const gid = item.id;
-        const running = item.tools.some((t) => t.status === 'running');
-        const anyError = item.tools.some((t) => t.status === 'error');
-        const groupDefaultOpen = running || anyError;
-        const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, gid)
-          ? expandedTools[gid]
-          : groupDefaultOpen;
-        return (
-          <div
-            className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
-            key={gid}
-          >
-            <div
-              className="tool-row-head"
-              role="button"
-              tabIndex={0}
-              onClick={() => onToggleTool(gid, isOpen)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onToggleTool(gid, isOpen);
-                }
-              }}
-            >
-              <span className="tool-row-head-main">
-                {running ? (
-                  <span className="tool-row-live" aria-hidden>
-                    <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-                  </span>
-                ) : null}
-                <span className="tool-row-summary">{item.label}</span>
-              </span>
-              <span className="tool-row-chevron-slot is-toggle">
-                <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
-              </span>
-            </div>
-            {isOpen && (
-              <div className="tool-group-body">
-                {item.tools.map((tc) => (
-                  <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+    <div className={`tool-round-group ${isRoundOpen ? 'is-open' : 'is-collapsed'}`}>
+      <div
+        className="tool-round-group-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={isRoundOpen}
+        onClick={() => onToggleRound?.(roundKey, isRoundOpen)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggleRound?.(roundKey, isRoundOpen);
+          }
+        }}
+      >
+        <span className="tool-round-group-label" title={summary}>
+          {hasLive && !isRoundOpen ? (
+            <span className="tool-row-live" aria-hidden>
+              <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+            </span>
+          ) : null}
+          {summary}
+        </span>
+        <span className="tool-row-chevron-slot is-toggle">
+          <Lucide.ChevronRight
+            size={14}
+            className={`tool-row-chevron ${isRoundOpen ? 'rot' : ''}`}
+          />
+        </span>
+      </div>
+      {visibleItems.length > 0 ? (
+        <div className="tool-stack tool-round-group-body">
+          {renderToolStackItems(visibleItems, msgId, props)}
+        </div>
+      ) : null}
     </div>
   );
 };

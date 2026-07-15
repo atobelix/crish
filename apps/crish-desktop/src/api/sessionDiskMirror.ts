@@ -204,6 +204,7 @@ export async function restoreSessionsFromDiskMirror(): Promise<{
         branchParentId: e.branchParentId,
         timestamp: e.timestamp || '恢复',
         messages,
+        pinnedMessageIds: e.pinnedMessageIds?.length ? e.pinnedMessageIds : undefined,
         agents: [],
         engineCursor: e.engineCursor,
         engineLastRunId: e.engineLastRunId,

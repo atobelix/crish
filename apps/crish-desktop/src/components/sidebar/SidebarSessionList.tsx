@@ -11,6 +11,11 @@ import {
   sessionLastActivityMs,
 } from '../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
+import {
+  matchSessionSearch,
+  storeSessionSearchQuery,
+  type SessionSearchMatch,
+} from '../../api/sessionSearch';
 
 export type SidebarDragItem =
   | { type: 'session'; sessionId: string; folderName?: string }
@@ -97,14 +102,16 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
   let visibleSessions = sessions.filter((s) => !s.isArchived);
   if (filterType === 'pinned') visibleSessions = visibleSessions.filter((s) => s.isPinned);
-  const q = searchQuery.trim().toLowerCase();
+
+  /** 搜索命中缓存：过滤 + 侧栏摘录 */
+  const searchHits = new Map<string, SessionSearchMatch>();
+  const q = searchQuery.trim();
   if (q) {
-    visibleSessions = visibleSessions.filter(
-      (s) =>
-        sessionListDisplayTitle(s).toLowerCase().includes(q) ||
-        s.title.toLowerCase().includes(q) ||
-        s.folder.toLowerCase().includes(q),
-    );
+    visibleSessions = visibleSessions.filter((s) => {
+      const hit = matchSessionSearch(s, q);
+      if (hit.match) searchHits.set(s.id, hit);
+      return hit.match;
+    });
   }
 
   const sortedSessions =
@@ -209,6 +216,8 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     // 整树仅一行「当前」高亮：主对话激活时不高亮嵌套 agent
     const sessionActive = s.id === activeSessionId && !activeAgentId;
     const timeLabel = formatSessionListTime(s, nowTick);
+    const hit = searchHits.get(s.id);
+    const snippet = hit?.snippet;
     return (
       <li
         key={s.id}
@@ -216,13 +225,20 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${sessionRunning ? 'is-running' : ''}`}
       >
         <div
-          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''} ${sessionRunning ? 'is-running' : ''}`}
-          onClick={() => onSelectSession(s.id)}
+          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''} ${sessionRunning ? 'is-running' : ''} ${snippet ? 'has-search-snippet' : ''}`}
+          onClick={() => {
+            // 有搜索词则写入高亮；无词则清除上次命中高亮
+            storeSessionSearchQuery(q);
+            onSelectSession(s.id);
+          }}
           onContextMenu={(e) => onContextMenuSession(e, s.id)}
           onPointerDown={isDraggable ? (e) => startSessionDrag(e, s.id, s.folder) : undefined}
         >
-          <span className="session-text" title={displayText}>
-            {displayText}
+          <span className="session-text-col" title={snippet ? `${displayText}\n${snippet}` : displayText}>
+            <span className="session-text">{displayText}</span>
+            {snippet ? (
+              <span className="session-search-snippet">{snippet}</span>
+            ) : null}
           </span>
           <span className="session-trailing">
             {sessionRunning ? (

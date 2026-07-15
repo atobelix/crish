@@ -2,9 +2,10 @@
  * 消息列表渲染：空状态 + user/assistant bubbles + 工具时间线。
  * 从 ChatCard 剪切粘贴，保持 className；状态机/stream 仍在 ChatCard。
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
+import { useLayoutStore } from '../store/layoutStore';
 import {
   getActiveProject,
   getWorkspacePath,
@@ -20,6 +21,41 @@ import {
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { ChangeOverviewCard } from './ChangeOverviewCard';
+import {
+  messageMatchesSearch,
+  readSessionSearchQuery,
+} from '../api/sessionSearch';
+
+const EMPTY_PIN_IDS: string[] = [];
+const EMPTY_MSGS: SessionMessage[] = [];
+
+/** 固定条摘要：去空白后截断 */
+function pinSnippet(text?: string, max = 72): string {
+  const t = (text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '（无文本）';
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+}
+
+function scrollToMessage(messageId: string) {
+  const el = document.querySelector(
+    `[data-msg-id="${CSS.escape(messageId)}"]`,
+  ) as HTMLElement | null;
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('msg-row-pin-flash');
+  window.setTimeout(() => el.classList.remove('msg-row-pin-flash'), 1200);
+}
+
+/** 助手回复是否像「计划」：含步骤/计划/编号列表/标题 */
+function looksLikePlan(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  if (/步骤|计划/.test(t)) return true;
+  if (/^#{1,3}\s/m.test(t)) return true;
+  // 1. / 1、 / 2. 等有序列表
+  if (/(?:^|\n)\s*\d+[\.、]\s+\S/.test(t)) return true;
+  return false;
+}
 
 export interface ChatMessageListProps {
   messages: SessionMessage[];
@@ -77,10 +113,80 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const [expandedToolsBySession, setExpandedToolsBySession] = useState<
     Record<string, Record<string, boolean>>
   >({});
+  /** 本轮工具组展开态（key=`${msgId}:${timelineKey}`）；N>=4 默认折叠 */
+  const [expandedRoundsBySession, setExpandedRoundsBySession] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
   const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
+  const [pinsOpen, setPinsOpen] = useState(true);
   const activeProject = getActiveProject();
   const sessionKey = activeSessionId || '_';
   const expandedTools = expandedToolsBySession[sessionKey] || {};
+  const expandedRounds = expandedRoundsBySession[sessionKey] || {};
+  /** 侧栏搜索选中后写入 sessionStorage，用于命中消息高亮 */
+  const searchHighlightQuery = useMemo(
+    () => readSessionSearchQuery(),
+    // 随会话切换 / 消息数变化重读（选中会话后进入列表）
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeSessionId 触发重读
+    [activeSessionId, messages.length],
+  );
+
+  const permissionMode = useLayoutStore((s) => s.permissionMode);
+  const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
+  const planApproved = useLayoutStore((s) => s.planApproved);
+  const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
+  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
+  const inPlanMode = permissionMode === 'plan' || planModeEnabled;
+
+  const pinMessage = useLayoutStore((s) => s.pinMessage);
+  const unpinMessage = useLayoutStore((s) => s.unpinMessage);
+  const pinnedMessageIds = useLayoutStore(
+    (s) =>
+      s.sessions.find((x) => x.id === activeSessionId)?.pinnedMessageIds || EMPTY_PIN_IDS,
+  );
+  const sessionAllMessages = useLayoutStore(
+    (s) => s.sessions.find((x) => x.id === activeSessionId)?.messages || EMPTY_MSGS,
+  );
+  const pinnedIdSet = useMemo(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
+
+  const pinnedItems = useMemo(() => {
+    if (!pinnedMessageIds.length) return [];
+    const byId = new Map(sessionAllMessages.map((m) => [m.id, m]));
+    return pinnedMessageIds
+      .map((id) => {
+        const m = byId.get(id);
+        if (!m) return null;
+        const text =
+          m.sender === 'assistant' ? assistantCopyText(m) || m.text || '' : m.text || '';
+        return {
+          id,
+          sender: m.sender as 'user' | 'assistant',
+          snippet: pinSnippet(text),
+        };
+      })
+      .filter(Boolean) as { id: string; sender: 'user' | 'assistant'; snippet: string }[];
+  }, [pinnedMessageIds, sessionAllMessages]);
+
+  const togglePin = useCallback(
+    (messageId: string) => {
+      if (!activeSessionId) return;
+      if (pinnedIdSet.has(messageId)) {
+        unpinMessage(activeSessionId, messageId);
+        onShowToast('已取消固定');
+      } else {
+        pinMessage(activeSessionId, messageId);
+        onShowToast('已固定消息');
+      }
+    },
+    [activeSessionId, pinnedIdSet, pinMessage, unpinMessage, onShowToast],
+  );
+
+  const lastAssistantId = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.sender === 'assistant') return messages[i]!.id;
+    }
+    return null;
+  })();
 
   /** 切换展开；须传入当前展示态，避免 defaultOpen=true 时首次点击仍为 true */
   const toggleTool = useCallback(
@@ -90,6 +196,19 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         [sessionKey]: {
           ...(prev[sessionKey] || {}),
           [toolId]: !currentlyOpen,
+        },
+      }));
+    },
+    [sessionKey],
+  );
+
+  const toggleRound = useCallback(
+    (roundKey: string, currentlyOpen: boolean) => {
+      setExpandedRoundsBySession((prev) => ({
+        ...prev,
+        [sessionKey]: {
+          ...(prev[sessionKey] || {}),
+          [roundKey]: !currentlyOpen,
         },
       }));
     },
@@ -122,6 +241,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     activeSessionId,
     expandedTools,
     onToggleTool: toggleTool,
+    expandedRounds,
+    onToggleRound: toggleRound,
     approvalBusy,
     pendingApprovalMsgId,
     onOpenDiff,
@@ -210,17 +331,81 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   return (
     <div className="chat-message-list" onClick={handleMarkdownClick}>
+      {pinnedItems.length > 0 ? (
+        <div className="chat-pinned-bar" role="region" aria-label="已固定消息">
+          <button
+            type="button"
+            className="chat-pinned-bar-toggle"
+            onClick={() => setPinsOpen((v) => !v)}
+            title={pinsOpen ? '收起固定列表' : '展开固定列表'}
+            aria-expanded={pinsOpen}
+          >
+            <Lucide.Pin size={13} strokeWidth={2} />
+            <span>已固定 · {pinnedItems.length}</span>
+            <Lucide.ChevronDown
+              size={14}
+              className={`chat-pinned-chevron${pinsOpen ? ' is-open' : ''}`}
+            />
+          </button>
+          {pinsOpen ? (
+            <ul className="chat-pinned-list">
+              {pinnedItems.map((item) => (
+                <li key={item.id} className="chat-pinned-item">
+                  <button
+                    type="button"
+                    className="chat-pinned-jump"
+                    title="跳转到消息"
+                    onClick={() => scrollToMessage(item.id)}
+                  >
+                    <span
+                      className={`chat-pinned-role ${
+                        item.sender === 'user' ? 'is-user' : 'is-assistant'
+                      }`}
+                    >
+                      {item.sender === 'user' ? '你' : '助手'}
+                    </span>
+                    <span className="chat-pinned-snippet">{item.snippet}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-pinned-unpin msg-icon-btn"
+                    title="取消固定"
+                    aria-label="取消固定"
+                    onClick={() => togglePin(item.id)}
+                  >
+                    <Lucide.PinOff size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       {messages.map((msg, index) => {
         const prevMsg = index > 0 ? messages[index - 1] : null;
         const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
+        const isPinnedMsg = pinnedIdSet.has(msg.id);
         if (msg.sender === 'user') {
           const isLong = (msg.text || '').length > 260;
           const isExpanded = !!expandedUserMsgs[msg.id];
           const displayText =
             isLong && !isExpanded ? (msg.text || '').slice(0, 240) + '…' : msg.text;
+          const isSearchHit =
+            !!searchHighlightQuery && messageMatchesSearch(msg, searchHighlightQuery);
           return (
-            <div className="msg-row msg-row-user" key={msg.id}>
+            <div
+              className={`msg-row msg-row-user${isSearchHit ? ' msg-search-hit' : ''}${isPinnedMsg ? ' is-pinned' : ''}`}
+              key={msg.id}
+              data-msg-id={msg.id}
+            >
               <div className="msg-user-stack">
+                {isPinnedMsg ? (
+                  <span className="msg-pin-badge" title="已固定">
+                    <Lucide.Pin size={11} strokeWidth={2.25} />
+                    已固定
+                  </span>
+                ) : null}
                 <div
                   className={`msg-user-bubble ${isExpanded ? 'expanded' : ''}`}
                   onClick={() => {
@@ -237,6 +422,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                 </div>
                 <div className="msg-user-meta">
                   <span className="msg-time">{formatTime(msg.timestamp)}</span>
+                  <button
+                    type="button"
+                    className={`msg-icon-btn${isPinnedMsg ? ' is-pinned-active' : ''}`}
+                    title={isPinnedMsg ? '取消固定' : '固定'}
+                    onClick={() => togglePin(msg.id)}
+                  >
+                    {isPinnedMsg ? <Lucide.PinOff size={16} /> : <Lucide.Pin size={16} />}
+                  </button>
                   <button
                     type="button"
                     className="msg-icon-btn"
@@ -279,12 +472,21 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         const thinkingShort =
           !isThinkingMsg && thinkingLineCount > 0 && thinkingLineCount <= 5;
         const showThinking = isThinkingMsg || thinkingLineCount > 0;
+        const isSearchHit =
+          !!searchHighlightQuery && messageMatchesSearch(msg, searchHighlightQuery);
 
         return (
           <div
-            className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}`}
+            className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}${isSearchHit ? ' msg-search-hit' : ''}${isPinnedMsg ? ' is-pinned' : ''}`}
             key={msg.id}
+            data-msg-id={msg.id}
           >
+            {isPinnedMsg ? (
+              <span className="msg-pin-badge" title="已固定">
+                <Lucide.Pin size={11} strokeWidth={2.25} />
+                已固定
+              </span>
+            ) : null}
             {/* 思考：短内容平铺；长内容 / 进行中用折叠 */}
             {showThinking && thinkingShort ? (
               <div className="msg-thinking-plain" key={`think-plain-${msg.id}`}>
@@ -372,7 +574,12 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                     if (!item.items?.length) return null;
                     return (
                       <div key={item.key} className="msg-timeline-tools">
-                        <ChatToolStack items={item.items} msgId={msg.id} {...toolStackProps} />
+                        <ChatToolStack
+                          items={item.items}
+                          msgId={msg.id}
+                          roundKey={`${msg.id}:${item.key}`}
+                          {...toolStackProps}
+                        />
                       </div>
                     );
                   });
@@ -394,7 +601,33 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                   onOpenDiff={onOpenDiff}
                   onOpenDiffPanel={onOpenDiffPanel}
                 />
+                {inPlanMode &&
+                !planApproved &&
+                msg.id === lastAssistantId &&
+                looksLikePlan(assistantCopyText(msg) || msg.text || '') ? (
+                  <div className="msg-plan-approve-row">
+                    <button
+                      type="button"
+                      className="msg-plan-approve-chip"
+                      onClick={() => {
+                        setPermissionMode('ask');
+                        setPlanApproved(true);
+                        onShowToast('已批准此计划，已切回需确认模式');
+                      }}
+                    >
+                      批准此计划
+                    </button>
+                  </div>
+                ) : null}
                 <div className="msg-assistant-meta">
+                  <button
+                    type="button"
+                    className={`msg-icon-btn${isPinnedMsg ? ' is-pinned-active' : ''}`}
+                    title={isPinnedMsg ? '取消固定' : '固定'}
+                    onClick={() => togglePin(msg.id)}
+                  >
+                    {isPinnedMsg ? <Lucide.PinOff size={16} /> : <Lucide.Pin size={16} />}
+                  </button>
                   <button
                     type="button"
                     className="msg-icon-btn"

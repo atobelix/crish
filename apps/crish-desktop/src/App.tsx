@@ -107,6 +107,22 @@ function App() {
   // 会话 index / JSONL 防抖落盘 + 磁盘镜像回灌（demo 模式 no-op）
   useEffect(() => initLayoutStorePersistence(), []);
 
+  // 按项目路径保存/恢复右侧工作区布局（localStorage + session 防覆盖）
+  useEffect(() => {
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+    void import('./api/workspaceLayoutStore').then(({ initWorkspaceLayoutSync }) => {
+      if (cancelled) return;
+      cleanup = initWorkspaceLayoutSync({
+        onRestored: () => handleShowToast('已恢复项目工作区布局'),
+      });
+    });
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [handleShowToast]);
+
   // Initial load theme & settings sync
   useEffect(() => {
     // 同步本地主题/字体（settings 异步前就已在 main/html 里 bootstrap）
@@ -352,7 +368,7 @@ function App() {
             <Lucide.Search className="search-icon" size={16} />
             <input
               type="text"
-              placeholder="搜索会话…"
+              placeholder="搜索会话与消息…"
               value={sessionSearch}
               onChange={(e) => setSessionSearch(e.target.value)}
             />

@@ -10,6 +10,7 @@ import type {
   DropPreviewState,
   WorkspaceState,
 } from './types';
+import type { LayoutSnapshot } from '../api/workspaceLayoutStore';
 import {
   ensureChatColumn,
   createDefaultWorkspace,
@@ -53,6 +54,8 @@ export interface WorkspaceActions {
   splitScreenWorkspace: (sessionId: string) => void;
   closeWorkspace: (wsId: string) => void;
   applyLayoutPreset: (preset: 'developer-split' | 'full-chat' | 'telemetry-focus') => void;
+  /** 从项目布局快照还原活动工作区 columns（卡片 id / 宽高比 / active） */
+  applyWorkspaceLayout: (snapshot: LayoutSnapshot) => void;
 }
 
 /** immer set：recipe 可原地改 draft */
@@ -566,6 +569,80 @@ export function createWorkspaceActions(set: ImmerSet, _get: StoreGet): Workspace
           },
         ];
       }
+    }),
+
+    applyWorkspaceLayout: (snapshot) => set((state) => {
+      const ws = state.workspaces[state.activeWorkspaceIndex];
+      if (!ws || !snapshot?.columns?.length) return;
+
+      const stamp = Date.now();
+      const nextColumns: ColumnState[] = [];
+
+      snapshot.columns.forEach((colSnap, ci) => {
+        const groups: CardGroupState[] = [];
+        (colSnap.groups || []).forEach((gSnap, gi) => {
+          const cardIds = (gSnap.cards || []).filter(
+            (id): id is string => typeof id === 'string' && id.length > 0,
+          );
+          if (cardIds.length === 0) return;
+          // runtime 为浮动面板，不进列
+          const cards: CardState[] = cardIds
+            .filter((id) => id !== 'runtime')
+            .map((id) => ({ id, title: getPanelTitle(id) }));
+          if (cards.length === 0) return;
+          const activeCardId = cards.some((c) => c.id === gSnap.activeCardId)
+            ? gSnap.activeCardId
+            : cards[0].id;
+          groups.push({
+            id: `group-snap-${ci}-${gi}-${stamp}-${ws.id}`,
+            activeCardId,
+            cards,
+            heightRatio:
+              typeof gSnap.heightRatio === 'number' && gSnap.heightRatio > 0
+                ? gSnap.heightRatio
+                : 1,
+          });
+        });
+        if (groups.length === 0) return;
+
+        const hasChat = groups.some((g) => g.cards.some((c) => c.id === 'chat'));
+        // 组内高度比归一
+        const hSum = groups.reduce((a, g) => a + g.heightRatio, 0) || 1;
+        groups.forEach((g) => {
+          g.heightRatio /= hSum;
+        });
+
+        nextColumns.push({
+          id: hasChat ? `col-chat-${ws.id}` : `col-snap-${ci}-${stamp}-${ws.id}`,
+          widthRatio:
+            typeof colSnap.widthRatio === 'number' && colSnap.widthRatio > 0
+              ? colSnap.widthRatio
+              : 1,
+          groups,
+        });
+      });
+
+      if (nextColumns.length === 0) return;
+
+      // 保证最多一列 chat，且 chat 列在前
+      const chatCols = nextColumns.filter((c) => c.id.includes('chat'));
+      const toolCols = nextColumns.filter((c) => !c.id.includes('chat'));
+      if (chatCols.length > 1) {
+        const primary = chatCols[0];
+        for (let i = 1; i < chatCols.length; i++) {
+          primary.groups.push(...chatCols[i].groups);
+        }
+        const hSum = primary.groups.reduce((a, g) => a + g.heightRatio, 0) || 1;
+        primary.groups.forEach((g) => {
+          g.heightRatio /= hSum;
+        });
+        ws.columns = [primary, ...toolCols];
+      } else {
+        ws.columns = chatCols.length ? [chatCols[0], ...toolCols] : toolCols;
+      }
+
+      ensureChatColumn(ws);
+      normalizeColumnWidths(ws);
     }),
   };
 }

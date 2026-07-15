@@ -25,6 +25,8 @@ export type SessionIndexEntry = {
   timestamp: string;
   updatedAt: number;
   messageCount: number;
+  /** 固定消息 id 列表 */
+  pinnedMessageIds?: string[];
   /** H2/H3：引擎游标与 run 关联 */
   engineCursor?: number;
   engineLastRunId?: string;
@@ -189,6 +191,11 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
   return sessions.map((s) => {
     const old = prev.get(s.id);
     const messageCount = s.messages?.length ?? 0;
+    const pinnedIds = s.pinnedMessageIds?.length ? s.pinnedMessageIds : undefined;
+    const oldPinned = old?.pinnedMessageIds;
+    const pinsChanged =
+      (pinnedIds?.length ?? 0) !== (oldPinned?.length ?? 0) ||
+      (pinnedIds || []).some((id, i) => id !== oldPinned?.[i]);
     const metaChanged =
       !old ||
       old.title !== s.title ||
@@ -196,7 +203,8 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
       old.isPinned !== s.isPinned ||
       old.isArchived !== s.isArchived ||
       old.messageCount !== messageCount ||
-      old.branchParentId !== s.branchParentId;
+      old.branchParentId !== s.branchParentId ||
+      pinsChanged;
 
     let updatedAt = old?.updatedAt ?? Date.now();
     if (metaChanged) {
@@ -213,6 +221,7 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
       timestamp: s.timestamp,
       updatedAt,
       messageCount,
+      pinnedMessageIds: pinnedIds,
       engineCursor: s.engineCursor,
       engineLastRunId: s.engineLastRunId,
       hydratedFromEngine: s.hydratedFromEngine,
@@ -238,6 +247,7 @@ export function hydrateSessionsFromDisk(): {
     branchParentId: e.branchParentId,
     timestamp: e.timestamp,
     messages: sanitizeMessagesForHydrate(loadSessionBody(e.id)),
+    pinnedMessageIds: e.pinnedMessageIds?.length ? e.pinnedMessageIds : undefined,
     agents: loadSessionAgents(e.id),
     engineCursor: e.engineCursor,
     engineLastRunId: e.engineLastRunId,
