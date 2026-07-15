@@ -4902,7 +4902,8 @@ select.ui-input {
 .assistant-text-content p,
 .md-rendered .md-p {
   background: transparent !important;
-  margin: 0 0 0.65em;
+  /* 段落间距略收；列表项自身不再叠额外 margin */
+  margin: 0 0 0.35em;
 }
 .assistant-text-content code,
 .md-rendered .md-inline-code,
@@ -5308,16 +5309,50 @@ select.ui-input {
 .msg-assistant-text .md-h2 { font-size: 1.08em; }
 .msg-assistant-text .md-h3,
 .msg-assistant-text .md-h4 { font-size: 1em; }
+/*
+ * 列表：与正文同一行高，不另加「段落式」间距。
+ * 工具行约 20px 高、行距更紧；列表至少不应比正文段落更疏。
+ */
+.msg-assistant-text ul,
+.msg-assistant-text ol,
 .msg-assistant-text .md-ul,
-.msg-assistant-text .md-ol {
-  margin: 0.2em 0 0.35em;
-  padding-left: 1.15em;
-  line-height: 1.45;
+.msg-assistant-text .md-ol,
+.md-rendered ul,
+.md-rendered ol,
+.md-rendered .md-ul,
+.md-rendered .md-ol {
+  margin: 0 0 0.35em !important;
+  padding: 0 0 0 1.15em !important;
+  line-height: inherit !important;
+  list-style-position: outside;
 }
-.msg-assistant-text .md-li {
-  margin: 0.05em 0;
-  line-height: 1.45;
-  padding: 0;
+.msg-assistant-text li,
+.msg-assistant-text .md-li,
+.md-rendered li,
+.md-rendered .md-li {
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: inherit !important;
+  display: list-item;
+}
+.msg-assistant-text li + li,
+.msg-assistant-text .md-li + .md-li,
+.md-rendered li + li,
+.md-rendered .md-li + .md-li {
+  margin-top: 0 !important;
+}
+.msg-assistant-text li > p,
+.msg-assistant-text .md-li > p,
+.msg-assistant-text li > .md-p,
+.msg-assistant-text .md-li > .md-p,
+.msg-assistant-text li > br,
+.md-rendered li > p,
+.md-rendered .md-li > p,
+.md-rendered li > .md-p {
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: inherit !important;
+  display: inline;
 }
 .msg-assistant-text .md-hr {
   display: none !important;
@@ -6445,8 +6480,8 @@ select.ui-input {
 }
 .msg-assistant-text p,
 .msg-assistant-text .md-p {
-  margin: 0 0 0.4em;
-  line-height: 1.55;
+  margin: 0 0 0.3em;
+  line-height: inherit;
   background: transparent !important;
 }
 .msg-assistant-text p:last-child,

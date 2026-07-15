@@ -181,6 +181,17 @@ export function parseMarkdownToHtml(raw: string): string {
   // 对话流不渲染 --- 分隔线（模型爱刷，干扰阅读）
   html = html.replace(/^---+$/gm, '');
 
+  // 列表项之间的空行压成单换行，避免 split(/\n{2,}/) 把列表拆成多块、间距翻倍
+  {
+    let prev = '';
+    while (prev !== html) {
+      prev = html;
+      html = html.replace(
+        /^([ \t]*(?:[-*]|\d+\.)[ \t]+[^\n]+)\n\n+(?=[ \t]*(?:[-*]|\d+\.)[ \t]+)/gm,
+        '$1\n',
+      );
+    }
+  }
   // 任务列表与普通列表
   html = html.replace(
     /^(?:\s*)[-*]\s+\[ \]\s+(.+)$/gm,
@@ -193,13 +204,17 @@ export function parseMarkdownToHtml(raw: string): string {
   html = html.replace(/^(?:\s*)[-*]\s+(.+)$/gm, '<li class="md-li">$1</li>');
   html = html.replace(/^(?:\s*)\d+\.\s+(.+)$/gm, '<li class="md-li md-ol-item">$1</li>');
 
-  // 合并连续 li
-  html = html.replace(/(?:<li class="md-li[^"]*">[\s\S]*?<\/li>\s*)+/g, (block) => {
-    if (block.includes('md-ol-item')) {
-      return `<ol class="md-ol">${block}</ol>`;
-    }
-    return `<ul class="md-ul">${block}</ul>`;
-  });
+  // 合并连续 li。注意：不要用 \s* 吞掉列表后的空行，否则会和前后段落粘成一块 <p>
+  html = html.replace(
+    /(?:<li class="md-li[^"]*">[\s\S]*?<\/li>(?:[ \t]*\r?\n)?)+/g,
+    (block) => {
+      const compact = block.replace(/>\s*</g, '><').replace(/\s+$/g, '');
+      const tag = compact.includes('md-ol-item') ? 'ol' : 'ul';
+      const cls = compact.includes('md-ol-item') ? 'md-ol' : 'md-ul';
+      // 两侧补空行，保证后续按段落切开
+      return `\n\n<${tag} class="${cls}">${compact}</${tag}>\n\n`;
+    },
+  );
 
   // 段落：按空行切分
   const parts = html.split(/\n{2,}/);
@@ -219,11 +234,26 @@ export function parseMarkdownToHtml(raw: string): string {
       ) {
         return t;
       }
+      // 块内若仍混有块级列表，拆开，禁止 <p><ul>…
+      if (t.includes('<ul') || t.includes('<ol')) {
+        return t
+          .replace(/(<\/?(?:ul|ol)[^>]*>)/g, '\n$1\n')
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            if (line.startsWith('<ul') || line.startsWith('<ol') || line.startsWith('</')) {
+              return line;
+            }
+            return `<p class="md-p">${line.replace(/\n/g, '<br />')}</p>`;
+          })
+          .join('');
+      }
       // 单换行 → <br>
       const inner = t.replace(/\n/g, '<br />');
       return `<p class="md-p">${inner}</p>`;
     })
-    .join('');
+    .join('\n');
 
   return html;
 }
