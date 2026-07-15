@@ -1,5 +1,5 @@
 /**
- * 设置 · 快捷键：核心操作快捷键查看与录制
+ * 设置 · 快捷键（现代化列表：大标题、副文案、右侧录制按钮）
  */
 import React, { useEffect, useState } from 'react';
 
@@ -13,6 +13,13 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   command_palette: '/',
   close_tab: 'MiddleClick',
 };
+
+const SHORTCUT_ITEMS = [
+  { id: 'toggle_settings', label: '打开系统设置', desc: '打开或关闭系统设置管理面板' },
+  { id: 'branch_session', label: '分支分叉当前会话', desc: '分叉复制当前对话历史到新临时分支' },
+  { id: 'command_palette', label: '聊天命令行提示', desc: '在命令行输入框中弹出智能快捷指令' },
+  { id: 'close_tab', label: '关闭当前选中卡片', desc: '快速关闭工作区中打开的选显卡片' },
+] as const;
 
 export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
   const [customShortcuts, setCustomShortcuts] = useState<Record<string, string>>(() => {
@@ -66,51 +73,39 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
   }, [recordingShortcutId, customShortcuts, onShowToast]);
 
   return (
-    <>
-      <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-        <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>核心快捷键</h4>
-        <p style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', margin: 0 }}>查看与自定义系统操作中的主要快捷键。</p>
-      </div>
+    <div className="settings-pane settings-pane--modern">
+      <header className="settings-page-head">
+        <h2 className="settings-page-title">快捷键</h2>
+        <p className="settings-page-desc">查看与自定义系统操作中的主要快捷键。点击右侧按键开始录制，Esc 取消。</p>
+      </header>
 
-      <div className="settings-card-row" style={{ gap: 12 }}>
-        <span className="settings-field-label">系统核心快捷键</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {[
-            { id: 'toggle_settings', label: '打开系统设置', desc: '打开或关闭系统设置管理面板' },
-            { id: 'branch_session', label: '分支分叉当前会话', desc: '分叉复制当前对话历史到新临时分支' },
-            { id: 'command_palette', label: '聊天命令行提示', desc: '在命令行输入框中弹出智能快捷指令' },
-            { id: 'close_tab', label: '关闭当前选中卡片', desc: '快速关闭工作区中打开的选显卡片' },
-          ].map((sh) => {
+      <section className="settings-group" aria-label="核心快捷键">
+        <div className="settings-group-label">核心快捷键</div>
+        <div className="settings-list">
+          {SHORTCUT_ITEMS.map((sh) => {
             const isRecording = recordingShortcutId === sh.id;
             const displayKey = customShortcuts[sh.id] || '未设置';
 
             return (
-              <div
-                key={sh.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderBottom: '1px solid var(--border-color)',
-                  paddingBottom: '8px',
-                  paddingTop: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span className="settings-field-label">{sh.label}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{sh.desc}</span>
+              <div key={sh.id} className="settings-list-row">
+                <div className="settings-list-copy">
+                  <div className="settings-list-title">{sh.label}</div>
+                  <div className="settings-list-sub">{sh.desc}</div>
                 </div>
-                <button
-                  onClick={() => setRecordingShortcutId(isRecording ? null : sh.id)}
-                  className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
-                >
-                  {isRecording ? '录制中...' : displayKey}
-                </button>
+                <div className="settings-list-control">
+                  <button
+                    type="button"
+                    onClick={() => setRecordingShortcutId(isRecording ? null : sh.id)}
+                    className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
+                  >
+                    {isRecording ? '录制中...' : displayKey}
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
-    </>
+      </section>
+    </div>
   );
 };

@@ -263,7 +263,19 @@ export const clientApi = {
   getSettingsEx: async (cwd: string): Promise<Settings> => {
     initSettingsDb();
     await new Promise(resolve => setTimeout(resolve, 100));
-    const globalSettings = JSON.parse(lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)!);
+    let globalSettings: Settings = DEFAULT_SETTINGS as Settings;
+    try {
+      const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+      if (raw) globalSettings = JSON.parse(raw) as Settings;
+    } catch {
+      // 损坏时回退默认，避免设置页永久「加载中」
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+      } catch {
+        /* ignore */
+      }
+      globalSettings = DEFAULT_SETTINGS as Settings;
+    }
 
     if (!cwd || cwd === '__global__') {
       return globalSettings;
