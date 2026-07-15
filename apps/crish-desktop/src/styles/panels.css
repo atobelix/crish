@@ -1334,13 +1334,31 @@
   gap: 6px;
   height: var(--control-height);
   padding: 0 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--bg-secondary);
+  background: transparent;
 }
 .files-path-form:focus-within {
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color);
   background: var(--bg-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.files-path-filter {
+  width: 88px;
+  flex-shrink: 0;
+  height: 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+}
+.files-nav-btn.is-on {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
 }
 .files-path-ico {
   color: var(--text-tertiary);
@@ -1385,12 +1403,19 @@
   font-family: inherit;
   padding: 0 2px;
   cursor: pointer;
-  max-width: 96px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .files-bc-chip:hover {
   color: var(--text-primary);
+}
+.files-bc-chip--file {
+  color: var(--text-primary);
+  font-weight: 600;
+  max-width: 160px;
+  cursor: default;
 }
 .files-bc-sep {
   color: var(--text-tertiary);

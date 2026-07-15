@@ -292,11 +292,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     onShowToast('批注将随下一条消息发给模型');
   };
 
+  /** 地址栏面包屑：浏览用 cwd；详情用文件父路径 + 文件名 */
   const breadcrumbs = useMemo(() => {
-    if (!root || !cwd) return [] as { label: string; path: string }[];
-    const rel = pathRelativeToRoot(cwd, root);
-    const items: { label: string; path: string }[] = [
-      { label: pathBasename(root) || '项目', path: root },
+    if (!root) return [] as { label: string; path: string; isFile?: boolean }[];
+    const dir =
+      view === 'detail' && selected
+        ? pathDirname(selected) || root
+        : cwd || root;
+    const rel = pathRelativeToRoot(dir, root);
+    const items: { label: string; path: string; isFile?: boolean }[] = [
+      { label: '项目', path: root },
     ];
     if (rel && rel !== '.') {
       let acc = root;
@@ -305,15 +310,24 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
         items.push({ label: part, path: acc });
       }
     }
+    if (view === 'detail' && selected) {
+      items.push({
+        label: pathBasename(selected),
+        path: selected,
+        isFile: true,
+      });
+    }
     return items;
-  }, [cwd, root]);
+  }, [cwd, root, selected, view]);
 
-  const copyPath = () => {
+  const copyPath = (mode: 'abs' | 'rel' = 'rel') => {
     const p = selected || cwd;
-    if (!p) return;
-    void navigator.clipboard.writeText(p).then(
-      () => onShowToast('路径已复制'),
-      () => onShowToast(p),
+    if (!p || !root) return;
+    const text =
+      mode === 'rel' ? pathRelativeToRoot(p, root) || pathBasename(p) : p;
+    void navigator.clipboard.writeText(text).then(
+      () => onShowToast(mode === 'rel' ? '已复制相对路径' : '已复制绝对路径'),
+      () => onShowToast(text),
     );
   };
 
@@ -334,20 +348,28 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     <div className="files-card">
       {/* 第 2 行：稳定导航 + 地址栏（与浏览器一致） */}
       <div className="files-bar">
-        <button
-          type="button"
-          className="files-nav-btn"
-          title={view === 'detail' ? '返回列表' : '上级'}
-          disabled={view === 'browse' && (!cwd || cwd === root)}
-          onClick={() => {
-            if (view === 'detail') {
+        {view === 'detail' ? (
+          <button
+            type="button"
+            className="files-nav-btn"
+            title="返回列表"
+            onClick={() => {
               setView('browse');
               setSelText('');
               setEditing(false);
-            } else goUp();
-          }}
+            }}
+          >
+            <Lucide.ArrowLeft size={16} />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="files-nav-btn"
+          title="上级目录"
+          disabled={!cwd || cwd === root}
+          onClick={() => goUp()}
         >
-          <Lucide.ArrowLeft size={16} />
+          <Lucide.CornerLeftUp size={16} />
         </button>
         <button
           type="button"
@@ -361,96 +383,88 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
           <Lucide.RotateCw size={16} />
         </button>
 
+        {/* 地址栏始终显示项目内路径；筛选不顶掉路径 */}
         <div className="files-path-form">
-          {view === 'browse' ? (
-            filterMode || filter ? (
-              <>
-                <Lucide.Search size={16} className="files-path-ico" />
-                <input
-                  ref={filterInputRef}
-                  className="files-path-input"
-                  placeholder="筛选文件…"
-                  value={filter}
-                  autoFocus
-                  onChange={(e) => setFilter(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setFilter('');
-                      setFilterMode(false);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="files-nav-btn files-nav-btn--sm"
-                  title="关闭筛选"
-                  onClick={() => {
-                    setFilter('');
-                    setFilterMode(false);
-                  }}
-                >
-                  <Lucide.X size={14} />
-                </button>
-              </>
+          <Lucide.Folder size={16} className="files-path-ico" />
+          <div
+            className="files-path-crumbs files-path-crumbs--grow"
+            title={
+              selected || cwd
+                ? `绝对路径：${selected || cwd}`
+                : '项目根目录'
+            }
+            aria-label="工作区相对路径"
+          >
+            {breadcrumbs.length === 0 ? (
+              <span className="files-bc-chip files-bc-chip--muted">项目</span>
             ) : (
-              <>
-                <Lucide.Folder size={16} className="files-path-ico" />
-                {/* 地址栏：项目内相对路径面包屑，不是「功能区」路由 */}
-                <div
-                  className="files-path-crumbs files-path-crumbs--grow"
-                  title={cwd ? `工作区路径：${cwd}` : '项目根'}
-                  aria-label="当前文件夹"
-                >
-                  {breadcrumbs.length === 0 ? (
-                    <span className="files-bc-chip files-bc-chip--muted">项目根</span>
-                  ) : (
-                    breadcrumbs.map((b, i) => (
-                      <React.Fragment key={b.path}>
-                        {i > 0 ? <span className="files-bc-sep">/</span> : null}
-                        <button
-                          type="button"
-                          className={`files-bc-chip ${i === 0 ? 'files-bc-chip--root' : ''}`}
-                          title={i === 0 ? '项目根目录' : b.path}
-                          onClick={() => {
-                            setView('browse');
-                            void refresh(b.path);
-                          }}
-                        >
-                          {i === 0 ? '项目' : b.label}
-                        </button>
-                      </React.Fragment>
-                    ))
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="files-nav-btn files-nav-btn--sm"
-                  title="筛选"
-                  onClick={() => {
-                    setFilterMode(true);
-                    requestAnimationFrame(() => filterInputRef.current?.focus());
-                  }}
-                >
-                  <Lucide.Search size={14} />
-                </button>
-              </>
-            )
-          ) : (
-            <>
-              <Lucide.File size={16} className="files-path-ico" />
-              <div
-                className="files-path-crumbs files-path-crumbs--grow"
-                title={selected || ''}
-                aria-label="当前文件相对路径"
-              >
-                <span className="files-bc-chip files-bc-chip--muted">文件</span>
-                <span className="files-bc-sep">/</span>
-                <span className="files-bc-chip">
-                  {selected ? pathRelativeToRoot(selected, root) || pathBasename(selected) : ''}
-                </span>
-              </div>
-            </>
-          )}
+              breadcrumbs.map((b, i) => {
+                const isLast = i === breadcrumbs.length - 1;
+                const canNav = !b.isFile;
+                return (
+                  <React.Fragment key={`${b.path}-${i}`}>
+                    {i > 0 ? <span className="files-bc-sep">/</span> : null}
+                    {canNav ? (
+                      <button
+                        type="button"
+                        className={`files-bc-chip ${i === 0 ? 'files-bc-chip--root' : ''}`}
+                        title={i === 0 ? '项目根目录' : b.path}
+                        onClick={() => {
+                          setView('browse');
+                          setSelected(null);
+                          setEditing(false);
+                          void refresh(b.path);
+                        }}
+                      >
+                        {b.label}
+                      </button>
+                    ) : (
+                      <span
+                        className={`files-bc-chip ${isLast ? 'files-bc-chip--file' : ''}`}
+                        title={b.path}
+                      >
+                        {b.label}
+                      </span>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </div>
+          {view === 'browse' && (filterMode || filter) ? (
+            <input
+              ref={filterInputRef}
+              className="files-path-filter"
+              placeholder="筛选…"
+              value={filter}
+              autoFocus
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setFilter('');
+                  setFilterMode(false);
+                }
+              }}
+            />
+          ) : null}
+          {view === 'browse' ? (
+            <button
+              type="button"
+              className={`files-nav-btn files-nav-btn--sm ${filterMode || filter ? 'is-on' : ''}`}
+              title={filterMode || filter ? '关闭筛选' : '筛选当前目录'}
+              onClick={() => {
+                if (filterMode || filter) {
+                  setFilter('');
+                  setFilterMode(false);
+                } else {
+                  setFilterMode(true);
+                  requestAnimationFrame(() => filterInputRef.current?.focus());
+                }
+              }}
+            >
+              {filterMode || filter ? <Lucide.X size={14} /> : <Lucide.Search size={14} />}
+            </button>
+          ) : null}
         </div>
 
         {pendingCount > 0 ? (
@@ -458,6 +472,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             {pendingCount}
           </span>
         ) : null}
+
+        <button
+          type="button"
+          className="files-nav-btn"
+          title="复制相对路径"
+          onClick={() => copyPath('rel')}
+        >
+          <Lucide.Copy size={15} />
+        </button>
 
         <div className="files-more-wrap" ref={moreRef}>
           <button
@@ -474,11 +497,21 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                 type="button"
                 className="files-more-item"
                 onClick={() => {
-                  copyPath();
+                  copyPath('rel');
                   setMoreOpen(false);
                 }}
               >
-                复制路径
+                复制相对路径
+              </button>
+              <button
+                type="button"
+                className="files-more-item"
+                onClick={() => {
+                  copyPath('abs');
+                  setMoreOpen(false);
+                }}
+              >
+                复制绝对路径
               </button>
               <button
                 type="button"
