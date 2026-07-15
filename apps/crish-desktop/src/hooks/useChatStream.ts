@@ -494,12 +494,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     }
     const rawInput = chatInput.trim();
 
-    // /schedule → 打开设置「定时任务」页（不伪装为引擎内联调度命令）
+    // /schedule → 主对话区定时任务（与侧栏入口一致）
     if (/^\/schedule\b/i.test(rawInput)) {
       setChatInput('');
       setSlashMenuOpen(false);
-      useLayoutStore.getState().openSettings('schedule');
-      onShowToast('已打开定时任务设置');
+      try {
+        window.dispatchEvent(new CustomEvent('crish-open-scheduled'));
+      } catch {
+        /* ignore */
+      }
+      onShowToast('已打开定时任务');
       return;
     }
 
