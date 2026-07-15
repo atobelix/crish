@@ -145,10 +145,12 @@ export function markdownHtmlCacheSize(): number {
   return MARKDOWN_HTML_CACHE.size;
 }
 
+/**
+ * 缓存键必须标识完整正文身份。
+ * 不得对长文本只取头尾（不同中间内容会碰撞，返回错误 HTML）。
+ */
 function markdownCacheKey(raw: string): string {
-  // 过长键只取头尾 + 长度，降低 Map 内存；碰撞概率极低
-  if (raw.length <= 512) return raw;
-  return `${raw.length}:${raw.slice(0, 200)}:${raw.slice(-200)}`;
+  return raw;
 }
 
 /**
