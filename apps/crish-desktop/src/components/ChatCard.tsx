@@ -19,7 +19,7 @@ import { ModelPicker } from './ModelPicker';
 import { ChatMessageList } from './ChatMessageList';
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
 import { networkUserMessage } from '../api/userFacingErrors';
-import { toolSummaryLabel } from '../api/toolPresentation';
+import { toolHumanLabel } from '../api/toolPresentation';
 import {
   getSkillSlashCommandsCached,
   type SkillSlashCommand,
@@ -170,7 +170,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       pendingApprovalCount += 1;
       if (!pendingApprovalMsgId) {
         pendingApprovalMsgId = m.id;
-        pendingApprovalSummary = toolSummaryLabel(tc);
+        pendingApprovalSummary = toolHumanLabel(tc);
       }
     }
   }

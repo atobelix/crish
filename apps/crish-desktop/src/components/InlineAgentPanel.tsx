@@ -7,9 +7,10 @@ import type { SessionAgent } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
 import {
   buildAssistantTimeline,
+  extractToolCommand,
   toolCommandPreview,
+  toolHumanLabel,
   toolResultPreview,
-  toolSummaryLabel,
   truncateToolOutput,
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
@@ -263,20 +264,26 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                                   );
                                 }
                                 const tc = ti.tc;
+                                const summary = toolHumanLabel(tc);
+                                const techFull = extractToolCommand(tc.arguments || '');
+                                const cmd = toolCommandPreview(tc, 72);
+                                const preview = toolResultPreview(tc);
                                 const out = truncateToolOutput(tc.output || '', 6, 600);
                                 return (
                                   <div key={tc.id} className="tool-row">
                                     <div className="tool-row-head tool-row-head--static">
-                                      <span className="tool-row-summary">
-                                        {toolSummaryLabel(tc)}
-                                      </span>
-                                      {toolCommandPreview(tc) ? (
-                                        <code className="tool-row-cmd">{toolCommandPreview(tc)}</code>
-                                      ) : null}
-                                      {toolResultPreview(tc) ? (
-                                        <span className="tool-row-result-preview">
-                                          {toolResultPreview(tc)}
+                                      <span className="tool-row-text">
+                                        <span className="tool-row-summary" title={summary}>
+                                          {summary}
                                         </span>
+                                        {cmd ? (
+                                          <code className="tool-row-cmd" title={techFull || cmd}>
+                                            {cmd}
+                                          </code>
+                                        ) : null}
+                                      </span>
+                                      {preview ? (
+                                        <span className="tool-row-result-preview">{preview}</span>
                                       ) : null}
                                     </div>
                                     {out ? (

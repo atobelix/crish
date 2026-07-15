@@ -1278,7 +1278,7 @@
   text-align: left;
   color: var(--text-tertiary);
   min-height: var(--control-height-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
 }
 .tool-row-head-main {
   display: flex;
@@ -1300,17 +1300,16 @@
 .tool-row-chevron-slot.is-toggle {
   opacity: 1;
 }
+/* hover：仅主行人话略抬；副行命令保持 tertiary，不抢视觉 */
 .tool-row-head:hover {
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .tool-row-head:hover .tool-row-summary {
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
 }
 .tool-row-head:hover .tool-row-cmd {
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-normal);
+  color: var(--text-tertiary);
 }
 .tool-status-icon--muted {
   display: none;
@@ -1331,8 +1330,8 @@
   flex-shrink: 1;
   max-width: 100%;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1971,10 +1970,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
-}
-.msg-thinking-sec {
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
 }
 
 /* 首次向导 */
@@ -2739,11 +2735,13 @@
   opacity: 0.85;
 }
 
-/* 思考：重要性低于正文；约 3.5 行高，区内滚动；纯文本非 markdown */
+/* 思考（折叠/短文）：无背景无边框无卡片感；tertiary 弱化，统一克制 */
 .msg-thinking-fold {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
+  padding: 0;
   border: none;
   background: transparent;
+  box-shadow: none;
   max-width: min(720px, 100%);
 }
 .msg-thinking-fold-sum {
@@ -2754,38 +2752,45 @@
   list-style: none;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   user-select: none;
   padding: 0;
+  background: transparent;
+  border: none;
 }
 .msg-thinking-fold-sum::-webkit-details-marker {
   display: none;
 }
 .msg-thinking-fold-label {
   color: var(--text-tertiary);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
 }
 .msg-thinking-fold.is-live .msg-thinking-fold-label {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  opacity: 0.95;
 }
 .msg-thinking-fold-body {
   margin: 4px 0 0;
   padding: 0;
   font-size: var(--font-size-sm);
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
   /* 约 3.5–4 行，随 sm 字号 */
-  max-height: calc(var(--font-size-sm) * 1.45 * 4);
+  max-height: calc(var(--font-size-sm) * 1.5 * 4);
   overflow-y: auto;
   border: none;
   background: transparent;
+  box-shadow: none;
   font-family: inherit;
+  opacity: 0.9;
 }
 .msg-thinking-sec {
   color: var(--text-tertiary);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
 .msg-status-badge.queued {
@@ -3881,44 +3886,10 @@
   overflow: visible;
   margin: 4px 0 6px;
 }
+/* tool-row / thinking 色与字重见上文主定义；此处仅保留布局微调 */
 .tool-row-head {
   min-height: 24px !important;
   padding: 3px 0 !important;
-  font-weight: var(--font-weight-normal) !important;
-  color: var(--text-tertiary);
-}
-.tool-row-summary,
-.tool-row-cmd,
-.tool-row-result-preview {
-  font-weight: var(--font-weight-normal) !important;
-}
-.tool-row-summary {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-.tool-row-cmd {
-  font-size: var(--font-size-xs);
-}
-.tool-row-head:hover .tool-row-summary,
-.tool-row-head:hover .tool-row-cmd {
-  font-weight: var(--font-weight-normal) !important;
-}
-
-.msg-thinking-fold {
-  margin: 0 0 8px;
-}
-.msg-thinking-fold-sum,
-.msg-thinking-fold-label,
-.msg-thinking-sec {
-  font-weight: var(--font-weight-normal) !important;
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-}
-.msg-thinking-fold-body {
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-tertiary);
-  max-height: calc(var(--font-size-sm) * 1.5 * 4);
 }
 
 .msg-icon-btn {
@@ -4373,26 +4344,29 @@
 .sched-item-actions { display: flex; gap: 2px; flex-shrink: 0; }
 
 
-/* 短思考：不折叠；无背景无边框，弱化显示 */
+/* 短思考：不折叠；与折叠思考同策略 — 无背景/边框/卡片感，tertiary 克制 */
 .msg-thinking-plain {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   padding: 0;
-  max-width: 720px;
+  max-width: min(720px, 100%);
   background: transparent;
   border: none;
+  box-shadow: none;
 }
 .msg-thinking-plain-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   margin-bottom: 2px;
-  opacity: 0.85;
 }
 .msg-thinking-plain-body {
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
   opacity: 0.9;
+  background: transparent;
+  border: none;
 }

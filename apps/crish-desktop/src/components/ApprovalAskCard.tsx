@@ -14,14 +14,18 @@ type Props = {
   onDeny: () => void;
 };
 
-/** 把技术摘要收成用户能懂的一句话 */
+/** 把技术摘要收成用户能懂的一句话（summary 优先为人话主文案） */
 function plainQuestion(summary: string, cmd?: string): string {
   const s = (summary || '').trim();
   const c = (cmd || '').trim();
   // summary 已是人话时，直接问「是否允许…」
-  if (/[\u4e00-\u9fff]/.test(s) && s.length <= 48 && !/^[\w./\\-]+$/.test(s)) {
+  if (/[\u4e00-\u9fff]/.test(s) && s.length <= 56 && !/^[\w./\\-]+$/.test(s)) {
     if (/^是否允许/.test(s)) return s;
-    if (/正在|查看|修改|搜索|运行|安装|构建|列出|浏览/.test(s)) {
+    if (
+      /正在|查看|修改|搜索|运行|安装|构建|列出|浏览|执行|启动|切换|推送|拉取|暂存|创建|克隆|配置|发布|还原|请求|连接|传输|管理|查询|应用|进入|删除|复制|移动|格式化|检查|获取|操作|通过|处理|添加|卸载/.test(
+        s,
+      )
+    ) {
       return `是否允许：${s.replace(/^正在/, '')}？`.replace(/？？$/, '？');
     }
   }
@@ -37,7 +41,10 @@ function plainQuestion(summary: string, cmd?: string): string {
   if (/git |push|commit/i.test(c) || /Git|git/i.test(s)) {
     return '是否允许执行 Git 相关操作？';
   }
-  if (/npm |pnpm |yarn |pip |cargo |安装|构建/i.test(c + s)) {
+  if (/kubectl |aws |ssh |chmod |dotnet |cmake |make /i.test(c) || /Kubernetes|AWS|SSH|权限|\.NET|CMake|Make/i.test(s)) {
+    return '是否允许执行系统或云资源相关操作？';
+  }
+  if (/npm |pnpm |yarn |pip |cargo |go |安装|构建/i.test(c + s)) {
     return '是否允许运行安装或构建类命令？';
   }
   if (c) {

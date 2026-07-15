@@ -217,14 +217,15 @@ function CompactToolRow({
   }
   if (tc.status === 'pending_approval') {
     const summary = toolHumanLabel(tc);
-    const tech = extractToolCommand(tc.arguments || '') || toolCommandPreview(tc, 72);
+    const techFull = extractToolCommand(tc.arguments || '');
+    const tech = techFull && techFull !== summary ? techFull : toolCommandPreview(tc, 72);
     const mid = msgId || pendingApprovalMsgId;
     return (
       <ApprovalAskCard
         key={rowKey}
         msgId={mid}
         summary={summary}
-        cmd={tech && tech !== summary ? tech : toolCommandPreview(tc)}
+        cmd={tech && tech !== summary ? tech : undefined}
         busy={approvalBusy}
         onAllow={(note) => {
           if (note.trim()) {
@@ -248,7 +249,7 @@ function CompactToolRow({
     : defaultOpen;
   const human = toolHumanLabel(tc);
   const techFull = extractToolCommand(tc.arguments || '');
-  const cmd = toolCommandPreview(tc, 64) || (techFull && techFull !== human ? techFull.slice(0, 64) : '');
+  const cmd = toolCommandPreview(tc, 72);
   const running = tc.status === 'running';
   const canToggle = Boolean(body) || hasResult;
   const filePath = extractFilePathFromToolArgs(tc.arguments || '');

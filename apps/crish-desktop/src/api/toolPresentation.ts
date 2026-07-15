@@ -68,36 +68,121 @@ function isHumanExplanation(text: string, toolName: string): boolean {
   return false;
 }
 
+/** 去掉前导 cd / 取链式命令中真正干活的一段（便于人话） */
+function primaryShellSegment(cmd: string): string {
+  let s = cmd.replace(/\s+/g, ' ').trim();
+  if (!s) return s;
+
+  // 反复剥掉前导 cd / Set-Location / pushd（cd foo && npm i）
+  const cdHead =
+    /^(?:cd|Set-Location|sl|pushd)\s+(?:\/[dD]\s+)?(?:"[^"]+"|'[^']+'|[^\s&|;]+)\s*(?:&&|;)\s*/i;
+  while (cdHead.test(s)) {
+    s = s.replace(cdHead, '');
+  }
+
+  // 仍有 && / ; 链：取最后一个非 cd 段（多半是实际操作）
+  if (/\s*(?:&&|;)\s*/.test(s)) {
+    const parts = s
+      .split(/\s*(?:&&|;)\s*/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .filter((p) => !/^(?:cd|Set-Location|sl|pushd)\b/i.test(p));
+    if (parts.length) s = parts[parts.length - 1];
+  }
+
+  // PowerShell / bash 管道：用管道第一段做主意图（| Select-Object 等多为过滤）
+  if (/\s\|\s/.test(s) && !/^\s*aws\b/i.test(s)) {
+    const head = s.split(/\s\|\s/)[0]?.trim();
+    if (head) s = head;
+  }
+
+  return s.trim();
+}
+
 /**
  * 把终端/shell 命令翻译成用户一眼能懂的说明。
  * 技术原文仍由 toolCommandPreview / tool-row-cmd 展示。
  */
 export function humanizeShellCommand(cmd: string): string {
-  const raw = cmd.replace(/\s+/g, ' ').trim();
+  const full = cmd.replace(/\s+/g, ' ').trim();
+  if (!full) return '运行命令';
+  const raw = primaryShellSegment(full);
   if (!raw) return '运行命令';
   const lower = raw.toLowerCase();
 
-  // 包管理 / 脚本
-  if (/\b(npm|pnpm|yarn)\s+i(nstall)?(\s|$)/i.test(raw) && !/\s-/.test(raw.split(/\s+/).slice(0, 3).join(' '))) {
-    return '安装项目依赖';
+  // 包管理 / 脚本（npm / pnpm / yarn）
+  if (/\b(npm|pnpm|yarn)\s+(ci|install|i)(\s|$)/i.test(raw)) {
+    const rest = raw.replace(/^.*\b(?:ci|install|i)\s*/i, '').trim();
+    const pkg = rest.split(/\s+/).find((t) => t && !t.startsWith('-'));
+    return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
-  if (/\b(npm|pnpm|yarn)\s+(install|i)\s+/i.test(raw)) {
-    const pkg = raw.replace(/^.*\b(?:install|i)\s+/i, '').split(/\s+/)[0];
+  if (/\b(npm|pnpm|yarn)\s+add\s+/i.test(raw)) {
+    const pkg = raw.replace(/^.*\badd\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
     return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
   if (/\b(npm|pnpm|yarn)\s+run\s+([\w:-]+)/i.test(raw) || /\b(npm|pnpm|yarn)\s+([\w:-]+)\b/i.test(raw)) {
     const m = raw.match(/\b(?:npm|pnpm|yarn)\s+(?:run\s+)?([\w:-]+)/i);
     const script = m?.[1]?.toLowerCase();
-    if (script === 'build' || script === 'prod') return '构建项目';
-    if (script === 'dev' || script === 'start') return '启动开发服务';
-    if (script === 'test' || script?.startsWith('test:')) return '运行测试';
-    if (script === 'lint' || script?.startsWith('lint')) return '检查代码规范';
-    if (script === 'typecheck' || script === 'tsc') return '检查类型';
-    if (script) return `运行脚本 ${script}`;
+    const skip = !script || script === 'i' || script === 'install' || script === 'ci' || script === 'add';
+    if (!skip) {
+      if (script === 'build' || script === 'prod') return '构建项目';
+      if (script === 'dev' || script === 'start') return '启动开发服务';
+      if (script === 'test' || script.startsWith('test:')) return '运行测试';
+      if (script === 'lint' || script.startsWith('lint')) return '检查代码规范';
+      if (script === 'typecheck' || script === 'tsc') return '检查类型';
+      return `运行脚本 ${script}`;
+    }
   }
   if (/\bnpx\s+/i.test(raw)) {
     const tool = raw.replace(/^.*\bnpx\s+/i, '').split(/\s+/)[0];
     return tool ? `运行工具 ${tool}` : '运行命令行工具';
+  }
+
+  // Python 包 / 脚本
+  if (/\b(pip3?|python\s+-m\s+pip|py\s+-m\s+pip)\s+(install|i)\b/i.test(raw)) {
+    const rest = raw.replace(/^.*\b(?:install|i)\s*/i, '').trim();
+    const pkg = rest.split(/\s+/).find((t) => t && !t.startsWith('-'));
+    return pkg ? `安装 Python 包 ${pkg}` : '安装 Python 依赖';
+  }
+  if (/\b(pip3?|python\s+-m\s+pip)\s+uninstall\b/i.test(raw)) return '卸载 Python 包';
+  if (/\b(pip3?|python\s+-m\s+pip)\s+list\b/i.test(raw)) return '查看已装 Python 包';
+  if (/\bpython\b|\bpy\b/i.test(lower) && /\.py\b/i.test(raw)) return '运行 Python 脚本';
+  if (/\bpytest\b/i.test(raw)) return '运行 Python 测试';
+
+  // Go
+  if (/\bgo\s+test\b/i.test(raw)) return '运行 Go 测试';
+  if (/\bgo\s+build\b/i.test(raw)) return '构建 Go 项目';
+  if (/\bgo\s+run\b/i.test(raw)) return '运行 Go 程序';
+  if (/\bgo\s+mod\b/i.test(raw)) return '管理 Go 依赖';
+  if (/\bgo\s+get\b/i.test(raw)) return '获取 Go 依赖';
+  if (/\bgo\s+fmt\b|\bgo\s+vet\b/i.test(raw)) return '检查 Go 代码';
+  if (/\bgo\s+/i.test(raw)) return '执行 Go 命令';
+
+  // Rust
+  if (/\bcargo\s+run\b/i.test(raw)) return '运行 Rust 程序';
+  if (/\bcargo\s+test\b/i.test(raw)) return '运行 Rust 测试';
+  if (/\bcargo\s+check\b/i.test(raw)) return '检查 Rust 编译';
+  if (/\bcargo\s+build\b/i.test(raw)) return '构建 Rust 项目';
+  if (/\bcargo\s+add\b/i.test(raw)) return '添加 Rust 依赖';
+  if (/\bcargo\s+/i.test(raw)) return '执行 Cargo 命令';
+
+  // .NET
+  if (/\bdotnet\s+test\b/i.test(raw)) return '运行 .NET 测试';
+  if (/\bdotnet\s+build\b/i.test(raw)) return '构建 .NET 项目';
+  if (/\bdotnet\s+run\b/i.test(raw)) return '运行 .NET 程序';
+  if (/\bdotnet\s+restore\b/i.test(raw)) return '还原 .NET 依赖';
+  if (/\bdotnet\s+publish\b/i.test(raw)) return '发布 .NET 项目';
+  if (/\bdotnet\s+/i.test(raw)) return '执行 .NET 命令';
+
+  // CMake / Make
+  if (/\bcmake\b/i.test(raw)) {
+    if (/\b--build\b/i.test(raw) || /\s+--build\b/i.test(raw)) return '用 CMake 构建';
+    return '配置 CMake 工程';
+  }
+  if (/^make\b/i.test(raw) || /\bmake\s+[\w-]+/i.test(raw)) {
+    const t = raw.match(/^make\s+([\w.-]+)/i)?.[1];
+    if (t && t !== '-j' && !t.startsWith('-')) return `执行 make ${t}`;
+    return '执行 Make 构建';
   }
 
   // Git
@@ -110,41 +195,84 @@ export function humanizeShellCommand(cmd: string): string {
   if (/\bgit\s+pull\b/i.test(raw)) return '拉取远程更新';
   if (/\bgit\s+checkout\b|\bgit\s+switch\b/i.test(raw)) return '切换分支';
   if (/\bgit\s+branch\b/i.test(raw)) return '查看或管理分支';
+  if (/\bgit\s+clone\b/i.test(raw)) return '克隆仓库';
+  if (/\bgit\s+fetch\b/i.test(raw)) return '获取远程更新';
+  if (/\bgit\s+merge\b|\bgit\s+rebase\b/i.test(raw)) return '合并分支';
   if (/\bgit\s+/i.test(raw)) return '执行 Git 操作';
 
-  // 编译 / 检查
+  // 云 / 集群 / 远程
+  if (/\bkubectl\b/i.test(raw)) {
+    if (/\bget\b/i.test(raw)) return '查询 Kubernetes 资源';
+    if (/\bapply\b/i.test(raw)) return '应用 Kubernetes 配置';
+    if (/\blogs\b/i.test(raw)) return '查看集群日志';
+    if (/\bdescribe\b/i.test(raw)) return '查看 Kubernetes 详情';
+    if (/\bdelete\b/i.test(raw)) return '删除 Kubernetes 资源';
+    if (/\bexec\b/i.test(raw)) return '进入集群容器';
+    return '执行 Kubernetes 操作';
+  }
+  if (/\baws\b/i.test(raw)) {
+    if (/\bs3\b/i.test(raw)) return '操作 AWS S3';
+    if (/\bec2\b/i.test(raw)) return '操作 AWS EC2';
+    if (/\blambda\b/i.test(raw)) return '操作 AWS Lambda';
+    if (/\bsts\b/i.test(raw)) return '查询 AWS 身份';
+    return '执行 AWS 命令';
+  }
+  if (/^ssh\b/i.test(raw) || /\bssh\s+/i.test(raw)) return '通过 SSH 连接远程';
+  if (/^scp\b/i.test(raw) || /\bscp\s+/i.test(raw)) return '通过 SCP 传输文件';
+  if (/\bdocker\b/i.test(raw)) {
+    if (/\bps\b/i.test(raw)) return '查看 Docker 容器';
+    if (/\bbuild\b/i.test(raw)) return '构建 Docker 镜像';
+    if (/\bcompose\b/i.test(raw) || /\b-compose\b/i.test(raw)) return '运行 Docker Compose';
+    if (/\blogs\b/i.test(raw)) return '查看 Docker 日志';
+    return '运行 Docker 相关命令';
+  }
+
+  // 权限
+  if (/^chmod\b/i.test(raw) || /\bchmod\s+/i.test(raw)) return '修改文件权限';
+  if (/^chown\b/i.test(raw) || /\bchown\s+/i.test(raw)) return '修改文件所有者';
+
+  // 编译 / 检查 / 测试
   if (/\btsc\b/i.test(raw) || /\btypescript\b/i.test(raw)) return '检查 TypeScript 类型';
   if (/\beslint\b/i.test(raw)) return '运行 ESLint 检查';
   if (/\bprettier\b/i.test(raw)) return '格式化代码';
-  if (/\bvitest\b|\bjest\b|\bpytest\b/i.test(raw)) return '运行测试';
-  if (/\bcargo\s+(build|check|test)\b/i.test(raw)) {
-    if (/test/i.test(raw)) return '运行 Rust 测试';
-    if (/check/i.test(raw)) return '检查 Rust 编译';
-    return '构建 Rust 项目';
-  }
-  if (/\bpython\b|\bpy\b/i.test(lower) && /\.py\b/i.test(raw)) return '运行 Python 脚本';
+  if (/\bvitest\b|\bjest\b/i.test(raw)) return '运行测试';
   if (/\bnode\b/i.test(lower) && /\.m?js\b/i.test(raw)) return '运行 Node 脚本';
 
-  // 文件浏览
-  if (/^(ls|dir|ll|Get-ChildItem|gci)\b/i.test(raw) || /\bls\s+/i.test(raw)) {
+  // 文件浏览 / 读写（含 PowerShell 别名）
+  if (
+    /^(ls|dir|ll|Get-ChildItem|gci)\b/i.test(raw) ||
+    /\bGet-ChildItem\b/i.test(raw) ||
+    (/\bls\s+/i.test(raw) && !/\bnpm\b/i.test(raw))
+  ) {
     return '列出目录内容';
   }
-  if (/^(cat|type|Get-Content|gc|head|tail)\b/i.test(raw)) {
+  if (/^(cat|type|Get-Content|gc|head|tail)\b/i.test(raw) || /\bGet-Content\b/i.test(raw)) {
     const file = raw.split(/\s+/).find((p) => /[./\\]/.test(p) && !p.startsWith('-'));
     return file ? `查看 ${basename(file)}` : '查看文件内容';
   }
-  if (/^(rm|del|Remove-Item|ri)\b/i.test(raw)) return '删除文件或目录';
-  if (/^(cp|copy|Copy-Item)\b/i.test(raw)) return '复制文件';
-  if (/^(mv|move|Move-Item|ren)\b/i.test(raw)) return '移动或重命名';
-  if (/^(mkdir|md|New-Item)\b/i.test(raw)) return '创建目录';
-  if (/\bcd\b|\bSet-Location\b/i.test(raw)) return '切换工作目录';
-  if (/\brg\b|\bgrep\b|\bfindstr\b|\bfind\b/i.test(raw)) {
+  if (/^(rm|del|Remove-Item|ri)\b/i.test(raw) || /\bRemove-Item\b/i.test(raw)) return '删除文件或目录';
+  if (/^(cp|copy|Copy-Item)\b/i.test(raw) || /\bCopy-Item\b/i.test(raw)) return '复制文件';
+  if (/^(mv|move|Move-Item|ren|Rename-Item)\b/i.test(raw) || /\bMove-Item\b|\bRename-Item\b/i.test(raw)) {
+    return '移动或重命名';
+  }
+  if (/^(mkdir|md|New-Item)\b/i.test(raw) || /\bNew-Item\b/i.test(raw)) return '创建目录';
+  // 纯切换目录（复合命令已在 primaryShellSegment 剥掉）
+  if (/^(cd|Set-Location|sl|pushd|popd)\b/i.test(raw)) return '切换工作目录';
+
+  // 搜索
+  if (/\brg\b|\bgrep\b|\bfindstr\b|\bSelect-String\b|\bfind\b/i.test(raw)) {
     const q = raw.match(/['"]([^'"]{1,40})['"]/) || raw.match(/\s(-e\s+)?(\S{2,40})\s*$/);
     const term = q?.[1] || q?.[2];
     return term && !term.startsWith('-') ? `搜索「${term}」` : '搜索代码';
   }
-  if (/\bcurl\b|\bwget\b|\binvoke-webrequest\b/i.test(raw)) return '请求网络资源';
-  if (/\bdocker\b/i.test(raw)) return '运行 Docker 相关命令';
+
+  // 网络 / 进程（PowerShell 常见）
+  if (/\bcurl\b|\bwget\b|\bInvoke-WebRequest\b|\bInvoke-RestMethod\b/i.test(raw)) return '请求网络资源';
+  if (/\bGet-Process\b|\bStop-Process\b|(^|\s)ps(\s|$)/i.test(raw)) return '查看或管理进程';
+  if (/\bGet-Service\b|\bStart-Service\b|\bStop-Service\b/i.test(raw)) return '管理 Windows 服务';
+  if (/\bSelect-Object\b|\bWhere-Object\b|\bForEach-Object\b|\bSort-Object\b/i.test(raw)) {
+    return '处理命令输出';
+  }
 
   return '运行命令';
 }
@@ -231,15 +359,16 @@ export function toolSummaryLabel(tc: MessageToolCall): string {
 
 /**
  * 次要技术预览：真实命令/路径，与人话主文案区分开。
- * 即使与摘要部分重叠也尽量展示，方便进阶用户核对。
+ * 人话作主行时技术副行尽量显示完整命令（默认 max 72）。
  */
-export function toolCommandPreview(tc: MessageToolCall, max = 56): string {
+export function toolCommandPreview(tc: MessageToolCall, max = 72): string {
   const cmd = extractToolCommand(tc.arguments || '');
   if (!cmd) return '';
   const human = toolHumanLabel(tc);
   const one = cmd.replace(/\s+/g, ' ').trim();
   // 人话已等于完整命令时不再重复
   if (human === one) return '';
+  // 人话已是中文说明时，副行展示完整技术命令（可截断）
   return one.length <= max ? one : one.slice(0, max - 1) + '…';
 }
 

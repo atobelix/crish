@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { extractToolCommand, toolSummaryLabel } from '../api/toolPresentation';
+import { extractToolCommand, toolHumanLabel } from '../api/toolPresentation';
 
 export type ApprovalSheetTool = {
   id: string;
@@ -42,7 +42,7 @@ export const ApprovalSheet: React.FC<Props> = ({
   onAllowAndRemember,
   variant = 'inline',
 }) => {
-  const summary = toolSummaryLabel({
+  const summary = toolHumanLabel({
     id: tool.id,
     name: tool.name,
     arguments: tool.arguments || '',
@@ -50,7 +50,8 @@ export const ApprovalSheet: React.FC<Props> = ({
     status: 'pending_approval',
   });
   const command = formatCommand(tool);
-  const showCmd = command && command !== summary && !summary.includes(command);
+  // 人话主行 + 技术副行（完整命令，避免与人话重复）
+  const showCmd = Boolean(command && command !== summary);
 
   return (
     <div

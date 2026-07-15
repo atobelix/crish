@@ -7,9 +7,10 @@ import { useLayoutStore } from '../store/layoutStore';
 import type { SessionAgent, SessionMessage } from '../store/layoutStore';
 import {
   buildAssistantTimeline,
+  extractToolCommand,
   toolCommandPreview,
+  toolHumanLabel,
   toolResultPreview,
-  toolSummaryLabel,
   truncateToolOutput,
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
@@ -491,15 +492,24 @@ function AgentMessageRow({ msg }: { msg: SessionMessage }) {
                   );
                 }
                 const tc = ti.tc;
-                const summary = toolSummaryLabel(tc);
-                const cmd = toolCommandPreview(tc);
+                const summary = toolHumanLabel(tc);
+                const techFull = extractToolCommand(tc.arguments || '');
+                const cmd = toolCommandPreview(tc, 72);
                 const preview = toolResultPreview(tc);
                 const out = truncateToolOutput(tc.output || '', 8, 800);
                 return (
                   <div key={tc.id} className="tool-row">
                     <div className="tool-row-head tool-row-head--static">
-                      <span className="tool-row-summary">{summary}</span>
-                      {cmd ? <code className="tool-row-cmd">{cmd}</code> : null}
+                      <span className="tool-row-text">
+                        <span className="tool-row-summary" title={summary}>
+                          {summary}
+                        </span>
+                        {cmd ? (
+                          <code className="tool-row-cmd" title={techFull || cmd}>
+                            {cmd}
+                          </code>
+                        ) : null}
+                      </span>
                       {preview ? (
                         <span className="tool-row-result-preview">{preview}</span>
                       ) : null}
