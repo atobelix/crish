@@ -363,7 +363,7 @@ body {
 }
 
 .daemon-status-dot--connected {
-  background: #22c55e;
+  background: var(--text-secondary);
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
 }
 
@@ -1435,16 +1435,7 @@ body {
   margin-bottom: 4px;
 }
 
-.chat-footer {
-  border-top: 1px solid var(--border-subtle);
-  padding: 6px 14px 10px;
-  background-color: var(--bg-primary);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-top: 0;
-}
+/* .chat-footer 主定义见下方 Composer stack */
 
 /* Context chips — text-like, no colored blocks */
 .chat-context-ribbon {
@@ -1770,7 +1761,7 @@ body {
   color: var(--accent-green);
 }
 .ui-btn-success:hover {
-  background: #d1fae5;
+  background: var(--bg-active);
   color: var(--accent-green-hover);
 }
 .ui-btn-success-solid {
@@ -2239,7 +2230,7 @@ body {
 }
 
 .term-success {
-  color: #10b981;
+  color: var(--text-secondary);
 }
 
 .term-command {
@@ -2928,7 +2919,7 @@ body.dragging-card * {
 }
 
 .bubble-status-icon {
-  color: #6366f1;
+  color: var(--text-secondary);
 }
 
 /* User Message Left-Bottom Hover Toolbar */
@@ -2969,8 +2960,8 @@ body.dragging-card * {
 
 .toolbar-btn:hover {
   background: var(--bg-primary);
-  color: #4f46e5;
-  border-color: #6366f1;
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
   transform: translateY(-1px);
   box-shadow: 0 3px 8px rgba(99, 102, 241, 0.15);
 }
@@ -3432,7 +3423,7 @@ body.dragging-card * {
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: #ea580c;
+  color: var(--text-secondary);
   font-size: 12px;
   margin-bottom: 6px;
 }
@@ -3465,20 +3456,14 @@ body.dragging-card * {
 }
 
 .sticky-approve-btn {
-  background-color: #ea580c;
-  color: #ffffff;
-  border: none;
-  border-radius: 5px;
-  padding: 5px 14px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.2);
+  background: var(--bg-active);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
 }
 
 .sticky-approve-btn:hover {
-  background-color: #c2410c;
+  background-color: var(--text-secondary);
   transform: translateY(-1px);
 }
 
@@ -3512,7 +3497,7 @@ body.dragging-card * {
 
 .loading-spinner {
   border: 2px solid rgba(16, 185, 129, 0.1);
-  border-top: 2px solid #10b981;
+  border-top: 2px solid var(--text-tertiary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -3562,12 +3547,12 @@ body.dragging-card * {
 }
 
 .plan-mode-toggle-btn.active {
-  border-color: #10b981;
-  color: #10b981;
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 .plan-mode-toggle-btn.active .toggle-indicator {
-  background-color: #10b981;
+  background-color: var(--bg-active);
   box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
 }
 
@@ -3608,7 +3593,7 @@ body.dragging-card * {
 }
 
 .plan-capsule .sparkle-icon-spin {
-  color: #10b981;
+  color: var(--text-secondary);
   animation: spin-pulse 3s infinite linear;
 }
 
@@ -3686,7 +3671,7 @@ body.dragging-card * {
 
 .plan-card-body .progress-bar-fill {
   height: 100%;
-  background: #10b981;
+  background: var(--bg-active);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -3712,7 +3697,7 @@ body.dragging-card * {
 }
 
 .checklist-item.done svg {
-  color: #10b981;
+  color: var(--text-secondary);
 }
 
 .checklist-item.active {
@@ -3738,7 +3723,7 @@ body.dragging-card * {
   width: 100%;
   background: var(--bg-primary);
   border: 1px solid #d2d2d2;
-  color: #10b981;
+  color: var(--text-secondary);
   padding: 5px 12px;
   border-radius: 4px;
   font-size: 10.5px;
@@ -3798,7 +3783,7 @@ body.dragging-card * {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #ea580c;
+  color: var(--text-secondary);
 }
 
 .global-approval-modal .modal-header .warning-icon {
@@ -3860,7 +3845,7 @@ body.dragging-card * {
 .global-approval-modal .modal-approve-btn {
   background: var(--bg-primary);
   border: 1px solid transparent;
-  color: #ea580c;
+  color: var(--text-secondary);
   padding: 5px 14px;
   border-radius: 4px;
   font-size: 11px;
@@ -4894,7 +4879,7 @@ select.ui-input {
 .mode-switch-chip.is-demo {
   background: var(--bg-tertiary);
   border-color: #fed7aa;
-  color: #c2410c;
+  color: var(--text-secondary);
 }
 .mode-switch-chip:hover {
   background: var(--bg-hover);
@@ -5091,15 +5076,18 @@ select.ui-input {
   padding-left: 18px;
 }
 
-/* Composer stack: clear separation */
+/* Composer stack — 与上方 .chat-footer 合并，避免双重定义 */
 .chat-footer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 6px 16px 14px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 0%, transparent) 0%, var(--bg-primary) 28%);
+  gap: 6px;
+  padding: 6px 14px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
   position: relative;
   z-index: 5;
+  flex-shrink: 0;
+  margin-top: 0;
 }
 
 /* 回到最新：对话区右下角悬浮图标；低于审批条避免挡按钮 */
@@ -5902,7 +5890,7 @@ select.ui-input {
 /* Demo ribbon subtle tint */
 .app-mode-demo .sidebar-brand-tag::after {
   content: ' · 演示';
-  color: #c2410c;
+  color: var(--text-secondary);
 }
 
 /* Remove back/forward residue spacing */
@@ -6555,6 +6543,19 @@ html[data-theme="dark"] .session-agent-item.active {
   max-height: 160px;
   overflow: hidden;
   background: var(--bg-primary);
+}
+/* 浮层：不占第三行 chrome，叠在内容上方（相对 .preview-browser） */
+.preview-hist-panel--float {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 44px; /* 地址栏下方 */
+  z-index: 20;
+  max-height: min(220px, 40vh);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  background: var(--bg-elevated, var(--bg-primary));
 }
 .preview-hist-col {
   flex: 1;

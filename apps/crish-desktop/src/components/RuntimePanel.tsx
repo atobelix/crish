@@ -320,7 +320,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             {pendingApprovals.map((a, i) => (
               <div key={a.toolCallId || i} className="rt-row">
                 <div className="rt-row-main">
-                  <Lucide.Shield size={13} style={{ color: '#ea580c', flexShrink: 0 }} />
+                  <Lucide.Shield size={13} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
                   <div className="rt-row-text">
                     <span className="rt-row-title">{a.toolName || '工具'}</span>
                     <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>

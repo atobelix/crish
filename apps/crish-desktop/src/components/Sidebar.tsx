@@ -466,33 +466,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* 1) 置顶 */}
-        <section className="sb-section">
-          <button
-            type="button"
-            className="sb-section-label"
-            onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
-          >
-            <span>置顶</span>
-            <Lucide.ChevronDown size={12} className={pinnedCollapsed ? 'chev-collapsed' : ''} />
-          </button>
-          {!pinnedCollapsed && (
-            <div
-              ref={pinnedZoneRef}
-              className={`pinned-drop-zone ${dragOverPinned ? 'drag-over' : ''}`}
-            >
-              <ul className="session-list pinned-list">
-                {pinnedSessions.map((s) => renderSessionItem(s))}
-              </ul>
-              {pinnedSessions.length === 0 && (
-                <div className="sb-empty-hint subtle">固定的对话会出现在这里</div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* 项目 + 对话：共用一个滚动区域 */}
+        {/* 置顶 + 项目 + 对话：共用一条滚动条 */}
         <div ref={sessionListRef} className="sb-list-scroll">
+          {/* 1) 置顶 */}
+          <section className="sb-section">
+            <button
+              type="button"
+              className="sb-section-label"
+              onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
+            >
+              <span>置顶</span>
+              <Lucide.ChevronDown size={12} className={pinnedCollapsed ? 'chev-collapsed' : ''} />
+            </button>
+            {!pinnedCollapsed && (
+              <div
+                ref={pinnedZoneRef}
+                className={`pinned-drop-zone ${dragOverPinned ? 'drag-over' : ''}`}
+              >
+                <ul className="session-list pinned-list">
+                  {pinnedSessions.map((s) => renderSessionItem(s))}
+                </ul>
+                {pinnedSessions.length === 0 && (
+                  <div className="sb-empty-hint subtle">固定的对话会出现在这里</div>
+                )}
+              </div>
+            )}
+          </section>
+
           {/* 2) 项目 */}
           <section className="sb-section">
             <button

@@ -34,21 +34,21 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     label: '深入分析',
     shortLabel: '深入分析',
     description: '偏沟通分析（同需确认）：读码顺畅，改代码与 push/删除仍确认。',
-    accent: '#2563eb',
+    accent: 'var(--text-secondary)',
   },
   {
     id: 'plan',
     label: '计划',
     shortLabel: '计划',
     description: '只读规划；改项目与风险操作直接拦截，不弹窗。',
-    accent: '#7c3aed',
+    accent: 'var(--text-secondary)',
   },
   {
     id: 'full',
     label: '完全访问',
     shortLabel: '完全访问',
     description: '读/写/网络均可自动；破坏性、推送与极危仍需确认。',
-    accent: 'var(--accent-orange, #ea580c)',
+    accent: 'var(--text-primary)',
   },
 ];
 

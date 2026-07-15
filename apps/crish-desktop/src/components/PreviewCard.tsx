@@ -113,7 +113,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     activeUrl === 'about:blank';
 
   return (
-    <div className="preview-browser">
+    <div className="preview-browser" style={{ position: 'relative' }}>
       <div className="preview-browser-bar">
         <button
           type="button"
@@ -189,7 +189,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       </div>
 
       {showHist && (
-        <div className="preview-hist-panel">
+        <div className="preview-hist-panel preview-hist-panel--float" role="dialog" aria-label="书签与历史">
           <div className="preview-hist-col">
             <div className="preview-hist-title">书签</div>
             {bookmarks.length === 0 ? (
