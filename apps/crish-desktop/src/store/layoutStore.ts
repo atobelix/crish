@@ -3,6 +3,11 @@ import { immer } from 'zustand/middleware/immer';
 import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/clientApi';
 import { isDemoMode } from '../api/appMode';
 import { persistAllSessions } from '../api/sessionPersistence';
+import {
+  pickSessionDomain,
+  sessionDomainChanged,
+  type SessionDomainSlice,
+} from '../api/sessionPersistGate';
 import { normalizePermissionMode, type PermissionMode } from '../api/permissionModes';
 import {
   addCommandPermission as persistAddCommandPermission,
@@ -333,12 +338,22 @@ export function initLayoutStorePersistence(): () => void {
 
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let diskTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 上一份会话域切片：遥测等字段变更时引用不变 → 跳过落盘 */
+  let lastDomain: SessionDomainSlice | null = pickSessionDomain(useLayoutStore.getState());
 
   const unsub = useLayoutStore.subscribe((state) => {
+    const domain = pickSessionDomain(state);
+    // 仅 sessions / activeSessionId / folderOrder 变化时调度写入
+    if (!sessionDomainChanged(lastDomain, domain)) {
+      return;
+    }
+    lastDomain = domain;
+
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
       try {
-        persistAllSessions(state.sessions, state.activeSessionId, state.folderOrder);
+        const cur = useLayoutStore.getState();
+        persistAllSessions(cur.sessions, cur.activeSessionId, cur.folderOrder);
       } catch (e) {
         console.warn('[sessionPersistence] save failed', e);
       }

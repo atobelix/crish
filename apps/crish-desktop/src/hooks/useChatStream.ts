@@ -39,6 +39,10 @@ import {
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { getActiveModelId } from '../api/providerProfiles';
+import {
+  StreamTextBatcher,
+  streamBatchKey,
+} from '../api/streamTextBatcher';
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { rulesLinesToText, syncRulesToDaemon } from '../api/rulesApi';
@@ -278,6 +282,21 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     ) => void
   >(null!);
 
+  /**
+   * 流式正文批合并：onChunk 高频覆盖，~48ms 刷一次 updateMessageText。
+   * complete/stop 必须 flushNow，保证终态不丢。
+   */
+  const textBatcherRef = useRef<StreamTextBatcher | null>(null);
+  if (!textBatcherRef.current) {
+    textBatcherRef.current = new StreamTextBatcher((key, text) => {
+      const sep = key.indexOf('::');
+      if (sep < 0) return;
+      const sessionId = key.slice(0, sep);
+      const messageId = key.slice(sep + 2);
+      useLayoutStore.getState().updateMessageText(sessionId, messageId, text);
+    }, { intervalMs: 48 });
+  }
+
   /** 运行级错误横幅（不进 AI 正文） */
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);
 
@@ -411,6 +430,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const prevStream = streamsBySessionRef.current.get(sid);
     if (prevStream) {
       streamsBySessionRef.current.delete(sid);
+      // 刷出旧流 pending 正文，再 cancel
+      textBatcherRef.current?.flushNow();
       try {
         prevStream.cancel();
       } catch {
@@ -635,7 +656,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       },
       onChunk: (chunk) => {
         gotRealText = true;
-        store.updateMessageText(sid, assistantMsgId, chunk);
+        // 批合并写入 store，避免每 token 触发全树重绘
+        textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), chunk);
         // 有正文后清空占位思考，避免与正式输出叠在一起
         const cur = useLayoutStore
           .getState()
@@ -651,6 +673,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         onShowToast(message);
       },
       onComplete: () => {
+        // 终态前强制 flush 批合并正文
+        textBatcherRef.current?.flushNow();
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const st = useLayoutStore.getState();
         const asst = st.sessions
@@ -789,6 +813,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     if (!sid) return;
     const cur = streamsBySessionRef.current.get(sid);
     if (!cur) return;
+    // 停止前刷出批合并中的正文
+    textBatcherRef.current?.flushNow();
     const st = useLayoutStore.getState();
     // 停止生成时中断目标自动续写
     if (st.sessions.find((s) => s.id === sid)?.goalMode?.active) {

@@ -131,7 +131,45 @@ function applyInline(html: string): string {
   return s;
 }
 
+/** 未变化正文的 HTML 缓存（按规范化后的源文本）；命中时跳过完整解析 */
+const MARKDOWN_HTML_CACHE = new Map<string, string>();
+const MARKDOWN_HTML_CACHE_MAX = 240;
+
+/** 测试/调试：清空缓存 */
+export function clearMarkdownHtmlCache(): void {
+  MARKDOWN_HTML_CACHE.clear();
+}
+
+/** 测试：当前缓存条目数 */
+export function markdownHtmlCacheSize(): number {
+  return MARKDOWN_HTML_CACHE.size;
+}
+
+function markdownCacheKey(raw: string): string {
+  // 过长键只取头尾 + 长度，降低 Map 内存；碰撞概率极低
+  if (raw.length <= 512) return raw;
+  return `${raw.length}:${raw.slice(0, 200)}:${raw.slice(-200)}`;
+}
+
+/**
+ * Markdown → 安全 HTML。相同 raw 重复渲染时走缓存。
+ */
 export function parseMarkdownToHtml(raw: string): string {
+  if (!raw) return '';
+  const key = markdownCacheKey(raw);
+  const hit = MARKDOWN_HTML_CACHE.get(key);
+  if (hit !== undefined) return hit;
+  const html = parseMarkdownToHtmlUncached(raw);
+  if (MARKDOWN_HTML_CACHE.size >= MARKDOWN_HTML_CACHE_MAX) {
+    // 简单 FIFO：删最早插入的一条
+    const first = MARKDOWN_HTML_CACHE.keys().next().value;
+    if (first !== undefined) MARKDOWN_HTML_CACHE.delete(first);
+  }
+  MARKDOWN_HTML_CACHE.set(key, html);
+  return html;
+}
+
+function parseMarkdownToHtmlUncached(raw: string): string {
   if (!raw) return '';
   let text = stripThoughtPlaceholders(raw);
   if (!text) return '';

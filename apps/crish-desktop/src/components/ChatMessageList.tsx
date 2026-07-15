@@ -2,7 +2,7 @@
  * 消息列表渲染：空状态 + user/assistant bubbles + 工具时间线。
  * 从 ChatCard 剪切粘贴，保持 className；状态机/stream 仍在 ChatCard。
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
@@ -21,6 +21,11 @@ import {
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { ChangeOverviewCard } from './ChangeOverviewCard';
+import {
+  DEFAULT_RECENT_MESSAGE_COUNT,
+  nextExpandedOlder,
+  windowMessages,
+} from '../api/messageWindow';
 import {
   messageMatchesSearch,
   readSessionSearchQuery,
@@ -119,10 +124,26 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   >({});
   const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
   const [pinsOpen, setPinsOpen] = useState(true);
+  /** 长列表窗口：从尾部展开的额外更早条数；切换会话重置 */
+  const [expandedOlder, setExpandedOlder] = useState(0);
   const activeProject = getActiveProject();
   const sessionKey = activeSessionId || '_';
   const expandedTools = expandedToolsBySession[sessionKey] || {};
   const expandedRounds = expandedRoundsBySession[sessionKey] || {};
+
+  useEffect(() => {
+    setExpandedOlder(0);
+  }, [activeSessionId]);
+
+  const messageWindow = useMemo(
+    () =>
+      windowMessages(messages, {
+        recentCount: DEFAULT_RECENT_MESSAGE_COUNT,
+        expandedOlder,
+      }),
+    [messages, expandedOlder],
+  );
+  const visibleMessages = messageWindow.visible;
   /** 侧栏搜索选中后写入 sessionStorage，用于命中消息高亮 */
   const searchHighlightQuery = useMemo(
     () => readSessionSearchQuery(),
@@ -331,6 +352,24 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   return (
     <div className="chat-message-list" onClick={handleMarkdownClick}>
+      {messageWindow.hasOlder ? (
+        <div className="chat-msg-window-older">
+          <button
+            type="button"
+            className="chat-msg-window-older-btn"
+            onClick={() =>
+              setExpandedOlder((n) =>
+                nextExpandedOlder(n, messageWindow.hiddenCount),
+              )
+            }
+          >
+            显示更早的 {Math.min(40, messageWindow.hiddenCount)} 条消息
+            <span className="chat-msg-window-older-meta">
+              （已隐藏 {messageWindow.hiddenCount}）
+            </span>
+          </button>
+        </div>
+      ) : null}
       {pinnedItems.length > 0 ? (
         <div className="chat-pinned-bar" role="region" aria-label="已固定消息">
           <button
@@ -382,8 +421,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         </div>
       ) : null}
 
-      {messages.map((msg, index) => {
-        const prevMsg = index > 0 ? messages[index - 1] : null;
+      {visibleMessages.map((msg, index) => {
+        const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
         const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
         const isPinnedMsg = pinnedIdSet.has(msg.id);
         if (msg.sender === 'user') {

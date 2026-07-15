@@ -19,6 +19,7 @@ import * as Lucide from 'lucide-react';
 import type { SettingsTabType } from './components/SettingsPanel';
 import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
 import { emitUiEvent, onUiEvent } from './api/uiEvents';
+import { createDebounced } from './api/debouncedValue';
 
 const SettingsPanel = lazy(() =>
   import('./components/SettingsPanel')
@@ -59,7 +60,17 @@ function App() {
   const activeWorkspace = workspaces[activeWorkspaceIndex];
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
+  /** 搜索框即时输入 */
+  const [sessionSearchInput, setSessionSearchInput] = useState('');
+  /** 防抖后的查询，供侧栏过滤（避免每键全量扫 sessions） */
   const [sessionSearch, setSessionSearch] = useState('');
+  const searchDebounceRef = useRef(
+    createDebounced<string>((q) => setSessionSearch(q), 220),
+  );
+  useEffect(() => {
+    searchDebounceRef.current.schedule(sessionSearchInput);
+    return () => searchDebounceRef.current.cancel();
+  }, [sessionSearchInput]);
   const productShell = isProductShell();
   const [showFirstRun, setShowFirstRun] = useState(
     () => !isDemoMode() && shouldShowFirstRunWizard(),
@@ -369,8 +380,8 @@ function App() {
             <input
               type="text"
               placeholder="搜索会话与消息…"
-              value={sessionSearch}
-              onChange={(e) => setSessionSearch(e.target.value)}
+              value={sessionSearchInput}
+              onChange={(e) => setSessionSearchInput(e.target.value)}
             />
           </div>
 
