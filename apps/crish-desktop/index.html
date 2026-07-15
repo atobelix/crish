@@ -5,6 +5,27 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>crish-desktop</title>
+    <!-- 首屏前应用主题，避免闪白；与 themeStore 同源 key -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('crish_theme');
+          if (t !== 'dark' && t !== 'default' && t !== 'light') {
+            var raw = localStorage.getItem('crish_settings') || localStorage.getItem('conex_pi_settings');
+            if (raw) {
+              var s = JSON.parse(raw);
+              t = s && s.theme;
+            }
+          }
+          if (t === 'light') t = 'default';
+          if (t !== 'dark') t = 'default';
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'default');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -362,7 +362,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         ]);
         setSettings(sets);
         if (sets && sets.theme) {
-          document.body.setAttribute('data-theme', sets.theme);
+          const { applyTheme, normalizeTheme } = await import('../api/themeStore');
+          applyTheme(normalizeTheme(sets.theme));
         }
         setProviders(provs);
         setMcpServers(mcps);
@@ -392,9 +393,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       setSettings(merged);
       // Silent save — errors still toast
 
-      // Sync appearance changes to layouts
+      // 主题：立即应用 + 独立 localStorage 记忆
       if (updates.theme) {
-        document.body.setAttribute('data-theme', updates.theme);
+        const { setTheme } = await import('../api/themeStore');
+        setTheme(updates.theme);
       }
     } catch (err) {
       onShowToast('更新设置失败：' + String(err));
@@ -2152,8 +2154,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         type="button"
                         className={`ui-segment-item ${(settings.theme || 'default') === opt.id ? 'active' : ''}`}
                         onClick={() => {
-                          handleUpdateSettings({ theme: opt.id });
-                          document.body.setAttribute('data-theme', opt.id);
+                          void handleUpdateSettings({ theme: opt.id });
                         }}
                       >
                         {opt.label}

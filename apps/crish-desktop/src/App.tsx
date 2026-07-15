@@ -96,13 +96,18 @@ function App() {
 
   // Initial load theme & settings sync
   useEffect(() => {
+    // 同步本地主题（settings 异步前就已在 main/html 里 bootstrap）
+    void import('./api/themeStore').then(({ bootstrapTheme }) => bootstrapTheme());
     const initApp = async () => {
       try {
         const settings = await clientApi.getSettings();
         if (settings) {
           setAppSettings(settings);
           if (settings.theme) {
-            document.body.setAttribute('data-theme', settings.theme);
+            const { applyTheme, persistTheme, normalizeTheme } = await import('./api/themeStore');
+            const t = normalizeTheme(settings.theme);
+            applyTheme(t);
+            persistTheme(t);
           }
         }
         const provs = await clientApi.getProviders();
