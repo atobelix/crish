@@ -455,45 +455,69 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
                 </li>
               ) : null}
             </ul>
-            <div className="overview-quick">
-              <button type="button" className="overview-chip" onClick={() => onOpenPanel('files')}>
-                文件
-              </button>
-              <button type="button" className="overview-chip" onClick={() => onOpenPanel('terminal')}>
-                终端
-              </button>
-              <button type="button" className="overview-chip" onClick={() => onOpenPanel('runtime')}>
-                运行状态
+            <div className="overview-quick" role="toolbar" aria-label="快捷入口">
+              <button
+                type="button"
+                className="overview-icon-btn"
+                title="文件"
+                aria-label="文件"
+                onClick={() => onOpenPanel('files')}
+              >
+                <Lucide.FolderTree size={14} strokeWidth={1.75} />
               </button>
               <button
                 type="button"
-                className="overview-chip"
+                className="overview-icon-btn"
+                title="终端"
+                aria-label="终端"
+                onClick={() => onOpenPanel('terminal')}
+              >
+                <Lucide.Terminal size={14} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                className="overview-icon-btn"
+                title="运行状态"
+                aria-label="运行状态"
+                onClick={() => onOpenPanel('runtime')}
+              >
+                <Lucide.Gauge size={14} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                className="overview-icon-btn"
+                title="技能"
+                aria-label="技能"
                 onClick={() => {
                   useLayoutStore.getState().openSettings('skills');
                   onShowToast?.('已打开设置 · 技能');
                 }}
               >
-                技能
+                <Lucide.GraduationCap size={14} strokeWidth={1.75} />
               </button>
               <button
                 type="button"
-                className="overview-chip"
+                className="overview-icon-btn"
+                title="MCP"
+                aria-label="MCP"
                 onClick={() => {
                   useLayoutStore.getState().openSettings('mcp');
                   onShowToast?.('已打开设置 · 扩展服务');
                 }}
               >
-                MCP
+                <Lucide.Server size={14} strokeWidth={1.75} />
               </button>
               <button
                 type="button"
-                className="overview-chip"
+                className="overview-icon-btn"
+                title="规则"
+                aria-label="规则"
                 onClick={() => {
                   useLayoutStore.getState().openSettings('rules');
                   onShowToast?.('已打开设置 · 规则');
                 }}
               >
-                规则
+                <Lucide.FileText size={14} strokeWidth={1.75} />
               </button>
             </div>
           </div>
