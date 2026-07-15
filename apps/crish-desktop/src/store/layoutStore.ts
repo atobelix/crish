@@ -336,5 +336,31 @@ if (typeof window !== 'undefined') {
         });
       }, 2500);
     });
+
+    // localStorage 空时尝试从磁盘镜像回灌
+    if (useLayoutStore.getState().sessions.length === 0) {
+      void import('../api/sessionDiskMirror').then(({ restoreSessionsFromDiskMirror }) => {
+        void restoreSessionsFromDiskMirror().then((restored) => {
+          if (!restored?.sessions?.length) return;
+          const cur = useLayoutStore.getState();
+          // 用户已新建会话则不覆盖
+          if (cur.sessions.length > 0) return;
+          useLayoutStore.setState((state) => {
+            state.sessions = restored.sessions;
+            state.activeSessionId = restored.activeSessionId;
+            state.folderOrder = restored.folderOrder;
+          });
+          try {
+            persistAllSessions(
+              restored.sessions,
+              restored.activeSessionId,
+              restored.folderOrder,
+            );
+          } catch {
+            /* ignore */
+          }
+        });
+      });
+    }
   }
 }

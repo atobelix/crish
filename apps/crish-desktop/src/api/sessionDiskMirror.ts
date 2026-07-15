@@ -7,7 +7,13 @@
  */
 
 import type { SessionState } from '../store/layoutStore';
-import { messagesToJsonl, sessionsToIndex } from './sessionPersistence';
+import {
+  jsonlToMessages,
+  messagesToJsonl,
+  sanitizeMessagesForHydrate,
+  sessionsToIndex,
+  type SessionIndexEntry,
+} from './sessionPersistence';
 import { logInternalError } from './userFacingErrors';
 
 const MIRROR_META_KEY = 'crish_session_disk_mirror_v1';
@@ -141,5 +147,83 @@ export async function mirrorSessionsToDisk(
     };
     saveMirrorMeta(meta);
     return meta;
+  }
+}
+
+async function tryTauriRead(path: string): Promise<string | null> {
+  try {
+    const fs: any = await (Function('return import("@tauri-apps/plugin-fs")')() as Promise<any>).catch(
+      () => null,
+    );
+    if (!fs?.readTextFile) return null;
+    const text = await fs.readTextFile(path);
+    return typeof text === 'string' ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * localStorage 会话空时，从磁盘镜像回灌（防站点数据清空后丢历史）。
+ */
+export async function restoreSessionsFromDiskMirror(): Promise<{
+  sessions: SessionState[];
+  activeSessionId: string;
+  folderOrder: string[];
+} | null> {
+  const meta = loadMirrorMeta();
+  const dir = meta.lastPath || (await resolveMirrorDir());
+  if (!dir) return null;
+
+  const base = dir.replace(/[\\/]+$/, '');
+  const raw = await tryTauriRead(`${base}/index.json`);
+  if (!raw?.trim()) return null;
+
+  try {
+    const index = JSON.parse(raw) as {
+      activeSessionId?: string;
+      folderOrder?: string[];
+      sessions?: SessionIndexEntry[];
+    };
+    const entries = Array.isArray(index.sessions) ? index.sessions : [];
+    if (!entries.length) return null;
+
+    const sessions: SessionState[] = [];
+    for (const e of entries) {
+      if (!e?.id) continue;
+      const bodyRaw = await tryTauriRead(`${base}/${e.id}.jsonl`);
+      const messages = sanitizeMessagesForHydrate(
+        bodyRaw ? jsonlToMessages(bodyRaw) : [],
+      );
+      sessions.push({
+        id: e.id,
+        title: e.title || '会话',
+        folder: e.folder || '常规会话',
+        isPinned: Boolean(e.isPinned),
+        isArchived: Boolean(e.isArchived),
+        branchParentId: e.branchParentId,
+        timestamp: e.timestamp || '恢复',
+        messages,
+        agents: [],
+        engineCursor: e.engineCursor,
+        engineLastRunId: e.engineLastRunId,
+        hydratedFromEngine: e.hydratedFromEngine,
+      });
+    }
+    if (!sessions.length) return null;
+
+    const activeSessionId =
+      index.activeSessionId && sessions.some((s) => s.id === index.activeSessionId)
+        ? index.activeSessionId
+        : sessions[0].id;
+    const folderOrder =
+      Array.isArray(index.folderOrder) && index.folderOrder.length
+        ? index.folderOrder
+        : Array.from(new Set(sessions.map((s) => s.folder)));
+
+    return { sessions, activeSessionId, folderOrder };
+  } catch (e) {
+    logInternalError('restoreSessionsFromDiskMirror', e);
+    return null;
   }
 }
