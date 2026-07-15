@@ -547,7 +547,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           )}
           {/* TAB 1: PROFILE */}
           {activeTab === 'profile' && (
-            <>
+            <div className="settings-pane">
               <div className="settings-section-header" style={{ marginBottom: 8 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>账户</h4>
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
@@ -672,7 +672,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </p>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* TAB 2: MODELS */}

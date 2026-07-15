@@ -155,6 +155,9 @@ export function streamViaDaemon(
   let finished = false;
   let assistantText = '';
   let assistantThought = '';
+  /** 本轮是否收到过正文 delta（无 delta 时 message-end 做渐进展示） */
+  let receivedTextDelta = false;
+  let progressiveTimer: ReturnType<typeof setTimeout> | null = null;
   let unsub: (() => void) | null = null;
   /** 待用户确认的审批 id；有挂起时不结束流，避免 AI 轮空被 UI 提前收口 */
   const pendingApprovals = new Set<string>();
@@ -185,6 +188,42 @@ export function streamViaDaemon(
     finish(false);
   };
 
+  const clearProgressive = () => {
+    if (progressiveTimer) {
+      clearTimeout(progressiveTimer);
+      progressiveTimer = null;
+    }
+  };
+
+  const revealProgressively = (full: string, done: () => void) => {
+    clearProgressive();
+    // 调用方已判断「本段无 delta」；短文直接落地
+    if (!full || full.length < 24) {
+      callbacks.onChunk(full);
+      done();
+      return;
+    }
+    // 无流式 delta 时，本地按块推进，避免「整段砸下来」
+    let i = 0;
+    const step = Math.max(12, Math.ceil(full.length / 48));
+    const tick = () => {
+      if (cancelled || finished) {
+        callbacks.onChunk(full);
+        done();
+        return;
+      }
+      i = Math.min(full.length, i + step);
+      callbacks.onChunk(full.slice(0, i));
+      if (i >= full.length) {
+        progressiveTimer = null;
+        done();
+        return;
+      }
+      progressiveTimer = setTimeout(tick, 16);
+    };
+    tick();
+  };
+
   const finish = (force = false) => {
     if (finished) return;
     if (!force && !cancelled) {
@@ -204,6 +243,7 @@ export function streamViaDaemon(
       clearTimeout(endTimer);
       endTimer = null;
     }
+    clearProgressive();
     deferredTerminal = false;
     finished = true;
     unsub?.();
@@ -252,6 +292,7 @@ export function streamViaDaemon(
         assistantThought += t;
         callbacks.onThought(assistantThought);
       } else {
+        receivedTextDelta = true;
         // 仅当 content 是累计全文（长度 ≥ 当前）时才覆盖，避免把 delta 误当全文冲掉
         if (event.message && typeof event.message === 'object') {
           const msg = event.message as Record<string, unknown>;
@@ -295,6 +336,7 @@ export function streamViaDaemon(
         if (text.trim()) {
           // 多轮 tool→再回复：各轮正文累计；同轮 delta 已推过则用完整段覆盖，勿重复拼接
           const piece = text.trim();
+          const hadStream = receivedTextDelta && Boolean(assistantText);
           if (!assistantText) {
             assistantText = piece;
           } else if (
@@ -307,7 +349,15 @@ export function streamViaDaemon(
           } else {
             assistantText = `${assistantText}\n\n${piece}`;
           }
-          callbacks.onChunk(assistantText);
+          const full = assistantText;
+          if (hadStream) {
+            callbacks.onChunk(full);
+          } else {
+            revealProgressively(full, () => {
+              assistantText = full;
+            });
+          }
+          receivedTextDelta = false;
         }
       }
       return;

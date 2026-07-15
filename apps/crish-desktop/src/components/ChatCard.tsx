@@ -213,14 +213,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
 
-  // 进行中消息的待确认（时间线内 approval-card 使用 msgId 回退）
+  // 进行中消息的待确认（时间线内 approval-card + 底部提示条）
   let pendingApprovalMsgId = '';
+  let pendingApprovalCount = 0;
+  let pendingApprovalSummary = '';
   for (const m of messages) {
     if (!m.toolCalls) continue;
     if (m.status === 'completed' || m.status === 'queued') continue;
     for (const tc of m.toolCalls) {
       if (tc.status !== 'pending_approval') continue;
-      if (!pendingApprovalMsgId) pendingApprovalMsgId = m.id;
+      pendingApprovalCount += 1;
+      if (!pendingApprovalMsgId) {
+        pendingApprovalMsgId = m.id;
+        pendingApprovalSummary = toolSummaryLabel(tc);
+      }
     }
   }
 
@@ -232,6 +238,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
+  /** 运行级错误横幅（不进 AI 正文） */
+  const [runNotice, setRunNotice] = useState<{ text: string; kind?: string } | null>(null);
   // Demo-only decorative pills; product mode stays quiet until real signals exist
   const [prVisible] = useState(() => isDemoMode());
 
@@ -621,8 +629,9 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           store.updateMessageThinking(sid, assistantMsgId, '');
         }
       },
-      onRunError: (message) => {
-        // 系统级提示：不写进助手气泡，避免用户当成 AI 输出
+      onRunError: (message, kind) => {
+        // 系统级提示：不写进助手气泡；横幅 + toast，避免一闪而过
+        setRunNotice({ text: message, kind });
         onShowToast(message);
       },
       onComplete: () => {
@@ -638,8 +647,9 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             (t) => t.status === 'success' || t.status === 'error' || t.status === 'running',
           );
           if (!hasTools) {
-            // 不写进气泡，用 toast，避免被当成模型回复
-            onShowToast('这一轮没有文字回复。若刚改过配置，请检查模型与网络。');
+            const tip = '这一轮没有文字回复。若刚改过配置，请检查模型与网络。';
+            setRunNotice({ text: tip, kind: 'empty' });
+            onShowToast(tip);
           }
         }
         // 收口诚实：未完成工具标 error，不伪造 success
@@ -1134,7 +1144,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       const cmd = toolCommandPreview(tc);
       const mid = msgId || pendingApprovalMsgId;
       return (
-        <div className="approval-card" key={key} role="region" aria-label="需要权限">
+        <div
+          className="approval-card"
+          key={key}
+          role="region"
+          aria-label="需要权限"
+          data-msg={mid}
+        >
           <div className="approval-card-top">
             <span className="approval-card-badge">需要权限</span>
             <span className="approval-card-status">待授权</span>
@@ -1407,6 +1423,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           status: 'running',
         });
       },
+      onRunError: (message) => {
+        setRunNotice({ text: message, kind: 'collab' });
+        onShowToast(message);
+      },
       onThought: (t) => patchAsst((m) => { m.thinking = t; }),
       onChunk: (c) => patchAsst((m) => { m.text = c; if (m.thinking === '正在处理…') m.thinking = ''; }),
       onToolStart: (toolId, name, args, explanation) => {
@@ -1652,7 +1672,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                           return (
                             <div className="msg-timeline-text">
                               <div
-                                className="msg-assistant-text md-rendered"
+                                className={`msg-assistant-text md-rendered ${isThinkingMsg ? 'is-streaming' : ''}`}
                                 dangerouslySetInnerHTML={{
                                   __html: parseMarkdownToHtml(fallback),
                                 }}
@@ -1660,15 +1680,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                             </div>
                           );
                         }
+                        const textItems = timeline.filter((i) => i.kind === 'text');
+                        const lastTextKey = textItems.length
+                          ? textItems[textItems.length - 1]!.key
+                          : null;
                         return timeline.map((item) => {
                           if (item.kind === 'text') {
                             const bodyText = stripThoughtPlaceholders(item.content || '');
                             if (!bodyText.trim()) return null;
                             const imgs = extractImageRefs(bodyText);
+                            const streaming = isThinkingMsg && item.key === lastTextKey;
                             return (
                               <div key={item.key} className="msg-timeline-text">
                                 <div
-                                  className="msg-assistant-text md-rendered"
+                                  className={`msg-assistant-text md-rendered ${streaming ? 'is-streaming' : ''}`}
                                   dangerouslySetInnerHTML={{
                                     __html: parseMarkdownToHtml(bodyText),
                                   }}
@@ -1957,7 +1982,47 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </div>
         )}
 
-        {/* 审批仅在对话时间线内展示（approval-card），不占用输入区快捷功能位 */}
+        {/* 系统提示：错误/空回复 — 明确非 AI 输出 */}
+        {!activeAgent && runNotice ? (
+          <div className="run-notice" role="status">
+            <div className="run-notice-main">
+              <span className="run-notice-kicker">系统提示</span>
+              <span className="run-notice-text">{runNotice.text}</span>
+            </div>
+            <button
+              type="button"
+              className="run-notice-dismiss"
+              aria-label="关闭提示"
+              onClick={() => setRunNotice(null)}
+            >
+              <Lucide.X size={14} />
+            </button>
+          </div>
+        ) : null}
+
+        {/* 审批提示条：不是快捷功能；一点滚到时间线卡片 */}
+        {!activeAgent && pendingApprovalCount > 0 && pendingApprovalMsgId ? (
+          <button
+            type="button"
+            className="approval-dock"
+            onClick={() => {
+              const el = document.querySelector(
+                `.approval-card[data-msg="${pendingApprovalMsgId}"], .approval-card`,
+              );
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          >
+            <span className="approval-dock-dot" aria-hidden />
+            <span className="approval-dock-label">
+              需要权限
+              {pendingApprovalCount > 1 ? ` · ${pendingApprovalCount} 项` : ''}
+            </span>
+            <span className="approval-dock-summary" title={pendingApprovalSummary}>
+              {pendingApprovalSummary || '有操作等待你确认'}
+            </span>
+            <span className="approval-dock-go">查看</span>
+          </button>
+        ) : null}
 
         <div
           className="input-container"
