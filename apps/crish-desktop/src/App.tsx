@@ -286,28 +286,6 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Product: 先画骨架壳，后台连引擎（避免空白「加载中」）
-  if (productShell && !engineReady) {
-    return (
-      <div className="app-container app-boot-shell" role="status" aria-live="polite">
-        <aside className="app-boot-sidebar" aria-hidden>
-          <div className="app-boot-skel app-boot-skel--logo" />
-          <div className="app-boot-skel app-boot-skel--row" />
-          <div className="app-boot-skel app-boot-skel--row" />
-          <div className="app-boot-skel app-boot-skel--row" />
-          <div className="app-boot-skel app-boot-skel--row" style={{ width: '70%' }} />
-          <div style={{ flex: 1 }} />
-          <div className="app-boot-status">{productStartingMessage()}</div>
-        </aside>
-        <main className="app-boot-main" aria-hidden>
-          <div className="app-boot-skel app-boot-skel--title" />
-          <div className="app-boot-skel app-boot-skel--chat" />
-          <div className="app-boot-skel app-boot-skel--composer" />
-        </main>
-      </div>
-    );
-  }
-
   const winCtl = async (action: 'minimize' | 'toggleMaximize' | 'close') => {
     try {
       const mod = await import('@tauri-apps/api/window');
@@ -324,6 +302,13 @@ function App() {
 
   return (
     <div className={`app-container ${isDemoMode() ? 'app-mode-demo' : 'app-mode-normal'}`}>
+      {/* 本地壳立刻显示；引擎连接仅顶栏轻提示，不再整页挡死 */}
+      {productShell && !engineReady ? (
+        <div className="app-boot-banner" role="status" aria-live="polite">
+          <span className="app-boot-banner-dot" aria-hidden />
+          <span>{productStartingMessage()}</span>
+        </div>
+      ) : null}
       {showFirstRun && (
         <FirstRunWizard
           onDone={() => setShowFirstRun(false)}
