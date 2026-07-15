@@ -142,52 +142,110 @@ function normalizeBaseUrl(baseUrl: string): string {
 }
 
 function modelsListUrl(baseUrl: string): string {
-  const u = normalizeBaseUrl(baseUrl);
+  const u = ensureOpenAiCompatibleRoot(baseUrl);
   if (!u) return '';
-  if (/\/v1$/i.test(u)) return `${u}/models`;
   if (/\/models$/i.test(u)) return u;
+  // 已含 /v1 → /v1/models；否则补 /v1/models（OpenAI / DeepSeek 惯例）
+  if (/\/v1$/i.test(u)) return `${u}/models`;
   return `${u}/v1/models`;
 }
 
-/** 优先 Tauri HTTP 插件（绕过浏览器 CORS），否则 window.fetch */
+function chatCompletionsUrl(baseUrl: string): string {
+  const u = ensureOpenAiCompatibleRoot(baseUrl);
+  if (!u) return '';
+  if (/\/chat\/completions$/i.test(u)) return u;
+  if (/\/v1$/i.test(u)) return `${u}/chat/completions`;
+  return `${u}/v1/chat/completions`;
+}
+
+/**
+ * HTTP 探测顺序（符合 OpenAI 兼容供应商约定）：
+ * 1. Tauri 原生 workbench_http_request（无浏览器 CORS，与聊天引擎同属本机出站）
+ * 2. 浏览器 fetch（仅 dev 网页模式；失败时给出可行动说明）
+ */
 async function httpRequest(
   url: string,
   init: { method: string; headers?: Record<string, string>; body?: string },
 ): Promise<{ ok: boolean; status: number; text: string }> {
+  // 1) 桌面壳原生 HTTP（reqwest）
   try {
-    const http: any = await (Function(
-      'return import("@tauri-apps/plugin-http")',
+    const core: any = await (Function(
+      'return import("@tauri-apps/api/core")',
     )() as Promise<any>).catch(() => null);
-    if (http?.fetch) {
-      const res = await http.fetch(url, {
+    if (core?.invoke) {
+      const res = (await core.invoke('workbench_http_request', {
+        url,
         method: init.method,
-        headers: init.headers,
-        body: init.body,
-      });
-      const text = await res.text();
-      return { ok: Boolean(res.ok), status: Number(res.status) || 0, text };
+        headers: init.headers || {},
+        body: init.body ?? null,
+      })) as { ok?: boolean; status?: number; body?: string };
+      return {
+        ok: Boolean(res?.ok),
+        status: Number(res?.status) || 0,
+        text: String(res?.body ?? ''),
+      };
     }
-  } catch {
-    /* fall through */
+  } catch (e) {
+    // invoke 不存在或命令未注册时继续尝试 fetch；真正的网络错误在下面处理
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/network:/i.test(msg)) {
+      throw new Error(msg.replace(/^network:\s*/i, ''));
+    }
+    // 若是 command not found，fall through
+    if (!/not found|unknown command|COMMAND/i.test(msg)) {
+      // 其它 invoke 错误（如网络）直接抛出，避免误报 CORS
+      if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
+        throw new Error(msg);
+      }
+    }
   }
-  const res = await fetch(url, {
-    method: init.method,
-    headers: init.headers,
-    body: init.body,
-  });
-  const text = await res.text();
-  return { ok: res.ok, status: res.status, text };
+
+  // 2) 浏览器 fetch（dev 或无壳）
+  try {
+    const res = await fetch(url, {
+      method: init.method,
+      headers: init.headers,
+      body: init.body,
+    });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, text };
+  } catch (e) {
+    throw e;
+  }
 }
 
 function friendlyFetchError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/failed to fetch|networkerror|load failed|cors/i.test(msg)) {
-    return '无法访问该地址（网络或跨域限制）。请确认 Base URL 可访问，或手动添加模型 id。';
+    return '浏览器无法直连该 API（常见于跨域）。请使用桌面应用，或确认引擎/壳已启动后再试；也可手动添加模型 id。';
   }
   if (/ssl|certificate|cert/i.test(msg)) {
-    return '证书或 HTTPS 校验失败，请检查地址是否正确。';
+    return '证书或 HTTPS 校验失败，请检查 Base URL。';
+  }
+  if (/timed out|timeout/i.test(msg)) {
+    return '请求超时，请检查网络与 Base URL。';
+  }
+  if (/dns|getaddrinfo|name not resolved/i.test(msg)) {
+    return '无法解析主机名，请检查 Base URL。';
+  }
+  if (/refused|connect/i.test(msg)) {
+    return '无法连接到服务器，请检查 Base URL 与网络。';
   }
   return msg || '请求失败';
+}
+
+/**
+ * OpenAI 兼容 URL 规范化：
+ * - DeepSeek 文档：https://api.deepseek.com 或 …/v1
+ * - 列模型：GET {base}/models（base 已含 /v1 时不再叠）
+ * - 对话：POST {base}/chat/completions
+ */
+function ensureOpenAiCompatibleRoot(baseUrl: string): string {
+  let u = normalizeBaseUrl(baseUrl);
+  if (!u) return '';
+  // 去掉末尾 /models 误写
+  u = u.replace(/\/models\/?$/i, '');
+  return u;
 }
 
 /** 扫描提供商模型列表（OpenAI 兼容 /models） */
@@ -293,7 +351,14 @@ export async function testProviderModel(
     });
     return r;
   }
-  const url = /\/v1$/i.test(base) ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
+  const url = chatCompletionsUrl(base);
+  if (!url) {
+    const r = { ok: false, error: '无法构造 chat/completions 地址' };
+    upsertModelMeta(fresh.id, model, {
+      lastTest: { ok: false, at: Date.now(), error: r.error },
+    });
+    return r;
+  }
   const started = performance.now();
   try {
     const res = await httpRequest(url, {

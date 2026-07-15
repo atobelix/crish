@@ -38,6 +38,9 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     setPanelAgentId,
   } = useLayoutStore();
   const [tabAddOpen, setTabAddOpen] = React.useState(false);
+  const [tabAddPos, setTabAddPos] = React.useState<{ top: number; left: number } | null>(null);
+  const tabsBarRef = React.useRef<HTMLDivElement>(null);
+  const tabAddBtnRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
     const onOpenAgent = (ev: Event) => {
@@ -71,10 +74,52 @@ export const CardPanel: React.FC<CardPanelProps> = ({
   const col = ws?.columns[colIdx];
   const group = col?.groups[groupIdx];
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeCardId = group?.activeCardId || 'chat';
+  const cardsLen = group?.cards?.length || 0;
+
+  // 标签行：普通滚轮横向滚；禁中键拖动画布
+  React.useEffect(() => {
+    const el = tabsBarRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 1 && Math.abs(e.deltaX) < 1) return;
+      if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('mousedown', onMouseDown);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [activeCardId, cardsLen]);
+
+  React.useEffect(() => {
+    if (!tabAddOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (tabAddBtnRef.current?.contains(t)) return;
+      const menu = document.querySelector('.tabs-add-menu');
+      if (menu?.contains(t)) return;
+      setTabAddOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTabAddOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [tabAddOpen]);
 
   if (!ws || !col || !group) return null;
-
-  const activeCardId = group.activeCardId;
 
   // Render icons corresponding to tabs
   const renderCardIcon = (id: string) => {
@@ -121,23 +166,24 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     const targetWs = useLayoutStore.getState().workspaces.find((w) => w.id === wsId);
     if (!targetWs) return;
 
-    let found = false;
-    for (const c of targetWs.columns) {
-      for (const g of c.groups) {
-        if (g.cards.some((card) => card.id === cardId)) {
-          found = true;
-          break;
+    // 已存在：只切换 active，避免 togglePanel 重建列导致卡顿
+    let already = false;
+    useLayoutStore.setState((state) => {
+      const ws2 = state.workspaces.find((w) => w.id === wsId);
+      if (!ws2) return;
+      for (const c of ws2.columns) {
+        for (const g of c.groups) {
+          if (g.cards.some((card) => card.id === cardId)) {
+            g.activeCardId = cardId;
+            already = true;
+            return;
+          }
         }
       }
-      if (found) break;
-    }
+    });
+    if (already) return;
 
-    if (!found) {
-      // Panel not mounted — open it as a real workspace column/group via store
-      useLayoutStore.getState().togglePanel(wsId, cardId, true);
-    }
-
-    // Focus the card wherever it lives
+    useLayoutStore.getState().togglePanel(wsId, cardId, true);
     useLayoutStore.setState((state) => {
       const ws2 = state.workspaces.find((w) => w.id === wsId);
       if (!ws2) return;
@@ -690,7 +736,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
             </span>
           </div>
         ) : (
-          <div className="tabs-bar">
+          <div className="tabs-bar" ref={tabsBarRef}>
             {group.cards.map((c) => {
               const isToolTab = c.id !== 'chat';
               return (
@@ -704,70 +750,78 @@ export const CardPanel: React.FC<CardPanelProps> = ({
                 style={{ touchAction: 'none' }}
                 title={c.title}
               >
-                <div className="tab-icon-container">
-                  {renderCardIcon(c.id)}
-                  {c.id !== 'chat' && c.id !== 'overview' && (
-                    <button
-                      className="tab-close-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTabInGroup(wsId, group.id, c.id);
-                      }}
-                    >
-                      <Lucide.X size={12} />
-                    </button>
-                  )}
-                </div>
+                <div className="tab-icon-container">{renderCardIcon(c.id)}</div>
                 <span className="tab-label">{c.title}</span>
+                {c.id !== 'chat' && c.id !== 'overview' ? (
+                  <button
+                    type="button"
+                    className="tab-close-btn"
+                    title="关闭"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTabInGroup(wsId, group.id, c.id);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <Lucide.X size={12} />
+                  </button>
+                ) : null}
               </div>
               );
             })}
-            {/* Obsidian 式：标签后加号 */}
+            {/* Obsidian 式：标签后加号；菜单 fixed 全视口 */}
             <div className="tabs-add-wrap">
               <button
                 type="button"
                 className="tabs-add-btn"
+                ref={tabAddBtnRef}
                 title="打开面板"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setTabAddOpen((v) => !v);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const nextOpen = !tabAddOpen;
+                  setTabAddOpen(nextOpen);
+                  if (nextOpen) {
+                    setTabAddPos({
+                      top: rect.bottom + 4,
+                      left: Math.max(8, Math.min(rect.left, window.innerWidth - 200)),
+                    });
+                  }
                 }}
               >
                 <Lucide.Plus size={16} strokeWidth={1.75} />
               </button>
-              {tabAddOpen ? (
-                <div className="tabs-add-menu" role="menu">
-                  {PANEL_ADD_ITEMS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="tabs-add-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setTabAddOpen(false);
-                        handleGlobalTabClick(item.id);
-                        onShowToast(`已打开：${item.label}`);
-                      }}
-                    >
-                      {renderCardIcon(item.id)}
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           </div>
         )}
-        
-        {/* Card Drag Handle */}
-        <div
-          className="card-drag-handle"
-          onPointerDown={(e) => handleTabPointerDown(e, activeCardId)}
-          style={{ flex: 1, height: '100%', touchAction: 'none' }}
-        />
 
+        {tabAddOpen && tabAddPos ? (
+          <div
+            className="tabs-add-menu"
+            role="menu"
+            style={{ top: tabAddPos.top, left: tabAddPos.left }}
+          >
+            {PANEL_ADD_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="tabs-add-item"
+                role="menuitem"
+                onClick={() => {
+                  setTabAddOpen(false);
+                  // 已存在则只 focus，避免反复建列导致卡顿
+                  handleGlobalTabClick(item.id);
+                  onShowToast(`已打开：${item.label}`);
+                }}
+              >
+                {renderCardIcon(item.id)}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        
         <div className="card-header-right">
-          {/* 侧栏收缩：收起非 chat 列 */}
           <button
             type="button"
             className="card-action-btn"
@@ -777,7 +831,6 @@ export const CardPanel: React.FC<CardPanelProps> = ({
               if (activeCardId === 'chat') {
                 handleGlobalTabClick('overview');
               } else {
-                // 收起：关掉本 group 中非 chat 标签，回到仅聊天
                 const nonChat = group.cards.filter((c) => c.id !== 'chat');
                 for (const c of nonChat) {
                   closeTabInGroup(wsId, group.id, c.id);

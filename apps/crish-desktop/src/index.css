@@ -640,7 +640,7 @@ body {
 .sidebar-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 10px 14px;
+  padding: 10px 2px 14px 8px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1133,8 +1133,12 @@ body {
   align-items: center;
   gap: 4px;
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   height: 100%;
+  /* 横向滚动条贴近内容，中键滚动在 JS 中禁用 */
+  scrollbar-width: thin;
 }
 
 .card-tab {
@@ -1155,15 +1159,24 @@ body {
   height: var(--control-height);
 }
 
-/* 右侧工具标签：默认仅图标，减少冗余文字 */
+/* 右侧工具标签：整行文字+图标（Obsidian 式），避免仅图标误点关闭 */
 .card-tab.card-tab--tool {
-  padding: 0;
-  min-width: var(--control-height);
-  width: var(--control-height);
-  justify-content: center;
+  padding: 0 10px 0 8px;
+  min-width: 0;
+  max-width: 160px;
+  width: auto;
+  justify-content: flex-start;
+  gap: 6px;
+  height: var(--control-height);
+  border-radius: 8px;
 }
 .card-tab.card-tab--tool .tab-label {
-  display: none !important;
+  display: inline !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 110px;
+  font-size: var(--font-size-sm);
 }
 .card-tab.card-tab--tool.active {
   background-color: var(--bg-active);
@@ -1211,37 +1224,39 @@ body {
   color: var(--text-secondary);
 }
 
+/* 关闭钮：标签右侧独立热区，不盖住图标 */
 .tab-close-btn {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: var(--bg-hover);
+  position: static;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  flex-shrink: 0;
+  background-color: transparent;
   border: none;
-  border-radius: 50%;
+  border-radius: 6px;
   cursor: pointer;
-  color: var(--text-secondary);
-  display: flex;
+  color: var(--text-tertiary);
+  display: none;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.card-tab.active .tab-close-btn {
-  background-color: var(--bg-hover);
-}
-
-.card-tab:hover .tab-close-btn {
   opacity: 1;
   pointer-events: auto;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.card-tab:hover .tab-close-btn,
+.card-tab.active .tab-close-btn {
+  display: inline-flex;
+}
+
+.tab-close-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .tab-close-btn svg {
-  width: 10px !important;
-  height: 10px !important;
+  width: 12px !important;
+  height: 12px !important;
   color: var(--text-secondary) !important;
 }
 
@@ -6118,9 +6133,15 @@ html[data-theme="dark"] .tool-result-body {
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 8px;
-  margin: 0 -2px;
+  /* 滚动条贴近右侧分割线（1～2px） */
+  margin: 0;
   padding-left: 2px;
   padding-right: 2px;
+  scrollbar-gutter: stable;
+}
+.crish-sidebar .sidebar-scroll {
+  padding-right: 2px;
+  padding-left: 8px;
 }
 .sidebar-top-actions {
   display: flex;
@@ -11544,11 +11565,11 @@ html[data-theme="dark"] .hljs-attr { color: #f9a8d4; }
   color: var(--text-primary);
 }
 .tabs-add-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 40;
-  min-width: 160px;
+  position: fixed;
+  z-index: 10050;
+  min-width: 180px;
+  max-height: min(70vh, 360px);
+  overflow-y: auto;
   padding: 6px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
