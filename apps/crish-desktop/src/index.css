@@ -704,7 +704,8 @@ body {
 }
 
 .folder-header:hover {
-  background-color: #f5f5f5;
+  background-color: transparent;
+  color: var(--text-primary);
 }
 
 .folder-icon-wrap {
@@ -744,12 +745,12 @@ body {
 }
 
 .session-item:hover {
-  background-color: var(--bg-hover);
+  background-color: transparent;
   color: var(--text-primary);
 }
 
 .session-item.active {
-  background-color: var(--bg-active);
+  background-color: rgba(0, 0, 0, 0.045);
   color: var(--text-primary);
 }
 
@@ -785,11 +786,12 @@ body {
 
 .session-item:hover .session-actions-btn {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .session-actions-btn:hover {
-  background-color: #e5e5e5;
-  color: var(--text-secondary);
+  background-color: transparent;
+  color: var(--text-primary);
 }
 
 .branch-container {
@@ -5886,6 +5888,20 @@ select.ui-input {
   flex-direction: column;
   gap: 4px;
   padding: 12px 10px 8px;
+  overflow: hidden; /* 列表区单独滚，顶栏/置顶不跟着抖 */
+  flex: 1;
+  min-height: 0;
+}
+/* 项目 + 对话共用一条滚动条 */
+.crish-sidebar .sb-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 8px;
+  margin: 0 -2px;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 .sidebar-top-actions {
   display: flex;
@@ -5931,9 +5947,12 @@ select.ui-input {
   cursor: pointer;
   text-align: left;
 }
-.sb-nav-link:hover,
+.sb-nav-link:hover {
+  background: transparent;
+  color: var(--text-primary);
+}
 .sb-nav-link.active {
-  background: rgba(0,0,0,0.05);
+  background: transparent;
   color: var(--text-primary);
 }
 .sb-section {
@@ -5971,20 +5990,22 @@ select.ui-input {
   border-radius: 6px;
 }
 .sb-section-label:hover {
-  color: #6b6b72;
-  background: rgba(0,0,0,0.03);
+  color: var(--text-secondary);
+  background: transparent;
+  font-weight: 600; /* 与默认一致，不加重 */
 }
 .sb-section-label .chev-collapsed {
   transform: rotate(-90deg);
 }
 .sb-session-scroll {
-  overflow-y: auto;
-  flex: 1;
+  /* 旧嵌套滚动：保留兼容但默认不抢滚动 */
+  overflow: visible;
+  flex: none;
   min-height: 0;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 .crish-sidebar .folder-group {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .crish-sidebar .folder-header {
   display: flex;
@@ -5993,60 +6014,124 @@ select.ui-input {
   width: 100%;
   border: none;
   background: transparent;
-  color: #6b6b72;
+  color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 600;
-  padding: 6px 8px;
-  border-radius: 8px;
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: 6px;
   cursor: pointer;
   text-align: left;
+  transition: color 0.12s ease;
 }
+/* 项目行：hover 仅加深文字，无背景、无字重变化 */
 .crish-sidebar .folder-header:hover {
-  background: rgba(0,0,0,0.04);
+  background: transparent;
   color: var(--text-primary);
+  font-weight: 500;
+}
+.crish-sidebar .folder-header .folder-collapse-btn {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.crish-sidebar .folder-header:hover .folder-collapse-btn {
+  opacity: 1;
 }
 .crish-sidebar .folder-count {
   margin-left: auto;
   font-size: 10.5px;
   font-weight: 500;
-  color: #a0a0a6;
+  color: var(--text-tertiary);
+  opacity: 0.85;
 }
 .crish-sidebar .session-list {
-  gap: 1px;
-  padding-left: 4px;
+  gap: 0;
+  padding-left: 6px;
 }
 .crish-sidebar .session-item {
-  border-radius: 10px;
-  padding: 7px 10px;
+  border-radius: 8px;
+  padding: 6px 8px 6px 10px;
   font-size: 12.5px;
-  color: #55555c;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+  transition: color 0.12s ease, background-color 0.12s ease;
 }
+/* 默认清爽：无 hover 背景块 */
 .crish-sidebar .session-item:hover {
-  background: rgba(0,0,0,0.045);
+  background: transparent;
   color: var(--text-primary);
+  font-weight: 400 !important;
 }
+/* 当前会话：极轻一点底，无白卡片/阴影（整栏仅此一行「选中」） */
 .crish-sidebar .session-item.active {
-  background: #fff;
+  background: rgba(0, 0, 0, 0.045);
   color: var(--text-primary);
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  font-weight: 400 !important;
+  box-shadow: none !important;
 }
-.crish-sidebar .session-item.active .session-time {
-  color: #9a9aa0;
+html[data-theme="dark"] .crish-sidebar .session-item.active {
+  background: rgba(255, 255, 255, 0.06);
 }
 .crish-sidebar .session-text {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+/* 时间 / more 同槽位：默认时间，hover 换 more */
+.crish-sidebar .session-trailing {
+  position: relative;
+  flex-shrink: 0;
+  width: 22px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 .crish-sidebar .session-time {
   font-size: 10.5px;
-  color: #a8a8ae;
+  color: var(--text-tertiary);
   flex-shrink: 0;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.1s ease;
+}
+.crish-sidebar .session-actions-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s ease, color 0.1s ease;
+}
+.crish-sidebar .session-item:hover .session-time {
+  opacity: 0;
+}
+.crish-sidebar .session-item:hover .session-actions-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+.crish-sidebar .session-actions-btn:hover {
+  color: var(--text-primary);
+  background: transparent;
 }
 /* 主会话下嵌套协作 agent 列表（高度限制，可滚） */
 .session-item-wrap {
@@ -6078,12 +6163,17 @@ select.ui-input {
   font-family: inherit;
 }
 .session-agent-item:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: #333;
-}
-.session-agent-item.active {
-  background: var(--bg-active);
+  background: transparent;
   color: var(--text-primary);
+}
+/* 仅当前选中的 agent 一行轻高亮，不连带父会话一起「四行全亮」 */
+.session-agent-item.active {
+  background: rgba(0, 0, 0, 0.045);
+  color: var(--text-primary);
+  font-weight: 400;
+}
+html[data-theme="dark"] .session-agent-item.active {
+  background: rgba(255, 255, 255, 0.06);
 }
 .session-agent-item--running .session-agent-text {
   color: #3b6;
@@ -7900,8 +7990,9 @@ select.ui-input {
   padding-left: 4px;
 }
 .folder-header.is-active-project {
-  background: rgba(0,0,0,0.05);
-  color: var(--text-primary);
+  /* 不再用项目行抢高亮，注意力留给当前会话 */
+  background: transparent;
+  color: var(--text-secondary);
 }
 .sb-empty-hint.subtle {
   font-size: 11px;

@@ -10,6 +10,10 @@ import {
   openProject,
   type ProjectEntry,
 } from '../api/projectStore';
+import {
+  formatSessionListTime,
+  sessionLastActivityMs,
+} from '../api/sessionTime';
 
 interface SidebarProps {
   onShowToast: (message: string, onUndo?: () => void) => void;
@@ -87,6 +91,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false);
   const [generalCollapsed, setGeneralCollapsed] = useState(false);
+  /** 驱动相对时间刷新 */
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
     const sync = () => {
@@ -95,6 +101,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
     window.addEventListener('crish-project-changed', sync);
     return () => window.removeEventListener('crish-project-changed', sync);
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(t);
   }, []);
 
   const menuRef = useRef<HTMLDivElement>(null);
@@ -189,7 +200,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const sortedSessions =
     sortType === 'name'
       ? [...visibleSessions].sort((a, b) => a.title.localeCompare(b.title))
-      : visibleSessions;
+      : [...visibleSessions].sort(
+          (a, b) => sessionLastActivityMs(b) - sessionLastActivityMs(a),
+        );
 
   const pinnedSessions = sortedSessions.filter((s) => s.isPinned);
   const unpinned = sortedSessions.filter((s) => !s.isPinned);
@@ -329,6 +342,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
     const agents = s.agents || [];
     const agentRunning = agents.some((a) => a.status === 'running');
+    // 整树仅一行「当前」高亮：主对话激活时不高亮嵌套 agent
+    const sessionActive = s.id === activeSessionId && !activeAgentId;
+    const timeLabel = formatSessionListTime(s, nowTick);
     return (
       <li
         key={s.id}
@@ -336,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''}`}
       >
         <div
-          className={`session-item ${s.id === activeSessionId && !activeAgentId ? 'active' : ''} ${isBranched ? 'branch-session' : ''}`}
+          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''}`}
           onClick={() => {
             setActiveSessionId(s.id);
             setActiveAgentId(null);
@@ -347,32 +363,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="session-text" title={displayText}>
             {displayText}
           </span>
-          <span className="session-time">
+          <span className="session-trailing">
             {isRunning || agentRunning ? (
               <span className="session-running-spinner" title="处理中" />
             ) : (
-              s.timestamp
+              <>
+                <span className="session-time">{timeLabel}</span>
+                <button
+                  type="button"
+                  className="session-actions-btn"
+                  title="更多"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleContextMenu(e as unknown as React.MouseEvent, s.id);
+                  }}
+                >
+                  <Lucide.MoreHorizontal size={13} />
+                </button>
+              </>
             )}
           </span>
-          <button
-            type="button"
-            className="session-actions-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleContextMenu(e as unknown as React.MouseEvent, s.id);
-            }}
-          >
-            <Lucide.MoreHorizontal size={12} />
-          </button>
         </div>
         {agents.length > 0 ? (
           <ul className="session-agent-list" aria-label="协作 agent">
-            {agents.slice(0, 12).map((ag) => (
+            {agents.slice(0, 12).map((ag) => {
+              const agentActive = activeSessionId === s.id && activeAgentId === ag.id;
+              return (
               <li key={ag.id}>
                 <button
                   type="button"
                   className={`session-agent-item ${
-                    activeSessionId === s.id && activeAgentId === ag.id ? 'active' : ''
+                    agentActive ? 'active' : ''
                   } session-agent-item--${ag.status}`}
                   title={ag.description}
                   onClick={(e) => {
@@ -413,7 +434,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : null}
       </li>
@@ -469,93 +491,95 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </section>
 
-        {/* 2) 项目 — user-added projects */}
-        <section className="sb-section">
-          <button
-            type="button"
-            className="sb-section-label"
-            onClick={() => setProjectsSectionCollapsed(!projectsSectionCollapsed)}
-          >
-            <span>项目</span>
-            <Lucide.ChevronDown
-              size={12}
-              className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
-            />
-          </button>
-          {!projectsSectionCollapsed && (
-            <div className="sb-session-scroll">
-              {projects.map((p) => {
-                const open = !collapsedProjects[p.id];
-                const sess = sessionsByProject(p.id);
-                const isActive = activeProjectId === p.id;
-                return (
-                  <div key={p.id} className="folder-group" data-folder-name={p.id}>
-                    <button
-                      type="button"
-                      className={`folder-header ${isActive ? 'is-active-project' : ''}`}
-                      onClick={() => {
-                        openProject(p.id);
-                        setActiveProjectId(p.id);
-                        setCollapsedProjects((prev) => ({ ...prev, [p.id]: false }));
-                      }}
-                      onDoubleClick={() =>
-                        setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
-                      }
-                    >
-                      <Lucide.Folder size={13} />
-                      <span className="folder-name">{p.name}</span>
-                      <span className="folder-count">{sess.length}</span>
-                      <span
-                        className="folder-collapse-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }));
-                        }}
-                      >
-                        <Lucide.ChevronDown size={12} className={open ? '' : 'chev-collapsed'} />
-                      </span>
-                    </button>
-                    {open && (
-                      <ul className="session-list folder-sessions">
-                        {sess.map((s) => renderSessionItem(s, true))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-              {projects.length === 0 && (
-                <div className="sb-empty-hint subtle">在对话区选择或添加项目</div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* 3) 对话 — no-project chats */}
-        <section className="sb-section sb-section-grow">
-          <div className="sb-section-label-row">
+        {/* 项目 + 对话：共用一个滚动区域 */}
+        <div ref={sessionListRef} className="sb-list-scroll">
+          {/* 2) 项目 */}
+          <section className="sb-section">
             <button
               type="button"
               className="sb-section-label"
-              onClick={() => setGeneralCollapsed(!generalCollapsed)}
+              onClick={() => setProjectsSectionCollapsed(!projectsSectionCollapsed)}
             >
-              <span>对话</span>
-              <Lucide.ChevronDown size={12} className={generalCollapsed ? 'chev-collapsed' : ''} />
+              <span>项目</span>
+              <Lucide.ChevronDown
+                size={12}
+                className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
+              />
             </button>
-            <button type="button" className="sort-btn" title="排序" onClick={handleSortBtnClick}>
-              <Lucide.ArrowUpDown size={12} />
-            </button>
-          </div>
-          {!generalCollapsed && (
-            <div ref={sessionListRef} className="sb-session-scroll">
-              <ul className="session-list folder-sessions">
-                {generalSessions.map((s) => renderSessionItem(s))}
-              </ul>
-              {generalSessions.length === 0 && (
-                <div className="sb-empty-hint subtle">不在项目中时的对话</div>
-              )}
+            {!projectsSectionCollapsed && (
+              <>
+                {projects.map((p) => {
+                  const open = !collapsedProjects[p.id];
+                  const sess = sessionsByProject(p.id);
+                  return (
+                    <div key={p.id} className="folder-group" data-folder-name={p.id}>
+                      <button
+                        type="button"
+                        className="folder-header"
+                        onClick={() => {
+                          openProject(p.id);
+                          setActiveProjectId(p.id);
+                          setCollapsedProjects((prev) => ({ ...prev, [p.id]: false }));
+                        }}
+                        onDoubleClick={() =>
+                          setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
+                        }
+                      >
+                        <Lucide.Folder size={13} />
+                        <span className="folder-name">{p.name}</span>
+                        <span className="folder-count">{sess.length}</span>
+                        <span
+                          className="folder-collapse-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }));
+                          }}
+                        >
+                          <Lucide.ChevronDown size={12} className={open ? '' : 'chev-collapsed'} />
+                        </span>
+                      </button>
+                      {open && (
+                        <ul className="session-list folder-sessions">
+                          {sess.map((s) => renderSessionItem(s, true))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+                {projects.length === 0 && (
+                  <div className="sb-empty-hint subtle">在对话区选择或添加项目</div>
+                )}
+              </>
+            )}
+          </section>
+
+          {/* 3) 对话 */}
+          <section className="sb-section">
+            <div className="sb-section-label-row">
+              <button
+                type="button"
+                className="sb-section-label"
+                onClick={() => setGeneralCollapsed(!generalCollapsed)}
+              >
+                <span>对话</span>
+                <Lucide.ChevronDown size={12} className={generalCollapsed ? 'chev-collapsed' : ''} />
+              </button>
+              <button type="button" className="sort-btn" title="排序" onClick={handleSortBtnClick}>
+                <Lucide.ArrowUpDown size={12} />
+              </button>
             </div>
-          )}
-        </section>
+            {!generalCollapsed && (
+              <>
+                <ul className="session-list folder-sessions">
+                  {generalSessions.map((s) => renderSessionItem(s))}
+                </ul>
+                {generalSessions.length === 0 && (
+                  <div className="sb-empty-hint subtle">不在项目中时的对话</div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
       </div>
 
       <div className="sidebar-footer">

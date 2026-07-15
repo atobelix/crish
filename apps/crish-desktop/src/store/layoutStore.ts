@@ -1052,7 +1052,6 @@ export const useLayoutStore = create<LayoutStore>()(
       const sess = state.sessions.find((s) => s.id === sessionId);
       if (sess) {
         sess.title = title.slice(0, 48) || sess.title;
-        sess.timestamp = '刚刚';
       }
     }),
 

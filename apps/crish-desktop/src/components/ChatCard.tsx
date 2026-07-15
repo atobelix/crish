@@ -796,8 +796,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           status: isAiBusy ? 'queued' : 'processing',
         };
         // 正式版：不再支持「插入打断」，统一入队或立即发送
+        // 侧栏时间由消息 timestamp 推算，不写死「刚刚」
         sess.messages.push(newMsg);
-        sess.timestamp = '刚刚';
       }
     });
 
