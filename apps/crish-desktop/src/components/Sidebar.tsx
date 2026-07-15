@@ -240,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           if (el) {
             dragOverlay = el.cloneNode(true) as HTMLDivElement;
             dragOverlay.className = 'sidebar-drag-ghost';
-            dragOverlay.style.cssText = `position:fixed;width:${elRect.width}px;pointer-events:none;z-index:10000;opacity:0.9;box-shadow:0 8px 24px rgba(0,0,0,0.12);background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:8px 12px;font-size:13px;`;
+            dragOverlay.style.cssText = `position:fixed;width:${elRect?.width ?? 180}px;`;
             document.body.appendChild(dragOverlay);
           }
         }

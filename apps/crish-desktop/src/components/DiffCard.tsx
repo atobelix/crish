@@ -29,7 +29,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
   }, [current, diffSearchQuery]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, background: 'var(--bg-primary)' }}>
       <div
         className="card-subheader diff-subheader"
         style={{
@@ -38,7 +38,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: '1px solid var(--border-subtle)',
-          background: '#fff',
+          background: 'var(--bg-primary)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -120,7 +120,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
               borderRight: '1px solid var(--border-subtle)',
               overflowY: 'auto',
               flexShrink: 0,
-              background: '#fafafa',
+              background: 'var(--bg-secondary)',
             }}
           >
             {fileList.map((f) => {
@@ -137,7 +137,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
                     textAlign: 'left',
                     border: 'none',
                     borderBottom: '1px solid var(--border-subtle)',
-                    background: active ? '#fff' : 'transparent',
+                    background: active ? 'var(--bg-active)' : 'transparent',
                     padding: '8px 10px',
                     cursor: 'pointer',
                     fontFamily: 'var(--font-mono)',
@@ -160,7 +160,7 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
           </div>
         )}
 
-        <div className="diff-body" style={{ overflowY: 'auto', flex: 1, background: '#fff' }}>
+        <div className="diff-body" style={{ overflowY: 'auto', flex: 1, background: 'var(--bg-primary)' }}>
           {!current ? (
             <div
               style={{

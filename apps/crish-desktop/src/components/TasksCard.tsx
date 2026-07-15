@@ -42,7 +42,7 @@ export const TasksCard: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, background: 'var(--bg-primary)' }}>
       <div
         className="card-subheader"
         style={{
@@ -51,7 +51,7 @@ export const TasksCard: React.FC = () => {
           alignItems: 'center',
           padding: '8px 12px',
           borderBottom: '1px solid var(--border-subtle)',
-          background: '#fff',
+          background: 'var(--bg-primary)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
