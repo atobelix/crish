@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
+import {
+  joinUnderRoot,
+  resolveUnderRoot,
+  toRelativePosix,
+} from "./snapshots";
 import type { JsonObject, ToolArtifact } from "@crish/shared-types";
 
 export interface WorkspaceCheckpointOptions {
@@ -88,8 +93,8 @@ export async function createWorkspaceCheckpoint(request: CreateWorkspaceCheckpoi
     }
 
     const content = await readFile(targetPath);
-    const snapshotPath = resolve(checkpointDir, "files", relativePath);
-    assertInside(checkpointDir, snapshotPath, "checkpoint file");
+    // 分段 join，避免 relativePath 若为绝对路径时 resolve 丢掉 checkpointDir（双前缀/写穿）
+    const snapshotPath = joinUnderRoot(checkpointDir, "files", ...relativePath.split("/").filter(Boolean));
     await mkdir(dirname(snapshotPath), { recursive: true });
     await writeFile(snapshotPath, content);
     files.push({
@@ -188,14 +193,11 @@ export function resolveCheckpointArchiveRoot(workspaceRoot: string, archiveRoot?
 
 function normalizeRelativePath(workspaceRoot: string, inputPath: string): string {
   const targetPath = resolveWorkspacePath(workspaceRoot, inputPath);
-  return relative(resolve(workspaceRoot), targetPath);
+  return toRelativePosix(workspaceRoot, targetPath);
 }
 
 function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string {
-  const root = resolve(workspaceRoot);
-  const candidate = resolve(root, inputPath);
-  assertInside(root, candidate, "workspace path");
-  return candidate;
+  return resolveUnderRoot(workspaceRoot, inputPath, "workspace path");
 }
 
 function assertInside(root: string, candidate: string, label: string): void {
