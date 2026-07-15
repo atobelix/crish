@@ -25,6 +25,7 @@ import { isDemoMode } from '../api/appMode';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
 import { FontSettingsSection } from './FontSettingsSection';
+import { SettingsSelect } from './SettingsSelect';
 import {
   createWorkflow,
   defaultTimezone,
@@ -2141,74 +2142,83 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <div style={{ marginBottom: 16 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  主题、密度、字体与阅读选项（全页设置，空间更宽）
+                  主题、密度与字体
                 </p>
               </div>
 
-              <div className="settings-fields-stack" style={{ gap: 14 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">主题</label>
-                  <div className="ui-segment" style={{ maxWidth: 280 }}>
-                    {(
-                      [
-                        { id: 'default', label: '浅色' },
-                        { id: 'dark', label: '深色' },
-                      ] as const
-                    ).map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`ui-segment-item ${(settings.theme || 'default') === opt.id ? 'active' : ''}`}
-                        onClick={() => {
-                          void handleUpdateSettings({ theme: opt.id });
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+              <div className="settings-rows">
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-title">主题</span>
+                  </div>
+                  <div className="settings-row-control">
+                    <div className="ui-segment ui-segment--inline">
+                      {(
+                        [
+                          { id: 'default', label: '浅色' },
+                          { id: 'dark', label: '深色' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`ui-segment-item ${(settings.theme || 'default') === opt.id ? 'active' : ''}`}
+                          onClick={() => {
+                            void handleUpdateSettings({ theme: opt.id });
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">间距密度</label>
-                  <div className="ui-segment" style={{ maxWidth: 320 }}>
-                    {(
-                      [
-                        { id: 'small', label: '紧凑' },
-                        { id: 'medium', label: '标准' },
-                        { id: 'large', label: '宽松' },
-                      ] as const
-                    ).map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`ui-segment-item ${useLayoutStore.getState().uiSize === opt.id ? 'active' : ''}`}
-                        onClick={() => useLayoutStore.getState().setUiSize(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-title">间距密度</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>
-                    调整界面内边距与控件疏密，不是整体缩放窗口。
-                  </p>
+                  <div className="settings-row-control">
+                    <div className="ui-segment ui-segment--inline">
+                      {(
+                        [
+                          { id: 'small', label: '紧凑' },
+                          { id: 'medium', label: '标准' },
+                          { id: 'large', label: '宽松' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`ui-segment-item ${useLayoutStore.getState().uiSize === opt.id ? 'active' : ''}`}
+                          onClick={() => useLayoutStore.getState().setUiSize(opt.id)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label className="settings-field-label">代码缩进</label>
-                  <select
-                    value={settings.markdown?.codeBlockIndent || '  '}
-                    onChange={(e) =>
-                      handleUpdateSettings({
-                        markdown: { ...settings.markdown, codeBlockIndent: e.target.value },
-                      })
-                    }
-                    className="settings-field-input"
-                  >
-                    <option value="  ">2 空格</option>
-                    <option value="    ">4 空格</option>
-                    <option value="	">Tab</option>
-                  </select>
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-title">代码缩进</span>
+                  </div>
+                  <div className="settings-row-control">
+                    <SettingsSelect
+                      value={settings.markdown?.codeBlockIndent || '  '}
+                      options={[
+                        { value: '  ', label: '2 空格' },
+                        { value: '    ', label: '4 空格' },
+                        { value: '\t', label: 'Tab' },
+                      ]}
+                      onChange={(v) =>
+                        void handleUpdateSettings({
+                          markdown: { ...settings.markdown, codeBlockIndent: v },
+                        })
+                      }
+                    />
+                  </div>
                 </div>
 
                 <FontSettingsSection
@@ -2225,16 +2235,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   }
                 />
 
-                <label className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">隐藏思考过程</div>
-                    <div className="settings-toggle-desc">对话中不展示「思考中」状态文字</div>
+                <label className="settings-row settings-row--toggle">
+                  <div className="settings-row-label">
+                    <span className="settings-row-title">隐藏思考过程</span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={!!settings.hideThinkingBlock}
-                    onChange={(e) => handleUpdateSettings({ hideThinkingBlock: e.target.checked })}
-                  />
+                  <div className="settings-row-control">
+                    <input
+                      type="checkbox"
+                      className="settings-switch"
+                      checked={!!settings.hideThinkingBlock}
+                      onChange={(e) => handleUpdateSettings({ hideThinkingBlock: e.target.checked })}
+                    />
+                  </div>
                 </label>
               </div>
             </>

@@ -17,6 +17,7 @@ import {
   toLocalChoice,
   uiFontOptions,
 } from '../api/fontStore';
+import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
 
 interface Props {
   onShowToast?: (msg: string) => void;
@@ -24,28 +25,23 @@ interface Props {
 }
 
 /**
- * 紧凑字体设置：主行用下拉，本机字体收进可展开细节面板。
+ * 字体：每项一行；展开列表含内置 + 本机；扫描为行内图标。
  */
 export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSettings }) => {
   const [prefs, setPrefs] = useState<FontPreferences>(() => readStoredFonts());
   const [localFonts, setLocalFonts] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
-  const [customUi, setCustomUi] = useState('');
-  const [customMono, setCustomMono] = useState('');
+  const [customDraft, setCustomDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [localOpen, setLocalOpen] = useState(false);
+  /** 自定义输入目标：ui | mono */
+  const [customTarget, setCustomTarget] = useState<'ui' | 'mono'>('ui');
 
   useEffect(() => {
-    const p = readStoredFonts();
-    setPrefs(p);
-    if (isLocalFontChoice(p.uiFont)) {
-      setCustomUi(localFontFamily(p.uiFont));
-      setLocalOpen(true);
-    }
-    if (isLocalFontChoice(p.monoFont)) {
-      setCustomMono(localFontFamily(p.monoFont));
-      setLocalOpen(true);
-    }
+    setPrefs(readStoredFonts());
+    // 首次静默尝试列本机（失败忽略）
+    void listLocalFonts()
+      .then((list) => setLocalFonts(list.map((f) => f.family)))
+      .catch(() => undefined);
   }, []);
 
   const apply = useCallback(
@@ -70,8 +66,8 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
       const list = await listLocalFonts();
       const names = list.map((f) => f.family);
       setLocalFonts(names);
-      if (!names.length) onShowToast?.('未扫描到本机字体（可手动输入）');
-      else onShowToast?.(`已扫描 ${names.length} 个字体`);
+      if (!names.length) onShowToast?.('未扫描到本机字体');
+      else onShowToast?.(`已加载 ${names.length} 个本机字体`);
     } catch (e) {
       onShowToast?.(`扫描失败：${String(e)}`);
     } finally {
@@ -79,235 +75,191 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     }
   }, [onShowToast]);
 
-  const uiSelectValue = useMemo(() => {
-    if (isLocalFontChoice(prefs.uiFont)) return '__local__';
-    return prefs.uiFont;
-  }, [prefs.uiFont]);
-
-  const monoSelectValue = useMemo(() => {
-    if (isLocalFontChoice(prefs.monoFont)) return '__local__';
-    return prefs.monoFont;
-  }, [prefs.monoFont]);
-
-  const onUiSelect = (v: string) => {
-    if (v === '__local__') {
-      setLocalOpen(true);
-      if (customUi.trim()) void apply({ uiFont: toLocalChoice(customUi) });
-      return;
+  const uiOptions: SettingsSelectOption[] = useMemo(() => {
+    const base: SettingsSelectOption[] = uiFontOptions().map((o) => ({
+      value: o.id,
+      label: o.label,
+      group: '推荐',
+      previewFamily: o.previewFamily,
+      hint: o.kind === 'embedded' ? '内嵌' : o.kind === 'auto' ? platformLabel() : undefined,
+    }));
+    const locals: SettingsSelectOption[] = localFonts.map((f) => ({
+      value: `local:${f}`,
+      label: f,
+      group: '本机',
+      previewFamily: f,
+    }));
+    // 当前已选本机但不在列表里时补上
+    if (isLocalFontChoice(prefs.uiFont)) {
+      const fam = localFontFamily(prefs.uiFont);
+      if (fam && !localFonts.includes(fam)) {
+        locals.unshift({
+          value: prefs.uiFont,
+          label: fam,
+          group: '本机',
+          previewFamily: fam,
+        });
+      }
     }
-    void apply({ uiFont: v as UiFontChoice });
+    return [...base, ...locals];
+  }, [localFonts, prefs.uiFont]);
+
+  const monoOptions: SettingsSelectOption[] = useMemo(() => {
+    const base: SettingsSelectOption[] = monoFontOptions().map((o) => ({
+      value: o.id,
+      label: o.label,
+      group: '推荐',
+      previewFamily: o.previewFamily,
+      hint: o.kind === 'embedded' ? '内嵌' : o.kind === 'auto' ? platformLabel() : undefined,
+    }));
+    const locals: SettingsSelectOption[] = localFonts.map((f) => ({
+      value: `local:${f}`,
+      label: f,
+      group: '本机',
+      previewFamily: f,
+    }));
+    if (isLocalFontChoice(prefs.monoFont)) {
+      const fam = localFontFamily(prefs.monoFont);
+      if (fam && !localFonts.includes(fam)) {
+        locals.unshift({
+          value: prefs.monoFont,
+          label: fam,
+          group: '本机',
+          previewFamily: fam,
+        });
+      }
+    }
+    return [...base, ...locals];
+  }, [localFonts, prefs.monoFont]);
+
+  const uiValue = prefs.uiFont;
+  const monoValue = prefs.monoFont;
+
+  const applyCustom = (target: 'ui' | 'mono') => {
+    const name = customDraft.trim();
+    if (!name) return;
+    if (target === 'ui') void apply({ uiFont: toLocalChoice(name) });
+    else void apply({ monoFont: toLocalChoice(name) });
+    setCustomDraft('');
   };
 
-  const onMonoSelect = (v: string) => {
-    if (v === '__local__') {
-      setLocalOpen(true);
-      if (customMono.trim()) void apply({ monoFont: toLocalChoice(customMono) });
-      return;
-    }
-    void apply({ monoFont: v as MonoFontChoice });
-  };
+  const scanBtn = (
+    <button
+      type="button"
+      className="settings-select-icon-btn"
+      title={scanning ? '扫描中…' : '扫描本机字体'}
+      disabled={busy || scanning}
+      onClick={(e) => {
+        e.stopPropagation();
+        void scanLocal();
+      }}
+    >
+      {scanning ? <Lucide.Loader2 size={14} className="spin" /> : <Lucide.HardDrive size={14} />}
+    </button>
+  );
+
+  const customFooter = (target: 'ui' | 'mono') => (
+    <div className="settings-select-custom">
+      <input
+        className="settings-select-custom-input"
+        placeholder="输入本机字体名后回车"
+        value={customTarget === target ? customDraft : ''}
+        disabled={busy}
+        onFocus={() => setCustomTarget(target)}
+        onChange={(e) => {
+          setCustomTarget(target);
+          setCustomDraft(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            applyCustom(target);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
 
   return (
-    <div className="font-settings font-settings--compact">
-      <div className="font-settings-head">
-        <label className="settings-field-label">字体</label>
-        <span className="font-settings-hint">
-          {platformLabel()} · {describeActiveUi(prefs)} / {describeActiveMono(prefs)}
-        </span>
-      </div>
-
-      {/* 主行：界面 + 代码 + 连字 */}
-      <div className="font-settings-row">
-        <label className="font-field">
-          <span className="font-field-label">界面</span>
-          <select
-            className="settings-field-input font-field-select"
-            value={uiSelectValue}
-            disabled={busy}
-            onChange={(e) => onUiSelect(e.target.value)}
-          >
-            {uiFontOptions().map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-            <option value="__local__">本机字体…</option>
-          </select>
-        </label>
-
-        <label className="font-field">
-          <span className="font-field-label">代码</span>
-          <select
-            className="settings-field-input font-field-select"
-            value={monoSelectValue}
-            disabled={busy}
-            onChange={(e) => onMonoSelect(e.target.value)}
-          >
-            {monoFontOptions().map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-            <option value="__local__">本机字体…</option>
-          </select>
-        </label>
-
-        <label className="font-ligature-toggle" title="代码连字">
-          <input
-            type="checkbox"
-            checked={!!prefs.monoLigatures}
-            disabled={busy}
-            onChange={(e) => void apply({ monoLigatures: e.target.checked })}
-          />
-          <span>连字</span>
-        </label>
-
-        <button
-          type="button"
-          className="font-link-btn"
-          disabled={busy}
-          onClick={() => {
-            setCustomUi('');
-            setCustomMono('');
-            void apply({ ...DEFAULT_FONT_PREFS });
-            onShowToast?.('已恢复默认字体');
-          }}
-        >
-          默认
-        </button>
-      </div>
-
-      {/* 预览：单行 */}
-      <div className="font-preview-inline">
-        <span style={{ fontFamily: 'var(--font-sans)' }}>界面 Ag 中文</span>
-        <span className="font-preview-sep">·</span>
-        <span style={{ fontFamily: 'var(--font-mono)' }}>{'const x = 1'}</span>
-      </div>
-
-      {/* 本机：折叠细节 */}
-      <details
-        className="font-local-details"
-        open={localOpen}
-        onToggle={(e) => setLocalOpen((e.target as HTMLDetailsElement).open)}
-      >
-        <summary className="font-local-summary">
-          <Lucide.HardDrive size={14} />
-          <span>本机字体</span>
-          {(isLocalFontChoice(prefs.uiFont) || isLocalFontChoice(prefs.monoFont)) && (
-            <span className="font-local-badge">使用中</span>
-          )}
-          <Lucide.ChevronDown size={14} className="font-local-chev" />
-        </summary>
-        <div className="font-local-panel">
-          <div className="font-local-actions">
-            <button
-              type="button"
-              className="settings-secondary-btn"
-              disabled={scanning || busy}
-              onClick={() => void scanLocal()}
-            >
-              {scanning ? '扫描中…' : '扫描本机'}
-            </button>
-            {localFonts.length > 0 ? (
-              <span className="font-settings-hint">{localFonts.length} 个可用</span>
-            ) : (
-              <span className="font-settings-hint">或直接输入字体族名</span>
-            )}
-          </div>
-          <div className="font-local-grid">
-            <label className="font-field font-field--stack">
-              <span className="font-field-label">界面本机</span>
-              <div className="font-local-inputs">
-                {localFonts.length > 0 ? (
-                  <select
-                    className="settings-field-input"
-                    value={isLocalFontChoice(prefs.uiFont) ? localFontFamily(prefs.uiFont) : ''}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!v) return;
-                      setCustomUi(v);
-                      void apply({ uiFont: toLocalChoice(v) });
-                    }}
-                  >
-                    <option value="">选择…</option>
-                    {localFonts.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                <input
-                  className="settings-field-input"
-                  placeholder="如 Segoe UI"
-                  value={customUi}
-                  disabled={busy}
-                  onChange={(e) => setCustomUi(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && customUi.trim()) {
-                      void apply({ uiFont: toLocalChoice(customUi) });
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="settings-secondary-btn"
-                  disabled={busy || !customUi.trim()}
-                  onClick={() => void apply({ uiFont: toLocalChoice(customUi) })}
-                >
-                  应用
-                </button>
-              </div>
-            </label>
-            <label className="font-field font-field--stack">
-              <span className="font-field-label">代码本机</span>
-              <div className="font-local-inputs">
-                {localFonts.length > 0 ? (
-                  <select
-                    className="settings-field-input"
-                    value={isLocalFontChoice(prefs.monoFont) ? localFontFamily(prefs.monoFont) : ''}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!v) return;
-                      setCustomMono(v);
-                      void apply({ monoFont: toLocalChoice(v) });
-                    }}
-                  >
-                    <option value="">选择…</option>
-                    {localFonts.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                <input
-                  className="settings-field-input"
-                  placeholder="如 Consolas"
-                  value={customMono}
-                  disabled={busy}
-                  onChange={(e) => setCustomMono(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && customMono.trim()) {
-                      void apply({ monoFont: toLocalChoice(customMono) });
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="settings-secondary-btn"
-                  disabled={busy || !customMono.trim()}
-                  onClick={() => void apply({ monoFont: toLocalChoice(customMono) })}
-                >
-                  应用
-                </button>
-              </div>
-            </label>
-          </div>
+    <>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <span className="settings-row-title">界面字体</span>
         </div>
-      </details>
-    </div>
+        <div className="settings-row-control">
+          <SettingsSelect
+            value={uiValue}
+            options={uiOptions}
+            disabled={busy}
+            onChange={(v) => void apply({ uiFont: v as UiFontChoice })}
+            valuePreviewFamily={
+              isLocalFontChoice(uiValue)
+                ? localFontFamily(uiValue)
+                : uiFontOptions().find((o) => o.id === uiValue)?.previewFamily
+            }
+            trailing={scanBtn}
+            footer={customFooter('ui')}
+            maxHeight={320}
+          />
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <span className="settings-row-title">代码字体</span>
+        </div>
+        <div className="settings-row-control">
+          <label className="settings-row-check" title="代码连字">
+            <input
+              type="checkbox"
+              checked={!!prefs.monoLigatures}
+              disabled={busy}
+              onChange={(e) => void apply({ monoLigatures: e.target.checked })}
+            />
+            <span>连字</span>
+          </label>
+          <SettingsSelect
+            value={monoValue}
+            options={monoOptions}
+            disabled={busy}
+            onChange={(v) => void apply({ monoFont: v as MonoFontChoice })}
+            valuePreviewFamily={
+              isLocalFontChoice(monoValue)
+                ? localFontFamily(monoValue)
+                : monoFontOptions().find((o) => o.id === monoValue)?.previewFamily
+            }
+            trailing={scanBtn}
+            footer={customFooter('mono')}
+            maxHeight={320}
+          />
+          <button
+            type="button"
+            className="settings-row-text-btn"
+            disabled={busy}
+            title="恢复默认字体"
+            onClick={() => {
+              void apply({ ...DEFAULT_FONT_PREFS });
+              onShowToast?.('已恢复默认字体');
+            }}
+          >
+            默认
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-row settings-row--preview">
+        <div className="settings-row-label">
+          <span className="settings-row-meta">
+            {platformLabel()} · {describeActiveUi(prefs)} / {describeActiveMono(prefs)}
+          </span>
+        </div>
+        <div className="settings-row-control settings-row-preview-text">
+          <span style={{ fontFamily: 'var(--font-sans)' }}>Ag 中文</span>
+          <span className="font-preview-sep">·</span>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{'const x = 1'}</span>
+        </div>
+      </div>
+    </>
   );
 };
