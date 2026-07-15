@@ -21,6 +21,7 @@ import { ScheduledTasksPanel } from './ScheduledTasksPanel';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { toolHumanLabel } from '../api/toolPresentation';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
+import { publishToolDiffs } from '../api/publishToolDiffs';
 import {
   getSkillSlashCommandsCached,
   type SkillSlashCommand,
@@ -538,11 +539,12 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         });
       },
       onToolSuccess: (toolId, output, diffs) => {
+        let resolved: import('../store/layoutStore').FileDiff[] = [];
         patchAsst((m) => {
           const tc = m.toolCalls?.find((t) => t.id === toolId);
           if (!tc) return;
           const displayOut = sanitizeToolDisplayOutput(output || '');
-          const resolved = resolveToolDiffs({
+          resolved = resolveToolDiffs({
             name: tc.name || '',
             args: tc.arguments,
             output: displayOut,
@@ -550,12 +552,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           });
           tc.status = 'success';
           tc.output = displayOut || output || '完成';
-          if (resolved.length) {
-            tc.diffs = resolved;
-            const push = useLayoutStore.getState().pushDiffFile;
-            if (push) resolved.forEach((d) => push(d));
-          }
+          if (resolved.length) tc.diffs = resolved;
         });
+        // 必须在 immer set 外推右侧变更，嵌套 set 会被丢弃
+        publishToolDiffs(resolved);
       },
       onToolError: (toolId, error) => {
         patchAsst((m) => {

@@ -12,6 +12,7 @@ import {
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
 } from '../api/toolFeedback';
+import { publishToolDiffs } from '../api/publishToolDiffs';
 import { stripThoughtPlaceholders } from '../api/markdownRender';
 import { normalizeAssistantTimeline } from '../api/toolPresentation';
 import {
@@ -306,11 +307,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           displayOut.split('\n').slice(0, 80).forEach((line) => addTerminalLine(line, sid));
         }
 
-        // 有可展示 diff 才推右侧变更；不自动抢焦点展开
+        // 有可展示 diff 才推右侧变更（set 外调用，避免 immer 嵌套丢弃）
         if (resolvedDiffs.length > 0) {
-          const push = useLayoutStore.getState().pushDiffFile;
-          if (push) resolvedDiffs.forEach((d) => push(d));
-          else setActiveDiffSource(resolvedDiffs[0]);
+          publishToolDiffs(resolvedDiffs);
         }
       },
       onToolError: (toolId, error) => {

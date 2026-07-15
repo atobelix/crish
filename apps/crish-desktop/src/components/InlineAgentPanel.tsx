@@ -15,6 +15,7 @@ import {
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
+import { publishToolDiffs } from '../api/publishToolDiffs';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { openAgentInNewWindow } from './AgentCard';
 import {
@@ -129,11 +130,12 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         });
       },
       onToolSuccess: (toolId, output, diffs) => {
+        let resolved: import('../store/layoutStore').FileDiff[] = [];
         patchAsst((m) => {
           const tc = m.toolCalls?.find((t) => t.id === toolId);
           if (!tc) return;
           const displayOut = sanitizeToolDisplayOutput(output || '');
-          const resolved = resolveToolDiffs({
+          resolved = resolveToolDiffs({
             name: tc.name || '',
             args: tc.arguments,
             output: displayOut,
@@ -141,12 +143,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           });
           tc.status = 'success';
           tc.output = displayOut || output || '完成';
-          if (resolved.length) {
-            tc.diffs = resolved;
-            const push = useLayoutStore.getState().pushDiffFile;
-            if (push) resolved.forEach((d) => push(d));
-          }
+          if (resolved.length) tc.diffs = resolved;
         });
+        // 必须在 immer set 外推右侧变更，嵌套 set 会被丢弃
+        publishToolDiffs(resolved);
       },
       onToolError: (toolId, err) => {
         patchAsst((m) => {
