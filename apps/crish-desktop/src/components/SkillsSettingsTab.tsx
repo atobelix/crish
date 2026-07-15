@@ -64,13 +64,30 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [createDesc, setCreateDesc] = useState('');
   const [createBusy, setCreateBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
+  /** 自发现：尚未确认导入的技能（需用户同意） */
+  const [discoverCandidates, setDiscoverCandidates] = useState<DesktopSkill[] | null>(null);
+  const [discoverPick, setDiscoverPick] = useState<Record<string, boolean>>({});
 
   const selected = useMemo(
     () => skills.find((s) => s.id === selectedId) || null,
     [skills, selectedId],
   );
 
-  const refresh = useCallback(async () => {
+  const knownIdsKey = 'crish_skill_known_ids_v1';
+  const loadKnownIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem(knownIdsKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  };
+  const saveKnownIds = (ids: Set<string>) => {
+    localStorage.setItem(knownIdsKey, JSON.stringify([...ids]));
+  };
+
+  const refresh = useCallback(async (opts?: { promptNew?: boolean }) => {
     setLoading(true);
     try {
       setFsOk(await skillsFsAvailable());
@@ -83,6 +100,23 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         if (prev && res.skills.some((s) => s.id === prev)) return prev;
         return res.skills[0]?.id ?? null;
       });
+      // 自发现：仅当明确请求时弹出，需用户同意才批量启用
+      if (opts?.promptNew) {
+        const known = loadKnownIds();
+        const fresh = res.skills.filter((s) => !known.has(s.id));
+        if (fresh.length > 0) {
+          setDiscoverCandidates(fresh);
+          const pick: Record<string, boolean> = {};
+          for (const s of fresh) pick[s.id] = true;
+          setDiscoverPick(pick);
+        } else {
+          onShowToast?.('未发现新技能（已扫描的路径均已登记）');
+        }
+      }
+      // 登记当前全部 id（不含强制启用）
+      const all = loadKnownIds();
+      for (const s of res.skills) all.add(s.id);
+      saveKnownIds(all);
       try {
         const settings = await clientApi.getSettings();
         setEnableCommands(settings?.enableSkillCommands !== false);
@@ -95,6 +129,30 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       setLoading(false);
     }
   }, [onShowToast]);
+
+  const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
+    if (!discoverCandidates) {
+      setDiscoverCandidates(null);
+      return;
+    }
+    if (mode === 'skip') {
+      setDiscoverCandidates(null);
+      onShowToast?.('已跳过导入；技能仍可在列表中单独启用');
+      return;
+    }
+    const targets =
+      mode === 'all'
+        ? discoverCandidates
+        : discoverCandidates.filter((s) => discoverPick[s.id]);
+    let n = 0;
+    for (const s of targets) {
+      await setSkillActivation(s, 'enabled');
+      n += 1;
+    }
+    setDiscoverCandidates(null);
+    await refresh();
+    onShowToast?.(n > 0 ? `已启用 ${n} 个新技能` : '未选择任何技能');
+  };
 
   useEffect(() => {
     void refresh();
@@ -257,6 +315,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           <button
             type="button"
             className="models-btn ghost"
+            onClick={() => void refresh({ promptNew: true })}
+            disabled={loading}
+            title="扫描路径并提示导入新发现的技能（需你确认）"
+          >
+            <Lucide.Search size={14} />
+            发现新技能
+          </button>
+          <button
+            type="button"
+            className="models-btn ghost"
             onClick={() => void refresh()}
             disabled={loading}
           >
@@ -265,6 +333,45 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           </button>
         </div>
       </div>
+
+      {discoverCandidates && discoverCandidates.length > 0 ? (
+        <div className="skills-discover-panel" role="dialog" aria-label="导入新技能">
+          <div className="skills-discover-title">
+            发现 {discoverCandidates.length} 个新技能
+          </div>
+          <p className="skills-discover-hint">
+            自发现不会自动启用。请选择要导入的技能（启用后可被模型 / 斜杠命令使用）。
+          </p>
+          <div className="skills-discover-list">
+            {discoverCandidates.map((s) => (
+              <label key={s.id} className="skills-discover-item">
+                <input
+                  type="checkbox"
+                  checked={discoverPick[s.id] !== false}
+                  onChange={(e) =>
+                    setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
+                  }
+                />
+                <span>
+                  <span className="skills-discover-name">{s.name}</span>
+                  <span className="skills-discover-desc">{s.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="skills-discover-actions">
+            <button type="button" className="models-btn ghost" onClick={() => void applyDiscoverImport('skip')}>
+              暂不导入
+            </button>
+            <button type="button" className="models-btn ghost" onClick={() => void applyDiscoverImport('all')}>
+              全部启用
+            </button>
+            <button type="button" className="models-btn" onClick={() => void applyDiscoverImport('selected')}>
+              启用所选
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {createOpen ? (
         <div className="skills-create-box">

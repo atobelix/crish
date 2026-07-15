@@ -68,13 +68,13 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
     case 'network':
       return networkUserMessage();
     case 'no_key':
-      return '还没有配置可用的模型密钥。请打开设置完成配置后再试。';
+      return '还没有配置可用的模型密钥。请打开设置 → 模型，填写密钥后再试。';
     case 'no_project':
-      return '请先选择工作目录，再继续。';
+      return '请先选择项目工作区，再继续对话。';
     case 'blocked':
-      return '该操作未获允许。';
+      return '该操作未获允许（可能被安全策略或计划模式拦截）。';
     case 'ended':
-      return '这一轮没有完成。你可以换个说法再试一次。';
+      return '这一轮任务中断了：可能是引擎繁忙、模型无响应，或运行被取消。请稍后重试；若刚改过密钥或地址，请到设置确认。';
     default:
       return null;
   }

@@ -102,12 +102,20 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     setScanBusy(true);
     try {
       const r = await scanProviderModels(selected);
-      refresh();
-      onShowToast?.(
-        r.ok
-          ? `发现 ${r.models?.length ?? 0} 个模型`
-          : `扫描失败：${r.error || 'unknown'}`,
-      );
+      if (r.ok && r.models?.length) {
+        // 合并进当前供应商（扫描成功但未写入是「按钮无反应」的主因）
+        const merged = Array.from(new Set([...(selected.models || []), ...r.models]));
+        upsertProfile({ ...selected, models: merged });
+        refresh();
+        onShowToast?.(`已获取 ${r.models.length} 个模型（列表已更新）`);
+      } else if (r.ok) {
+        refresh();
+        onShowToast?.('接口返回空列表，请检查地址或手动添加模型 id');
+      } else {
+        onShowToast?.(`获取失败：${r.error || '未知错误'}（若桌面跨域受限，请手动添加模型 id）`);
+      }
+    } catch (e) {
+      onShowToast?.(`获取失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setScanBusy(false);
     }

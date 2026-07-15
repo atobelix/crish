@@ -53,11 +53,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   const [detailLoading, setDetailLoading] = useState(false);
   const [selText, setSelText] = useState('');
   const [commentDraft, setCommentDraft] = useState('');
+  const [selAnchor, setSelAnchor] = useState<{ top: number; left: number } | null>(null);
   const [pendingCount, setPendingCount] = useState(() => countPendingFileAnnotations());
   const [moreOpen, setMoreOpen] = useState(false);
   const [filterMode, setFilterMode] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
+  const previewPaneRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
 
   const kind = selected ? detectFileKind(pathBasename(selected)) : 'binary';
@@ -236,10 +238,42 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   };
 
   const onTextSelect = () => {
-    // 延迟一帧，确保 selection 已稳定
+    // 延迟一帧，确保 selection 已稳定；批注条锚定到选区可视位置
     requestAnimationFrame(() => {
-      const sel = window.getSelection()?.toString().trim() || '';
-      if (sel.length > 0) setSelText(sel.slice(0, 2000));
+      const selection = window.getSelection();
+      const text = selection?.toString().trim() || '';
+      if (!text.length) {
+        setSelText('');
+        setSelAnchor(null);
+        return;
+      }
+      setSelText(text.slice(0, 2000));
+      try {
+        if (!selection || selection.rangeCount === 0) {
+          setSelAnchor(null);
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        const pane = previewPaneRef.current;
+        if (!pane || !rect || (rect.width === 0 && rect.height === 0)) {
+          setSelAnchor(null);
+          return;
+        }
+        const paneRect = pane.getBoundingClientRect();
+        // 相对预览窗定位，贴近选区下方
+        const top = Math.min(
+          Math.max(rect.bottom - paneRect.top + pane.scrollTop + 6, 8),
+          Math.max(pane.scrollHeight - 120, 8),
+        );
+        const left = Math.min(
+          Math.max(rect.left - paneRect.left + pane.scrollLeft, 8),
+          Math.max(pane.clientWidth - 280, 8),
+        );
+        setSelAnchor({ top, left });
+      } catch {
+        setSelAnchor(null);
+      }
     });
   };
 
@@ -253,6 +287,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     setPendingCount(countPendingFileAnnotations());
     setCommentDraft('');
     setSelText('');
+    setSelAnchor(null);
     onShowToast('批注将随下一条消息发给模型');
   };
 
@@ -585,7 +620,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
           </div>
         ) : (
           <div className="files-detail">
-            <div className="files-detail-body">
+            <div className="files-detail-body" ref={previewPaneRef}>
               {detailLoading ? (
                 <div className="files-empty">读取中…</div>
               ) : error && !content && !assetUrl ? (
@@ -645,7 +680,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             </div>
 
             {selText && !editing ? (
-              <div className="files-sel-bar" role="region" aria-label="选区批注">
+              <div
+                className={`files-sel-bar ${selAnchor ? 'is-anchored' : ''}`}
+                role="region"
+                aria-label="选区批注"
+                style={
+                  selAnchor
+                    ? { top: selAnchor.top, left: selAnchor.left }
+                    : undefined
+                }
+              >
                 <div className="files-sel-preview" title={selText}>
                   {selText.length > 120 ? `${selText.slice(0, 120)}…` : selText}
                 </div>
@@ -660,6 +704,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                       if (e.key === 'Escape') {
                         setSelText('');
                         setCommentDraft('');
+                        setSelAnchor(null);
                       }
                     }}
                   />
@@ -677,6 +722,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     onClick={() => {
                       setSelText('');
                       setCommentDraft('');
+                      setSelAnchor(null);
                     }}
                   >
                     取消

@@ -240,6 +240,10 @@ export interface StreamCallbacks {
   onToolError: (toolId: string, error: string) => void;
   onChunk: (chunk: string) => void;
   onComplete: () => void;
+  /**
+   * 运行级错误（网络/配置/中断等）。禁止写入助手正文，由 UI toast 展示。
+   */
+  onRunError?: (message: string, kind?: string) => void;
   onToolPendingApproval?: (toolId: string, name: string, args: string, explanation: string) => void;
   onTerminalLine?: (line: string) => void;
   /** H3：暴露 runId 以便拉取 snapshot usage */

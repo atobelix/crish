@@ -215,13 +215,19 @@ export function streamViaDaemon(
     }
   };
 
-  /** Apply product error policy to assistant bubble (soft setup/network only). */
+  /**
+   * 产品错误：绝不写入助手正文（避免被当成 AI 回复）。
+   * 通过 onRunError 回调给 UI toast / 系统提示。
+   */
   const surfaceFailure = (raw: unknown, scope: string) => {
     logInternalError(scope, raw);
     const kind = classifySoftFailure(raw);
-    const bubble = softFailureMessage(kind) ?? assistantBubbleForFailure(raw);
-    if (bubble) {
-      callbacks.onChunk(assistantText ? `${assistantText}\n\n${bubble}` : bubble);
+    const msg =
+      softFailureMessage(kind) ??
+      assistantBubbleForFailure(raw) ??
+      '这一轮没有顺利完成。请稍后重试，或检查网络与模型配置。';
+    if (callbacks.onRunError) {
+      callbacks.onRunError(msg, kind || 'ended');
     }
   };
 
@@ -229,22 +235,35 @@ export function streamViaDaemon(
     if (cancelled || finished) return;
     const type = String(event.type ?? '');
 
-    if (type === 'message-delta') {
-      const block = event.block;
-      const t = blockText(block);
+    if (type === 'message-delta' || type === 'text-delta') {
+      // text-delta: { text }；message-delta: { block: { type, text } }
+      let t = '';
+      let isThought = false;
+      if (type === 'text-delta') {
+        t = typeof event.text === 'string' ? event.text : blockText(event);
+      } else {
+        const block = event.block;
+        t = blockText(block);
+        const b = block && typeof block === 'object' ? (block as Record<string, unknown>) : null;
+        isThought = Boolean(b && (b.type === 'thought' || b.kind === 'thought'));
+      }
       if (!t) return;
-      const b = block as Record<string, unknown>;
-      if (b.type === 'thought' || b.kind === 'thought') {
-        // 累计思考，勿只推 delta
+      if (isThought) {
         assistantThought += t;
         callbacks.onThought(assistantThought);
       } else {
-        assistantText += t;
+        // 仅当 content 是累计全文（长度 ≥ 当前）时才覆盖，避免把 delta 误当全文冲掉
         if (event.message && typeof event.message === 'object') {
           const msg = event.message as Record<string, unknown>;
-          if (typeof msg.content === 'string') assistantText = msg.content;
+          if (typeof msg.content === 'string' && msg.content.length >= assistantText.length) {
+            assistantText = msg.content;
+          } else {
+            assistantText += t;
+          }
+        } else {
+          assistantText += t;
         }
-        callbacks.onChunk(assistantText || t);
+        callbacks.onChunk(assistantText);
       }
       return;
     }
@@ -565,7 +584,8 @@ export function streamViaDaemon(
       // Prefer waiting for keep-alive over instant fail — backend must not stall UX
       const ready = await client.waitUntilConnected(15_000);
       if (!ready || !client.isConnected()) {
-        callbacks.onChunk(networkUserMessage());
+        if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
+        else callbacks.onChunk(networkUserMessage());
         finish();
         return;
       }
@@ -591,7 +611,8 @@ export function streamViaDaemon(
     } catch (e) {
       // Stream start failures are connectivity/send path — user only sees network copy
       logInternalError('stream-start', e);
-      callbacks.onChunk(networkUserMessage());
+      if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
+      else callbacks.onChunk(networkUserMessage());
       finish();
     }
   })();

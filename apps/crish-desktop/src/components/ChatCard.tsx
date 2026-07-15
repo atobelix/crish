@@ -39,7 +39,6 @@ import {
   normalizeAssistantTimeline,
   toolCommandPreview,
   toolHasDisplayableResult,
-  toolResultPreview,
   toolSummaryLabel,
   fullToolOutput,
   toolPathDisplayName,
@@ -68,7 +67,6 @@ import {
 } from '../api/sessionEventHydrate';
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
-import { ApprovalSheet } from './ApprovalSheet';
 import { AgentCard } from './AgentCard';
 import { InlineAgentPanel } from './InlineAgentPanel';
 import {
@@ -215,23 +213,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
 
-  // 仅统计「进行中」消息的待确认，避免已结束会话的幽灵条
-  let pendingApprovalTc: any = null;
+  // 进行中消息的待确认（时间线内 approval-card 使用 msgId 回退）
   let pendingApprovalMsgId = '';
-  let pendingApprovalCount = 0;
   for (const m of messages) {
     if (!m.toolCalls) continue;
     if (m.status === 'completed' || m.status === 'queued') continue;
     for (const tc of m.toolCalls) {
       if (tc.status !== 'pending_approval') continue;
-      pendingApprovalCount += 1;
-      if (!pendingApprovalTc) {
-        pendingApprovalTc = tc;
-        pendingApprovalMsgId = m.id;
-      }
+      if (!pendingApprovalMsgId) pendingApprovalMsgId = m.id;
     }
   }
-  const pendingQueueRemaining = Math.max(0, pendingApprovalCount - 1);
 
   const formatTime = (ts?: number) => {
     if (!ts) return '';
@@ -630,6 +621,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           store.updateMessageThinking(sid, assistantMsgId, '');
         }
       },
+      onRunError: (message) => {
+        // 系统级提示：不写进助手气泡，避免用户当成 AI 输出
+        onShowToast(message);
+      },
       onComplete: () => {
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const st = useLayoutStore.getState();
@@ -643,9 +638,9 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             (t) => t.status === 'success' || t.status === 'error' || t.status === 'running',
           );
           if (!hasTools) {
-            st.updateMessageText(sid, assistantMsgId, '（本轮未返回文字回复）');
+            // 不写进气泡，用 toast，避免被当成模型回复
+            onShowToast('这一轮没有文字回复。若刚改过配置，请检查模型与网络。');
           }
-          // hasTools：不写占位，避免盖住工具结果区
         }
         // 收口诚实：未完成工具标 error，不伪造 success
         if (asst?.toolCalls?.length) {
@@ -1139,15 +1134,27 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       const cmd = toolCommandPreview(tc);
       const mid = msgId || pendingApprovalMsgId;
       return (
-        <div className="tool-row tool-row--pending" key={key}>
-          <div className="tool-row-head tool-row-head--static">
-            <span className="tool-row-summary">待确认 · {summary}</span>
-            {cmd ? <code className="tool-row-cmd">{cmd}</code> : null}
+        <div className="approval-card" key={key} role="region" aria-label="需要权限">
+          <div className="approval-card-top">
+            <span className="approval-card-badge">需要权限</span>
+            <span className="approval-card-status">待授权</span>
           </div>
-          <div className="tool-row-approve">
+          <div className="approval-card-title">是否允许执行以下操作？</div>
+          <div className="approval-card-desc">{summary}</div>
+          {cmd ? <code className="approval-card-cmd">{cmd}</code> : null}
+          <div className="approval-card-actions">
             <button
               type="button"
-              className="tool-row-approve-btn deny"
+              className="approval-card-btn ghost"
+              disabled={approvalBusy}
+              onClick={() => handleApprovalAllow(tc.id, mid, true)}
+              title="允许并将命令前缀加入白名单"
+            >
+              允许并记住
+            </button>
+            <button
+              type="button"
+              className="approval-card-btn deny"
               disabled={approvalBusy}
               onClick={() => handleApprovalDeny(tc.id, mid)}
             >
@@ -1155,9 +1162,9 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </button>
             <button
               type="button"
-              className="tool-row-approve-btn allow"
+              className="approval-card-btn allow"
               disabled={approvalBusy}
-              onClick={() => handleApprovalAllow(tc.id, mid)}
+              onClick={() => handleApprovalAllow(tc.id, mid, false)}
             >
               允许
             </button>
@@ -1166,7 +1173,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       );
     }
     const body = renderToolResultBody(tc);
-    const preview = toolResultPreview(tc);
     const hasResult = toolHasDisplayableResult(tc);
     const defaultOpen = shouldDefaultOpenTool(tc);
     const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, tc.id)
@@ -1187,6 +1193,32 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         n.includes('glob'));
     const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
     // 摘要里把 basename 渲成可点链（路径即入口，去掉「打开文件」按钮）
+    const pathActions = pathClickable && filePath ? (
+      <span className="tool-path-actions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="tool-path-action"
+          title="在文件面板打开"
+          onClick={() => openPathInFilesPanel(filePath)}
+        >
+          <Lucide.PanelRightOpen size={14} />
+        </button>
+        <button
+          type="button"
+          className="tool-path-action"
+          title="复制路径"
+          onClick={() => {
+            void navigator.clipboard.writeText(filePath).then(
+              () => onShowToast('路径已复制'),
+              () => onShowToast(filePath),
+            );
+          }}
+        >
+          <Lucide.Copy size={14} />
+        </button>
+      </span>
+    ) : null;
+
     const renderSummary = () => {
       if (!pathClickable || !filePath || !pathLabel) {
         return (
@@ -1196,27 +1228,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         );
       }
       const idx = summary.lastIndexOf(pathLabel);
-      if (idx < 0) {
-        return (
-          <span className="tool-row-summary" title={filePath}>
-            {summary}{' '}
-            <button
-              type="button"
-              className="tool-path-link"
-              title={filePath}
-              onClick={(e) => {
-                e.stopPropagation();
-                openPathInFilesPanel(filePath);
-              }}
-            >
-              {pathLabel}
-            </button>
-          </span>
-        );
-      }
-      return (
-        <span className="tool-row-summary" title={filePath}>
-          {summary.slice(0, idx)}
+      const link = (
+        <span className="tool-path-wrap">
           <button
             type="button"
             className="tool-path-link"
@@ -1228,6 +1241,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           >
             {pathLabel}
           </button>
+          {pathActions}
+        </span>
+      );
+      if (idx < 0) {
+        return (
+          <span className="tool-row-summary" title={filePath}>
+            {summary} {link}
+          </span>
+        );
+      }
+      return (
+        <span className="tool-row-summary" title={filePath}>
+          {summary.slice(0, idx)}
+          {link}
           {summary.slice(idx + pathLabel.length)}
         </span>
       );
@@ -1239,25 +1266,25 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           className="tool-row-head"
           onClick={() => canToggle && toggleTool(tc.id, isOpen)}
         >
-          {running ? (
-            <span className="tool-row-live" aria-hidden>
-              <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-            </span>
-          ) : null}
-          {renderSummary()}
-          {cmd ? (
-            <code className="tool-row-cmd" title="命令">
-              {cmd}
-            </code>
-          ) : null}
-          {!isOpen && preview ? (
-            <span className="tool-row-result-preview" title={preview}>
-              {preview}
-            </span>
-          ) : null}
-          {canToggle ? (
-            <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
-          ) : null}
+          <span className="tool-row-head-main">
+            {running ? (
+              <span className="tool-row-live" aria-hidden>
+                <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+              </span>
+            ) : null}
+            {renderSummary()}
+            {cmd ? (
+              <code className="tool-row-cmd" title="命令">
+                {cmd}
+              </code>
+            ) : null}
+          </span>
+          {/* 折叠按钮固定右侧，避免展开后位置跳动 */}
+          <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
+            {canToggle ? (
+              <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+            ) : null}
+          </span>
         </button>
         {isOpen && body}
       </div>
@@ -1277,28 +1304,23 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, gid)
           ? expandedTools[gid]
           : groupDefaultOpen;
-        const lastDone = [...item.tools]
-          .reverse()
-          .find((t) => toolHasDisplayableResult(t));
-        const groupPreview = lastDone ? toolResultPreview(lastDone) : '';
         return (
           <div
             className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
             key={gid}
           >
             <button type="button" className="tool-row-head" onClick={() => toggleTool(gid, isOpen)}>
-              {running ? (
-                <span className="tool-row-live" aria-hidden>
-                  <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-                </span>
-              ) : null}
-              <span className="tool-row-summary">{item.label}</span>
-              {!isOpen && groupPreview ? (
-                <span className="tool-row-result-preview" title={groupPreview}>
-                  {groupPreview}
-                </span>
-              ) : null}
-              <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+              <span className="tool-row-head-main">
+                {running ? (
+                  <span className="tool-row-live" aria-hidden>
+                    <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+                  </span>
+                ) : null}
+                <span className="tool-row-summary">{item.label}</span>
+              </span>
+              <span className="tool-row-chevron-slot is-toggle">
+                <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+              </span>
             </button>
             {isOpen && (
               <div className="tool-group-body">
@@ -1935,25 +1957,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </div>
         )}
 
-        {/* 待确认 sticky：不抢焦点、无蒙层；与时间线内联条同步同一 tool id */}
-        {!activeAgent && pendingApprovalTc && (
-          <ApprovalSheet
-            variant="sticky"
-            tool={{
-              id: pendingApprovalTc.id,
-              name: pendingApprovalTc.name,
-              arguments: pendingApprovalTc.arguments,
-              explanation: pendingApprovalTc.explanation,
-            }}
-            busy={approvalBusy}
-            queueRemaining={pendingQueueRemaining}
-            onAllow={() => handleApprovalAllow(pendingApprovalTc.id, pendingApprovalMsgId, false)}
-            onAllowAndRemember={() =>
-              handleApprovalAllow(pendingApprovalTc.id, pendingApprovalMsgId, true)
-            }
-            onDeny={() => handleApprovalDeny(pendingApprovalTc.id, pendingApprovalMsgId)}
-          />
-        )}
+        {/* 审批仅在对话时间线内展示（approval-card），不占用输入区快捷功能位 */}
 
         <div
           className="input-container"
