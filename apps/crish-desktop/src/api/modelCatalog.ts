@@ -149,17 +149,68 @@ function modelsListUrl(baseUrl: string): string {
   return `${u}/v1/models`;
 }
 
+/** 优先 Tauri HTTP 插件（绕过浏览器 CORS），否则 window.fetch */
+async function httpRequest(
+  url: string,
+  init: { method: string; headers?: Record<string, string>; body?: string },
+): Promise<{ ok: boolean; status: number; text: string }> {
+  try {
+    const http: any = await (Function(
+      'return import("@tauri-apps/plugin-http")',
+    )() as Promise<any>).catch(() => null);
+    if (http?.fetch) {
+      const res = await http.fetch(url, {
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      const text = await res.text();
+      return { ok: Boolean(res.ok), status: Number(res.status) || 0, text };
+    }
+  } catch {
+    /* fall through */
+  }
+  const res = await fetch(url, {
+    method: init.method,
+    headers: init.headers,
+    body: init.body,
+  });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
+function friendlyFetchError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/failed to fetch|networkerror|load failed|cors/i.test(msg)) {
+    return '无法访问该地址（网络或跨域限制）。请确认 Base URL 可访问，或手动添加模型 id。';
+  }
+  if (/ssl|certificate|cert/i.test(msg)) {
+    return '证书或 HTTPS 校验失败，请检查地址是否正确。';
+  }
+  return msg || '请求失败';
+}
+
 /** 扫描提供商模型列表（OpenAI 兼容 /models） */
 export async function scanProviderModels(
   profile: ProviderProfile,
 ): Promise<{ ok: boolean; models: string[]; error?: string }> {
-  const key = profile.apiKey?.trim();
-  if (!key) return { ok: false, models: [], error: '未配置密钥' };
-  const url = modelsListUrl(profile.baseUrl);
-  if (!url) return { ok: false, models: [], error: '未配置地址' };
+  // 始终用本地最新 profile（含密钥），避免 UI 态过期
+  const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
+  const key = fresh.apiKey?.trim();
+  if (!key) {
+    return {
+      ok: false,
+      models: [],
+      error: fresh.hasKey
+        ? '密钥未载入内存，请重新输入并保存密钥后再试'
+        : '未配置密钥，请先保存 API Key',
+    };
+  }
+  const url = modelsListUrl(fresh.baseUrl);
+  if (!url) return { ok: false, models: [], error: '未配置地址（Base URL）' };
 
   try {
-    const res = await fetch(url, {
+    const res = await httpRequest(url, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -167,17 +218,21 @@ export async function scanProviderModels(
       },
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       return {
         ok: false,
         models: [],
-        error: `HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`,
+        error: `获取失败 HTTP ${res.status}${res.text ? `：${res.text.slice(0, 120)}` : ''}`,
       };
     }
-    const data = (await res.json()) as {
+    let data: {
       data?: Array<{ id?: string; context_length?: number; max_model_len?: number }>;
       models?: Array<{ id?: string } | string>;
     };
+    try {
+      data = JSON.parse(res.text) as typeof data;
+    } catch {
+      return { ok: false, models: [], error: '响应不是 JSON，请检查 Base URL 是否指向 API 根路径' };
+    }
     const rawList = Array.isArray(data.data)
       ? data.data
       : Array.isArray(data.models)
@@ -200,19 +255,14 @@ export async function scanProviderModels(
               ? (item as { max_model_len: number }).max_model_len
               : undefined;
         if (ctx && ctx > 0) {
-          upsertModelMeta(profile.id, id, { contextLength: ctx });
+          upsertModelMeta(fresh.id, id, { contextLength: ctx });
         }
       }
     }
-    // 去重排序
     const unique = Array.from(new Set(models)).sort((a, b) => a.localeCompare(b));
     return { ok: true, models: unique };
   } catch (e) {
-    return {
-      ok: false,
-      models: [],
-      error: e instanceof Error ? e.message : String(e),
-    };
+    return { ok: false, models: [], error: friendlyFetchError(e) };
   }
 }
 
@@ -221,18 +271,24 @@ export async function testProviderModel(
   profile: ProviderProfile,
   model: string,
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
-  const key = profile.apiKey?.trim();
+  const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
+  const key = fresh.apiKey?.trim();
   if (!key) {
-    const r = { ok: false, error: '未配置密钥' };
-    upsertModelMeta(profile.id, model, {
+    const r = {
+      ok: false,
+      error: fresh.hasKey
+        ? '密钥未载入，请重新输入并点「保存」'
+        : '未配置密钥',
+    };
+    upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error: r.error },
     });
     return r;
   }
-  const base = normalizeBaseUrl(profile.baseUrl);
+  const base = normalizeBaseUrl(fresh.baseUrl);
   if (!base) {
     const r = { ok: false, error: '未配置地址' };
-    upsertModelMeta(profile.id, model, {
+    upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error: r.error },
     });
     return r;
@@ -240,7 +296,7 @@ export async function testProviderModel(
   const url = /\/v1$/i.test(base) ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
   const started = performance.now();
   try {
-    const res = await fetch(url, {
+    const res = await httpRequest(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -255,20 +311,19 @@ export async function testProviderModel(
     });
     const latencyMs = Math.round(performance.now() - started);
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      const error = `HTTP ${res.status}${text ? `：${text.slice(0, 100)}` : ''}`;
-      upsertModelMeta(profile.id, model, {
+      const error = `连通失败 HTTP ${res.status}${res.text ? `：${res.text.slice(0, 100)}` : ''}`;
+      upsertModelMeta(fresh.id, model, {
         lastTest: { ok: false, latencyMs, at: Date.now(), error },
       });
       return { ok: false, latencyMs, error };
     }
-    upsertModelMeta(profile.id, model, {
+    upsertModelMeta(fresh.id, model, {
       lastTest: { ok: true, latencyMs, at: Date.now() },
     });
     return { ok: true, latencyMs };
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    upsertModelMeta(profile.id, model, {
+    const error = friendlyFetchError(e);
+    upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error },
     });
     return { ok: false, error };

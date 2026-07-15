@@ -2,12 +2,26 @@
  * 对话正文 Markdown → 安全 HTML（正式版紧凑排版）。
  */
 
+import { highlightCode } from './codeHighlight';
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function isLocalPathRef(s: string): boolean {
+  const t = (s || '').trim();
+  if (!t || t.startsWith('http://') || t.startsWith('https://') || t.startsWith('mailto:')) {
+    return false;
+  }
+  if (/^[A-Za-z]:[\\/]/.test(t)) return true;
+  if (t.startsWith('/') || t.startsWith('~/') || t.startsWith('./') || t.startsWith('../')) return true;
+  if (/^(apps|packages|src|docs)\//.test(t)) return true;
+  if (/\.(ts|tsx|js|jsx|css|md|json|rs|py|toml|yml|yaml)$/i.test(t) && !t.includes('://')) return true;
+  return false;
 }
 
 /** 去掉模型常夹带的「正在思考…」占位，避免与思考区重复 */
@@ -126,14 +140,20 @@ export function parseMarkdownToHtml(raw: string): string {
   text = text.replace(/^[ \t]*([-*_])\1{2,}[ \t]*$/gm, '');
   text = text.replace(/\n{3,}/g, '\n\n');
 
-  // 保护代码块
+  // 保护代码块（highlight.js 着色）
   const fences: string[] = [];
   text = text.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
     const i = fences.length;
+    const body = code.replace(/\n$/, '');
+    const langClean = String(lang || '').trim();
+    let inner: string;
+    try {
+      inner = highlightCode(body, langClean);
+    } catch {
+      inner = escapeHtml(body);
+    }
     fences.push(
-      `<pre class="md-code-block"><code class="language-${escapeHtml(lang || '')}">${escapeHtml(
-        code.replace(/\n$/, ''),
-      )}</code></pre>`,
+      `<pre class="md-code-block hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre>`,
     );
     return `\n%%FENCE${i}%%\n`;
   });
@@ -150,24 +170,49 @@ export function parseMarkdownToHtml(raw: string): string {
       `<img class="md-img" src="${escapeHtml(url)}" alt="${escapeHtml(alt || '')}" loading="lazy" />`,
   );
 
-  // 链接 [t](u)
+  // 链接与路径 → 占位，escape 后再还原
+  const inlines: string[] = [];
+  const pushInline = (html: string) => {
+    const i = inlines.length;
+    inlines.push(html);
+    return `%%INLINE${i}%%`;
+  };
+
+  // 链接 [t](u) — 本地路径走侧栏打开
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, u) => {
+    const url = String(u || '');
+    if (isLocalPathRef(url) || isLocalPathRef(t)) {
+      const path = isLocalPathRef(url) ? url : t;
+      return pushInline(
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(t)}</button>`,
+      );
+    }
+    return pushInline(
+      `<a class="md-a" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(t)}</a>`,
+    );
+  });
+
+  // 裸路径：盘符 / 相对路径 / monorepo 前缀
   text = text.replace(
-    /\[([^\]]+)\]\(([^)\s]+)\)/g,
-    (_, t, u) =>
-      `<a class="md-a" href="${escapeHtml(u)}" target="_blank" rel="noreferrer">${escapeHtml(t)}</a>`,
+    /(?<!["`>])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?\/|apps\/|packages\/|src\/)[^\s`"'<>|]{2,160}\.[A-Za-z0-9]{1,12})/g,
+    (full, path: string) => {
+      if (path.length > 160) return full;
+      return pushInline(
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`,
+      );
+    },
   );
 
-  // 其余文本 escape（已是 HTML 的 img/a 占位用特殊标记避免双重 escape——上面已写入标签）
-  // 对剩余纯文本行：若整行已是我们的 HTML 标签则跳过
+  // 其余文本 escape
   let html = text
     .split('\n')
     .map((line) => {
       const t = line.trim();
       if (
         t.startsWith('<img ') ||
-        t.startsWith('<a ') ||
         t.startsWith('%%FENCE') ||
-        t.startsWith('%%TABLE')
+        t.startsWith('%%TABLE') ||
+        t.startsWith('%%INLINE')
       ) {
         return line;
       }
@@ -175,9 +220,10 @@ export function parseMarkdownToHtml(raw: string): string {
     })
     .join('\n');
 
-  // 还原代码块与表格
+  // 还原代码块、表格、内联
   html = html.replace(/%%FENCE(\d+)%%/g, (_, i) => fences[Number(i)] || '');
   html = html.replace(/%%TABLE(\d+)%%/g, (_, i) => tables[Number(i)] || '');
+  html = html.replace(/%%INLINE(\d+)%%/g, (_, i) => inlines[Number(i)] || '');
 
   // 行内格式（仅作用于非标签片段时仍可能影响属性——表格已完整 HTML）
   html = applyInline(html);

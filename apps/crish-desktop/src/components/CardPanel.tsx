@@ -9,6 +9,7 @@ import { TasksCard } from './TasksCard';
 import { TerminalCard } from './TerminalCard';
 import { AgentCard } from './AgentCard';
 import { FilesCard } from './FilesCard';
+import { OverviewCard } from './OverviewCard';
 
 interface CardPanelProps {
   wsId: string;
@@ -34,9 +35,9 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     mergeTab,
     detachTabToStandalone,
     closeTabInGroup,
-    setPanelsDropdownCoords,
     setPanelAgentId,
   } = useLayoutStore();
+  const [tabAddOpen, setTabAddOpen] = React.useState(false);
 
   React.useEffect(() => {
     const onOpenAgent = (ev: Event) => {
@@ -78,19 +79,31 @@ export const CardPanel: React.FC<CardPanelProps> = ({
   // Render icons corresponding to tabs
   const renderCardIcon = (id: string) => {
     switch (id) {
-      case 'chat': return <Lucide.MessageSquare size={16} />;
-      case 'plan': return <Lucide.Scroll size={16} />;
-      case 'preview': return <Lucide.Globe size={16} />;
-      case 'files': return <Lucide.FolderTree size={16} />;
-      case 'diff': return <Lucide.GitBranch size={16} />;
-      case 'tasks': return <Lucide.CheckSquare size={16} />;
-      case 'terminal': return <Lucide.Terminal size={16} />;
-      case 'settings': return <Lucide.Settings size={16} />;
-      case 'runtime': return <Lucide.Gauge size={16} />;
-      case 'agent': return <Lucide.Bot size={16} />;
-      default: return <Lucide.Layout size={16} />;
+      case 'chat': return <Lucide.MessageSquare size={16} strokeWidth={1.75} />;
+      case 'overview': return <Lucide.LayoutDashboard size={16} strokeWidth={1.75} />;
+      case 'plan': return <Lucide.Scroll size={16} strokeWidth={1.75} />;
+      case 'preview': return <Lucide.Globe size={16} strokeWidth={1.75} />;
+      case 'files': return <Lucide.FolderTree size={16} strokeWidth={1.75} />;
+      case 'diff': return <Lucide.GitBranch size={16} strokeWidth={1.75} />;
+      case 'tasks': return <Lucide.CheckSquare size={16} strokeWidth={1.75} />;
+      case 'terminal': return <Lucide.Terminal size={16} strokeWidth={1.75} />;
+      case 'settings': return <Lucide.Settings size={16} strokeWidth={1.75} />;
+      case 'runtime': return <Lucide.Gauge size={16} strokeWidth={1.75} />;
+      case 'agent': return <Lucide.Bot size={16} strokeWidth={1.75} />;
+      default: return <Lucide.Layout size={16} strokeWidth={1.75} />;
     }
   };
+
+  const PANEL_ADD_ITEMS: { id: string; label: string }[] = [
+    { id: 'overview', label: '总览' },
+    { id: 'files', label: '文件' },
+    { id: 'diff', label: '变更' },
+    { id: 'terminal', label: '终端' },
+    { id: 'tasks', label: '任务' },
+    { id: 'preview', label: '预览' },
+    { id: 'runtime', label: '运行状态' },
+    { id: 'agent', label: 'Agent' },
+  ];
 
   const handleTabClick = (cardId: string) => {
     useLayoutStore.setState((state) => {
@@ -693,7 +706,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
               >
                 <div className="tab-icon-container">
                   {renderCardIcon(c.id)}
-                  {c.id !== 'chat' && (
+                  {c.id !== 'chat' && c.id !== 'overview' && (
                     <button
                       className="tab-close-btn"
                       onClick={(e) => {
@@ -709,6 +722,40 @@ export const CardPanel: React.FC<CardPanelProps> = ({
               </div>
               );
             })}
+            {/* Obsidian 式：标签后加号 */}
+            <div className="tabs-add-wrap">
+              <button
+                type="button"
+                className="tabs-add-btn"
+                title="打开面板"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTabAddOpen((v) => !v);
+                }}
+              >
+                <Lucide.Plus size={16} strokeWidth={1.75} />
+              </button>
+              {tabAddOpen ? (
+                <div className="tabs-add-menu" role="menu">
+                  {PANEL_ADD_ITEMS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="tabs-add-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setTabAddOpen(false);
+                        handleGlobalTabClick(item.id);
+                        onShowToast(`已打开：${item.label}`);
+                      }}
+                    >
+                      {renderCardIcon(item.id)}
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
         
@@ -720,19 +767,30 @@ export const CardPanel: React.FC<CardPanelProps> = ({
         />
 
         <div className="card-header-right">
+          {/* 侧栏收缩：收起非 chat 列 */}
           <button
-            className="card-action-btn panel-menu-btn"
-            title="Toggle Panels"
+            type="button"
+            className="card-action-btn"
+            title={activeCardId === 'chat' ? '打开总览侧栏' : '收起侧栏'}
             onClick={(e) => {
               e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setPanelsDropdownCoords({
-                x: rect.left + rect.width - 210,
-                y: rect.top + rect.height + 4,
-              });
+              if (activeCardId === 'chat') {
+                handleGlobalTabClick('overview');
+              } else {
+                // 收起：关掉本 group 中非 chat 标签，回到仅聊天
+                const nonChat = group.cards.filter((c) => c.id !== 'chat');
+                for (const c of nonChat) {
+                  closeTabInGroup(wsId, group.id, c.id);
+                }
+                handleTabClick('chat');
+              }
             }}
           >
-            <Lucide.Layout size={16} />
+            {activeCardId === 'chat' ? (
+              <Lucide.PanelRight size={16} strokeWidth={1.75} />
+            ) : (
+              <Lucide.PanelRightClose size={16} strokeWidth={1.75} />
+            )}
           </button>
         </div>
       </div>
@@ -752,6 +810,13 @@ export const CardPanel: React.FC<CardPanelProps> = ({
           <PreviewCard 
             wsId={wsId} 
             onShowToast={onShowToast} 
+          />
+        )}
+        {activeCardId === 'overview' && (
+          <OverviewCard
+            wsId={wsId}
+            onOpenPanel={handleGlobalTabClick}
+            onShowToast={onShowToast}
           />
         )}
         {activeCardId === 'files' && (

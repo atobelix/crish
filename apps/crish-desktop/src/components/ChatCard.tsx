@@ -24,6 +24,7 @@ import { ProjectPickerMenu } from './ProjectPickerMenu';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelPicker } from './ModelPicker';
+import { ApprovalAskCard } from './ApprovalAskCard';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
   isEditToolName,
@@ -336,6 +337,24 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       cancelled = true;
     };
   }, [activeSessionId]);
+
+  // AI 正文里的路径按钮 → 侧栏文件
+  useEffect(() => {
+    const root = chatFlowRef.current;
+    if (!root) return;
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      const btn = t?.closest?.('.md-path-link') as HTMLElement | null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const path = btn.getAttribute('data-path') || btn.textContent || '';
+      if (!path.trim()) return;
+      openPathInFilesPanel(path.trim());
+    };
+    root.addEventListener('click', onClick);
+    return () => root.removeEventListener('click', onClick);
+  }, [messages.length, activeSessionId]);
 
   const loadSkillSlash = useCallback(async () => {
     if (!skillCommandsEnabled) return;
@@ -1144,48 +1163,24 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       const cmd = toolCommandPreview(tc);
       const mid = msgId || pendingApprovalMsgId;
       return (
-        <div
-          className="approval-card"
+        <ApprovalAskCard
           key={key}
-          role="region"
-          aria-label="需要权限"
-          data-msg={mid}
-        >
-          <div className="approval-card-top">
-            <span className="approval-card-badge">需要权限</span>
-            <span className="approval-card-status">待授权</span>
-          </div>
-          <div className="approval-card-title">是否允许执行以下操作？</div>
-          <div className="approval-card-desc">{summary}</div>
-          {cmd ? <code className="approval-card-cmd">{cmd}</code> : null}
-          <div className="approval-card-actions">
-            <button
-              type="button"
-              className="approval-card-btn ghost"
-              disabled={approvalBusy}
-              onClick={() => handleApprovalAllow(tc.id, mid, true)}
-              title="允许并将命令前缀加入白名单"
-            >
-              允许并记住
-            </button>
-            <button
-              type="button"
-              className="approval-card-btn deny"
-              disabled={approvalBusy}
-              onClick={() => handleApprovalDeny(tc.id, mid)}
-            >
-              拒绝
-            </button>
-            <button
-              type="button"
-              className="approval-card-btn allow"
-              disabled={approvalBusy}
-              onClick={() => handleApprovalAllow(tc.id, mid, false)}
-            >
-              允许
-            </button>
-          </div>
-        </div>
+          msgId={mid}
+          summary={summary}
+          cmd={cmd}
+          busy={approvalBusy}
+          onAllow={(note) => {
+            if (note.trim()) {
+              onShowToast(`备注：${note.trim().slice(0, 80)}`);
+            }
+            handleApprovalAllow(tc.id, mid, false);
+          }}
+          onAllowRemember={(note) => {
+            if (note.trim()) onShowToast(`备注：${note.trim().slice(0, 80)}`);
+            handleApprovalAllow(tc.id, mid, true);
+          }}
+          onDeny={() => handleApprovalDeny(tc.id, mid)}
+        />
       );
     }
     const body = renderToolResultBody(tc);
@@ -1275,6 +1270,38 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         </span>
       );
     };
+    const toolIcon = (() => {
+      const n = (tc.name || '').toLowerCase();
+      const cls = 'tool-row-type-ico';
+      const sz = 15;
+      if (running) {
+        return (
+          <span className="tool-row-live" aria-hidden>
+            <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+          </span>
+        );
+      }
+      if (isShellToolName(n) || n.includes('bash') || n.includes('shell') || n.includes('exec')) {
+        return <Lucide.Terminal className={`${cls} ico-shell`} size={sz} strokeWidth={1.75} />;
+      }
+      if (n.includes('grep') || n.includes('search') || n.includes('find')) {
+        return <Lucide.Search className={`${cls} ico-search`} size={sz} strokeWidth={1.75} />;
+      }
+      if (n.includes('read') || n.includes('cat') || n.includes('view')) {
+        return <Lucide.FileText className={`${cls} ico-read`} size={sz} strokeWidth={1.75} />;
+      }
+      if (isEditToolName(n) || n.includes('write') || n.includes('edit') || n.includes('patch')) {
+        return <Lucide.Pencil className={`${cls} ico-edit`} size={sz} strokeWidth={1.75} />;
+      }
+      if (n.includes('list') || n.includes('glob') || n.includes('dir')) {
+        return <Lucide.FolderTree className={`${cls} ico-list`} size={sz} strokeWidth={1.75} />;
+      }
+      if (n.includes('web') || n.includes('fetch') || n.includes('http')) {
+        return <Lucide.Globe className={`${cls} ico-web`} size={sz} strokeWidth={1.75} />;
+      }
+      return <Lucide.CircleDot className={`${cls} ico-default`} size={sz} strokeWidth={1.75} />;
+    })();
+
     return (
       <div className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`} key={key}>
         <button
@@ -1283,11 +1310,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           onClick={() => canToggle && toggleTool(tc.id, isOpen)}
         >
           <span className="tool-row-head-main">
-            {running ? (
-              <span className="tool-row-live" aria-hidden>
-                <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-              </span>
-            ) : null}
+            {toolIcon}
             {renderSummary()}
             {cmd ? (
               <code className="tool-row-cmd" title="命令">

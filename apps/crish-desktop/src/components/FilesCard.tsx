@@ -25,6 +25,7 @@ import {
   writeTextFile,
   type FsDirEntry,
 } from '../api/workspaceFsApi';
+import { fileExtColor, highlightCode, langFromFilename } from '../api/codeHighlight';
 
 interface FilesCardProps {
   onShowToast: (message: string) => void;
@@ -663,13 +664,17 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                 ) : (
                   <pre
                     ref={textRef}
-                    className="files-text-pre"
+                    className="files-text-pre hljs"
                     onMouseUp={onTextSelect}
                     onKeyUp={onTextSelect}
-                  >
-                    {content || '（空文件）'}
-                    {truncated ? '\n\n…（已截断）' : ''}
-                  </pre>
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        highlightCode(
+                          (content || '（空文件）') + (truncated ? '\n\n…（已截断）' : ''),
+                          langFromFilename(selected || ''),
+                        ) || '',
+                    }}
+                  />
                 )
               ) : (
                 <div className="files-empty">
@@ -740,13 +745,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
 
 function FileIcon({ name }: { name: string }) {
   const k = detectFileKind(name);
-  if (k === 'image') return <Lucide.Image size={16} className="files-row-ico" />;
-  if (k === 'pdf') return <Lucide.FileText size={16} className="files-row-ico" />;
-  if (k === 'table') return <Lucide.Table size={16} className="files-row-ico" />;
-  if (/\.(ts|tsx|js|jsx|mjs|rs|py|go)$/i.test(name)) {
-    return <Lucide.FileCode size={16} className="files-row-ico" />;
+  const color = fileExtColor(name);
+  const sw = 1.75;
+  if (k === 'image') return <Lucide.Image size={16} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+  if (k === 'pdf') return <Lucide.FileText size={16} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+  if (k === 'table') return <Lucide.Table size={16} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
+    return <Lucide.FileCode2 size={16} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
   }
-  return <Lucide.File size={16} className="files-row-ico" />;
+  return <Lucide.File size={16} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
 }
 
 function formatSize(n: number): string {

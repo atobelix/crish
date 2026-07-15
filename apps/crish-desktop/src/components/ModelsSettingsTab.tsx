@@ -50,6 +50,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [ctxDraft, setCtxDraft] = useState('');
   const [priceIn, setPriceIn] = useState('');
   const [priceOut, setPriceOut] = useState('');
+  /** 模型操作状态：始终展示给用户，避免「没反应」 */
+  const [actionHint, setActionHint] = useState<{ ok: boolean; text: string } | null>(null);
 
   const selected = useMemo(
     () => profiles.find((p) => p.id === selectedId) || null,
@@ -57,6 +59,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   );
 
   const refresh = () => setProfiles(loadProfiles());
+
+  const notify = (ok: boolean, text: string) => {
+    setActionHint({ ok, text });
+    onShowToast?.(text);
+  };
 
   useEffect(() => {
     if (selected) {
@@ -100,22 +107,32 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const runScan = async () => {
     if (!selected) return;
     setScanBusy(true);
+    setActionHint({ ok: true, text: '正在获取模型列表…' });
     try {
-      const r = await scanProviderModels(selected);
+      // 用本地最新 profile（含密钥）
+      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      if (!fresh.apiKey?.trim() && !fresh.hasKey) {
+        notify(false, '请先填写并保存 API Key，再获取列表');
+        return;
+      }
+      if (!fresh.apiKey?.trim() && fresh.hasKey) {
+        notify(false, '密钥仅有「已保存」标记但未读入，请重新输入密钥并点保存');
+        return;
+      }
+      const r = await scanProviderModels(fresh);
       if (r.ok && r.models?.length) {
-        // 合并进当前供应商（扫描成功但未写入是「按钮无反应」的主因）
-        const merged = Array.from(new Set([...(selected.models || []), ...r.models]));
-        upsertProfile({ ...selected, models: merged });
+        const merged = Array.from(new Set([...(fresh.models || []), ...r.models]));
+        upsertProfile({ ...fresh, models: merged });
         refresh();
-        onShowToast?.(`已获取 ${r.models.length} 个模型（列表已更新）`);
+        notify(true, `已获取 ${r.models.length} 个模型，列表已更新`);
       } else if (r.ok) {
         refresh();
-        onShowToast?.('接口返回空列表，请检查地址或手动添加模型 id');
+        notify(false, '接口返回空列表。请检查 Base URL，或手动在下方添加模型 id');
       } else {
-        onShowToast?.(`获取失败：${r.error || '未知错误'}（若桌面跨域受限，请手动添加模型 id）`);
+        notify(false, r.error || '获取失败');
       }
     } catch (e) {
-      onShowToast?.(`获取失败：${e instanceof Error ? e.message : String(e)}`);
+      notify(false, e instanceof Error ? e.message : String(e));
     } finally {
       setScanBusy(false);
     }
@@ -125,12 +142,19 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     if (!selected) return;
     const key = `${selected.id}::${model}`;
     setTestBusy(key);
+    setActionHint({ ok: true, text: `正在测试 ${model}…` });
     try {
-      const r = await testProviderModel(selected, model);
+      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const r = await testProviderModel(fresh, model);
       refresh();
-      onShowToast?.(
-        r.ok ? `连通成功 ${r.latencyMs ?? '?'}ms` : `失败：${r.error || ''}`,
+      notify(
+        r.ok,
+        r.ok
+          ? `连通成功 · ${model} · ${r.latencyMs ?? '?'}ms`
+          : `连通失败 · ${model}：${r.error || '未知错误'}`,
       );
+    } catch (e) {
+      notify(false, e instanceof Error ? e.message : String(e));
     } finally {
       setTestBusy(null);
     }
@@ -283,13 +307,26 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   <button
                     type="button"
                     className="models-btn ghost"
-                    disabled={scanBusy || !(selected.hasKey || selected.apiKey)}
+                    disabled={scanBusy}
+                    title={
+                      selected.hasKey || selected.apiKey
+                        ? '从供应商接口拉取模型列表'
+                        : '将先检查密钥；无密钥会提示你保存'
+                    }
                     onClick={() => void runScan()}
                   >
-                    {scanBusy ? '扫描中…' : '获取列表'}
+                    {scanBusy ? '获取中…' : '获取列表'}
                   </button>
                 </div>
               </div>
+              {actionHint ? (
+                <div
+                  className={`models-action-hint ${actionHint.ok ? 'is-ok' : 'is-err'}`}
+                  role="status"
+                >
+                  {actionHint.text}
+                </div>
+              ) : null}
 
               <div className="models-model-list">
                 {(selected.models || []).map((m) => {
