@@ -15,12 +15,14 @@ import {
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
+import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import {
   getSubagentStatus,
   sendToSubagent,
   streamCollaboratorRun,
 } from '../api/subagentApi';
 import { getWorkspacePath } from '../api/projectStore';
+import { ApprovalAskCard } from './ApprovalAskCard';
 
 interface AgentCardProps {
   agentId?: string | null;
@@ -382,7 +384,14 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             )}
           </div>
         ) : (
-          agent.messages.map((msg) => <AgentMessageRow key={msg.id} msg={msg} />)
+          agent.messages.map((msg) => (
+            <AgentMessageRow
+              key={msg.id}
+              msg={msg}
+              parentSessionId={parentId || ''}
+              agentId={agent.id}
+            />
+          ))
         )}
       </div>
 
@@ -450,7 +459,15 @@ async function getDesktopCancel(runId: string): Promise<void> {
   }
 }
 
-function AgentMessageRow({ msg }: { msg: SessionMessage }) {
+function AgentMessageRow({
+  msg,
+  parentSessionId,
+  agentId,
+}: {
+  msg: SessionMessage;
+  parentSessionId: string;
+  agentId: string;
+}) {
   if (msg.sender === 'user') {
     // 任务提示 / 用户输入：左侧对齐，与主对话用户气泡略有区别
     return (
@@ -504,6 +521,61 @@ function AgentMessageRow({ msg }: { msg: SessionMessage }) {
                   );
                 }
                 const tc = ti.tc;
+                if (tc.status === 'pending_approval') {
+                  const summary = toolHumanLabel(tc);
+                  const techFull = extractToolCommand(tc.arguments || '');
+                  const cmd = toolCommandPreview(tc, 72);
+                  return (
+                    <ApprovalAskCard
+                      key={tc.id}
+                      msgId={msg.id}
+                      summary={summary}
+                      cmd={cmd && cmd !== summary ? cmd : techFull || undefined}
+                      onAllow={() => {
+                        useLayoutStore.setState((state) => {
+                          const ag = state.sessions
+                            .find((s) => s.id === parentSessionId)
+                            ?.agents?.find((a) => a.id === agentId);
+                          const m = ag?.messages?.find((x) => x.id === msg.id);
+                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
+                          if (t) {
+                            t.status = 'running';
+                            t.output = '执行中…';
+                          }
+                        });
+                        void daemonApproveTool(tc.id);
+                      }}
+                      onAllowRemember={() => {
+                        useLayoutStore.setState((state) => {
+                          const ag = state.sessions
+                            .find((s) => s.id === parentSessionId)
+                            ?.agents?.find((a) => a.id === agentId);
+                          const m = ag?.messages?.find((x) => x.id === msg.id);
+                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
+                          if (t) {
+                            t.status = 'running';
+                            t.output = '执行中…';
+                          }
+                        });
+                        void daemonApproveTool(tc.id);
+                      }}
+                      onDeny={() => {
+                        useLayoutStore.setState((state) => {
+                          const ag = state.sessions
+                            .find((s) => s.id === parentSessionId)
+                            ?.agents?.find((a) => a.id === agentId);
+                          const m = ag?.messages?.find((x) => x.id === msg.id);
+                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
+                          if (t) {
+                            t.status = 'error';
+                            t.output = '已拒绝';
+                          }
+                        });
+                        void daemonDenyTool(tc.id);
+                      }}
+                    />
+                  );
+                }
                 const summary = toolHumanLabel(tc);
                 const techFull = extractToolCommand(tc.arguments || '');
                 const cmd = toolCommandPreview(tc, 72);

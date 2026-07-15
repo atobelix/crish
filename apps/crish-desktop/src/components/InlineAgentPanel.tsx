@@ -15,11 +15,13 @@ import {
 } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
+import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { openAgentInNewWindow } from './AgentCard';
 import {
   sendToSubagent,
   streamCollaboratorRun,
 } from '../api/subagentApi';
+import { ApprovalAskCard } from './ApprovalAskCard';
 
 interface InlineAgentPanelProps {
   agent: SessionAgent;
@@ -316,6 +318,47 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                                   );
                                 }
                                 const tc = ti.tc;
+                                if (tc.status === 'pending_approval') {
+                                  const summary = toolHumanLabel(tc);
+                                  const techFull = extractToolCommand(tc.arguments || '');
+                                  const cmd = toolCommandPreview(tc, 72);
+                                  const patchTool = (
+                                    status: 'running' | 'error',
+                                    output: string,
+                                  ) => {
+                                    useLayoutStore.setState((state) => {
+                                      const ag = state.sessions
+                                        .find((s) => s.id === parentSessionId)
+                                        ?.agents?.find((a) => a.id === live.id);
+                                      const m = ag?.messages?.find((x) => x.id === msg.id);
+                                      const t = m?.toolCalls?.find((x) => x.id === tc.id);
+                                      if (t) {
+                                        t.status = status;
+                                        t.output = output;
+                                      }
+                                    });
+                                  };
+                                  return (
+                                    <ApprovalAskCard
+                                      key={tc.id}
+                                      msgId={msg.id}
+                                      summary={summary}
+                                      cmd={cmd && cmd !== summary ? cmd : techFull || undefined}
+                                      onAllow={() => {
+                                        patchTool('running', '执行中…');
+                                        void daemonApproveTool(tc.id);
+                                      }}
+                                      onAllowRemember={() => {
+                                        patchTool('running', '执行中…');
+                                        void daemonApproveTool(tc.id);
+                                      }}
+                                      onDeny={() => {
+                                        patchTool('error', '已拒绝');
+                                        void daemonDenyTool(tc.id);
+                                      }}
+                                    />
+                                  );
+                                }
                                 const summary = toolHumanLabel(tc);
                                 const techFull = extractToolCommand(tc.arguments || '');
                                 const cmd = toolCommandPreview(tc, 72);

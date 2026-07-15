@@ -204,17 +204,7 @@ function CompactToolRow({
     onShowToast,
   } = props;
 
-  const linkedAgent = findAgentForTool(tc, agents);
-  if (linkedAgent && activeSessionId) {
-    return (
-      <InlineAgentPanel
-        key={String(rowKey)}
-        agent={linkedAgent}
-        parentSessionId={activeSessionId}
-        defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
-      />
-    );
-  }
+  // 审批优先：勿被 linked agent 分支吞掉 pending_approval
   if (tc.status === 'pending_approval') {
     const summary = toolHumanLabel(tc);
     const techFull = extractToolCommand(tc.arguments || '');
@@ -225,7 +215,7 @@ function CompactToolRow({
         key={rowKey}
         msgId={mid}
         summary={summary}
-        cmd={tech && tech !== summary ? tech : undefined}
+        cmd={tech && tech !== summary ? tech : techFull || undefined}
         busy={approvalBusy}
         onAllow={(note) => {
           if (note.trim()) {
@@ -238,6 +228,17 @@ function CompactToolRow({
           onApprovalAllow(tc.id, mid, true);
         }}
         onDeny={() => onApprovalDeny(tc.id, mid)}
+      />
+    );
+  }
+  const linkedAgent = findAgentForTool(tc, agents);
+  if (linkedAgent && activeSessionId) {
+    return (
+      <InlineAgentPanel
+        key={String(rowKey)}
+        agent={linkedAgent}
+        parentSessionId={activeSessionId}
+        defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
       />
     );
   }

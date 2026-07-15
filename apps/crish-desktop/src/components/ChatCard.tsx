@@ -159,21 +159,27 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
 
-  // 进行中消息的待确认（时间线内 approval-card + 底部提示条）
+  // 进行中消息的待确认（主会话 + 协作 agent；时间线 approval-card + 底部提示）
   let pendingApprovalMsgId = '';
   let pendingApprovalCount = 0;
   let pendingApprovalSummary = '';
-  for (const m of messages) {
-    if (!m.toolCalls) continue;
-    if (m.status === 'completed' || m.status === 'queued') continue;
-    for (const tc of m.toolCalls) {
-      if (tc.status !== 'pending_approval') continue;
-      pendingApprovalCount += 1;
-      if (!pendingApprovalMsgId) {
-        pendingApprovalMsgId = m.id;
-        pendingApprovalSummary = toolHumanLabel(tc);
+  const scanPending = (msgs: typeof messages) => {
+    for (const m of msgs) {
+      if (!m.toolCalls) continue;
+      if (m.status === 'completed' || m.status === 'queued') continue;
+      for (const tc of m.toolCalls) {
+        if (tc.status !== 'pending_approval') continue;
+        pendingApprovalCount += 1;
+        if (!pendingApprovalMsgId) {
+          pendingApprovalMsgId = m.id;
+          pendingApprovalSummary = toolHumanLabel(tc);
+        }
       }
     }
+  };
+  scanPending(messages);
+  for (const ag of activeSession?.agents || []) {
+    scanPending(ag.messages || []);
   }
 
   // Composer extras — permission mode is global so chatApi can read it
