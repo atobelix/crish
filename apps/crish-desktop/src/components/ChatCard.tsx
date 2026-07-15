@@ -23,6 +23,7 @@ import {
   openProject,
 } from '../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
+import { ComposePlusMenu } from './ComposePlusMenu';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
   isEditToolName,
@@ -59,9 +60,7 @@ import { ApprovalSheet } from './ApprovalSheet';
 import { AgentCard } from './AgentCard';
 import { InlineAgentPanel } from './InlineAgentPanel';
 import {
-  PERMISSION_MODES,
   permissionModeMeta,
-  type PermissionMode,
 } from '../api/permissionModes';
 import {
   buildCollaboratorPrompt,
@@ -129,7 +128,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
   const [approvalBusy, setApprovalBusy] = useState(false);
-  const [showSpawnCollab, setShowSpawnCollab] = useState(false);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [plusInitialPanel, setPlusInitialPanel] = useState<'root' | 'permission' | 'collaborator'>('root');
   const [collabMode, setCollabMode] = useState<CollaboratorMode>('research');
   const [collabDesc, setCollabDesc] = useState('');
   const [collabTask, setCollabTask] = useState('');
@@ -243,8 +243,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const renameSession = useLayoutStore((s) => s.renameSession);
   const [attachments, setAttachments] = useState<{ name: string; text?: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showPermMenu, setShowPermMenu] = useState(false);
-  const permMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -259,20 +257,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, [showModelDropdown]);
-
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (permMenuRef.current && !permMenuRef.current.contains(e.target as Node)) {
-        setShowPermMenu(false);
-      }
-    };
-    if (showPermMenu) {
-      document.addEventListener('mousedown', handleOutsideClick);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [showPermMenu]);
 
   // Keyboard and Input states
   const [chatInput, setChatInput] = useState('');
@@ -1254,7 +1238,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       ],
       startedAt: Date.now(),
     });
-    setShowSpawnCollab(false);
+    setShowPlusMenu(false);
     setCollabTask('');
     setActiveAgentId(agentId);
 
@@ -1864,66 +1848,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           className="input-container"
           style={{ position: 'relative', display: activeAgent ? 'none' : undefined }}
         >
-          {showSpawnCollab && (
-            <div className="collab-spawn-popover" role="dialog" aria-label="拉起协作者">
-              <div className="collab-spawn-head">
-                <Lucide.Users size={14} />
-                <strong>协作者</strong>
-                <button
-                  type="button"
-                  className="files-icon-btn"
-                  title="关闭"
-                  onClick={() => setShowSpawnCollab(false)}
-                >
-                  <Lucide.X size={13} />
-                </button>
-              </div>
-              <div className="collab-mode-row">
-                {COLLABORATOR_MODES.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={`collab-mode-chip ${collabMode === m.id ? 'active' : ''}`}
-                    onClick={() => setCollabMode(m.id)}
-                    title={m.hint}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <label className="collab-field">
-                <span>名称（可选）</span>
-                <input
-                  value={collabDesc}
-                  onChange={(e) => setCollabDesc(e.target.value)}
-                  placeholder="简短名称"
-                />
-              </label>
-              <label className="collab-field">
-                <span>任务</span>
-                <textarea
-                  rows={3}
-                  value={collabTask}
-                  onChange={(e) => setCollabTask(e.target.value)}
-                  placeholder="要协作完成的事"
-                  autoFocus
-                />
-              </label>
-              <div className="collab-spawn-actions">
-                <button type="button" className="collab-btn ghost" onClick={() => setShowSpawnCollab(false)}>
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="collab-btn primary"
-                  disabled={collabBusy || !collabTask.trim()}
-                  onClick={handleSpawnCollaborator}
-                >
-                  {collabBusy ? '启动中…' : '启动'}
-                </button>
-              </div>
-            </div>
-          )}
           {slashMenuOpen && filteredCommands.length > 0 && (
             <div
               className="slash-commands-popover"
@@ -2103,69 +2027,57 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
         {/* Toolbar outside the input field */}
         <div className="footer-actions">
-          <div className="left-actions">
-            <div ref={permMenuRef} className="perm-mode-wrap">
-              <button
-                type="button"
-                className="bypass-link"
-                title={permissionModeMeta(permissionMode).description}
-                onClick={() => setShowPermMenu((v) => !v)}
-                style={{ border: 'none', background: 'transparent', fontFamily: 'inherit' }}
-              >
-                <span
-                  className="orange-dot"
-                  style={{ background: permissionModeMeta(permissionMode).accent }}
-                />
-                <span
-                  className="bypass-text"
-                  style={{ color: permissionModeMeta(permissionMode).accent }}
-                >
-                  {permissionModeMeta(permissionMode).shortLabel}
-                </span>
-                <Lucide.ChevronDown size={11} style={{ opacity: 0.5 }} />
-              </button>
-              {showPermMenu && (
-                <div className="perm-mode-popover" onClick={(e) => e.stopPropagation()}>
-                  <div className="perm-mode-popover-title">权限模式</div>
-                  {PERMISSION_MODES.map((m) => {
-                    const active = permissionMode === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        className={`perm-mode-item${active ? ' active' : ''}`}
-                        onClick={() => {
-                          setPermissionMode(m.id as PermissionMode);
-                          setShowPermMenu(false);
-                        }}
-                      >
-                        <span className="perm-mode-item-row">
-                          <span className="orange-dot" style={{ background: m.accent }} />
-                          <span className="perm-mode-item-label">{m.label}</span>
-                          {active && <Lucide.Check size={14} style={{ marginLeft: 'auto', opacity: 0.7 }} />}
-                        </span>
-                        <span className="perm-mode-item-desc">{m.description}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+          <div className="left-actions" style={{ position: 'relative' }}>
             <button
               type="button"
-              className="plus-btn"
-              title="添加文件"
-              onClick={() => fileInputRef.current?.click()}
+              className={`plus-btn ${showPlusMenu ? 'is-open' : ''}`}
+              title="添加与工具"
+              onClick={() => {
+                if (showPlusMenu) {
+                  setShowPlusMenu(false);
+                } else {
+                  setPlusInitialPanel('root');
+                  setShowPlusMenu(true);
+                  setShowModelDropdown(false);
+                }
+              }}
             >
               <Lucide.Plus size={14} />
             </button>
+            <ComposePlusMenu
+              open={showPlusMenu}
+              initialPanel={plusInitialPanel}
+              onClose={() => setShowPlusMenu(false)}
+              permissionMode={permissionMode}
+              onPermissionMode={(m) => setPermissionMode(m)}
+              onAddFiles={() => fileInputRef.current?.click()}
+              collabMode={collabMode}
+              onCollabMode={setCollabMode}
+              collabDesc={collabDesc}
+              onCollabDesc={setCollabDesc}
+              collabTask={collabTask}
+              onCollabTask={setCollabTask}
+              collabBusy={collabBusy}
+              onSpawnCollaborator={handleSpawnCollaborator}
+            />
             <button
               type="button"
-              className="plus-btn"
-              title="协作者"
-              onClick={() => setShowSpawnCollab((v) => !v)}
+              className="bypass-link"
+              title={permissionModeMeta(permissionMode).description}
+              onClick={() => {
+                setPlusInitialPanel('permission');
+                setShowPlusMenu(true);
+                setShowModelDropdown(false);
+              }}
+              style={{ border: 'none', background: 'transparent', fontFamily: 'inherit' }}
             >
-              <Lucide.Users size={14} />
+              <span
+                className="orange-dot"
+                style={{ background: 'var(--text-tertiary)' }}
+              />
+              <span className="bypass-text" style={{ color: 'var(--text-secondary)' }}>
+                {permissionModeMeta(permissionMode).shortLabel}
+              </span>
             </button>
           </div>
           <div className="right-actions">
