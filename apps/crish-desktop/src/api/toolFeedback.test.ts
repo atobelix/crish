@@ -6,6 +6,8 @@ import {
   parseUnifiedDiffs,
   resolveToolDiffs,
 } from './toolFeedback';
+import { collectMessageDiffs } from '../components/ChangeOverviewCard';
+import type { SessionMessage } from '../store/types';
 
 describe('resolveToolDiffs shell safety', () => {
   it('does not treat PowerShell directory listing as diff', () => {
@@ -115,5 +117,59 @@ describe('tool name helpers', () => {
 
   it('parseUnifiedDiffs returns empty without git markers', () => {
     expect(parseUnifiedDiffs('hello\nworld\n----\nfiles')).toEqual([]);
+  });
+});
+
+describe('collectMessageDiffs (change overview path)', () => {
+  it('aggregates edit-tool args into overview files', () => {
+    const msg: SessionMessage = {
+      id: 'a1',
+      sender: 'assistant',
+      text: 'done',
+      timestamp: Date.now(),
+      status: 'completed',
+      toolCalls: [
+        {
+          id: 't1',
+          name: 'search_replace',
+          arguments: JSON.stringify({
+            path: 'src/app.ts',
+            old_string: 'foo',
+            new_string: 'bar',
+          }),
+          status: 'success',
+          output: 'OK',
+        },
+      ],
+    };
+    const files = collectMessageDiffs(msg);
+    expect(files.length).toBe(1);
+    expect(files[0].filePath).toBe('src/app.ts');
+    expect(files[0].additions).toBeGreaterThan(0);
+  });
+
+  it('does not open overview from shell directory listing', () => {
+    const listing = [
+      'Mode                 LastWriteTime         Length Name',
+      '----                 -------------         ------ ----',
+      'd-----        2026/7/16     10:00                apps',
+    ].join('\n');
+    const msg: SessionMessage = {
+      id: 'a2',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      status: 'completed',
+      toolCalls: [
+        {
+          id: 't2',
+          name: 'run_terminal_command',
+          arguments: JSON.stringify({ command: 'Get-ChildItem' }),
+          status: 'success',
+          output: listing,
+        },
+      ],
+    };
+    expect(collectMessageDiffs(msg)).toEqual([]);
   });
 });

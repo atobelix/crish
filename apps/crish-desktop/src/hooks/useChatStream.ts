@@ -473,6 +473,22 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       st.updateMessageText(sid, cur.assistantMsgId, '已停止。');
       st.updateMessageThinking(sid, cur.assistantMsgId, '');
     }
+    // 立刻收成终态，避免 cancel 竞态下 UI 永久 processing
+    st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
+    st.setSessionMessageStatus(sid, cur.assistantMsgId, 'completed');
+    // 运行中工具收成中断
+    useLayoutStore.setState((state) => {
+      const msg = state.sessions
+        .find((s) => s.id === sid)
+        ?.messages.find((m) => m.id === cur.assistantMsgId);
+      if (!msg?.toolCalls) return;
+      for (const tc of msg.toolCalls) {
+        if (tc.status === 'running' || tc.status === 'pending_approval') {
+          tc.status = 'error';
+          tc.output = tc.output?.trim() ? tc.output : '已停止';
+        }
+      }
+    });
     streamsBySessionRef.current.delete(sid);
     cur.cancel();
   };
