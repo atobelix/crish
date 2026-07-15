@@ -23,6 +23,7 @@ import {
 } from '../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 import { ComposePlusMenu } from './ComposePlusMenu';
+import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelPicker } from './ModelPicker';
 import { networkUserMessage } from '../api/userFacingErrors';
 import {
@@ -65,7 +66,6 @@ import { ApprovalSheet } from './ApprovalSheet';
 import { AgentCard } from './AgentCard';
 import { InlineAgentPanel } from './InlineAgentPanel';
 import {
-  permissionModeMeta,
 } from '../api/permissionModes';
 import {
   buildCollaboratorPrompt,
@@ -134,7 +134,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
-  const [plusInitialPanel, setPlusInitialPanel] = useState<'root' | 'permission' | 'collaborator'>('root');
   const [collabMode, setCollabMode] = useState<CollaboratorMode>('research');
   const [collabDesc, setCollabDesc] = useState('');
   const [collabTask, setCollabTask] = useState('');
@@ -2043,12 +2042,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             <button
               type="button"
               className={`plus-btn ${showPlusMenu ? 'is-open' : ''}`}
-              title="添加与工具"
+              title="添加"
               onClick={() => {
                 if (showPlusMenu) {
                   setShowPlusMenu(false);
                 } else {
-                  setPlusInitialPanel('root');
                   setShowPlusMenu(true);
                   setShowModelDropdown(false);
                 }
@@ -2058,10 +2056,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </button>
             <ComposePlusMenu
               open={showPlusMenu}
-              initialPanel={plusInitialPanel}
               onClose={() => setShowPlusMenu(false)}
-              permissionMode={permissionMode}
-              onPermissionMode={(m) => setPermissionMode(m)}
               onAddFiles={() => fileInputRef.current?.click()}
               collabMode={collabMode}
               onCollabMode={setCollabMode}
@@ -2072,25 +2067,14 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               collabBusy={collabBusy}
               onSpawnCollaborator={handleSpawnCollaborator}
             />
-            <button
-              type="button"
-              className="bypass-link"
-              title={permissionModeMeta(permissionMode).description}
-              onClick={() => {
-                setPlusInitialPanel('permission');
-                setShowPlusMenu(true);
+            <PermissionModeMenu
+              mode={permissionMode}
+              onChange={(m) => {
+                setPermissionMode(m);
+                setShowPlusMenu(false);
                 setShowModelDropdown(false);
               }}
-              style={{ border: 'none', background: 'transparent', fontFamily: 'inherit' }}
-            >
-              <span
-                className="orange-dot"
-                style={{ background: 'var(--text-tertiary)' }}
-              />
-              <span className="bypass-text" style={{ color: 'var(--text-secondary)' }}>
-                {permissionModeMeta(permissionMode).shortLabel}
-              </span>
-            </button>
+            />
           </div>
           <div className="right-actions">
             {showModelPicker && (

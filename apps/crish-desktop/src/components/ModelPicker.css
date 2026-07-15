@@ -1,18 +1,47 @@
-/* 模型选择：层级列表（提供商 > 模型） */
+/* 模型选择：层级列表（提供商 > 模型）— 底栏仅切换 */
 .mpick {
   position: absolute;
   bottom: calc(100% + 8px);
   right: 0;
-  width: min(360px, 92vw);
-  max-height: min(420px, 60vh);
+  width: min(300px, 92vw);
+  max-height: min(360px, 55vh);
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   z-index: 20000;
   overflow: hidden;
+}
+.mpick--slim .mpick-provider-actions,
+.mpick--slim .mpick-model-actions,
+.mpick--slim .mpick-add-row {
+  display: none !important;
+}
+.mpick-model-main--row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  text-align: left;
+}
+.mpick-model-main--row:hover {
+  background: var(--bg-hover);
+}
+.mpick-model-main--row.is-selected {
+  background: var(--bg-active);
+}
+.mpick-model-ico {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
 .mpick-error {

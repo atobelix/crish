@@ -6,25 +6,13 @@ import { useLayoutStore } from '../store/layoutStore';
 import { ensureDaemonConnected } from '../api/daemonChatBridge';
 import { getDesktopDaemonClient } from '../api/daemonClient';
 import { fetchEngineStatus, type EngineStatus } from '../api/engineConfig';
-import {
-  activateProfileModel,
-  addModelToProfile,
-  anyProfileHasKey,
-  createCustomProfile,
-  getActiveProfileId,
-  loadProfiles,
-  removeModelFromProfile,
-  removeProfile,
-  saveProfileKey,
-  upsertProfile,
-  type ProviderProfile,
-} from '../api/providerProfiles';
 import { estimateCostUsd, loadPrices, upsertPrice, type ModelPrice } from '../api/pricingStore';
 import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { isDemoMode } from '../api/appMode';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
 import { FontSettingsSection } from './FontSettingsSection';
+import { ModelsSettingsTab } from './ModelsSettingsTab';
 import { SettingsSelect } from './SettingsSelect';
 import {
   createWorkflow,
@@ -215,18 +203,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [daemonConnHint, setDaemonConnHint] = useState('');
 
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
-  const [profiles, setProfiles] = useState<ProviderProfile[]>(() => loadProfiles());
-  const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
-  const [draftModelName, setDraftModelName] = useState<Record<string, string>>({});
   const [priceList, setPriceList] = useState<ModelPrice[]>(() => loadPrices());
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
-  const [profileInlineError, setProfileInlineError] = useState('');
-  const [profileInlineOk, setProfileInlineOk] = useState('');
-  const [activeProfileId, setActiveProfileIdState] = useState<string | null>(() => getActiveProfileId());
-  const [profileBusyId, setProfileBusyId] = useState<string | null>(null);
-  const [newProfileName, setNewProfileName] = useState('');
-  const [newProfileUrl, setNewProfileUrl] = useState('https://api.openai.com/v1');
-  const [showAddProfile, setShowAddProfile] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
   const [wfBusy, setWfBusy] = useState(false);
@@ -253,11 +231,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   useEffect(() => {
     if (activeTab !== 'models' && activeTab !== 'usage') return;
     void fetchEngineStatus().then(setEngineStatus);
-    setProfiles(loadProfiles());
-    setActiveProfileIdState(getActiveProfileId());
-    setPriceList(loadPrices());
-    setProfileInlineError('');
-    setProfileInlineOk('');
+    if (activeTab === 'usage') setPriceList(loadPrices());
   }, [activeTab]);
 
   useEffect(() => {
@@ -889,379 +863,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </>
           )}
 
-          {/* TAB 2: MODELS — multi profile */}
+          {/* TAB 2: MODELS */}
           {activeTab === 'models' && (
-            <>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>AI 模型</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                    配置多个服务商，点击模型即可写入引擎并立即生效。
-                    当前引擎：{engineStatus?.model || '未读取'}
-                    {engineStatus?.hasApiKey === false ? ' · 未检测到密钥' : engineStatus?.hasApiKey ? ' · 密钥已就绪' : ''}
-                    {activeProfileId
-                      ? ` · 活动：${profiles.find((x) => x.id === activeProfileId)?.name || activeProfileId}`
-                      : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  onClick={() => {
-                    setShowAddProfile((v) => !v);
-                    setProfileInlineError('');
-                    setProfileInlineOk('');
-                  }}
-                >
-                  <Lucide.Plus size={16} />
-                  添加服务商
-                </button>
-              </div>
-
-              {!anyProfileHasKey() && (
-                <div className="chat-soft-hint" style={{ marginBottom: 12 }}>
-                  <span>首次使用：为任意服务商粘贴 API 密钥，再点击一个模型启用即可开始对话。</span>
-                </div>
-              )}
-
-              {profileInlineError && (
-                <div className="model-picker-error" style={{ marginBottom: 10 }}>{profileInlineError}</div>
-              )}
-              {profileInlineOk && (
-                <div className="chat-soft-hint" style={{ marginBottom: 10 }}>
-                  <span>{profileInlineOk}</span>
-                </div>
-              )}
-
-              {showAddProfile && (
-                <div className="settings-card-row" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>新的服务商</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label className="settings-field-label">显示名称</label>
-                    <input
-                      className="settings-field-input"
-                      placeholder="例如 公司内网网关"
-                      value={newProfileName}
-                      onChange={(e) => setNewProfileName(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label className="settings-field-label">接口地址（OpenAI 兼容）</label>
-                    <input
-                      className="settings-field-input"
-                      placeholder="https://…"
-                      value={newProfileUrl}
-                      onChange={(e) => setNewProfileUrl(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      onClick={() => {
-                        setShowAddProfile(false);
-                        setNewProfileName('');
-                        setNewProfileUrl('https://api.openai.com/v1');
-                      }}
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-secondary ui-btn-sm"
-                      onClick={() => {
-                        const name = newProfileName.trim();
-                        if (!name) {
-                          setProfileInlineError('请填写服务商名称');
-                          setProfileInlineOk('');
-                          return;
-                        }
-                        const entry = createCustomProfile({
-                          name,
-                          baseUrl: newProfileUrl.trim() || 'https://api.openai.com/v1',
-                        });
-                        setProfiles(loadProfiles());
-                        setShowAddProfile(false);
-                        setNewProfileName('');
-                        setNewProfileUrl('https://api.openai.com/v1');
-                        setProfileInlineError('');
-                        setProfileInlineOk(`已添加「${entry.name}」，请填写密钥并添加模型`);
-                      }}
-                    >
-                      创建
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="settings-fields-stack" style={{ gap: 12 }}>
-                {profiles.map((p) => {
-                  const isActive = activeProfileId === p.id;
-                  const hasKey = Boolean(p.hasKey || p.apiKey);
-                  const busy = profileBusyId === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`settings-card-row${isActive ? ' is-active' : ''}`}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 10,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
-                          <span className={`status-badge ${hasKey ? 'available' : 'unconfigured'}`}>
-                            <span className="status-dot" style={{ width: 5, height: 5, borderRadius: '50%' }} />
-                            {hasKey ? '已配置密钥' : '未配置密钥'}
-                          </span>
-                          {isActive && (
-                            <span className="status-badge available" style={{ fontSize: 10 }}>
-                              使用中
-                            </span>
-                          )}
-                        </div>
-                        {p.id.startsWith('custom-') && (
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-ghost ui-btn-sm"
-                            title="移除服务商"
-                            onClick={() => {
-                              setProfiles(removeProfile(p.id));
-                              setActiveProfileIdState(getActiveProfileId());
-                              setProfileInlineOk('已移除自定义服务商');
-                              setProfileInlineError('');
-                            }}
-                          >
-                            <Lucide.Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label className="settings-field-label">接口地址</label>
-                        <input
-                          className="settings-field-input"
-                          value={p.baseUrl}
-                          onChange={(e) => {
-                            const next = profiles.map((x) =>
-                              x.id === p.id ? { ...x, baseUrl: e.target.value } : x,
-                            );
-                            setProfiles(next);
-                            upsertProfile({ ...p, baseUrl: e.target.value });
-                          }}
-                        />
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label className="settings-field-label">API 密钥</label>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <input
-                            type="password"
-                            className="settings-field-input"
-                            style={{ flex: 1, minWidth: 160 }}
-                            placeholder={hasKey ? '已保存 · 输入新密钥以覆盖' : '粘贴 API 密钥'}
-                            value={draftKeys[p.id] ?? ''}
-                            onChange={(e) => setDraftKeys((d) => ({ ...d, [p.id]: e.target.value }))}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                (e.target as HTMLInputElement).blur();
-                                void (async () => {
-                                  const v = (draftKeys[p.id] || '').trim();
-                                  if (!v) {
-                                    setProfileInlineError('请输入密钥后再保存');
-                                    setProfileInlineOk('');
-                                    return;
-                                  }
-                                  setProfileBusyId(p.id);
-                                  setProfileInlineError('');
-                                  const res = await saveProfileKey(p.id, v, {
-                                    activateModel: p.models[0],
-                                  });
-                                  setProfiles(loadProfiles());
-                                  setDraftKeys((d) => ({ ...d, [p.id]: '' }));
-                                  setActiveProfileIdState(getActiveProfileId());
-                                  if (!res.ok) {
-                                    setProfileInlineError(
-                                      res.error === 'not_connected'
-                                        ? networkUserMessage()
-                                        : '密钥已保存，但同步到引擎失败',
-                                    );
-                                    setProfileInlineOk('');
-                                  } else {
-                                    setProfileInlineOk(
-                                      res.synced
-                                        ? '密钥已保存并同步到引擎'
-                                        : '密钥已保存',
-                                    );
-                                    setEngineStatus(await fetchEngineStatus());
-                                  }
-                                  setProfileBusyId(null);
-                                })();
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-sm ui-btn-secondary"
-                            disabled={busy}
-                            onClick={async () => {
-                              const v = (draftKeys[p.id] || '').trim();
-                              if (!v) {
-                                setProfileInlineError('请输入密钥后再保存');
-                                setProfileInlineOk('');
-                                return;
-                              }
-                              setProfileBusyId(p.id);
-                              setProfileInlineError('');
-                              const res = await saveProfileKey(p.id, v, {
-                                activateModel: p.models[0],
-                              });
-                              setProfiles(loadProfiles());
-                              setDraftKeys((d) => ({ ...d, [p.id]: '' }));
-                              setActiveProfileIdState(getActiveProfileId());
-                              if (!res.ok) {
-                                setProfileInlineError(
-                                  res.error === 'not_connected'
-                                    ? networkUserMessage()
-                                    : '密钥已保存，但同步到引擎失败',
-                                );
-                                setProfileInlineOk('');
-                              } else {
-                                setProfileInlineOk(
-                                  res.synced
-                                    ? p.models[0]
-                                      ? `密钥已保存，并启用 ${p.models[0]}`
-                                      : '密钥已保存并同步到引擎'
-                                    : '密钥已保存',
-                                );
-                                setEngineStatus(await fetchEngineStatus());
-                              }
-                              setProfileBusyId(null);
-                            }}
-                          >
-                            {busy ? '保存中…' : '保存密钥'}
-                          </button>
-                        </div>
-                        <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                          密钥仅保存在本机。保存时若该服务商为活动项（或尚无活动项），会自动写入引擎。
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="settings-field-label">模型（点击启用）</label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                          {p.models.length === 0 && (
-                            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                              还没有模型，请在下方添加模型 ID
-                            </span>
-                          )}
-                          {p.models.map((m) => {
-                            const selected =
-                              (engineStatus?.model === m && isActive) ||
-                              (engineStatus?.model === m && !activeProfileId);
-                            return (
-                              <button
-                                key={m}
-                                type="button"
-                                className={`model-chip ${selected ? 'on' : ''}`}
-                                disabled={busy}
-                                onClick={async () => {
-                                  setProfileInlineError('');
-                                  setProfileInlineOk('');
-                                  setProfileBusyId(p.id);
-                                  const res = await activateProfileModel(p.id, m);
-                                  setActiveProfileIdState(getActiveProfileId());
-                                  if (!res.ok) {
-                                    setProfileInlineError(
-                                      res.error === 'not_connected'
-                                        ? networkUserMessage()
-                                        : '启用失败，请检查密钥与地址',
-                                    );
-                                    setProfileBusyId(null);
-                                    return;
-                                  }
-                                  if (res.warning === 'model_mismatch') {
-                                    setProfileInlineOk(
-                                      `已请求启用 ${m}，但引擎回报模型不一致，请刷新或检查密钥`,
-                                    );
-                                  } else if (res.warning === 'no_local_key') {
-                                    setProfileInlineOk(
-                                      `已切换到 ${m}（本地未保存密钥，将使用引擎现有凭证）`,
-                                    );
-                                  } else {
-                                    setProfileInlineOk(`已启用 ${p.name} · ${m}`);
-                                  }
-                                  setEngineStatus(await fetchEngineStatus());
-                                  setProfileBusyId(null);
-                                }}
-                              >
-                                {m}
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setProfiles(removeModelFromProfile(p.id, m));
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.stopPropagation();
-                                      setProfiles(removeModelFromProfile(p.id, m));
-                                    }
-                                  }}
-                                  style={{ marginLeft: 4, opacity: 0.5 }}
-                                >
-                                  ×
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                          <input
-                            className="settings-field-input"
-                            style={{ flex: 1 }}
-                            placeholder="添加模型 ID，例如 gpt-4o"
-                            value={draftModelName[p.id] || ''}
-                            onChange={(e) =>
-                              setDraftModelName((d) => ({ ...d, [p.id]: e.target.value }))
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const name = (draftModelName[p.id] || '').trim();
-                                if (name) {
-                                  setProfiles(addModelToProfile(p.id, name));
-                                  setDraftModelName((d) => ({ ...d, [p.id]: '' }));
-                                  setProfileInlineOk(`已添加模型 ${name}`);
-                                  setProfileInlineError('');
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-secondary ui-btn-sm"
-                            onClick={() => {
-                              const name = (draftModelName[p.id] || '').trim();
-                              if (name) {
-                                setProfiles(addModelToProfile(p.id, name));
-                                setDraftModelName((d) => ({ ...d, [p.id]: '' }));
-                                setProfileInlineOk(`已添加模型 ${name}`);
-                                setProfileInlineError('');
-                              }
-                            }}
-                          >
-                            添加
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+            <ModelsSettingsTab onShowToast={onShowToast} />
           )}
 
           {/* TAB 3: MCP — 正式版读取引擎列表；演示保留本地 mock 管理 */}
@@ -1762,12 +1366,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       const inputPerMTok = Number(priceDraft.input);
                       const outputPerMTok = Number(priceDraft.output);
                       if (!model || Number.isNaN(inputPerMTok) || Number.isNaN(outputPerMTok)) {
-                        setProfileInlineError('请填写完整的定价');
+                        onShowToast('请填写完整的定价');
                         return;
                       }
                       setPriceList(upsertPrice({ model, inputPerMTok, outputPerMTok }));
                       setPriceDraft({ model: '', input: '', output: '' });
-                      setProfileInlineError('');
                     }}
                   >
                     保存定价

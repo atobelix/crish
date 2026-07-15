@@ -1,30 +1,20 @@
 /**
- * 输入区「+」菜单
- * 布局借鉴：主列条目 + 可选右侧展开面板（与项目选择列表同气质，非抄袭）
- * - 主列：图标 + 标题 + 副文案 + 箭头
- * - 展开：权限模式列表 / 协作者表单
+ * 输入区「+」菜单：仅附件与协作；权限在独立控件。
+ * 带箭头项 hover 即展开级联子面板。
  */
 import React, { useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import {
-  PERMISSION_MODES,
-  permissionModeMeta,
-  type PermissionMode,
-} from '../api/permissionModes';
 import {
   COLLABORATOR_MODES,
   type CollaboratorMode,
 } from '../api/subagentApi';
 
-export type ComposePlusPanel = 'root' | 'permission' | 'collaborator';
+export type ComposePlusPanel = 'root' | 'collaborator';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  /** 打开时默认展开的侧栏 */
   initialPanel?: ComposePlusPanel;
-  permissionMode: PermissionMode;
-  onPermissionMode: (m: PermissionMode) => void;
   onAddFiles: () => void;
   collabMode: CollaboratorMode;
   onCollabMode: (m: CollaboratorMode) => void;
@@ -40,8 +30,6 @@ export const ComposePlusMenu: React.FC<Props> = ({
   open,
   onClose,
   initialPanel = 'root',
-  permissionMode,
-  onPermissionMode,
   onAddFiles,
   collabMode,
   onCollabMode,
@@ -54,10 +42,11 @@ export const ComposePlusMenu: React.FC<Props> = ({
 }) => {
   const [panel, setPanel] = useState<ComposePlusPanel>('root');
   const rootRef = useRef<HTMLDivElement>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setPanel(initialPanel || 'root');
+    setPanel(initialPanel === 'collaborator' ? 'collaborator' : 'root');
   }, [open, initialPanel]);
 
   useEffect(() => {
@@ -79,12 +68,29 @@ export const ComposePlusMenu: React.FC<Props> = ({
     };
   }, [open, onClose, panel]);
 
+  const clearLeave = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+  };
+
+  const scheduleRoot = () => {
+    clearLeave();
+    leaveTimer.current = setTimeout(() => setPanel('root'), 140);
+  };
+
   if (!open) return null;
 
-  const permMeta = permissionModeMeta(permissionMode);
-
   return (
-    <div ref={rootRef} className="cplus-root" role="menu" aria-label="添加与工具">
+    <div
+      ref={rootRef}
+      className="cplus-root cplus-root--slim"
+      role="menu"
+      aria-label="添加"
+      onMouseLeave={scheduleRoot}
+      onMouseEnter={clearLeave}
+    >
       <div className="cplus-main">
         <button
           type="button"
@@ -100,7 +106,6 @@ export const ComposePlusMenu: React.FC<Props> = ({
           </span>
           <span className="cplus-item-text">
             <span className="cplus-item-title">添加文件</span>
-            <span className="cplus-item-desc">附件到当前消息</span>
           </span>
         </button>
 
@@ -108,70 +113,29 @@ export const ComposePlusMenu: React.FC<Props> = ({
           type="button"
           className={`cplus-item ${panel === 'collaborator' ? 'is-active' : ''}`}
           role="menuitem"
-          onClick={() => setPanel(panel === 'collaborator' ? 'root' : 'collaborator')}
+          onMouseEnter={() => {
+            clearLeave();
+            setPanel('collaborator');
+          }}
+          onClick={() => setPanel('collaborator')}
         >
           <span className="cplus-item-icon">
             <Lucide.Users size={16} strokeWidth={1.75} />
           </span>
           <span className="cplus-item-text">
             <span className="cplus-item-title">协作者</span>
-            <span className="cplus-item-desc">并行子代理</span>
           </span>
-          <Lucide.ChevronRight size={16} className="cplus-item-chev" />
-        </button>
-
-        <button
-          type="button"
-          className={`cplus-item ${panel === 'permission' ? 'is-active' : ''}`}
-          role="menuitem"
-          onClick={() => setPanel(panel === 'permission' ? 'root' : 'permission')}
-        >
-          <span className="cplus-item-icon">
-            <Lucide.Shield size={16} strokeWidth={1.75} />
-          </span>
-          <span className="cplus-item-text">
-            <span className="cplus-item-title">权限模式</span>
-            <span className="cplus-item-desc">{permMeta.shortLabel}</span>
-          </span>
-          <Lucide.ChevronRight size={16} className="cplus-item-chev" />
+          <Lucide.ChevronRight size={14} className="cplus-item-chev" />
         </button>
       </div>
 
-      {panel === 'permission' ? (
-        <div className="cplus-flyout" role="menu" aria-label="权限模式">
-          <div className="cplus-flyout-head">
-            <span>权限模式</span>
-          </div>
-          <div className="cplus-flyout-scroll">
-            {PERMISSION_MODES.map((m) => {
-              const active = permissionMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`cplus-fly-row ${active ? 'is-selected' : ''}`}
-                  onClick={() => {
-                    onPermissionMode(m.id);
-                    onClose();
-                  }}
-                >
-                  <span className="cplus-fly-icon">
-                    <Lucide.CircleDot size={16} strokeWidth={1.75} />
-                  </span>
-                  <span className="cplus-fly-text">
-                    <span className="cplus-fly-title">{m.label}</span>
-                    <span className="cplus-fly-desc">{m.description}</span>
-                  </span>
-                  {active ? <Lucide.Check size={16} className="cplus-fly-check" /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
       {panel === 'collaborator' ? (
-        <div className="cplus-flyout cplus-flyout--wide" role="dialog" aria-label="协作者">
+        <div
+          className="cplus-flyout cplus-flyout--wide"
+          role="dialog"
+          aria-label="协作者"
+          onMouseEnter={clearLeave}
+        >
           <div className="cplus-flyout-head">
             <span>协作者</span>
           </div>
@@ -216,7 +180,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
               <label className="cplus-field">
                 <span>任务</span>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={collabTask}
                   onChange={(e) => onCollabTask(e.target.value)}
                   placeholder="要协作完成的事"
@@ -230,9 +194,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
                   type="button"
                   className="cplus-btn primary"
                   disabled={collabBusy || !collabTask.trim()}
-                  onClick={() => {
-                    onSpawnCollaborator();
-                  }}
+                  onClick={() => onSpawnCollaborator()}
                 >
                   {collabBusy ? '启动中…' : '启动'}
                 </button>
