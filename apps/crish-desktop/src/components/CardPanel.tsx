@@ -7,6 +7,7 @@ import { PreviewCard } from './PreviewCard';
 import { DiffCard } from './DiffCard';
 import { TasksCard } from './TasksCard';
 import { TerminalCard } from './TerminalCard';
+import { AgentCard } from './AgentCard';
 
 interface CardPanelProps {
   wsId: string;
@@ -33,7 +34,19 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     detachTabToStandalone,
     closeTabInGroup,
     setPanelsDropdownCoords,
+    setPanelAgentId,
   } = useLayoutStore();
+
+  React.useEffect(() => {
+    const onOpenAgent = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ agentId?: string }>).detail;
+      if (detail?.agentId) setPanelAgentId(detail.agentId);
+      handleGlobalTabClick('agent');
+    };
+    window.addEventListener('crish-open-agent-panel', onOpenAgent);
+    return () => window.removeEventListener('crish-open-agent-panel', onOpenAgent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsId]);
 
   const ws = workspaces.find((w) => w.id === wsId);
   const col = ws?.columns[colIdx];
@@ -55,6 +68,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
       case 'terminal': return <Lucide.Terminal size={13} />;
       case 'settings': return <Lucide.Settings size={13} />;
       case 'runtime': return <Lucide.Gauge size={13} />;
+      case 'agent': return <Lucide.Bot size={13} />;
       default: return <Lucide.Layout size={13} />;
     }
   };
@@ -736,6 +750,14 @@ export const CardPanel: React.FC<CardPanelProps> = ({
         )}
         {activeCardId === 'runtime' && (
           <RuntimePanel wsId={wsId} onShowToast={onShowToast} />
+        )}
+        {activeCardId === 'agent' && (
+          <AgentCard
+            onClose={() => {
+              useLayoutStore.getState().setPanelAgentId(null);
+              handleTabClick('chat');
+            }}
+          />
         )}
         {activeCardId === 'plan' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', gap: '8px', padding: '32px' }}>

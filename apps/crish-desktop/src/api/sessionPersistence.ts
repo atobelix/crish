@@ -6,11 +6,12 @@
  * - 本地消息正文为真相源；引擎 list-sessions 仅作元数据补全
  */
 
-import type { SessionMessage, SessionState } from '../store/layoutStore';
+import type { SessionAgent, SessionMessage, SessionState } from '../store/layoutStore';
 import { normalizeAssistantTimeline } from './toolPresentation';
 
 const INDEX_KEY = 'crish_session_index_v1';
 const BODY_PREFIX = 'crish_session_body_v1:';
+const AGENTS_PREFIX = 'crish_session_agents_v1:';
 const ACTIVE_KEY = 'crish_active_session_v1';
 const FOLDER_KEY = 'crish_folder_order_v1';
 
@@ -128,6 +129,30 @@ export function saveSessionBody(sessionId: string, messages: SessionMessage[]): 
 
 export function deleteSessionBody(sessionId: string): void {
   localStorage.removeItem(BODY_PREFIX + sessionId);
+  localStorage.removeItem(AGENTS_PREFIX + sessionId);
+}
+
+export function loadSessionAgents(sessionId: string): SessionAgent[] {
+  const raw = localStorage.getItem(AGENTS_PREFIX + sessionId);
+  const list = safeParse<SessionAgent[]>(raw, []);
+  return list.map((a) => ({
+    ...a,
+    messages: sanitizeMessagesForHydrate(a.messages || []),
+    // 重开时 running 收成中断
+    status: a.status === 'running' ? 'failed' : a.status,
+    summary:
+      a.status === 'running'
+        ? a.summary || '上次会话中断，协作 agent 未完成'
+        : a.summary,
+  }));
+}
+
+export function saveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
+  if (!agents?.length) {
+    localStorage.removeItem(AGENTS_PREFIX + sessionId);
+    return;
+  }
+  localStorage.setItem(AGENTS_PREFIX + sessionId, JSON.stringify(agents.slice(0, 40)));
 }
 
 export function loadActiveSessionId(): string | null {
@@ -213,6 +238,7 @@ export function hydrateSessionsFromDisk(): {
     branchParentId: e.branchParentId,
     timestamp: e.timestamp,
     messages: sanitizeMessagesForHydrate(loadSessionBody(e.id)),
+    agents: loadSessionAgents(e.id),
     engineCursor: e.engineCursor,
     engineLastRunId: e.engineLastRunId,
     hydratedFromEngine: e.hydratedFromEngine,
@@ -241,6 +267,7 @@ export function persistAllSessions(
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
     );
     saveSessionBody(s.id, msgs);
+    saveSessionAgents(s.id, s.agents || []);
   }
   // 清理孤儿正文
   try {

@@ -431,6 +431,44 @@ export function streamViaDaemon(
     if (cancelled || finished) return;
     const type = String(msg.type ?? '');
 
+    // 子 agent 广播：runId 是父 run；与本流绑定
+    if (type === 'subagent-started') {
+      if (msg.runId && msg.runId !== runId) return;
+      callbacks.onSubagentStarted?.({
+        subagentId: String(msg.subagentId ?? ''),
+        subagentRunId: String(msg.subagentRunId ?? ''),
+        parentRunId: String(msg.runId ?? runId),
+        parentToolCallId: msg.parentToolCallId ? String(msg.parentToolCallId) : undefined,
+        description: String(msg.description ?? '协作 agent'),
+        mode: String(msg.mode ?? 'research'),
+      });
+      return;
+    }
+    if (type === 'subagent-event') {
+      if (msg.runId && msg.runId !== runId) return;
+      const ev =
+        msg.event && typeof msg.event === 'object'
+          ? (msg.event as Record<string, unknown>)
+          : {};
+      callbacks.onSubagentEvent?.({
+        subagentId: String(msg.subagentId ?? ''),
+        subagentRunId: String(msg.subagentRunId ?? ''),
+        event: ev,
+      });
+      return;
+    }
+    if (type === 'subagent-ended') {
+      if (msg.runId && msg.runId !== runId) return;
+      const st = msg.status === 'failed' ? 'failed' : 'completed';
+      callbacks.onSubagentEnded?.({
+        subagentId: String(msg.subagentId ?? ''),
+        subagentRunId: String(msg.subagentRunId ?? ''),
+        status: st,
+        summary: msg.summary ? String(msg.summary) : undefined,
+      });
+      return;
+    }
+
     if (type === 'error') {
       if (msg.runId && msg.runId !== runId) return;
       surfaceFailure(msg.message ?? msg.error ?? msg, 'daemon-error');

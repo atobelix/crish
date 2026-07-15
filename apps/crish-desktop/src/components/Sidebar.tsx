@@ -44,8 +44,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     sessions,
     folderOrder: _folderOrder,
     activeSessionId,
+    activeAgentId,
     sidebarCollapsed,
     setActiveSessionId,
+    setActiveAgentId,
+    setPanelAgentId,
     createSession,
     pinSession,
     unpinSession,
@@ -316,31 +319,85 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const displayText = isBranched ? `分支: ${s.title.replace(/ - 分支$/, '')}` : s.title;
     const isDraggingThis = activeDragItem?.type === 'session' && activeDragItem.sessionId === s.id;
     const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
+    const agents = s.agents || [];
+    const agentRunning = agents.some((a) => a.status === 'running');
     return (
       <li
         key={s.id}
         data-session-id={s.id}
-        className={`session-item ${s.id === activeSessionId ? 'active' : ''} ${isBranched ? 'branch-session' : ''} ${isDraggingThis ? 'drag-ghost-hidden' : ''}`}
-        onClick={() => setActiveSessionId(s.id)}
-        onContextMenu={(e) => handleContextMenu(e, s.id)}
-        onPointerDown={isDraggable ? (e) => startSessionDrag(e, s.id, s.folder) : undefined}
+        className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''}`}
       >
-        <span className="session-text" title={displayText}>
-          {displayText}
-        </span>
-        <span className="session-time">
-          {isRunning ? <span className="session-running-spinner" title="处理中" /> : s.timestamp}
-        </span>
-        <button
-          type="button"
-          className="session-actions-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleContextMenu(e as unknown as React.MouseEvent, s.id);
+        <div
+          className={`session-item ${s.id === activeSessionId && !activeAgentId ? 'active' : ''} ${isBranched ? 'branch-session' : ''}`}
+          onClick={() => {
+            setActiveSessionId(s.id);
+            setActiveAgentId(null);
           }}
+          onContextMenu={(e) => handleContextMenu(e, s.id)}
+          onPointerDown={isDraggable ? (e) => startSessionDrag(e, s.id, s.folder) : undefined}
         >
-          <Lucide.MoreHorizontal size={12} />
-        </button>
+          <span className="session-text" title={displayText}>
+            {displayText}
+          </span>
+          <span className="session-time">
+            {isRunning || agentRunning ? (
+              <span className="session-running-spinner" title="处理中" />
+            ) : (
+              s.timestamp
+            )}
+          </span>
+          <button
+            type="button"
+            className="session-actions-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleContextMenu(e as unknown as React.MouseEvent, s.id);
+            }}
+          >
+            <Lucide.MoreHorizontal size={12} />
+          </button>
+        </div>
+        {agents.length > 0 ? (
+          <ul className="session-agent-list" aria-label="协作 agent">
+            {agents.slice(0, 12).map((ag) => (
+              <li key={ag.id}>
+                <button
+                  type="button"
+                  className={`session-agent-item ${
+                    activeSessionId === s.id && activeAgentId === ag.id ? 'active' : ''
+                  } session-agent-item--${ag.status}`}
+                  title={ag.description}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveSessionId(s.id);
+                    setActiveAgentId(ag.id);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setActiveSessionId(s.id);
+                    setPanelAgentId(ag.id);
+                    // 右侧打开依赖工作区已有 agent 卡；由 CardPanel 全局 tab 逻辑补
+                    window.dispatchEvent(
+                      new CustomEvent('crish-open-agent-panel', { detail: { agentId: ag.id } }),
+                    );
+                  }}
+                >
+                  <Lucide.Bot size={11} className="session-agent-icon" />
+                  <span className="session-agent-text">
+                    {ag.description || ag.mode || 'agent'}
+                  </span>
+                  {ag.status === 'running' ? (
+                    <span className="session-running-spinner" title="运行中" />
+                  ) : (
+                    <span className="session-agent-status">
+                      {ag.status === 'failed' ? '失败' : '完成'}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </li>
     );
   };

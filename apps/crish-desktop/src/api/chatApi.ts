@@ -246,6 +246,26 @@ export interface StreamCallbacks {
   onRunMeta?: (meta: { runId: string }) => void;
   /** 审批结果（含完全访问自动放行） */
   onApprovalResolved?: (toolCallId: string, decision: 'allow' | 'deny') => void;
+  /** 协作子 agent 生命周期（侧栏列表 / 面板） */
+  onSubagentStarted?: (info: {
+    subagentId: string;
+    subagentRunId: string;
+    parentRunId: string;
+    parentToolCallId?: string;
+    description: string;
+    mode: string;
+  }) => void;
+  onSubagentEvent?: (info: {
+    subagentId: string;
+    subagentRunId: string;
+    event: Record<string, unknown>;
+  }) => void;
+  onSubagentEnded?: (info: {
+    subagentId: string;
+    subagentRunId: string;
+    status: 'completed' | 'failed';
+    summary?: string;
+  }) => void;
 }
 
 const getMockModuleName = (idx: number): string => {

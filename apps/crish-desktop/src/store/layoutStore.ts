@@ -72,6 +72,23 @@ export interface SessionMessage {
   thinkingTime?: number;
 }
 
+/** 主会话下的协作子 agent（run_subagent） */
+export interface SessionAgent {
+  id: string;
+  subagentRunId: string;
+  parentSessionId: string;
+  parentRunId: string;
+  parentToolCallId?: string;
+  description: string;
+  mode: string;
+  status: 'running' | 'completed' | 'failed';
+  summary?: string;
+  /** 子 agent 时间线（与主对话同结构，便于复用渲染） */
+  messages: SessionMessage[];
+  startedAt: number;
+  endedAt?: number;
+}
+
 export interface SessionState {
   id: string;
   title: string;
@@ -81,6 +98,8 @@ export interface SessionState {
   branchParentId?: string;
   timestamp: string;
   messages: SessionMessage[];
+  /** 本会话拉起的协作 agent 列表（侧栏嵌套展示） */
+  agents?: SessionAgent[];
   /** 引擎事件游标（H2 水合 / H3 增量） */
   engineCursor?: number;
   /** 最近 runId，H3 可拉 snapshot usage */
@@ -111,6 +130,10 @@ interface LayoutStore {
   sessions: SessionState[];
   folderOrder: string[];
   activeSessionId: string;
+  /** 当前聚焦的子 agent（null = 看主对话） */
+  activeAgentId: string | null;
+  /** 右侧「协作 agent」面板要展示的 agent id */
+  panelAgentId: string | null;
   draggedTab: DraggedTabState | null;
   dropPreview: DropPreviewState | null;
   panelsDropdownCoords: { x: number; y: number } | null;
@@ -124,6 +147,19 @@ interface LayoutStore {
   setSidebarCollapsed: (collapsed: boolean) => void;
   setTabModeEnabled: (enabled: boolean) => void;
   setActiveSessionId: (id: string) => void;
+  setActiveAgentId: (id: string | null) => void;
+  setPanelAgentId: (id: string | null) => void;
+  upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
+  patchSessionAgent: (
+    sessionId: string,
+    agentId: string,
+    patch: Partial<SessionAgent>,
+  ) => void;
+  appendSessionAgentMessage: (
+    sessionId: string,
+    agentId: string,
+    message: SessionMessage,
+  ) => void;
   setPanelsDropdownCoords: (coords: { x: number; y: number } | null) => void;
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: string) => void;
@@ -548,6 +584,8 @@ export const useLayoutStore = create<LayoutStore>()(
     sessions: _seed.sessions,
     folderOrder: _seed.folderOrder,
     activeSessionId: _seed.activeSessionId,
+    activeAgentId: null,
+    panelAgentId: null,
     draggedTab: null,
     dropPreview: null,
     panelsDropdownCoords: null,
@@ -908,9 +946,46 @@ export const useLayoutStore = create<LayoutStore>()(
     setUiSize: (size) => set((state) => { state.uiSize = size; }),
     setSidebarCollapsed: (collapsed) => set((state) => { state.sidebarCollapsed = collapsed; }),
     setTabModeEnabled: (enabled) => set((state) => { state.tabModeEnabled = enabled; }),
+    setActiveAgentId: (id) => set((state) => {
+      state.activeAgentId = id;
+    }),
+    setPanelAgentId: (id) => set((state) => {
+      state.panelAgentId = id;
+    }),
+    upsertSessionAgent: (sessionId, agent) => set((state) => {
+      const sess = state.sessions.find((s) => s.id === sessionId);
+      if (!sess) return;
+      if (!sess.agents) sess.agents = [];
+      const i = sess.agents.findIndex((a) => a.id === agent.id);
+      if (i >= 0) {
+        sess.agents[i] = { ...sess.agents[i], ...agent, messages: agent.messages?.length ? agent.messages : sess.agents[i].messages };
+      } else {
+        sess.agents.unshift(agent);
+        if (sess.agents.length > 40) sess.agents.length = 40;
+      }
+    }),
+    patchSessionAgent: (sessionId, agentId, patch) => set((state) => {
+      const sess = state.sessions.find((s) => s.id === sessionId);
+      const ag = sess?.agents?.find((a) => a.id === agentId);
+      if (!ag) return;
+      Object.assign(ag, patch);
+    }),
+    appendSessionAgentMessage: (sessionId, agentId, message) => set((state) => {
+      const sess = state.sessions.find((s) => s.id === sessionId);
+      const ag = sess?.agents?.find((a) => a.id === agentId);
+      if (!ag) return;
+      if (!ag.messages) ag.messages = [];
+      const existing = ag.messages.find((m) => m.id === message.id);
+      if (existing) {
+        Object.assign(existing, message);
+      } else {
+        ag.messages.push(message);
+      }
+    }),
     setActiveSessionId: (id) => {
       set((state) => {
         state.activeSessionId = id;
+        state.activeAgentId = null; // 切会话时回到主对话
         // 切换会话时切换终端缓冲视图
         if (id) {
           state.terminalLines = state.terminalBySession[id] || [];
@@ -1023,6 +1098,7 @@ export const useLayoutStore = create<LayoutStore>()(
 
       const cardId = key;
       const titleMap: Record<string, string> = {
+        agent: '协作 Agent',
         preview: '预览',
         diff: '变更',
         terminal: '终端',

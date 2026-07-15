@@ -48,7 +48,9 @@ import {
   fetchRunSnapshotUsage,
 } from '../api/sessionEventHydrate';
 import { estimateCostUsd } from '../api/pricingStore';
+import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { ApprovalSheet } from './ApprovalSheet';
+import { AgentCard, openAgentInNewWindow } from './AgentCard';
 import {
   PERMISSION_MODES,
   permissionModeMeta,
@@ -73,6 +75,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const {
     sessions,
     activeSessionId,
+    activeAgentId,
+    setActiveAgentId,
+    setPanelAgentId,
+    upsertSessionAgent,
+    // patchSessionAgent reserved for future agent edits
     withdrawMessage,
     setActiveDiffSource,
     respondToApproval,
@@ -463,6 +470,44 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             output: '未获批准',
           });
         }
+      },
+      onSubagentStarted: (info) => {
+        if (!info.subagentId) return;
+        upsertSessionAgent(sid, {
+          id: info.subagentId,
+          subagentRunId: info.subagentRunId,
+          parentSessionId: sid,
+          parentRunId: info.parentRunId,
+          parentToolCallId: info.parentToolCallId,
+          description: info.description || '协作 agent',
+          mode: info.mode || 'research',
+          status: 'running',
+          messages: [],
+          startedAt: Date.now(),
+        });
+      },
+      onSubagentEvent: (info) => {
+        if (!info.subagentId) return;
+        useLayoutStore.setState((state) => {
+          const sess = state.sessions.find((s) => s.id === sid);
+          const ag = sess?.agents?.find((a) => a.id === info.subagentId);
+          if (!ag) return;
+          ag.messages = applySubagentEventToMessages(ag.messages || [], info.event);
+        });
+      },
+      onSubagentEnded: (info) => {
+        if (!info.subagentId) return;
+        useLayoutStore.setState((state) => {
+          const sess = state.sessions.find((s) => s.id === sid);
+          const ag = sess?.agents?.find((a) => a.id === info.subagentId);
+          if (!ag) return;
+          ag.status = info.status;
+          if (info.summary) ag.summary = info.summary;
+          ag.endedAt = Date.now();
+          for (const m of ag.messages || []) {
+            if (m.status === 'processing') m.status = 'completed';
+          }
+        });
       },
       onTerminalLine: (line) => {
         addTerminalLine(line, sid);
@@ -1026,9 +1071,51 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     </div>
   );
 
+  const activeAgent =
+    activeAgentId &&
+    sessions
+      .find((s) => s.id === activeSessionId)
+      ?.agents?.find((a) => a.id === activeAgentId);
+
+  const openAgentRight = (agentId: string) => {
+    setPanelAgentId(agentId);
+    handleGlobalTabClick('agent');
+  };
+
   return (
     <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-      <div className="chat-doc-flow" ref={chatFlowRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 4px' }}>
+      {activeAgent ? (
+        <div className="agent-inline-shell" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="agent-inline-bar">
+            <button
+              type="button"
+              className="agent-inline-back"
+              onClick={() => setActiveAgentId(null)}
+            >
+              <Lucide.ArrowLeft size={13} />
+              返回主对话
+            </button>
+            <span className="agent-inline-hint">协作 agent 视图（与主对话同结构）</span>
+          </div>
+          <AgentCard
+            agentId={activeAgent.id}
+            embedded
+            onClose={() => setActiveAgentId(null)}
+            onOpenRight={() => openAgentRight(activeAgent.id)}
+            onOpenWindow={() => openAgentInNewWindow(activeAgent)}
+          />
+        </div>
+      ) : null}
+      <div
+        className="chat-doc-flow"
+        ref={chatFlowRef}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '12px 16px 4px',
+          display: activeAgent ? 'none' : undefined,
+        }}
+      >
         {messages.length === 0 ? (
           <div className="chat-empty-state">
             <h3 className="chat-empty-title">有什么可以帮你？</h3>
@@ -1508,7 +1595,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         )}
 
         {/* 待确认 sticky：不抢焦点、无蒙层；与时间线内联条同步同一 tool id */}
-        {pendingApprovalTc && (
+        {!activeAgent && pendingApprovalTc && (
           <ApprovalSheet
             variant="sticky"
             tool={{
@@ -1524,7 +1611,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           />
         )}
 
-        <div className="input-container" style={{ position: 'relative' }}>
+        <div
+          className="input-container"
+          style={{ position: 'relative', display: activeAgent ? 'none' : undefined }}
+        >
           {slashMenuOpen && filteredCommands.length > 0 && (
             <div
               className="slash-commands-popover"
