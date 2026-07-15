@@ -98,13 +98,7 @@ html[data-theme="dark"] .tool-result-body {
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
 }
 
-html[data-theme="dark"] .crish-sidebar .session-item.active {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .session-agent-item.active {
-  background: rgba(255, 255, 255, 0.06);
-}
+/* Active rows use color-mix(text-primary) in shell.css — theme-agnostic, no dark rgba override */
 
 /* Settings surfaces — avoid white islands */
 html[data-theme="dark"] .settings-field-input,
@@ -158,12 +152,18 @@ html[data-theme="dark"] .settings-field-input,
 html[data-theme="dark"] textarea.settings-field-input,
 html[data-theme="dark"] select.settings-field-input,
 html[data-theme="dark"] .ui-input,
-html[data-theme="dark"] .chat-soft-hint,
 html[data-theme="dark"] .search-bar,
 html[data-theme="dark"] .ui-segment {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
   border-color: var(--border-color);
+}
+
+/* Soft hints stay outline-only; no filled gray block in dark mode */
+html[data-theme="dark"] .chat-soft-hint {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
 }
 
 html[data-theme="dark"] .settings-card-row.is-active {

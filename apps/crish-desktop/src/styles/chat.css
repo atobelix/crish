@@ -505,7 +505,7 @@
 }
 
 .plus-btn {
-  background: var(--bg-secondary);
+  background: transparent;
   border: none;
   cursor: pointer;
   width: var(--control-height);
@@ -2820,7 +2820,8 @@
   margin: 0 4px 6px;
   padding: 8px 12px;
   border-radius: 10px;
-  background: var(--bg-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.4;

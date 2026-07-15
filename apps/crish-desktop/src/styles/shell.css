@@ -275,7 +275,7 @@ body {
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
+  background: transparent;
 }
 .plan-mode-ribbon-text {
   font-size: var(--font-size-xs);
@@ -639,7 +639,7 @@ body {
 }
 
 .session-item.active {
-  background-color: rgba(0, 0, 0, 0.045);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
 }
 
@@ -2170,7 +2170,7 @@ select.ui-input {
   padding: 7px 10px;
 }
 .session-item.active {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   box-shadow: none;
 }
 
@@ -2287,10 +2287,10 @@ select.ui-input {
   color: var(--text-secondary);
 }
 .sb-nav-item.is-active {
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  border-color: transparent;
+  box-shadow: none;
 }
 .sb-nav-item.is-active svg {
   color: var(--text-secondary);
@@ -2531,9 +2531,9 @@ select.ui-input {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium) !important;
 }
-/* 当前会话：极轻一点底，无白卡片/阴影（整栏仅此一行「选中」） */
+/* 当前会话：token 轻雾选中，无白卡片/阴影（整栏仅此一行「选中」） */
 .crish-sidebar .session-item.active {
-  background: rgba(0, 0, 0, 0.045);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium) !important;
   box-shadow: none;
@@ -2636,7 +2636,7 @@ select.ui-input {
 }
 /* 仅当前选中的 agent 一行轻高亮，不连带父会话一起「四行全亮」 */
 .session-agent-item.active {
-  background: rgba(0, 0, 0, 0.045);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
   font-weight: 400;
 }
