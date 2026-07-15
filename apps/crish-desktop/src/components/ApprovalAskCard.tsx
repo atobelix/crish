@@ -22,7 +22,7 @@ function plainQuestion(summary: string, cmd?: string): string {
   if (/[\u4e00-\u9fff]/.test(s) && s.length <= 56 && !/^[\w./\\-]+$/.test(s)) {
     if (/^是否允许/.test(s)) return s;
     if (
-      /正在|查看|修改|搜索|运行|安装|构建|列出|浏览|执行|启动|切换|推送|拉取|暂存|创建|克隆|配置|发布|还原|请求|连接|传输|管理|查询|应用|进入|删除|复制|移动|格式化|检查|获取|操作|通过|处理|添加|卸载/.test(
+      /正在|查看|修改|搜索|运行|安装|构建|列出|浏览|执行|启动|切换|推送|拉取|暂存|贮藏|创建|克隆|配置|发布|还原|回退|重置|请求|连接|传输|管理|查询|应用|进入|删除|复制|移动|格式化|检查|获取|操作|通过|处理|添加|卸载|编译|刷新|更新/.test(
         s,
       )
     ) {
@@ -44,7 +44,7 @@ function plainQuestion(summary: string, cmd?: string): string {
   if (/kubectl |aws |ssh |chmod |dotnet |cmake |make /i.test(c) || /Kubernetes|AWS|SSH|权限|\.NET|CMake|Make/i.test(s)) {
     return '是否允许执行系统或云资源相关操作？';
   }
-  if (/npm |pnpm |yarn |pip |cargo |go |安装|构建/i.test(c + s)) {
+  if (/npm |pnpm |yarn |bun |pip |cargo |go |composer |安装|构建/i.test(c + s)) {
     return '是否允许运行安装或构建类命令？';
   }
   if (c) {

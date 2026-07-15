@@ -137,6 +137,48 @@ export function humanizeShellCommand(cmd: string): string {
     const tool = raw.replace(/^.*\bnpx\s+/i, '').split(/\s+/)[0];
     return tool ? `运行工具 ${tool}` : '运行命令行工具';
   }
+  if (/\b(pnpm|yarn)\s+dlx\s+/i.test(raw)) {
+    const tool = raw.replace(/^.*\bdlx\s+/i, '').split(/\s+/)[0];
+    return tool ? `运行工具 ${tool}` : '运行命令行工具';
+  }
+
+  // Bun
+  if (/\bbun\s+(ci|install|i)(\s|$)/i.test(raw)) {
+    const rest = raw.replace(/^.*\b(?:ci|install|i)\s*/i, '').trim();
+    const pkg = rest.split(/\s+/).find((t) => t && !t.startsWith('-'));
+    return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
+  }
+  if (/\bbun\s+add\s+/i.test(raw)) {
+    const pkg = raw.replace(/^.*\badd\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
+    return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
+  }
+  if (/\bbun\s+x\s+/i.test(raw) || /\bbunx\s+/i.test(raw)) {
+    const tool = raw.replace(/^.*\b(?:bun\s+x|bunx)\s+/i, '').split(/\s+/)[0];
+    return tool ? `运行工具 ${tool}` : '运行命令行工具';
+  }
+  if (/\bbun\s+(run\s+)?(test|build|dev|start|lint|typecheck)\b/i.test(raw)) {
+    const m = raw.match(/\bbun\s+(?:run\s+)?([\w:-]+)/i);
+    const script = m?.[1]?.toLowerCase();
+    if (script === 'build') return '构建项目';
+    if (script === 'dev' || script === 'start') return '启动开发服务';
+    if (script === 'test' || script?.startsWith('test')) return '运行测试';
+    if (script === 'lint' || script?.startsWith('lint')) return '检查代码规范';
+    if (script === 'typecheck' || script === 'tsc') return '检查类型';
+  }
+  if (/\bbun\s+run\s+([\w:-]+)/i.test(raw)) {
+    const script = raw.match(/\bbun\s+run\s+([\w:-]+)/i)?.[1];
+    return script ? `运行脚本 ${script}` : '运行脚本';
+  }
+  if (/\bbun\b/i.test(raw)) return '执行 Bun 命令';
+
+  // PHP Composer
+  if (/\bcomposer\s+install\b/i.test(raw)) return '安装 PHP 依赖';
+  if (/\bcomposer\s+require\b/i.test(raw)) {
+    const pkg = raw.replace(/^.*\brequire\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
+    return pkg ? `添加 PHP 依赖 ${pkg}` : '添加 PHP 依赖';
+  }
+  if (/\bcomposer\s+update\b/i.test(raw)) return '更新 PHP 依赖';
+  if (/\bcomposer\b/i.test(raw)) return '执行 Composer 命令';
 
   // Python 包 / 脚本
   if (/\b(pip3?|python\s+-m\s+pip|py\s+-m\s+pip)\s+(install|i)\b/i.test(raw)) {
@@ -161,10 +203,13 @@ export function humanizeShellCommand(cmd: string): string {
   // Rust
   if (/\bcargo\s+run\b/i.test(raw)) return '运行 Rust 程序';
   if (/\bcargo\s+test\b/i.test(raw)) return '运行 Rust 测试';
+  if (/\bcargo\s+clippy\b/i.test(raw)) return '检查 Rust 代码';
+  if (/\bcargo\s+fmt\b/i.test(raw)) return '格式化 Rust 代码';
   if (/\bcargo\s+check\b/i.test(raw)) return '检查 Rust 编译';
   if (/\bcargo\s+build\b/i.test(raw)) return '构建 Rust 项目';
   if (/\bcargo\s+add\b/i.test(raw)) return '添加 Rust 依赖';
   if (/\bcargo\s+/i.test(raw)) return '执行 Cargo 命令';
+  if (/\brustc\b/i.test(raw)) return '编译 Rust 源码';
 
   // .NET
   if (/\bdotnet\s+test\b/i.test(raw)) return '运行 .NET 测试';
@@ -198,6 +243,11 @@ export function humanizeShellCommand(cmd: string): string {
   if (/\bgit\s+clone\b/i.test(raw)) return '克隆仓库';
   if (/\bgit\s+fetch\b/i.test(raw)) return '获取远程更新';
   if (/\bgit\s+merge\b|\bgit\s+rebase\b/i.test(raw)) return '合并分支';
+  if (/\bgit\s+stash\b/i.test(raw)) return '贮藏工作区改动';
+  if (/\bgit\s+reset\b/i.test(raw)) return '重置 Git 状态';
+  if (/\bgit\s+restore\b/i.test(raw)) return '还原文件改动';
+  if (/\bgit\s+revert\b/i.test(raw)) return '回退某次提交';
+  if (/\bgit\s+show\b/i.test(raw)) return '查看提交详情';
   if (/\bgit\s+/i.test(raw)) return '执行 Git 操作';
 
   // 云 / 集群 / 远程
