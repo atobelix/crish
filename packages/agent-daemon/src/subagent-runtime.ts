@@ -10,7 +10,10 @@ import {
 } from "@crish/agent-runtime";
 
 export const DAEMON_SUBAGENT_BRIDGE_KIND = "daemon-subagent-runtime";
-export const DEFAULT_MAX_SUBAGENT_DEPTH = 2;
+/** 默认子 agent 嵌套深度；可用 CRISH_MAX_SUBAGENT_DEPTH 覆盖，0 表示实际上限 32 */
+export const DEFAULT_MAX_SUBAGENT_DEPTH = 8;
+/** 深度「不限制」时的安全封顶，防止无限递归 */
+export const SUBAGENT_DEPTH_HARD_CAP = 32;
 
 export type DaemonSubagentMode = "research" | "implement" | "verify";
 
@@ -61,13 +64,24 @@ interface SubagentRunState {
   turns: number;
 }
 
+export function resolveMaxSubagentDepth(configured?: number): number {
+  if (configured === undefined || configured === null || Number.isNaN(configured)) {
+    return DEFAULT_MAX_SUBAGENT_DEPTH;
+  }
+  if (configured <= 0) return SUBAGENT_DEPTH_HARD_CAP;
+  return Math.min(Math.floor(configured), SUBAGENT_DEPTH_HARD_CAP);
+}
+
 export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): AgentTool {
-  const maxDepth = options.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH;
+  const maxDepth = resolveMaxSubagentDepth(options.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH);
 
   return defineTool({
     name: "run_subagent",
     label: "Run sub-agent",
-    description: "Run a focused child agent in a separate daemon run and stream its events back to the parent run.",
+    description:
+      "Spawn a focused collaborator agent as a separate daemon run (parallel-safe). " +
+      "Use multiple run_subagent calls in one turn for concurrent research/implement/verify. " +
+      "Each child has its own session; results stream back to this parent tool call.",
     category: "agent",
     concurrency: "parallel",
     inputSchema: {

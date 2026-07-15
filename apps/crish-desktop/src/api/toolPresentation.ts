@@ -78,6 +78,25 @@ export function toolSummaryLabel(tc: MessageToolCall): string {
   if (name.includes('grep') || name.includes('search')) {
     return cmd ? `搜索 ${cmd.slice(0, 40)}` : '搜索';
   }
+  // 子 agent 协同：优先展示描述/模式
+  if (name === 'run_subagent' || name.includes('subagent')) {
+    try {
+      const parsed = tc.arguments?.trim().startsWith('{')
+        ? (JSON.parse(tc.arguments) as Record<string, unknown>)
+        : null;
+      const desc =
+        (typeof parsed?.description === 'string' && parsed.description.trim()) ||
+        (typeof parsed?.prompt === 'string' && parsed.prompt.trim().slice(0, 48)) ||
+        '';
+      const mode = typeof parsed?.mode === 'string' ? parsed.mode : '';
+      if (desc) return mode ? `子代理·${mode} · ${desc}` : `子代理 · ${desc}`;
+    } catch {
+      /* plain */
+    }
+    const exp0 = (tc.explanation || '').trim();
+    if (exp0 && exp0 !== name) return `子代理 · ${exp0.slice(0, 48)}`;
+    return '子代理';
+  }
 
   // 其它：explanation 若像命令则用；否则 name + cmd
   const exp = (tc.explanation || '').trim();

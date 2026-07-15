@@ -89,18 +89,25 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [projectTick, setProjectTick] = useState(0);
   const [engineHint, setEngineHint] = useState<EngineStatus | null>(null);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
-  /** 当前流式 run 的取消函数 */
-  const streamCancelRef = useRef<null | (() => void)>(null);
-  const activeStreamRef = useRef<{
-    sid: string;
-    userMsgId: string;
-    assistantMsgId: string;
-  } | null>(null);
-  /** 防止 onComplete 重入 drain */
-  const drainingRef = useRef(false);
+  /**
+   * 按会话隔离流式 run：多会话可并行，互不覆盖 cancel。
+   * key = sessionId
+   */
+  const streamsBySessionRef = useRef(
+    new Map<
+      string,
+      {
+        cancel: () => void;
+        userMsgId: string;
+        assistantMsgId: string;
+        runId: string | null;
+      }
+    >(),
+  );
+  /** 防止同会话 onComplete 重入 drain */
+  const drainingSessionsRef = useRef(new Set<string>());
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
-  const currentRunIdRef = useRef<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
 
   const modelChoices = flattenModelChoices();
@@ -335,11 +342,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   }, []);
 
   const drainQueuedAfterComplete = (sid: string) => {
-    if (drainingRef.current) return;
-    drainingRef.current = true;
+    if (drainingSessionsRef.current.has(sid)) return;
+    drainingSessionsRef.current.add(sid);
     try {
       const st = useLayoutStore.getState();
       const sess = st.sessions.find((s) => s.id === sid);
+      // 同会话仍有在跑的助手时不抢跑排队消息
+      const stillBusy = sess?.messages?.some(
+        (m) => m.sender === 'assistant' && m.status === 'processing',
+      );
+      if (stillBusy) return;
       const next = sess?.messages.find((m) => m.sender === 'user' && m.status === 'queued');
       if (next?.text) {
         st.setSessionMessageStatus(sid, next.id, 'processing');
@@ -349,7 +361,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     } finally {
       // 下一帧再允许，避免与本次 onComplete 叠压
       setTimeout(() => {
-        drainingRef.current = false;
+        drainingSessionsRef.current.delete(sid);
       }, 0);
     }
   };
@@ -358,15 +370,17 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const runStreamingAssistant = (input: string, userMsgId: string, sessionIdOverride?: string) => {
     const sid = sessionIdOverride || useLayoutStore.getState().activeSessionId;
     if (!sid) return;
-    const assistantMsgId = `assistant-msg-${Date.now()}`;
+    const assistantMsgId = `assistant-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const store = useLayoutStore.getState();
     const toolNames: Record<string, string> = {};
     const startTime = Date.now();
     let gotRealText = false;
-    openSidePanelOnceRef.current = { terminal: false, diff: false };
-    currentRunIdRef.current = null;
-
-    setActiveDiffSource(null);
+    let localRunId: string | null = null;
+    // 仅当前查看会话时清 diff 焦点，避免后台会话抢右侧
+    if (useLayoutStore.getState().activeSessionId === sid) {
+      openSidePanelOnceRef.current = { terminal: false, diff: false };
+      setActiveDiffSource(null);
+    }
 
     store.addMessage(wsId, sid, {
       id: assistantMsgId,
@@ -378,11 +392,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       toolCalls: []
     });
 
-    activeStreamRef.current = { sid, userMsgId, assistantMsgId };
-
     const cancel = streamAssistantResponseApi(input, {
       onRunMeta: ({ runId }) => {
-        currentRunIdRef.current = runId;
+        localRunId = runId;
+        const entry = streamsBySessionRef.current.get(sid);
+        if (entry && entry.assistantMsgId === assistantMsgId) {
+          entry.runId = runId;
+        }
         // 记在会话上，便于 H3 事后拉 usage
         useLayoutStore.setState((state) => {
           const s = state.sessions.find((x) => x.id === sid);
@@ -570,14 +586,14 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         }
         st.setSessionMessageStatus(sid, userMsgId, 'completed');
         st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
-        if (streamCancelRef.current) streamCancelRef.current = null;
-        if (activeStreamRef.current?.assistantMsgId === assistantMsgId) {
-          activeStreamRef.current = null;
+        const curStream = streamsBySessionRef.current.get(sid);
+        if (curStream?.assistantMsgId === assistantMsgId) {
+          streamsBySessionRef.current.delete(sid);
         }
         // H3：优先 run snapshot 真实 usage；无样本再字数估算
         void (async () => {
           try {
-            const runId = currentRunIdRef.current;
+            const runId = localRunId;
             let applied = false;
             if (runId) {
               // 稍等引擎落盘 snapshot
@@ -616,24 +632,30 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       }
     }, sid, assistantMsgId);
 
-    streamCancelRef.current = cancel;
+    streamsBySessionRef.current.set(sid, {
+      cancel,
+      userMsgId,
+      assistantMsgId,
+      runId: null,
+    });
   };
 
   const handleStopGeneration = () => {
-    const cur = activeStreamRef.current;
-    if (cur) {
-      const st = useLayoutStore.getState();
-      const asst = st.sessions
-        .find((s) => s.id === cur.sid)
-        ?.messages.find((m) => m.id === cur.assistantMsgId);
-      if (asst && !(asst.text || '').trim()) {
-        st.updateMessageText(cur.sid, cur.assistantMsgId, '已停止。');
-        st.updateMessageThinking(cur.sid, cur.assistantMsgId, '');
-      }
+    // 只停当前会话，其它会话的并行 run 继续
+    const sid = activeSessionId;
+    if (!sid) return;
+    const cur = streamsBySessionRef.current.get(sid);
+    if (!cur) return;
+    const st = useLayoutStore.getState();
+    const asst = st.sessions
+      .find((s) => s.id === sid)
+      ?.messages.find((m) => m.id === cur.assistantMsgId);
+    if (asst && !(asst.text || '').trim()) {
+      st.updateMessageText(sid, cur.assistantMsgId, '已停止。');
+      st.updateMessageThinking(sid, cur.assistantMsgId, '');
     }
-    const cancel = streamCancelRef.current;
-    streamCancelRef.current = null;
-    cancel?.();
+    streamsBySessionRef.current.delete(sid);
+    cur.cancel();
   };
 
   const handleSendChat = (_isInsert: boolean = false) => {

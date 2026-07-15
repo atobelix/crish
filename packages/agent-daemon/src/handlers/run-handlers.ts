@@ -497,10 +497,12 @@ export class RunHandler {
       );
     }
 
-    if (this.activeRunCount() >= this.options.config.maxConcurrentRuns) {
+    // maxConcurrentRuns <= 0：不限制（多会话并行 + 单会话多 subagent）
+    const max = this.options.config.maxConcurrentRuns;
+    if (max > 0 && this.activeRunCount() >= max) {
       throw new DaemonRunPreflightError(
         "MAX_CONCURRENT_RUNS",
-        `Max concurrent runs (${this.options.config.maxConcurrentRuns}) reached.`,
+        `Max concurrent runs (${max}) reached.`,
         runId
       );
     }

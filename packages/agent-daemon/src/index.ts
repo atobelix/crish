@@ -209,8 +209,12 @@ if (isMainModule) {
   } else {
     config.port = 8765;
   }
-  if (process.env.DAEMON_MAX_CONCURRENT) {
-    config.maxConcurrentRuns = Number(process.env.DAEMON_MAX_CONCURRENT);
+  if (process.env.DAEMON_MAX_CONCURRENT !== undefined && process.env.DAEMON_MAX_CONCURRENT !== "") {
+    // 0 = unlimited；正整数 = 上限。未设置时沿用 DEFAULT（0 不限制）
+    const n = Number(process.env.DAEMON_MAX_CONCURRENT);
+    if (Number.isFinite(n) && n >= 0) {
+      config.maxConcurrentRuns = Math.floor(n);
+    }
   }
   if (process.env.DAEMON_SESSION_EVENT_LOG_DIR) {
     config.sessionEventLogDir = process.env.DAEMON_SESSION_EVENT_LOG_DIR;

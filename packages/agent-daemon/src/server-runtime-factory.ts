@@ -36,6 +36,7 @@ import { DaemonApprovalHandler } from "./daemon-approval-handler.js";
 import {
   DEFAULT_MAX_SUBAGENT_DEPTH,
   createDaemonSubagentTool,
+  resolveMaxSubagentDepth,
 } from "./subagent-runtime.js";
 import { DaemonPermissionPolicy } from "./daemon-permission-policy.js";
 import type { DaemonPermissionMode } from "./daemon-permission-policy.js";
@@ -523,6 +524,13 @@ export class DaemonRuntimeFactory {
       (tool) => tool.name !== "run_subagent"
     );
 
+    const envMaxDepth = process.env.CRISH_MAX_SUBAGENT_DEPTH;
+    const parsedEnvMax =
+      envMaxDepth !== undefined && envMaxDepth !== "" && Number.isFinite(Number(envMaxDepth))
+        ? Number(envMaxDepth)
+        : undefined;
+    const maxSubagentDepth = resolveMaxSubagentDepth(parsedEnvMax ?? DEFAULT_MAX_SUBAGENT_DEPTH);
+
     return [
       ...baseTools,
       createDaemonSubagentTool({
@@ -530,7 +538,7 @@ export class DaemonRuntimeFactory {
         parentSessionId: input.sessionId,
         cwd: input.cwd,
         depth: input.subagentDepth,
-        maxDepth: DEFAULT_MAX_SUBAGENT_DEPTH,
+        maxDepth: maxSubagentDepth,
         permissionMode: input.permissionMode,
         maxTurns: input.maxTurns,
         startRun: (request) => this.options.startRun(request),

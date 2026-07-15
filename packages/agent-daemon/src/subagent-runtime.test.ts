@@ -6,9 +6,22 @@ import {
 } from "@crish/agent-orchestrator";
 import type { JsonValue } from "@crish/shared-types";
 import type { AgentEvent, AgentMessage, ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";
-import { createDaemonSubagentTool } from "./subagent-runtime";
+import {
+  createDaemonSubagentTool,
+  DEFAULT_MAX_SUBAGENT_DEPTH,
+  resolveMaxSubagentDepth,
+  SUBAGENT_DEPTH_HARD_CAP,
+} from "./subagent-runtime";
 
 describe("daemon subagent runtime", () => {
+  it("resolves max subagent depth with unlimited and hard cap", () => {
+    expect(resolveMaxSubagentDepth(undefined)).toBe(DEFAULT_MAX_SUBAGENT_DEPTH);
+    expect(resolveMaxSubagentDepth(3)).toBe(3);
+    expect(resolveMaxSubagentDepth(0)).toBe(SUBAGENT_DEPTH_HARD_CAP);
+    expect(resolveMaxSubagentDepth(-1)).toBe(SUBAGENT_DEPTH_HARD_CAP);
+    expect(resolveMaxSubagentDepth(999)).toBe(SUBAGENT_DEPTH_HARD_CAP);
+  });
+
   it("starts child runs with stable context in metadata and volatile task card as input", async () => {
     const updates: ToolProgressUpdate[] = [];
     let capturedRequest: StartRunRequest | undefined;

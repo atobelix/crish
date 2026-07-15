@@ -1634,7 +1634,10 @@ export interface DaemonTaskSnapshotCache {
 export interface DaemonConfig {
   /** WebSocket 监听端口，0 表示动态分配 */
   port: number;
-  /** 最大并发任务数 */
+  /**
+   * 最大并发 run 数（含 subagent 子 run）。
+   * **0 表示不限制**，便于多会话并行 + 单会话多 agent 协同。
+   */
   maxConcurrentRuns: number;
   /** 运行时实例空闲保留时间 (ms) */
   runtimeIdleTimeoutMs: number;
@@ -1659,7 +1662,7 @@ export interface DaemonConfig {
 
 export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
   port: 0, // 动态分配
-  maxConcurrentRuns: 10,
+  maxConcurrentRuns: 0, // 0 = 不限制并发
   runtimeIdleTimeoutMs: 5 * 60 * 1000, // 5 分钟
   approvalTimeoutMs: 5 * 60 * 1000,
   defaultCwd: process.cwd(),

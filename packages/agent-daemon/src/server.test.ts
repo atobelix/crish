@@ -2987,6 +2987,63 @@ describe("DaemonServer orchestrated runs", () => {
     server = undefined;
   });
 
+  it("allows unlimited concurrent runs when maxConcurrentRuns is 0", async () => {
+    server = new DaemonServer({
+      port: 0,
+      maxConcurrentRuns: 0,
+      sessionEventLogDir: await tempEventLogDir(),
+    });
+    server.setProviderFactory(() => new BlockingProvider());
+    server.setToolFactory(() => []);
+    const port = await server.start();
+    const ws = await openClient(port);
+
+    ws.send(
+      JSON.stringify({
+        type: "run-task",
+        runId: "run_unlimited_a",
+        sessionId: "session_a",
+        prompt: "hold-a",
+      }),
+    );
+    ws.send(
+      JSON.stringify({
+        type: "run-task",
+        runId: "run_unlimited_b",
+        sessionId: "session_b",
+        prompt: "hold-b",
+      }),
+    );
+    await collectMessages(ws, (message) => {
+      return (
+        message.type === "event" &&
+        message.runId === "run_unlimited_a" &&
+        message.event?.type === "agent-start"
+      );
+    });
+    await collectMessages(ws, (message) => {
+      return (
+        message.type === "event" &&
+        message.runId === "run_unlimited_b" &&
+        message.event?.type === "agent-start"
+      );
+    });
+    const runningStatus = (
+      await sendAndCollectMessages(ws, { type: "get-status" }, (message) => message.type === "status-response")
+    ).at(-1);
+    expect(runningStatus.lifecycle.activeRunCount).toBeGreaterThanOrEqual(2);
+    const ids = (runningStatus.activeRuns as Array<{ runId: string }>).map((r) => r.runId);
+    expect(ids).toEqual(expect.arrayContaining(["run_unlimited_a", "run_unlimited_b"]));
+
+    ws.send(JSON.stringify({ type: "cancel-run", runId: "run_unlimited_a" }));
+    ws.send(JSON.stringify({ type: "cancel-run", runId: "run_unlimited_b" }));
+    await waitForPersistedRunEvent(server, "run_unlimited_a", "run-cancelled");
+    await waitForPersistedRunEvent(server, "run_unlimited_b", "run-cancelled");
+    ws.close();
+    await server.stop();
+    server = undefined;
+  });
+
   it("enforces max concurrent orchestrated runs", async () => {
     server = new DaemonServer({
       port: 0,
