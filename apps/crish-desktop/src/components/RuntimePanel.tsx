@@ -489,9 +489,15 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
           <button
             type="button"
             className="ui-btn ui-btn-ghost ui-btn-sm"
-            onClick={() => useLayoutStore.getState().openSettings('schedule')}
+            onClick={() => {
+              try {
+                window.dispatchEvent(new CustomEvent('crish-open-scheduled'));
+              } catch {
+                useLayoutStore.getState().openSettings('schedule');
+              }
+            }}
           >
-            设置中管理
+            主区管理
           </button>
         </div>
         {workflows.length === 0 && cronJobs.length === 0 ? (

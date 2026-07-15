@@ -79,9 +79,9 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <Lucide.Settings size={16} />
+        <Lucide.Settings size={16} strokeWidth={1.75} />
         <span>设置</span>
-        <Lucide.ChevronUp size={14} className="sb-quick-chev" />
+        <Lucide.ChevronUp size={14} strokeWidth={1.75} className="sb-quick-chev" />
       </button>
 
       {open && menuPos && (
@@ -91,11 +91,11 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           style={{
             left: menuPos.left,
             bottom: menuPos.bottom,
-            width: menuPos.width,
+            width: Math.max(menuPos.width, 240),
           }}
         >
           <div className="sb-quick-section">
-            <div className="sb-quick-label">主题</div>
+            <div className="sb-quick-label">外观</div>
             <div className="ui-segment ui-segment--inline sb-quick-segment">
               <button
                 type="button"
@@ -117,7 +117,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           <div className="sb-quick-divider" />
 
           <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go('models')}>
-            <Lucide.Cpu size={16} />
+            <Lucide.Cpu size={16} strokeWidth={1.75} />
             <span>模型与密钥</span>
           </button>
           <button
@@ -126,11 +126,11 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             role="menuitem"
             onClick={() => go('appearance')}
           >
-            <Lucide.Palette size={16} />
+            <Lucide.Palette size={16} strokeWidth={1.75} />
             <span>外观与字体</span>
           </button>
           <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go()}>
-            <Lucide.SlidersHorizontal size={16} />
+            <Lucide.Settings size={16} strokeWidth={1.75} />
             <span>全部设置</span>
           </button>
 
@@ -147,7 +147,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
               );
             }}
           >
-            <Lucide.RefreshCw size={16} />
+            <Lucide.RefreshCw size={16} strokeWidth={1.75} />
             <span>检查更新</span>
           </button>
         </div>

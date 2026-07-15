@@ -67,6 +67,27 @@ function allowedTabIds(_mcpAvailable: boolean): TabType[] {
   return base;
 }
 
+const TAB_META: {
+  id: TabType;
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  group: string;
+  demoOnly?: boolean;
+}[] = [
+  { id: 'profile', label: '账户', icon: Lucide.User, group: '个人' },
+  { id: 'appearance', label: '外观', icon: Lucide.Palette, group: '个人' },
+  { id: 'personalize', label: '个性化', icon: Lucide.SlidersHorizontal, group: '个人' },
+  { id: 'models', label: '模型', icon: Lucide.Cpu, group: '智能' },
+  { id: 'skills', label: '技能', icon: Lucide.GraduationCap, group: '智能' },
+  { id: 'usage', label: '用量', icon: Lucide.PieChart, group: '智能' },
+  { id: 'rules', label: '规则', icon: Lucide.FileText, group: '智能' },
+  { id: 'schedule', label: '定时任务', icon: Lucide.Clock, group: '工作' },
+  { id: 'shortcuts', label: '快捷键', icon: Lucide.Keyboard, group: '工作' },
+  { id: 'mcp', label: '扩展服务', icon: Lucide.Server, group: '工作' },
+  { id: 'plugins', label: '插件', icon: Lucide.Blocks, group: '演示', demoOnly: true },
+  { id: 'security', label: '安全', icon: Lucide.Shield, group: '安全' },
+];
+
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   wsId: _wsId,
   onShowToast,
@@ -77,6 +98,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
   const [mcpAvailable, setMcpAvailable] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
+  const [navQuery, setNavQuery] = useState('');
 
   const resolveTab = (raw?: string | null): TabType => {
     if (raw && (allowedTabIds(mcpAvailable) as string[]).includes(raw)) return raw as TabType;
@@ -215,30 +237,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
+  const visibleTabs = TAB_META.filter((t) => {
+    if (t.demoOnly && !isDemoMode()) return false;
+    if (!(allowedTabIds(mcpAvailable) as string[]).includes(t.id)) return false;
+    const q = navQuery.trim().toLowerCase();
+    if (!q) return true;
+    return t.label.toLowerCase().includes(q) || t.group.toLowerCase().includes(q);
+  });
+
   return (
     <div
       className="settings-panel settings-panel--cover"
       onWheel={handleRootWheel}
     >
-      <header className="settings-cover-header" data-tauri-drag-region>
-        <div className="settings-cover-header-left" data-tauri-drag-region>
-          {onClose ? (
-            <button
-              type="button"
-              className="settings-back-btn no-drag"
-              data-tauri-drag-region="false"
-              onClick={onClose}
-              title="返回工作区"
-            >
-              <Lucide.ArrowLeft size={16} />
-              <span>返回</span>
-            </button>
-          ) : null}
-          <div className="settings-cover-title-block" data-tauri-drag-region>
-            <h1 className="settings-cover-title">设置</h1>
-            <span className="settings-cover-subtitle">偏好与工作区配置</span>
-          </div>
-        </div>
+      {/* 顶栏极简：仅拖拽区 + 关闭，返回/搜索进左侧导航列（对齐 ChatGPT 参考） */}
+      <header className="settings-cover-header settings-cover-header--slim" data-tauri-drag-region>
+        <div className="settings-cover-header-spacer" data-tauri-drag-region />
         {onClose ? (
           <button
             type="button"
@@ -248,51 +262,63 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             title="关闭"
             aria-label="关闭设置"
           >
-            <Lucide.X size={16} />
+            <Lucide.X size={18} strokeWidth={1.75} />
           </button>
         ) : null}
       </header>
 
       <div className="settings-cover-body">
         <nav className="settings-cover-nav" aria-label="设置分类">
-          {(
-            [
-              { id: 'profile' as const, label: '账户', icon: Lucide.User, group: '通用' },
-              { id: 'appearance' as const, label: '外观', icon: Lucide.Palette, group: '通用' },
-              { id: 'personalize' as const, label: '个性化', icon: Lucide.SlidersHorizontal, group: '通用' },
-              { id: 'models' as const, label: '模型', icon: Lucide.Cpu, group: '智能' },
-              { id: 'skills' as const, label: '技能', icon: Lucide.GraduationCap, group: '智能' },
-              { id: 'usage' as const, label: '用量', icon: Lucide.PieChart, group: '智能' },
-              { id: 'rules' as const, label: '规则', icon: Lucide.FileText, group: '智能' },
-              { id: 'schedule' as const, label: '定时任务', icon: Lucide.Clock, group: '工作' },
-              { id: 'shortcuts' as const, label: '快捷键', icon: Lucide.Keyboard, group: '工作' },
-              { id: 'mcp' as const, label: '扩展服务', icon: Lucide.Server, group: '工作' },
-              ...(isDemoMode()
-                ? ([{ id: 'plugins' as const, label: '插件', icon: Lucide.Blocks, group: '演示' }] as const)
-                : []),
-              { id: 'security' as const, label: '安全', icon: Lucide.Shield, group: '安全' },
-            ] as const
-          ).map((tab, idx, arr) => {
-            const isTabActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            const showGroup = idx === 0 || arr[idx - 1].group !== tab.group;
+          {onClose ? (
+            <button
+              type="button"
+              className="settings-nav-back no-drag"
+              onClick={onClose}
+              title="返回工作区"
+            >
+              <Lucide.ArrowLeft size={16} strokeWidth={1.75} />
+              <span>返回应用</span>
+            </button>
+          ) : null}
 
-            return (
-              <React.Fragment key={tab.id}>
-                {showGroup && (
-                  <div className="settings-nav-group">{tab.group}</div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => selectTab(tab.id)}
-                  className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
-                >
-                  <Icon size={16} style={{ color: isTabActive ? 'var(--text-primary)' : 'var(--text-tertiary)' }} />
-                  <span>{tab.label}</span>
-                </button>
-              </React.Fragment>
-            );
-          })}
+          <div className="settings-nav-search-wrap">
+            <Lucide.Search size={14} strokeWidth={1.75} className="settings-nav-search-ico" aria-hidden />
+            <input
+              type="search"
+              className="settings-nav-search"
+              placeholder="搜索设置…"
+              value={navQuery}
+              onChange={(e) => setNavQuery(e.target.value)}
+              aria-label="搜索设置"
+            />
+          </div>
+
+          <div className="settings-nav-scroll">
+            {visibleTabs.map((tab, idx, arr) => {
+              const isTabActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              const showGroup = idx === 0 || arr[idx - 1].group !== tab.group;
+
+              return (
+                <React.Fragment key={tab.id}>
+                  {showGroup && <div className="settings-nav-group">{tab.group}</div>}
+                  <button
+                    type="button"
+                    onClick={() => selectTab(tab.id)}
+                    className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
+                  >
+                    <span className="settings-sidebar-tab-ico" aria-hidden>
+                      <Icon size={16} strokeWidth={1.75} />
+                    </span>
+                    <span>{tab.label}</span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+            {visibleTabs.length === 0 ? (
+              <div className="settings-nav-empty">无匹配项</div>
+            ) : null}
+          </div>
         </nav>
 
         <div ref={contentAreaRef} className="settings-cover-content">

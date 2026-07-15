@@ -187,10 +187,10 @@
   height: 34px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -234,12 +234,13 @@ select.settings-field-input {
 .settings-profile-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--bg-primary);
-  margin-bottom: 16px;
+  gap: 14px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 4px 0 16px;
+  background: transparent;
+  margin-bottom: 12px;
 }
 
 .settings-profile-avatar {
@@ -267,17 +268,17 @@ select.settings-field-input {
   gap: 12px;
 }
 
-/* Settings nav — ghost items, soft brand active (no heavy filled blocks) */
+/* Settings nav — ChatGPT 式：轻选中、圆润、无色块堆叠 */
 .settings-sidebar-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px !important;
-  border-radius: 8px !important;
+  gap: 10px;
+  padding: 9px 12px !important;
+  border-radius: 999px !important;
   border: none !important;
   cursor: pointer;
-  font-size: var(--font-size-base) !important;
-  font-weight: var(--font-weight-medium) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-normal) !important;
   text-align: left;
   width: 100%;
   background: transparent;
@@ -288,28 +289,42 @@ select.settings-field-input {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* 导航选中：中性底，不用大面积绿 */
 .settings-sidebar-tab.active {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
+  font-weight: var(--font-weight-medium) !important;
+}
+.settings-sidebar-tab-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.88;
+}
+.settings-sidebar-tab.active .settings-sidebar-tab-ico {
+  opacity: 1;
 }
 .settings-sidebar-tab.active svg {
   color: var(--text-primary);
 }
+/* 列表/表单块：默认透明，仅细线分隔，减少「脏」底 */
 .settings-card-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   padding: 12px 14px;
-  background: var(--bg-secondary);
+  background: transparent;
   color: var(--text-primary);
 }
 .settings-card-row.is-active {
   border-color: var(--border-color);
-  background: var(--bg-tertiary);
-  box-shadow: 0 0 0 1px var(--border-color);
+  background: transparent;
+  box-shadow: none;
 }
 
 .settings-scope-selector {
@@ -392,13 +407,22 @@ select.settings-field-input {
 .settings-cover-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  height: 52px;
-  padding: 0 16px 0 12px;
+  justify-content: flex-end;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   flex-shrink: 0;
+}
+.settings-cover-header--slim {
+  min-height: 40px;
+  height: 40px;
+}
+.settings-cover-header-spacer {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
 }
 .settings-cover-header-left {
   display: flex;
@@ -406,26 +430,79 @@ select.settings-field-input {
   gap: 12px;
   min-width: 0;
 }
-.settings-back-btn {
+.settings-back-btn,
+.settings-nav-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: var(--control-height);
+  gap: 8px;
+  height: 36px;
   padding: 0 12px 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   flex-shrink: 0;
   box-shadow: none;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
 }
-.settings-back-btn:hover {
+.settings-back-btn:hover,
+.settings-nav-back:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: transparent;
+}
+.settings-nav-search-wrap {
+  position: relative;
+  margin: 4px 0 10px;
+  flex-shrink: 0;
+}
+.settings-nav-search-ico {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.settings-nav-search {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  outline: none;
+  box-sizing: border-box;
+}
+.settings-nav-search::placeholder {
+  color: var(--text-tertiary);
+}
+.settings-nav-search:focus {
   border-color: var(--border-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.settings-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 12px;
+}
+.settings-nav-empty {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 12px 10px;
 }
 .settings-cover-title-block {
   display: flex;
@@ -446,10 +523,10 @@ select.settings-field-input {
   line-height: 1.2;
 }
 .settings-cover-close {
-  width: var(--control-height);
-  height: var(--control-height);
+  width: 32px;
+  height: 32px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-tertiary);
   display: inline-flex;
@@ -469,23 +546,22 @@ select.settings-field-input {
   overflow: hidden;
 }
 .settings-cover-nav {
-  width: 200px;
+  width: 228px;
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
-  /* 与主内容同级灰阶，仅靠分割线区分，避免大块黑底 */
-  background: var(--bg-primary);
-  padding: 12px 10px 16px;
-  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg-secondary) 55%, var(--bg-primary));
+  padding: 12px 12px 16px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 .settings-nav-group {
-  font-size: var(--font-size-xxs);
+  font-size: 11px;
   font-weight: var(--font-weight-normal);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: var(--text-tertiary);
-  padding: 12px 10px 4px;
+  padding: 14px 12px 6px;
   text-transform: none;
 }
 .settings-cover-content {
@@ -494,15 +570,24 @@ select.settings-field-input {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 28px 32px;
+  padding: 28px 40px 40px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   position: relative;
   background: var(--bg-primary);
-  /* 占满右侧，内部再居中内容，避免整页偏左 + 矮小 */
   max-width: none;
   align-items: stretch;
+}
+.settings-section-header h4 {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.settings-section-header p,
+.settings-section-header + p {
+  margin-top: 6px;
 }
 .settings-cover-content > * {
   width: 100%;
@@ -716,10 +801,9 @@ select.settings-field-input {
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
   padding: 0 8px 0 10px;
-  /* 浅描边，禁止黑框 */
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-tertiary);
+  border-radius: 999px;
+  background: transparent;
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);

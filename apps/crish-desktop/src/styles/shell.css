@@ -2861,9 +2861,9 @@ select.ui-input {
   z-index: 5000;
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: var(--shadow-lg);
-  padding: 8px;
+  padding: 10px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2880,36 +2880,37 @@ select.ui-input {
 .sb-quick-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 4px 8px;
+  gap: 8px;
+  padding: 8px 6px 10px;
 }
 .sb-quick-label {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  padding: 0 4px;
+  padding: 0 8px;
 }
 .sb-quick-segment {
   width: 100%;
 }
 .sb-quick-segment .ui-segment-item {
   flex: 1;
+  border-radius: 999px;
 }
 .sb-quick-divider {
   height: 1px;
   background: var(--border-subtle);
-  margin: 4px 2px;
+  margin: 6px 8px;
   border: none;
 }
 .sb-quick-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 9px 10px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
   cursor: pointer;
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -2922,6 +2923,7 @@ select.ui-input {
 .sb-quick-item svg {
   color: var(--text-tertiary);
   flex-shrink: 0;
+  stroke-width: 1.75;
 }
 
 /* Hide legacy gateway chrome if any residual markup appears */
