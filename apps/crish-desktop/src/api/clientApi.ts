@@ -1,15 +1,24 @@
 /**
- * clientApi — localStorage-backed client preferences + demo-only mocks.
+ * clientApi — localStorage-backed client preferences + demo-gated stubs.
  *
- * 正式路径约定（勿走死轨）：
- * - 勿用 getProviders / fetchLatestModels / updateProvider*（正式模型用 providerProfiles + ModelsSettingsTab）
- * - 正式 MCP 用 mcpApi（本文件 getMcpServers* 仅为 demo/legacy localStorage）
- * - Settings（getSettings / updateSettings / getSettingsEx / saveSettingsEx）仍为正式路径，SettingsPanel 在用
- * - 正式 telemetry / scheduled tasks 不在此发明假数据；见下方 DEAD / HONEST-HIDE
+ * 正式路径（保留实现）：
+ * - Settings：getSettings / updateSettings / getSettingsEx / saveSettingsEx
+ *   → SettingsPanel / SettingsRulesTab / SkillsSettingsTab / App / ChatCard
+ * - subscribeTelemetry：正式安静 no-op；demo 转发 clientApi.demo
+ *
+ * 正式勿走（DEAD / HONEST-HIDE，实现在 clientApi.demo.ts）：
+ * - getProviders / updateProvider* / fetchLatestModels → 用 providerProfiles + ModelsSettingsTab
+ * - getMcpServers* / saveMcpServer / deleteMcpServer → 正式用 mcpApi；demo 用 localStorage
+ * - getScheduledTasks / saveScheduledTask / deleteScheduledTask → 正式无假定时；demo localStorage
+ *
+ * 转发约定：
+ *   if (isDemoMode()) return clientApiDemo.xxx(...)
+ *   else return [] | no-op  // HONEST-HIDE
  *
  * 兼容：`export const piClientApi = clientApi`（勿再新建 piClientApi.ts）
  */
 import { isDemoMode } from './appMode';
+import { clientApiDemo } from './clientApi.demo';
 
 export interface CompactionSettings {
   enabled?: boolean;
@@ -114,6 +123,7 @@ export interface Settings {
   responseStyle?: 'minimal' | 'low' | 'medium' | 'high';
 }
 
+/** Demo / layoutStore shape; formal models use providerProfiles. */
 export interface ProviderInfo {
   id: string;
   name: string;
@@ -121,6 +131,7 @@ export interface ProviderInfo {
   models: string[];
 }
 
+/** Demo / RuntimePanel shape; formal has no invented cron list. */
 export interface CronJob {
   id: string;
   cronExpression: string;
@@ -130,6 +141,7 @@ export interface CronJob {
   nextRun: string;
 }
 
+/** Demo / McpSettingsTab mock shape; formal MCP uses mcpApi.McpServerInfo. */
 export interface McpServer {
   id: string;
   name: string;
@@ -141,15 +153,9 @@ export interface McpServer {
   tools: string[];
 }
 
-// LocalStorage Keys
+// LocalStorage Keys (settings only — providers/cron/mcp live in clientApi.demo)
 const SETTINGS_KEY = 'crish_settings';
 const SETTINGS_KEY_LEGACY = 'conex_pi_settings';
-const PROVIDERS_KEY = 'crish_providers';
-const PROVIDERS_KEY_LEGACY = 'conex_pi_providers';
-const CRON_KEY = 'crish_cron';
-const CRON_KEY_LEGACY = 'conex_pi_cron';
-const MCP_KEY = 'crish_mcp';
-const MCP_KEY_LEGACY = 'conex_pi_mcp';
 
 const DEFAULT_SETTINGS: Settings = {
   customRules: [],
@@ -178,43 +184,6 @@ const DEFAULT_SETTINGS: Settings = {
   responseStyle: 'medium',
 };
 
-const DEFAULT_PROVIDERS: ProviderInfo[] = [
-  {
-    id: 'google',
-    name: 'Google Gemini',
-    apiKey: '••••••••••••••••••••••••',
-    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-thinking', 'gemini-2.0-pro-exp']
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    apiKey: '',
-    models: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229']
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI GPT',
-    apiKey: '',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o1-pro', 'o3-mini']
-  },
-  {
-    id: 'bedrock',
-    name: 'Amazon Bedrock',
-    apiKey: '',
-    models: ['us.anthropic.claude-3-5-sonnet-20241022-v2:0', 'us.meta.llama3-1-70b-instruct-v1:0']
-  },
-  {
-    id: 'mistral',
-    name: 'Mistral AI',
-    apiKey: '',
-    models: ['mistral-large-latest', 'codestral-latest']
-  }
-];
-
-/** 正式版：新用户不 seed 假定时任务 / 假 MCP */
-const DEFAULT_CRON: CronJob[] = [];
-const DEFAULT_MCP: McpServer[] = [];
-
 function lsGet(key: string, legacy?: string): string | null {
   try {
     const v = localStorage.getItem(key);
@@ -232,19 +201,9 @@ function lsGet(key: string, legacy?: string): string | null {
   return null;
 }
 
-// Helper to initialize LocalStorage if empty
-const initDb = () => {
+const initSettingsDb = () => {
   if (!lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
-  }
-  if (!lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)) {
-    localStorage.setItem(PROVIDERS_KEY, JSON.stringify(DEFAULT_PROVIDERS));
-  }
-  if (!lsGet(CRON_KEY, CRON_KEY_LEGACY)) {
-    localStorage.setItem(CRON_KEY, JSON.stringify(DEFAULT_CRON));
-  }
-  if (!lsGet(MCP_KEY, MCP_KEY_LEGACY)) {
-    localStorage.setItem(MCP_KEY, JSON.stringify(DEFAULT_MCP));
   }
 };
 
@@ -285,7 +244,8 @@ function projectSettingsKey(cwd: string): string {
 }
 
 export const clientApi = {
-  // Settings Management
+  // ── Settings（正式路径）────────────────────────────────────────────────
+
   getSettings: async (): Promise<Settings> => {
     let cwd = '';
     try {
@@ -300,9 +260,8 @@ export const clientApi = {
     return clientApi.saveSettingsEx('__global__', 'global', updates);
   },
 
-  // Scoped Settings (Global vs Project)
   getSettingsEx: async (cwd: string): Promise<Settings> => {
-    initDb();
+    initSettingsDb();
     await new Promise(resolve => setTimeout(resolve, 100));
     const globalSettings = JSON.parse(lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)!);
 
@@ -324,7 +283,7 @@ export const clientApi = {
   },
 
   saveSettingsEx: async (cwd: string, scope: 'global' | 'project', updates: Partial<Settings>): Promise<Settings> => {
-    initDb();
+    initSettingsDb();
     await acquireWriteLock();
     try {
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -349,195 +308,79 @@ export const clientApi = {
     }
   },
 
-  // Telemetry: demo uses mock stream; formal edition stays quiet
+  // ── Telemetry：正式 no-op；demo → clientApi.demo ───────────────────────
+
   subscribeTelemetry: (onData: (data: any) => void): (() => void) => {
-    // Formal product: do not invent token counters or fake workers
-    if (!isDemoMode()) {
-      return () => undefined;
-    }
-
-    let ws: WebSocket | null = null;
-    let mockInterval: any = null;
-    let isClosed = false;
-
-    let inputTokens = 115482;
-    let outputTokens = 24930;
-    let cost = 0.345;
-
-    const connect = () => {
-      if (isClosed) return;
-      try {
-        ws = new WebSocket('ws://localhost:3011/telemetry');
-        ws.onmessage = (event) => {
-          try {
-            const parsed = JSON.parse(event.data);
-            if (parsed.type === 'telemetry') {
-              onData(parsed.data);
-            }
-          } catch (e) {
-            console.error('Telemetry parse error:', e);
-          }
-        };
-        ws.onerror = () => {};
-        ws.onclose = () => {
-          ws = null;
-          if (!isClosed && !mockInterval) {
-            startMockTelemetry();
-          }
-        };
-      } catch {
-        if (!isClosed && !mockInterval) {
-          startMockTelemetry();
-        }
-      }
-    };
-
-    const startMockTelemetry = () => {
-      mockInterval = setInterval(() => {
-        inputTokens += Math.floor(Math.random() * 250);
-        outputTokens += Math.floor(Math.random() * 50);
-        cost = parseFloat((cost + Math.random() * 0.005).toFixed(4));
-
-        onData({
-          tokenUsage: {
-            input: inputTokens,
-            inputMax: 160000,
-            output: outputTokens,
-            outputMax: 40000,
-            cost: cost,
-          },
-          activeWorkers: [
-            { id: 'worker-1', taskName: 'Git diff analysis', elapsedSeconds: Math.floor(Math.random() * 20) + 5 },
-            { id: 'worker-2', taskName: 'indexing codebase', elapsedSeconds: Math.floor(Math.random() * 60) + 120 },
-          ],
-          mcpServers: JSON.parse(lsGet(MCP_KEY, MCP_KEY_LEGACY) || '[]'),
-          cronJobs: JSON.parse(lsGet(CRON_KEY, CRON_KEY_LEGACY) || '[]'),
-        });
-      }, 2000);
-    };
-
-    connect();
-    startMockTelemetry();
-
-    return () => {
-      isClosed = true;
-      if (ws) ws.close();
-      if (mockInterval) clearInterval(mockInterval);
-    };
+    if (!isDemoMode()) return () => undefined;
+    return clientApiDemo.subscribeTelemetry(onData);
   },
 
-  // Providers & Keys — DEAD for formal path (use providerProfiles). Demo-only mock below.
+  // ── Providers — DEAD formal（providerProfiles）；demo mock ──────────────
+
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   getProviders: async (): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return []; // HONEST-HIDE formal
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
+    if (!isDemoMode()) return [];
+    return clientApiDemo.getProviders();
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderKey: async (id: string, apiKey: string): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return []; // HONEST-HIDE formal
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
-    const updated = list.map(p => p.id === id ? { ...p, apiKey } : p);
-    localStorage.setItem(PROVIDERS_KEY, JSON.stringify(updated));
-    return updated;
+    if (!isDemoMode()) return [];
+    return clientApiDemo.updateProviderKey(id, apiKey);
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderModels: async (id: string, models: string[]): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return []; // HONEST-HIDE formal
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    const list: ProviderInfo[] = JSON.parse(lsGet(PROVIDERS_KEY, PROVIDERS_KEY_LEGACY)!);
-    const updated = list.map(p => p.id === id ? { ...p, models } : p);
-    localStorage.setItem(PROVIDERS_KEY, JSON.stringify(updated));
-    return updated;
+    if (!isDemoMode()) return [];
+    return clientApiDemo.updateProviderModels(id, models);
   },
 
   /** @deprecated DEAD formal — use providerProfiles / ModelsSettingsTab. HONEST-HIDE: formal returns []. */
   fetchLatestModels: async (id: string): Promise<string[]> => {
-    if (!isDemoMode()) return []; // HONEST-HIDE formal — no fake model catalog
-    await new Promise(resolve => setTimeout(resolve, 800)); // 模拟网络延迟
-    if (id === 'google') {
-      return ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-thinking', 'gemini-2.0-pro-exp', 'gemini-2.5-flash', 'gemini-2.5-pro'];
-    } else if (id === 'anthropic') {
-      return ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229', 'claude-3-7-sonnet', 'claude-3-7-opus'];
-    } else if (id === 'openai') {
-      return ['gpt-4o', 'gpt-4o-mini', 'o1-pro', 'o3-mini', 'o1-preview', 'gpt-4.5-preview'];
-    } else if (id === 'bedrock') {
-      return ['us.anthropic.claude-3-5-sonnet-20241022-v2:0', 'us.meta.llama3-1-70b-instruct-v1:0', 'us.amazon.nova-pro-v1:0'];
-    } else if (id === 'mistral') {
-      return ['mistral-large-latest', 'codestral-latest', 'mistral-saba-latest'];
-    }
-    return ['custom-model-v1', 'custom-model-v2'];
+    if (!isDemoMode()) return [];
+    return clientApiDemo.fetchLatestModels(id);
   },
 
-  // Cron / Scheduled Tasks — formal: no invented cron list (demo may use localStorage)
+  // ── Cron — formal 无假定时；demo localStorage ──────────────────────────
+
   /** HONEST-HIDE formal: returns []. Demo only reads localStorage mock. */
   getScheduledTasks: async (): Promise<CronJob[]> => {
-    if (!isDemoMode()) return []; // HONEST-HIDE formal
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 120));
-    return JSON.parse(lsGet(CRON_KEY, CRON_KEY_LEGACY)!);
+    if (!isDemoMode()) return [];
+    return clientApiDemo.getScheduledTasks();
   },
 
+  /** HONEST-HIDE formal: returns []. */
   saveScheduledTask: async (task: CronJob): Promise<CronJob[]> => {
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const list: CronJob[] = JSON.parse(lsGet(CRON_KEY, CRON_KEY_LEGACY)!);
-    const existsIdx = list.findIndex(c => c.id === task.id);
-    if (existsIdx !== -1) {
-      list[existsIdx] = task;
-    } else {
-      list.push(task);
-    }
-    localStorage.setItem(CRON_KEY, JSON.stringify(list));
-    return list;
+    if (!isDemoMode()) return [];
+    return clientApiDemo.saveScheduledTask(task);
   },
 
+  /** HONEST-HIDE formal: returns []. */
   deleteScheduledTask: async (id: string): Promise<CronJob[]> => {
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    const list: CronJob[] = JSON.parse(lsGet(CRON_KEY, CRON_KEY_LEGACY)!);
-    const filtered = list.filter(c => c.id !== id);
-    localStorage.setItem(CRON_KEY, JSON.stringify(filtered));
-    return filtered;
+    if (!isDemoMode()) return [];
+    return clientApiDemo.deleteScheduledTask(id);
   },
 
-  // MCP Servers Management
+  // ── MCP localStorage — formal 用 mcpApi；demo mock ─────────────────────
+
+  /** HONEST-HIDE formal: returns []. Demo: localStorage. Formal MCP → mcpApi. */
   getMcpServers: async (): Promise<McpServer[]> => {
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 120));
-    return JSON.parse(lsGet(MCP_KEY, MCP_KEY_LEGACY)!);
+    if (!isDemoMode()) return [];
+    return clientApiDemo.getMcpServers();
   },
 
+  /** HONEST-HIDE formal: returns []. */
   saveMcpServer: async (server: McpServer): Promise<McpServer[]> => {
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const list: McpServer[] = JSON.parse(lsGet(MCP_KEY, MCP_KEY_LEGACY)!);
-    const existsIdx = list.findIndex(m => m.id === server.id);
-    if (existsIdx !== -1) {
-      list[existsIdx] = server;
-    } else {
-      list.push(server);
-    }
-    localStorage.setItem(MCP_KEY, JSON.stringify(list));
-    return list;
+    if (!isDemoMode()) return [];
+    return clientApiDemo.saveMcpServer(server);
   },
 
+  /** HONEST-HIDE formal: returns []. */
   deleteMcpServer: async (id: string): Promise<McpServer[]> => {
-    initDb();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    const list: McpServer[] = JSON.parse(lsGet(MCP_KEY, MCP_KEY_LEGACY)!);
-    const filtered = list.filter(m => m.id !== id);
-    localStorage.setItem(MCP_KEY, JSON.stringify(filtered));
-    return filtered;
-  }
+    if (!isDemoMode()) return [];
+    return clientApiDemo.deleteMcpServer(id);
+  },
 };
-
 
 /** @deprecated use clientApi */
 export const piClientApi = clientApi;

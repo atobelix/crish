@@ -34,7 +34,7 @@ html[data-theme="dark"] .cplus-flyout {
   color: var(--text-primary);
 }
 
-/* flat-layout / chat 壳层在 index 内有 background !important，需对等覆盖 */
+/* flat-layout / chat 壳层：token 背景；html[data-theme] 特异性通常足够 */
 html[data-theme="dark"] .workspace-card.flat-layout,
 html[data-theme="dark"] .workspace-card.flat-layout .card-body,
 html[data-theme="dark"] .workspace-card.flat-layout .card-header,
@@ -42,7 +42,7 @@ html[data-theme="dark"] .chat-body,
 html[data-theme="dark"] .chat-doc-flow,
 html[data-theme="dark"] .chat-footer,
 html[data-theme="dark"] .breadcrumb-item {
-  background-color: var(--bg-primary) !important;
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
@@ -85,7 +85,7 @@ html[data-theme="dark"] .header-btn {
 
 /* Quiet active wins in .crish-sidebar; do not force !important on sessions */
 html[data-theme="dark"] .card-tab.active {
-  background-color: var(--bg-active) !important;
+  background-color: var(--bg-active);
   color: var(--text-primary);
 }
 
@@ -128,17 +128,17 @@ html[data-theme="dark"] .shortcut-key-btn {
   box-shadow: none;
 }
 
-/* .shortcut-key-btn.recording 在 index 使用 !important，需对等 */
+/* .shortcut-key-btn.recording */
 html[data-theme="dark"] .shortcut-key-btn.recording {
-  background: var(--bg-active) !important;
-  color: var(--text-primary) !important;
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 
-/* settings buttons 在 index 有 border !important */
+/* settings buttons border */
 html[data-theme="dark"] .settings-btn-primary,
 html[data-theme="dark"] .settings-btn-secondary,
 html[data-theme="dark"] .settings-btn-flat {
-  border-color: var(--border-color) !important;
+  border-color: var(--border-color);
 }
 
 html[data-theme="dark"] .custom-modal-backdrop > div {
@@ -210,11 +210,11 @@ html[data-theme="dark"] .chat-doc-flow p {
   color: var(--text-primary);
 }
 
-/* assistant code 在 index 使用 background !important */
+/* assistant code surfaces */
 html[data-theme="dark"] .msg-assistant-text code,
 html[data-theme="dark"] .chat-doc-flow p code,
 html[data-theme="dark"] .msg-assistant-text pre {
-  background: var(--bg-tertiary) !important;
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
@@ -236,23 +236,23 @@ html[data-theme="dark"] .settings-back-btn {
   border-color: var(--border-subtle);
 }
 
-/* settings cover 壳层：index 内有 background !important 的扁平化规则 */
+/* settings cover 壳层 */
 html[data-theme="dark"] .settings-cover,
 html[data-theme="dark"] .settings-panel--cover,
 html[data-theme="dark"] .settings-cover-header,
 html[data-theme="dark"] .settings-cover-content {
-  background: var(--bg-primary) !important;
+  background: var(--bg-primary);
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
 
 html[data-theme="dark"] .settings-cover-nav {
-  background: var(--bg-primary) !important;
+  background: var(--bg-primary);
 }
 
-/* pp-menu / menus 在 index 使用 background !important */
+/* pp-menu / menus elevated surfaces */
 html[data-theme="dark"] .settings-select-menu {
-  background: var(--bg-elevated) !important;
+  background: var(--bg-elevated);
   border-color: var(--border-subtle) !important;
   box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45);
 }
@@ -268,7 +268,7 @@ html[data-theme="dark"] .settings-select.is-open .settings-select-trigger {
 }
 
 html[data-theme="dark"] .sb-quick-menu {
-  background: var(--bg-elevated) !important;
+  background: var(--bg-elevated);
   border-color: var(--border-subtle) !important;
 }
 
