@@ -1874,6 +1874,32 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </button>
           </div>
         )}
+        {permissionMode === 'plan' && (
+          <div className="plan-mode-ribbon">
+            <div className="plan-mode-ribbon-text">
+              <strong>计划模式</strong>
+              ：只读分析，不改项目文件。进度与步骤见右侧总览。
+            </div>
+            <div className="plan-mode-ribbon-actions">
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('crish-open-overview'));
+                }}
+              >
+                总览
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                onClick={() => setPermissionMode('ask')}
+              >
+                退出
+              </button>
+            </div>
+          </div>
+        )}
         {/* 回到最新：浮在对话区右下角，仅图标 */}
         {showScrollToBottom && (
           <button

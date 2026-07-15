@@ -521,6 +521,75 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* 顶层渲染崩溃时的兜底（避免 root 全空） */
+.app-error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg-primary, #fafafa);
+  padding: 24px;
+  box-sizing: border-box;
+}
+.app-error-card {
+  max-width: 420px;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-secondary, #fff);
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.app-error-title {
+  font-size: var(--font-size-lg, 16px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+.app-error-msg {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+  font-family: var(--font-mono, monospace);
+  max-height: 120px;
+  overflow: auto;
+}
+.app-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.plan-mode-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+.plan-mode-ribbon-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  min-width: 0;
+}
+.plan-mode-ribbon-text strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+.plan-mode-ribbon-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .navigation-arrows {
   display: flex;
   gap: 1px;
