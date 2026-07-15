@@ -49,6 +49,8 @@ export const ModelPicker: React.FC<Props> = ({
   const [tick, setTick] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [scanBusy, setScanBusy] = useState<string | null>(null);
+  /** 扫描失败时的内联错误（按提供商，不单靠 toast） */
+  const [scanErrors, setScanErrors] = useState<Record<string, string>>({});
   const [testBusy, setTestBusy] = useState<string | null>(null);
   const [addDraft, setAddDraft] = useState<Record<string, string>>({});
   const [ctxEdit, setCtxEdit] = useState<string | null>(null);
@@ -87,13 +89,23 @@ export const ModelPicker: React.FC<Props> = ({
   const handleScan = async (p: ProviderProfile) => {
     if (scanBusy) return;
     setScanBusy(p.id);
+    setScanErrors((e) => {
+      const next = { ...e };
+      delete next[p.id];
+      return next;
+    });
     try {
       const res = await scanProviderModels(p);
       if (!res.ok) {
-        onToast?.(res.error || '扫描失败');
+        const msg = res.error || '扫描失败';
+        setScanErrors((e) => ({ ...e, [p.id]: msg }));
+        setExpanded((e) => ({ ...e, [p.id]: true }));
+        onToast?.(msg);
         return;
       }
       if (res.models.length === 0) {
+        setScanErrors((e) => ({ ...e, [p.id]: '未发现模型' }));
+        setExpanded((e) => ({ ...e, [p.id]: true }));
         onToast?.('未发现模型');
         return;
       }
@@ -208,6 +220,11 @@ export const ModelPicker: React.FC<Props> = ({
 
                 {isOpen ? (
                   <div className="mpick-models">
+                    {scanErrors[p.id] ? (
+                      <div className="mpick-provider-err" role="alert">
+                        {scanErrors[p.id]}
+                      </div>
+                    ) : null}
                     {models.length === 0 ? (
                       <div className="mpick-empty-models">暂无模型 · 可扫描或手动添加</div>
                     ) : (
@@ -217,6 +234,8 @@ export const ModelPicker: React.FC<Props> = ({
                         const modelOff = meta.enabled === false || providerDisabled;
                         const testKey = `${p.id}::${m}`;
                         const editingCtx = ctxEdit === testKey;
+                        const ctxLabel = formatContextLabel(meta.contextLength);
+                        const selectable = !busy && !modelOff && hasKey;
 
                         return (
                           <div
@@ -226,9 +245,19 @@ export const ModelPicker: React.FC<Props> = ({
                             <button
                               type="button"
                               className="mpick-model-main"
-                              disabled={busy || modelOff || !hasKey}
+                              disabled={!selectable}
+                              aria-disabled={!selectable}
+                              title={
+                                modelOff
+                                  ? providerDisabled
+                                    ? '提供商已禁用'
+                                    : '模型已禁用'
+                                  : !hasKey
+                                    ? '未配置密钥'
+                                    : m
+                              }
                               onClick={() => {
-                                if (modelOff || !hasKey) return;
+                                if (!selectable) return;
                                 setStoredProfileId(p.id);
                                 onSelect(p.id, m);
                               }}
@@ -236,8 +265,19 @@ export const ModelPicker: React.FC<Props> = ({
                               <span className="mpick-model-name" title={m}>
                                 {m}
                               </span>
-                              <span className="mpick-model-ctx" title="上下文长度">
-                                {editingCtx ? null : formatContextLabel(meta.contextLength)}
+                              <span
+                                className="mpick-model-ctx"
+                                title={
+                                  meta.contextLength
+                                    ? `上下文长度 ${meta.contextLength.toLocaleString()} tokens`
+                                    : '上下文长度未设置'
+                                }
+                              >
+                                {editingCtx
+                                  ? null
+                                  : meta.contextLength
+                                    ? `ctx ${ctxLabel}`
+                                    : 'ctx —'}
                               </span>
                               {selected ? (
                                 <Lucide.Check size={13} className="mpick-check" />

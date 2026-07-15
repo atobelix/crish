@@ -79,6 +79,31 @@ export function getFsRoot(): string {
   return getWorkspacePath() || '';
 }
 
+/** Windows 盘符 / UNC / POSIX 绝对路径 */
+export function isAbsoluteFsPath(path: string): boolean {
+  const p = (path || '').trim();
+  if (!p) return false;
+  if (/^[A-Za-z]:[\\/]/.test(p)) return true;
+  if (p.startsWith('\\\\') || p.startsWith('//')) return true;
+  if (p.startsWith('/')) return true;
+  return false;
+}
+
+/**
+ * 相对路径且已设置工作区时，拼到工作区下；绝对路径原样返回。
+ * 用于 FilesCard 打开/列举及 readTextFile / listDirectory 等入口。
+ */
+export function resolveWorkspacePath(path: string): string {
+  const p = (path || '').trim();
+  if (!p) return p;
+  if (isAbsoluteFsPath(p)) return p;
+  const root = getFsRoot().trim();
+  if (!root) return p;
+  // 去掉前导 ./ 或 .\
+  const rel = p.replace(/^\.[\\/]/, '');
+  return joinPath(root, rel);
+}
+
 /** 传给 Tauri 的工作区根（绝对路径） */
 function workspaceRootArg(): string | undefined {
   const root = getFsRoot().trim();
@@ -87,7 +112,7 @@ function workspaceRootArg(): string | undefined {
 
 export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   const root = getFsRoot();
-  const path = dirPath || root;
+  const path = resolveWorkspacePath(dirPath || root);
   if (!path) throw new Error('未打开项目工作区，请先选择项目');
 
   const res = await invokeCmd<{ items?: Array<Record<string, unknown>> }>('list_directory', {
@@ -113,6 +138,7 @@ export async function readTextFile(
   maxLines = 4000,
 ): Promise<FsReadResult> {
   if (!filePath) throw new Error('路径为空');
+  const path = resolveWorkspacePath(filePath);
 
   const res = await invokeCmd<{
     content?: string;
@@ -120,7 +146,7 @@ export async function readTextFile(
     line_count?: number;
     truncated?: boolean;
   }>('read_file_content', {
-    path: filePath,
+    path,
     maxLines,
     workspaceRoot: workspaceRootArg(),
   });
@@ -134,7 +160,7 @@ export async function readTextFile(
       content: res.data.content,
       lineCount,
       truncated: Boolean(res.data.truncated),
-      path: filePath,
+      path,
     };
   }
   if (res.status === 'error') throw new Error(res.message);
@@ -142,8 +168,9 @@ export async function readTextFile(
 }
 
 export async function writeTextFile(filePath: string, content: string): Promise<void> {
+  const path = resolveWorkspacePath(filePath);
   const res = await invokeCmd('write_file_content', {
-    path: filePath,
+    path,
     content,
     workspaceRoot: workspaceRootArg(),
   });
@@ -154,15 +181,16 @@ export async function writeTextFile(filePath: string, content: string): Promise<
 
 /** 资源 URL（图片 / PDF 内嵌预览） */
 export async function toAssetUrl(filePath: string): Promise<string | null> {
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
+  const path = resolveWorkspacePath(filePath);
   try {
     const mod = await import('@tauri-apps/api/core').catch(() => null);
     if (mod && typeof (mod as { convertFileSrc?: (p: string) => string }).convertFileSrc === 'function') {
-      return (mod as { convertFileSrc: (p: string) => string }).convertFileSrc(filePath);
+      return (mod as { convertFileSrc: (p: string) => string }).convertFileSrc(path);
     }
   } catch {
     /* ignore */
   }
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
   return null;
 }
 
@@ -343,10 +371,11 @@ export function takePendingOpenPath(): string | null {
 /**
  * 打开右侧文件面板并定位到路径。
  * 由对话工具行等入口调用；FilesCard 未挂载时先缓存路径。
+ * 相对路径会接到当前工作区根下。
  */
 export function openFileInPanel(filePath: string): void {
   if (!filePath?.trim()) return;
-  const path = filePath.trim();
+  const path = resolveWorkspacePath(filePath.trim());
   pendingOpenPath = path;
   window.dispatchEvent(new CustomEvent('crish-open-file', { detail: { path } }));
 }

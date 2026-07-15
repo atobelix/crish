@@ -18,6 +18,7 @@ import {
   pathDirname,
   pathRelativeToRoot,
   readTextFile,
+  resolveWorkspacePath,
   revealInOs,
   takePendingOpenPath,
   toAssetUrl,
@@ -61,13 +62,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
 
   const kind = selected ? detectFileKind(pathBasename(selected)) : 'binary';
 
-  const loadDir = useCallback(async (path: string) => listDirectory(path), []);
+  const loadDir = useCallback(async (path: string) => listDirectory(resolveWorkspacePath(path)), []);
 
   const refresh = useCallback(
     async (dir?: string) => {
       const r = getWorkspacePath();
       setRoot(r);
-      const path = dir || cwd || r;
+      const path = resolveWorkspacePath(dir || cwd || r || '');
       if (!path) {
         setError('请先选择项目工作区');
         setEntries([]);
@@ -91,7 +92,8 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
 
   const openFile = useCallback(async (filePath: string) => {
     takePendingOpenPath();
-    setSelected(filePath);
+    const resolved = resolveWorkspacePath(filePath);
+    setSelected(resolved);
     setView('detail');
     setEditing(false);
     setDirty(false);
@@ -103,16 +105,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     setSelText('');
     setCommentDraft('');
     setMoreOpen(false);
-    const parent = pathDirname(filePath);
+    const parent = pathDirname(resolved);
     if (parent) setCwd(parent);
-    const k = detectFileKind(pathBasename(filePath));
+    const k = detectFileKind(pathBasename(resolved));
     try {
       if (k === 'image' || k === 'pdf') {
-        const url = await toAssetUrl(filePath);
+        const url = await toAssetUrl(resolved);
         setAssetUrl(url);
         if (!url) setError('无法生成预览（需桌面壳）');
       } else if (k === 'text' || k === 'table') {
-        const res = await readTextFile(filePath, k === 'table' ? 500 : 5000);
+        const res = await readTextFile(resolved, k === 'table' ? 500 : 5000);
         setContent(res.content);
         setEditBuf(res.content);
         setTruncated(res.truncated);
@@ -147,11 +149,21 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   useEffect(() => {
     const onOpen = (ev: Event) => {
       const path = (ev as CustomEvent<{ path?: string }>).detail?.path;
-      if (path) void openFile(path);
+      if (!path) return;
+      const resolved = resolveWorkspacePath(path);
+      // 从对话打开时：先定位到父目录列表，再进入详情
+      const parent = pathDirname(resolved);
+      if (parent) {
+        void refresh(parent).finally(() => {
+          void openFile(resolved);
+        });
+      } else {
+        void openFile(resolved);
+      }
     };
     window.addEventListener('crish-open-file', onOpen);
     return () => window.removeEventListener('crish-open-file', onOpen);
-  }, [openFile]);
+  }, [openFile, refresh]);
 
   useEffect(() => {
     const onAnn = () => setPendingCount(countPendingFileAnnotations());

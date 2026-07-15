@@ -179,6 +179,18 @@
   color: var(--text-tertiary);
 }
 
+.mpick-provider-err {
+  margin: 2px 4px 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .mpick-model {
   display: flex;
   align-items: center;
@@ -232,8 +244,15 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  min-width: 28px;
+  min-width: 40px;
   text-align: right;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.mpick-model.is-off .mpick-model-main {
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 .mpick-check {

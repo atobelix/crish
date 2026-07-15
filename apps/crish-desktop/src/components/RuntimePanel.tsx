@@ -103,8 +103,16 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     void loadData();
   }, [onShowToast, demo]);
 
+  type LiveTask = {
+    id: string;
+    taskName: string;
+    elapsedSeconds: number;
+    sessionId?: string;
+    kind: 'session' | 'run';
+  };
+
   const liveTasks = useMemo(() => {
-    const fromMessages: { id: string; taskName: string; elapsedSeconds: number }[] = [];
+    const fromMessages: LiveTask[] = [];
     for (const s of sessions) {
       for (const m of s.messages || []) {
         if (m.status === 'processing') {
@@ -112,6 +120,8 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             id: m.id,
             taskName: s.title || '对话进行中',
             elapsedSeconds: Math.max(0, Math.round((now - (m.timestamp || now)) / 1000)),
+            sessionId: s.id,
+            kind: 'session',
           });
         }
       }
@@ -125,14 +135,59 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
           : typeof r.startedAt === 'string'
             ? Date.parse(r.startedAt) || now
             : now;
+      const matched = sessions.find(
+        (s) => s.engineLastRunId === r.runId || s.id === r.sessionId,
+      );
       fromMessages.push({
         id: r.runId,
-        taskName: (r.prompt || r.status || '引擎任务').slice(0, 48),
+        taskName: (matched?.title || r.prompt || r.status || '引擎任务').slice(0, 48),
         elapsedSeconds: Math.max(0, Math.round((now - started) / 1000)),
+        sessionId: matched?.id || r.sessionId,
+        kind: 'run',
       });
     }
     return fromMessages;
   }, [sessions, activeRuns, now]);
+
+  const focusSession = (sessionId: string, toastMsg: string) => {
+    const store = useLayoutStore.getState();
+    store.setActiveSessionId(sessionId);
+    store.setActiveAgentId(null);
+    try {
+      window.dispatchEvent(new CustomEvent('crish-focus-chat', { detail: { sessionId } }));
+    } catch {
+      /* ignore */
+    }
+    onShowToast(toastMsg);
+  };
+
+  const handleLiveTaskClick = (wk: LiveTask) => {
+    if (!wk.sessionId) return;
+    focusSession(wk.sessionId, '已切换到会话');
+  };
+
+  const handleApprovalClick = (a: PendingApprovalInfo) => {
+    const toolCallId = a.toolCallId;
+    let found = toolCallId
+      ? sessions.find((s) =>
+          (s.messages || []).some((m) =>
+            (m.toolCalls || []).some(
+              (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+            ),
+          ),
+        )
+      : undefined;
+    if (!found && a.runId) {
+      found = sessions.find(
+        (s) => s.engineLastRunId === a.runId || s.id === a.runId,
+      );
+    }
+    if (found) {
+      focusSession(found.id, '已打开待确认会话');
+    } else {
+      onShowToast('请在当前对话中确认');
+    }
+  };
 
   const modelId = getActiveModelId() || 'unknown';
   const estimated =
@@ -225,7 +280,23 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         ) : (
           <div className="rt-list">
             {liveTasks.map((wk) => (
-              <div key={wk.id} className="rt-row is-live">
+              <div
+                key={wk.id}
+                className={`rt-row is-live${wk.sessionId ? ' is-clickable' : ''}`}
+                role={wk.sessionId ? 'button' : undefined}
+                tabIndex={wk.sessionId ? 0 : undefined}
+                title={wk.sessionId ? '打开对应会话' : undefined}
+                onClick={() => {
+                  if (wk.sessionId) handleLiveTaskClick(wk);
+                }}
+                onKeyDown={(e) => {
+                  if (!wk.sessionId) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleLiveTaskClick(wk);
+                  }
+                }}
+              >
                 <div className="rt-row-main">
                   <div className="loading-spinner rt-spinner" />
                   <div className="rt-row-text">
@@ -233,6 +304,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">已运行 {wk.elapsedSeconds} 秒</span>
                   </div>
                 </div>
+                {wk.sessionId ? <Lucide.ChevronRight size={13} className="rt-row-chevron" /> : null}
               </div>
             ))}
           </div>
@@ -304,7 +376,20 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
           <h4 className="rt-section-title">待确认</h4>
           <div className="rt-list">
             {pendingApprovals.map((a, i) => (
-              <div key={a.toolCallId || i} className="rt-row">
+              <div
+                key={a.toolCallId || i}
+                className="rt-row is-clickable"
+                role="button"
+                tabIndex={0}
+                title="打开待确认会话"
+                onClick={() => handleApprovalClick(a)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleApprovalClick(a);
+                  }
+                }}
+              >
                 <div className="rt-row-main">
                   <span className="rt-dot warn" aria-hidden />
                   <div className="rt-row-text">
@@ -312,6 +397,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>
                   </div>
                 </div>
+                <Lucide.ChevronRight size={13} className="rt-row-chevron" />
               </div>
             ))}
           </div>

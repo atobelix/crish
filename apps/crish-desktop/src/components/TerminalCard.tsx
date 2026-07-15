@@ -112,6 +112,7 @@ export const TerminalCard: React.FC = () => {
           <div className="term-empty">
             <div className="term-empty-title">助手命令输出镜像</div>
             <div className="term-empty-desc">Shell 等命令的结果会同步到此，不在主对话刷屏</div>
+            <div className="term-empty-hint">输入 <kbd>clear</kbd> 清空</div>
           </div>
         ) : (
           terminalLines.map((line, i) => (

@@ -540,6 +540,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
         });
 
+        // shell：仅镜像到终端缓冲区，不自动 openSidePanel / crish-open-terminal（避免每条命令抢焦点）
         if (isShellToolName(name) && displayOut) {
           displayOut.split('\n').slice(0, 80).forEach((line) => addTerminalLine(line, sid));
         }
@@ -838,11 +839,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     onShowToast(`已在右侧打开完整改动：${diff.filePath}`);
   };
 
-  /** 在右侧文件管理器中打开路径（按需预览，不刷屏） */
+  /** 在右侧文件管理器中打开路径（按需预览，不刷屏；相对路径由 openFileInPanel 接到工作区根） */
   const openPathInFilesPanel = (filePath: string) => {
     openSidePanel('files');
     openFileInPanel(filePath);
-    onShowToast(`已在文件面板打开：${filePath.replace(/^.*[\\/]/, '')}`);
+    onShowToast(`已打开文件：${filePath.replace(/^.*[\\/]/, '')}`);
   };
 
   const renderGitDiff = (diff: FileDiff) => {
@@ -894,16 +895,21 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     const images = extractImageRefs(tc.output || '');
     // 主对话里工具输出必须克制：长结果只给预览；完整内容走右侧文件/终端入口，不刷屏
     const raw = tc.output || '';
-    const long = raw.length > 360 || raw.split('\n').length > 10;
+    const lineCount = raw ? raw.split('\n').length : 0;
+    const long = raw.length > 360 || lineCount > 10;
     const out = truncateToolOutput(raw, long ? 5 : 10, long ? 360 : 720);
     const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
     const filePath = extractFilePathFromToolArgs(tc.arguments || '');
+    const shellTool = isShellToolName(tc.name || '');
+    // shell 长输出主入口：终端；读写工具带路径：文件面板
+    const showOpenFile = Boolean(filePath) && !shellTool;
+    const showOpenTerminal = shellTool && long;
     if (!out && images.length === 0 && !hasDiffs) {
       if (tc.status === 'success') {
         return (
           <div className="tool-result-body">
             <pre className="tool-result-pre">完成</pre>
-            {filePath ? (
+            {showOpenFile && filePath ? (
               <button
                 type="button"
                 className="tool-result-open-file"
@@ -912,7 +918,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   openPathInFilesPanel(filePath);
                 }}
               >
-                在文件面板打开
+                打开文件
               </button>
             ) : null}
           </div>
@@ -930,11 +936,11 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     return (
       <div className="tool-result-body">
         {out ? <pre className="tool-result-pre">{out}</pre> : null}
-        {long || filePath ? (
+        {long || showOpenFile || showOpenTerminal ? (
           <div className="tool-result-long-hint">
             {long ? <span>输出较长，已截断</span> : null}
             <span className="tool-result-long-actions">
-              {filePath ? (
+              {showOpenFile && filePath ? (
                 <button
                   type="button"
                   className="tool-result-hint-btn"
@@ -943,10 +949,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                     openPathInFilesPanel(filePath);
                   }}
                 >
-                  文件面板
+                  打开文件
                 </button>
               ) : null}
-              {long && isShellToolName(tc.name || '') ? (
+              {showOpenTerminal ? (
                 <button
                   type="button"
                   className="tool-result-hint-btn"
@@ -955,7 +961,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                     openSidePanel('terminal');
                   }}
                 >
-                  终端
+                  在终端查看
                 </button>
               ) : null}
             </span>
@@ -1151,7 +1157,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               openPathInFilesPanel(filePath);
             }}
           >
-            打开
+            打开文件
           </button>
         ) : null}
         {isOpen && body}

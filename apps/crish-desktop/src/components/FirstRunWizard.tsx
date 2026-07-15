@@ -236,7 +236,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
           {step === 3 && (
             <div className="first-run-ready">
-              <Lucide.CheckCircle2 size={28} style={{ color: 'var(--accent-green, #16a34a)' }} />
+              <Lucide.CheckCircle2 size={28} style={{ color: 'var(--text-secondary)' }} />
               <div style={{ fontWeight: 600, fontSize: 15 }}>可以开始了</div>
               <p className="first-run-hint" style={{ textAlign: 'center' }}>
                 在主界面输入问题即可。随时可在设置中改模型、项目与权限。

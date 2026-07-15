@@ -1347,6 +1347,7 @@ body {
 
 .chat-doc-flow p code {
   background-color: var(--bg-tertiary);
+  color: var(--text-primary);
   padding: 1px 4px;
   border-radius: 3px;
   font-family: var(--font-mono);
@@ -2853,7 +2854,7 @@ body.dragging-card * {
   align-items: center;
   gap: 4px;
   font-size: 9px;
-  color: #8b8b8b;
+  color: var(--text-tertiary);
   font-weight: 500;
   user-select: none;
   pointer-events: none;
@@ -4050,6 +4051,10 @@ select.ui-input {
 .rt-row.is-live:hover {
   background: var(--bg-secondary);
 }
+/* 可点穿到会话：与后台任务一致的安静 hover */
+.rt-row.is-live.is-clickable:hover {
+  background: var(--bg-hover);
+}
 .rt-row.is-live .rt-row-title {
   font-weight: 500;
   color: var(--text-secondary);
@@ -4835,6 +4840,7 @@ select.settings-field-input {
 .chat-doc-flow p code,
 .md-inline-code {
   background: var(--bg-tertiary) !important;
+  color: var(--text-primary);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.92em;
@@ -4843,7 +4849,7 @@ select.settings-field-input {
 .assistant-text-content pre,
 .md-rendered .md-code-block {
   background: var(--bg-tertiary) !important;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 10px 12px;
   color: var(--text-primary);
@@ -4908,20 +4914,20 @@ select.settings-field-input {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin: 4px 0 6px;
+  margin: 2px 0 4px;
   max-height: 200px;
   overflow-y: auto;
   padding: 0;
 }
 .msg-timeline-tools {
-  margin: 2px 0 8px;
+  margin: 1px 0 4px;
 }
 .msg-timeline-text {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 .msg-timeline-text + .msg-timeline-tools,
 .msg-timeline-tools + .msg-timeline-text {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .tool-row {
   border-radius: 0;
@@ -5286,7 +5292,7 @@ select.settings-field-input {
   width: 100%;
   overflow-x: auto;
   margin: 0.65em 0 0.85em;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   background: var(--bg-primary);
 }
@@ -5300,21 +5306,21 @@ select.settings-field-input {
 .msg-assistant-text .md-td {
   padding: 8px 12px;
   text-align: left;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-color);
   vertical-align: top;
   color: var(--text-primary);
 }
 .msg-assistant-text .md-th {
   font-weight: 600;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   font-size: 12px;
 }
 .msg-assistant-text tbody .md-tr:last-child .md-td {
   border-bottom: none;
 }
 .msg-assistant-text tbody .md-tr:hover .md-td {
-  background: rgba(0, 0, 0, 0.015);
+  background: var(--bg-hover);
 }
 .msg-thinking-text {
   overflow: hidden;
@@ -5514,7 +5520,7 @@ select.settings-field-input {
   gap: 8px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(22, 163, 74, 0.06);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 13px;
 }
@@ -7277,6 +7283,7 @@ html[data-theme="dark"] .session-agent-item.active {
 .msg-assistant-text code,
 .msg-assistant-text .md-inline-code {
   background: var(--bg-tertiary) !important;
+  color: var(--text-primary);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.9em;
@@ -7284,7 +7291,7 @@ html[data-theme="dark"] .session-agent-item.active {
 .msg-assistant-text pre,
 .msg-assistant-text .md-code-block {
   background: var(--bg-tertiary) !important;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   color: var(--text-primary);
   padding: 12px 14px;
@@ -7309,7 +7316,7 @@ html[data-theme="dark"] .session-agent-item.active {
   border: none;
   background: transparent;
   border-radius: 8px;
-  color: #6b6b6b;
+  color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7348,7 +7355,7 @@ html[data-theme="dark"] .session-agent-item.active {
   cursor: pointer;
   list-style: none;
   font-size: 11.5px;
-  color: #b8b8b8;
+  color: var(--text-tertiary);
   font-weight: 400;
   user-select: none;
   padding: 0;
@@ -7357,18 +7364,18 @@ html[data-theme="dark"] .session-agent-item.active {
   display: none;
 }
 .msg-thinking-fold-label {
-  color: #b8b8b8;
+  color: var(--text-tertiary);
   font-weight: 400;
 }
 .msg-thinking-fold.is-live .msg-thinking-fold-label {
-  color: #a8a8a8;
+  color: var(--text-secondary);
 }
 .msg-thinking-fold-body {
   margin: 4px 0 0;
   padding: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: #b0b0b0;
+  color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
   /* ~3.5–4 行：12 * 1.45 * 4 */
@@ -7379,7 +7386,7 @@ html[data-theme="dark"] .session-agent-item.active {
   font-family: inherit;
 }
 .msg-thinking-sec {
-  color: #c8c8c8;
+  color: var(--text-tertiary);
   font-weight: 400;
 }
 
@@ -8219,6 +8226,20 @@ html[data-theme="dark"] .session-agent-item.active {
   font-size: 11.5px;
   color: var(--terminal-muted);
 }
+.term-empty-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--terminal-muted);
+  opacity: 0.85;
+}
+.term-empty-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
 .term-line { margin: 0; }
 .term-line.is-cmd { color: #c8c8c8; }
 .term-input-row {
@@ -8676,25 +8697,94 @@ html[data-theme="dark"] th {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-/* 助手 markdown 表格：两边主题可读 */
+/* 助手 markdown：表格 / 代码 / 引用 / 链接 — 中性 token，双主题可读 */
 .msg-assistant-text table,
-.md-rendered table {
+.md-rendered table,
+.msg-assistant-text .md-table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5em 0;
   font-size: 0.95em;
+  color: var(--text-primary);
 }
 .msg-assistant-text th,
 .msg-assistant-text td,
 .md-rendered th,
-.md-rendered td {
+.md-rendered td,
+.msg-assistant-text .md-th,
+.msg-assistant-text .md-td {
   border: 1px solid var(--border-color);
   padding: 6px 10px;
   color: var(--text-primary);
   background: transparent;
 }
 .msg-assistant-text th,
-.md-rendered th {
+.md-rendered th,
+.msg-assistant-text .md-th {
   background: var(--bg-tertiary);
+  color: var(--text-primary);
   font-weight: 600;
+}
+
+.msg-assistant-text pre,
+.msg-assistant-text .md-code-block,
+.md-rendered pre,
+.md-rendered .md-code-block,
+.msg-assistant-text code,
+.msg-assistant-text .md-inline-code,
+.md-rendered code,
+.md-rendered .md-inline-code,
+.chat-doc-flow p code {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary);
+}
+
+.msg-assistant-text blockquote,
+.md-rendered blockquote,
+.msg-assistant-text .md-blockquote {
+  margin: 0.5em 0;
+  padding: 0.25em 0 0.25em 0.85em;
+  border-left: 3px solid var(--border-color);
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+/* links: no brand blue — primary underline, secondary at rest optional */
+.msg-assistant-text a,
+.msg-assistant-text .md-a,
+.md-rendered a,
+.md-rendered .md-a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--text-tertiary);
+}
+.msg-assistant-text a:hover,
+.msg-assistant-text .md-a:hover,
+.md-rendered a:hover,
+.md-rendered .md-a:hover {
+  color: var(--text-primary);
+  text-decoration-color: var(--text-secondary);
+}
+
+/* user bubble: slightly elevated vs column primary */
+.msg-user-bubble,
+.user-text-bubble,
+.chat-doc-flow .user-text {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary);
+}
+
+/* tool stack / tool rows: keep quiet vertical rhythm */
+.tool-stack,
+.msg-timeline-tools,
+.agent-tool-stack {
+  gap: 0;
+}
+.msg-assistant-body .tool-timeline-item {
+  margin: 1px 0;
+}
+.tool-row-head {
+  min-height: 18px;
+  padding: 1px 0;
 }
