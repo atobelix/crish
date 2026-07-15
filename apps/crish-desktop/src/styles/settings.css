@@ -1853,7 +1853,7 @@ select.settings-field-input {
   padding: 14px 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--bg-tertiary);
+  background: transparent;
   overflow: auto;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
