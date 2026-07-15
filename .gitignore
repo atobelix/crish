@@ -108,3 +108,10 @@ target-tauri-smoke/
 
 # Tauri generated schemas
 apps/agent-workbench/src-tauri/gen/
+
+# local junk
+*.orig
+*.orig_utf8
+**/diff.txt
+**/diff_ansi.txt
+**/diff_css.txt
