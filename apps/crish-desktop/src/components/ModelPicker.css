@@ -36,7 +36,7 @@
   padding: 20px 14px;
   text-align: center;
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
@@ -51,7 +51,7 @@
   padding: 6px 12px;
   min-height: var(--control-height-sm);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
   color: var(--text-primary);
@@ -126,7 +126,7 @@
 
 .mpick-provider-name {
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-normal);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -134,7 +134,7 @@
 
 .mpick-provider-meta {
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 
@@ -190,7 +190,7 @@
 .mpick-empty-models {
   padding: 8px 10px;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 
@@ -251,7 +251,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -259,7 +259,7 @@
 
 .mpick-model-ctx {
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -339,7 +339,7 @@
   padding: 0 12px;
   height: var(--control-height);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
   color: var(--text-primary);
@@ -368,7 +368,7 @@
   padding: 0 10px;
   min-height: var(--control-height);
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   color: var(--text-secondary);
   cursor: pointer;

@@ -47,8 +47,8 @@ html[data-theme="light"] {
   --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
   --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.12);
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', 'JetBrains Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
   --dropdown-padding: 6px;
   --dropdown-gap: 2px;
@@ -72,10 +72,11 @@ html[data-theme="light"] {
   --font-size-lg: 15px;
   --font-size-xl: 17px;
 
-  /* 字重：大字用 400–500，小字用 500–600，避免「大又细」 */
+  /* UI weight flat 400; only AI markdown uses --font-weight-content */
   --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-content: 600;
 
   /* 图标与控件热区 */
   --icon-size: 16px;
@@ -296,6 +297,16 @@ html[data-theme="dark"] .card-tab.active {
   padding: 0;
 }
 
+html {
+  /* Windows ClearType: do not force grayscale antialiased (fringing) */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  font-optical-sizing: auto;
+  font-kerning: normal;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
@@ -307,7 +318,12 @@ body {
   height: 100vh;
   width: 100vw;
   user-select: none;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  font-feature-settings: "kern" 1, "liga" 1;
+  font-variant-ligatures: common-ligatures;
 }
 
 /* 通用图标按钮热区：高 32，图标约 16 */
@@ -485,7 +501,7 @@ body {
 
 .product-boot-title {
   font-size: var(--font-size-xl);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary, #1a1a1a);
   letter-spacing: 0.02em;
 }
@@ -936,7 +952,7 @@ body {
 
 .gateway-text {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -1089,7 +1105,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   overflow: hidden;
   white-space: nowrap;
@@ -1374,7 +1390,7 @@ body {
 }
 
 .branch-text {
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -1473,18 +1489,18 @@ body {
 
 .diff-action-line .file-hl {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 
 .diff-action-line .diff-add-count {
   color: var(--accent-green);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   margin-left: 4px;
 }
 
 .diff-action-line .diff-remove-count {
   color: var(--accent-red);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   margin-left: 2px;
 }
 
@@ -1535,7 +1551,7 @@ body {
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: var(--font-sans);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
@@ -1612,7 +1628,7 @@ body {
   border-radius: 6px;
   padding: 5px 10px;
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   font-family: var(--font-sans);
 }
@@ -1677,7 +1693,7 @@ body {
 
 .branch-text {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1688,7 +1704,7 @@ body {
   font-size: var(--font-size-xxs);
   padding: 1px 4px;
   border-radius: 3px;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 .pr-badge.plus-minus {
@@ -1702,7 +1718,7 @@ body {
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s;
@@ -2008,7 +2024,7 @@ body {
   align-items: center;
   gap: 4px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -2070,7 +2086,7 @@ body {
 }
 
 .plan-body h4 {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-size: var(--font-size-base);
   margin-bottom: 4px;
   color: var(--text-primary);
@@ -2136,7 +2152,7 @@ body {
 }
 
 .diff-file-path {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
   margin-bottom: 8px;
   font-size: var(--font-size-xs);
@@ -2150,7 +2166,7 @@ body {
 }
 
 .diff-green-red {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   margin-left: 8px;
 }
 
@@ -2225,7 +2241,7 @@ body {
 
 .tasks-body h4 {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -2290,7 +2306,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   padding: 6px 8px 8px;
   border-bottom: none;
@@ -2419,7 +2435,7 @@ body {
 
 .dropdown-pref-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   padding-left: 2px;
 }
@@ -2446,7 +2462,7 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 
 .ui-segment-item:hover {
@@ -2457,7 +2473,7 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 /* Legacy aliases */
@@ -2482,7 +2498,7 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: var(--font-sans);
 }
 
@@ -2495,7 +2511,7 @@ body {
   border-color: transparent;
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 /* Custom Context Menu */
@@ -2595,7 +2611,7 @@ body {
   background: rgba(255, 255, 255, 0.14);
   border: none;
   color: #ffffff;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   font-size: var(--font-size-sm);
   padding: 4px 8px;
@@ -2690,7 +2706,7 @@ body {
   content: "✓";
   font-size: var(--font-size-xxs);
   color: var(--text-primary);
-  font-weight: bold;
+  font-weight: var(--font-weight-normal);
 }
 
 /* Branch session dashed connector graphics */
@@ -2933,7 +2949,7 @@ body.dragging-card * {
   gap: 4px;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   user-select: none;
   pointer-events: none;
 }
@@ -2965,7 +2981,7 @@ body.dragging-card * {
   border-radius: 4px;
   padding: 3px 8px;
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3039,7 +3055,7 @@ body.dragging-card * {
   justify-content: space-between;
   padding: 8px 12px;
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
   background-color: transparent;
   cursor: pointer;
@@ -3119,11 +3135,11 @@ body.dragging-card * {
 }
 .tool-command-inline .prompt-char {
   color: var(--text-tertiary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 .tool-command-inline .cmd-name {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 .tool-command-inline .cmd-args {
   color: var(--text-secondary);
@@ -3240,7 +3256,7 @@ body.dragging-card * {
 }
 
 .git-diff-filename {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-family: var(--font-mono);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -3249,7 +3265,7 @@ body.dragging-card * {
 .git-diff-preview-tag {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   white-space: nowrap;
 }
 
@@ -3258,7 +3274,7 @@ body.dragging-card * {
   gap: 6px;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   flex-shrink: 0;
 }
 
@@ -3298,7 +3314,7 @@ body.dragging-card * {
   border-right: none;
   padding: 2px 0;
   flex-shrink: 0;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 .git-diff-line-row.addition .line-num-col {
@@ -3328,7 +3344,7 @@ body.dragging-card * {
   background-color: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   text-align: center;
   border-top: 1px solid var(--border-subtle);
   user-select: none;
@@ -3368,7 +3384,7 @@ body.dragging-card * {
   border-radius: 20px;
   padding: 4px 12px;
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
@@ -3423,7 +3439,7 @@ body.dragging-card * {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
@@ -3472,7 +3488,7 @@ body.dragging-card * {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -3502,7 +3518,7 @@ body.dragging-card * {
   display: flex;
   justify-content: space-between;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -3571,7 +3587,7 @@ body.dragging-card * {
   padding: 5px 12px;
   border-radius: 4px;
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -3626,7 +3642,7 @@ body.dragging-card * {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -3689,7 +3705,7 @@ body.dragging-card * {
   padding: 5px 14px;
   border-radius: 4px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -3706,7 +3722,7 @@ body.dragging-card * {
   padding: 5px 14px;
   border-radius: 4px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -3722,7 +3738,7 @@ body.dragging-card * {
   border: none;
   color: var(--text-secondary);
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 3px;
@@ -3746,7 +3762,7 @@ body.dragging-card * {
   color: var(--text-primary) !important;
   border: 1px solid var(--border-color) !important;
   transition: all 0.15s ease;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: 32px;
   padding: 0 16px;
@@ -3766,7 +3782,7 @@ body.dragging-card * {
   color: var(--text-secondary) !important;
   border: none !important;
   transition: all 0.15s ease;
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: 32px;
   padding: 0 14px;
@@ -3786,7 +3802,7 @@ body.dragging-card * {
   color: var(--text-secondary) !important;
   border: none !important;
   transition: all 0.15s ease;
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: 28px;
   padding: 0 10px;
@@ -3809,7 +3825,7 @@ body.dragging-card * {
 .text-md { font-size: var(--font-size-md); }
 .text-lg { font-size: var(--font-size-lg); }
 .text-xl { font-size: var(--font-size-xl); }
-.font-semibold { font-weight: 600; }
+.font-semibold { font-weight: var(--font-weight-normal); }
 .text-primary { color: var(--text-primary); }
 .text-secondary { color: var(--text-secondary); }
 .text-tertiary { color: var(--text-tertiary); }
@@ -3825,7 +3841,7 @@ body.dragging-card * {
   border: none;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   border-radius: var(--radius-md);
   transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
   white-space: nowrap;
@@ -3885,7 +3901,7 @@ body.dragging-card * {
   display: inline-flex;
   align-items: center;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--bg-tertiary);
@@ -3943,7 +3959,7 @@ select.ui-input {
 .rt-section-title {
   margin: 0;
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   letter-spacing: 0;
   text-transform: none;
@@ -3984,7 +4000,7 @@ select.ui-input {
 .rt-ring-value {
   position: absolute;
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   letter-spacing: -0.02em;
 }
@@ -4010,7 +4026,7 @@ select.ui-input {
 }
 
 .rt-stat-value {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
@@ -4135,7 +4151,7 @@ select.ui-input {
   background: var(--bg-hover);
 }
 .rt-row.is-live .rt-row-title {
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 .rt-row-ico {
@@ -4188,7 +4204,7 @@ select.ui-input {
 .rt-cron-expr {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -4228,14 +4244,14 @@ select.ui-input {
 .telemetry-title,
 .cron-panel-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   text-transform: none;
   letter-spacing: 0;
 }
 .telemetry-item-name {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .telemetry-item-desc {
@@ -4253,7 +4269,7 @@ select.ui-input {
 }
 .cron-expr-text {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
@@ -4274,7 +4290,7 @@ select.ui-input {
 }
 .cron-form-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .cron-input {
@@ -4295,7 +4311,7 @@ select.ui-input {
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 
 /* --- CHEATSHEET MODAL --- */
@@ -4343,7 +4359,7 @@ select.ui-input {
 .cheatsheet-title {
   margin: 0;
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -4392,7 +4408,7 @@ select.ui-input {
 .cheatsheet-key {
   font-family: var(--font-sans);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   background: var(--bg-tertiary);
   border: none;
@@ -4412,17 +4428,17 @@ select.ui-input {
 }
 .cheatsheet-footer-tip strong {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 /* --- TASKS COMPONENT CLASSES --- */
 .tasks-count-text {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 .tasks-summary-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .tasks-desc-muted {
@@ -4458,19 +4474,19 @@ select.ui-input {
   color: var(--text-primary);
 }
 .diff-filepath {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-size: var(--font-size-sm);
 }
 .diff-green-red {
   color: var(--accent-green);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   margin-left: 8px;
   font-size: var(--font-size-sm);
 }
 .diff-col-label {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   margin-bottom: 6px;
 }
 .diff-line-number {
@@ -4493,7 +4509,7 @@ select.ui-input {
 /* --- SETTINGS PANEL FIELD CLASSES --- */
 .settings-field-label {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 .settings-field-input {
@@ -4532,7 +4548,7 @@ select.settings-field-input {
 }
 .settings-modal-title {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 
@@ -4562,7 +4578,7 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-size: 16px;
 }
 
@@ -4638,7 +4654,7 @@ select.settings-field-input {
 .settings-scope-toggle-btn {
   padding: 5px 12px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -4661,7 +4677,7 @@ select.settings-field-input {
   font-size: var(--font-size-xxs);
   padding: 2px 6px;
   border-radius: 4px;
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 
 .status-badge.available {
@@ -4721,7 +4737,7 @@ select.settings-field-input {
   cursor: pointer;
   min-width: 95px;
   text-align: center;
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   transition: all 0.15s;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
@@ -4772,7 +4788,7 @@ select.settings-field-input {
   background: #1a1a1a;
   color: #fff;
   font-size: var(--font-size-base);
-  font-weight: 700;
+  font-weight: var(--font-weight-normal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4787,13 +4803,13 @@ select.settings-field-input {
 }
 .sidebar-brand-name {
   font-size: var(--font-size-base);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .sidebar-brand-tag {
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 
 .sidebar-nav {
@@ -4816,7 +4832,7 @@ select.settings-field-input {
   background: var(--text-primary) !important;
   color: #fff !important;
   border-radius: 10px !important;
-  font-weight: 600 !important;
+  font-weight: var(--font-weight-normal) !important;
   padding: 9px 12px !important;
 }
 .nav-item-primary .nav-icon,
@@ -4843,7 +4859,7 @@ select.settings-field-input {
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   padding: 8px 10px;
   border-radius: 8px;
@@ -5002,10 +5018,13 @@ select.settings-field-input {
   margin: 1px 0 4px;
 }
 .msg-timeline-text {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
 }
 .msg-timeline-text + .msg-timeline-tools,
 .msg-timeline-tools + .msg-timeline-text {
+  margin-top: 6px;
+}
+.msg-timeline-tools + .msg-timeline-tools {
   margin-top: 2px;
 }
 .tool-row {
@@ -5165,13 +5184,13 @@ select.settings-field-input {
 }
 .inline-approval-kicker {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
   letter-spacing: 0.02em;
 }
 .inline-approval-summary {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   line-height: 1.35;
 }
@@ -5204,7 +5223,7 @@ select.settings-field-input {
   border-radius: 0;
   font-family: inherit;
   font-size: var(--font-size-sm);
-  font-weight: 550;
+  font-weight: var(--font-weight-normal);
   padding: 2px 0;
   cursor: pointer;
   background: transparent;
@@ -5254,7 +5273,7 @@ select.settings-field-input {
   background: transparent;
   font-family: inherit;
   font-size: var(--font-size-sm);
-  font-weight: 550;
+  font-weight: var(--font-weight-normal);
   padding: 2px 0;
   cursor: pointer;
 }
@@ -5280,7 +5299,7 @@ select.settings-field-input {
   border: none;
   border-radius: 10px;
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   padding: 9px 18px;
   cursor: pointer;
@@ -5312,7 +5331,7 @@ select.settings-field-input {
 .msg-assistant-text .md-h3,
 .msg-assistant-text .md-h4 {
   margin: 0.85em 0 0.35em;
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   line-height: 1.35;
   color: var(--text-primary);
 }
@@ -5391,7 +5410,7 @@ select.settings-field-input {
   color: var(--text-primary);
 }
 .msg-assistant-text .md-th {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   background: var(--bg-tertiary);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -5451,12 +5470,12 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: var(--font-weight-normal);
   font-size: 16px;
 }
 .first-run-title {
   font-size: 16px;
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .first-run-sub {
@@ -5482,7 +5501,7 @@ select.settings-field-input {
 .first-run-step.is-active {
   color: var(--text-primary);
   background: var(--bg-secondary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 .first-run-step.is-done {
   color: var(--text-secondary);
@@ -5496,7 +5515,7 @@ select.settings-field-input {
   align-items: center;
   justify-content: center;
   font-size: var(--font-size-xxs);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
 }
 .first-run-step.is-active .first-run-step-num {
   background: var(--text-primary);
@@ -5510,7 +5529,7 @@ select.settings-field-input {
 }
 .first-run-label {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   margin-top: 4px;
 }
@@ -5569,7 +5588,7 @@ select.settings-field-input {
   gap: 6px;
   border-radius: 10px;
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   padding: 9px 14px;
   cursor: pointer;
@@ -5625,7 +5644,7 @@ select.settings-field-input {
   color: var(--text-tertiary) !important;
   border-radius: 8px !important;
   padding: 4px 8px !important;
-  font-weight: 500 !important;
+  font-weight: var(--font-weight-normal) !important;
 }
 .context-pill:hover {
   background: var(--bg-hover) !important;
@@ -5665,7 +5684,7 @@ select.settings-field-input {
 }
 .panel-dropdown .dropdown-header {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   padding: 6px 8px 8px;
   border-bottom: 1px solid var(--border-subtle);
@@ -6167,7 +6186,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .agent-card-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6259,7 +6278,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .agent-card-header--slim .agent-card-title {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 /* 内置预览浏览器 */
 .preview-browser {
@@ -6353,7 +6372,7 @@ html[data-theme="dark"] .session-agent-item.active {
   line-height: 1.55;
 }
 .preview-browser-empty-title {
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   font-size: var(--font-size-base);
 }
@@ -6420,7 +6439,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .preview-hist-title {
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   margin-bottom: 4px;
   text-transform: uppercase;
@@ -6649,7 +6668,7 @@ html[data-theme="dark"] .session-agent-item.active {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
@@ -6685,7 +6704,7 @@ html[data-theme="dark"] .session-agent-item.active {
   background: var(--bg-active);
   border-color: var(--border-color);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 .files-soft-btn--emphasis:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -6780,7 +6799,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .files-empty-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 .files-empty--err .files-empty-title {
@@ -6881,7 +6900,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .files-table th {
   background: var(--bg-tertiary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 .files-trunc {
@@ -7028,7 +7047,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .inline-agent-label {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   max-width: 42%;
   overflow: hidden;
@@ -7212,7 +7231,7 @@ html[data-theme="dark"] .session-agent-item.active {
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   padding: 5px 10px;
   border-radius: 999px;
@@ -7282,7 +7301,7 @@ html[data-theme="dark"] .session-agent-item.active {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-base);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .runtime-float-body {
@@ -7449,7 +7468,7 @@ html[data-theme="dark"] .session-agent-item.active {
   gap: 6px;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   margin-bottom: 4px;
 }
 .msg-thinking.done {
@@ -7541,7 +7560,7 @@ html[data-theme="dark"] .session-agent-item.active {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   font-size: var(--font-size-sm);
   cursor: pointer;
   text-decoration: underline;
@@ -7561,7 +7580,7 @@ html[data-theme="dark"] .session-agent-item.active {
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
   -webkit-app-region: no-drag;
@@ -7610,7 +7629,7 @@ html[data-theme="dark"] .session-agent-item.active {
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
   padding: 6px 8px;
@@ -7632,7 +7651,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .settings-toggle-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .settings-toggle-desc {
@@ -7687,7 +7706,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .chat-empty-title {
   font-size: var(--font-size-xl);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   margin: 0 0 8px;
 }
@@ -7717,7 +7736,7 @@ html[data-theme="dark"] .session-agent-item.active {
   border-radius: 999px;
   padding: 8px 14px;
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   color: var(--text-primary);
   cursor: pointer;
@@ -7955,7 +7974,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .pp-row-title {
   font-size: var(--font-size-base);
-  font-weight: 550;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8011,7 +8030,7 @@ html[data-theme="dark"] .session-agent-item.active {
   padding: 10px 12px;
   border-radius: 10px;
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   color: var(--text-primary);
   cursor: pointer;
@@ -8054,7 +8073,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .pp-add-title {
   font-size: var(--font-size-base);
-  font-weight: 650;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .pp-add-card {
@@ -8093,7 +8112,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .pp-add-card-title {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .pp-add-card-desc {
@@ -8147,7 +8166,7 @@ html[data-theme="dark"] .session-agent-item.active {
   border-radius: 9px;
   padding: 8px 14px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
 }
@@ -8332,7 +8351,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .term-empty-title {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
   color: var(--terminal-fg);
   opacity: 0.72;
   margin-bottom: 4px;
@@ -8490,7 +8509,7 @@ html[data-theme="dark"] .session-agent-item.active {
 .cplus-flyout-head {
   padding: 10px 12px 6px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
   flex-shrink: 0;
@@ -8503,7 +8522,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .cplus-section-label {
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   padding: 8px 8px 4px;
 }
@@ -8553,7 +8572,7 @@ html[data-theme="dark"] .session-agent-item.active {
 }
 .cplus-fly-title {
   font-size: var(--font-size-base);
-  font-weight: 550;
+  font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
 .cplus-fly-desc {
@@ -8626,7 +8645,7 @@ html[data-theme="dark"] .session-agent-item.active {
   background: var(--bg-active);
   border-color: var(--border-color);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-normal);
 }
 .cplus-btn.primary:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -8839,7 +8858,7 @@ html[data-theme="dark"] th {
 .msg-assistant-text .md-th {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-normal);
 }
 
 .msg-assistant-text pre,
@@ -8900,7 +8919,196 @@ html[data-theme="dark"] th {
 .msg-assistant-body .tool-timeline-item {
   margin: 1px 0;
 }
+/* 工具行高度由文末 CHAT_FLOW_POLISH 统一（约 24px），此处不压到 18 */
+
+/* AI_CONTENT_WEIGHT_BLOCK: only AI output may be bold / italic */
+.msg-assistant-text strong,
+.msg-assistant-text b,
+.md-rendered strong,
+.md-rendered b,
+.assistant-text-content strong,
+.assistant-text-content b {
+  font-weight: var(--font-weight-content);
+}
+.msg-assistant-text em,
+.md-rendered em,
+.assistant-text-content em {
+  font-style: italic;
+  font-weight: var(--font-weight-normal);
+}
+.msg-assistant-text .md-h1,
+.msg-assistant-text .md-h2,
+.msg-assistant-text .md-h3,
+.msg-assistant-text .md-h4,
+.md-rendered .md-h1,
+.md-rendered .md-h2,
+.md-rendered .md-h3,
+.md-rendered .md-h4 {
+  font-weight: var(--font-weight-content);
+}
+.msg-assistant-text .md-th {
+  font-weight: var(--font-weight-content);
+}
+
+/* CHAT_FLOW_POLISH */
+.chat-doc-flow {
+  padding: 16px 22px 12px !important;
+  box-sizing: border-box;
+}
+.chat-doc-flow,
+.msg-assistant-text,
+.msg-user-bubble,
+.msg-user-text,
+.msg-thinking-fold-body,
+.tool-result-pre {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.msg-row {
+  margin-bottom: 16px;
+}
+.msg-row-user {
+  margin-bottom: 18px;
+}
+.msg-row-assistant {
+  margin-bottom: 12px;
+}
+.msg-row-assistant.is-followup {
+  margin-top: -2px;
+  margin-bottom: 12px;
+}
+
+.msg-user-bubble {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.55;
+  padding: 10px 14px;
+  border-radius: 16px;
+  max-width: min(78%, 560px);
+}
+.msg-user-text {
+  font-weight: var(--font-weight-normal);
+}
+
+.msg-assistant-text {
+  font-size: var(--font-size-base) !important;
+  font-weight: var(--font-weight-normal);
+  line-height: 1.65 !important;
+  letter-spacing: 0.005em;
+}
+.msg-assistant-text p,
+.msg-assistant-text .md-p {
+  margin: 0 0 0.45em;
+}
+.msg-assistant-text p:last-child,
+.msg-assistant-text .md-p:last-child {
+  margin-bottom: 0;
+}
+
+.tool-stack {
+  max-height: min(240px, 40vh);
+  margin: 4px 0 6px;
+}
 .tool-row-head {
-  min-height: 18px;
-  padding: 1px 0;
+  min-height: 24px !important;
+  padding: 3px 0 !important;
+  font-weight: var(--font-weight-normal) !important;
+  color: var(--text-tertiary);
+}
+.tool-row-summary,
+.tool-row-cmd,
+.tool-row-result-preview {
+  font-weight: var(--font-weight-normal) !important;
+}
+.tool-row-summary {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.tool-row-cmd {
+  font-size: var(--font-size-xs);
+}
+.tool-row-head:hover .tool-row-summary,
+.tool-row-head:hover .tool-row-cmd {
+  font-weight: var(--font-weight-normal) !important;
+}
+
+.msg-thinking-fold {
+  margin: 0 0 8px;
+}
+.msg-thinking-fold-sum,
+.msg-thinking-fold-label,
+.msg-thinking-sec {
+  font-weight: var(--font-weight-normal) !important;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+.msg-thinking-fold-body {
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  max-height: calc(var(--font-size-sm) * 1.5 * 4);
+}
+
+.msg-icon-btn {
+  width: var(--control-height) !important;
+  height: var(--control-height) !important;
+  border-radius: 8px;
+}
+.msg-icon-btn svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+.msg-assistant-meta,
+.msg-user-meta {
+  min-height: var(--control-height);
+}
+.msg-time {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+}
+
+.chat-empty-title {
+  font-weight: var(--font-weight-normal) !important;
+  letter-spacing: -0.01em;
+}
+.chat-empty-project-btn,
+.quick-prompt-card {
+  font-weight: var(--font-weight-normal) !important;
+}
+
+.msg-assistant-text pre,
+.msg-assistant-text .md-code-block {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0.55em 0;
+}
+.msg-assistant-text code,
+.msg-assistant-text .md-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-weight: var(--font-weight-normal);
+}
+
+.msg-assistant-text .md-h1,
+.msg-assistant-text .md-h2,
+.msg-assistant-text .md-h3,
+.msg-assistant-text .md-h4 {
+  margin: 0.9em 0 0.4em;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+.msg-assistant-text .md-h1:first-child,
+.msg-assistant-text .md-h2:first-child,
+.msg-assistant-text .md-h3:first-child {
+  margin-top: 0.15em;
+}
+
+.toolbar-btn:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+  border-color: var(--border-color) !important;
+  transform: none !important;
 }
