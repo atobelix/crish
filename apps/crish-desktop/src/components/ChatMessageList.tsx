@@ -229,17 +229,34 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         }
 
         const isThinkingMsg = msg.id === thinkingMsgId;
+        const thinkingRaw =
+          msg.thinking &&
+          msg.thinking.trim() &&
+          msg.thinking !== '正在处理…' &&
+          msg.thinking !== '正在思考中...'
+            ? msg.thinking.trim()
+            : '';
+        const thinkingText = thinkingRaw || (isThinkingMsg ? '…' : '');
+        const thinkingLineCount = thinkingText
+          ? thinkingText.split(/\r?\n/).length
+          : 0;
+        /** 五行以内（且非流式中）直接展示，不折叠 */
+        const thinkingShort =
+          !isThinkingMsg && thinkingLineCount > 0 && thinkingLineCount <= 5;
+        const showThinking = isThinkingMsg || thinkingLineCount > 0;
+
         return (
           <div
             className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}`}
             key={msg.id}
           >
-            {/* 思考：浅色限高可滚；完成后可由用户展开，不强制 open 锁死 */}
-            {(isThinkingMsg ||
-              (msg.thinking &&
-                msg.thinking.trim() &&
-                msg.thinking !== '正在处理…' &&
-                msg.thinking !== '正在思考中...')) && (
+            {/* 思考：短内容平铺；长内容 / 进行中用折叠 */}
+            {showThinking && thinkingShort ? (
+              <div className="msg-thinking-plain" key={`think-plain-${msg.id}`}>
+                <div className="msg-thinking-plain-label">思考</div>
+                <div className="msg-thinking-plain-body">{thinkingText.slice(0, 4000)}</div>
+              </div>
+            ) : showThinking ? (
               <details
                 className={`msg-thinking-fold ${isThinkingMsg ? 'is-live' : ''}`}
                 key={`think-${msg.id}-${isThinkingMsg ? 'live' : 'done'}`}
@@ -260,15 +277,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   </span>
                 </summary>
                 <div className="msg-thinking-fold-body">
-                  {(msg.thinking &&
-                  msg.thinking !== '正在处理…' &&
-                  msg.thinking !== '正在思考中...'
-                    ? msg.thinking
-                    : '…'
-                  ).slice(0, 4000)}
+                  {thinkingText.slice(0, 4000)}
                 </div>
               </details>
-            )}
+            ) : null}
 
             <div className="msg-assistant-body">
               {(() => {

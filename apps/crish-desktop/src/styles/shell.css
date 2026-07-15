@@ -2339,20 +2339,35 @@ select.ui-input {
 .sb-section-label-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 4px;
   padding-right: 2px;
   min-height: 28px;
 }
-.sb-section-label-row .sb-section-label { flex: 1; min-width: 0; }
+.sb-section-label-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.sb-section-label-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+/* hover 时显示排序 / 新建 / 项目行新建对话 */
 .sb-section-label-row:hover .sb-section-new,
 .sb-section-label-row:focus-within .sb-section-new,
-.crish-sidebar .folder-header:hover .folder-new-session,
-.crish-sidebar .folder-header:focus-within .folder-new-session {
+.sb-section-label-row:hover .sb-section-sort,
+.sb-section-label-row:focus-within .sb-section-sort,
+.crish-sidebar .folder-header-row:hover .folder-new-session,
+.crish-sidebar .folder-header-row:focus-within .folder-new-session {
   opacity: 1;
   pointer-events: auto;
 }
 .sb-section-new,
+.sb-section-sort,
 .crish-sidebar .folder-new-session {
   width: 24px;
   height: 24px;
@@ -2367,16 +2382,50 @@ select.ui-input {
   opacity: 0;
   pointer-events: none;
   flex-shrink: 0;
-  margin-left: auto;
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 .sb-section-new:hover,
+.sb-section-sort:hover,
 .crish-sidebar .folder-new-session:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+/* 兼容旧 sort-btn：分区内也仅 hover 显示 */
+.sb-section-label-row .sort-btn {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sb-section-label-row:hover .sort-btn,
+.sb-section-label-row:focus-within .sort-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
 .crish-sidebar .folder-count {
   display: none !important;
+}
+.crish-sidebar .folder-header-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--control-height);
+}
+.crish-sidebar .folder-header-row .folder-header {
+  flex: 1;
+  min-width: 0;
+}
+.crish-sidebar .folder-header-row .folder-new-session {
+  margin-right: 2px;
 }
 .sb-section-label {
   display: flex;

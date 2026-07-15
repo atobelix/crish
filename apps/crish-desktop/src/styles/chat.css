@@ -4359,3 +4359,27 @@
   -webkit-box-orient: vertical;
 }
 .sched-item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+
+/* 短思考：不折叠，平铺展示 */
+.msg-thinking-plain {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  max-width: 720px;
+}
+.msg-thinking-plain-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+.msg-thinking-plain-body {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

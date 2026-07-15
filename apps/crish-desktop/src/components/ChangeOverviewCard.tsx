@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
+import { resolveToolDiffs } from '../api/toolFeedback';
 
 export type ChangeOverviewCardProps = {
   message: SessionMessage;
@@ -16,22 +17,34 @@ function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
+function mergeDiff(map: Map<string, FileDiff>, d: FileDiff) {
+  if (!d?.filePath) return;
+  const prev = map.get(d.filePath);
+  if (!prev) {
+    map.set(d.filePath, d);
+    return;
+  }
+  map.set(d.filePath, {
+    ...d,
+    additions: (prev.additions || 0) + (d.additions || 0),
+    deletions: (prev.deletions || 0) + (d.deletions || 0),
+    changes: [...(prev.changes || []), ...(d.changes || [])].slice(0, 400),
+  });
+}
+
 /** 从助手消息工具调用中汇总 FileDiff（去重 path） */
 export function collectMessageDiffs(message: SessionMessage): FileDiff[] {
   const map = new Map<string, FileDiff>();
   for (const tc of message.toolCalls || []) {
-    for (const d of tc.diffs || []) {
-      if (!d?.filePath) continue;
-      const prev = map.get(d.filePath);
-      if (!prev) {
-        map.set(d.filePath, d);
-      } else {
-        map.set(d.filePath, {
-          ...d,
-          additions: (prev.additions || 0) + (d.additions || 0),
-          deletions: (prev.deletions || 0) + (d.deletions || 0),
-          changes: [...(prev.changes || []), ...(d.changes || [])].slice(0, 400),
-        });
+    for (const d of tc.diffs || []) mergeDiff(map, d);
+    // 结构化 diffs 为空时，从输出/参数再解析编辑类 diff
+    if (!(tc.diffs && tc.diffs.length)) {
+      for (const d of resolveToolDiffs({
+        name: tc.name || '',
+        args: tc.arguments,
+        output: tc.output,
+      })) {
+        mergeDiff(map, d);
       }
     }
   }

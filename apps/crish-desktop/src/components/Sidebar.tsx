@@ -329,6 +329,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onOpenProject={handleOpenProject}
           onSortBtnClick={handleSortBtnClick}
           onNewSession={handleNewSession}
+          onAddProject={() => {
+            window.dispatchEvent(new CustomEvent('crish-pick-workspace'));
+          }}
           onMoveSessionRealtime={moveSessionRealtime}
         />
       </div>
