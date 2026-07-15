@@ -104,6 +104,43 @@ function normalizeToolExecutionOptions(options: AgentRuntimeOptions["toolExecuti
   };
 }
 
+/**
+ * 最近一轮用户输入之后：用过工具，却几乎没有助手正文 → 需要强制收尾总结。
+ */
+function conversationNeedsTextSynthesis(conversation: ConversationEngine): boolean {
+  const messages = conversation.getMessages();
+  if (messages.length === 0) return false;
+
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx < 0) return false;
+
+  const after = messages.slice(lastUserIdx + 1);
+  // 忽略我们自己注入的收尾提示后的空窗
+  let sawTool = false;
+  let proseChars = 0;
+  for (const m of after) {
+    if (m.role === "tool") {
+      sawTool = true;
+      continue;
+    }
+    if (m.role === "assistant") {
+      for (const b of m.blocks ?? []) {
+        if (b.type === "tool-call") sawTool = true;
+        if (b.type === "text" && typeof (b as { text?: string }).text === "string") {
+          proseChars += (b as { text: string }).text.trim().length;
+        }
+      }
+    }
+  }
+  return sawTool && proseChars < 40;
+}
+
 function positiveIntegerLocal(value: number | undefined, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value) && value > 0 && Number.isInteger(value)) return value;
   return fallback;
@@ -122,6 +159,10 @@ export class AgentSessionLoop {
   private readonly compressionGate: ContextCompressionGate;
   private readonly singleToolExecutor: SingleToolExecutor;
   private readonly permissionPolicy: RuntimePermissionPolicy;
+  /** 工具回合结束后若无文字总结，最多强制收尾一次，避免「只有工具、没有回复」 */
+  private synthesisNudgeUsed = false;
+  /** 本 run 是否执行过工具（比扫 messages 更稳） */
+  private sawToolsThisRun = false;
 
   constructor(
     private readonly options: AgentRuntimeOptions,
@@ -285,9 +326,60 @@ export class AgentSessionLoop {
         // ── streaming: 调用 Provider，收集助手消息 ────────────
         case "streaming": {
           const callIterator = this.buildProviderCall();
-          const consumeResult = await this.providerConsumer.consume(
-            callIterator, this.tools, this.abortController.signal
+          // 流式 delta 经队列边收边 yield，避免只能等整段 message-end
+          const deltaQueue: AgentEvent[] = [];
+          let deltaWaiters: Array<() => void> = [];
+          const wake = () => {
+            const w = deltaWaiters;
+            deltaWaiters = [];
+            for (const r of w) r();
+          };
+          const consumePromise = this.providerConsumer.consume(
+            callIterator,
+            this.tools,
+            this.abortController.signal,
+            (d) => {
+              deltaQueue.push({
+                type: "message-delta",
+                sessionId: this.sessionId,
+                block:
+                  d.kind === "thought"
+                    ? {
+                        type: "thought",
+                        text: d.text,
+                        ...(d.redacted !== undefined ? { redacted: d.redacted } : {}),
+                      }
+                    : { type: "text", text: d.text },
+                timestamp: nowIso(),
+              } as AgentEvent);
+              wake();
+            },
           );
+          let consumeResult: Awaited<ReturnType<ProviderResponseConsumer["consume"]>> | undefined;
+          const done = consumePromise.then((r) => {
+            consumeResult = r;
+            wake();
+            return r;
+          });
+          while (true) {
+            while (deltaQueue.length > 0) {
+              const next = deltaQueue.shift()!;
+              yield* this.emitEvent(next);
+            }
+            if (consumeResult) break;
+            await Promise.race([
+              done,
+              new Promise<void>((resolve) => {
+                deltaWaiters.push(resolve);
+              }),
+            ]);
+          }
+          while (deltaQueue.length > 0) {
+            yield* this.emitEvent(deltaQueue.shift()!);
+          }
+          if (!consumeResult) {
+            consumeResult = await done;
+          }
 
           // emit 在流期间收集的 provider-diagnostic 事件
           for (const diagnostic of consumeResult.diagnostics) {
@@ -402,6 +494,7 @@ export class AgentSessionLoop {
             : [];
 
           const toolResults = yield* this.executeToolCalls(toolCalls, this.tools, this.recorder);
+          this.sawToolsThisRun = true;
           if (toolResults.every((block) => !block.isError)) {
             this.steeringCoordinator.resetSteeringCount();
           }
@@ -447,8 +540,24 @@ export class AgentSessionLoop {
             endReason = "aborted";
             this.dispatch("FINISH");
           } else if (shouldStopForMaxTurns(ctx)) {
-            endReason = "max-turns";
-            this.dispatch("MAX_TURNS_REACHED");
+            // 触顶前若仍只有工具没有结论，先抢一轮收尾（仍计入合成预算）
+            if (
+              !this.synthesisNudgeUsed &&
+              this.sawToolsThisRun &&
+              conversationNeedsTextSynthesis(this.conversation)
+            ) {
+              this.synthesisNudgeUsed = true;
+              this.inputQueue.enqueue(
+                createTextMessage(
+                  "user",
+                  "轮次将尽。请立刻基于已有工具结果给出完整中文总结与建议，不要再调用工具。",
+                ),
+              );
+              this.dispatch("INPUT_AVAILABLE");
+            } else {
+              endReason = "max-turns";
+              this.dispatch("MAX_TURNS_REACHED");
+            }
           } else if (this.composedHooks.shouldStopAfterTurn) {
             // ★ Hook: shouldStopAfterTurn — 如果任何注册的 Hook 返回 true，提前终止
             const turnCtx: TurnContext = {
@@ -477,6 +586,20 @@ export class AgentSessionLoop {
             this.dispatch("NEXT_TURN");
           } else if (this.inputQueue.hasPending()) {
             // 无工具调用但有新输入：切换到新输入周期
+            this.dispatch("INPUT_AVAILABLE");
+          } else if (
+            !this.synthesisNudgeUsed &&
+            this.sawToolsThisRun &&
+            conversationNeedsTextSynthesis(this.conversation)
+          ) {
+            // 已跑过工具但尚无实质文字结论：注入一次收尾提示，禁止再空停
+            this.synthesisNudgeUsed = true;
+            this.inputQueue.enqueue(
+              createTextMessage(
+                "user",
+                "请基于以上工具结果，用完整中文给出分析结论与下一步建议。不要再调用工具；若信息不足请明确说明缺什么。",
+              ),
+            );
             this.dispatch("INPUT_AVAILABLE");
           } else {
             // 正常停止

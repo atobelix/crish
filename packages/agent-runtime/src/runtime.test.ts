@@ -31,6 +31,63 @@ function terminalTool(name: string): AgentTool {
 }
 
 describe("AgentRuntime", () => {
+  it("nudges a text synthesis turn when the model only runs tools and never writes prose", async () => {
+    let requestCount = 0;
+    const provider: AgentProvider = {
+      id: "scripted-tools-only",
+      async *stream() {
+        requestCount += 1;
+        if (requestCount === 1) {
+          yield { type: "tool-call", id: "call_only", toolName: "shell", input: { command: "pwd" } };
+          yield { type: "stop", reason: "tool-call" };
+          return;
+        }
+        if (requestCount === 2) {
+          // 工具后只给极短废话（不足总结阈值），应触发收尾 nudge
+          yield { type: "text-delta", text: "嗯" };
+          yield { type: "stop", reason: "stop" };
+          return;
+        }
+        // 第 3 次调用：收尾 nudge 后的总结
+        yield { type: "text-delta", text: "综合结论：工具已检查完毕，仓库状态正常。" };
+        yield { type: "stop", reason: "stop" };
+      },
+    };
+
+    const store = new InMemorySessionStore();
+    const runtime = new AgentRuntime({
+      sessionId: "s_synthesis_nudge",
+      cwd: "C:/repo",
+      provider,
+      tools: [terminalTool("shell")],
+      sessionStore: store,
+      maxTurns: 8,
+    });
+
+    const texts: string[] = [];
+    const userTexts: string[] = [];
+    for await (const event of runtime.run("check without prose")) {
+      if (event.type === "message-end" && event.message.role === "assistant") {
+        const t = event.message.blocks
+          ?.filter((b) => b.type === "text")
+          .map((b) => (b as { text?: string }).text ?? "")
+          .join("");
+        if (t) texts.push(t);
+      }
+      if (event.type === "message-end" && event.message.role === "user") {
+        const t = event.message.blocks
+          ?.filter((b) => b.type === "text")
+          .map((b) => (b as { text?: string }).text ?? "")
+          .join("");
+        if (t) userTexts.push(t);
+      }
+    }
+
+    expect(requestCount).toBeGreaterThanOrEqual(3);
+    expect(userTexts.some((t) => t.includes("不要再调用工具") || t.includes("分析结论"))).toBe(true);
+    expect(texts.some((t) => t.includes("综合结论"))).toBe(true);
+  });
+
   it("keeps assistant text and tool calls in source order while batching parallel tools", async () => {
     let requestCount = 0;
     const provider: AgentProvider = {

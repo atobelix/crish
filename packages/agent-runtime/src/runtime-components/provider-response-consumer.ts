@@ -15,11 +15,18 @@ export interface ConsumeResult {
   diagnostics: ProviderDiagnostic[];
 }
 
+export type ProviderDeltaSink = (delta: {
+  kind: "text" | "thought";
+  text: string;
+  redacted?: boolean;
+}) => void;
+
 export class ProviderResponseConsumer {
   async consume(
     callIterator: AsyncIterable<ProviderStreamContractEvent>,
     tools: AgentTool[],
     signal: AbortSignal,
+    onDelta?: ProviderDeltaSink,
   ): Promise<ConsumeResult> {
     const blocks: AgentMessageBlock[] = [];
     const diagnostics: ProviderDiagnostic[] = [];
@@ -41,6 +48,11 @@ export class ProviderResponseConsumer {
             sawContent = true;
             textBuffer += event.delta.text;
             blocks.push({ type: "text", text: event.delta.text });
+            try {
+              onDelta?.({ kind: "text", text: event.delta.text });
+            } catch {
+              /* UI sink must not break stream */
+            }
           } else if (event.delta.type === "thought") {
             sawContent = true;
             thoughtBuffer += event.delta.text;
@@ -49,6 +61,15 @@ export class ProviderResponseConsumer {
               text: event.delta.text,
               ...(event.delta.redacted !== undefined ? { redacted: event.delta.redacted } : {}),
             });
+            try {
+              onDelta?.({
+                kind: "thought",
+                text: event.delta.text,
+                ...(event.delta.redacted !== undefined ? { redacted: event.delta.redacted } : {}),
+              });
+            } catch {
+              /* ignore */
+            }
           } else if (event.delta.type === "diagnostic") {
             diagnostics.push(event.delta.diagnostic);
           }

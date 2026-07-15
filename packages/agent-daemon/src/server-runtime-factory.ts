@@ -401,7 +401,8 @@ export class DaemonRuntimeFactory {
     // 从合并结果中提取运行时参数
     const permissionMode =
       (mergedConfig.permissionMode as "ask" | "auto" | "full-access" | "plan") ?? "ask";
-    const maxTurns = (mergedConfig.maxTurns as number) ?? 16;
+    // 探索型任务常需多轮读文件；16 偏紧，默认放宽到 32（仍可用 metadata/env 覆盖）
+    const maxTurns = (mergedConfig.maxTurns as number) ?? 32;
     const subagentDepth = (mergedConfig.subagentDepth as number) ?? 0;
 
     const permissionPolicy = new DaemonPermissionPolicy(

@@ -534,11 +534,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
         const asst = st.sessions
           .find((s) => s.id === sid)
           ?.messages.find((m) => m.id === assistantMsgId);
+        // 禁止伪造「已结束。」进正文：会污染会话展示，也被用户当成模型失忆/胡说
+        // 有工具无正文时保持空文案，时间线已有工具行；无工具则给一句诚实说明
         if (asst && !gotRealText && !(asst.text || '').trim()) {
-          // 不把思考提升为正文，避免与思考折叠重复
-          if (!(asst.text || '').trim()) {
-            st.updateMessageText(sid, assistantMsgId, '已结束。');
+          const hasTools = (asst.toolCalls || []).some(
+            (t) => t.status === 'success' || t.status === 'error' || t.status === 'running',
+          );
+          if (!hasTools) {
+            st.updateMessageText(sid, assistantMsgId, '（本轮未返回文字回复）');
           }
+          // hasTools：不写占位，避免盖住工具结果区
         }
         // 收口诚实：未完成工具标 error，不伪造 success
         if (asst?.toolCalls?.length) {

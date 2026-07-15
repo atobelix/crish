@@ -261,11 +261,29 @@ export function streamViaDaemon(
         // content 仅作文案，不把 thought 混进正文
         if (typeof msg.content === 'string' && msg.content && !text) text = msg.content;
         if (thought.trim()) {
-          assistantThought = thought.trim();
+          // 思考累计（多轮工具时可能多段）
+          if (assistantThought && !assistantThought.includes(thought.trim())) {
+            assistantThought = `${assistantThought}\n${thought.trim()}`;
+          } else {
+            assistantThought = thought.trim();
+          }
           callbacks.onThought(assistantThought);
         }
         if (text.trim()) {
-          assistantText = text.trim();
+          // 多轮 tool→再回复：各轮正文累计；同轮 delta 已推过则用完整段覆盖，勿重复拼接
+          const piece = text.trim();
+          if (!assistantText) {
+            assistantText = piece;
+          } else if (
+            assistantText === piece ||
+            piece.startsWith(assistantText) ||
+            assistantText.endsWith(piece) ||
+            piece.includes(assistantText)
+          ) {
+            assistantText = piece.length >= assistantText.length ? piece : assistantText;
+          } else {
+            assistantText = `${assistantText}\n\n${piece}`;
+          }
           callbacks.onChunk(assistantText);
         }
       }

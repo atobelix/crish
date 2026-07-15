@@ -92,6 +92,10 @@ export function sanitizeMessagesForHydrate(messages: SessionMessage[]): SessionM
         }),
       };
     }
+    // 历史脏数据：客户端曾注入的「已结束。」不是模型正文，去掉以免误导续聊
+    if (next.sender === 'assistant' && (next.text || '').trim() === '已结束。') {
+      next = { ...next, text: '' };
+    }
     // 对齐 blocks / toolCalls，保证重开会话时间线可渲染
     if (next.sender === 'assistant') {
       next = normalizeAssistantTimeline(next);
