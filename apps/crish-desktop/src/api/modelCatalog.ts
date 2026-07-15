@@ -159,59 +159,113 @@ function chatCompletionsUrl(baseUrl: string): string {
 }
 
 /**
- * HTTP 探测顺序（符合 OpenAI 兼容供应商约定）：
- * 1. Tauri 原生 workbench_http_request（无浏览器 CORS，与聊天引擎同属本机出站）
- * 2. 浏览器 fetch（仅 dev 网页模式；失败时给出可行动说明）
+ * HTTP 探测顺序（OpenAI 兼容供应商，服务端出站无 CORS）：
+ * 1. Tauri 原生 workbench_http_request（reqwest）
+ * 2. Vite 开发代理 /__crish_http_proxy（localhost:5174 场景）
+ * 3. 浏览器直连 fetch（多数公网 API 会被 CORS 拦截，仅作最后手段）
  */
 async function httpRequest(
   url: string,
   init: { method: string; headers?: Record<string, string>; body?: string },
 ): Promise<{ ok: boolean; status: number; text: string }> {
-  // 1) 桌面壳原生 HTTP（reqwest）
+  const method = (init.method || 'GET').toUpperCase();
+  // GET/HEAD 不要带 Content-Type，避免多余 preflight（直连时）
+  const headers: Record<string, string> = { ...(init.headers || {}) };
+  if (method === 'GET' || method === 'HEAD') {
+    delete headers['Content-Type'];
+    delete headers['content-type'];
+  }
+
+  // 1) 桌面壳原生 HTTP
   try {
     const core: any = await (Function(
       'return import("@tauri-apps/api/core")',
     )() as Promise<any>).catch(() => null);
-    if (core?.invoke) {
-      const res = (await core.invoke('workbench_http_request', {
-        url,
-        method: init.method,
-        headers: init.headers || {},
-        body: init.body ?? null,
-      })) as { ok?: boolean; status?: number; body?: string };
-      return {
-        ok: Boolean(res?.ok),
-        status: Number(res?.status) || 0,
-        text: String(res?.body ?? ''),
-      };
+    const hasTauri =
+      typeof window !== 'undefined' &&
+      Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+    if (core?.invoke && hasTauri) {
+      try {
+        const res = (await core.invoke('workbench_http_request', {
+          url,
+          method,
+          headers,
+          body: init.body ?? null,
+        })) as { ok?: boolean; status?: number; body?: string };
+        return {
+          ok: Boolean(res?.ok),
+          status: Number(res?.status) || 0,
+          text: String(res?.body ?? ''),
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // 命令未注册 → 继续代理；真网络错误 → 抛出
+        if (/network:/i.test(msg)) {
+          throw new Error(msg.replace(/^network:\s*/i, ''));
+        }
+        if (!/not found|unknown command|Command|ipc/i.test(msg)) {
+          if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
+            throw new Error(msg);
+          }
+        }
+        // fall through to vite proxy
+      }
     }
   } catch (e) {
-    // invoke 不存在或命令未注册时继续尝试 fetch；真正的网络错误在下面处理
     const msg = e instanceof Error ? e.message : String(e);
-    if (/network:/i.test(msg)) {
-      throw new Error(msg.replace(/^network:\s*/i, ''));
-    }
-    // 若是 command not found，fall through
-    if (!/not found|unknown command|COMMAND/i.test(msg)) {
-      // 其它 invoke 错误（如网络）直接抛出，避免误报 CORS
-      if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
-        throw new Error(msg);
-      }
+    if (!/not found|unknown command|Cannot find module|Failed to fetch dynamically/i.test(msg)) {
+      // 仅在已判定为网络类时上抛
+      if (/dns|connect|timed out|timeout|refused|network/i.test(msg)) throw e;
     }
   }
 
-  // 2) 浏览器 fetch（dev 或无壳）
-  try {
-    const res = await fetch(url, {
-      method: init.method,
-      headers: init.headers,
-      body: init.body,
-    });
-    const text = await res.text();
-    return { ok: res.ok, status: res.status, text };
-  } catch (e) {
-    throw e;
+  // 2) Vite 开发代理（origin 为 localhost:5174 时的正解）
+  const useDevProxy =
+    typeof window !== 'undefined' &&
+    (window.location.port === '5174' ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1');
+  if (useDevProxy) {
+    try {
+      const res = await fetch('/__crish_http_proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          method,
+          headers,
+          body: init.body ?? null,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        status?: number;
+        body?: string;
+        error?: string;
+      };
+      if (data.error && !data.status) {
+        throw new Error(data.error);
+      }
+      return {
+        ok: Boolean(data.ok),
+        status: Number(data.status) || 0,
+        text: String(data.body ?? ''),
+      };
+    } catch (e) {
+      // 代理未启动时再 fall through
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/failed to fetch|404|proxy/i.test(msg)) throw e;
+    }
   }
+
+  // 3) 浏览器直连（多数供应商会 CORS 失败）
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: init.body,
+  });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
 }
 
 function friendlyFetchError(e: unknown): string {

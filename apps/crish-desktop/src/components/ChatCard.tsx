@@ -1304,10 +1304,19 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
     return (
       <div className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`} key={key}>
-        <button
-          type="button"
+        {/* 用 div 而非 button，避免路径操作按钮嵌套 button 报错 */}
+        <div
           className="tool-row-head"
+          role={canToggle ? 'button' : undefined}
+          tabIndex={canToggle ? 0 : undefined}
           onClick={() => canToggle && toggleTool(tc.id, isOpen)}
+          onKeyDown={(e) => {
+            if (!canToggle) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleTool(tc.id, isOpen);
+            }
+          }}
         >
           <span className="tool-row-head-main">
             {toolIcon}
@@ -1318,13 +1327,12 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               </code>
             ) : null}
           </span>
-          {/* 折叠按钮固定右侧，避免展开后位置跳动 */}
           <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
             {canToggle ? (
               <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
             ) : null}
           </span>
-        </button>
+        </div>
         {isOpen && body}
       </div>
     );
@@ -1348,7 +1356,18 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
             key={gid}
           >
-            <button type="button" className="tool-row-head" onClick={() => toggleTool(gid, isOpen)}>
+            <div
+              className="tool-row-head"
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleTool(gid, isOpen)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTool(gid, isOpen);
+                }
+              }}
+            >
               <span className="tool-row-head-main">
                 {running ? (
                   <span className="tool-row-live" aria-hidden>
@@ -1360,7 +1379,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               <span className="tool-row-chevron-slot is-toggle">
                 <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
               </span>
-            </button>
+            </div>
             {isOpen && (
               <div className="tool-group-body">
                 {item.tools.map((tc) => renderCompactToolRow(tc, tc.id, msgId))}
