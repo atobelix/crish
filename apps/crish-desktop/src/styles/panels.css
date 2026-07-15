@@ -2008,15 +2008,48 @@
   overflow: auto;
   background: var(--bg-primary);
 }
-.diff-current-path {
+.diff-current-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.diff-current-path {
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
   color: var(--text-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.diff-apply-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.diff-apply-actions .ui-btn {
+  gap: 4px;
+}
+.diff-apply-hint {
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--accent-orange, #f59e0b) 8%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.diff-icon-btn--accept {
+  color: var(--accent-green, #22c55e);
+}
+.diff-icon-btn--accept:hover:not(:disabled) {
+  color: var(--accent-green, #22c55e);
+  background: color-mix(in srgb, var(--accent-green, #22c55e) 12%, transparent);
 }
 .diff-lines {
   margin: 0;

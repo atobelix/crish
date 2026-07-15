@@ -284,6 +284,7 @@ export const streamMockAssistantResponse = (
   callbacks: StreamCallbacks,
   sessionId?: string,
   assistantMsgId?: string,
+  _options?: import('./chatApi').StreamRequestOptions,
 ) => {
   let isCancelled = false;
 

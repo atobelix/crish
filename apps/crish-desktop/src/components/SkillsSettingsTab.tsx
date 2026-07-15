@@ -65,7 +65,13 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
   const [actFilter, setActFilter] = useState<ActFilter>('all');
   const [extraDir, setExtraDir] = useState('');
-  const [extraDirs, setExtraDirs] = useState<string[]>(() => getExtraSkillDirs());
+  const [extraDirs, setExtraDirs] = useState<string[]>(() => {
+    try {
+      return getExtraSkillDirs();
+    } catch {
+      return [];
+    }
+  });
   const [fsOk, setFsOk] = useState(true);
   const [enableCommands, setEnableCommands] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);

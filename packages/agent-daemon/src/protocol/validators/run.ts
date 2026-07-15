@@ -156,6 +156,31 @@ export function validateRunTaskMessage(
     validateScopedContextRuntimeConfig(input.scopedContextConfig, "$.scopedContextConfig", issues);
   }
 
+  // 多模态 content / attachments：宽松校验（数组即可），避免拦死未来 part 形态
+  let content: RunTaskMessage["content"] | undefined;
+  if ("content" in input) {
+    if (!Array.isArray(input.content)) {
+      issues.push({
+        path: "$.content",
+        message: "content must be an array of content parts",
+      });
+    } else {
+      content = input.content as RunTaskMessage["content"];
+    }
+  }
+  const hasImages = optionalBoolean(input, "hasImages", "$.hasImages", issues);
+  let attachments: RunTaskMessage["attachments"] | undefined;
+  if ("attachments" in input) {
+    if (!Array.isArray(input.attachments)) {
+      issues.push({
+        path: "$.attachments",
+        message: "attachments must be an array",
+      });
+    } else {
+      attachments = input.attachments as RunTaskMessage["attachments"];
+    }
+  }
+
   if (issues.length > 0) return invalid("Invalid run-task message", issues);
 
   return ok({
@@ -180,6 +205,9 @@ export function validateRunTaskMessage(
     ...(projectTags !== undefined ? { projectTags } : {}),
     ...(packageNames !== undefined ? { packageNames } : {}),
     ...("scopedContextConfig" in input ? { scopedContextConfig: input.scopedContextConfig as RunTaskMessage["scopedContextConfig"] } : {}),
+    ...(content !== undefined ? { content } : {}),
+    ...(hasImages !== undefined ? { hasImages } : {}),
+    ...(attachments !== undefined ? { attachments } : {}),
   });
 }
 

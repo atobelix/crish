@@ -1,5 +1,6 @@
 /**
  * 右侧变更面板：Git 工作区变更 + 本会话 AI 回合汇总（下拉）。
+ * 支持接受/拒绝落盘（工程闭环）。
  * 工具栏以图标为主，保持功能行紧凑。
  */
 import React, { useCallback, useMemo, useState } from 'react';
@@ -7,6 +8,11 @@ import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
 import { fetchGitDiff, fetchGitStatus } from '../api/gitApi';
+import {
+  applyFileDiffToDisk,
+  applyFileDiffsToDisk,
+  classifyFileDiff,
+} from '../api/applyFileDiff';
 import { collectMessageDiffs } from './ChangeOverviewCard';
 
 interface DiffCardProps {
@@ -39,10 +45,12 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
   const pushDiffFile = useLayoutStore((s) => s.pushDiffFile);
+  const removeDiffFile = useLayoutStore((s) => s.removeDiffFile);
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
   const [diffSearchQuery, setDiffSearchQuery] = useState('');
   const [gitLoading, setGitLoading] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
   const [sourceMode, setSourceMode] = useState<SourceMode>('list');
   const [turnKey, setTurnKey] = useState('');
 
@@ -165,6 +173,67 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return current.changes.filter((c) => c.content.toLowerCase().includes(q));
   }, [current, diffSearchQuery]);
 
+  const currentCanApply = useMemo(
+    () => (current ? classifyFileDiff(current).ok : false),
+    [current],
+  );
+
+  const rejectCurrent = useCallback(() => {
+    if (!current) return;
+    removeDiffFile(current.filePath);
+    onShowToast(`已拒绝 · ${basename(current.filePath)}`);
+  }, [current, onShowToast, removeDiffFile]);
+
+  const acceptCurrent = useCallback(async () => {
+    if (!current || applyBusy) return;
+    const cls = classifyFileDiff(current);
+    if (!cls.ok) {
+      onShowToast('此 diff 无法安全自动应用，请在编辑器确认');
+      return;
+    }
+    setApplyBusy(true);
+    try {
+      const result = await applyFileDiffToDisk(current);
+      if (result.ok === true) {
+        removeDiffFile(current.filePath);
+        onShowToast(
+          result.alreadyApplied
+            ? `已是目标内容 · ${basename(current.filePath)}`
+            : `已应用 · ${basename(current.filePath)}`,
+        );
+      } else {
+        onShowToast(result.message || '此 diff 无法安全自动应用，请在编辑器确认');
+      }
+    } finally {
+      setApplyBusy(false);
+    }
+  }, [applyBusy, current, onShowToast, removeDiffFile]);
+
+  const acceptAll = useCallback(async () => {
+    if (!fileList.length || applyBusy) return;
+    const safe = fileList.filter((f) => classifyFileDiff(f).ok);
+    if (!safe.length) {
+      onShowToast('此 diff 无法安全自动应用，请在编辑器确认');
+      return;
+    }
+    setApplyBusy(true);
+    try {
+      const { applied, skipped, failed, results } = await applyFileDiffsToDisk(safe);
+      for (const r of results) {
+        if (r.result.ok) removeDiffFile(r.filePath);
+      }
+      const parts: string[] = [];
+      if (applied) parts.push(`应用 ${applied}`);
+      if (skipped) parts.push(`已同步 ${skipped}`);
+      if (failed) parts.push(`失败 ${failed}`);
+      const unsafe = fileList.length - safe.length;
+      if (unsafe > 0) parts.push(`跳过不安全 ${unsafe}`);
+      onShowToast(parts.length ? `全部接受 · ${parts.join(' · ')}` : '全部接受完成');
+    } finally {
+      setApplyBusy(false);
+    }
+  }, [applyBusy, fileList, onShowToast, removeDiffFile]);
+
   return (
     <div className="diff-panel">
       <div className="diff-toolbar">
@@ -209,6 +278,17 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           >
             <Lucide.Layers size={16} />
           </button>
+          {fileList.length > 1 ? (
+            <button
+              type="button"
+              className="diff-icon-btn diff-icon-btn--accept"
+              title="全部接受（可安全应用的文件）"
+              disabled={applyBusy}
+              onClick={() => void acceptAll()}
+            >
+              <Lucide.CheckCheck size={16} />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`diff-icon-btn ${diffViewMode === 'unified' ? 'is-on' : ''}`}
@@ -306,9 +386,54 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             </div>
           ) : (
             <>
-              <div className="diff-current-path" title={current.filePath}>
-                {current.filePath}
+              <div className="diff-current-header">
+                <div className="diff-current-path" title={current.filePath}>
+                  {current.filePath}
+                </div>
+                <div className="diff-apply-actions">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-primary ui-btn-sm"
+                    title={
+                      currentCanApply
+                        ? '接受并写入磁盘'
+                        : '此 diff 无法安全自动应用'
+                    }
+                    disabled={applyBusy || !currentCanApply}
+                    onClick={() => void acceptCurrent()}
+                  >
+                    <Lucide.Check size={14} />
+                    {applyBusy ? '应用中…' : '接受/应用'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    title="从列表移除（不写盘）"
+                    disabled={applyBusy}
+                    onClick={rejectCurrent}
+                  >
+                    <Lucide.X size={14} />
+                    拒绝
+                  </button>
+                  {fileList.length > 1 ? (
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-secondary ui-btn-sm"
+                      title="批量接受列表中可安全应用的文件"
+                      disabled={applyBusy}
+                      onClick={() => void acceptAll()}
+                    >
+                      <Lucide.CheckCheck size={14} />
+                      全部接受
+                    </button>
+                  ) : null}
+                </div>
               </div>
+              {!currentCanApply ? (
+                <div className="diff-apply-hint">
+                  此 diff 无法安全自动应用，请在编辑器确认
+                </div>
+              ) : null}
               <pre className="diff-lines">
                 {filteredChanges.map((c, i) => (
                   <div

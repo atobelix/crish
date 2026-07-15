@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import {
@@ -205,17 +205,22 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
       return `read ${stringField(input, "path") ?? "<missing path>"}`;
     },
     async execute(input, context) {
-      const filePath = resolveWorkspacePath(options.workspaceRoot, requireString(input, "path"));
+      const relativePath = requireString(input, "path");
+      const filePath = resolveWorkspacePath(options.workspaceRoot, relativePath);
       const limit = Math.max(1, numberField(input, "maxBytes") ?? maxBytes);
-      const bytes = await readFile(filePath);
+      const bytes = await readFileOrThrow(filePath, displayPath(options.workspaceRoot, filePath));
       const decoded = decodeTextBuffer(bytes);
       if (decoded.encoding === "binary") {
         throw new Error(`File is binary and cannot be read as text: ${displayPath(options.workspaceRoot, filePath)}`);
       }
-      const truncated = bytes.byteLength > limit;
-      const text = truncated ? decoded.text.slice(0, limit) : decoded.text;
+      const totalChars = decoded.text.length;
+      const truncated = totalChars > limit || bytes.byteLength > limit;
+      const shown = truncated ? decoded.text.slice(0, limit) : decoded.text;
       const snapshotTag = computeSnapshotTag(bytes);
       recordReadSnapshot(options, context, filePath, snapshotTag);
+      const text = truncated
+        ? `${shown}\n... truncated: showing ${shown.length} of ${totalChars} chars (${bytes.byteLength} bytes) ...`
+        : shown;
       return {
         text,
         json: {
@@ -224,7 +229,9 @@ export function createReadFileTool(options: LocalToolOptions & { maxBytes?: numb
           encoding: decoded.encoding,
           hasBom: decoded.hasBom,
           snapshotTag,
-          truncated
+          truncated,
+          totalChars,
+          shownChars: shown.length
         }
       };
     }
@@ -270,20 +277,21 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
       const selectedStartLine = explicitStartLine ?? selector.startLine;
       const selectedEndLine = explicitEndLine ?? selector.endLine;
       const targetPath = resolveWorkspacePath(options.workspaceRoot, selector.path);
-      const targetStat = await stat(targetPath);
+      const relativeDisplay = displayPath(options.workspaceRoot, targetPath);
+      const targetStat = await statOrThrow(targetPath, relativeDisplay);
 
       if (targetStat.isDirectory()) {
-        const entries = await readdir(targetPath, { withFileTypes: true });
+        const entries = await readdirOrThrow(targetPath, relativeDisplay);
         const items = entries
           .map((entry) => ({
             name: entry.name,
-            kind: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other"
+            kind: (entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other") as ListingEntryKind
           }))
           .sort((left, right) => `${left.kind}:${left.name}`.localeCompare(`${right.kind}:${right.name}`));
         return {
-          text: items.map((item) => `${item.kind === "directory" ? "/" : " "}${item.name}`).join("\n"),
+          text: formatListingText(items),
           json: {
-            path: displayPath(options.workspaceRoot, targetPath),
+            path: relativeDisplay,
             kind: "directory",
             items: items as unknown as JsonValue
           } as JsonObject
@@ -291,13 +299,13 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
       }
 
       if (!targetStat.isFile()) {
-        throw new Error(`Path is not a file or directory: ${displayPath(options.workspaceRoot, targetPath)}`);
+        throw new Error(`Path is not a file or directory: ${relativeDisplay}`);
       }
 
-      const bytes = await readFile(targetPath);
+      const bytes = await readFileOrThrow(targetPath, relativeDisplay);
       const decoded = decodeTextBuffer(bytes);
       if (decoded.encoding === "binary") {
-        throw new Error(`File is binary and cannot be read as text: ${displayPath(options.workspaceRoot, targetPath)}`);
+        throw new Error(`File is binary and cannot be read as text: ${relativeDisplay}`);
       }
 
       const lines = splitTextLines(decoded.text);
@@ -305,30 +313,39 @@ export function createReadTool(options: LocalToolOptions & { maxBytes?: number; 
       const lineFormat = readLineFormat(input);
       const selectedText = formatReadLines(selection.lines, selection.startLine, lineFormat);
       const limit = Math.max(1, numberField(input, "maxBytes") ?? maxBytes);
-      const truncated = selectedText.length > limit;
+      const totalSelectedChars = selectedText.length;
+      const truncated = totalSelectedChars > limit;
+      const shownText = truncated ? selectedText.slice(0, limit) : selectedText;
       const snapshotTag = computeSnapshotTag(bytes);
-      const relativePath = displayPath(options.workspaceRoot, targetPath);
       recordReadSnapshot(options, context, targetPath, snapshotTag);
       const header = [
-        `path: ${relativePath}`,
+        `path: ${relativeDisplay}`,
         `snapshotTag: ${snapshotTag}`,
         `encoding: ${decoded.encoding}`,
         `lines: ${lines.length}`,
         `selectedLines: ${selection.startLine}-${selection.endLine}`,
+        truncated
+          ? `truncated: true (showing ${shownText.length} of ${totalSelectedChars} chars; file has ${lines.length} lines, ${decoded.text.length} chars, ${bytes.byteLength} bytes)`
+          : undefined,
         "---"
-      ].join("\n");
+      ]
+        .filter((line): line is string => typeof line === "string")
+        .join("\n");
 
       return {
-        text: `${header}\n${truncated ? selectedText.slice(0, limit) : selectedText}`,
+        text: `${header}\n${truncated ? `${shownText}\n... truncated ...` : shownText}`,
         json: {
-          path: relativePath,
+          path: relativeDisplay,
           kind: "file",
           bytes: bytes.byteLength,
           encoding: decoded.encoding,
           hasBom: decoded.hasBom,
           lineCount: lines.length,
+          totalChars: decoded.text.length,
           selectedStartLine: selection.startLine,
           selectedEndLine: selection.endLine,
+          selectedChars: totalSelectedChars,
+          shownChars: shownText.length,
           lineFormat,
           snapshotTag,
           truncated
@@ -357,18 +374,21 @@ export function createListDirectoryTool(options: LocalToolOptions & { name?: str
       return `list ${stringField(input, "path") ?? "."}`;
     },
     async execute(input) {
-      const directory = resolveWorkspacePath(options.workspaceRoot, stringField(input, "path") ?? ".");
-      const entries = await readdir(directory, { withFileTypes: true });
+      const inputPath = stringField(input, "path") ?? ".";
+      const directory = resolveWorkspacePath(options.workspaceRoot, inputPath);
+      const relativeDisplay = displayPath(options.workspaceRoot, directory);
+      await statOrThrow(directory, relativeDisplay);
+      const entries = await readdirOrThrow(directory, relativeDisplay);
       const items = entries
         .map((entry) => ({
           name: entry.name,
-          kind: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other"
+          kind: (entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other") as ListingEntryKind
         }))
         .sort((left, right) => `${left.kind}:${left.name}`.localeCompare(`${right.kind}:${right.name}`));
       return {
-        text: items.map((item) => `${item.kind === "directory" ? "/" : " "}${item.name}`).join("\n"),
+        text: formatListingText(items),
         json: {
-          path: displayPath(options.workspaceRoot, directory),
+          path: relativeDisplay,
           items: items as unknown as JsonValue
         }
       };
@@ -433,12 +453,30 @@ export function createSearchFilesTool(
         if (matches.length >= maxMatches) break;
       }
 
+      const rootDisplay = displayPath(options.workspaceRoot, root);
+      const truncated = matches.length >= maxMatches;
+      const header = [
+        `query: ${query}`,
+        `root: ${rootDisplay}`,
+        `matches: ${matches.length}`,
+        `visitedFiles: ${visitedFiles}`,
+        truncated ? "truncated: true" : undefined,
+        "---"
+      ]
+        .filter((line): line is string => typeof line === "string")
+        .join("\n");
+      const body =
+        matches.length === 0
+          ? "(no matches)"
+          : matches.map((match) => `${match.path}:${match.line}: ${match.preview}`).join("\n");
       return {
-        text: matches.map((match) => `${match.path}:${match.line}: ${match.preview}`).join("\n"),
+        text: `${header}\n${body}`,
         json: {
-          root: displayPath(options.workspaceRoot, root),
+          query,
+          root: rootDisplay,
           visitedFiles,
-          truncated: matches.length >= maxMatches,
+          matchCount: matches.length,
+          truncated,
           matches: matches as unknown as JsonValue
         }
       };
@@ -498,7 +536,11 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
             toolCallId: context.toolCallId,
             options: options.snapshot
           });
-          await mkdir(dirname(filePath), { recursive: true });
+          const parentInfo = await ensureParentDirectoryForWrite(filePath, {
+            existed: false,
+            relativePath,
+            workspaceRoot: options.workspaceRoot
+          });
           const content = requireString(input, "content");
           const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
           await writeFile(filePath, encodeTextBuffer(content, encoding));
@@ -509,11 +551,14 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
           return withPreMutationCheckpointOutput({
             text: [
               `Wrote ${displayPath(options.workspaceRoot, filePath)} (${content.length} chars)`,
+              parentInfo.created ? `Created parent directories: ${parentInfo.parentDisplay}` : undefined,
               `Encoding: ${encoding}`,
               `Snapshot tag: ${newSnapshotTag}`,
               resultPreview.summary,
               resultPreview.text
-            ].join("\n"),
+            ]
+              .filter((line): line is string => typeof line === "string")
+              .join("\n"),
             artifacts: [snapshot].filter(
               (artifact): artifact is ToolArtifact => artifact !== null
             ),
@@ -523,6 +568,8 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
               chars: content.length,
               charsAfter: afterDecoded.text.length,
               newSnapshotTag,
+              createdParentDirectories: parentInfo.created,
+              parentDirectory: parentInfo.parentDisplay,
               resultPreview: {
                 mode: resultPreview.mode,
                 summary: resultPreview.summary,
@@ -658,7 +705,11 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
         toolCallId: context.toolCallId,
         options: options.snapshot
       });
-      await mkdir(dirname(filePath), { recursive: true });
+      const parentInfo = await ensureParentDirectoryForWrite(filePath, {
+        existed: !!fileStat,
+        relativePath,
+        workspaceRoot: options.workspaceRoot
+      });
       const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
       await writeFile(filePath, encodeTextBuffer(afterText, encoding));
       const afterBytes = await readFile(filePath);
@@ -679,13 +730,16 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
       return withPreMutationCheckpointOutput({
         text: [
           `Edited ${relativePath}`,
+          parentInfo.created ? `Created parent directories: ${parentInfo.parentDisplay}` : undefined,
           `Encoding: ${encoding}`,
           `Snapshot tag: ${newSnapshotTag}`,
           resultPreview.summary,
           resultPreview.text,
           `Diff preview:`,
           diffPreview
-        ].join("\n"),
+        ]
+          .filter((line): line is string => typeof line === "string")
+          .join("\n"),
         artifacts: [snapshot, diffArtifact].filter(
           (artifact): artifact is ToolArtifact => artifact !== null
         ),
@@ -697,6 +751,8 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
           charsAfter: afterDecoded.text.length,
           snapshotTag: currentSnapshotTag ?? null,
           newSnapshotTag,
+          createdParentDirectories: parentInfo.created,
+          parentDirectory: parentInfo.parentDisplay,
           snapshot: snapshot?.metadata ?? null,
           resultPreview: {
             mode: resultPreview.mode,
@@ -850,10 +906,14 @@ export function createApplyWorkspaceEditsTool(options: LocalToolOptions & { name
             }
           }));
 
+          const createdParentNotes = applied.files
+            .filter((file) => file.createdParentDirectories)
+            .map((file) => `Created parent directories for ${file.relativePath}: ${file.parentDirectory}`);
           return withPreMutationCheckpointOutput(
             {
               text: [
                 `Applied workspace edits to ${changed.length} of ${prepared.length} file(s)`,
+                ...createdParentNotes,
                 ...applied.files.map((file) => `${file.relativePath}: ${file.charsBefore} -> ${file.charsAfter} chars, snapshotTag ${file.newSnapshotTag}`)
               ].join("\n"),
               artifacts: diffArtifacts,
@@ -1066,6 +1126,8 @@ interface PreparedWorkspaceEditFile extends WorkspaceEditFileRequest {
   snapshotTag: string | null;
   requestedSnapshotTag: string | null;
   snapshotTagSource: WorkspaceEditSnapshotTagSource;
+  createdParentDirectories: boolean;
+  parentDirectory: string;
 }
 
 interface AppliedWorkspaceEditFile extends PreparedWorkspaceEditFile {
@@ -1196,7 +1258,9 @@ async function prepareWorkspaceEditFiles(
       writeEncoding,
       snapshotTag,
       requestedSnapshotTag,
-      snapshotTagSource
+      snapshotTagSource,
+      createdParentDirectories: false,
+      parentDirectory: displayPath(options.workspaceRoot, dirname(file.filePath))
     });
   }
   return prepared;
@@ -1210,11 +1274,20 @@ async function applyPreparedWorkspaceEditFiles(files: PreparedWorkspaceEditFile[
   try {
     for (const file of files) {
       activeFile = file;
-      await writeBytesAtomically(file.filePath, encodeTextBuffer(file.afterText, file.writeEncoding));
+      const parentInfo = await ensureParentDirectoryForWrite(file.filePath, {
+        existed: file.existed,
+        relativePath: file.relativePath
+      });
+      // Parent was validated/created above; do not silently mkdir again.
+      await writeBytesAtomically(file.filePath, encodeTextBuffer(file.afterText, file.writeEncoding), {
+        createParents: false
+      });
       const afterBytes = await readFile(file.filePath);
       const afterDecoded = decodeTextBuffer(afterBytes);
       applied.push({
         ...file,
+        createdParentDirectories: parentInfo.created,
+        parentDirectory: parentInfo.parentDisplay,
         newSnapshotTag: computeSnapshotTag(afterBytes),
         charsBefore: file.beforeText.length,
         charsAfter: afterDecoded.text.length
@@ -1264,8 +1337,14 @@ async function rollbackWorkspaceEditFiles(states: WorkspaceEditRollbackState[]):
   return summary;
 }
 
-async function writeBytesAtomically(filePath: string, bytes: Buffer): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
+async function writeBytesAtomically(
+  filePath: string,
+  bytes: Buffer,
+  options?: { createParents?: boolean }
+): Promise<void> {
+  if (options?.createParents !== false) {
+    await mkdir(dirname(filePath), { recursive: true });
+  }
   const tempPath = resolve(
     dirname(filePath),
     `.${basename(filePath)}.${process.pid}.${Date.now()}.${Math.floor(Math.random() * 1_000_000_000)}.tmp`
@@ -1296,7 +1375,9 @@ function preparedWorkspaceEditFileToJson(file: PreparedWorkspaceEditFile): JsonO
     snapshotTagSource: file.snapshotTagSource,
     encoding: file.writeEncoding,
     charsBefore: file.beforeText.length,
-    charsAfter: file.afterText.length
+    charsAfter: file.afterText.length,
+    createdParentDirectories: file.createdParentDirectories,
+    parentDirectory: file.parentDirectory
   };
 }
 
@@ -1413,13 +1494,62 @@ async function runTerminalCommand(
   }, mutationCheckpoint);
 }
 
+/**
+ * Prefer skip: only create a Pre-mutation Git checkpoint when the command is
+ * likely to mutate the workspace (write/destructive patterns or package install).
+ * Benign unclassified cmds (echo/ping without redirect) and pure reads skip.
+ */
 function shouldCheckpointTerminalCommand(command: string): boolean {
-  const classification = classifyTerminalCommand(command);
-  if (classification.risk === "write" || classification.risk === "destructive") return true;
-  if (classification.risk !== "network") return false;
-  return /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(install|add|remove|update|audit\s+fix)\b/i.test(command) ||
-    /\b(pip|uv)\s+(install|sync|add|remove)\b/i.test(command) ||
-    />{1,2}/.test(command);
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+
+  // Package installs mutate lockfiles / node_modules even when risk is "network".
+  if (isPackageMutationCommand(trimmed)) return true;
+  // Redirection (incl. curl/iwr downloads) writes files regardless of risk tier.
+  if (hasOutputRedirect(trimmed)) return true;
+
+  const classification = classifyTerminalCommand(trimmed);
+  if (classification.risk === "destructive") return true;
+  if (classification.risk !== "write") return false;
+
+  // Unclassified defaults to "write" for permission policy, but many are benign
+  // (echo, ping, Write-Host). Only checkpoint when mutation signals are present.
+  if (classification.reason === "Unclassified command") {
+    return hasLikelyWorkspaceMutation(trimmed);
+  }
+
+  // Explicit write patterns (mkdir, git commit, Set-Content, …).
+  return true;
+}
+
+function hasOutputRedirect(command: string): boolean {
+  // Ignore fd merges (2>&1 / 1>&2); still catch file redirects (>, >>, 2>err.txt).
+  const withoutFdMerge = command.replace(/\d*>&\d+/g, " ");
+  if (/>{1,2}/.test(withoutFdMerge)) return true;
+  return /\|\s*(out-file|set-content|add-content|tee-object|tee)\b/i.test(command);
+}
+
+function isPackageMutationCommand(command: string): boolean {
+  return (
+    /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(install|add|remove|update|audit\s+fix)\b/i.test(command) ||
+    /\b(pip|uv)\s+(install|sync|add|remove)\b/i.test(command)
+  );
+}
+
+/** Signals that an otherwise-unclassified command may write the workspace. */
+function hasLikelyWorkspaceMutation(command: string): boolean {
+  if (hasOutputRedirect(command)) return true;
+  if (
+    /\b(mkdir|md|touch|cp|copy|mv|move|rm|del|rmdir|rd|set-content|add-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|ni|mi|ri|ci)\b/i.test(
+      command
+    )
+  ) {
+    return true;
+  }
+  if (/\bgit\s+(commit|add|checkout|switch|merge|rebase|stash|reset|clean|pull|tag|am|cherry-pick|revert)\b/i.test(command)) {
+    return true;
+  }
+  return false;
 }
 
 async function createPreMutationCheckpoint(
@@ -1537,10 +1667,15 @@ function withPreMutationCheckpointOutput(
   checkpoint: NormalizedPreMutationCheckpointResult | null | undefined
 ): ToolOutput {
   if (!checkpoint) return output;
-  const checkpointArtifacts = checkpoint.artifacts ?? (checkpoint.checkpoint ? [gitCheckpointToArtifact(checkpoint.checkpoint)] : []);
+  // Skipped checkpoints stay in json for debug; omit noisy diagnostic line from tool text.
+  const diagnosticLine = formatPreMutationCheckpointLine(checkpoint);
+  const checkpointArtifacts =
+    checkpoint.status === "created"
+      ? (checkpoint.artifacts ?? (checkpoint.checkpoint ? [gitCheckpointToArtifact(checkpoint.checkpoint)] : []))
+      : [];
   return {
     ...output,
-    text: [formatPreMutationCheckpointLine(checkpoint), output.text].filter(Boolean).join("\n"),
+    text: diagnosticLine ? [diagnosticLine, output.text].filter(Boolean).join("\n") : output.text,
     artifacts: [...(output.artifacts ?? []), ...checkpointArtifacts],
     json: mergePreMutationCheckpointJson(output.json, checkpoint)
   };
@@ -1617,14 +1752,16 @@ function gitCheckpointToJson(checkpoint: GitCheckpoint): JsonObject {
   return json;
 }
 
-function formatPreMutationCheckpointLine(checkpoint: NormalizedPreMutationCheckpointResult): string {
+/** Text diagnostic for tool output; null when skipped (json still carries status). */
+function formatPreMutationCheckpointLine(checkpoint: NormalizedPreMutationCheckpointResult): string | null {
   if (checkpoint.status === "created" && checkpoint.checkpoint) {
     return `Pre-mutation Git checkpoint: ${checkpoint.checkpoint.id} (${checkpoint.checkpoint.strategy}, ${checkpoint.checkpoint.refName})`;
   }
   if (checkpoint.status === "failed") {
     return `Pre-mutation Git checkpoint failed: ${checkpoint.error ?? checkpoint.reason ?? "unknown error"}`;
   }
-  return `Pre-mutation Git checkpoint skipped: ${checkpoint.reason ?? "skipped"}`;
+  // skipped → omit from tool text (prefer quiet; details remain in json.preMutationCheckpoint)
+  return null;
 }
 
 function truncateForMetadata(value: string, maxLength: number): string {
@@ -1828,34 +1965,82 @@ function operationSortLine(operation: EditOperation): number {
 }
 
 function applyLineEditOperation(lines: string[], operation: EditOperation): void {
-  const lineCount = Math.max(1, lines.length);
   const contentLines = operation.content !== undefined ? splitTextLines(operation.content) : [];
 
-  if (operation.op === "insert_head" || operation.op === "insert_tail") {
-    if (lines.length === 1 && lines[0] === "") {
-      lines.splice(0, 1, ...contentLines);
+  if (operation.op === "insert_head") {
+    if (isEmptyLineBuffer(lines)) {
+      lines.splice(0, lines.length, ...contentLines);
       return;
     }
-    const insertIndex = operation.op === "insert_head" ? 0 : lines.length;
-    lines.splice(insertIndex, 0, ...contentLines);
+    lines.splice(0, 0, ...contentLines);
     return;
   }
 
+  if (operation.op === "insert_tail") {
+    if (isEmptyLineBuffer(lines)) {
+      lines.splice(0, lines.length, ...contentLines);
+      return;
+    }
+    // Avoid an extra blank line when the file already ends with a trailing newline
+    // (split yields a final empty element) or content also ends with a newline.
+    const fileHasTrailingEmpty = lines.length > 0 && lines[lines.length - 1] === "";
+    let insertLines = contentLines;
+    const contentHasTrailingEmpty = insertLines.length > 0 && insertLines[insertLines.length - 1] === "";
+    if (fileHasTrailingEmpty && contentHasTrailingEmpty) {
+      insertLines = insertLines.slice(0, -1);
+    }
+    const insertIndex = fileHasTrailingEmpty ? lines.length - 1 : lines.length;
+    lines.splice(insertIndex, 0, ...insertLines);
+    return;
+  }
+
+  const lineCount = lines.length;
   if (operation.op === "insert_before" || operation.op === "insert_after") {
-    const line = clampLine(operation.line ?? operation.startLine ?? 1, lineCount);
+    const rawLine = operation.line ?? operation.startLine;
+    if (rawLine === undefined) {
+      throw new Error(`${operation.op} requires line or startLine`);
+    }
+    const line = requireLineInRange(rawLine, lineCount, "line");
     const insertIndex = operation.op === "insert_before" ? line - 1 : line;
     lines.splice(insertIndex, 0, ...contentLines);
     return;
   }
 
-  const startLine = clampLine(operation.startLine ?? operation.line ?? 1, lineCount);
-  const endLine = clampLine(operation.endLine ?? operation.line ?? operation.startLine ?? startLine, lineCount);
-  const deleteCount = Math.max(0, endLine - startLine + 1);
+  const rawStart = operation.startLine ?? operation.line;
+  if (rawStart === undefined) {
+    throw new Error(`${operation.op} requires startLine or line`);
+  }
+  const startLine = requireLineInRange(rawStart, lineCount, "startLine");
+  const rawEnd = operation.endLine ?? operation.line ?? operation.startLine ?? startLine;
+  const endLine = requireLineInRange(rawEnd, lineCount, "endLine");
+  if (endLine < startLine) {
+    throw new Error(`endLine ${endLine} must be >= startLine ${startLine}`);
+  }
+  const deleteCount = endLine - startLine + 1;
   if (operation.op === "delete") {
     lines.splice(startLine - 1, deleteCount);
     return;
   }
   lines.splice(startLine - 1, deleteCount, ...contentLines);
+}
+
+function isEmptyLineBuffer(lines: string[]): boolean {
+  return lines.length === 0 || (lines.length === 1 && lines[0] === "");
+}
+
+function requireLineInRange(line: number, lineCount: number, label: string): number {
+  if (!Number.isSafeInteger(line) || line < 1) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  if (lineCount < 1) {
+    throw new Error(`${label} ${line} is out of range for an empty file`);
+  }
+  if (line > lineCount) {
+    throw new Error(
+      `${label} ${line} is out of range (file has ${lineCount} line${lineCount === 1 ? "" : "s"})`
+    );
+  }
+  return line;
 }
 
 function createUnifiedDiffPreview(beforeText: string, afterText: string): string {
@@ -1985,6 +2170,80 @@ function displayPath(workspaceRoot: string, filePath: string): string {
 function normalizeForCompare(path: string): string {
   const normalized = resolve(path);
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+type ListingEntryKind = "directory" | "file" | "other";
+
+function formatListingEntry(entry: { name: string; kind: ListingEntryKind }): string {
+  // Keep a stable one-char prefix so dirs and files align in text output.
+  const prefix = entry.kind === "directory" ? "/" : entry.kind === "file" ? " " : "?";
+  return `${prefix}${entry.name}`;
+}
+
+function formatListingText(items: Array<{ name: string; kind: ListingEntryKind }>): string {
+  if (items.length === 0) return "(empty directory)";
+  return items.map(formatListingEntry).join("\n");
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return !!error && typeof error === "object" && "code" in error;
+}
+
+async function statOrThrow(targetPath: string, display: string): Promise<Stats> {
+  try {
+    return await stat(targetPath);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new Error(`Path does not exist: ${display}`);
+    }
+    throw error;
+  }
+}
+
+async function readdirOrThrow(targetPath: string, display: string) {
+  try {
+    return await readdir(targetPath, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new Error(`Directory does not exist: ${display}`);
+    }
+    throw error;
+  }
+}
+
+async function readFileOrThrow(targetPath: string, display: string): Promise<Buffer> {
+  try {
+    return await readFile(targetPath);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new Error(`File does not exist: ${display}`);
+    }
+    throw error;
+  }
+}
+
+async function ensureParentDirectoryForWrite(
+  filePath: string,
+  options: { existed: boolean; relativePath: string; workspaceRoot?: string }
+): Promise<{ created: boolean; parentDisplay: string }> {
+  const parent = dirname(filePath);
+  const parentDisplay = options.workspaceRoot ? displayPath(options.workspaceRoot, parent) : parent;
+  try {
+    const parentStat = await stat(parent);
+    if (!parentStat.isDirectory()) {
+      throw new Error(`Parent path is not a directory for ${options.relativePath}: ${parentDisplay}`);
+    }
+    return { created: false, parentDisplay };
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    if (options.existed) {
+      throw new Error(
+        `Parent directory is missing for existing file ${options.relativePath}. Refusing to recreate directories unexpectedly.`
+      );
+    }
+    await mkdir(parent, { recursive: true });
+    return { created: true, parentDisplay };
+  }
 }
 
 function requireString(input: JsonObject, key: string): string {

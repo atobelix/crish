@@ -96,6 +96,10 @@ export interface OrchestratedRunInput {
   projectTags?: string[];
   packageNames?: string[];
   scopedContextConfig?: RunTaskMessage["scopedContextConfig"];
+  /** OpenAI-style multimodal parts from desktop */
+  content?: RunTaskMessage["content"];
+  hasImages?: boolean;
+  attachments?: RunTaskMessage["attachments"];
   metadata?: JsonObject;
   correlation?: DaemonCorrelationFields;
   prechecked?: boolean;
@@ -197,6 +201,9 @@ export class RunHandler {
       projectMarkers: msg.projectMarkers,
       projectFiles: msg.projectFiles,
       projectTags: msg.projectTags,
+      content: msg.content,
+      hasImages: msg.hasImages,
+      attachments: msg.attachments,
       packageNames: msg.packageNames,
       scopedContextConfig: msg.scopedContextConfig,
       correlation: msg,
@@ -340,7 +347,11 @@ export class RunHandler {
       const scopedContextConfig = scopedContextConfigJson(input.scopedContextConfig);
       const runTaskConfig = runTaskConfigSnapshot(input);
       const initialUserMessageId = createBackendUserMessageId(input.runId);
-      const runPromptMessage = createRunPromptMessage(input.prompt, initialUserMessageId);
+      const runPromptMessage = createRunPromptMessage(input.prompt, initialUserMessageId, {
+        content: input.content,
+        hasImages: input.hasImages,
+        attachments: input.attachments,
+      });
       const runRequest = {
         id: input.runId,
         sessionId: input.sessionId,
@@ -367,6 +378,10 @@ export class RunHandler {
           ...(input.packageNames ? { packageNames: input.packageNames } : {}),
           ...(scopedContextConfig ? { scopedContextConfig } : {}),
           ...(runTaskConfig ? { runTaskConfig } : {}),
+          ...(input.hasImages ? { hasImages: true } : {}),
+          ...(input.content?.length
+            ? { hasMultimodalContent: true, multimodalPartCount: input.content.length }
+            : {}),
           clientId: input.clientId,
         },
       };
@@ -859,12 +874,39 @@ function createBackendUserMessageId(runId: string): string {
   return `user_boundary_${safeIdSegment(runId)}_${randomUUID()}`;
 }
 
-function createRunPromptMessage(prompt: string, userMessageId: string): AgentMessage {
-  const message = createTextMessage("user", prompt, {
+function createRunPromptMessage(
+  prompt: string,
+  userMessageId: string,
+  multimodal?: {
+    content?: RunTaskMessage["content"];
+    hasImages?: boolean;
+    attachments?: RunTaskMessage["attachments"];
+  },
+): AgentMessage {
+  const hasImages =
+    Boolean(multimodal?.hasImages) ||
+    Boolean(
+      multimodal?.content?.some(
+        (part) =>
+          part &&
+          typeof part === "object" &&
+          (part as { type?: string }).type === "image_url",
+      ),
+    );
+  const metadata: JsonObject = {
     kind: "daemon-user-message-boundary",
     boundaryId: userMessageId,
     generatedBy: "agent-daemon",
-  });
+  };
+  if (multimodal?.content?.length) {
+    // OpenAI-style parts for provider vision path (array is valid JsonValue)
+    metadata.contentParts = multimodal.content as unknown as JsonObject[string];
+  }
+  if (hasImages) metadata.hasImages = true;
+  if (multimodal?.attachments?.length) {
+    metadata.attachments = multimodal.attachments as unknown as JsonObject[string];
+  }
+  const message = createTextMessage("user", prompt, metadata);
   return {
     ...message,
     id: userMessageId,

@@ -20,6 +20,7 @@ import { SettingsAppearanceTab } from './SettingsAppearanceTab';
 import { SettingsUsageTab } from './SettingsUsageTab';
 import { SettingsShortcutsTab } from './SettingsShortcutsTab';
 import { SettingsPersonalizeTab } from './SettingsPersonalizeTab';
+import { AppErrorBoundary } from './AppErrorBoundary';
 
 /** Settings sidebar tab ids — shared for openSettings / initialTab typing */
 export type SettingsTabType =
@@ -118,6 +119,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     setActiveTab(tab);
     setSettingsActiveTab(tab);
   };
+
+  /** 永远走合法 tab；未知 id 回退 profile，保证默认页可挂载 */
+  const safeActiveTab: TabType = resolveTab(activeTab);
+  /** 当前页元信息；永远有 fallback，避免渲染期未定义变量导致设置打不开 */
+  const activeTabMeta =
+    TAB_META.find((t) => t.id === safeActiveTab) ?? TAB_META[0] ?? {
+      id: 'profile' as TabType,
+      label: '账户',
+      icon: Lucide.User,
+      group: '个人',
+    };
+  const activeLabel = activeTabMeta.label || '设置';
 
   const contentAreaRef = useRef<HTMLDivElement>(null);
 
@@ -295,9 +308,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           <div className="settings-nav-scroll">
             {visibleTabs.map((tab, idx, arr) => {
-              const isTabActive = activeTab === tab.id;
+              const isTabActive = safeActiveTab === tab.id;
               const Icon = tab.icon;
-              const showGroup = idx === 0 || arr[idx - 1].group !== tab.group;
+              const showGroup = idx === 0 || arr[idx - 1]?.group !== tab.group;
 
               return (
                 <React.Fragment key={tab.id}>
@@ -321,138 +334,168 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           </div>
         </nav>
 
-        <div ref={contentAreaRef} className="settings-cover-content">
-          {activeTab === 'profile' && (
-            <SettingsProfileTab onShowToast={onShowToast} />
+        <div
+          ref={contentAreaRef}
+          className="settings-cover-content"
+          aria-label={activeLabel}
+          data-settings-tab={safeActiveTab}
+        >
+          {/* 每页独立 ErrorBoundary：单页崩溃不拖垮整个设置层；key 切换时重置错误态 */}
+          {safeActiveTab === 'profile' && (
+            <AppErrorBoundary key="tab-profile" compact title={`${activeLabel}加载失败`}>
+              <SettingsProfileTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'appearance' && (
-            <SettingsAppearanceTab onShowToast={onShowToast} />
+          {safeActiveTab === 'appearance' && (
+            <AppErrorBoundary key="tab-appearance" compact title={`${activeLabel}加载失败`}>
+              <SettingsAppearanceTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'personalize' && (
-            <SettingsPersonalizeTab onShowToast={onShowToast} />
+          {safeActiveTab === 'personalize' && (
+            <AppErrorBoundary key="tab-personalize" compact title={`${activeLabel}加载失败`}>
+              <SettingsPersonalizeTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'models' && (
-            <ModelsSettingsTab onShowToast={onShowToast} />
+          {safeActiveTab === 'models' && (
+            <AppErrorBoundary key="tab-models" compact title={`${activeLabel}加载失败`}>
+              <ModelsSettingsTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'mcp' && (
-            <McpSettingsTab
-              onShowToast={onShowToast}
-              onAvailabilityChange={(ok) => {
-                setMcpAvailable(ok);
-              }}
-            />
+          {safeActiveTab === 'mcp' && (
+            <AppErrorBoundary key="tab-mcp" compact title={`${activeLabel}加载失败`}>
+              <McpSettingsTab
+                onShowToast={onShowToast}
+                onAvailabilityChange={(ok) => {
+                  setMcpAvailable(ok);
+                }}
+              />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'plugins' && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div>
-                  <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>插件</h4>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                    已安装的扩展包
-                  </p>
-                </div>
-                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddPluginModal(true)}>
-                  <Lucide.Plus size={16} />
-                  安装
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {packages.map((pkg, idx) => {
-                  const isObj = typeof pkg !== 'string';
-                  const name = isObj ? (pkg as PackageSource).source : (pkg as string);
-                  const filters = isObj
-                    ? [
-                        (pkg as PackageSource).extensions
-                          ? `后缀 ${(pkg as PackageSource).extensions?.join(',')}`
-                          : null,
-                        (pkg as PackageSource).skills
-                          ? `技能 ${(pkg as PackageSource).skills?.join(',')}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')
-                    : '';
-
-                  return (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 0',
-                        borderBottom: '1px solid var(--border-subtle)',
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 500,
-                            color: 'var(--text-primary)',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          {name}
-                        </div>
-                        {filters && (
-                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            {filters}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost danger"
-                        onClick={() => handleRemovePackage(idx)}
-                        title="卸载"
-                      >
-                        <Lucide.X size={16} />
-                      </button>
-                    </div>
-                  );
-                })}
-                {packages.length === 0 && (
-                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '16px 0' }}>
-                    还没有插件。点击「安装」添加。
+          {safeActiveTab === 'plugins' && (
+            <AppErrorBoundary key="tab-plugins" compact title={`${activeLabel}加载失败`}>
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>插件</h4>
+                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                      已安装的扩展包
+                    </p>
                   </div>
-                )}
-              </div>
-            </>
+                  <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddPluginModal(true)}>
+                    <Lucide.Plus size={16} />
+                    安装
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {packages.map((pkg, idx) => {
+                    const isObj = typeof pkg !== 'string';
+                    const name = isObj ? (pkg as PackageSource).source : (pkg as string);
+                    const filters = isObj
+                      ? [
+                          (pkg as PackageSource).extensions
+                            ? `后缀 ${(pkg as PackageSource).extensions?.join(',')}`
+                            : null,
+                          (pkg as PackageSource).skills
+                            ? `技能 ${(pkg as PackageSource).skills?.join(',')}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : '';
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 0',
+                          borderBottom: '1px solid var(--border-subtle)',
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 500,
+                              color: 'var(--text-primary)',
+                              fontFamily: 'var(--font-mono)',
+                            }}
+                          >
+                            {name}
+                          </div>
+                          {filters && (
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                              {filters}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost danger"
+                          onClick={() => handleRemovePackage(idx)}
+                          title="卸载"
+                        >
+                          <Lucide.X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {packages.length === 0 && (
+                    <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '16px 0' }}>
+                      还没有插件。点击「安装」添加。
+                    </div>
+                  )}
+                </div>
+              </>
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'skills' && (
-            <SkillsSettingsTab onShowToast={onShowToast} />
+          {safeActiveTab === 'skills' && (
+            <AppErrorBoundary key="tab-skills" compact title={`${activeLabel}加载失败`}>
+              <SkillsSettingsTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'usage' && (
-            <SettingsUsageTab onShowToast={onShowToast} />
+          {safeActiveTab === 'usage' && (
+            <AppErrorBoundary key="tab-usage" compact title={`${activeLabel}加载失败`}>
+              <SettingsUsageTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'schedule' && (
-            <SettingsScheduleTab onShowToast={onShowToast} />
+          {safeActiveTab === 'schedule' && (
+            <AppErrorBoundary key="tab-schedule" compact title={`${activeLabel}加载失败`}>
+              <SettingsScheduleTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'rules' && (
-            <SettingsRulesTab
-              onShowToast={onShowToast}
-              onBlockingOverlayChange={setRulesModalOpen}
-            />
+          {safeActiveTab === 'rules' && (
+            <AppErrorBoundary key="tab-rules" compact title={`${activeLabel}加载失败`}>
+              <SettingsRulesTab
+                onShowToast={onShowToast}
+                onBlockingOverlayChange={setRulesModalOpen}
+              />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'shortcuts' && (
-            <SettingsShortcutsTab onShowToast={onShowToast} />
+          {safeActiveTab === 'shortcuts' && (
+            <AppErrorBoundary key="tab-shortcuts" compact title={`${activeLabel}加载失败`}>
+              <SettingsShortcutsTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
 
-          {activeTab === 'security' && (
-            <SettingsSecurityTab onShowToast={onShowToast} />
+          {safeActiveTab === 'security' && (
+            <AppErrorBoundary key="tab-security" compact title={`${activeLabel}加载失败`}>
+              <SettingsSecurityTab onShowToast={onShowToast} />
+            </AppErrorBoundary>
           )}
         </div>
       </div>

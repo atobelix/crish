@@ -18,11 +18,30 @@ type State = {
   error: Error | null;
 };
 
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === 'string') return new Error(error);
+  try {
+    return new Error(JSON.stringify(error));
+  } catch {
+    return new Error(String(error));
+  }
+}
+
+/** 展示真实错误文案（含 ReferenceError 名），避免空白「出错了」 */
+function formatErrorMessage(error: Error): string {
+  const msg = (error.message || String(error)).trim() || '未知渲染错误';
+  const name = error.name && error.name !== 'Error' ? error.name : '';
+  // ReferenceError: activeLabel is not defined 等需完整可见
+  if (name && !msg.startsWith(name)) return `${name}: ${msg}`;
+  return msg;
+}
+
 export class AppErrorBoundary extends React.Component<Props, State> {
   state: State = { error: null };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { error };
+  static getDerivedStateFromError(error: unknown): State {
+    return { error: toError(error) };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -46,7 +65,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
 
-    const msg = this.state.error.message || String(this.state.error);
+    const msg = formatErrorMessage(this.state.error);
     const compact = !!this.props.compact;
     const title =
       this.props.title || (compact ? '此面板出错' : '界面出错了');
@@ -59,7 +78,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
       >
         <div className={compact ? 'app-error-card app-error-card--compact' : 'app-error-card'}>
           <div className="app-error-title">{title}</div>
-          <div className="app-error-msg">{msg}</div>
+          <div className="app-error-msg" role="alert" title={msg}>
+            {msg}
+          </div>
           <div className="app-error-actions">
             {compact ? (
               <>

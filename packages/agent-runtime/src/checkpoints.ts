@@ -4,6 +4,7 @@ import { dirname, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
 import {
   joinUnderRoot,
+  resolveSnapshotLocation,
   resolveUnderRoot,
   toRelativePosix,
 } from "./snapshots";
@@ -126,7 +127,8 @@ export async function createWorkspaceCheckpoint(request: CreateWorkspaceCheckpoi
 export async function restoreWorkspaceCheckpoint(request: RestoreWorkspaceCheckpointRequest): Promise<WorkspaceCheckpointRestoreResult> {
   const workspaceRoot = resolve(request.workspaceRoot);
   const archiveRoot = resolveCheckpointArchiveRoot(workspaceRoot, request.archiveRoot);
-  const manifestPath = resolve(archiveRoot, request.checkpointPath);
+  // 支持：绝对 manifest 路径、archive 相对路径、误带 .agent-runtime/snapshots 前缀的路径
+  const manifestPath = resolveCheckpointManifestPath(archiveRoot, request.checkpointPath);
   assertInside(archiveRoot, manifestPath, "checkpoint manifest");
 
   const checkpoint = JSON.parse(await readFile(manifestPath, "utf8")) as WorkspaceCheckpoint;
@@ -189,6 +191,34 @@ export function checkpointRestoreResultToOutput(result: WorkspaceCheckpointResto
 
 export function resolveCheckpointArchiveRoot(workspaceRoot: string, archiveRoot?: string): string {
   return resolve(workspaceRoot, archiveRoot ?? ".agent-runtime/snapshots");
+}
+
+/**
+ * 解析 checkpoint 清单路径，避免 archiveRoot 与 checkpointPath 双重叠加。
+ * 接受：绝对路径、相对 archive 路径、误带 `.agent-runtime/snapshots/` 前缀的路径、目录（补 checkpoint.json）。
+ */
+export function resolveCheckpointManifestPath(archiveRoot: string, checkpointPath: string): string {
+  let raw = (checkpointPath || "").trim();
+  if (!raw) {
+    throw new Error("checkpoint path is empty");
+  }
+  // 归一化分隔符
+  raw = raw.replace(/\\/g, "/");
+  // 剥掉重复的 archive 相对前缀
+  const prefixes = [
+    ".agent-runtime/snapshots/",
+    "agent-runtime/snapshots/",
+  ];
+  for (const p of prefixes) {
+    while (raw.startsWith(p)) {
+      raw = raw.slice(p.length);
+    }
+  }
+  // 若传入目录，默认读 checkpoint.json
+  if (!raw.endsWith("checkpoint.json") && !raw.endsWith(".json")) {
+    raw = `${raw.replace(/\/+$/, "")}/checkpoint.json`;
+  }
+  return resolveSnapshotLocation(archiveRoot, raw);
 }
 
 function normalizeRelativePath(workspaceRoot: string, inputPath: string): string {

@@ -88,12 +88,21 @@ export interface SessionAgent {
   endedAt?: number;
 }
 
+/** /goal 任务清单项（与 TasksCard `- [ ]` 解析对齐） */
+export interface SessionGoalTask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 /** /goal 长期目标模式：自动多轮推进直至 DONE 或达上限 */
 export interface SessionGoalMode {
   active: boolean;
   goal: string;
   iteration: number;
   maxIterations?: number;
+  /** 绑定任务板：续写时注入未完成项；助手 checklist 回写进度 */
+  tasks?: SessionGoalTask[];
 }
 
 export interface SessionState {

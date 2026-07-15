@@ -8,7 +8,7 @@
  */
 
 import { getDesktopDaemonClient } from './daemonClient';
-import type { StreamCallbacks } from './chatApi';
+import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
 import { useLayoutStore } from '../store/layoutStore';
 import { parseUnifiedDiffs } from './toolFeedback';
 import { toDaemonPermissionMode } from './permissionModes';
@@ -141,12 +141,14 @@ function toolResultFields(result: unknown): {
  * Returns a cancel function.
  *
  * Note: daemon streams type=event frames; client supplies runId.
+ * options.content / hasImages：多模态图片（OpenAI-style parts）；引擎校验通过后写入消息 metadata。
  */
 export function streamViaDaemon(
   prompt: string,
   callbacks: StreamCallbacks,
   sessionId: string,
   assistantMsgId: string,
+  options?: StreamRequestOptions,
 ): () => void {
   const client = getDesktopDaemonClient();
   client.startKeepAlive();
@@ -656,6 +658,7 @@ export function streamViaDaemon(
       const mode = useLayoutStore.getState().permissionMode;
       const permissionMode = toDaemonPermissionMode(mode);
 
+      const hasImages = Boolean(options?.hasImages || options?.content?.some((p) => p.type === 'image_url'));
       await client.send({
         type: 'run-task',
         runId,
@@ -663,6 +666,10 @@ export function streamViaDaemon(
         sessionId,
         permissionMode,
         ...(cwd ? { cwd } : {}),
+        // 结构化多模态：引擎支持时走 vision；未知字段在旧校验下会被拒——与 daemon 轻量扩展对齐
+        ...(options?.content?.length ? { content: options.content } : {}),
+        ...(hasImages ? { hasImages: true } : {}),
+        ...(options?.attachments?.length ? { attachments: options.attachments } : {}),
       });
     } catch (e) {
       // Stream start failures are connectivity/send path — user only sees network copy

@@ -31,6 +31,8 @@ export {
   defaultProcessShell,
   formatProcessPreview,
   normalizePowerShellCommand,
+  encodePowerShellEncodedCommand,
+  buildWindowsPowerShellScript,
 } from "./process-executor";
 
 export type {

@@ -213,15 +213,43 @@ export function createGuardedProcessEnv(): NodeJS.ProcessEnv {
 
 // ─── Shell 适配 ───────────────────────────────────────────
 
+/**
+ * Encode a PowerShell script for `powershell.exe -EncodedCommand` (UTF-16LE base64).
+ * Avoids shell metacharacter breakage for | & > < and nested quotes.
+ */
+export function encodePowerShellEncodedCommand(script: string): string {
+  return Buffer.from(script, "utf16le").toString("base64");
+}
+
+/**
+ * Build the full Windows PowerShell wrapper script for a user command.
+ * The user command is embedded as UTF-8 base64 so quotes/operators/braces never
+ * break the wrapper script source.
+ */
+export function buildWindowsPowerShellScript(userCommand: string): string {
+  const prelude = [
+    "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
+    "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
+    "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
+    "$env:PYTHONUTF8='1'",
+    "$env:PYTHONIOENCODING='utf-8'"
+  ].join("; ");
+  const normalized = normalizePowerShellCommand(userCommand);
+  const payload = Buffer.from(normalized, "utf8").toString("base64");
+  return [
+    prelude,
+    "$global:LASTEXITCODE=$null",
+    `$__conexCmd = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${payload}'))`,
+    "& ([scriptblock]::Create($__conexCmd))",
+    "$success=$?",
+    "$exitCode=$LASTEXITCODE",
+    "if ($exitCode -ne $null -and $exitCode -ne 0) { exit $exitCode }",
+    "if (-not $success) { exit 1 }"
+  ].join("; ");
+}
+
 export function defaultProcessShell(): ProcessShell {
   if (process.platform === "win32") {
-    const prelude = [
-      "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
-      "$env:PYTHONUTF8='1'",
-      "$env:PYTHONIOENCODING='utf-8'"
-    ].join("; ");
     return {
       command: "powershell.exe",
       args: (command) => [
@@ -229,8 +257,8 @@ export function defaultProcessShell(): ProcessShell {
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
-        "-Command",
-        `${prelude}; $global:LASTEXITCODE=$null; & { ${normalizePowerShellCommand(command)} }; $success=$?; $exitCode=$LASTEXITCODE; if ($exitCode -ne $null -and $exitCode -ne 0) { exit $exitCode }; if (-not $success) { exit 1 }`
+        "-EncodedCommand",
+        encodePowerShellEncodedCommand(buildWindowsPowerShellScript(command))
       ]
     };
   }

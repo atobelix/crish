@@ -392,7 +392,7 @@ select.settings-field-input {
 .settings-cover {
   position: fixed;
   inset: 0;
-  /* 高于 cheatsheet/runtime float(12k)，低于 first-run(100k) */
+  /* 高于 cheatsheet/runtime float(12k)，低于 first-run(100k)；与 App.tsx inline zIndex 对齐 */
   z-index: 13000;
   display: flex;
   flex-direction: column;
@@ -402,6 +402,23 @@ select.settings-field-input {
   /* 确保覆盖层可点、可铺满（修复「进不去/空白」） */
   pointer-events: auto;
   isolation: isolate;
+}
+
+/* 设置内嵌错误卡片：保证真实错误文案可见、可滚动 */
+.settings-cover-content .app-error-boundary--compact {
+  min-height: 160px;
+  width: 100%;
+  padding: 24px 8px;
+  box-sizing: border-box;
+}
+.settings-cover-content .app-error-msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 40vh;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .settings-panel--cover {
   display: flex;

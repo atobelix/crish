@@ -88,16 +88,30 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         aria-label="协作看板"
       >
         <div className="agent-team-board-head">
-          <Lucide.LayoutGrid size={14} strokeWidth={1.75} />
-          <span>协作看板</span>
-          <span className="agent-team-board-count">{sorted.length}</span>
+          <Lucide.LayoutGrid size={13} strokeWidth={1.75} aria-hidden />
+          <span className="agent-team-board-count" title="协作数量">
+            {sorted.length}
+          </span>
         </div>
         <div className="agent-team-board-grid">
           {sorted.map((a) => {
             const prog = toolProgress(a);
             const pct =
-              prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : a.status === 'completed' ? 100 : a.status === 'running' ? 35 : 0;
+              prog.total > 0
+                ? Math.round((prog.done / prog.total) * 100)
+                : a.status === 'completed'
+                  ? 100
+                  : a.status === 'running'
+                    ? 35
+                    : 0;
             const isOn = activeId === a.id;
+            const snippet = summarySnippet(a);
+            const toolsHint =
+              prog.total > 0
+                ? `工具 ${prog.done}/${prog.total}${prog.running ? ` · ${prog.running} 执行中` : ''}`
+                : a.status === 'running'
+                  ? '执行中…'
+                  : '';
             return (
               <button
                 key={a.id}
@@ -105,7 +119,9 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 role="listitem"
                 className={`agent-team-card agent-team-card--${a.status} ${isOn ? 'is-active' : ''}`}
                 onClick={() => onSelect(a.id)}
-                title={a.description || a.mode || a.id}
+                title={[a.description || a.mode || a.id, snippet, toolsHint]
+                  .filter(Boolean)
+                  .join('\n')}
               >
                 <div className="agent-team-card-top">
                   <span className="agent-team-card-title">
@@ -115,22 +131,23 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                     {STATUS_LABEL[a.status]}
                   </span>
                 </div>
-                {a.mode ? <div className="agent-team-card-mode">{a.mode}</div> : null}
-                <div className="agent-team-card-summary">{summarySnippet(a)}</div>
-                <div className="agent-team-card-progress" aria-label={`工具 ${prog.done}/${prog.total}`}>
+                {/* 紧凑：只留标题+徽章+进度条；详情靠 title 悬浮 */}
+                {!compact ? (
+                  <div className="agent-team-card-summary">{snippet}</div>
+                ) : null}
+                <div
+                  className="agent-team-card-progress"
+                  aria-label={toolsHint || STATUS_LABEL[a.status]}
+                >
                   <div className="agent-team-card-bar">
                     <div
                       className={`agent-team-card-bar-fill agent-team-card-bar-fill--${a.status}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="agent-team-card-tools">
-                    {prog.total > 0
-                      ? `工具 ${prog.done}/${prog.total}${prog.running ? ` · ${prog.running} 执行中` : ''}`
-                      : a.status === 'running'
-                        ? '等待工具…'
-                        : '无工具调用'}
-                  </span>
+                  {!compact && toolsHint ? (
+                    <span className="agent-team-card-tools">{toolsHint}</span>
+                  ) : null}
                 </div>
               </button>
             );

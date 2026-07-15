@@ -120,7 +120,7 @@ export function resolveArchiveRoot(workspaceRoot: string, archiveRoot?: string):
  */
 export function resolveSnapshotLocation(archiveRoot: string, snapshotPath: string): string {
   const archive = resolve(archiveRoot);
-  const raw = snapshotPath.trim();
+  let raw = snapshotPath.trim().replace(/\\/g, "/");
   if (!raw) {
     throw new Error("snapshot path is empty");
   }
@@ -129,6 +129,13 @@ export function resolveSnapshotLocation(archiveRoot: string, snapshotPath: strin
     const abs = resolve(raw);
     assertInside(archive, abs, "snapshot path");
     return abs;
+  }
+
+  // 剥掉误带的 archive 相对前缀，避免 .agent-runtime/snapshots 双拼
+  for (const prefix of [".agent-runtime/snapshots/", "agent-runtime/snapshots/"]) {
+    while (raw.startsWith(prefix)) {
+      raw = raw.slice(prefix.length);
+    }
   }
 
   // Relative: join segment-by-segment under archive (never resolve(archive, abs-looking))

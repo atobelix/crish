@@ -12,21 +12,44 @@ type Props = {
 
 export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
-  const [priceList, setPriceList] = useState<ModelPrice[]>(() => loadPrices());
+  const [priceList, setPriceList] = useState<ModelPrice[]>(() => {
+    try {
+      return loadPrices();
+    } catch {
+      return [];
+    }
+  });
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
   const [priceFilter, setPriceFilter] = useState('');
 
   useEffect(() => {
-    void fetchEngineStatus().then(setEngineStatus);
-    setPriceList(loadPrices());
+    void fetchEngineStatus()
+      .then(setEngineStatus)
+      .catch(() => setEngineStatus({ ok: false, error: 'status_failed' }));
+    try {
+      setPriceList(loadPrices());
+    } catch {
+      setPriceList([]);
+    }
   }, []);
 
-  const tokenUsage = useLayoutStore((s) => s.tokenUsage);
+  // 防御：store 重水合异常时也不要在用量页 ReferenceError / TypeError
+  const tokenUsageRaw = useLayoutStore((s) => s.tokenUsage);
+  const tokenUsage = {
+    input: Number(tokenUsageRaw?.input) || 0,
+    output: Number(tokenUsageRaw?.output) || 0,
+    cost: Number(tokenUsageRaw?.cost) || 0,
+  };
   const model = engineStatus?.model || 'unknown';
-  const cost =
-    tokenUsage.cost > 0
-      ? tokenUsage.cost
-      : estimateCostUsd(model, tokenUsage.input, tokenUsage.output);
+  let cost = 0;
+  try {
+    cost =
+      tokenUsage.cost > 0
+        ? tokenUsage.cost
+        : estimateCostUsd(model, tokenUsage.input, tokenUsage.output) || 0;
+  } catch {
+    cost = tokenUsage.cost || 0;
+  }
 
   const totalTokens = tokenUsage.input + tokenUsage.output;
   const avgCostPer1k = cost > 0 && totalTokens > 0 ? (cost / totalTokens) * 1000 : 0;

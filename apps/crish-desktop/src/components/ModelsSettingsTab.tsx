@@ -43,8 +43,20 @@ function profileHasKey(p: ProviderProfile): boolean {
 }
 
 export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
-  const [profiles, setProfiles] = useState<ProviderProfile[]>(() => loadProfiles());
-  const [selectedId, setSelectedId] = useState<string | null>(() => getActiveProfileId() || loadProfiles()[0]?.id || null);
+  const [profiles, setProfiles] = useState<ProviderProfile[]>(() => {
+    try {
+      return loadProfiles();
+    } catch {
+      return [];
+    }
+  });
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return getActiveProfileId() || loadProfiles()[0]?.id || null;
+    } catch {
+      return null;
+    }
+  });
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
@@ -78,7 +90,14 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     return list.filter((m) => m.toLowerCase().includes(q));
   }, [selected?.models, modelFilter]);
 
-  const refresh = () => setProfiles(loadProfiles());
+  const refresh = () => {
+    try {
+      setProfiles(loadProfiles());
+    } catch (e) {
+      onShowToast?.(`读取供应商失败：${e instanceof Error ? e.message : String(e)}`);
+      setProfiles([]);
+    }
+  };
 
   const notify = (ok: boolean, text: string) => {
     setActionHint({ ok, text });

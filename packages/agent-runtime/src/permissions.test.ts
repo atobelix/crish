@@ -16,7 +16,7 @@ describe("command classification (legacy)", () => {
 
   it("detects hardline commands", () => {
     expect(getHardlineCommandBlock("shutdown /s")).toBeDefined();
-    expect(getHardlineCommandBlock("sudo rm -rf /")).toBeDefined();
+    expect(getHardlineCommandBlock("reg delete HKLM\\Software\\X /f")).toBeDefined();
     expect(getHardlineCommandBlock("ls -la")).toBeUndefined();
   });
 });

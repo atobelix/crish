@@ -268,7 +268,10 @@ function AgentLaunchPad({
       <header className="agent-card-header agent-card-header--slim">
         <div className="agent-card-title-row">
           <Lucide.Bot size={16} strokeWidth={1.75} />
-          <span className="agent-card-title">协作对话</span>
+          <span className="agent-card-title">协作</span>
+          {agents.length > 0 ? (
+            <span className="agent-card-badge">{agents.length}</span>
+          ) : null}
         </div>
         {onClose ? (
           <button type="button" className="agent-card-btn" title="关闭" onClick={onClose}>
@@ -277,17 +280,15 @@ function AgentLaunchPad({
         ) : null}
       </header>
 
-      {agents.length > 1 ? <AgentTeamBoard agents={agents} /> : null}
+      {/* 多 agent 才展示看板；单 agent 用下方紧凑列表 */}
+      {agents.length > 1 ? <AgentTeamBoard agents={agents} compact /> : null}
 
       <div className="agent-launch-body">
-        <p className="agent-launch-lead">
-          日常协作由主 AI 自动拉起。这里用于查看已有智能体，或临时追问决策；不必在输入框下手动「协作者」。
-        </p>
         <textarea
           className="agent-launch-input"
-          placeholder="描述你想让协作 agent 做什么…"
+          placeholder="描述协作任务…"
           value={task}
-          rows={3}
+          rows={2}
           disabled={busy}
           onChange={(e) => setTask(e.target.value)}
         />
@@ -331,10 +332,9 @@ function AgentLaunchPad({
           </button>
         </div>
 
-        {/* 仅 1 个 agent 时保留紧凑列表；多 agent 已由上方看板展示 */}
         {agents.length === 1 ? (
           <div className="agent-launch-list">
-            <div className="agent-launch-list-h">本会话已有协作</div>
+            <div className="agent-launch-list-h">本会话</div>
             {agents.map((a) => (
               <button
                 key={a.id}
@@ -401,12 +401,32 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [isComposing, setIsComposing] = useState(false);
-  /** 聚焦单 agent 时是否展开顶部协作看板 */
-  const [showTeamBoard, setShowTeamBoard] = useState(true);
+  /** 聚焦单 agent 时是否展开顶部协作看板（默认收起，减噪） */
+  const [showTeamBoard, setShowTeamBoard] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const followUpCancelRef = useRef<null | (() => void)>(null);
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const siblingAgents = sess?.agents || [];
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMoreMenu(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [showMoreMenu]);
 
   // 自动滚到底
   useEffect(() => {
@@ -673,16 +693,23 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     });
   };
 
+  const hasRareActions =
+    siblingAgents.length > 1 ||
+    (!embedded && Boolean(onOpenRight || onOpenWindow));
+
   return (
     <div className={`agent-card ${embedded ? 'agent-card--embedded' : ''}`}>
-      {/* 精简顶栏：全屏主区时不放「右侧/新窗口」（那些在主对话内联块上） */}
-      <header className={`agent-card-header ${embedded ? 'agent-card-header--slim' : ''}`}>
+      {/* 顶栏：标题 + 状态徽章；停止/关闭常显；窗口/看板进 ⋯ */}
+      <header className="agent-card-header agent-card-header--slim">
         <div className="agent-card-title-row">
-          <Lucide.Bot size={16} />
-          <span className="agent-card-title" title={agent.description}>
+          <Lucide.Bot size={15} strokeWidth={1.75} />
+          <span className="agent-card-title" title={agent.description || agent.mode || ''}>
             {agent.description || '协作 agent'}
           </span>
-          <span className={`agent-card-badge agent-card-badge--${agent.status}`}>
+          <span
+            className={`agent-card-badge agent-card-badge--${agent.status}`}
+            title={agent.mode ? `模式：${agent.mode}` : undefined}
+          >
             {running
               ? '运行中'
               : agent.status === 'failed'
@@ -691,43 +718,89 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
                   ? '已停止'
                   : '完成'}
           </span>
-          {agent.mode ? <span className="agent-card-mode">{agent.mode}</span> : null}
         </div>
         <div className="agent-card-actions">
-          {siblingAgents.length > 1 ? (
-            <button
-              type="button"
-              className={`agent-card-btn ${showTeamBoard ? 'is-on' : ''}`}
-              title={showTeamBoard ? '收起协作看板' : '展开协作看板'}
-              aria-pressed={showTeamBoard}
-              onClick={() => setShowTeamBoard((v) => !v)}
-            >
-              <Lucide.LayoutGrid size={15} strokeWidth={1.75} />
-            </button>
-          ) : null}
           {running ? (
             <button
               type="button"
               className="agent-card-btn agent-card-btn--danger"
               title="停止"
+              aria-label="停止"
               onClick={handleStop}
             >
-              <Lucide.Square size={14} fill="currentColor" />
+              <Lucide.Square size={13} fill="currentColor" />
             </button>
           ) : null}
-          {!embedded && onOpenRight ? (
-            <button type="button" className="agent-card-btn" title="在右侧打开" onClick={onOpenRight}>
-              <Lucide.PanelRight size={16} />
-            </button>
-          ) : null}
-          {!embedded && onOpenWindow ? (
-            <button type="button" className="agent-card-btn" title="新窗口" onClick={onOpenWindow}>
-              <Lucide.ExternalLink size={16} />
-            </button>
+          {hasRareActions ? (
+            <div className="agent-more-wrap" ref={moreMenuRef}>
+              <button
+                type="button"
+                className={`agent-card-btn${showMoreMenu ? ' is-on' : ''}`}
+                title="更多"
+                aria-label="更多"
+                aria-haspopup="menu"
+                aria-expanded={showMoreMenu}
+                onClick={() => setShowMoreMenu((v) => !v)}
+              >
+                <Lucide.MoreHorizontal size={15} strokeWidth={1.75} />
+              </button>
+              {showMoreMenu ? (
+                <div className="agent-more-menu" role="menu" aria-label="更多操作">
+                  {siblingAgents.length > 1 ? (
+                    <button
+                      type="button"
+                      className="agent-more-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowTeamBoard((v) => !v);
+                        setShowMoreMenu(false);
+                      }}
+                    >
+                      <Lucide.LayoutGrid size={14} strokeWidth={1.75} />
+                      <span>{showTeamBoard ? '收起协作看板' : '协作看板'}</span>
+                    </button>
+                  ) : null}
+                  {!embedded && onOpenRight ? (
+                    <button
+                      type="button"
+                      className="agent-more-item"
+                      role="menuitem"
+                      onClick={() => {
+                        onOpenRight();
+                        setShowMoreMenu(false);
+                      }}
+                    >
+                      <Lucide.PanelRight size={14} strokeWidth={1.75} />
+                      <span>在右侧打开</span>
+                    </button>
+                  ) : null}
+                  {!embedded && onOpenWindow ? (
+                    <button
+                      type="button"
+                      className="agent-more-item"
+                      role="menuitem"
+                      onClick={() => {
+                        onOpenWindow();
+                        setShowMoreMenu(false);
+                      }}
+                    >
+                      <Lucide.ExternalLink size={14} strokeWidth={1.75} />
+                      <span>新窗口打开</span>
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {onClose ? (
-            <button type="button" className="agent-card-btn" title="关闭" onClick={onClose}>
-              <Lucide.X size={16} />
+            <button
+              type="button"
+              className="agent-card-btn"
+              title={embedded ? '返回主对话' : '关闭'}
+              aria-label={embedded ? '返回主对话' : '关闭'}
+              onClick={onClose}
+            >
+              {embedded ? <Lucide.ArrowLeft size={15} /> : <Lucide.X size={15} />}
             </button>
           ) : null}
         </div>
@@ -737,20 +810,16 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
         <AgentTeamBoard agents={siblingAgents} activeId={agent.id} compact />
       ) : null}
 
-      {agent.summary && !embedded ? (
-        <div className="agent-card-summary">{agent.summary}</div>
-      ) : null}
-
       <div className="agent-card-body" ref={bodyRef}>
         {(agent.messages || []).length === 0 ? (
           <div className="agent-card-empty-msgs">
             {running ? (
               <>
                 <span className="loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                <span>协作 agent 处理中…可在下方补充指示</span>
+                <span>处理中…</span>
               </>
             ) : (
-              <span>暂无消息。输入任务开始续聊。</span>
+              <span>暂无消息</span>
             )}
           </div>
         ) : (
@@ -771,10 +840,13 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           <textarea
             className="agent-card-textarea"
             rows={1}
-            placeholder={
+            placeholder={running ? '补充指示…' : '继续对话…'}
+            title={
               running
-                ? '向运行中的 agent 补充指示（Enter 发送）…'
-                : '继续向该 agent 发消息（将开启新一轮）…'
+                ? '运行中：消息会注入当前回合'
+                : getWorkspacePath()
+                  ? `新一轮 · ${shortPath(getWorkspacePath()!)}`
+                  : '将开启新一轮'
             }
             value={input}
             disabled={sending}
@@ -795,19 +867,14 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             disabled={!canSend}
             onClick={() => void handleSend()}
             title="发送"
+            aria-label="发送"
           >
             {sending ? (
               <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
             ) : (
-              <Lucide.Send size={16} />
+              <Lucide.Send size={15} />
             )}
           </button>
-        </div>
-        <div className="agent-card-input-hint">
-          {running
-            ? '运行中：消息会注入当前回合（steer）'
-            : '已结束：发送将基于该 agent 历史开启新一轮'}
-          {getWorkspacePath() ? ` · ${shortPath(getWorkspacePath()!)}` : ''}
         </div>
       </div>
     </div>

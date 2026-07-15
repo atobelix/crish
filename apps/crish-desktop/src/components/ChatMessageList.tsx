@@ -600,6 +600,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                   message={msg}
                   onOpenDiff={onOpenDiff}
                   onOpenDiffPanel={onOpenDiffPanel}
+                  onShowToast={onShowToast}
                 />
                 {inPlanMode &&
                 !planApproved &&

@@ -103,8 +103,17 @@ export const TasksCard: React.FC = () => {
   const agents = session?.agents || [];
 
   const checklist = useMemo(() => {
+    // 目标模式优先用 session.goalMode.tasks（与续写绑定）；否则解析助手 checklist
+    const goalTasks = session?.goalMode?.tasks;
+    if (goalTasks && goalTasks.length > 0) {
+      return goalTasks.map((t) => ({
+        id: t.id,
+        text: t.text,
+        done: Boolean(t.done),
+      }));
+    }
     return findLatestAssistantChecklist(session?.messages).items;
-  }, [session?.messages]);
+  }, [session?.messages, session?.goalMode?.tasks]);
 
   const engineSteps = useMemo(() => {
     // 主会话 + 协作 agent 工具步骤

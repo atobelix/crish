@@ -88,8 +88,9 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   }
 
   const theme = settings.theme || 'default';
-  const themeLabel = THEME_LABELS[theme] || theme;
+  const themeLabel = THEME_LABELS[theme] || theme || '浅色';
   const hideThinking = Boolean(settings.hideThinkingBlock);
+  const codeIndent = settings.markdown?.codeBlockIndent || '  ';
 
   return (
     <div className="settings-pane settings-pane--modern">
@@ -138,7 +139,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
             </div>
             <div className="settings-list-control">
               <SettingsSelect
-                value={settings.markdown?.codeBlockIndent || '  '}
+                value={codeIndent}
                 options={[
                   { value: '  ', label: '2 空格' },
                   { value: '    ', label: '4 空格' },
@@ -146,7 +147,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                 ]}
                 onChange={(v) =>
                   void handleUpdateSettings({
-                    markdown: { ...settings.markdown, codeBlockIndent: v },
+                    markdown: { ...(settings.markdown || {}), codeBlockIndent: v },
                   })
                 }
               />
@@ -179,7 +180,13 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         <div className="settings-list settings-list--spaced settings-list--flush">
           <FontSettingsSection
             onShowToast={onShowToast}
-            onPersistSettings={(fonts) => handleUpdateSettings({ fonts })}
+            onPersistSettings={async (fonts) => {
+              try {
+                await handleUpdateSettings({ fonts });
+              } catch (err) {
+                onShowToast('保存字体失败：' + String(err));
+              }
+            }}
           />
         </div>
       </section>

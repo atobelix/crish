@@ -79,6 +79,9 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWorkflowsLoading(true);
     try {
       setWorkflows(await listWorkflows());
+    } catch (e) {
+      setWfError(e instanceof Error ? e.message : '读取计划失败');
+      setWorkflows([]);
     } finally {
       setWorkflowsLoading(false);
     }
@@ -89,6 +92,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfError('');
     void listWorkflows()
       .then(setWorkflows)
+      .catch((e) => {
+        setWfError(e instanceof Error ? e.message : '读取计划失败');
+        setWorkflows([]);
+      })
       .finally(() => setWorkflowsLoading(false));
   }, []);
 

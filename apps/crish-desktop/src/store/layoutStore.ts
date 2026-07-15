@@ -39,6 +39,7 @@ export type {
   SessionMessage,
   SessionAgent,
   SessionGoalMode,
+  SessionGoalTask,
   SessionState,
   DropPreviewState,
 } from './types';
@@ -78,6 +79,8 @@ interface LayoutStore extends SessionActions, WorkspaceActions {
   setActiveDiffSource: (diff: FileDiff | null) => void;
   setDiffFiles: (files: FileDiff[]) => void;
   pushDiffFile: (diff: FileDiff) => void;
+  /** 从变更列表移除（拒绝 / 已应用后清理） */
+  removeDiffFile: (filePath: string) => void;
 
   // Plan Mode & Permissions
   planModeEnabled: boolean;
@@ -165,6 +168,13 @@ export const useLayoutStore = create<LayoutStore>()(
       else state.diffFiles.unshift(diff);
       state.activeDiffSource = diff;
       if (state.diffFiles.length > 40) state.diffFiles.length = 40;
+    }),
+    removeDiffFile: (filePath) => set((state) => {
+      const path = filePath || '';
+      state.diffFiles = state.diffFiles.filter((f) => f.filePath !== path);
+      if (state.activeDiffSource?.filePath === path) {
+        state.activeDiffSource = state.diffFiles[0] || null;
+      }
     }),
     planModeEnabled: false,
     setPlanModeEnabled: (enabled) => set((state) => {

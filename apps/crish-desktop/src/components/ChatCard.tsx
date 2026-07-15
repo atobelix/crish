@@ -167,6 +167,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const modelSelectorRef = useRef<HTMLDivElement>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  /** 输入区旁「更多」：导出 / 本会话搜索等次要动作 */
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   /** 本会话消息客户端过滤（搜索本会话） */
   const [localMsgFilter, setLocalMsgFilter] = useState('');
   const [showMsgFilter, setShowMsgFilter] = useState(false);
@@ -383,6 +386,24 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     };
   }, [showModelDropdown]);
 
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMoreMenu(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [showMoreMenu]);
+
   // Keyboard and Input states
   const [chatInput, setChatInput] = useState('');
   const [isComposing, setIsComposing] = useState(false); // IME Composition State
@@ -595,18 +616,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
       {activeAgent ? (
         <div className="agent-inline-shell" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <div className="agent-inline-bar">
-            <button
-              type="button"
-              className="agent-inline-back"
-              onClick={() => setActiveAgentId(null)}
-            >
-              <Lucide.ArrowLeft size={16} />
-              返回主对话
-            </button>
-            <span className="agent-inline-hint">{activeAgent.description || '协作 agent'}</span>
-          </div>
-          {/* 已在主区全屏：不再显示「右侧/新窗口」（那些在时间线内联块上） */}
+          {/* 全屏主区：顶栏仅 AgentCard 自带（状态 + 关闭），不再叠一层返回条 */}
           <AgentCard
             agentId={activeAgent.id}
             embedded
@@ -615,69 +625,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         </div>
       ) : null}
 
-      {/* 会话顶栏工具：贴近标题区，导出 / 搜索 / 目标停止 */}
-      {!activeAgent && mainSurface === 'chat' ? (
-        <div className="chat-session-toolbar" role="toolbar" aria-label="会话工具">
-          <div className="chat-session-toolbar-title" title={activeSession?.title || ''}>
-            <span className="chat-session-toolbar-kicker">本会话</span>
-            <span className="chat-session-toolbar-name">
-              {activeSession?.title || '新对话'}
-            </span>
-          </div>
-          <div className="chat-session-toolbar-actions">
-            {goalModeActive ? (
-              <button
-                type="button"
-                className="chat-session-tool-btn is-danger"
-                title="停止目标"
-                onClick={() => {
-                  handleStopGeneration();
-                  if (activeSessionId) {
-                    const gm = useLayoutStore
-                      .getState()
-                      .sessions.find((s) => s.id === activeSessionId)?.goalMode;
-                    useLayoutStore.getState().patchSession(activeSessionId, {
-                      goalMode: gm ? { ...gm, active: false } : null,
-                    });
-                  }
-                  onShowToast('已停止目标');
-                }}
-              >
-                <Lucide.Square size={13} fill="currentColor" />
-                <span>停止</span>
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="chat-session-tool-btn"
-              title="导出 Markdown"
-              disabled={!activeSession}
-              onClick={handleExportMarkdown}
-            >
-              <Lucide.FileDown size={14} strokeWidth={1.75} />
-              <span className="chat-session-tool-label">导出</span>
-            </button>
-            <button
-              type="button"
-              className={`chat-session-tool-btn${showMsgFilter ? ' is-on' : ''}`}
-              title="搜索本会话"
-              aria-pressed={showMsgFilter}
-              onClick={() => {
-                setShowMsgFilter((v) => {
-                  const next = !v;
-                  if (!next) setLocalMsgFilter('');
-                  return next;
-                });
-              }}
-            >
-              <Lucide.Search size={14} strokeWidth={1.75} />
-              <span className="chat-session-tool-label">搜索</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* 本会话消息过滤条：钉在消息列表上方，滚动时仍可见 */}
+      {/* 本会话消息过滤条：由「更多」菜单打开，钉在列表上方 */}
       {!activeAgent && mainSurface === 'chat' && showMsgFilter ? (
         <div className="chat-msg-filter-bar" role="search">
           <Lucide.Search size={14} className="chat-msg-filter-icon" aria-hidden />
@@ -834,69 +782,60 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           </div>
         )}
         {inPlanMode && (
-          <div className="plan-mode-ribbon">
-            <div className="plan-mode-ribbon-text">
-              <strong>计划模式</strong>
-              ：AI 只规划不改文件。审阅后可批准执行。
-              {planApproved ? (
-                <span className="plan-mode-ribbon-status"> · 已批准</span>
-              ) : null}
-            </div>
-            <div className="plan-mode-ribbon-actions">
-              <button
-                type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
-                onClick={() => {
-                  onShowToast('继续计划：仍只规划不改文件');
-                }}
-              >
-                继续计划
-              </button>
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                onClick={() => {
-                  // 先切模式（会清 planApproved），再标记已批准
-                  setPermissionMode('ask');
-                  setPlanApproved(true);
-                  onShowToast('已批准执行，已切回需确认模式');
-                }}
-              >
-                批准执行
-              </button>
-            </div>
+          <div className="plan-mode-ribbon plan-mode-ribbon--slim" role="status">
+            <Lucide.ListChecks size={14} strokeWidth={1.75} aria-hidden />
+            <span className="plan-mode-ribbon-text" title="计划模式：只规划不改文件">
+              计划模式{planApproved ? ' · 已批准' : ' · 只规划'}
+            </span>
+            <button
+              type="button"
+              className="plan-mode-ribbon-icon-btn"
+              title="批准执行"
+              onClick={() => {
+                setPermissionMode('ask');
+                setPlanApproved(true);
+                onShowToast('已批准执行，已切回需确认模式');
+              }}
+            >
+              <Lucide.Check size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
-        {activeSession?.goalMode?.active && (
-          <div className="plan-mode-ribbon goal-mode-ribbon" role="status">
-            <div className="plan-mode-ribbon-text">
-              <strong>目标模式</strong>
-              {` · 第 ${(activeSession.goalMode.iteration ?? 0) + 1} 轮`}
+        {goalModeActive && activeSession?.goalMode ? (
+          <div className="plan-mode-ribbon goal-mode-ribbon plan-mode-ribbon--slim" role="status">
+            <Lucide.Target size={14} strokeWidth={1.75} aria-hidden />
+            <span
+              className="plan-mode-ribbon-text"
+              title={activeSession.goalMode.goal || '目标模式'}
+            >
+              目标 · 第 {(activeSession.goalMode.iteration ?? 0) + 1} 轮
               {activeSession.goalMode.goal
                 ? ` · ${
-                    activeSession.goalMode.goal.length > 48
-                      ? `${activeSession.goalMode.goal.slice(0, 48)}…`
+                    activeSession.goalMode.goal.length > 36
+                      ? `${activeSession.goalMode.goal.slice(0, 36)}…`
                       : activeSession.goalMode.goal
                   }`
                 : ''}
-            </div>
-            <div className="plan-mode-ribbon-actions">
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                onClick={() => {
-                  if (!activeSessionId) return;
+            </span>
+            <button
+              type="button"
+              className="plan-mode-ribbon-icon-btn is-danger"
+              title="停止目标"
+              aria-label="停止目标"
+              onClick={() => {
+                handleStopGeneration();
+                if (activeSessionId) {
                   useLayoutStore.getState().patchSession(activeSessionId, {
                     goalMode: null,
                   });
-                  onShowToast('已停止目标模式');
-                }}
-              >
-                停止
-              </button>
-            </div>
+                }
+                onShowToast('已停止目标');
+              }}
+            >
+              <Lucide.Square size={12} fill="currentColor" />
+            </button>
           </div>
-        )}
+        ) : null}
         {/* 回到最新：浮在对话区右下角，仅图标 */}
         {showScrollToBottom && (
           <button
@@ -939,7 +878,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         {!activeAgent && pendingApprovalCount > 0 ? (
           <button
             type="button"
-            className="approval-dock"
+            className="approval-dock approval-dock--slim"
+            title={pendingApprovalSummary || '有操作等待你确认'}
             onClick={() => {
               const byTool = pendingApprovalToolId
                 ? document.querySelector(
@@ -979,12 +919,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           >
             <span className="approval-dock-dot" aria-hidden />
             <span className="approval-dock-label">
-              {pendingApprovalCount} 个操作待审批
+              {pendingApprovalCount} 待审批
+              {pendingApprovalSummary ? ` · ${pendingApprovalSummary}` : ''}
             </span>
-            <span className="approval-dock-summary" title={pendingApprovalSummary}>
-              {pendingApprovalSummary || '有操作等待你确认'}
-            </span>
-            <span className="approval-dock-go">查看</span>
+            <Lucide.ChevronRight size={14} className="approval-dock-go-icon" aria-hidden />
           </button>
         ) : null}
 
@@ -1211,6 +1149,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 } else {
                   setShowPlusMenu(true);
                   setShowModelDropdown(false);
+                  setShowMoreMenu(false);
                 }
               }}
             >
@@ -1227,29 +1166,61 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 setPermissionMode(m);
                 setShowPlusMenu(false);
                 setShowModelDropdown(false);
+                setShowMoreMenu(false);
               }}
             />
-            <button
-              type="button"
-              className="plus-btn"
-              title="导出 Markdown"
-              aria-label="导出"
-              disabled={!activeSession}
-              onClick={() => {
-                if (!activeSession) {
-                  onShowToast('没有可导出的会话');
-                  return;
-                }
-                try {
-                  downloadSessionMarkdown(activeSession);
-                  onShowToast('已导出 Markdown');
-                } catch {
-                  onShowToast('导出失败');
-                }
-              }}
-            >
-              <Lucide.Download size={16} />
-            </button>
+            {/* 次要动作：导出 / 本会话搜索 → ⋯ 菜单（侧栏也有导出） */}
+            <div className="chat-more-wrap" ref={moreMenuRef}>
+              <button
+                type="button"
+                className={`plus-btn${showMoreMenu ? ' is-open' : ''}${showMsgFilter ? ' is-on' : ''}`}
+                title="更多"
+                aria-label="更多"
+                aria-haspopup="menu"
+                aria-expanded={showMoreMenu}
+                onClick={() => {
+                  setShowMoreMenu((v) => !v);
+                  setShowPlusMenu(false);
+                  setShowModelDropdown(false);
+                }}
+              >
+                <Lucide.MoreHorizontal size={16} />
+              </button>
+              {showMoreMenu ? (
+                <div className="chat-more-menu" role="menu" aria-label="更多操作">
+                  <button
+                    type="button"
+                    className="chat-more-item"
+                    role="menuitem"
+                    aria-pressed={showMsgFilter}
+                    onClick={() => {
+                      setShowMsgFilter((v) => {
+                        const next = !v;
+                        if (!next) setLocalMsgFilter('');
+                        return next;
+                      });
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    <Lucide.Search size={15} strokeWidth={1.75} />
+                    <span>{showMsgFilter ? '关闭搜索' : '搜索本会话'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-more-item"
+                    role="menuitem"
+                    disabled={!activeSession}
+                    onClick={() => {
+                      handleExportMarkdown();
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    <Lucide.FileDown size={15} strokeWidth={1.75} />
+                    <span>导出 Markdown</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="right-actions">
             {showModelPicker && (

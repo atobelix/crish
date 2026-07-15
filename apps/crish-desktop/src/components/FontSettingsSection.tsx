@@ -28,7 +28,13 @@ interface Props {
  * 字体：每项一行；展开列表含内置 + 本机；扫描为行内图标。
  */
 export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSettings }) => {
-  const [prefs, setPrefs] = useState<FontPreferences>(() => readStoredFonts());
+  const [prefs, setPrefs] = useState<FontPreferences>(() => {
+    try {
+      return readStoredFonts();
+    } catch {
+      return { ...DEFAULT_FONT_PREFS };
+    }
+  });
   const [localFonts, setLocalFonts] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
   const [customDraft, setCustomDraft] = useState('');
@@ -37,7 +43,11 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
   const [customTarget, setCustomTarget] = useState<'ui' | 'mono'>('ui');
 
   useEffect(() => {
-    setPrefs(readStoredFonts());
+    try {
+      setPrefs(readStoredFonts());
+    } catch {
+      setPrefs({ ...DEFAULT_FONT_PREFS });
+    }
     // 不在挂载时扫描，避免多余工作；用户点扫描图标再列本机字体
   }, []);
 
@@ -178,6 +188,27 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     </div>
   );
 
+  let previewMeta = '';
+  try {
+    previewMeta = `${platformLabel()} · ${describeActiveUi(prefs)} / ${describeActiveMono(prefs)}`;
+  } catch {
+    previewMeta = '字体预览暂不可用';
+  }
+
+  let uiPreviewFamily: string | undefined;
+  let monoPreviewFamily: string | undefined;
+  try {
+    uiPreviewFamily = isLocalFontChoice(uiValue)
+      ? localFontFamily(uiValue)
+      : uiFontOptions().find((o) => o.id === uiValue)?.previewFamily;
+    monoPreviewFamily = isLocalFontChoice(monoValue)
+      ? localFontFamily(monoValue)
+      : monoFontOptions().find((o) => o.id === monoValue)?.previewFamily;
+  } catch {
+    uiPreviewFamily = undefined;
+    monoPreviewFamily = undefined;
+  }
+
   return (
     <>
       <div className="settings-row">
@@ -186,15 +217,11 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
         </div>
         <div className="settings-row-control">
           <SettingsSelect
-            value={uiValue}
+            value={uiValue || 'auto'}
             options={uiOptions}
             disabled={busy}
             onChange={(v) => void apply({ uiFont: v as UiFontChoice })}
-            valuePreviewFamily={
-              isLocalFontChoice(uiValue)
-                ? localFontFamily(uiValue)
-                : uiFontOptions().find((o) => o.id === uiValue)?.previewFamily
-            }
+            valuePreviewFamily={uiPreviewFamily}
             trailing={scanBtn}
             footer={customFooter('ui')}
             maxHeight={320}
@@ -210,22 +237,18 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
           <label className="settings-row-check" title="代码连字">
             <input
               type="checkbox"
-              checked={!!prefs.monoLigatures}
+              checked={!!prefs?.monoLigatures}
               disabled={busy}
               onChange={(e) => void apply({ monoLigatures: e.target.checked })}
             />
             <span>连字</span>
           </label>
           <SettingsSelect
-            value={monoValue}
+            value={monoValue || 'auto'}
             options={monoOptions}
             disabled={busy}
             onChange={(v) => void apply({ monoFont: v as MonoFontChoice })}
-            valuePreviewFamily={
-              isLocalFontChoice(monoValue)
-                ? localFontFamily(monoValue)
-                : monoFontOptions().find((o) => o.id === monoValue)?.previewFamily
-            }
+            valuePreviewFamily={monoPreviewFamily}
             trailing={scanBtn}
             footer={customFooter('mono')}
             maxHeight={320}
@@ -247,9 +270,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
 
       <div className="settings-row settings-row--preview">
         <div className="settings-row-label">
-          <span className="settings-row-meta">
-            {platformLabel()} · {describeActiveUi(prefs)} / {describeActiveMono(prefs)}
-          </span>
+          <span className="settings-row-meta">{previewMeta}</span>
         </div>
         <div className="settings-row-control settings-row-preview-text">
           <span style={{ fontFamily: 'var(--font-sans)' }}>Ag 中文</span>

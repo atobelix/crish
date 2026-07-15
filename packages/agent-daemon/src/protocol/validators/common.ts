@@ -69,6 +69,10 @@ export const RUN_TASK_FIELDS = [
   "projectTags",
   "packageNames",
   "scopedContextConfig",
+  // 多模态轻量扩展（desktop image parts）
+  "content",
+  "hasImages",
+  "attachments",
 ] as const;
 
 export const APPROVE_TOOL_FIELDS = ["type", ...CORRELATION_FIELDS, "toolCallId", "scope"] as const;

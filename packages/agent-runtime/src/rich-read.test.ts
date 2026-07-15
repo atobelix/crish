@@ -162,6 +162,26 @@ describe("rich read", () => {
     });
   });
 
+  it("enforces maxBytes truncation with total chars and lines in the note", async () => {
+    const content = Array.from({ length: 30 }, (_, i) => `row-${i + 1}`).join("\n");
+    await writeFile(join(workspaceRoot, "big.txt"), content, "utf8");
+    const read = createRichReadTool({ workspaceRoot });
+
+    const output = await read.execute({ path: "big.txt", maxBytes: 40, lineFormat: "plain" }, context());
+    expect(output.text).toMatch(/truncated: true \(showing \d+ of \d+ chars; file has \d+ lines/);
+    expect(output.text).toContain("... truncated ...");
+    expect(output.json).toMatchObject({
+      truncated: true,
+      totalChars: content.length,
+      shownChars: 40
+    });
+  });
+
+  it("returns a friendly ENOENT error for missing workspace paths", async () => {
+    const read = createRichReadTool({ workspaceRoot });
+    await expect(read.execute({ path: "nope.txt" }, context())).rejects.toThrow(/Path does not exist: nope\.txt/);
+  });
+
   it("allows future resource providers to plug into the same renderer", async () => {
     const archiveProvider: RichReadProvider = {
       id: "archive",

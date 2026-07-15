@@ -18,6 +18,34 @@ export {
   withdrawMessageFromDb,
 } from './chatApi.demo';
 
+/** OpenAI-style multimodal content part (user turn) */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image_url';
+      image_url: { url: string; detail?: 'auto' | 'low' | 'high' };
+      /** 展示名，便于调试 / 未来引擎侧落盘 */
+      name?: string;
+      mime?: string;
+    };
+
+/** 轻量附件元数据（不重复塞 dataUrl） */
+export type StreamAttachmentMeta = {
+  name: string;
+  mime?: string;
+  kind: 'image' | 'text' | 'file';
+};
+
+/**
+ * 流式请求扩展：结构化图片 / 附件元数据。
+ * 文本协议仍用 prompt；有 hasImages 时同时下发 content，供引擎视觉通路使用。
+ */
+export type StreamRequestOptions = {
+  content?: ChatContentPart[];
+  hasImages?: boolean;
+  attachments?: StreamAttachmentMeta[];
+};
+
 export interface StreamCallbacks {
   onThought: (thought: string) => void;
   onToolStart: (toolId: string, name: string, args: string, explanation: string) => void;
@@ -65,14 +93,15 @@ export const streamAssistantResponseApi = (
   prompt: string,
   callbacks: StreamCallbacks,
   sessionId?: string,
-  assistantMsgId?: string
+  assistantMsgId?: string,
+  options?: StreamRequestOptions,
 ) => {
   if (!shouldUseMockStream(prompt)) {
     const sid = sessionId || `sess-${Date.now()}`;
     const aid = assistantMsgId || `asst-${Date.now()}`;
     // Prefer real backend for desktop product path
     void getDesktopDaemonClient();
-    return streamViaDaemon(prompt, callbacks, sid, aid);
+    return streamViaDaemon(prompt, callbacks, sid, aid, options);
   }
-  return streamMockAssistantResponse(prompt, callbacks, sessionId, assistantMsgId);
+  return streamMockAssistantResponse(prompt, callbacks, sessionId, assistantMsgId, options);
 };

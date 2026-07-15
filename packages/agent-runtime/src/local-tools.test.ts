@@ -98,8 +98,9 @@ describe("local workspace tools", () => {
     const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000 });
     const output = await tool.execute({ command: 'node -e "console.log(123)"' }, context());
 
-    expect(output.text).toContain("Exit code: 0");
+    // Tool text is stdout/stderr only; exit metadata lives in json for the UI.
     expect(output.text).toContain("123");
+    expect(output.text).not.toMatch(/Exit code:/);
     expect(output.json).toMatchObject({ exitCode: 0 });
   });
 
@@ -107,7 +108,6 @@ describe("local workspace tools", () => {
     const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000 });
     const output = await tool.execute({ command: 'node -e "process.exit(7)"' }, context());
 
-    expect(output.text).toContain("Exit code: 7");
     expect(output.json).toMatchObject({ exitCode: 7 });
   });
 
@@ -122,7 +122,7 @@ describe("local workspace tools", () => {
       terminationDiagnostics?: Array<{ strategy?: string; ok?: boolean }>;
     };
 
-    expect(output.text).toContain("Timed out: true");
+    expect(output.text).toMatch(/命令超时|timed out/i);
     expect(json.timedOut).toBe(true);
     expect(json.cancelled).toBe(false);
     expect(json.exitCode ?? json.signal).not.toBeUndefined();
@@ -139,7 +139,7 @@ describe("local workspace tools", () => {
     const output = await running;
     const json = output.json as { timedOut?: boolean; cancelled?: boolean; terminationDiagnostics?: unknown[] };
 
-    expect(output.text).toContain("Cancelled: true");
+    expect(output.text).toMatch(/已取消|cancel/i);
     expect(json).toMatchObject({ timedOut: false, cancelled: true });
     expect(json.terminationDiagnostics?.length).toBeGreaterThan(0);
   }, 10_000);
@@ -163,7 +163,6 @@ describe("local workspace tools", () => {
       context()
     );
 
-    expect(output.text).toContain("Exit code: 0");
     expect(output.text).toContain("firstsecond");
     expect(output.json).toMatchObject({ exitCode: 0 });
   });
@@ -172,9 +171,8 @@ describe("local workspace tools", () => {
     const tool = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 10_000 });
     const output = await tool.execute({ command: 'node -e "console.log(\'中文探针\')"' }, context());
 
-    expect(output.text).toContain("Exit code: 0");
     expect(output.text).toContain("中文探针");
-    expect(output.json).toMatchObject({ stdout: "中文探针\n" });
+    expect(output.json).toMatchObject({ exitCode: 0, stdout: "中文探针\n" });
   });
 
   it("blocks hardline terminal commands below the approval layer", async () => {
@@ -231,10 +229,70 @@ describe("local workspace tools", () => {
 
     try {
       const output = await tool.execute({ command: "pwd" }, context());
-      expect(output.text).toContain("Exit code: 0");
+      // Read-only shell must not block on the workspace lease; json carries success.
+      expect(output.json).toMatchObject({ exitCode: 0 });
     } finally {
       if (active.ok) mutationCoordinator.release(active.lease.token);
     }
+  });
+
+  it("does not create pre-mutation git checkpoints for read-only or benign shell commands", async () => {
+    const checkpointed: string[] = [];
+    const tool = createTerminalCommandTool({
+      workspaceRoot,
+      defaultTimeoutMs: 15_000,
+      preMutationCheckpoint: {
+        hook: async (request) => {
+          checkpointed.push(request.targetSummary);
+          return { status: "skipped", reason: "test-should-not-run" };
+        }
+      }
+    });
+
+    const readonlyCommands = [
+      "echo hello",
+      "ping -n 1 127.0.0.1",
+      process.platform === "win32" ? "dir" : "ls",
+      process.platform === "win32" ? "Get-ChildItem" : "ls -la",
+      "git status",
+      "git log -1 --oneline",
+      "git diff --stat"
+    ];
+
+    for (const command of readonlyCommands) {
+      const output = await tool.execute({ command }, context());
+      expect(output.text, command).not.toMatch(/Pre-mutation Git checkpoint/);
+      expect((output.json as { preMutationCheckpoint?: unknown }).preMutationCheckpoint, command).toBeUndefined();
+    }
+    expect(checkpointed).toEqual([]);
+  }, 60_000);
+
+  it("creates pre-mutation checkpoints for mutating shell commands and omits skipped diagnostics from text", async () => {
+    let hookCalls = 0;
+    const tool = createTerminalCommandTool({
+      workspaceRoot,
+      defaultTimeoutMs: 15_000,
+      preMutationCheckpoint: {
+        hook: async () => {
+          hookCalls += 1;
+          return { status: "skipped", reason: "test-skip-quiet" };
+        }
+      }
+    });
+
+    const output = await tool.execute(
+      {
+        command: process.platform === "win32" ? "echo hi > shell-mutate.txt" : "echo hi > shell-mutate.txt"
+      },
+      context()
+    );
+
+    expect(hookCalls).toBe(1);
+    expect(output.text).not.toMatch(/Pre-mutation Git checkpoint/);
+    expect((output.json as { preMutationCheckpoint?: { status?: string; reason?: string } }).preMutationCheckpoint).toMatchObject({
+      status: "skipped",
+      reason: "test-skip-quiet"
+    });
   });
 
   it("wraps foreground mutating shell commands in a workspace lease and releases on failure", async () => {
@@ -746,6 +804,159 @@ describe("local workspace tools", () => {
       text: "after\nline",
       json: { encoding: "utf-16le" }
     });
+  });
+
+  it("rejects out-of-range line edits instead of silently clamping", async () => {
+    await writeFile(join(workspaceRoot, "short.txt"), "one\ntwo\nthree\nfour\nfive\nsix", "utf8");
+    const edit = createEditTool({ workspaceRoot });
+    const before = await readFile(join(workspaceRoot, "short.txt"), "utf8");
+
+    await expect(
+      edit.execute(
+        {
+          path: "short.txt",
+          edits: [{ op: "delete", startLine: 99, endLine: 100 }]
+        },
+        context()
+      )
+    ).rejects.toThrow(/out of range/);
+    await expect(readFile(join(workspaceRoot, "short.txt"), "utf8")).resolves.toBe(before);
+
+    await expect(
+      edit.execute(
+        {
+          path: "short.txt",
+          edits: [{ op: "replace", startLine: 10, content: "nope" }]
+        },
+        context()
+      )
+    ).rejects.toThrow(/out of range \(file has 6 lines\)/);
+  });
+
+  it("mentions created parent directories for new nested files and refuses silent mkdir for missing parents of existing files", async () => {
+    const edit = createEditTool({ workspaceRoot });
+    const created = await edit.execute(
+      {
+        path: "nested/deep/new.txt",
+        content: "hello"
+      },
+      context()
+    );
+
+    await expect(readFile(join(workspaceRoot, "nested", "deep", "new.txt"), "utf8")).resolves.toBe("hello");
+    expect(created.text).toMatch(/Created parent directories/i);
+    expect(created.json).toMatchObject({ createdParentDirectories: true });
+
+    await writeFile(join(workspaceRoot, "existing.txt"), "keep", "utf8");
+    // Simulate a pathological case: target path under a non-directory parent name is blocked earlier;
+    // for a brand-new nested path with only line edits that require an existing file, still error clearly.
+    await expect(
+      edit.execute(
+        {
+          path: "ghost/dir/missing.txt",
+          edits: [{ op: "replace", line: 1, content: "x" }]
+        },
+        context()
+      )
+    ).rejects.toThrow(/Cannot apply line edits to a missing file/);
+  });
+
+  it("unifies search_files empty and hit output formats", async () => {
+    await mkdir(join(workspaceRoot, "notes"), { recursive: true });
+    await writeFile(join(workspaceRoot, "notes", "a.txt"), "alpha\nbeta", "utf8");
+    const search = createSearchFilesTool({ workspaceRoot });
+
+    const hits = await search.execute({ query: "beta" }, context());
+    expect(hits.text).toContain("query: beta");
+    expect(hits.text).toContain("matches: 1");
+    expect(hits.text).toContain("visitedFiles:");
+    expect(hits.text).toContain("---");
+    expect(hits.text).toMatch(/a\.txt:2: beta/);
+    expect(hits.json).toMatchObject({
+      query: "beta",
+      matchCount: 1,
+      truncated: false,
+      matches: [{ line: 2, preview: "beta" }]
+    });
+
+    const empty = await search.execute({ query: "zzz-no-match" }, context());
+    expect(empty.text).toContain("query: zzz-no-match");
+    expect(empty.text).toContain("matches: 0");
+    expect(empty.text).toContain("---");
+    expect(empty.text).toContain("(no matches)");
+    expect(empty.json).toMatchObject({
+      query: "zzz-no-match",
+      matchCount: 0,
+      truncated: false,
+      matches: []
+    });
+  });
+
+  it("enforces read maxBytes truncation with totals in text and json", async () => {
+    const content = Array.from({ length: 40 }, (_, i) => `line-${i + 1}`).join("\n");
+    await writeFile(join(workspaceRoot, "big.txt"), content, "utf8");
+    const read = createReadTool({ workspaceRoot });
+
+    const output = await read.execute({ path: "big.txt", maxBytes: 50, format: "plain" }, context());
+    expect(output.text).toMatch(/truncated: true \(showing \d+ of \d+ chars/);
+    expect(output.text).toContain("file has");
+    expect(output.text).toContain("... truncated ...");
+    expect(output.json).toMatchObject({
+      truncated: true,
+      totalChars: content.length,
+      shownChars: 50
+    });
+    expect((output.json as { selectedChars?: number }).selectedChars).toBeGreaterThan(50);
+  });
+
+  it("avoids extra blank lines when insert_tail follows a trailing newline", async () => {
+    await writeFile(join(workspaceRoot, "tail.txt"), "alpha\nbeta\n", "utf8");
+    const edit = createEditTool({ workspaceRoot });
+
+    await edit.execute(
+      {
+        path: "tail.txt",
+        edits: [{ op: "insert_tail", content: "gamma" }]
+      },
+      context()
+    );
+    await expect(readFile(join(workspaceRoot, "tail.txt"), "utf8")).resolves.toBe("alpha\nbeta\ngamma\n");
+
+    await edit.execute(
+      {
+        path: "tail.txt",
+        edits: [{ op: "insert_tail", content: "delta\n" }]
+      },
+      context()
+    );
+    await expect(readFile(join(workspaceRoot, "tail.txt"), "utf8")).resolves.toBe("alpha\nbeta\ngamma\ndelta\n");
+  });
+
+  it("returns friendly ENOENT errors for read and list_directory", async () => {
+    const read = createReadTool({ workspaceRoot });
+    const list = createListDirectoryTool({ workspaceRoot });
+
+    await expect(read.execute({ path: "missing-file.txt" }, context())).rejects.toThrow(
+      /Path does not exist: missing-file\.txt/
+    );
+    await expect(list.execute({ path: "missing-dir" }, context())).rejects.toThrow(
+      /Path does not exist: missing-dir|Directory does not exist: missing-dir/
+    );
+  });
+
+  it("lists directories and files with consistent prefixes", async () => {
+    await mkdir(join(workspaceRoot, "tree", "subdir"), { recursive: true });
+    await writeFile(join(workspaceRoot, "tree", "a.txt"), "a", "utf8");
+    const list = createListDirectoryTool({ workspaceRoot });
+    const read = createReadTool({ workspaceRoot });
+
+    const listed = await list.execute({ path: "tree" }, context());
+    expect(listed.text?.split("\n")).toEqual(expect.arrayContaining(["/subdir", " a.txt"]));
+    expect(listed.text).toMatch(/^\/subdir$/m);
+    expect(listed.text).toMatch(/^ a\.txt$/m);
+
+    const viaRead = await read.execute({ path: "tree" }, context());
+    expect(viaRead.text?.split("\n")).toEqual(expect.arrayContaining(["/subdir", " a.txt"]));
   });
 
   it("registers only unified product file tools by default", () => {

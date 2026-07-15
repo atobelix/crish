@@ -125,9 +125,14 @@ export interface OpenAICompatibleModel {
   ownedBy?: string;
 }
 
+/** OpenAI chat content part (multimodal user turns) */
+type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: string } };
+
 interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  content?: string | null | ChatContentPart[];
   tool_call_id?: string;
   reasoning_content?: string;
   tool_calls?: Array<{
@@ -1037,15 +1042,83 @@ function toChatMessages(
       continue;
     }
 
+    // user / other: prefer multimodal contentParts from metadata when images present
     result.push({
       role: message.role,
-      content: message.blocks
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("")
+      content: userMessageContent(message)
     });
   }
   return result;
+}
+
+/**
+ * Build OpenAI user content: multimodal parts when metadata.contentParts has image_url;
+ * otherwise plain text from blocks.
+ */
+function userMessageContent(message: AgentMessage): string | ChatContentPart[] {
+  const parts = normalizeContentParts(message.metadata?.contentParts);
+  const hasImage = parts.some((p) => p.type === "image_url");
+  if (!hasImage) {
+    return textContent(message);
+  }
+  // Prefer structured parts; ensure at least one text part (strip inline dataUrls to avoid double payload)
+  const out: ChatContentPart[] = [];
+  let sawText = false;
+  for (const p of parts) {
+    if (p.type === "text") {
+      const cleaned = stripInlineDataUrls(p.text).trim();
+      if (cleaned) {
+        out.push({ type: "text", text: cleaned });
+        sawText = true;
+      }
+    } else if (p.type === "image_url" && p.image_url.url) {
+      out.push(p);
+    }
+  }
+  if (!sawText) {
+    const fallback = stripInlineDataUrls(textContent(message)).trim();
+    if (fallback) out.unshift({ type: "text", text: fallback });
+  }
+  return out.length > 0 ? out : textContent(message);
+}
+
+function normalizeContentParts(value: unknown): ChatContentPart[] {
+  if (!Array.isArray(value)) return [];
+  const parts: ChatContentPart[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const p = raw as Record<string, unknown>;
+    if (p.type === "text" && typeof p.text === "string") {
+      parts.push({ type: "text", text: p.text });
+      continue;
+    }
+    if (p.type === "image_url") {
+      const imageUrl = p.image_url;
+      if (imageUrl && typeof imageUrl === "object") {
+        const url = (imageUrl as { url?: unknown }).url;
+        if (typeof url === "string" && url.trim()) {
+          const detail = (imageUrl as { detail?: unknown }).detail;
+          parts.push({
+            type: "image_url",
+            image_url: {
+              url,
+              ...(typeof detail === "string" ? { detail } : {})
+            }
+          });
+        }
+      } else if (typeof p.url === "string" && p.url.trim()) {
+        parts.push({ type: "image_url", image_url: { url: p.url } });
+      }
+    }
+  }
+  return parts;
+}
+
+function stripInlineDataUrls(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+/g, "[image]")
+    .replace(/!\[([^\]]*)\]\(data:image\/[^)]+\)/g, "![$1]([image])");
 }
 
 function reasoningContentObject(
@@ -1110,13 +1183,43 @@ function toResponsesInput(
       continue;
     }
 
-    const content = textContent(message);
-    if (content) {
-      result.push({
-        type: "message",
-        role: message.role === "system" && wireMode === "user-prefix" ? "user" : message.role,
-        content: message.role === "system" && wireMode === "user-prefix" ? systemPromptAsUserPrefix(content) : content
-      });
+    if (message.role === "user") {
+      const multimodal = userMessageContent(message);
+      if (Array.isArray(multimodal)) {
+        const responsesContent: JsonValue[] = multimodal.map((part) => {
+          if (part.type === "image_url") {
+            const image: JsonObject = {
+              type: "input_image",
+              image_url: part.image_url.url
+            };
+            if (part.image_url.detail) image.detail = part.image_url.detail;
+            return image;
+          }
+          return { type: "input_text", text: part.text };
+        });
+        if (responsesContent.length > 0) {
+          result.push({
+            type: "message",
+            role: "user",
+            content: responsesContent
+          });
+        }
+      } else if (multimodal) {
+        result.push({
+          type: "message",
+          role: "user",
+          content: multimodal
+        });
+      }
+    } else {
+      const content = textContent(message);
+      if (content) {
+        result.push({
+          type: "message",
+          role: message.role === "system" && wireMode === "user-prefix" ? "user" : message.role,
+          content: message.role === "system" && wireMode === "user-prefix" ? systemPromptAsUserPrefix(content) : content
+        });
+      }
     }
 
     if (message.role === "assistant") {

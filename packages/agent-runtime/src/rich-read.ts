@@ -183,15 +183,31 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
     async read(request) {
       const workspacePath = workspacePathFromResource(request);
       const targetPath = resolveWorkspacePath(root, workspacePath);
-      const targetStat = await stat(targetPath);
       const path = displayPath(root, targetPath);
+      let targetStat;
+      try {
+        targetStat = await stat(targetPath);
+      } catch (error) {
+        if (isNodeError(error) && error.code === "ENOENT") {
+          throw new Error(`Path does not exist: ${path}`);
+        }
+        throw error;
+      }
       const uri = workspaceUri(path);
       const metadata: JsonObject = {
         modifiedMs: targetStat.mtimeMs
       };
 
       if (targetStat.isDirectory()) {
-        const entries = await readdir(targetPath, { withFileTypes: true });
+        let entries;
+        try {
+          entries = await readdir(targetPath, { withFileTypes: true });
+        } catch (error) {
+          if (isNodeError(error) && error.code === "ENOENT") {
+            throw new Error(`Directory does not exist: ${path}`);
+          }
+          throw error;
+        }
         return {
           providerId: "workspace",
           kind: "directory",
@@ -211,13 +227,23 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
         throw new Error(`Path is not a file or directory: ${path}`);
       }
 
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(targetPath);
+      } catch (error) {
+        if (isNodeError(error) && error.code === "ENOENT") {
+          throw new Error(`File does not exist: ${path}`);
+        }
+        throw error;
+      }
+
       return {
         providerId: "workspace",
         kind: "file",
         uri,
         path,
         metadata,
-        bytes: await readFile(targetPath),
+        bytes,
         mimeType: mimeTypeFromPath(path)
       };
     }
@@ -336,7 +362,9 @@ function renderByteResource(resource: RichReadByteResource, request: RichReadReq
   const lines = splitTextLines(decoded.text);
   const selection = selectLineRange(lines, request.startLine, request.endLine);
   const selectedText = formatReadLines(selection.lines, selection.startLine, request.lineFormat);
-  const truncated = selectedText.length > request.maxBytes;
+  const totalSelectedChars = selectedText.length;
+  const truncated = totalSelectedChars > request.maxBytes;
+  const shownText = truncated ? selectedText.slice(0, request.maxBytes) : selectedText;
   const snapshotTag = computeSnapshotTag(resource.bytes);
   const mimeType = normalizeMimeType(resource.mimeType) ?? "text/plain";
   const header = [
@@ -352,10 +380,12 @@ function renderByteResource(resource: RichReadByteResource, request: RichReadReq
     `hasBom: ${decoded.hasBom}`,
     `lines: ${lines.length}`,
     `selectedLines: ${selection.startLine}-${selection.endLine}`,
-    truncated ? `truncated: true (${request.maxBytes} chars)` : undefined,
+    truncated
+      ? `truncated: true (showing ${shownText.length} of ${totalSelectedChars} chars; file has ${lines.length} lines, ${decoded.text.length} chars, ${resource.bytes.byteLength} bytes)`
+      : undefined,
     "---"
   ].filter((line): line is string => typeof line === "string");
-  const body = truncated ? `${selectedText.slice(0, request.maxBytes)}\n... truncated ...` : selectedText;
+  const body = truncated ? `${shownText}\n... truncated ...` : shownText;
   const json: JsonObject = {
     providerId: resource.providerId,
     uri: resource.uri,
@@ -368,8 +398,11 @@ function renderByteResource(resource: RichReadByteResource, request: RichReadReq
     hasBom: decoded.hasBom,
     writableEncoding: decoded.writable,
     lineCount: lines.length,
+    totalChars: decoded.text.length,
     selectedStartLine: selection.startLine,
     selectedEndLine: selection.endLine,
+    selectedChars: totalSelectedChars,
+    shownChars: shownText.length,
     lineFormat: request.lineFormat,
     truncated
   };
@@ -612,8 +645,14 @@ function computeSnapshotTag(bytes: Buffer): string {
 }
 
 function formatDirectoryEntry(entry: RichReadDirectoryEntry): string {
+  // Match local list_directory / read directory prefix convention:
+  // "/" directory, " " file, "?" other.
   const prefix = entry.kind === "directory" ? "/" : entry.kind === "file" ? " " : "?";
   return `${prefix}${entry.name}`;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return !!error && typeof error === "object" && "code" in error;
 }
 
 function detectImageMetadata(bytes: Buffer, declaredMimeType: string | undefined): ImageMetadata | undefined {

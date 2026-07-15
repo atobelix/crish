@@ -6,7 +6,12 @@ import {
 } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionMessage } from '../store/layoutStore';
-import { streamAssistantResponseApi } from '../api/chatApi';
+import {
+  streamAssistantResponseApi,
+  type ChatContentPart,
+  type StreamAttachmentMeta,
+  type StreamRequestOptions,
+} from '../api/chatApi';
 import {
   isShellToolName,
   resolveToolDiffs,
@@ -37,6 +42,8 @@ import { getActiveModelId } from '../api/providerProfiles';
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { rulesLinesToText, syncRulesToDaemon } from '../api/rulesApi';
+import { parseMarkdownChecklist } from '../components/TasksCard';
+import type { SessionGoalMode, SessionGoalTask } from '../store/types';
 
 /** /goal 默认自动续写轮次上限 */
 const GOAL_DEFAULT_MAX_ITERATIONS = 5;
@@ -48,18 +55,124 @@ function replyLooksGoalDone(text: string): boolean {
   return /\bDONE\b/i.test(t) || /目标已完成/.test(t);
 }
 
+/** 将 goalMode.tasks 中未完成项注入续写提示 */
+function formatOpenGoalTasksForPrompt(tasks: SessionGoalTask[] | undefined): string {
+  const open = (tasks || []).filter((t) => t && !t.done && (t.text || '').trim());
+  if (!open.length) return '';
+  return [
+    '当前未完成任务清单（请继续推进；每轮结束用 markdown checklist 更新 `- [ ]` / `- [x]`）：',
+    ...open.map((t) => `- [ ] ${t.text.trim()}`),
+    '',
+  ].join('\n');
+}
+
 /** 构造目标模式注入到模型的前缀（不展示在用户气泡） */
-function buildGoalModePrefix(goal: string, iteration: number, maxIterations: number): string {
+function buildGoalModePrefix(
+  goal: string,
+  iteration: number,
+  maxIterations: number,
+  tasks?: SessionGoalTask[],
+): string {
+  const openBlock = formatOpenGoalTasksForPrompt(tasks);
   return [
     '[目标模式 · 系统指令]',
     `你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。`,
     `目标：${goal}`,
     `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在 8 轮内完成）。`,
     '请工作直至目标实质完成；不要半途停下或只列计划而不执行。',
+    '请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。',
     '若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。',
+    openBlock ? openBlock.trimEnd() : '',
     '---',
     '',
-  ].join('\n');
+  ]
+    .filter((line, i, arr) => line !== '' || (i > 0 && arr[i - 1] !== ''))
+    .join('\n');
+}
+
+/** 从助手正文解析 checklist 并写回 session.goalMode.tasks */
+function syncGoalTasksFromAssistantText(
+  sid: string,
+  assistantText: string,
+  gm: SessionGoalMode,
+): SessionGoalMode {
+  const items = parseMarkdownChecklist(assistantText);
+  if (!items.length) return gm;
+  const tasks: SessionGoalTask[] = items.map((it) => ({
+    id: it.id,
+    text: it.text,
+    done: it.done,
+  }));
+  const next: SessionGoalMode = { ...gm, tasks };
+  useLayoutStore.getState().patchSession(sid, { goalMode: next });
+  return next;
+}
+
+/**
+ * 从附件构建 OpenAI-style content parts + 文本兜底块 + 元数据。
+ * 图片：结构化 image_url；文本协议仍在 prompt 中保留 dataUrl 备援。
+ */
+function buildMultimodalFromAttachments(
+  modelText: string,
+  attachments: ChatAttachment[],
+): {
+  promptAttachBlock: string;
+  streamOptions: StreamRequestOptions | undefined;
+} {
+  if (!attachments.length) {
+    return { promptAttachBlock: '', streamOptions: undefined };
+  }
+
+  const content: ChatContentPart[] = [];
+  const meta: StreamAttachmentMeta[] = [];
+  const promptChunks: string[] = [];
+  let hasImages = false;
+
+  const baseText = (modelText || '').trim();
+  if (baseText) {
+    content.push({ type: 'text', text: baseText });
+  }
+
+  for (const a of attachments) {
+    if (a.dataUrl) {
+      hasImages = true;
+      const mime = a.mime || guessMimeFromDataUrl(a.dataUrl) || 'image/png';
+      meta.push({ name: a.name, mime, kind: 'image' });
+      content.push({
+        type: 'image_url',
+        image_url: { url: a.dataUrl, detail: 'auto' },
+        name: a.name,
+        mime,
+      });
+      // 文本协议备援：保留 dataUrl，兼容尚不读 content 的引擎
+      const note = `用户粘贴了截图 ${a.name}，请结合 OCR/视觉理解分析（structured image_url 已一并下发）`;
+      promptChunks.push(
+        `[图片附件: ${a.name}]\ndataUrl: ${a.dataUrl}\n${note}\n![${a.name}](${a.dataUrl})`,
+      );
+    } else if (a.text) {
+      meta.push({ name: a.name, kind: 'text' });
+      const body = `${a.text.slice(0, 80_000)}${a.text.length > 80_000 ? '\n…(截断)' : ''}`;
+      content.push({ type: 'text', text: `--- ${a.name} ---\n${body}` });
+      promptChunks.push(`--- ${a.name} ---\n${body}`);
+    } else {
+      meta.push({ name: a.name, kind: 'file' });
+      content.push({ type: 'text', text: `- ${a.name}` });
+      promptChunks.push(`- ${a.name}`);
+    }
+  }
+
+  const promptAttachBlock = `\n\n[附件]\n${promptChunks.join('\n\n')}`;
+  const streamOptions: StreamRequestOptions = {
+    content,
+    hasImages,
+    attachments: meta,
+  };
+  return { promptAttachBlock, streamOptions };
+}
+
+function guessMimeFromDataUrl(dataUrl: string): string | undefined {
+  const m = /^data:([^;,]+)/i.exec(dataUrl || '');
+  return m?.[1] || undefined;
 }
 
 const GRILL_ME_PREFIX = [
@@ -157,7 +270,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
    * 避免 drainQueuedAfterComplete 或旧闭包调用到过期的 options / store action 身份。
    */
   const runStreamingAssistantRef = useRef<
-    (input: string, userMsgId: string, sessionIdOverride?: string) => void
+    (
+      input: string,
+      userMsgId: string,
+      sessionIdOverride?: string,
+      streamOptions?: StreamRequestOptions,
+    ) => void
   >(null!);
 
   /** 运行级错误横幅（不进 AI 正文） */
@@ -174,7 +292,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     }
     const st = useLayoutStore.getState();
     const sess = st.sessions.find((s) => s.id === sid);
-    const gm = sess?.goalMode;
+    let gm = sess?.goalMode;
     if (!gm?.active) return false;
 
     // 有用户排队消息时优先 drain，不抢目标续写
@@ -185,7 +303,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
 
     const asstText =
       sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
-    if (replyLooksGoalDone(asstText)) {
+    // 助手 checklist → 更新 goal 进度
+    gm = syncGoalTasksFromAssistantText(sid, asstText, gm);
+
+    const allTasksDone =
+      Array.isArray(gm.tasks) &&
+      gm.tasks.length > 0 &&
+      gm.tasks.every((t) => t.done);
+
+    if (replyLooksGoalDone(asstText) || allTasksDone) {
       st.patchSession(sid, {
         goalMode: { ...gm, active: false },
       });
@@ -203,13 +329,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       return false;
     }
 
-    st.patchSession(sid, {
-      goalMode: { ...gm, active: true, iteration: nextIter, maxIterations: maxIter },
-    });
+    const nextGm: SessionGoalMode = {
+      ...gm,
+      active: true,
+      iteration: nextIter,
+      maxIterations: maxIter,
+    };
+    st.patchSession(sid, { goalMode: nextGm });
 
     const contDisplay = '继续推进目标，若已完成请明确说明 DONE';
     const contModel = [
-      buildGoalModePrefix(gm.goal, nextIter, maxIter),
+      buildGoalModePrefix(gm.goal, nextIter, maxIter, nextGm.tasks),
       contDisplay,
     ].join('\n');
 
@@ -255,7 +385,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         const gm = sess?.goalMode;
         if (gm?.active && gm.goal) {
           const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
-          prompt = `${buildGoalModePrefix(gm.goal, gm.iteration ?? 0, maxIter)}${next.text}`;
+          prompt = `${buildGoalModePrefix(gm.goal, gm.iteration ?? 0, maxIter, gm.tasks)}${next.text}`;
         }
         runStreamingAssistantRef.current(prompt, next.id, sid);
       }
@@ -268,7 +398,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   };
 
   // Real-time AI response streaming helper
-  const runStreamingAssistant = (input: string, userMsgId: string, sessionIdOverride?: string) => {
+  const runStreamingAssistant = (
+    input: string,
+    userMsgId: string,
+    sessionIdOverride?: string,
+    streamOptions?: StreamRequestOptions,
+  ) => {
     const sid = sessionIdOverride || useLayoutStore.getState().activeSessionId;
     if (!sid) return;
 
@@ -621,12 +756,22 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
             /* ignore */
           }
         })();
+        // 目标模式：即使不续写也尝试从本轮 checklist 同步进度
+        {
+          const live = useLayoutStore.getState().sessions.find((s) => s.id === sid);
+          const liveGm = live?.goalMode;
+          if (liveGm?.active) {
+            const t =
+              live?.messages.find((m) => m.id === assistantMsgId)?.text || '';
+            syncGoalTasksFromAssistantText(sid, t, liveGm);
+          }
+        }
         // 目标模式自动续写优先；否则 drain 排队
         if (!maybeContinueGoalMode(sid, assistantMsgId)) {
           drainQueuedAfterComplete(sid);
         }
       }
-    }, sid, assistantMsgId);
+    }, sid, assistantMsgId, streamOptions);
 
     streamsBySessionRef.current.set(sid, {
       cancel,
@@ -806,16 +951,24 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         return;
       }
       goalCancelledSessionsRef.current.delete(sessionId);
+      const seedTasks: SessionGoalTask[] = [
+        {
+          id: `goal-task-${Date.now()}`,
+          text: goal,
+          done: false,
+        },
+      ];
       useLayoutStore.getState().patchSession(sessionId, {
         goalMode: {
           active: true,
           goal,
           iteration: 0,
           maxIterations: GOAL_DEFAULT_MAX_ITERATIONS,
+          tasks: seedTasks,
         },
       });
       displayText = `/goal ${goal}`;
-      modelText = `${buildGoalModePrefix(goal, 0, GOAL_DEFAULT_MAX_ITERATIONS)}${goal}`;
+      modelText = `${buildGoalModePrefix(goal, 0, GOAL_DEFAULT_MAX_ITERATIONS, seedTasks)}${goal}`;
       onShowToast('已进入目标模式');
     }
 
@@ -858,30 +1011,40 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         .sessions.find((s) => s.id === sessionId)?.goalMode;
       if (liveGm?.active && liveGm.goal) {
         const maxIter = liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
-        modelText = `${buildGoalModePrefix(liveGm.goal, liveGm.iteration ?? 0, maxIter)}${modelText}`;
+        modelText = `${buildGoalModePrefix(liveGm.goal, liveGm.iteration ?? 0, maxIter, liveGm.tasks)}${modelText}`;
       }
     }
 
-    // Fold attachments into the prompt so the model path sees them
-    const attachBlock =
-      attachments.length > 0
-        ? `\n\n[附件]\n${attachments
-            .map((a) => {
-              if (a.dataUrl) {
-                const note = `用户粘贴了截图 ${a.name}，请结合 OCR/视觉理解分析`;
-                return `[图片附件: ${a.name}]\ndataUrl: ${a.dataUrl}\n${note}\n![${a.name}](${a.dataUrl})`;
-              }
-              if (a.text) {
-                return `--- ${a.name} ---\n${a.text.slice(0, 80_000)}${a.text.length > 80_000 ? '\n…(截断)' : ''}`;
-              }
-              return `- ${a.name}`;
-            })
-            .join('\n\n')}`
-        : '';
+    // 附件 → 结构化 content parts + 文本 prompt 备援
+    const { promptAttachBlock, streamOptions } = buildMultimodalFromAttachments(
+      modelText,
+      attachments,
+    );
     // 文件面板选区批注：注入模型上下文；气泡只展示用户原文 + 轻量提示
     const fileAnns = takePendingFileAnnotations();
     const annBlock = formatAnnotationsForModel(fileAnns);
-    const input = (annBlock ? `${annBlock}\n\n` : '') + modelText + attachBlock;
+    const input = (annBlock ? `${annBlock}\n\n` : '') + modelText + promptAttachBlock;
+    // 批注并入 content text part（若有多模态）
+    let finalStreamOptions = streamOptions;
+    if (finalStreamOptions?.content?.length && annBlock) {
+      const parts = [...finalStreamOptions.content];
+      const firstText = parts.findIndex((p) => p.type === 'text');
+      const head = firstText >= 0 ? parts[firstText] : undefined;
+      if (head && head.type === 'text') {
+        parts[firstText] = {
+          type: 'text',
+          text: `${annBlock}\n\n${head.text}`,
+        };
+      } else {
+        parts.unshift({ type: 'text', text: annBlock });
+      }
+      finalStreamOptions = { ...finalStreamOptions, content: parts };
+    } else if (!finalStreamOptions && annBlock) {
+      finalStreamOptions = {
+        content: [{ type: 'text', text: `${annBlock}\n\n${modelText}` }],
+        hasImages: false,
+      };
+    }
     if (fileAnns.length) {
       displayText = displayText
         ? `${displayText}\n\n（含 ${fileAnns.length} 条文件批注）`
@@ -936,7 +1099,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       if (store.activeSessionId !== sessionId) {
         store.setActiveSessionId(sessionId);
       }
-      runStreamingAssistant(input, userMsgId, sessionId);
+      runStreamingAssistant(input, userMsgId, sessionId, finalStreamOptions);
     }
   };
 

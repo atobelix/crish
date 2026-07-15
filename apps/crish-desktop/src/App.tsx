@@ -513,9 +513,15 @@ function App() {
         </div>
       )}
 
-      {/* 设置：全覆盖；ErrorBoundary 防止 lazy/子页崩溃导致「进不去」空白 */}
+      {/* 设置：全覆盖；z-index 与 settings.css(.settings-cover=13000) 双保险；ErrorBoundary 展示真实错误 */}
       {showSettingsOverlay && (
-        <div className="settings-cover" role="dialog" aria-modal="true" aria-label="设置">
+        <div
+          className="settings-cover"
+          role="dialog"
+          aria-modal="true"
+          aria-label="设置"
+          style={{ zIndex: 13000 }}
+        >
           <AppErrorBoundary
             title="设置加载失败"
             onReset={() => {
@@ -535,7 +541,7 @@ function App() {
                 wsId={activeWorkspace?.id || 'ws-0'}
                 onShowToast={handleShowToast}
                 onClose={() => setShowSettingsOverlay(false)}
-                initialTab={settingsActiveTab as SettingsTabType}
+                initialTab={(settingsActiveTab as SettingsTabType) || 'profile'}
               />
             </Suspense>
           </AppErrorBoundary>

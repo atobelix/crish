@@ -177,6 +177,17 @@ export interface DaemonCorrelationFields {
   correlationId?: string;
 }
 
+/** OpenAI-style multimodal content part on run-task (light vision bridge) */
+export type RunTaskContentPart =
+  | { type: "text"; text: string }
+  | {
+      type: "image_url";
+      image_url: { url: string; detail?: string };
+      name?: string;
+      mime?: string;
+    }
+  | JsonObject;
+
 export interface RunTaskMessage {
   type: "run-task";
   runId: string;
@@ -200,6 +211,15 @@ export interface RunTaskMessage {
   projectTags?: string[];
   packageNames?: string[];
   scopedContextConfig?: ScopedContextRuntimeConfig;
+  /**
+   * 可选多模态 content（OpenAI chat parts）。
+   * 写入首条 user message metadata，provider 有图时走 vision content 数组。
+   */
+  content?: RunTaskContentPart[];
+  /** 客户端标记：本轮含图片附件 */
+  hasImages?: boolean;
+  /** 轻量附件元数据（无 dataUrl） */
+  attachments?: Array<{ name?: string; mime?: string; kind?: string } & JsonObject>;
 }
 
 export interface ApproveToolMessage {
