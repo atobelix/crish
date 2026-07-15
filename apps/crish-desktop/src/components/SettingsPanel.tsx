@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import { clientApi } from '../api/clientApi';
-import type { Settings, ProviderInfo, CronJob, McpServer, PackageSource } from '../api/clientApi';
+import type { Settings, ProviderInfo, CronJob, PackageSource } from '../api/clientApi';
 import { useLayoutStore } from '../store/layoutStore';
 import { ensureDaemonConnected } from '../api/daemonChatBridge';
 import { getDesktopDaemonClient } from '../api/daemonClient';
@@ -13,6 +13,8 @@ import { networkUserMessage } from '../api/userFacingErrors';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ModelsSettingsTab } from './ModelsSettingsTab';
+import { SkillsSettingsTab } from './SkillsSettingsTab';
+import { McpSettingsTab } from './McpSettingsTab';
 import { SettingsSelect } from './SettingsSelect';
 import {
   createWorkflow,
@@ -25,7 +27,7 @@ import {
   type WorkflowDefinition,
   type WorkflowSchedule,
 } from '../api/workflowApi';
-import { listMcpServers, type McpServerInfo } from '../api/mcpApi';
+import { listMcpServers } from '../api/mcpApi';
 import { loadMirrorMeta } from '../api/sessionDiskMirror';
 import { PERMISSION_MODES, type PermissionMode } from '../api/permissionModes';
 
@@ -56,18 +58,18 @@ const FORMAL_TAB_IDS: TabType[] = [
   'appearance',
   'personalize',
   'models',
+  'skills',
+  'mcp',
   'usage',
   'schedule',
   'rules',
   'shortcuts',
   'security',
 ];
-const DEMO_ONLY_TAB_IDS: TabType[] = ['skills', 'plugins'];
+const DEMO_ONLY_TAB_IDS: TabType[] = ['plugins'];
 
-function allowedTabIds(mcpAvailable: boolean): TabType[] {
+function allowedTabIds(_mcpAvailable: boolean): TabType[] {
   const base = [...FORMAL_TAB_IDS];
-  // H3：引擎已配置 MCP 时，正式版也显示扩展服务页
-  if (mcpAvailable || isDemoMode()) base.push('mcp');
   if (isDemoMode()) base.push(...DEMO_ONLY_TAB_IDS);
   return base;
 }
@@ -82,9 +84,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
   const permissionMode = useLayoutStore((s) => s.permissionMode);
   const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const scheduledTasks = useLayoutStore((s) => s.scheduledTasks);
   const [mcpAvailable, setMcpAvailable] = useState(false);
-  const [mcpServersLive, setMcpServersLive] = useState<McpServerInfo[]>([]);
 
   const resolveTab = (raw?: string | null): TabType => {
     if (raw && (allowedTabIds(mcpAvailable) as string[]).includes(raw)) return raw as TabType;
@@ -106,7 +106,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   };
   const [settings, setSettings] = useState<Settings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [_cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -132,19 +131,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [scope] = useState<'global' | 'project'>('global');
 
   // Form states
-  const [newMcpName, setNewMcpName] = useState('');
-  const [newMcpType, setNewMcpType] = useState<'stdio' | 'sse'>('stdio');
-  const [newMcpCmd, setNewMcpCmd] = useState('');
-  const [newMcpArgs, setNewMcpArgs] = useState('');
-  const [newMcpUrl, setNewMcpUrl] = useState('');
   const [visibleKeyProvider, setVisibleKeyProvider] = useState<string | null>(null);
 
   // Expanded Plugin Package states
   const [newPkgSource, setNewPkgSource] = useState('');
   const [newPkgExtensions, setNewPkgExtensions] = useState('');
   const [newPkgSkills, setNewPkgSkills] = useState('');
-  
-  const [newSkillPath, setNewSkillPath] = useState('');
+
   const [newWhitelistCmd, setNewWhitelistCmd] = useState('');
 
   // Rules text states
@@ -156,10 +149,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [manualModelName, setManualModelName] = useState<Record<string, string>>({});
   const [fetchingModelsProviderId, setFetchingModelsProviderId] = useState<string | null>(null);
   const [showAddCustomModel, setShowAddCustomModel] = useState(false);
-  const [expandedMcpServerIds, setExpandedMcpServerIds] = useState<Record<string, boolean>>({});
-  const [enabledMcpServers, setEnabledMcpServers] = useState<Record<string, boolean>>({
-    'mcp-1': true, 'mcp-2': true
-  });
 
   // Custom model form states
   const [customType, setCustomType] = useState('openai');
@@ -173,7 +162,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [fetchedModels, setFetchedModels] = useState<{ id: string; name: string }[]>([]);
   const [selectedFetchedModelIds, setSelectedFetchedModelIds] = useState<Record<string, boolean>>({});
   const [testingConnection, setTestingConnection] = useState(false);
-  const [showAddMcpModal, setShowAddMcpModal] = useState(false);
   const [showAddPluginModal, setShowAddPluginModal] = useState(false);
   const [editingRuleFileType, setEditingRuleFileType] = useState<'global' | 'project' | null>(null);
   const [newRuleText, setNewRuleText] = useState('');
@@ -183,14 +171,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     if (!onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (showAddMcpModal || editingRuleFileType || showAddPluginModal) return;
+      if (editingRuleFileType || showAddPluginModal) return;
       e.preventDefault();
       e.stopPropagation();
       onClose();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, showAddMcpModal, editingRuleFileType, showAddPluginModal]);
+  }, [onClose, editingRuleFileType, showAddPluginModal]);
 
   // Daemon endpoint (desktop product, developer only)
   const [daemonWsDraft, setDaemonWsDraft] = useState(() => {
@@ -221,10 +209,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [diskMeta, setDiskMeta] = useState(() => loadMirrorMeta());
 
   useEffect(() => {
-    // 启动时探测 MCP 是否可展示
+    // 启动时探测 MCP 配置（导航常驻，此处仅更新状态徽章等）
     void listMcpServers().then((r) => {
       setMcpAvailable(r.configured || r.servers.length > 0);
-      setMcpServersLive(r.servers);
     });
   }, []);
 
@@ -241,14 +228,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     void listWorkflows()
       .then(setWorkflows)
       .finally(() => setWorkflowsLoading(false));
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== 'mcp') return;
-    void listMcpServers().then((r) => {
-      setMcpAvailable(r.configured || r.servers.length > 0);
-      setMcpServersLive(r.servers);
-    });
   }, [activeTab]);
 
   useEffect(() => {
@@ -344,10 +323,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const loadAll = async () => {
       try {
         setLoading(true);
-        const [sets, provs, mcps, crons] = await Promise.all([
+        const [sets, provs, crons] = await Promise.all([
           clientApi.getSettingsEx(cwd),
           clientApi.getProviders(),
-          clientApi.getMcpServers(),
           clientApi.getScheduledTasks(),
         ]);
         setSettings(sets);
@@ -356,7 +334,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           applyTheme(normalizeTheme(sets.theme));
         }
         setProviders(provs);
-        setMcpServers(mcps);
         setCronJobs(crons);
 
         // 规则正文：来自 settings.customRules；无则空模板
@@ -410,53 +387,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
-  const handleAddMcpServer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMcpName.trim()) return;
-
-    try {
-      const newServer: McpServer = {
-        id: `mcp-${Date.now()}`,
-        name: newMcpName.trim(),
-        type: newMcpType,
-        command: newMcpType === 'stdio' ? newMcpCmd.trim() : undefined,
-        args: newMcpType === 'stdio' && newMcpArgs ? newMcpArgs.split(',').map(a => a.trim()) : undefined,
-        url: newMcpType === 'sse' ? newMcpUrl.trim() : undefined,
-        status: 'connecting',
-        tools: []
-      };
-
-      const list = await clientApi.saveMcpServer(newServer);
-      setMcpServers(list);
-      setNewMcpName('');
-      setNewMcpCmd('');
-      setNewMcpArgs('');
-      setNewMcpUrl('');
-      onShowToast(`已注册 MCP 服务: ${newServer.name}`);
-
-      // Simulate connection completion
-      setTimeout(async () => {
-        newServer.status = 'connected';
-        newServer.tools = ['click', 'hover', 'type_text', 'take_screenshot', 'lighthouse_audit'];
-        const updatedList = await clientApi.saveMcpServer(newServer);
-        setMcpServers(updatedList);
-        onShowToast(`MCP 服务已连接: ${newServer.name} (加载 5 个工具)`);
-      }, 1500);
-    } catch (err) {
-      onShowToast('添加 MCP 服务失败');
-    }
-  };
-
-  const handleDeleteMcpServer = async (id: string, name: string) => {
-    try {
-      const filtered = await clientApi.deleteMcpServer(id);
-      setMcpServers(filtered);
-      onShowToast(`已移除 MCP 服务: ${name}`);
-    } catch (err) {
-      onShowToast('移除 MCP 服务失败');
-    }
-  };
-
   const handleAddPackage = async () => {
     if (!newPkgSource.trim() || !settings) return;
     
@@ -501,29 +431,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       await handleUpdateSettings({ packages: list });
     } catch (err) {
       onShowToast('移除插件包失败');
-    }
-  };
-
-  const handleAddSkill = async () => {
-    if (!newSkillPath.trim() || !settings) return;
-    try {
-      const list = [...(settings.skills || [])];
-      list.push(newSkillPath.trim());
-      await handleUpdateSettings({ skills: list });
-      setNewSkillPath('');
-    } catch (err) {
-      onShowToast('添加技能目录失败');
-    }
-  };
-
-  const handleRemoveSkill = async (idx: number) => {
-    if (!settings) return;
-    try {
-      const list = [...(settings.skills || [])];
-      list.splice(idx, 1);
-      await handleUpdateSettings({ skills: list });
-    } catch (err) {
-      onShowToast('移除技能目录失败');
     }
   };
 
@@ -701,18 +608,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               { id: 'appearance' as const, label: '外观', icon: Lucide.Palette, group: '通用' },
               { id: 'personalize' as const, label: '个性化', icon: Lucide.SlidersHorizontal, group: '通用' },
               { id: 'models' as const, label: '模型', icon: Lucide.Cpu, group: '智能' },
+              { id: 'skills' as const, label: '技能', icon: Lucide.GraduationCap, group: '智能' },
               { id: 'usage' as const, label: '用量', icon: Lucide.PieChart, group: '智能' },
               { id: 'rules' as const, label: '规则', icon: Lucide.FileText, group: '智能' },
               { id: 'schedule' as const, label: '定时任务', icon: Lucide.Clock, group: '工作' },
               { id: 'shortcuts' as const, label: '快捷键', icon: Lucide.Keyboard, group: '工作' },
-              ...(mcpAvailable || isDemoMode()
-                ? ([{ id: 'mcp' as const, label: '扩展服务', icon: Lucide.Server, group: '工作' }] as const)
-                : []),
+              { id: 'mcp' as const, label: '扩展服务', icon: Lucide.Server, group: '工作' },
               ...(isDemoMode()
-                ? ([
-                    { id: 'skills' as const, label: '技能', icon: Lucide.GraduationCap, group: '演示' },
-                    { id: 'plugins' as const, label: '插件', icon: Lucide.Blocks, group: '演示' },
-                  ] as const)
+                ? ([{ id: 'plugins' as const, label: '插件', icon: Lucide.Blocks, group: '演示' }] as const)
                 : []),
               { id: 'security' as const, label: '安全', icon: Lucide.Shield, group: '安全' },
             ] as const
@@ -868,196 +771,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <ModelsSettingsTab onShowToast={onShowToast} />
           )}
 
-          {/* TAB 3: MCP — 正式版读取引擎列表；演示保留本地 mock 管理 */}
-          {activeTab === 'mcp' && !isDemoMode() && (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>扩展服务</h4>
-                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                  来自引擎 MCP 状态（只读）。配置文件与启停由引擎侧管理。
-                </p>
-              </div>
-              <div className="settings-fields-stack" style={{ gap: 8 }}>
-                {mcpServersLive.map((srv) => (
-                  <div key={srv.id} className="settings-card-row">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{srv.name}</div>
-                      <span className="status-badge available">{srv.status || '已登记'}</span>
-                    </div>
-                    {srv.tools && srv.tools.length > 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                        工具：{srv.tools.slice(0, 8).join('、')}
-                        {srv.tools.length > 8 ? '…' : ''}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {mcpServersLive.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '16px 0' }}>
-                    引擎未报告已配置的 MCP 服务。配置完成后此页会自动出现列表。
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {activeTab === 'mcp' && isDemoMode() && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div>
-                  <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>扩展服务</h4>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-                    管理已连接的外部工具服务
-                  </p>
-                </div>
-                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setShowAddMcpModal(true)}>
-                  <Lucide.Plus size={16} />
-                  添加
-                </button>
-              </div>
-
-              <div className="settings-fields-stack" style={{ gap: 8 }}>
-                {mcpServers.map((srv) => {
-                  const isExpanded = !!expandedMcpServerIds[srv.id];
-                  const isEnabled = enabledMcpServers[srv.id] !== false;
-
-                  return (
-                    <div key={srv.id} className="settings-card-row">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: '50%',
-                              background: isEnabled ? 'var(--text-secondary)' : 'var(--bg-active)',
-                              flexShrink: 0,
-                            }}
-                          />
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{srv.name}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                            {isEnabled ? '已启用' : '已关闭'}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-ghost"
-                            title="配置"
-                            onClick={() =>
-                              setExpandedMcpServerIds((prev) => ({ ...prev, [srv.id]: !isExpanded }))
-                            }
-                          >
-                            <Lucide.Settings size={16} />
-                          </button>
-                          <div
-                            onClick={() =>
-                              setEnabledMcpServers((prev) => ({ ...prev, [srv.id]: !isEnabled }))
-                            }
-                            style={{
-                              width: 32,
-                              height: 18,
-                              borderRadius: 9,
-                              backgroundColor: isEnabled ? 'var(--text-secondary)' : 'var(--border-color)',
-                              padding: 2,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: isEnabled ? 'flex-end' : 'flex-start',
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 14,
-                                height: 14,
-                                borderRadius: '50%',
-                                backgroundColor: 'var(--bg-primary)',
-                              }}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-ghost danger"
-                            title="删除"
-                            onClick={() => handleDeleteMcpServer(srv.id, srv.name)}
-                          >
-                            <Lucide.Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 10,
-                            marginTop: 8,
-                            paddingTop: 12,
-                            borderTop: '1px solid var(--border-subtle)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <label className="settings-field-label">启动命令</label>
-                            <input
-                              type="text"
-                              defaultValue={srv.command || ''}
-                              id={`mcp-cmd-${srv.id}`}
-                              className="settings-field-input"
-                            />
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <label className="settings-field-label">参数（逗号分隔）</label>
-                            <input
-                              type="text"
-                              defaultValue={srv.args?.join(', ') || ''}
-                              id={`mcp-args-${srv.id}`}
-                              className="settings-field-input"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            className="ui-btn ui-btn-secondary ui-btn-sm"
-                            style={{ alignSelf: 'flex-end' }}
-                            onClick={() => {
-                              const cmdEl = document.getElementById(`mcp-cmd-${srv.id}`) as HTMLInputElement;
-                              const argsEl = document.getElementById(
-                                `mcp-args-${srv.id}`,
-                              ) as HTMLInputElement;
-                              if (cmdEl) {
-                                clientApi
-                                  .saveMcpServer({
-                                    ...srv,
-                                    command: cmdEl.value.trim(),
-                                    args: argsEl
-                                      ? argsEl.value
-                                          .split(',')
-                                          .map((a) => a.trim())
-                                          .filter(Boolean)
-                                      : [],
-                                  })
-                                  .then((list) => {
-                                    setMcpServers(list);
-                                    onShowToast(`已保存：${srv.name}`);
-                                    setExpandedMcpServerIds((prev) => ({ ...prev, [srv.id]: false }));
-                                  });
-                              }
-                            }}
-                          >
-                            保存
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {mcpServers.length === 0 && (
-                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '20px 0' }}>
-                    还没有扩展服务。点击「添加」连接一个工具。
-                  </div>
-                )}
-              </div>
-            </>
+          {/* TAB 3: MCP */}
+          {activeTab === 'mcp' && (
+            <McpSettingsTab
+              onShowToast={onShowToast}
+              onAvailabilityChange={(ok) => {
+                setMcpAvailable(ok);
+              }}
+            />
           )}
 
           {/* TAB 4: PLUGINS */}
@@ -1143,136 +864,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           )}
 
           {activeTab === 'skills' && (
-            <>
-              <div style={{ marginBottom: 4 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  技能
-                </h4>
-                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 12px' }}>
-                  加载本地技能目录
-                </p>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 0 14px',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  marginBottom: 8,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    注册为快捷命令
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    输入框可用 /skill:name
-                  </div>
-                </div>
-                <label
-                  style={{
-                    position: 'relative',
-                    display: 'inline-block',
-                    width: 32,
-                    height: 18,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={settings.enableSkillCommands || false}
-                    onChange={(e) =>
-                      handleUpdateSettings({ enableSkillCommands: e.target.checked })
-                    }
-                    style={{ opacity: 0, width: 0, height: 0 }}
-                  />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundColor: settings.enableSkillCommands
-                        ? 'var(--text-secondary)'
-                        : 'var(--border-color)',
-                      borderRadius: 18,
-                    }}
-                  >
-                    <span
-                      style={{
-                        position: 'absolute',
-                        height: 14,
-                        width: 14,
-                        left: settings.enableSkillCommands ? 16 : 2,
-                        bottom: 2,
-                        backgroundColor: 'var(--bg-primary)',
-                        borderRadius: '50%',
-                      }}
-                    />
-                  </span>
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 12 }}>
-                {(settings.skills || []).map((skPath, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid var(--border-subtle)',
-                      gap: 8,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontFamily: 'var(--font-mono)',
-                        color: 'var(--text-secondary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                      title={skPath}
-                    >
-                      {skPath}
-                    </span>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost danger"
-                      onClick={() => handleRemoveSkill(idx)}
-                      title="移除"
-                    >
-                      <Lucide.X size={16} />
-                    </button>
-                  </div>
-                ))}
-                {(settings.skills || []).length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 0' }}>
-                    还没有技能路径
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="text"
-                  placeholder="技能目录绝对路径"
-                  value={newSkillPath}
-                  onChange={(e) => setNewSkillPath(e.target.value)}
-                  className="settings-field-input"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddSkill}
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                >
-                  添加
-                </button>
-              </div>
-            </>
+            <SkillsSettingsTab onShowToast={onShowToast} />
           )}
 
           {activeTab === 'usage' && (
@@ -2078,110 +1670,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
         </div>
       </div>
-
-      {/* MODAL 1: ADD MCP SERVER (二级面板) */}
-      {showAddMcpModal && (
-        <div className="custom-modal-backdrop" style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 20000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            width: '460px', background: 'var(--bg-elevated, var(--bg-primary))', borderRadius: '12px',
-            boxShadow: 'var(--shadow-2xl)',
-            border: '1px solid var(--border-color)', overflow: 'hidden', display: 'flex', flexDirection: 'column'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-              <span className="settings-modal-title">注册新 MCP 服务</span>
-              <button onClick={() => setShowAddMcpModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color:  'var(--text-tertiary)'  }}>
-                <Lucide.X size={16} />
-              </button>
-            </div>
-            
-            <form onSubmit={(e) => { e.preventDefault(); handleAddMcpServer(e); setShowAddMcpModal(false); }} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ fontSize: '11px', color:  'var(--text-tertiary)' , margin: 0 }}>配置基于 STDIO 命令或 SSE 网络端点的 MCP 服务器工具。</p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label className="settings-field-label">服务名称</label>
-                <input
-                  type="text"
-                  placeholder="服务名称，例如 github-mcp"
-                  value={newMcpName}
-                  onChange={e => setNewMcpName(e.target.value)}
-                  className="settings-field-input"
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label className="settings-field-label">服务连接类型</label>
-                <select
-                  value={newMcpType}
-                  onChange={e => setNewMcpType(e.target.value as any)}
-                  className="settings-field-input"
-                >
-                  <option value="stdio">本地命令行 stdio</option>
-                  <option value="sse">远程服务 sse</option>
-                </select>
-              </div>
-
-              {newMcpType === 'stdio' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="settings-field-label">执行命令 (Command)</label>
-                    <input
-                      type="text"
-                      placeholder="执行命令，例如 node"
-                      value={newMcpCmd}
-                      onChange={e => setNewMcpCmd(e.target.value)}
-                      className="settings-field-input"
-                      required={newMcpType === 'stdio'}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="settings-field-label">命令参数 (用逗号分隔)</label>
-                    <input
-                      type="text"
-                      placeholder="参数，例如: dist/index.js, --port=80"
-                      value={newMcpArgs}
-                      onChange={e => setNewMcpArgs(e.target.value)}
-                      className="settings-field-input"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="settings-field-label">SSE 端点 URL</label>
-                  <input
-                    type="url"
-                    placeholder="SSE 端点地址，例如 http://localhost:3011/sse"
-                    value={newMcpUrl}
-                    onChange={e => setNewMcpUrl(e.target.value)}
-                    className="settings-field-input"
-                    required={newMcpType === 'sse'}
-                  />
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddMcpModal(false)}
-                  className="settings-btn-secondary"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="settings-btn-primary"
-                >
-                  连接并加载
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* MODAL 2: INSTALL PLUGIN (二级面板) */}
       {showAddPluginModal && (

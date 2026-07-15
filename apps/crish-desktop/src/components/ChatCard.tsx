@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionMessage, FileDiff } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
 import { streamAssistantResponseApi } from '../api/chatApi';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
-import { getDesktopDaemonClient } from '../api/daemonClient';
 import { isDemoMode } from '../api/appMode';
 import { fetchEngineStatus, type EngineStatus } from '../api/engineConfig';
 import {
@@ -46,6 +45,13 @@ import {
   toolPathDisplayName,
   type ToolRenderItem,
 } from '../api/toolPresentation';
+import {
+  formatSkillInjection,
+  getSkillSlashCommandsCached,
+  resolveSkillSlash,
+  type SkillSlashCommand,
+} from '../api/skillsApi';
+import { clientApi } from '../api/clientApi';
 import {
   deriveSessionTitle,
   isDefaultSessionTitle,
@@ -94,12 +100,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     activeSessionId,
     activeAgentId,
     setActiveAgentId,
-    setPanelAgentId,
     upsertSessionAgent,
     // patchSessionAgent reserved for future agent edits
     withdrawMessage,
     setActiveDiffSource,
-    respondToApproval,
     addTerminalLine,
     appSettings,
   } = useLayoutStore();
@@ -290,19 +294,68 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
   const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Slash commands list
-  const SLASH_COMMANDS = [
-    { cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' },
-    { cmd: '/goal', desc: '执行长期自动迭代任务' },
-    { cmd: '/schedule', desc: '配置周期性定时或重复任务' },
-    { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
-    { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
-    { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
-    { cmd: '/learn', desc: '记录最佳实践和对齐规则' }
-  ];
+  // Slash commands：固定 + 技能（enableSkillCommands）
+  const BASE_SLASH = useMemo(
+    () => [
+      ...(isDemoMode()
+        ? [
+            { cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' },
+            { cmd: '/grill-me', desc: '进入详细设计对齐问答模式' },
+            { cmd: '/teamwork-preview', desc: '启用多代理协作模式预览' },
+          ]
+        : []),
+      { cmd: '/goal', desc: '执行长期自动迭代任务' },
+      { cmd: '/schedule', desc: '配置周期性定时或重复任务' },
+      { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
+      { cmd: '/learn', desc: '记录最佳实践和对齐规则' },
+    ],
+    [],
+  );
+  const [skillSlash, setSkillSlash] = useState<SkillSlashCommand[]>([]);
+  const [skillCommandsEnabled, setSkillCommandsEnabled] = useState(true);
 
-  const filteredCommands = SLASH_COMMANDS.filter(c =>
-    c.cmd.toLowerCase().startsWith(chatInput.toLowerCase())
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = await clientApi.getSettings();
+        if (cancelled) return;
+        const on = settings?.enableSkillCommands !== false;
+        setSkillCommandsEnabled(on);
+        if (!on) {
+          setSkillSlash([]);
+          return;
+        }
+        const { commands } = await getSkillSlashCommandsCached();
+        if (!cancelled) setSkillSlash(commands);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId]);
+
+  const loadSkillSlash = useCallback(async () => {
+    if (!skillCommandsEnabled) return;
+    try {
+      const { commands } = await getSkillSlashCommandsCached();
+      setSkillSlash(commands);
+    } catch {
+      /* ignore */
+    }
+  }, [skillCommandsEnabled]);
+
+  const allSlashCommands = useMemo(() => {
+    const skillPart = skillCommandsEnabled
+      ? skillSlash.map((s) => ({ cmd: s.cmd, desc: s.desc }))
+      : [];
+    return [...BASE_SLASH, ...skillPart];
+  }, [BASE_SLASH, skillSlash, skillCommandsEnabled]);
+
+  const filteredCommands = allSlashCommands.filter((c) =>
+    c.cmd.toLowerCase().startsWith(chatInput.toLowerCase()),
   );
 
   // Thinking timer: start when AI is processing, clear when done
@@ -711,7 +764,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     cur.cancel();
   };
 
-  const handleSendChat = (_isInsert: boolean = false) => {
+  const handleSendChat = async (_isInsert: boolean = false) => {
     if (!chatInput.trim()) return;
 
     // 未配置密钥时软拦截
@@ -742,6 +795,27 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       onShowToast(rest ? `预览浏览器 → ${rest}` : '已打开预览浏览器');
       return;
     }
+
+    // /skill:name [task] → 注入 SKILL.md 正文到模型上下文
+    let modelText = rawInput;
+    let displayText = rawInput;
+    if (skillCommandsEnabled && /^\/skill:/i.test(rawInput)) {
+      try {
+        const resolved = await resolveSkillSlash(rawInput);
+        if (resolved) {
+          modelText = formatSkillInjection(resolved.skill, resolved.rest);
+          displayText = resolved.rest
+            ? `/skill:${resolved.skill.name} ${resolved.rest}`
+            : `使用技能：${resolved.skill.name}`;
+          onShowToast(`已加载技能 ${resolved.skill.name}`);
+        } else {
+          onShowToast('未找到该技能，请在设置 → 技能 中确认名称与启用状态');
+        }
+      } catch {
+        /* 回退原文 */
+      }
+    }
+
     // Fold attachments into the prompt so the model path sees them
     const attachBlock =
       attachments.length > 0
@@ -756,8 +830,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     // 文件面板选区批注：注入模型上下文；气泡只展示用户原文 + 轻量提示
     const fileAnns = takePendingFileAnnotations();
     const annBlock = formatAnnotationsForModel(fileAnns);
-    const input = (annBlock ? `${annBlock}\n\n` : '') + rawInput + attachBlock;
-    let displayText = rawInput;
+    const input = (annBlock ? `${annBlock}\n\n` : '') + modelText + attachBlock;
     if (fileAnns.length) {
       displayText = displayText
         ? `${displayText}\n\n（含 ${fileAnns.length} 条文件批注）`
@@ -1429,7 +1502,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             </div>
           </div>
         ) : (() => {
-          const lastAssistantMsgId = [...messages].reverse().find(m => m.sender === 'assistant')?.id;
           const thinkingMsgId = messages.find(m => m.sender === 'assistant' && m.status === 'processing')?.id;
           return messages.map((msg, index) => {
             const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -1484,7 +1556,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 </div>
               );
             } else {
-              const isLastAssistantMsg = msg.id === lastAssistantMsgId;
               const isThinkingMsg = msg.id === thinkingMsgId;
               return (
                 <div
@@ -1500,7 +1571,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                     <details
                       className={`msg-thinking-fold ${isThinkingMsg ? 'is-live' : ''}`}
                       key={`think-${msg.id}-${isThinkingMsg ? 'live' : 'done'}`}
-                      defaultOpen={Boolean(isThinkingMsg)}
+                      open={Boolean(isThinkingMsg) ? true : undefined}
                     >
                       <summary className="msg-thinking-fold-sum">
                         {isThinkingMsg ? (
@@ -1914,6 +1985,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
               setChatInput(val);
               if (val.startsWith('/') && !val.includes(' ')) {
                 setSlashMenuOpen(true);
+                void loadSkillSlash();
               } else {
                 setSlashMenuOpen(false);
               }

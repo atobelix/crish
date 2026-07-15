@@ -15,7 +15,6 @@ import {
   addProjectFromPath,
   getActiveProject,
   getWorkspacePath,
-  listProjects,
 } from '../api/projectStore';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { fetchEngineStatus } from '../api/engineConfig';
