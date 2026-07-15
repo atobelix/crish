@@ -99,17 +99,21 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
     };
   }, [refreshGit]);
 
-  const runningTools =
-    session?.messages
-      ?.flatMap((m) => m.toolCalls || [])
-      .filter((t) => t.status === 'running' || t.status === 'pending_approval') || [];
+  const allSessionTools = useMemo(() => {
+    const main = session?.messages?.flatMap((m) => m.toolCalls || []) || [];
+    const agents =
+      session?.agents?.flatMap((a) => (a.messages || []).flatMap((m) => m.toolCalls || [])) || [];
+    return [...main, ...agents];
+  }, [session?.messages, session?.agents]);
+
+  const runningTools = allSessionTools.filter(
+    (t) => t.status === 'running' || t.status === 'pending_approval',
+  );
 
   const completedToolsRecent = useMemo(() => {
-    const all =
-      session?.messages?.flatMap((m) => m.toolCalls || []).filter((t) => t.status === 'success' || t.status === 'error') ||
-      [];
+    const all = allSessionTools.filter((t) => t.status === 'success' || t.status === 'error');
     return all.slice(-6).reverse();
-  }, [session?.messages]);
+  }, [allSessionTools]);
 
   const toggle = (k: keyof typeof openSec) =>
     setOpenSec((s) => ({ ...s, [k]: !s[k] }));
