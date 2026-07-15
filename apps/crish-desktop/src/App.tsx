@@ -10,15 +10,21 @@ import {
   FirstRunWizard,
   shouldShowFirstRunWizard,
 } from './components/FirstRunWizard';
-
-if (typeof window !== 'undefined') {
-  (window as any).useLayoutStore = useLayoutStore;
-}
 import { Sidebar } from './components/Sidebar';
 import { Workspace } from './components/Workspace';
 import * as Lucide from 'lucide-react';
-import { SettingsPanel } from './components/SettingsPanel';
+import { SettingsPanel, type SettingsTabType } from './components/SettingsPanel';
 import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
+
+/** Devtools / internal globals attached to window (no `as any`) */
+type CrishWindow = Window & {
+  useLayoutStore?: typeof useLayoutStore;
+  AUTO_FOLD_DELAY?: number;
+};
+
+if (typeof window !== 'undefined') {
+  (window as CrishWindow).useLayoutStore = useLayoutStore;
+}
 
 function App() {
   const {
@@ -73,8 +79,10 @@ function App() {
 
   // 工具自动折叠默认值（原面板菜单已移除；仍供内部读取）
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).AUTO_FOLD_DELAY === undefined) {
-      (window as any).AUTO_FOLD_DELAY = 5000;
+    if (typeof window === 'undefined') return;
+    const w = window as CrishWindow;
+    if (w.AUTO_FOLD_DELAY === undefined) {
+      w.AUTO_FOLD_DELAY = 5000;
     }
   }, []);
 
@@ -496,7 +504,7 @@ function App() {
             wsId={activeWorkspace?.id || 'ws-0'}
             onShowToast={handleShowToast}
             onClose={() => setShowSettingsOverlay(false)}
-            initialTab={settingsActiveTab as any}
+            initialTab={settingsActiveTab as SettingsTabType}
           />
         </div>
       )}

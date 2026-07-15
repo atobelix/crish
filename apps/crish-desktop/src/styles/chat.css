@@ -2182,13 +2182,13 @@
 .context-pill:hover {
   background: var(--bg-hover);
   color: var(--text-secondary);
-  border-color: transparent !important;
+  border-color: transparent;
 }
 .context-pill.active,
 .context-pill.approval {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: transparent !important;
+  border-color: transparent;
 }
 
 .input-container {
@@ -2199,7 +2199,7 @@
 }
 .input-container:focus-within {
   background: var(--bg-primary);
-  border-color: var(--text-tertiary) !important;
+  border-color: var(--text-tertiary);
 }
 
 .footer-actions {
@@ -3657,7 +3657,7 @@
 /* 项目选择：跟主题变量，避免死白 */
 .pp-menu {
   background: var(--bg-elevated, var(--bg-primary));
-  border-color: var(--border-color) !important;
+  border-color: var(--border-color);
 }
 .pp-search {
   background: var(--bg-secondary);
@@ -3968,7 +3968,7 @@
 
 .toolbar-btn:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
-  border-color: var(--border-color) !important;
+  border-color: var(--border-color);
   transform: none !important;
 }
 

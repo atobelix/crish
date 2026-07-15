@@ -21,7 +21,8 @@ import { SettingsUsageTab } from './SettingsUsageTab';
 import { SettingsShortcutsTab } from './SettingsShortcutsTab';
 import { SettingsPersonalizeTab } from './SettingsPersonalizeTab';
 
-type TabType =
+/** Settings sidebar tab ids — shared for openSettings / initialTab typing */
+export type SettingsTabType =
   | 'profile'
   | 'appearance'
   | 'personalize'
@@ -35,11 +36,13 @@ type TabType =
   | 'plugins'
   | 'security';
 
+type TabType = SettingsTabType;
+
 interface SettingsPanelProps {
   wsId: string;
   onShowToast: (msg: string) => void;
   onClose?: () => void;
-  initialTab?: TabType;
+  initialTab?: SettingsTabType;
 }
 
 /** Formal tabs; demo-only tabs only when demo mode */

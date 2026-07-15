@@ -33,6 +33,7 @@ import {
   type CollaboratorMode,
 } from '../api/subagentApi';
 import { useChatStream } from '../hooks/useChatStream';
+import { ChatDemoChrome } from './ChatDemoChrome';
 
 interface ChatCardProps {
   wsId: string;
@@ -165,9 +166,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     }
   }
 
-  // Demo-only decorative pills; product mode stays quiet until real signals exist
-  const [prVisible] = useState(() => isDemoMode());
-
   // Composer extras — permission mode is global so chatApi can read it
   // 状态须在依赖它的 useEffect 之前声明，避免 TDZ 白屏
   const permissionMode = useLayoutStore((s) => s.permissionMode);
@@ -194,13 +192,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [isComposing, setIsComposing] = useState(false); // IME Composition State
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const [activePill, setActivePill] = useState<string | null>(null);
-
-  // Goal mode states
-  const [goalPaused, setGoalPaused] = useState(false);
-  const [goalEditMode, setGoalEditMode] = useState(false);
-  const [goalText, setGoalText] = useState('自动完成系统的交互式升级与界面美化工作，包括状态栏 Ribbon、浏览器和终端模拟器的对接及验证。');
-  const [goalActive, setGoalActive] = useState(() => isDemoMode());
 
   const openSidePanel = (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => {
     handleGlobalTabClick(panelId);
@@ -706,137 +697,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </button>
         )}
 
-        {/* Demo-only context chips */}
-        {isDemoMode() && (
-          <div className="chat-context-ribbon">
-            {prVisible && (
-              <button
-                type="button"
-                className="context-pill git"
-                title="在右侧查看代码变更"
-                onClick={() => {
-                  handleGlobalTabClick('diff');
-                  setActivePill(null);
-                }}
-              >
-                <Lucide.GitBranch size={14} />
-                <span>变更</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="context-pill"
-              title="终端"
-              onClick={() => handleGlobalTabClick('terminal')}
-            >
-              <Lucide.Terminal size={14} />
-              <span>终端</span>
-            </button>
-          </div>
-        )}
-
-        {/* Goal 抽屉：正式模式无引擎目标能力，隐藏假进度/暂停 UI；仅演示模式保留 playground */}
-        {isDemoMode() && activePill === 'goal' && goalActive && (
-          <div className="context-details-drawer">
-            <div
-              className="drawer-expand-content goal-drawer-content"
-              style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>当前目标</span>
-                  <span className="ui-badge">{goalPaused ? '已暂停' : '进行中 · 45%'}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                    onClick={() => {
-                      const next = !goalPaused;
-                      setGoalPaused(next);
-                      onShowToast(next ? '目标已暂停' : '目标已继续');
-                    }}
-                  >
-                    {goalPaused ? <Lucide.Play size={14} /> : <Lucide.Pause size={14} />}
-                    {goalPaused ? '继续' : '暂停'}
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost"
-                    title="停止"
-                    onClick={() => {
-                      setGoalActive(false);
-                      setActivePill(null);
-                      onShowToast('目标已停止');
-                    }}
-                  >
-                    <Lucide.Square size={14} />
-                  </button>
-                  <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
-                    <Lucide.X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {goalEditMode ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <textarea
-                    className="ui-input"
-                    value={goalText}
-                    onChange={(e) => setGoalText((e.target as HTMLTextAreaElement).value)}
-                    rows={2}
-                    style={{ resize: 'none', minHeight: 56, background: 'var(--bg-secondary)' }}
-                    autoFocus
-                  />
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-secondary ui-btn-sm"
-                      onClick={() => setGoalEditMode(false)}
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-primary ui-btn-sm"
-                      onClick={() => {
-                        setGoalEditMode(false);
-                        onShowToast('目标已更新');
-                      }}
-                    >
-                      保存
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => setGoalEditMode(true)}
-                  style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'text' }}
-                >
-                  <span style={{ color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1, fontSize: 12.5 }}>
-                    {goalText}
-                  </span>
-                  <Lucide.Pencil size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 3 }} />
-                </div>
-              )}
-
-              <div style={{ height: 3, background: 'var(--bg-tertiary)', borderRadius: 99, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    height: '100%',
-                    width: '45%',
-                    background: 'var(--text-secondary)',
-                    borderRadius: 99,
-                  }}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                <span>已运行 4h22m</span>
-                <span>预计剩余约 1 天</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Demo-only context chips + Goal playground；正式模式不挂载 */}
+        {isDemoMode() ? (
+          <ChatDemoChrome
+            onShowToast={onShowToast}
+            handleGlobalTabClick={handleGlobalTabClick}
+          />
+        ) : null}
 
         {/* 系统提示：错误/空回复 — 明确非 AI 输出 */}
         {!activeAgent && runNotice ? (
