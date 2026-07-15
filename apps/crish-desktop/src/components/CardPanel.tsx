@@ -49,13 +49,20 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
-  // 文件管理器：外部请求打开某路径时，先展开右侧「文件」面板
+  // 文件 / 终端：外部入口先展开右侧对应面板
   React.useEffect(() => {
     const onOpenFile = () => {
       handleGlobalTabClick('files');
     };
+    const onOpenTerm = () => {
+      handleGlobalTabClick('terminal');
+    };
     window.addEventListener('crish-open-file', onOpenFile);
-    return () => window.removeEventListener('crish-open-file', onOpenFile);
+    window.addEventListener('crish-open-terminal', onOpenTerm);
+    return () => {
+      window.removeEventListener('crish-open-file', onOpenFile);
+      window.removeEventListener('crish-open-terminal', onOpenTerm);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
@@ -671,15 +678,18 @@ export const CardPanel: React.FC<CardPanelProps> = ({
           </div>
         ) : (
           <div className="tabs-bar">
-            {group.cards.map((c) => (
+            {group.cards.map((c) => {
+              const isToolTab = c.id !== 'chat';
+              return (
               <div
                 key={c.id}
-                className={`card-tab ${c.id === activeCardId ? 'active' : ''} ${
+                className={`card-tab ${isToolTab ? 'card-tab--tool' : ''} ${c.id === activeCardId ? 'active' : ''} ${
                   draggedTab && draggedTab.cardId === c.id && draggedTab.sourceGroupId === group.id ? 'dragging-tab-hidden' : ''
                 }`}
                 onClick={() => handleTabClick(c.id)}
                 onPointerDown={(e) => handleTabPointerDown(e, c.id)}
                 style={{ touchAction: 'none' }}
+                title={c.title}
               >
                 <div className="tab-icon-container">
                   {renderCardIcon(c.id)}
@@ -695,9 +705,10 @@ export const CardPanel: React.FC<CardPanelProps> = ({
                     </button>
                   )}
                 </div>
-                <span>{c.title}</span>
+                <span className="tab-label">{c.title}</span>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         

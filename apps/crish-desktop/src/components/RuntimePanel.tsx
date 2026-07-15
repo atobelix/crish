@@ -13,6 +13,12 @@ import {
   type PendingApprovalInfo,
 } from '../api/engineStatus';
 import { listWorkflows, scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import {
+  getBackgroundTaskOutput,
+  listBackgroundTasks,
+  openBackgroundTaskInTerminal,
+  type BackgroundTaskInfo,
+} from '../api/backgroundTasksApi';
 
 interface RuntimePanelProps {
   wsId: string;
@@ -37,6 +43,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const [bgExpanded, setBgExpanded] = useState<string | null>(null);
+  const [bgDetail, setBgDetail] = useState('');
+  const [bgLoading, setBgLoading] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -46,18 +56,27 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   useEffect(() => {
     const client = getDesktopDaemonClient();
     setEngineOnline(client.isConnected());
-    return client.onState((s) => setEngineOnline(s === 'connected'));
+    const unsub = client.onState((s) => {
+      setEngineOnline(s === 'connected');
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
-  // 轮询引擎 live 状态（H2）；H3 可改为事件驱动
+  // 轮询引擎 live 状态 + 后台常驻任务
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
-      const live = await fetchEngineLiveStatus();
+      const [live, bgs] = await Promise.all([
+        fetchEngineLiveStatus(),
+        listBackgroundTasks().catch(() => [] as BackgroundTaskInfo[]),
+      ]);
       if (cancelled) return;
       setEngineOnline(live.connected);
       setActiveRuns(live.activeRuns);
       setPendingApprovals(live.pendingApprovals);
+      setBgTasks(bgs);
     };
     void tick();
     const t = setInterval(() => void tick(), 4000);
@@ -216,6 +235,78 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     <span className="rt-row-meta">已运行 {wk.elapsedSeconds} 秒</span>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rt-section">
+        <h4 className="rt-section-title">后台常驻</h4>
+        {bgTasks.length === 0 ? (
+          <div className="rt-empty">无后台任务 · 长驻进程会列在此处</div>
+        ) : (
+          <div className="rt-list">
+            {bgTasks.map((t) => (
+              <div key={t.id}>
+                <div
+                  className="rt-row is-clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    void (async () => {
+                      if (bgExpanded === t.id) {
+                        setBgExpanded(null);
+                        setBgDetail('');
+                        return;
+                      }
+                      setBgExpanded(t.id);
+                      setBgLoading(true);
+                      try {
+                        const out = await getBackgroundTaskOutput(t.id);
+                        setBgDetail(out || t.summary || t.command || '（无输出）');
+                      } catch {
+                        setBgDetail(t.summary || t.command || '读取失败');
+                      } finally {
+                        setBgLoading(false);
+                      }
+                    })();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.currentTarget as HTMLElement).click();
+                  }}
+                >
+                  <div className="rt-row-main">
+                    <Lucide.Server size={13} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                    <div className="rt-row-text">
+                      <span className="rt-row-title">{t.label}</span>
+                      <span className="rt-row-meta">
+                        {t.state}
+                        {t.command ? ` · ${t.command.slice(0, 40)}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {bgExpanded === t.id ? (
+                  <div className="rt-bg-detail">
+                    {bgLoading ? '加载中…' : bgDetail}
+                    {!bgLoading ? (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBackgroundTaskInTerminal(t.label, bgDetail);
+                            onShowToast('已在终端面板打开详情');
+                          }}
+                        >
+                          在终端中打开
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

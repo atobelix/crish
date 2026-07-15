@@ -1,26 +1,23 @@
 /**
- * 右侧文件管理器：浏览工作区 + 详情预览 / 编辑 / 评论。
- * 定位：按需打开的详细入口，不是运行时日志垃圾桶。
+ * 右侧文件管理器：中性色、两行工具栏、树形浏览、选区评论喂入下轮输入。
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { getWorkspacePath } from '../api/projectStore';
 import {
-  addFileComment,
+  addPendingFileAnnotation,
+  countPendingFileAnnotations,
   detectFileKind,
   listDirectory,
-  listFileComments,
   parseCsvPreview,
   pathBasename,
   pathDirname,
   pathRelativeToRoot,
   readTextFile,
-  removeFileComment,
   revealInOs,
   takePendingOpenPath,
   toAssetUrl,
   writeTextFile,
-  type FileComment,
   type FsDirEntry,
 } from '../api/workspaceFsApi';
 
@@ -31,10 +28,13 @@ interface FilesCardProps {
 
 type ViewMode = 'browse' | 'detail';
 
+type TreeNode = FsDirEntry & { depth: number };
+
 export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }) => {
   const [root, setRoot] = useState(() => getWorkspacePath());
   const [cwd, setCwd] = useState(root || '');
   const [entries, setEntries] = useState<FsDirEntry[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, FsDirEntry[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
@@ -46,77 +46,78 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   const [dirty, setDirty] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const [assetUrl, setAssetUrl] = useState<string | null>(null);
-  const [comments, setComments] = useState<FileComment[]>([]);
-  const [commentDraft, setCommentDraft] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(true);
+  const [selText, setSelText] = useState('');
+  const [commentDraft, setCommentDraft] = useState('');
+  const [pendingCount, setPendingCount] = useState(() => countPendingFileAnnotations());
+  const textRef = useRef<HTMLPreElement>(null);
 
   const kind = selected ? detectFileKind(pathBasename(selected)) : 'binary';
 
-  const refresh = useCallback(async (dir?: string) => {
-    const r = getWorkspacePath();
-    setRoot(r);
-    const path = dir || cwd || r;
-    if (!path) {
-      setError('请先选择项目工作区');
-      setEntries([]);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const list = await listDirectory(path);
-      setEntries(list);
-      setCwd(path);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [cwd]);
+  const loadDir = useCallback(async (path: string): Promise<FsDirEntry[]> => {
+    return listDirectory(path);
+  }, []);
 
-  const openFile = useCallback(
-    async (filePath: string) => {
-      // 消费挂起的打开请求，避免下次挂载重复打开
-      takePendingOpenPath();
-      setSelected(filePath);
-      setView('detail');
-      setEditing(false);
-      setDirty(false);
-      setDetailLoading(true);
-      setContent('');
-      setEditBuf('');
-      setAssetUrl(null);
+  const refresh = useCallback(
+    async (dir?: string) => {
+      const r = getWorkspacePath();
+      setRoot(r);
+      const path = dir || cwd || r;
+      if (!path) {
+        setError('请先选择项目工作区');
+        setEntries([]);
+        return;
+      }
+      setLoading(true);
       setError('');
-      setComments(listFileComments(filePath));
-      // 定位到文件所在目录，便于返回后仍在附近
-      const parent = pathDirname(filePath);
-      if (parent) setCwd(parent);
-      const k = detectFileKind(pathBasename(filePath));
       try {
-        if (k === 'image' || k === 'pdf') {
-          const url = await toAssetUrl(filePath);
-          setAssetUrl(url);
-          if (!url) {
-            setError('无法生成预览 URL（需桌面壳 convertFileSrc）');
-          }
-        } else if (k === 'text' || k === 'table') {
-          const res = await readTextFile(filePath, k === 'table' ? 500 : 5000);
-          setContent(res.content);
-          setEditBuf(res.content);
-          setTruncated(res.truncated);
-        } else {
-          setContent('');
-        }
+        const list = await loadDir(path);
+        setEntries(list);
+        setCwd(path);
+        setExpanded({});
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+        setEntries([]);
       } finally {
-        setDetailLoading(false);
+        setLoading(false);
       }
     },
-    [],
+    [cwd, loadDir],
   );
+
+  const openFile = useCallback(async (filePath: string) => {
+    takePendingOpenPath();
+    setSelected(filePath);
+    setView('detail');
+    setEditing(false);
+    setDirty(false);
+    setDetailLoading(true);
+    setContent('');
+    setEditBuf('');
+    setAssetUrl(null);
+    setError('');
+    setSelText('');
+    setCommentDraft('');
+    const parent = pathDirname(filePath);
+    if (parent) setCwd(parent);
+    const k = detectFileKind(pathBasename(filePath));
+    try {
+      if (k === 'image' || k === 'pdf') {
+        const url = await toAssetUrl(filePath);
+        setAssetUrl(url);
+        if (!url) setError('无法生成预览（需桌面壳）');
+      } else if (k === 'text' || k === 'table') {
+        const res = await readTextFile(filePath, k === 'table' ? 500 : 5000);
+        setContent(res.content);
+        setEditBuf(res.content);
+        setTruncated(res.truncated);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const onProject = () => {
@@ -132,11 +133,9 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
 
   useEffect(() => {
     void refresh(root || undefined).then(() => {
-      // 面板刚挂载：消费打开请求（事件可能早于挂载发出）
       const pending = takePendingOpenPath() || initialPath;
       if (pending) void openFile(pending);
     });
-    // 仅挂载
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -149,22 +148,54 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     return () => window.removeEventListener('crish-open-file', onOpen);
   }, [openFile]);
 
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) => e.name.toLowerCase().includes(q));
-  }, [entries, filter]);
-
-  const enterDir = (path: string) => {
-    setView('browse');
-    setSelected(null);
-    void refresh(path);
+  const toggleExpand = async (dirPath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (expanded[dirPath]) {
+      setExpanded((prev) => {
+        const next = { ...prev };
+        delete next[dirPath];
+        return next;
+      });
+      return;
+    }
+    try {
+      const list = await loadDir(dirPath);
+      setExpanded((prev) => ({ ...prev, [dirPath]: list }));
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : '展开失败');
+    }
   };
+
+  const flatTree: TreeNode[] = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const out: TreeNode[] = [];
+    const walk = (list: FsDirEntry[], depth: number) => {
+      for (const e of list) {
+        if (q && !e.name.toLowerCase().includes(q) && !e.isDir) continue;
+        if (q && e.isDir && !e.name.toLowerCase().includes(q) && !expanded[e.path]) {
+          // 仍显示匹配子树的父级：若展开后有匹配则保留
+        }
+        out.push({ ...e, depth });
+        if (e.isDir && expanded[e.path]) {
+          walk(expanded[e.path], depth + 1);
+        }
+      }
+    };
+    walk(entries, 0);
+    if (q) {
+      return out.filter((n) => n.name.toLowerCase().includes(q) || (n.isDir && expanded[n.path]));
+    }
+    return out;
+  }, [entries, expanded, filter]);
 
   const goUp = () => {
     if (!cwd || (root && cwd === root)) return;
     const parent = pathDirname(cwd);
-    if (parent && parent !== cwd) enterDir(parent);
+    if (parent && parent !== cwd) {
+      setView('browse');
+      setSelected(null);
+      void refresh(parent);
+    }
   };
 
   const saveFile = async () => {
@@ -180,50 +211,68 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
     }
   };
 
-  const copyPath = async (p: string) => {
-    try {
-      await navigator.clipboard.writeText(p);
-      onShowToast('路径已复制');
-    } catch {
-      onShowToast(p);
+  const onTextSelect = () => {
+    const sel = window.getSelection()?.toString().trim() || '';
+    if (sel.length > 0) {
+      setSelText(sel.slice(0, 2000));
     }
+  };
+
+  const submitSelectionComment = () => {
+    if (!selected || !selText.trim() || !commentDraft.trim()) return;
+    addPendingFileAnnotation({
+      path: selected,
+      selectedText: selText.trim(),
+      text: commentDraft.trim(),
+    });
+    setPendingCount(countPendingFileAnnotations());
+    setCommentDraft('');
+    setSelText('');
+    onShowToast('批注已加入，将随下一条消息发给模型');
   };
 
   const breadcrumbs = useMemo(() => {
     if (!root || !cwd) return [] as { label: string; path: string }[];
     const rel = pathRelativeToRoot(cwd, root);
-    if (rel === '.' || !rel) return [{ label: pathBasename(root) || '项目', path: root }];
-    const parts = rel.replace(/\\/g, '/').split('/').filter(Boolean);
     const items: { label: string; path: string }[] = [
       { label: pathBasename(root) || '项目', path: root },
     ];
-    let acc = root;
-    for (const part of parts) {
-      acc = joinLocal(acc, part);
-      items.push({ label: part, path: acc });
+    if (rel && rel !== '.') {
+      let acc = root;
+      for (const part of rel.replace(/\\/g, '/').split('/').filter(Boolean)) {
+        acc = joinLocal(acc, part);
+        items.push({ label: part, path: acc });
+      }
     }
     return items;
   }, [cwd, root]);
 
-  const relSelected = selected && root ? pathRelativeToRoot(selected, root) : selected;
+  if (!root) {
+    return (
+      <div className="files-card">
+        <div className="files-no-root">请先在侧栏选择项目，再浏览文件</div>
+      </div>
+    );
+  }
 
   return (
     <div className="files-card">
-      <div className="files-card-header">
-        <div className="files-card-title-row">
-          <Lucide.FolderTree size={14} />
-          <span className="files-card-title">文件</span>
+      {/* 行 1：路径与导航 */}
+      <div className="files-toolbar">
+        <div className="files-toolbar-actions">
           {view === 'detail' ? (
-            <button type="button" className="files-link-btn" onClick={() => setView('browse')}>
-              <Lucide.ArrowLeft size={12} />
-              返回列表
+            <button
+              type="button"
+              className="files-icon-btn"
+              title="返回列表"
+              onClick={() => {
+                setView('browse');
+                setSelText('');
+              }}
+            >
+              <Lucide.ArrowLeft size={14} />
             </button>
-          ) : null}
-        </div>
-        {!root ? (
-          <div className="files-no-root">未打开项目 — 请在侧栏选择项目后再浏览文件</div>
-        ) : (
-          <div className="files-path-bar">
+          ) : (
             <button
               type="button"
               className="files-icon-btn"
@@ -233,56 +282,191 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             >
               <Lucide.CornerLeftUp size={13} />
             </button>
-            <button type="button" className="files-icon-btn" title="刷新" onClick={() => void refresh()}>
-              <Lucide.RefreshCw size={12} />
-            </button>
-            <div className="files-breadcrumbs" title={cwd}>
-              {breadcrumbs.map((b, i) => (
-                <React.Fragment key={b.path}>
-                  {i > 0 ? <span className="files-bc-sep">/</span> : null}
-                  <button
-                    type="button"
-                    className="files-bc-item"
-                    onClick={() => enterDir(b.path)}
-                  >
-                    {b.label}
-                  </button>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            className="files-icon-btn"
+            title="刷新"
+            onClick={() => void refresh()}
+          >
+            <Lucide.RefreshCw size={12} />
+          </button>
+        </div>
+        <div className="files-breadcrumbs" title={cwd}>
+          {breadcrumbs.map((b, i) => (
+            <React.Fragment key={b.path}>
+              {i > 0 ? <span className="files-bc-sep">/</span> : null}
+              <button
+                type="button"
+                className={`files-bc-item ${i === breadcrumbs.length - 1 ? 'is-current' : ''}`}
+                onClick={() => {
+                  setView('browse');
+                  setSelected(null);
+                  void refresh(b.path);
+                }}
+              >
+                {b.label}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+        {pendingCount > 0 ? (
+          <span className="files-pending-badge" title="待发送给模型的批注">
+            批注 {pendingCount}
+          </span>
+        ) : null}
       </div>
 
+      {/* 行 2：筛选 或 详情操作 */}
       {view === 'browse' ? (
-        <>
-          <div className="files-filter-row">
+        <div className="files-subbar">
+          <div className="files-filter-wrap">
             <Lucide.Search size={12} className="files-filter-ico" />
             <input
               className="files-filter-input"
-              placeholder="筛选文件名…"
+              placeholder="筛选…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
+        </div>
+      ) : (
+        <div className="files-subbar">
+          <span className="files-subbar-name" title={selected || ''}>
+            {selected ? pathBasename(selected) : ''}
+          </span>
+          {(kind === 'text' || kind === 'table') && (
+            <>
+              {!editing ? (
+                <button
+                  type="button"
+                  className="files-chip-btn"
+                  onClick={() => {
+                    setEditing(true);
+                    setEditBuf(content);
+                    setSelText('');
+                  }}
+                >
+                  <Lucide.Pencil size={11} /> 编辑
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="files-chip-btn primary"
+                    onClick={() => void saveFile()}
+                    disabled={!dirty}
+                  >
+                    <Lucide.Save size={11} /> 保存
+                  </button>
+                  <button
+                    type="button"
+                    className="files-chip-btn"
+                    onClick={() => {
+                      setEditing(false);
+                      setEditBuf(content);
+                      setDirty(false);
+                    }}
+                  >
+                    取消
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          {selected ? (
+            <>
+              <button
+                type="button"
+                className="files-icon-btn"
+                title="复制路径"
+                onClick={() => {
+                  void navigator.clipboard.writeText(selected).then(
+                    () => onShowToast('路径已复制'),
+                    () => onShowToast(selected),
+                  );
+                }}
+              >
+                <Lucide.Copy size={12} />
+              </button>
+              <button
+                type="button"
+                className="files-icon-btn"
+                title="资源管理器"
+                onClick={() => {
+                  void revealInOs(selected).catch((e) =>
+                    onShowToast(e instanceof Error ? e.message : '打开失败'),
+                  );
+                }}
+              >
+                <Lucide.FolderOpen size={12} />
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      <div className="files-body">
+        {view === 'browse' ? (
           <div className="files-list">
             {loading ? (
               <div className="files-empty">加载中…</div>
             ) : error && !entries.length ? (
               <div className="files-empty files-empty--err">{error}</div>
-            ) : filtered.length === 0 ? (
+            ) : flatTree.length === 0 ? (
               <div className="files-empty">空目录或无匹配项</div>
             ) : (
-              filtered.map((e) => (
-                <button
+              flatTree.map((e) => (
+                <div
                   key={e.path}
-                  type="button"
                   className={`files-row ${selected === e.path ? 'is-selected' : ''}`}
+                  style={{ paddingLeft: 6 + e.depth * 14 }}
                   onClick={() => {
-                    if (e.isDir) enterDir(e.path);
-                    else void openFile(e.path);
+                    if (e.isDir) {
+                      void (async () => {
+                        if (!expanded[e.path]) {
+                          try {
+                            const list = await loadDir(e.path);
+                            setExpanded((prev) => ({ ...prev, [e.path]: list }));
+                          } catch {
+                            /* ignore */
+                          }
+                        }
+                        setCwd(e.path);
+                      })();
+                    } else {
+                      void openFile(e.path);
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (e.isDir) {
+                      setView('browse');
+                      void refresh(e.path);
+                    } else void openFile(e.path);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter') {
+                      if (e.isDir) void refresh(e.path);
+                      else void openFile(e.path);
+                    }
                   }}
                 >
+                  <button
+                    type="button"
+                    className={`files-row-twist ${e.isDir ? '' : 'is-leaf'}`}
+                    onClick={(ev) => (e.isDir ? void toggleExpand(e.path, ev) : undefined)}
+                    tabIndex={-1}
+                  >
+                    {e.isDir ? (
+                      expanded[e.path] ? (
+                        <Lucide.ChevronDown size={12} />
+                      ) : (
+                        <Lucide.ChevronRight size={12} />
+                      )
+                    ) : null}
+                  </button>
                   {e.isDir ? (
                     <Lucide.Folder size={14} className="files-row-ico dir" />
                   ) : (
@@ -291,191 +475,85 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                   <span className="files-row-name">{e.name}</span>
                   {!e.isDir && e.size != null ? (
                     <span className="files-row-meta">{formatSize(e.size)}</span>
-                  ) : e.isDir ? (
-                    <Lucide.ChevronRight size={12} className="files-row-chevron" />
                   ) : null}
-                </button>
+                </div>
               ))
             )}
           </div>
-          <div className="files-footer-hint">
-            点击文件可预览 / 编辑 / 评论 · 图片 · 表格 · PDF
-          </div>
-        </>
-      ) : (
-        <div className="files-detail">
-          <div className="files-detail-toolbar">
-            <div className="files-detail-name-wrap">
-              <span className="files-detail-name" title={selected || ''}>
-                {selected ? pathBasename(selected) : ''}
-              </span>
-              {relSelected ? (
-                <span className="files-detail-rel" title={selected || ''}>
-                  {relSelected}
-                </span>
-              ) : null}
-            </div>
-            <div className="files-detail-actions">
-              {(kind === 'text' || kind === 'table') && (
-                <>
-                  {!editing ? (
-                    <button
-                      type="button"
-                      className="files-chip-btn"
-                      onClick={() => {
-                        setEditing(true);
-                        setEditBuf(content);
-                      }}
-                    >
-                      <Lucide.Pencil size={11} /> 编辑
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="files-chip-btn primary"
-                        onClick={() => void saveFile()}
-                        disabled={!dirty}
-                      >
-                        <Lucide.Save size={11} /> 保存
-                      </button>
-                      <button
-                        type="button"
-                        className="files-chip-btn"
-                        onClick={() => {
-                          setEditing(false);
-                          setEditBuf(content);
-                          setDirty(false);
-                        }}
-                      >
-                        取消
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
-              {selected ? (
-                <>
-                  <button
-                    type="button"
-                    className="files-icon-btn"
-                    title="复制路径"
-                    onClick={() => void copyPath(selected)}
-                  >
-                    <Lucide.Copy size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="files-icon-btn"
-                    title="在资源管理器中显示"
-                    onClick={() => {
-                      void revealInOs(selected).catch((e) =>
-                        onShowToast(e instanceof Error ? e.message : '打开失败'),
-                      );
+        ) : (
+          <div className="files-detail">
+            <div className="files-detail-body">
+              {detailLoading ? (
+                <div className="files-empty">读取中…</div>
+              ) : error && !content && !assetUrl ? (
+                <div className="files-empty files-empty--err">{error}</div>
+              ) : kind === 'image' && assetUrl ? (
+                <div className="files-preview-media">
+                  <img src={assetUrl} alt={pathBasename(selected || '')} />
+                </div>
+              ) : kind === 'pdf' && assetUrl ? (
+                <iframe title="pdf" className="files-preview-pdf" src={assetUrl} />
+              ) : kind === 'table' && !editing ? (
+                <div className="files-table-wrap">
+                  <table className="files-table">
+                    <tbody>
+                      {parseCsvPreview(content).map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) =>
+                            i === 0 ? <th key={j}>{cell}</th> : <td key={j}>{cell}</td>,
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {truncated ? <div className="files-trunc">已截断预览</div> : null}
+                </div>
+              ) : kind === 'text' || kind === 'table' ? (
+                editing ? (
+                  <textarea
+                    className="files-editor"
+                    value={editBuf}
+                    onChange={(e) => {
+                      setEditBuf(e.target.value);
+                      setDirty(e.target.value !== content);
                     }}
+                    spellCheck={false}
+                  />
+                ) : (
+                  <pre
+                    ref={textRef}
+                    className="files-text-pre"
+                    onMouseUp={onTextSelect}
+                    onKeyUp={onTextSelect}
                   >
-                    <Lucide.FolderOpen size={12} />
-                  </button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="files-detail-body">
-            {detailLoading ? (
-              <div className="files-empty">读取中…</div>
-            ) : error && kind !== 'image' && kind !== 'pdf' && !content ? (
-              <div className="files-empty files-empty--err">{error}</div>
-            ) : kind === 'image' && assetUrl ? (
-              <div className="files-preview-media">
-                <img src={assetUrl} alt={pathBasename(selected || '')} />
-              </div>
-            ) : kind === 'pdf' && assetUrl ? (
-              <iframe title="pdf" className="files-preview-pdf" src={assetUrl} />
-            ) : kind === 'table' && !editing ? (
-              <div className="files-table-wrap">
-                <table className="files-table">
-                  <tbody>
-                    {parseCsvPreview(content).map((row, i) => (
-                      <tr key={i} className={i === 0 ? 'is-header' : undefined}>
-                        {row.map((cell, j) =>
-                          i === 0 ? <th key={j}>{cell}</th> : <td key={j}>{cell}</td>,
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {truncated ? <div className="files-trunc">已截断预览</div> : null}
-              </div>
-            ) : kind === 'text' || kind === 'table' ? (
-              editing ? (
-                <textarea
-                  className="files-editor"
-                  value={editBuf}
-                  onChange={(e) => {
-                    setEditBuf(e.target.value);
-                    setDirty(e.target.value !== content);
-                  }}
-                  spellCheck={false}
-                />
+                    {content || '（空文件）'}
+                    {truncated ? '\n\n…（已截断）' : ''}
+                  </pre>
+                )
               ) : (
-                <pre className="files-text-pre">
-                  {content || '（空文件）'}
-                  {truncated ? '\n\n…（已截断，仅预览前部）' : ''}
-                </pre>
-              )
-            ) : kind === 'image' || kind === 'pdf' ? (
-              <div className="files-empty files-empty--err">
-                {error || '无法预览'}
-                <div className="files-empty-sub">{selected}</div>
-              </div>
-            ) : (
-              <div className="files-empty">
-                二进制或不支持预览的类型
-                <div className="files-empty-sub">{selected}</div>
-                <button
-                  type="button"
-                  className="files-chip-btn"
-                  style={{ marginTop: 10 }}
-                  onClick={() => {
-                    if (selected) {
-                      void revealInOs(selected).catch((e) =>
-                        onShowToast(e instanceof Error ? e.message : '打开失败'),
-                      );
-                    }
-                  }}
-                >
-                  用系统应用打开
-                </button>
-              </div>
-            )}
-          </div>
+                <div className="files-empty">
+                  不支持预览的类型
+                  <div className="files-empty-sub">{selected}</div>
+                </div>
+              )}
+            </div>
 
-          <div className="files-comments">
-            <button
-              type="button"
-              className="files-comments-title"
-              onClick={() => setCommentsOpen((v) => !v)}
-            >
-              <Lucide.MessageSquare size={12} />
-              评论
-              <span className="files-comments-count">{comments.length}</span>
-              <Lucide.ChevronRight
-                size={12}
-                className={`files-comments-chev ${commentsOpen ? 'open' : ''}`}
-              />
-            </button>
-            {commentsOpen ? (
-              <>
-                <div className="files-comment-form">
+            {/* 仅选中文本时显示评论入口 */}
+            {selText && !editing ? (
+              <div className="files-sel-bar">
+                <div className="files-sel-preview" title={selText}>
+                  {selText.length > 120 ? `${selText.slice(0, 120)}…` : selText}
+                </div>
+                <div className="files-sel-form">
                   <input
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
-                    placeholder="添加评论（本地保存）…"
+                    placeholder="对选区写批注…"
+                    autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && commentDraft.trim() && selected) {
-                        addFileComment(selected, commentDraft);
-                        setComments(listFileComments(selected));
+                      if (e.key === 'Enter') submitSelectionComment();
+                      if (e.key === 'Escape') {
+                        setSelText('');
                         setCommentDraft('');
                       }
                     }}
@@ -484,48 +562,27 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     type="button"
                     className="files-chip-btn primary"
                     disabled={!commentDraft.trim()}
+                    onClick={submitSelectionComment}
+                  >
+                    批注
+                  </button>
+                  <button
+                    type="button"
+                    className="files-link-btn"
                     onClick={() => {
-                      if (!selected || !commentDraft.trim()) return;
-                      addFileComment(selected, commentDraft);
-                      setComments(listFileComments(selected));
+                      setSelText('');
                       setCommentDraft('');
                     }}
                   >
-                    添加
+                    取消
                   </button>
                 </div>
-                <div className="files-comment-list">
-                  {comments.length === 0 ? (
-                    <div className="files-empty" style={{ padding: 8 }}>
-                      暂无评论
-                    </div>
-                  ) : (
-                    comments.map((c) => (
-                      <div key={c.id} className="files-comment-item">
-                        <div className="files-comment-text">{c.text}</div>
-                        <div className="files-comment-meta">
-                          <span>{new Date(c.createdAt).toLocaleString()}</span>
-                          <button
-                            type="button"
-                            className="files-link-btn"
-                            onClick={() => {
-                              if (!selected) return;
-                              removeFileComment(selected, c.id);
-                              setComments(listFileComments(selected));
-                            }}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </>
+                <div className="files-sel-hint">批注会随下一条用户消息发给模型</div>
+              </div>
             ) : null}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
@@ -535,10 +592,9 @@ function FileIcon({ name }: { name: string }) {
   if (k === 'image') return <Lucide.Image size={14} className="files-row-ico" />;
   if (k === 'pdf') return <Lucide.FileText size={14} className="files-row-ico" />;
   if (k === 'table') return <Lucide.Table size={14} className="files-row-ico" />;
-  if (/\.(ts|tsx|js|jsx|mjs)$/i.test(name)) {
+  if (/\.(ts|tsx|js|jsx|mjs|rs|py|go)$/i.test(name)) {
     return <Lucide.FileCode size={14} className="files-row-ico" />;
   }
-  if (/\.md$/i.test(name)) return <Lucide.FileType size={14} className="files-row-ico" />;
   return <Lucide.File size={14} className="files-row-ico" />;
 }
 

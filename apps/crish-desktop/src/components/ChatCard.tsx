@@ -45,7 +45,9 @@ import {
 } from '../api/toolPresentation';
 import {
   extractFilePathFromToolArgs,
+  formatAnnotationsForModel,
   openFileInPanel,
+  takePendingFileAnnotations,
 } from '../api/workspaceFsApi';
 import {
   applyUsageDelta,
@@ -766,11 +768,19 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             )
             .join('\n\n')}`
         : '';
-    const input = rawInput + attachBlock;
-    const displayText =
-      attachments.length > 0
-        ? `${rawInput}\n\n📎 ${attachments.map((a) => a.name).join('、')}`
-        : rawInput;
+    // 文件面板选区批注：注入模型上下文；气泡只展示用户原文 + 轻量提示
+    const fileAnns = takePendingFileAnnotations();
+    const annBlock = formatAnnotationsForModel(fileAnns);
+    const input = (annBlock ? `${annBlock}\n\n` : '') + rawInput + attachBlock;
+    let displayText = rawInput;
+    if (fileAnns.length) {
+      displayText = displayText
+        ? `${displayText}\n\n（含 ${fileAnns.length} 条文件批注）`
+        : `（${fileAnns.length} 条文件批注）`;
+    }
+    if (attachments.length > 0) {
+      displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${attachments.map((a) => a.name).join('、')}`;
+    }
 
     setChatInput('');
     setSlashMenuOpen(false);
@@ -1858,37 +1868,36 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           {showSpawnCollab && (
             <div className="collab-spawn-popover" role="dialog" aria-label="拉起协作者">
               <div className="collab-spawn-head">
-                <Lucide.Bot size={14} />
-                <strong>拉起协作者</strong>
-                <button type="button" className="agent-card-btn" onClick={() => setShowSpawnCollab(false)}>
+                <Lucide.Users size={14} />
+                <strong>协作者</strong>
+                <button
+                  type="button"
+                  className="files-icon-btn"
+                  title="关闭"
+                  onClick={() => setShowSpawnCollab(false)}
+                >
                   <Lucide.X size={13} />
                 </button>
               </div>
-              <p className="collab-spawn-desc">
-                在独立会话中启动协作 agent，结果出现在侧栏本对话下方；与主对话并行不抢上下文。
-              </p>
+              <div className="collab-mode-row">
+                {COLLABORATOR_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`collab-mode-chip ${collabMode === m.id ? 'active' : ''}`}
+                    onClick={() => setCollabMode(m.id)}
+                    title={m.hint}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
               <label className="collab-field">
-                <span>模式</span>
-                <div className="collab-mode-row">
-                  {COLLABORATOR_MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`collab-mode-chip ${collabMode === m.id ? 'active' : ''}`}
-                      onClick={() => setCollabMode(m.id)}
-                      title={m.hint}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="collab-field">
-                <span>名称</span>
+                <span>名称（可选）</span>
                 <input
                   value={collabDesc}
                   onChange={(e) => setCollabDesc(e.target.value)}
-                  placeholder="例如：读权限模块"
+                  placeholder="简短名称"
                 />
               </label>
               <label className="collab-field">
@@ -1897,7 +1906,8 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   rows={3}
                   value={collabTask}
                   onChange={(e) => setCollabTask(e.target.value)}
-                  placeholder="写清楚要协作完成的事…"
+                  placeholder="要协作完成的事"
+                  autoFocus
                 />
               </label>
               <div className="collab-spawn-actions">
@@ -1910,7 +1920,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                   disabled={collabBusy || !collabTask.trim()}
                   onClick={handleSpawnCollaborator}
                 >
-                  {collabBusy ? '启动中…' : '开始协作'}
+                  {collabBusy ? '启动中…' : '启动'}
                 </button>
               </div>
             </div>

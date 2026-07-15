@@ -256,63 +256,79 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
-// ── 文件评论（本地持久化） ──
-const COMMENT_KEY = 'crish_file_comments_v1';
-
-export type FileComment = {
+// ── 选区批注：下一条用户消息注入模型（非常驻评论区） ──
+export type PendingFileAnnotation = {
   id: string;
   path: string;
+  selectedText: string;
   text: string;
   createdAt: number;
-  line?: number;
 };
 
-export function listFileComments(filePath: string): FileComment[] {
-  try {
-    const all = JSON.parse(localStorage.getItem(COMMENT_KEY) || '{}') as Record<
-      string,
-      FileComment[]
-    >;
-    return all[filePath] || [];
-  } catch {
-    return [];
-  }
-}
+let pendingAnnotations: PendingFileAnnotation[] = [];
 
-export function addFileComment(filePath: string, text: string, line?: number): FileComment {
-  const c: FileComment = {
-    id: `c-${Date.now().toString(36)}`,
-    path: filePath,
-    text: text.trim(),
+export function addPendingFileAnnotation(input: {
+  path: string;
+  selectedText: string;
+  text: string;
+}): PendingFileAnnotation {
+  const a: PendingFileAnnotation = {
+    id: `ann-${Date.now().toString(36)}`,
+    path: input.path,
+    selectedText: input.selectedText.trim().slice(0, 2000),
+    text: input.text.trim(),
     createdAt: Date.now(),
-    line,
   };
+  pendingAnnotations = [a, ...pendingAnnotations].slice(0, 20);
   try {
-    const all = JSON.parse(localStorage.getItem(COMMENT_KEY) || '{}') as Record<
-      string,
-      FileComment[]
-    >;
-    const list = all[filePath] || [];
-    list.unshift(c);
-    all[filePath] = list.slice(0, 100);
-    localStorage.setItem(COMMENT_KEY, JSON.stringify(all));
+    window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
   } catch {
     /* ignore */
   }
-  return c;
+  return a;
 }
 
-export function removeFileComment(filePath: string, id: string): void {
+export function countPendingFileAnnotations(): number {
+  return pendingAnnotations.length;
+}
+
+export function peekPendingFileAnnotations(): PendingFileAnnotation[] {
+  return [...pendingAnnotations];
+}
+
+/** 取出并清空待发送批注（发送用户消息时调用） */
+export function takePendingFileAnnotations(): PendingFileAnnotation[] {
+  const list = pendingAnnotations;
+  pendingAnnotations = [];
   try {
-    const all = JSON.parse(localStorage.getItem(COMMENT_KEY) || '{}') as Record<
-      string,
-      FileComment[]
-    >;
-    all[filePath] = (all[filePath] || []).filter((c) => c.id !== id);
-    localStorage.setItem(COMMENT_KEY, JSON.stringify(all));
+    window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
   } catch {
     /* ignore */
   }
+  return list;
+}
+
+/** 格式化为注入模型的上下文块 */
+export function formatAnnotationsForModel(list: PendingFileAnnotation[]): string {
+  if (!list.length) return '';
+  const parts = list.map((a, i) => {
+    const path = a.path;
+    const sel = a.selectedText.length > 800 ? `${a.selectedText.slice(0, 800)}…` : a.selectedText;
+    return [
+      `### 文件批注 ${i + 1}`,
+      `路径: ${path}`,
+      `选中内容:`,
+      '```',
+      sel,
+      '```',
+      `用户批注: ${a.text}`,
+    ].join('\n');
+  });
+  return (
+    `<file_annotations>\n以下批注来自用户在文件面板中对选区的标注，请优先参考。\n\n` +
+    parts.join('\n\n') +
+    `\n</file_annotations>`
+  );
 }
 
 /** 面板尚未挂载时暂存待打开路径 */
