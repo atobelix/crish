@@ -994,13 +994,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   return (
                     <div
                       key={p.id}
-                      className="settings-card-row"
+                      className={`settings-card-row${isActive ? ' is-active' : ''}`}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
                         gap: 10,
-                        borderColor: isActive ? 'var(--accent-color)' : undefined,
-                        boxShadow: isActive ? '0 0 0 1px color-mix(in srgb, var(--accent-color) 35%, transparent)' : undefined,
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -1407,7 +1405,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                           </div>
                           <button
                             type="button"
-                            className="ui-btn ui-btn-success-solid ui-btn-sm"
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
                             style={{ alignSelf: 'flex-end' }}
                             onClick={() => {
                               const cmdEl = document.getElementById(`mcp-cmd-${srv.id}`) as HTMLInputElement;
@@ -1583,7 +1581,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       position: 'absolute',
                       inset: 0,
                       backgroundColor: settings.enableSkillCommands
-                        ? 'var(--accent-green)'
+                        ? 'var(--text-secondary)'
                         : 'var(--border-color)',
                       borderRadius: 18,
                     }}
@@ -1657,7 +1655,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleAddSkill}
-                  className="ui-btn ui-btn-success-solid ui-btn-sm"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
                 >
                   添加
                 </button>
@@ -1668,7 +1666,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {activeTab === 'usage' && (
             <>
               <div style={{ marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>用量总览</h4>
+                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>用量总览</h4>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>
                   优先使用引擎 run snapshot 的 token 样本；无样本时回退字数估算。费用按下方定价表计算。
                 </p>
@@ -1703,7 +1701,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               })()}
 
               <div style={{ marginTop: 20 }}>
-                <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600 }}>定价表（每百万 tokens）</h4>
+                <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>定价表（每百万 tokens）</h4>
                 <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-tertiary)' }}>
                   默认参考公开标价，可按你的渠道自行修改
                 </p>
@@ -1783,7 +1781,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }}
               >
                 <div>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>定时任务</h4>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>定时任务</h4>
                   <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
                     引擎 workflow：手动 / 每天 / 间隔。与运行状态悬浮条分离——这里是计划，悬浮条是当前执行。
                   </p>
@@ -2045,13 +2043,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {(settings.customRules || []).map((rule, idx) => (
-                    <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                        <span style={{ fontSize: '11.5px', color:  'var(--text-primary)' , lineHeight: '1.4' }}>{rule}</span>
+                    <div key={idx} className="settings-card-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--text-primary)', lineHeight: '1.4' }}>{rule}</span>
                       </div>
                       <button
+                        type="button"
                         onClick={() => handleDeleteCustomRule(idx)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', marginLeft: '12px' }}
+                        className="ui-btn ui-btn-ghost danger"
+                        style={{ marginLeft: 12, flexShrink: 0 }}
                         title="删除规则"
                       >
                         <Lucide.Trash2 size={12} />
@@ -2059,7 +2059,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     </div>
                   ))}
                   {(settings.customRules || []).length === 0 && (
-                    <div style={{ fontSize: '11px', color:  'var(--text-tertiary)' , textAlign: 'center', padding: '24px', border: '1px dashed #ededed', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '24px', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
                       暂无细化规范，请在下方输入框添加日常开发的零碎规范。
                     </div>
                   )}
@@ -2067,7 +2067,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
 
               {/* Add Custom Rule Form */}
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="settings-card-row" style={{ gap: 10 }}>
                 <span className="settings-field-label">添加新规范</span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
@@ -2075,12 +2075,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     placeholder="输入规则内容，例如: 提交代码前确保完成 lint 测试"
                     value={newRuleText}
                     onChange={e => setNewRuleText(e.target.value)}
-                    style={{ flex: 1, height: '30px', padding: '0 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '11px', background: 'var(--bg-primary)', outline: 'none', boxSizing: 'border-box' }}
+                    className="settings-field-input"
+                    style={{ flex: 1 }}
                   />
                   <button
                     type="button"
                     onClick={handleAddCustomRule}
-                    className="ui-btn ui-btn-success-solid ui-btn-sm"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
                   >
                     添加
                   </button>
@@ -2097,7 +2098,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <p style={{ fontSize: '10px', color:  'var(--text-tertiary)' , marginTop: '2px', margin: 0 }}>查看与自定义系统操作中的主要快捷键。</p>
               </div>
 
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="settings-card-row" style={{ gap: 12 }}>
                 <span className="settings-field-label">系统核心快捷键</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {[
@@ -2474,12 +2475,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       {showAddMcpModal && (
         <div className="custom-modal-backdrop" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 20000,
+          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 20000,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
-            width: '460px', background: 'var(--bg-primary)', borderRadius: '12px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '460px', background: 'var(--bg-elevated, var(--bg-primary))', borderRadius: '12px',
+            boxShadow: 'var(--shadow-2xl)',
             border: '1px solid var(--border-color)', overflow: 'hidden', display: 'flex', flexDirection: 'column'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
@@ -2578,12 +2579,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       {showAddPluginModal && (
         <div className="custom-modal-backdrop" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 20000,
+          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 20000,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
-            width: '460px', background: 'var(--bg-primary)', borderRadius: '12px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '460px', background: 'var(--bg-elevated, var(--bg-primary))', borderRadius: '12px',
+            boxShadow: 'var(--shadow-2xl)',
             border: '1px solid var(--border-color)', overflow: 'hidden', display: 'flex', flexDirection: 'column'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
@@ -2655,12 +2656,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       {editingRuleFileType && (
         <div className="custom-modal-backdrop" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 20000,
+          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 20000,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
-            width: '580px', background: 'var(--bg-primary)', borderRadius: '12px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '580px', background: 'var(--bg-elevated, var(--bg-primary))', borderRadius: '12px',
+            boxShadow: 'var(--shadow-2xl)',
             border: '1px solid var(--border-color)', overflow: 'hidden', display: 'flex', flexDirection: 'column'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
@@ -2680,6 +2681,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </p>
               
               <textarea
+                className="settings-field-input"
                 value={editingRuleFileType === 'global' ? globalRules : projectRules}
                 onChange={e => {
                   if (editingRuleFileType === 'global') {
@@ -2690,9 +2692,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }}
                 rows={12}
                 style={{
-                  width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '6px',
-                  fontSize: '11px', fontFamily: 'var(--font-mono)', background: 'var(--bg-primary)', color:  'var(--text-primary)' ,
-                  outline: 'none', resize: 'vertical', boxSizing: 'border-box'
+                  width: '100%',
+                  minHeight: 220,
+                  height: 'auto',
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  resize: 'vertical',
+                  lineHeight: 1.5,
                 }}
               />
 

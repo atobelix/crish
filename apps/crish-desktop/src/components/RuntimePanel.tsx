@@ -44,9 +44,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
-  const [bgExpanded, setBgExpanded] = useState<string | null>(null);
-  const [bgDetail, setBgDetail] = useState('');
-  const [bgLoading, setBgLoading] = useState(false);
+  const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -227,7 +225,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         ) : (
           <div className="rt-list">
             {liveTasks.map((wk) => (
-              <div key={wk.id} className="rt-row">
+              <div key={wk.id} className="rt-row is-live">
                 <div className="rt-row-main">
                   <div className="loading-spinner rt-spinner" />
                   <div className="rt-row-text">
@@ -248,65 +246,53 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         ) : (
           <div className="rt-list">
             {bgTasks.map((t) => (
-              <div key={t.id}>
-                <div
-                  className="rt-row is-clickable"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    void (async () => {
-                      if (bgExpanded === t.id) {
-                        setBgExpanded(null);
-                        setBgDetail('');
-                        return;
-                      }
-                      setBgExpanded(t.id);
-                      setBgLoading(true);
-                      try {
-                        const out = await getBackgroundTaskOutput(t.id);
-                        setBgDetail(out || t.summary || t.command || '（无输出）');
-                      } catch {
-                        setBgDetail(t.summary || t.command || '读取失败');
-                      } finally {
-                        setBgLoading(false);
-                      }
-                    })();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.currentTarget as HTMLElement).click();
-                  }}
-                >
-                  <div className="rt-row-main">
-                    <Lucide.Server size={13} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                    <div className="rt-row-text">
-                      <span className="rt-row-title">{t.label}</span>
-                      <span className="rt-row-meta">
-                        {t.state}
-                        {t.command ? ` · ${t.command.slice(0, 40)}` : ''}
-                      </span>
-                    </div>
+              <div
+                key={t.id}
+                className={`rt-row is-clickable${bgOpeningId === t.id ? ' is-opening' : ''}`}
+                role="button"
+                tabIndex={0}
+                title="在终端中查看输出"
+                onClick={() => {
+                  if (bgOpeningId) return;
+                  void (async () => {
+                    setBgOpeningId(t.id);
+                    try {
+                      const out = await getBackgroundTaskOutput(t.id);
+                      openBackgroundTaskInTerminal(
+                        t.label,
+                        out || t.summary || t.command || '（无输出）',
+                      );
+                      onShowToast('已在终端面板打开详情');
+                    } catch {
+                      openBackgroundTaskInTerminal(
+                        t.label,
+                        t.summary || t.command || '读取失败',
+                      );
+                      onShowToast('已在终端面板打开详情');
+                    } finally {
+                      setBgOpeningId(null);
+                    }
+                  })();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLElement).click();
+                  }
+                }}
+              >
+                <div className="rt-row-main">
+                  <Lucide.Terminal size={13} className="rt-row-ico" />
+                  <div className="rt-row-text">
+                    <span className="rt-row-title">{t.label}</span>
+                    <span className="rt-row-meta">
+                      {bgOpeningId === t.id
+                        ? '打开中…'
+                        : `${t.state}${t.command ? ` · ${t.command.slice(0, 40)}` : ''}`}
+                    </span>
                   </div>
                 </div>
-                {bgExpanded === t.id ? (
-                  <div className="rt-bg-detail">
-                    {bgLoading ? '加载中…' : bgDetail}
-                    {!bgLoading ? (
-                      <div style={{ marginTop: 8 }}>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openBackgroundTaskInTerminal(t.label, bgDetail);
-                            onShowToast('已在终端面板打开详情');
-                          }}
-                        >
-                          在终端中打开
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                <Lucide.ChevronRight size={13} className="rt-row-chevron" />
               </div>
             ))}
           </div>
@@ -320,7 +306,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             {pendingApprovals.map((a, i) => (
               <div key={a.toolCallId || i} className="rt-row">
                 <div className="rt-row-main">
-                  <Lucide.Shield size={13} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                  <span className="rt-dot warn" aria-hidden />
                   <div className="rt-row-text">
                     <span className="rt-row-title">{a.toolName || '工具'}</span>
                     <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>

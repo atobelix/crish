@@ -109,7 +109,10 @@ export const TerminalCard: React.FC = () => {
       </div>
       <div className="term-body">
         {terminalLines.length === 0 ? (
-          <div className="term-empty">助手执行命令后的输出会出现在这里</div>
+          <div className="term-empty">
+            <div className="term-empty-title">助手命令输出镜像</div>
+            <div className="term-empty-desc">Shell 等命令的结果会同步到此，不在主对话刷屏</div>
+          </div>
         ) : (
           terminalLines.map((line, i) => (
             <div key={i} className={`term-line ${line.startsWith('$') ? 'is-cmd' : ''}`}>

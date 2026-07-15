@@ -14,6 +14,7 @@ import {
   formatSessionListTime,
   sessionLastActivityMs,
 } from '../api/sessionTime';
+import { sessionListDisplayTitle } from '../api/sessionTitle';
 
 interface SidebarProps {
   onShowToast: (message: string, onUndo?: () => void) => void;
@@ -87,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [activeDragItem, setActiveDragItem] = useState<DragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
   const [projects, setProjects] = useState<ProjectEntry[]>(() => listProjects());
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => getActiveProjectId());
+  const [, setActiveProjectId] = useState<string | null>(() => getActiveProjectId());
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false);
   const [generalCollapsed, setGeneralCollapsed] = useState(false);
@@ -159,12 +160,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         break;
       case 'archive':
         archiveSession(sessionId);
-        onShowToast(`已归档: ${targetSession.title}`, () => {
+        onShowToast(`已归档: ${sessionListDisplayTitle(targetSession)}`, () => {
           unarchiveSession(sessionId);
         });
         break;
       case 'branch': {
-        const newTitle = `${targetSession.title} - 分支`;
+        const newTitle = `${sessionListDisplayTitle(targetSession)} - 分支`;
         branchSession(sessionId, newTitle);
         break;
       }
@@ -193,13 +194,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const q = searchQuery.trim().toLowerCase();
   if (q) {
     visibleSessions = visibleSessions.filter(
-      (s) => s.title.toLowerCase().includes(q) || s.folder.toLowerCase().includes(q),
+      (s) =>
+        sessionListDisplayTitle(s).toLowerCase().includes(q) ||
+        s.title.toLowerCase().includes(q) ||
+        s.folder.toLowerCase().includes(q),
     );
   }
 
   const sortedSessions =
     sortType === 'name'
-      ? [...visibleSessions].sort((a, b) => a.title.localeCompare(b.title))
+      ? [...visibleSessions].sort((a, b) =>
+          sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b)),
+        )
       : [...visibleSessions].sort(
           (a, b) => sessionLastActivityMs(b) - sessionLastActivityMs(a),
         );
@@ -337,7 +343,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const renderSessionItem = (s: SessionState, isDraggable: boolean = true) => {
     const isBranched = !!s.branchParentId;
-    const displayText = isBranched ? `分支: ${s.title.replace(/ - 分支$/, '')}` : s.title;
+    const baseTitle = sessionListDisplayTitle(s);
+    const displayText = isBranched ? `分支: ${baseTitle.replace(/ - 分支$/, '')}` : baseTitle;
     const isDraggingThis = activeDragItem?.type === 'session' && activeDragItem.sessionId === s.id;
     const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
     const agents = s.agents || [];

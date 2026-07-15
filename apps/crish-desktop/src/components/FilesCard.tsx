@@ -272,7 +272,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
   if (!root) {
     return (
       <div className="files-card">
-        <div className="files-empty">请先在侧栏选择项目</div>
+        <div className="files-empty">
+          <div className="files-empty-title">未选择项目</div>
+          <div className="files-empty-sub">请先在侧栏选择项目工作区</div>
+        </div>
       </div>
     );
   }
@@ -500,9 +503,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             {loading ? (
               <div className="files-empty">加载中…</div>
             ) : error && !entries.length ? (
-              <div className="files-empty files-empty--err">{error}</div>
+              <div className="files-empty files-empty--err">
+                <div className="files-empty-title">无法读取目录</div>
+                <div className="files-empty-sub">{error}</div>
+              </div>
             ) : flatTree.length === 0 ? (
-              <div className="files-empty">空目录或无匹配项</div>
+              <div className="files-empty">
+                {filter.trim() ? '无匹配项' : '空目录'}
+              </div>
             ) : (
               flatTree.map((e) => (
                 <div
@@ -569,7 +577,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
               {detailLoading ? (
                 <div className="files-empty">读取中…</div>
               ) : error && !content && !assetUrl ? (
-                <div className="files-empty files-empty--err">{error}</div>
+                <div className="files-empty files-empty--err">
+                  <div className="files-empty-title">无法预览</div>
+                  <div className="files-empty-sub">{error}</div>
+                </div>
               ) : kind === 'image' && assetUrl ? (
                 <div className="files-preview-media">
                   <img src={assetUrl} alt={pathBasename(selected || '')} />
@@ -622,8 +633,8 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
             </div>
 
             {selText && !editing ? (
-              <div className="files-sel-bar">
-                <div className="files-sel-preview">
+              <div className="files-sel-bar" role="region" aria-label="选区批注">
+                <div className="files-sel-preview" title={selText}>
                   {selText.length > 120 ? `${selText.slice(0, 120)}…` : selText}
                 </div>
                 <div className="files-sel-form">
@@ -659,7 +670,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ onShowToast, initialPath }
                     取消
                   </button>
                 </div>
-                <div className="files-sel-hint">批注随下一条消息发给模型</div>
+                <div className="files-sel-hint">随下一条消息发给模型 · Esc 取消</div>
               </div>
             ) : null}
           </div>

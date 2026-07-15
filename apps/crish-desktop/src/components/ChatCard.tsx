@@ -45,6 +45,10 @@ import {
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import {
+  deriveSessionTitle,
+  isDefaultSessionTitle,
+} from '../api/sessionTitle';
+import {
   extractFilePathFromToolArgs,
   formatAnnotationsForModel,
   openFileInPanel,
@@ -275,11 +279,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
     handleGlobalTabClick(panelId);
   };
 
-  const deriveSessionTitle = (text: string) => {
-    const cleaned = text.replace(/\s+/g, ' ').trim();
-    if (!cleaned) return '新会话';
-    return cleaned.length > 28 ? `${cleaned.slice(0, 28)}…` : cleaned;
-  };
+
 
   // Smart auto-scroll refs
   const chatFlowRef = useRef<HTMLDivElement>(null);
@@ -776,12 +776,16 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       useLayoutStore.getState().sessions.find((s) => s.id === sessionId)?.messages || [];
     const isAiBusy = sessMsgs.some((m) => m.status === 'processing');
 
-    // Auto-title empty / default sessions from first user turn
-    const priorUserMsgs = sessMsgs.filter((m) => m.sender === 'user').length;
-    if (priorUserMsgs === 0) {
+    // 标题仍为默认时自动命名（首条优先；不覆盖用户手动 rename）
+    {
       const sess = useLayoutStore.getState().sessions.find((s) => s.id === sessionId);
-      if (sess && (!sess.title || sess.title === '新会话' || sess.title.startsWith('新会话'))) {
-        renameSession(sessionId, deriveSessionTitle(rawInput));
+      if (sess && isDefaultSessionTitle(sess.title)) {
+        const priorUser = sessMsgs.find((m) => m.sender === 'user' && (m.text || '').trim());
+        const seed = (priorUser?.text || rawInput).trim();
+        const nextTitle = deriveSessionTitle(seed);
+        if (!isDefaultSessionTitle(nextTitle)) {
+          renameSession(sessionId, nextTitle);
+        }
       }
     }
 

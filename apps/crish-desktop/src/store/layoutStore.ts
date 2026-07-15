@@ -6,6 +6,7 @@ import { hydrateSessionsFromDisk, persistAllSessions } from '../api/sessionPersi
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import { normalizePermissionMode, type PermissionMode } from '../api/permissionModes';
 import { normalizeAssistantTimeline } from '../api/toolPresentation';
+import { fillDefaultSessionTitles, maybeAutoTitleFromMessages } from '../api/sessionTitle';
 
 export interface CardState {
   id: string; // 'plan' | 'preview' | 'diff' | 'tasks' | 'terminal'
@@ -564,12 +565,14 @@ function seedSessions(): { sessions: SessionState[]; activeSessionId: string; fo
 }
 
 function populateBlocksForSessions(sessions: SessionState[]): SessionState[] {
-  return sessions.map((sess) => ({
+  const normalized = sessions.map((sess) => ({
     ...sess,
     messages: sess.messages.map((msg) =>
       msg.sender === 'assistant' ? normalizeAssistantTimeline(msg) : msg,
     ),
   }));
+  // 磁盘/演示种子：默认标题且已有用户消息 → 补短标题
+  return fillDefaultSessionTitles(normalized);
 }
 
 const _seed = seedSessions();
@@ -809,15 +812,16 @@ export const useLayoutStore = create<LayoutStore>()(
       }
     }),
     setSessions: (sessions) => set((state) => {
-      state.sessions = sessions;
+      // 合并远程后补默认标题（有消息则推导）
+      state.sessions = fillDefaultSessionTitles(sessions);
       // 合并远程会话后补齐侧栏分组顺序
-      for (const s of sessions) {
+      for (const s of state.sessions) {
         if (s.folder && !state.folderOrder.includes(s.folder)) {
           state.folderOrder.push(s.folder);
         }
       }
       // 活动会话若已被移除则清空（回到空态）
-      if (state.activeSessionId && !sessions.some((s) => s.id === state.activeSessionId)) {
+      if (state.activeSessionId && !state.sessions.some((s) => s.id === state.activeSessionId)) {
         state.activeSessionId = '';
       }
     }),
@@ -1012,11 +1016,15 @@ export const useLayoutStore = create<LayoutStore>()(
                   // 水合期间用户可能已发消息，勿覆盖非空
                   if (s.messages && s.messages.length > 0) {
                     s.hydratedFromEngine = true;
+                    const auto = maybeAutoTitleFromMessages(s.title, s.messages);
+                    if (auto) s.title = auto;
                     return;
                   }
                   if (res.messages.length > 0) {
                     s.messages = res.messages;
                     s.timestamp = '远程';
+                    const auto = maybeAutoTitleFromMessages(s.title, res.messages);
+                    if (auto) s.title = auto;
                   }
                   s.engineCursor = res.nextAfterSequence;
                   if (res.lastRunId) s.engineLastRunId = res.lastRunId;

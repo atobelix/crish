@@ -7,6 +7,7 @@ import { getDesktopDaemonClient } from './daemonClient';
 import { logInternalError } from './userFacingErrors';
 import type { SessionState } from '../store/layoutStore';
 import { GENERAL_FOLDER, listProjects } from './projectStore';
+import { isDefaultSessionTitle, maybeAutoTitleFromMessages } from './sessionTitle';
 
 type DaemonSession = {
   id?: string;
@@ -24,11 +25,13 @@ function asId(s: DaemonSession): string | null {
 }
 
 function asTitle(s: DaemonSession): string {
-  return (
+  const raw =
     (typeof s.title === 'string' && s.title.trim()) ||
     (typeof s.name === 'string' && s.name.trim()) ||
-    '会话'
-  );
+    '';
+  // 引擎无标题时用「新会话」，避免侧栏长期卡在空的「会话」
+  if (!raw || raw === '会话') return '新会话';
+  return raw;
 }
 
 /** 远程 cwd 映射到用户项目 id；匹配不上则归入对话区 */
@@ -93,8 +96,11 @@ export function mergeDaemonSessions(
     if (!id) continue;
     const existing = byId.get(id);
     if (existing) {
-      if (!existing.title || existing.title === '新会话') {
-        existing.title = asTitle(r);
+      // 仅补默认标题；本地已有用户消息时优先从消息推导
+      if (isDefaultSessionTitle(existing.title)) {
+        const fromMsgs = maybeAutoTitleFromMessages(existing.title, existing.messages);
+        const remoteTitle = asTitle(r);
+        existing.title = fromMsgs || (isDefaultSessionTitle(remoteTitle) ? existing.title || '新会话' : remoteTitle);
       }
       // 本地仍是 GENERAL 且远程能映射到项目时，补绑定
       if (
@@ -122,7 +128,11 @@ export function mergeDaemonSessions(
   for (const [id, s] of byId) {
     if (!localIds.has(id)) merged.push(s);
   }
-  return merged;
+  // 合并后：默认标题 + 本地消息 → 再推导一次
+  return merged.map((s) => {
+    const t = maybeAutoTitleFromMessages(s.title, s.messages);
+    return t ? { ...s, title: t } : s;
+  });
 }
 
 export async function syncSessionsFromDaemon(
