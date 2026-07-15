@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useLayoutStore } from './store/layoutStore';
 import { clientApi } from './api/clientApi';
 import { ensureDaemonConnected } from './api/daemonChatBridge';
@@ -13,8 +13,12 @@ import {
 import { Sidebar } from './components/Sidebar';
 import { Workspace } from './components/Workspace';
 import * as Lucide from 'lucide-react';
-import { SettingsPanel, type SettingsTabType } from './components/SettingsPanel';
+import type { SettingsTabType } from './components/SettingsPanel';
 import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
+
+const SettingsPanel = lazy(() =>
+  import('./components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })),
+);
 
 /** Devtools / internal globals attached to window (no `as any`) */
 type CrishWindow = Window & {
@@ -500,12 +504,28 @@ function App() {
       {/* 设置：全覆盖工作区（非居中弹窗），便于留白与长表单 */}
       {showSettingsOverlay && (
         <div className="settings-cover" role="dialog" aria-modal="true" aria-label="设置">
-          <SettingsPanel
-            wsId={activeWorkspace?.id || 'ws-0'}
-            onShowToast={handleShowToast}
-            onClose={() => setShowSettingsOverlay(false)}
-            initialTab={settingsActiveTab as SettingsTabType}
-          />
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  width: '100%',
+                }}
+              >
+                加载设置…
+              </div>
+            }
+          >
+            <SettingsPanel
+              wsId={activeWorkspace?.id || 'ws-0'}
+              onShowToast={handleShowToast}
+              onClose={() => setShowSettingsOverlay(false)}
+              initialTab={settingsActiveTab as SettingsTabType}
+            />
+          </Suspense>
         </div>
       )}
     </div>

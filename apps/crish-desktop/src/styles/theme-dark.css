@@ -100,25 +100,25 @@ html[data-theme="dark"] .tool-result-body {
 
 /* Active rows use color-mix(text-primary) in shell.css — theme-agnostic, no dark rgba override */
 
-/* Settings surfaces — avoid white islands */
+/* Settings surfaces — 透明底 + 细边，避免 tertiary 灰块叠层 */
 html[data-theme="dark"] .settings-field-input,
 html[data-theme="dark"] textarea.settings-field-input,
 html[data-theme="dark"] select.settings-field-input {
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-primary);
   border-color: var(--border-color);
 }
 
 html[data-theme="dark"] .settings-card-row {
-  background: var(--bg-elevated);
+  background: transparent;
   border-color: var(--border-subtle);
   color: var(--text-primary);
 }
 
 html[data-theme="dark"] .settings-card-row.is-active {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-color: var(--border-color);
-  box-shadow: 0 0 0 1px var(--border-color);
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .shortcut-key-btn {
@@ -145,12 +145,13 @@ html[data-theme="dark"] .custom-modal-backdrop > div {
   border-color: var(--border-color);
 }
 
-/* Unified form / segment surfaces
- * 与上方 settings-card-row 细调并存：此处 tertiary 覆盖用于 form 群组统一 */
+/* Unified form / segment：输入透明；segment 保留轻底便于区分 */
 html[data-theme="dark"] .settings-card-row,
 html[data-theme="dark"] .settings-field-input,
 html[data-theme="dark"] textarea.settings-field-input,
-html[data-theme="dark"] select.settings-field-input,
+html[data-theme="dark"] select.settings-field-input {
+  background-color: transparent;
+}
 html[data-theme="dark"] .ui-input,
 html[data-theme="dark"] .search-bar,
 html[data-theme="dark"] .ui-segment {
@@ -235,10 +236,11 @@ html[data-theme="dark"] th {
   background: var(--bg-tertiary);
 }
 
-html[data-theme="dark"] .settings-back-btn {
-  background: var(--bg-tertiary);
+html[data-theme="dark"] .settings-back-btn,
+html[data-theme="dark"] .settings-nav-back {
+  background: transparent;
   color: var(--text-primary);
-  border-color: var(--border-subtle);
+  border-color: transparent;
 }
 
 /* settings cover 壳层 */
@@ -263,7 +265,7 @@ html[data-theme="dark"] .settings-select-menu {
 }
 
 html[data-theme="dark"] .settings-select-trigger {
-  background: var(--bg-tertiary);
+  background: transparent;
   border-color: var(--border-subtle);
 }
 
