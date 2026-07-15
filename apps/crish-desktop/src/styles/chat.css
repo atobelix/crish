@@ -4342,6 +4342,20 @@
   -webkit-box-orient: vertical;
 }
 .sched-item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.sched-runs {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.sched-runs-h {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+.sched-run-item .sched-item-name {
+  font-weight: 500;
+}
 
 
 /* 短思考：不折叠；与折叠思考同策略 — 无背景/边框/卡片感，tertiary 克制 */
