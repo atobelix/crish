@@ -1042,7 +1042,7 @@ select.settings-field-input {
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
+  background: transparent;
 }
 .models-rail-list {
   flex: 1;
@@ -1399,7 +1399,7 @@ select.settings-field-input {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1481,7 +1481,7 @@ select.settings-field-input {
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1609,7 +1609,7 @@ select.settings-field-input {
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
+  background: transparent;
 }
 .skills-rail-list {
   flex: 1;
@@ -1840,11 +1840,7 @@ select.settings-field-input {
   padding: 14px 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-tertiary) 55%, transparent) 0%,
-    color-mix(in srgb, var(--bg-secondary) 30%, transparent) 100%
-  );
+  background: transparent;
   overflow-y: auto;
   font-size: var(--font-size-sm);
   line-height: 1.55;
@@ -1968,7 +1964,10 @@ select.settings-field-input {
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 12px 14px;
-  background: var(--bg-secondary);
+  background: transparent;
+}
+.mcp-card:hover {
+  background: var(--bg-hover);
 }
 .mcp-card-top {
   display: flex;
@@ -2083,7 +2082,7 @@ select.settings-field-input {
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;

@@ -172,4 +172,99 @@ describe('collectMessageDiffs (change overview path)', () => {
     };
     expect(collectMessageDiffs(msg)).toEqual([]);
   });
+
+  it('prefers structured tc.diffs over re-parsing edit args', () => {
+    // 引擎已写入结构化 diffs 时，不应再用 arguments 二次合成（数值以 structured 为准）
+    const structured = {
+      filePath: 'src/prefer.ts',
+      additions: 3,
+      deletions: 1,
+      changes: [
+        { type: 'deletion' as const, content: 'old' },
+        { type: 'addition' as const, content: 'a' },
+        { type: 'addition' as const, content: 'b' },
+        { type: 'addition' as const, content: 'c' },
+      ],
+    };
+    const msg: SessionMessage = {
+      id: 'a3',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      status: 'completed',
+      toolCalls: [
+        {
+          id: 't3',
+          name: 'search_replace',
+          arguments: JSON.stringify({
+            path: 'src/prefer.ts',
+            old_string: 'x',
+            new_string: 'y',
+          }),
+          status: 'success',
+          output: 'OK',
+          diffs: [structured],
+        },
+      ],
+    };
+    const files = collectMessageDiffs(msg);
+    expect(files.length).toBe(1);
+    expect(files[0].filePath).toBe('src/prefer.ts');
+    expect(files[0].additions).toBe(3);
+    expect(files[0].deletions).toBe(1);
+    expect(files[0].changes).toEqual(structured.changes);
+  });
+
+  it('merges same path across toolCalls and keeps distinct files', () => {
+    const msg: SessionMessage = {
+      id: 'a4',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      status: 'completed',
+      toolCalls: [
+        {
+          id: 't4a',
+          name: 'search_replace',
+          arguments: JSON.stringify({
+            path: 'src/shared.ts',
+            old_string: 'one',
+            new_string: 'two',
+          }),
+          status: 'success',
+          output: 'OK',
+        },
+        {
+          id: 't4b',
+          name: 'search_replace',
+          arguments: JSON.stringify({
+            path: 'src/shared.ts',
+            old_string: 'alpha',
+            new_string: 'beta\ngamma',
+          }),
+          status: 'success',
+          output: 'OK',
+        },
+        {
+          id: 't4c',
+          name: 'write_file',
+          arguments: JSON.stringify({
+            path: 'src/other.ts',
+            content: 'line1\nline2',
+          }),
+          status: 'success',
+          output: '写入成功',
+        },
+      ],
+    };
+    const files = collectMessageDiffs(msg);
+    const byPath = Object.fromEntries(files.map((f) => [f.filePath, f]));
+    expect(Object.keys(byPath).sort()).toEqual(['src/other.ts', 'src/shared.ts']);
+    // 同路径两次 edit：additions/deletions 累加
+    expect(byPath['src/shared.ts'].additions).toBe(1 + 2);
+    expect(byPath['src/shared.ts'].deletions).toBe(1 + 1);
+    expect(byPath['src/shared.ts'].changes.length).toBeGreaterThanOrEqual(2);
+    expect(byPath['src/other.ts'].additions).toBe(2);
+    expect(byPath['src/other.ts'].deletions).toBe(0);
+  });
 });
