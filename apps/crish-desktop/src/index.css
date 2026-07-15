@@ -1131,14 +1131,28 @@ body {
 .tabs-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1;
+  gap: 2px;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   height: 100%;
   /* 横向滚动条贴近内容，中键滚动在 JS 中禁用 */
   scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabs-bar::-webkit-scrollbar {
+  height: 3px;
+}
+.tabs-bar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 999px;
+}
+.tabs-bar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .card-tab {
@@ -1152,18 +1166,19 @@ body {
   color: var(--text-secondary);
   background-color: transparent;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
   user-select: none;
   white-space: nowrap;
   border: none;
   height: var(--control-height);
+  flex: 0 0 auto;
 }
 
 /* 右侧工具标签：整行文字+图标（Obsidian 式），避免仅图标误点关闭 */
 .card-tab.card-tab--tool {
-  padding: 0 10px 0 8px;
-  min-width: 0;
-  max-width: 160px;
+  padding: 0 8px 0 8px;
+  min-width: 72px;
+  max-width: min(200px, 40vw);
   width: auto;
   justify-content: flex-start;
   gap: 6px;
@@ -1175,8 +1190,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 110px;
+  max-width: 140px;
   font-size: var(--font-size-sm);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .card-tab.card-tab--tool.active {
   background-color: var(--bg-active);
@@ -1274,6 +1291,8 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .card-action-btn {
@@ -11746,4 +11765,112 @@ html[data-theme="dark"] .hljs-attr { color: #f9a8d4; }
 .overview-chip:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+.overview-chip.active {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: var(--bg-active);
+}
+.overview-plan-banner {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+}
+.overview-plan-banner-t {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.overview-plan-banner-t strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+.overview-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.overview-files-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.overview-files-meta {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-icon-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.overview-icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.overview-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.overview-hint {
+  margin: 6px 0 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+.git-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-top: 2px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+.git-badge.add {
+  color: var(--accent-green, #22c55e);
+  background: color-mix(in srgb, var(--accent-green, #22c55e) 14%, transparent);
+}
+.git-badge.del {
+  color: var(--accent-red, #ef4444);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 14%, transparent);
+}
+.git-badge.mod {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+.git-badge.untracked {
+  color: var(--text-tertiary);
+}
+.git-badge.conflict {
+  color: var(--accent-red, #ef4444);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 18%, transparent);
+}
+@keyframes crish-spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: crish-spin 0.8s linear infinite;
 }

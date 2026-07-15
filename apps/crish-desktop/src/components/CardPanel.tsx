@@ -53,7 +53,7 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
-  // 文件 / 终端：外部入口先展开右侧对应面板
+  // 文件 / 终端 / 总览：外部入口先展开右侧对应面板
   React.useEffect(() => {
     const onOpenFile = () => {
       handleGlobalTabClick('files');
@@ -61,11 +61,16 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     const onOpenTerm = () => {
       handleGlobalTabClick('terminal');
     };
+    const onOpenOverview = () => {
+      handleGlobalTabClick('overview');
+    };
     window.addEventListener('crish-open-file', onOpenFile);
     window.addEventListener('crish-open-terminal', onOpenTerm);
+    window.addEventListener('crish-open-overview', onOpenOverview);
     return () => {
       window.removeEventListener('crish-open-file', onOpenFile);
       window.removeEventListener('crish-open-terminal', onOpenTerm);
+      window.removeEventListener('crish-open-overview', onOpenOverview);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
@@ -904,9 +909,38 @@ export const CardPanel: React.FC<CardPanelProps> = ({
           />
         )}
         {activeCardId === 'plan' && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', gap: '8px', padding: '32px' }}>
-            <Lucide.Scroll size={24} style={{ opacity: 0.4 }} />
-            <span style={{ fontSize: '12px', textAlign: 'center', lineHeight: 1.5 }}>计划面板已移除。<br/>计划进度现在显示在输入栏上方的状态 Ribbon 中。</span>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              color: 'var(--text-tertiary)',
+              gap: 12,
+              padding: 32,
+              textAlign: 'center',
+            }}
+          >
+            <Lucide.ListTodo size={24} style={{ opacity: 0.4 }} />
+            <span style={{ fontSize: 13, lineHeight: 1.55, maxWidth: 280 }}>
+              计划进度已并入<strong style={{ color: 'var(--text-secondary)' }}>总览</strong>
+              （进行中步骤、计划模式确认、任务入口）。
+            </span>
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() => handleGlobalTabClick('overview')}
+            >
+              打开总览
+            </button>
+            <button
+              type="button"
+              className="overview-link"
+              onClick={() => handleGlobalTabClick('tasks')}
+            >
+              或打开任务面板
+            </button>
           </div>
         )}
       </div>

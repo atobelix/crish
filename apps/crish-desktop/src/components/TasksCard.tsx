@@ -100,7 +100,21 @@ export const TasksCard: React.FC = () => {
           >
             <Lucide.CheckSquare size={28} style={{ opacity: 0.35 }} />
             <div>任务列表尚未接入引擎计划</div>
-            <div style={{ fontSize: 12 }}>可手动添加备忘，或在对话中让助手拆解步骤。</div>
+            <div style={{ fontSize: 12, lineHeight: 1.55, maxWidth: 280 }}>
+              可手动添加备忘；进行中的工具步骤与计划模式状态见右侧
+              <strong style={{ color: 'var(--text-secondary)', fontWeight: 500 }}> 总览</strong>
+              。
+            </div>
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              style={{ marginTop: 4 }}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('crish-open-overview'));
+              }}
+            >
+              打开总览
+            </button>
           </div>
         )}
 

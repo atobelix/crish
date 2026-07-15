@@ -24,15 +24,9 @@ function App() {
   const {
     workspaces,
     activeWorkspaceIndex,
-    tabModeEnabled,
     uiSize,
     sidebarCollapsed,
-    panelsDropdownCoords,
-    setUiSize,
     setSidebarCollapsed,
-    setTabModeEnabled,
-    setPanelsDropdownCoords,
-    togglePanel,
     showSettingsOverlay,
     setShowSettingsOverlay,
     settingsActiveTab,
@@ -40,7 +34,6 @@ function App() {
   } = useLayoutStore();
 
   const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const activeWorkspace = workspaces[activeWorkspaceIndex];
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
@@ -78,20 +71,12 @@ function App() {
   const [isHoveredExpanded, setIsHoveredExpanded] = useState(false);
   const hoverTimeoutRef = useRef<any>(null);
 
-  const [autoFoldDelay, setAutoFoldDelay] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const current = (window as any).AUTO_FOLD_DELAY;
-      if (current !== undefined) return current;
-      (window as any).AUTO_FOLD_DELAY = 5000;
-      return 5000;
-    }
-    return 5000;
-  });
-
-  // Sync window.AUTO_FOLD_DELAY
+  // 工具自动折叠默认值（原面板菜单已移除；仍供内部读取）
   useEffect(() => {
-    (window as any).AUTO_FOLD_DELAY = autoFoldDelay;
-  }, [autoFoldDelay]);
+    if (typeof window !== 'undefined' && (window as any).AUTO_FOLD_DELAY === undefined) {
+      (window as any).AUTO_FOLD_DELAY = 5000;
+    }
+  }, []);
 
   // Initial load theme & settings sync
   useEffect(() => {
@@ -275,22 +260,6 @@ function App() {
     return () => window.removeEventListener('crish-pick-workspace', onPick);
   }, []);
 
-  // Click outside to close layout panels dropdown
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        const clickedBtn = (e.target as HTMLElement).closest('.panel-menu-btn');
-        if (!clickedBtn) {
-          setPanelsDropdownCoords(null);
-        }
-      }
-    };
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [setPanelsDropdownCoords]);
-
-
-
   const handleShowToast = useCallback((message: string, onUndo?: () => void) => {
     setToast({ message, onUndo });
     // Auto close toast after 5 seconds
@@ -299,33 +268,6 @@ function App() {
     }, 5000);
     return () => clearTimeout(timer);
   }, []);
-
-  // Check if a card is currently visible/open in the active workspace
-  const isPanelOpen = (key: string) => {
-    if (!activeWorkspace) return false;
-    return activeWorkspace.columns.some((col) =>
-      col.groups.some((g) => g.cards.some((c) => c.id === key))
-    );
-  };
-
-  const handleTogglePanel = (key: string) => {
-    if (!activeWorkspace) return;
-    const isCurrentlyOpen = isPanelOpen(key);
-    togglePanel(activeWorkspace.id, key, !isCurrentlyOpen);
-  };
-
-  const renderCardIcon = (id: string) => {
-    switch (id) {
-      case 'chat': return <Lucide.MessageSquare size={16} />;
-      case 'plan': return <Lucide.Scroll size={16} />;
-      case 'files': return <Lucide.FolderTree size={16} />;
-      case 'preview': return <Lucide.Globe size={16} />;
-      case 'diff': return <Lucide.GitBranch size={16} />;
-      case 'tasks': return <Lucide.CheckSquare size={16} />;
-      case 'terminal': return <Lucide.Terminal size={16} />;
-      default: return <Lucide.Layout size={16} />;
-    }
-  };
 
   // Product: never expose a "shell-only" workspace before engine is ready
   if (productShell && !engineReady) {
@@ -421,114 +363,6 @@ function App() {
           </div>
         </div>
       </header>
-
-      {/* Floating Panels Selector Dropdown */}
-      {panelsDropdownCoords && (
-        <div
-          ref={dropdownRef}
-          className="panel-dropdown open"
-          style={{
-            position: 'fixed',
-            left: `${panelsDropdownCoords.x}px`,
-            top: `${panelsDropdownCoords.y}px`,
-          }}
-        >
-          <div className="dropdown-header">
-            <Lucide.LayoutGrid size={16} />
-            <span>面板</span>
-            <button
-              type="button"
-              className="dropdown-close-btn"
-              onClick={() => setPanelsDropdownCoords(null)}
-            >
-              <Lucide.X size={14} />
-            </button>
-          </div>
-
-          <div className="dropdown-group" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
-            {(['files', 'preview', 'diff', 'terminal', 'tasks'] as const).map((key) => {
-              const labels: Record<string, string> = {
-                files: '文件',
-                preview: '浏览器',
-                diff: '差异',
-                terminal: '终端',
-                tasks: '任务',
-              };
-              const isOpen = isPanelOpen(key);
-              return (
-                <label
-                  key={key}
-                  className="dropdown-item"
-                  onClick={() => handleTogglePanel(key)}
-                >
-                  <span className={`custom-chk ${isOpen ? 'checked' : ''}`} />
-                  <span
-                    className="dropdown-item-icon-wrap"
-                    style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}
-                  >
-                    {renderCardIcon(key)}
-                  </span>
-                  <span>{labels[key]}</span>
-                </label>
-              );
-            })}
-          </div>
-
-          <div className="dropdown-group">
-            <label
-              className="dropdown-item"
-              onClick={() => setTabModeEnabled(!tabModeEnabled)}
-            >
-              <span className={`custom-chk ${tabModeEnabled ? 'checked' : ''}`} />
-              <Lucide.Layers size={16} style={{ color: 'var(--text-tertiary)' }} />
-              <span>优先合并为标签页</span>
-            </label>
-          </div>
-
-          <div className="dropdown-group">
-            <div className="dropdown-pref">
-              <span className="dropdown-pref-label">自动折叠</span>
-              <div className="ui-segment">
-                {[0, 3000, 5000, 10000].map((delayVal) => (
-                  <button
-                    key={delayVal}
-                    type="button"
-                    className={`ui-segment-item ${autoFoldDelay === delayVal ? 'active' : ''}`}
-                    onClick={() => {
-                      setAutoFoldDelay(delayVal);
-                      handleShowToast(
-                        delayVal === 0
-                          ? '已关闭工具自动折叠'
-                          : `自动折叠延迟 ${delayVal / 1000}s`,
-                      );
-                    }}
-                  >
-                    {delayVal === 0 ? '关' : `${delayVal / 1000}s`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="dropdown-pref">
-              <span className="dropdown-pref-label">间距密度</span>
-              <div className="ui-segment">
-                {(['small', 'medium', 'large'] as const).map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    className={`ui-segment-item ${uiSize === size ? 'active' : ''}`}
-                    onClick={() => setUiSize(size)}
-                  >
-                    {size === 'small' && '紧凑'}
-                    {size === 'medium' && '标准'}
-                    {size === 'large' && '宽松'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main content body with Sidebar and workspaces side by side */}
       <main

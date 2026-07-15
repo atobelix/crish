@@ -143,7 +143,6 @@ interface LayoutStore {
   panelAgentId: string | null;
   draggedTab: DraggedTabState | null;
   dropPreview: DropPreviewState | null;
-  panelsDropdownCoords: { x: number; y: number } | null;
   showSettingsOverlay: boolean;
   settingsActiveTab: string;
   permissionMode: PermissionMode;
@@ -167,7 +166,6 @@ interface LayoutStore {
     agentId: string,
     message: SessionMessage,
   ) => void;
-  setPanelsDropdownCoords: (coords: { x: number; y: number } | null) => void;
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: string) => void;
   openSettings: (tab?: string) => void;
@@ -599,7 +597,7 @@ export const useLayoutStore = create<LayoutStore>()(
     panelAgentId: null,
     draggedTab: null,
     dropPreview: null,
-    panelsDropdownCoords: null,
+
     showSettingsOverlay: false,
     settingsActiveTab: 'profile',
     permissionMode: (() => {
@@ -1036,7 +1034,6 @@ export const useLayoutStore = create<LayoutStore>()(
         }
       }
     },
-    setPanelsDropdownCoords: (coords) => set((state) => { state.panelsDropdownCoords = coords; }),
     setShowSettingsOverlay: (show) => set((state) => { state.showSettingsOverlay = show; }),
     setSettingsActiveTab: (tab) => set((state) => { state.settingsActiveTab = tab; }),
     openSettings: (tab) => set((state) => {

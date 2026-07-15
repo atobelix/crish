@@ -1,18 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
+import { fetchGitDiff, fetchGitStatus } from '../api/gitApi';
 
 interface DiffCardProps {
   onShowToast: (message: string) => void;
 }
 
-export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
+const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
   const diffFiles = useLayoutStore((s) => s.diffFiles);
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
+  const pushDiffFile = useLayoutStore((s) => s.pushDiffFile);
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
   const [diffSearchQuery, setDiffSearchQuery] = useState('');
+  const [gitLoading, setGitLoading] = useState(false);
 
   const fileList = useMemo(() => {
     if (diffFiles.length > 0) return diffFiles;
@@ -20,6 +23,53 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
   }, [diffFiles, activeDiffSource]);
 
   const current = activeDiffSource || fileList[0] || null;
+
+  const loadFromGit = useCallback(async () => {
+    setGitLoading(true);
+    try {
+      const status = await fetchGitStatus();
+      if (!status.found || status.files.length === 0) {
+        onShowToast(status.found ? '工作区无未提交变更' : '无法读取 Git 状态');
+        return;
+      }
+      const collected: typeof diffFiles = [];
+      // 优先批量 unstaged；失败则逐文件
+      const batch = await fetchGitDiff({});
+      if (batch.files.length > 0) {
+        for (const f of batch.files) {
+          pushDiffFile(f);
+          collected.push(f);
+        }
+      } else {
+        for (const gf of status.files.slice(0, 20)) {
+          const one = await fetchGitDiff({ path: gf.path });
+          for (const f of one.files) {
+            pushDiffFile(f);
+            collected.push(f);
+          }
+        }
+      }
+      if (collected.length > 0) {
+        setActiveDiffSource(collected[0]);
+        onShowToast(`已载入 ${collected.length} 个 Git 变更`);
+      } else {
+        // 占位列表
+        const placeholders = status.files.slice(0, 20).map((gf) => ({
+          filePath: gf.path,
+          additions: 0,
+          deletions: 0,
+          changes: [{ type: 'normal' as const, content: `（${gf.status}）暂无行级 diff` }],
+        }));
+        setDiffFiles(placeholders);
+        setActiveDiffSource(placeholders[0] || null);
+        onShowToast(`已列出 ${placeholders.length} 个变更文件`);
+      }
+    } catch {
+      onShowToast('从 Git 载入失败');
+    } finally {
+      setGitLoading(false);
+    }
+  }, [onShowToast, pushDiffFile, setActiveDiffSource, setDiffFiles]);
 
   const filteredChanges = useMemo(() => {
     if (!current) return [];
@@ -95,6 +145,15 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
               分栏
             </button>
           </div>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            title="从 Git 刷新"
+            disabled={gitLoading}
+            onClick={() => void loadFromGit()}
+          >
+            <Lucide.RefreshCw size={16} className={gitLoading ? 'spin' : ''} />
+          </button>
           {fileList.length > 0 && (
             <button
               type="button"
@@ -179,8 +238,17 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
               <Lucide.FileDiff size={28} style={{ opacity: 0.35 }} />
               <div>暂无变更可查看</div>
               <div style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 280 }}>
-                助手修改文件或产生 diff 后，会在此列出文件；可切换多文件对比。
+                助手修改文件后会在此列出；也可从 Git 工作区载入未提交变更。
               </div>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={gitLoading}
+                onClick={() => void loadFromGit()}
+                style={{ marginTop: 8 }}
+              >
+                {gitLoading ? '读取中…' : '从 Git 载入'}
+              </button>
             </div>
           ) : (
             <>
@@ -342,3 +410,5 @@ export const DiffCard: React.FC<DiffCardProps> = ({ onShowToast }) => {
     </div>
   );
 };
+
+export const DiffCard = React.memo(DiffCardInner);
