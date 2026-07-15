@@ -192,6 +192,53 @@ function AgentLaunchPad({
           }
         });
       },
+      onToolPendingApproval: (toolId, name, args, explanation) => {
+        patchAsst((m) => {
+          if (!m.toolCalls) m.toolCalls = [];
+          if (!m.blocks) m.blocks = [];
+          const existing = m.toolCalls.find((t) => t.id === toolId);
+          if (existing) {
+            existing.status = 'pending_approval';
+            existing.arguments = args || existing.arguments;
+            if (explanation) existing.explanation = explanation;
+          } else {
+            m.toolCalls.push({
+              id: toolId,
+              name,
+              arguments: args,
+              explanation,
+              status: 'pending_approval',
+            });
+            m.blocks.push({ type: 'tool_call', id: toolId });
+          }
+        });
+      },
+      onApprovalResolved: (toolId, decision) => {
+        patchAsst((m) => {
+          const tc = m.toolCalls?.find((t) => t.id === toolId);
+          if (!tc) return;
+          if (decision === 'allow') {
+            tc.status = 'running';
+            tc.output = '执行中…';
+          } else {
+            tc.status = 'error';
+            tc.output = '未获批准';
+          }
+        });
+      },
+      onRunError: (message) => {
+        patchAsst((m) => {
+          m.status = 'completed';
+          m.text = (m.text || '') + (m.text ? '\n' : '') + (message || '运行失败');
+          if (m.thinking === '正在处理…') m.thinking = '';
+        });
+        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
+          status: 'failed',
+          endedAt: Date.now(),
+          summary: message || '运行失败',
+        });
+        setBusy(false);
+      },
       onComplete: () => {
         patchAsst((m) => {
           m.status = 'completed';

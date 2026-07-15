@@ -2097,16 +2097,17 @@
 }
 .term-line {
   margin: 0;
+  color: var(--terminal-fg);
 }
 .term-line.is-cmd {
-  color: #c8c8c8;
+  color: var(--terminal-cmd);
 }
 .term-input-row {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px 8px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--terminal-border);
   flex-shrink: 0;
 }
 .term-prompt {

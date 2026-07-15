@@ -223,7 +223,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             title="分栏视图"
             onClick={() => setDiffViewMode('split')}
           >
-            <Lucide.Columns size={16} />
+            <Lucide.Columns2 size={16} />
           </button>
           <div className="diff-search">
             <Lucide.Search size={14} />
