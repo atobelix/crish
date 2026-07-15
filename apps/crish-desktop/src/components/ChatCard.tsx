@@ -665,11 +665,14 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             onProjectChanged={() => setProjectTick((n) => n + 1)}
             onSetChatInput={setChatInput}
             onWithdraw={(msgId, text) => {
+              // 撤回前停掉进行中的流，避免幽灵 run / 审批挂起
+              handleStopGeneration();
               setChatInput(text);
               withdrawMessage(wsId, activeSessionId, msgId);
             }}
             onRegenerate={(userText, assistantMsgId) => {
-              // 从该助手消息截断，保留用户提问，不叠第二轮用户气泡
+              // 重生成前先停旧流，再从助手消息截断
+              handleStopGeneration();
               withdrawMessage(wsId, activeSessionId, assistantMsgId);
               const msgs =
                 useLayoutStore.getState().sessions.find((s) => s.id === activeSessionId)
@@ -816,10 +819,28 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             type="button"
             className="approval-dock"
             onClick={() => {
+              // 主时间线有审批卡则滚动；否则打开含 pending 的协作 agent
               const el = document.querySelector(
                 `.approval-card[data-msg="${pendingApprovalMsgId}"], .approval-card`,
               );
-              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+              }
+              const sess = useLayoutStore
+                .getState()
+                .sessions.find((s) => s.id === activeSessionId);
+              const pendingAgent = (sess?.agents || []).find((ag) =>
+                (ag.messages || []).some((m) =>
+                  (m.toolCalls || []).some((tc) => tc.status === 'pending_approval'),
+                ),
+              );
+              if (pendingAgent) {
+                useLayoutStore.getState().setActiveAgentId(pendingAgent.id);
+                onShowToast('已打开待确认的协作任务');
+                return;
+              }
+              onShowToast('请在对话中确认权限');
             }}
           >
             <span className="approval-dock-dot" aria-hidden />

@@ -144,6 +144,18 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   const runStreamingAssistant = (input: string, userMsgId: string, sessionIdOverride?: string) => {
     const sid = sessionIdOverride || useLayoutStore.getState().activeSessionId;
     if (!sid) return;
+
+    // 同会话已有流：先 cancel，避免旧 cancel 句柄被覆盖后幽灵 run
+    const prevStream = streamsBySessionRef.current.get(sid);
+    if (prevStream) {
+      streamsBySessionRef.current.delete(sid);
+      try {
+        prevStream.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+
     const assistantMsgId = `assistant-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const store = useLayoutStore.getState();
     const toolNames: Record<string, string> = {};
