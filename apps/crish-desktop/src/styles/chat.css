@@ -1116,7 +1116,7 @@
 .user-text-bubble {
   background: var(--bg-tertiary);
   border: none !important;
-  box-shadow: none !important;
+  box-shadow: none;
   color: var(--text-primary);
   padding: 10px 14px 12px !important;
   border-radius: 14px 14px 4px 14px !important;
@@ -1140,7 +1140,7 @@
 .assistant-text-bubble {
   background: transparent;
   border: none !important;
-  box-shadow: none !important;
+  box-shadow: none;
   padding: 2px 0 4px !important;
   max-width: 100% !important;
   width: 100% !important;
@@ -2195,7 +2195,7 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-color) !important;
   border-radius: 16px !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .input-container:focus-within {
   background: var(--bg-primary);
@@ -2211,7 +2211,7 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-color) !important;
   border-radius: 14px !important;
-  box-shadow: var(--shadow-lg) !important;
+  box-shadow: var(--shadow-lg);
   padding: 8px !important;
   min-width: 200px;
 }
@@ -2652,7 +2652,7 @@
   color: var(--text-primary);
   background: transparent;
   border: none !important;
-  box-shadow: none !important;
+  box-shadow: none;
   padding: 0 !important;
   max-width: 100%;
 }

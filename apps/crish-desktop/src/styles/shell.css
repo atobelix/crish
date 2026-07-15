@@ -820,7 +820,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   border-radius: 0 !important; /* Flattened border radius */
-  box-shadow: none !important; /* Flattened shadow */
+  box-shadow: none; /* Flattened shadow */
   border: none !important;
   border-right: 1px solid var(--border-subtle) !important;
   border-bottom: 1px solid var(--border-subtle) !important;
@@ -845,7 +845,7 @@ body {
 
 .workspace-card.dragging {
   z-index: 1000 !important;
-  box-shadow: var(--shadow-drag) !important;
+  box-shadow: var(--shadow-drag);
   opacity: 0.95;
   pointer-events: none;
 }
@@ -2422,7 +2422,7 @@ select.ui-input {
   border: none;
   /* 14px 正文用 medium，避免「大又细」 */
   font-weight: var(--font-weight-medium) !important;
-  box-shadow: none !important;
+  box-shadow: none;
   transition: color 0.12s ease, background-color 0.12s ease;
 }
 /* 默认清爽：无 hover 背景块 */
@@ -2436,7 +2436,7 @@ select.ui-input {
   background: rgba(0, 0, 0, 0.045);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium) !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .crish-sidebar .session-text {
   flex: 1;

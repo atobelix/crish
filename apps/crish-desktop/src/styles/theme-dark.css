@@ -258,23 +258,23 @@ html[data-theme="dark"] .settings-cover-nav {
 /* pp-menu / menus elevated surfaces */
 html[data-theme="dark"] .settings-select-menu {
   background: var(--bg-elevated);
-  border-color: var(--border-subtle) !important;
+  border-color: var(--border-subtle);
   box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45);
 }
 
 html[data-theme="dark"] .settings-select-trigger {
   background: var(--bg-tertiary);
-  border-color: var(--border-subtle) !important;
+  border-color: var(--border-subtle);
 }
 
 html[data-theme="dark"] .settings-select.is-open .settings-select-trigger {
-  border-color: var(--border-color) !important;
+  border-color: var(--border-color);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
 }
 
 html[data-theme="dark"] .sb-quick-menu {
   background: var(--bg-elevated);
-  border-color: var(--border-subtle) !important;
+  border-color: var(--border-subtle);
 }
 
 html[data-theme="dark"] .settings-switch,

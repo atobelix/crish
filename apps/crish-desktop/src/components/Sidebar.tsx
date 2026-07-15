@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
-import type { SessionState } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
 import { canUseDemoMode, getAppMode, isDemoMode, switchAppMode } from '../api/appMode';
 import {
-  GENERAL_FOLDER,
   getActiveProjectId,
   listProjects,
-  openProject,
   type ProjectEntry,
 } from '../api/projectStore';
-import {
-  formatSessionListTime,
-  sessionLastActivityMs,
-} from '../api/sessionTime';
 import { sessionListDisplayTitle } from '../api/sessionTitle';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 import { isUpdateAvailable } from '../api/updateStore';
+import { SidebarNav } from './sidebar/SidebarNav';
+import { SidebarSessionList } from './sidebar/SidebarSessionList';
+import {
+  SidebarContextMenus,
+  type AgentContextMenuState,
+  type SessionContextMenuState,
+} from './sidebar/SidebarContextMenus';
 
 interface SidebarProps {
   onShowToast: (message: string, onUndo?: () => void) => void;
@@ -27,10 +27,6 @@ interface SidebarProps {
   /** Filter session titles (from top search). */
   searchQuery?: string;
 }
-
-type DragItem =
-  | { type: 'session'; sessionId: string; folderName?: string }
-  | { type: 'folder'; folderName: string };
 
 /**
  * Sidebar design notes (distinct from Claude):
@@ -49,7 +45,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const {
     sessions,
-    folderOrder: _folderOrder,
     activeSessionId,
     activeAgentId,
     sidebarCollapsed,
@@ -66,36 +61,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     moveSessionRealtime,
   } = useLayoutStore();
 
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    sessionId: string;
-  } | null>(null);
-  const [agentMenu, setAgentMenu] = useState<{
-    x: number;
-    y: number;
-    sessionId: string;
-    agentId: string;
-  } | null>(null);
-
-  const [_collapsedFolders, _setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [contextMenu, setContextMenu] = useState<SessionContextMenuState | null>(null);
+  const [agentMenu, setAgentMenu] = useState<AgentContextMenuState | null>(null);
   const [activeNav, setActiveNav] = useState('chat');
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
-  const [_sessionsCollapsed, _setSessionsCollapsed] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [sortDropdownCoords, setSortDropdownCoords] = useState<{ x: number; y: number } | null>(null);
   const [sortType, setSortType] = useState<'active' | 'name'>('active');
   const [groupType, setGroupType] = useState<'folder' | 'none'>('folder');
   const [filterType, setFilterType] = useState<'all' | 'pinned'>('all');
-  const [activeDragItem, setActiveDragItem] = useState<DragItem | null>(null);
-  const [dragOverPinned, setDragOverPinned] = useState(false);
   const [projects, setProjects] = useState<ProjectEntry[]>(() => listProjects());
   const [, setActiveProjectId] = useState<string | null>(() => getActiveProjectId());
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false);
   const [generalCollapsed, setGeneralCollapsed] = useState(false);
-  /** 驱动相对时间刷新 */
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [updateAvailable, setUpdateAvailableState] = useState(() => isUpdateAvailable());
+
+  const menuRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -104,11 +88,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
     window.addEventListener('crish-project-changed', sync);
     return () => window.removeEventListener('crish-project-changed', sync);
-  }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 60_000);
-    return () => clearInterval(t);
   }, []);
 
   // 侧栏宽独立于主题/密度；启动恢复用户拖拽宽度
@@ -124,18 +103,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, []);
 
-  const [updateAvailable, setUpdateAvailableState] = useState(() => isUpdateAvailable());
   useEffect(() => {
     const sync = () => setUpdateAvailableState(isUpdateAvailable());
     window.addEventListener('crish-update-changed', sync);
     return () => window.removeEventListener('crish-update-changed', sync);
   }, []);
-
-  const menuRef = useRef<HTMLDivElement>(null);
-  const sortMenuRef = useRef<HTMLDivElement>(null);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const pinnedZoneRef = useRef<HTMLDivElement>(null);
-  const sessionListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -156,6 +128,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setAgentMenu(null);
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+  };
+
+  const handleContextMenuAgent = (e: React.MouseEvent, sessionId: string, agentId: string) => {
+    setContextMenu(null);
+    setAgentMenu({ x: e.clientX, y: e.clientY, sessionId, agentId });
   };
 
   const handleAction = (action: string) => {
@@ -196,10 +173,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleOpenSettings = (tab?: string) => {
-    useLayoutStore.getState().openSettings(tab);
-  };
-
   const handleNewSession = () => {
     createSession({ title: '新会话' });
     setActiveNav('chat');
@@ -208,110 +181,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleOpenScheduled = () => {
     setActiveNav('scheduled');
     // Timed tasks live under settings (not the runtime float)
-    handleOpenSettings('schedule');
+    useLayoutStore.getState().openSettings('schedule');
   };
 
-  let visibleSessions = sessions.filter((s) => !s.isArchived);
-  if (filterType === 'pinned') visibleSessions = visibleSessions.filter((s) => s.isPinned);
-  const q = searchQuery.trim().toLowerCase();
-  if (q) {
-    visibleSessions = visibleSessions.filter(
-      (s) =>
-        sessionListDisplayTitle(s).toLowerCase().includes(q) ||
-        s.title.toLowerCase().includes(q) ||
-        s.folder.toLowerCase().includes(q),
+  const handleSelectSession = (id: string) => {
+    setActiveSessionId(id);
+    setActiveAgentId(null);
+  };
+
+  const handleSelectAgent = (sessionId: string, agentId: string) => {
+    setActiveSessionId(sessionId);
+    setActiveAgentId(agentId);
+  };
+
+  const handleOpenAgentPanel = (sessionId: string, agentId: string) => {
+    setActiveSessionId(sessionId);
+    setPanelAgentId(agentId);
+    window.dispatchEvent(
+      new CustomEvent('crish-open-agent-panel', { detail: { agentId } }),
     );
-  }
+  };
 
-  const sortedSessions =
-    sortType === 'name'
-      ? [...visibleSessions].sort((a, b) =>
-          sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b)),
-        )
-      : [...visibleSessions].sort(
-          (a, b) => sessionLastActivityMs(b) - sessionLastActivityMs(a),
-        );
+  const handleOpenAgentWindow = (sessionId: string, agentId: string) => {
+    const ag = sessions.find((s) => s.id === sessionId)?.agents?.find((a) => a.id === agentId);
+    if (ag) {
+      void import('./AgentCard').then(({ openAgentInNewWindow }) => {
+        openAgentInNewWindow(ag);
+      });
+    }
+  };
 
-  const pinnedSessions = sortedSessions.filter((s) => s.isPinned);
-  const unpinned = sortedSessions.filter((s) => !s.isPinned);
+  const handleCopyAgentSummary = (sessionId: string, agentId: string) => {
+    const ag = sessions.find((s) => s.id === sessionId)?.agents?.find((a) => a.id === agentId);
+    if (ag) {
+      void navigator.clipboard.writeText(
+        `${ag.description}\n${ag.summary || ''}\nrun:${ag.subagentRunId}`,
+      );
+      onShowToast('已复制 agent 摘要');
+    }
+  };
 
-  const projectIdSet = new Set(projects.map((p) => p.id));
-  const sessionsByProject = (projectId: string) =>
-    unpinned.filter((s) => s.folder === projectId || s.folder === projects.find((p) => p.id === projectId)?.name);
-  const generalSessions = unpinned.filter(
-    (s) =>
-      s.folder === GENERAL_FOLDER ||
-      s.folder === '会话' ||
-      s.folder === '常规会话' ||
-      (!projectIdSet.has(s.folder) && !projects.some((p) => p.name === s.folder)),
-  );
+  const handleOpenProject = (id: string) => {
+    setActiveProjectId(id);
+    setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
+  };
 
-  const startSessionDrag = useCallback(
-    (e: React.PointerEvent, sessionId: string, folderName?: string) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let dragging = false;
-      let dragOverlay: HTMLDivElement | null = null;
-      const el = (e.currentTarget as HTMLElement).closest('li') as HTMLElement;
-      const elRect = el?.getBoundingClientRect();
-      const offsetX = startX - (elRect?.left ?? startX);
-      const offsetY = startY - (elRect?.top ?? startY);
-
-      const move = (me: PointerEvent) => {
-        const dx = me.clientX - startX;
-        const dy = me.clientY - startY;
-        if (!dragging && Math.sqrt(dx * dx + dy * dy) > 6) {
-          dragging = true;
-          setActiveDragItem({ type: 'session', sessionId, folderName });
-          if (el) {
-            dragOverlay = el.cloneNode(true) as HTMLDivElement;
-            dragOverlay.className = 'sidebar-drag-ghost';
-            dragOverlay.style.cssText = `position:fixed;width:${elRect?.width ?? 180}px;`;
-            document.body.appendChild(dragOverlay);
-          }
-        }
-        if (!dragging || !dragOverlay) return;
-        dragOverlay.style.left = `${me.clientX - offsetX}px`;
-        dragOverlay.style.top = `${me.clientY - offsetY}px`;
-        dragOverlay.style.display = 'none';
-        const hoveredEl = document.elementFromPoint(me.clientX, me.clientY);
-        dragOverlay.style.display = 'flex';
-        if (!hoveredEl) return;
-        const pinnedZone = pinnedZoneRef.current;
-        const overPinned = pinnedZone
-          ? hoveredEl.closest('.pinned-drop-zone') ||
-            hoveredEl.closest('.pinned-list') ||
-            hoveredEl === pinnedZone
-          : false;
-        setDragOverPinned(!!overPinned);
-        if (overPinned) {
-          const targetSessionItem = hoveredEl.closest('li.session-item');
-          const targetSessionId = targetSessionItem?.getAttribute('data-session-id') || null;
-          moveSessionRealtime(sessionId, targetSessionId, folderName || '会话', true);
-        } else {
-          const targetSessionItem = hoveredEl.closest('li.session-item');
-          const targetFolderEl = hoveredEl.closest('[data-folder-name]');
-          const targetSessionId = targetSessionItem?.getAttribute('data-session-id') || null;
-          const targetFolder =
-            targetFolderEl?.getAttribute('data-folder-name') || folderName || '会话';
-          moveSessionRealtime(sessionId, targetSessionId, targetFolder, false);
-        }
-      };
-
-      const up = () => {
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        if (dragOverlay) dragOverlay.remove();
-        setActiveDragItem(null);
-        setDragOverPinned(false);
-      };
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
-    },
-    [moveSessionRealtime],
-  );
+  const handleToggleProjectCollapsed = (id: string) => {
+    setCollapsedProjects((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -371,114 +288,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setSortDropdownOpen(!sortDropdownOpen);
   };
 
-  const renderSessionItem = (s: SessionState, isDraggable: boolean = true) => {
-    const isBranched = !!s.branchParentId;
-    const baseTitle = sessionListDisplayTitle(s);
-    const displayText = isBranched ? `分支: ${baseTitle.replace(/ - 分支$/, '')}` : baseTitle;
-    const isDraggingThis = activeDragItem?.type === 'session' && activeDragItem.sessionId === s.id;
-    const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
-    const agents = s.agents || [];
-    const agentRunning = agents.some((a) => a.status === 'running');
-    // 整树仅一行「当前」高亮：主对话激活时不高亮嵌套 agent
-    const sessionActive = s.id === activeSessionId && !activeAgentId;
-    const timeLabel = formatSessionListTime(s, nowTick);
-    return (
-      <li
-        key={s.id}
-        data-session-id={s.id}
-        className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''}`}
-      >
-        <div
-          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''}`}
-          onClick={() => {
-            setActiveSessionId(s.id);
-            setActiveAgentId(null);
-          }}
-          onContextMenu={(e) => handleContextMenu(e, s.id)}
-          onPointerDown={isDraggable ? (e) => startSessionDrag(e, s.id, s.folder) : undefined}
-        >
-          <span className="session-text" title={displayText}>
-            {displayText}
-          </span>
-          <span className="session-trailing">
-            {isRunning || agentRunning ? (
-              <span className="session-running-spinner" title="处理中" />
-            ) : (
-              <>
-                <span className="session-time">{timeLabel}</span>
-                <button
-                  type="button"
-                  className="session-actions-btn"
-                  title="更多"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleContextMenu(e as unknown as React.MouseEvent, s.id);
-                  }}
-                >
-                  <Lucide.MoreHorizontal size={16} />
-                </button>
-              </>
-            )}
-          </span>
-        </div>
-        {agents.length > 0 ? (
-          <ul className="session-agent-list" aria-label="协作 agent">
-            {agents.slice(0, 12).map((ag) => {
-              const agentActive = activeSessionId === s.id && activeAgentId === ag.id;
-              return (
-              <li key={ag.id}>
-                <button
-                  type="button"
-                  className={`session-agent-item ${
-                    agentActive ? 'active' : ''
-                  } session-agent-item--${ag.status}`}
-                  title={ag.description}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveSessionId(s.id);
-                    setActiveAgentId(ag.id);
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    setActiveSessionId(s.id);
-                    setPanelAgentId(ag.id);
-                    window.dispatchEvent(
-                      new CustomEvent('crish-open-agent-panel', { detail: { agentId: ag.id } }),
-                    );
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setContextMenu(null);
-                    setAgentMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      sessionId: s.id,
-                      agentId: ag.id,
-                    });
-                  }}
-                >
-                  <Lucide.Bot size={14} className="session-agent-icon" />
-                  <span className="session-agent-text">
-                    {ag.description || ag.mode || 'agent'}
-                  </span>
-                  {ag.status === 'running' ? (
-                    <span className="session-running-spinner" title="运行中" />
-                  ) : (
-                    <span className="session-agent-status">
-                      {ag.status === 'failed' ? '失败' : '完成'}
-                    </span>
-                  )}
-                </button>
-              </li>
-              );
-            })}
-          </ul>
-        ) : null}
-      </li>
-    );
-  };
-
   return (
     <aside
       ref={sidebarRef}
@@ -487,136 +296,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       onMouseLeave={onHoverLeave}
     >
       <div className="sidebar-scroll">
-        {/* Primary actions — soft CTA, not Claude-black brand stack */}
-        <div className="sidebar-top-actions">
-          <button type="button" className="sb-new-btn" onClick={handleNewSession}>
-            <Lucide.Plus size={16} strokeWidth={2.25} />
-            <span>新对话</span>
-          </button>
-          <button
-            type="button"
-            className={`sb-nav-link ${activeNav === 'scheduled' ? 'active' : ''}`}
-            onClick={handleOpenScheduled}
-          >
-            <Lucide.Clock size={16} />
-            <span>定时任务</span>
-          </button>
-        </div>
-
-        {/* 置顶 + 项目 + 对话：共用一条滚动条 */}
-        <div ref={sessionListRef} className="sb-list-scroll">
-          {/* 1) 置顶 */}
-          <section className="sb-section">
-            <button
-              type="button"
-              className="sb-section-label"
-              onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
-            >
-              <span>置顶</span>
-              <Lucide.ChevronDown size={14} className={pinnedCollapsed ? 'chev-collapsed' : ''} />
-            </button>
-            {!pinnedCollapsed && (
-              <div
-                ref={pinnedZoneRef}
-                className={`pinned-drop-zone ${dragOverPinned ? 'drag-over' : ''}`}
-              >
-                <ul className="session-list pinned-list">
-                  {pinnedSessions.map((s) => renderSessionItem(s))}
-                </ul>
-                {pinnedSessions.length === 0 && (
-                  <div className="sb-empty-hint subtle">固定的对话会出现在这里</div>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* 2) 项目 */}
-          <section className="sb-section">
-            <button
-              type="button"
-              className="sb-section-label"
-              onClick={() => setProjectsSectionCollapsed(!projectsSectionCollapsed)}
-            >
-              <span>项目</span>
-              <Lucide.ChevronDown
-                size={14}
-                className={projectsSectionCollapsed ? 'chev-collapsed' : ''}
-              />
-            </button>
-            {!projectsSectionCollapsed && (
-              <>
-                {projects.map((p) => {
-                  const open = !collapsedProjects[p.id];
-                  const sess = sessionsByProject(p.id);
-                  return (
-                    <div key={p.id} className="folder-group" data-folder-name={p.id}>
-                      <button
-                        type="button"
-                        className="folder-header"
-                        onClick={() => {
-                          openProject(p.id);
-                          setActiveProjectId(p.id);
-                          setCollapsedProjects((prev) => ({ ...prev, [p.id]: false }));
-                        }}
-                        onDoubleClick={() =>
-                          setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
-                        }
-                      >
-                        <Lucide.Folder size={16} />
-                        <span className="folder-name">{p.name}</span>
-                        <span className="folder-count">{sess.length}</span>
-                        <span
-                          className="folder-collapse-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCollapsedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }));
-                          }}
-                        >
-                          <Lucide.ChevronDown size={14} className={open ? '' : 'chev-collapsed'} />
-                        </span>
-                      </button>
-                      {open && (
-                        <ul className="session-list folder-sessions">
-                          {sess.map((s) => renderSessionItem(s, true))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-                {projects.length === 0 && (
-                  <div className="sb-empty-hint subtle">在对话区选择或添加项目</div>
-                )}
-              </>
-            )}
-          </section>
-
-          {/* 3) 对话 */}
-          <section className="sb-section">
-            <div className="sb-section-label-row">
-              <button
-                type="button"
-                className="sb-section-label"
-                onClick={() => setGeneralCollapsed(!generalCollapsed)}
-              >
-                <span>对话</span>
-                <Lucide.ChevronDown size={14} className={generalCollapsed ? 'chev-collapsed' : ''} />
-              </button>
-              <button type="button" className="sort-btn" title="排序" onClick={handleSortBtnClick}>
-                <Lucide.ArrowUpDown size={14} />
-              </button>
-            </div>
-            {!generalCollapsed && (
-              <>
-                <ul className="session-list folder-sessions">
-                  {generalSessions.map((s) => renderSessionItem(s))}
-                </ul>
-                {generalSessions.length === 0 && (
-                  <div className="sb-empty-hint subtle">不在项目中时的对话</div>
-                )}
-              </>
-            )}
-          </section>
-        </div>
+        <SidebarNav
+          activeNav={activeNav}
+          onNewSession={handleNewSession}
+          onOpenScheduled={handleOpenScheduled}
+        />
+        <SidebarSessionList
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          activeAgentId={activeAgentId}
+          searchQuery={searchQuery}
+          sortType={sortType}
+          groupType={groupType}
+          filterType={filterType}
+          projects={projects}
+          collapsedProjects={collapsedProjects}
+          generalCollapsed={generalCollapsed}
+          pinnedCollapsed={pinnedCollapsed}
+          projectsSectionCollapsed={projectsSectionCollapsed}
+          onSelectSession={handleSelectSession}
+          onSelectAgent={handleSelectAgent}
+          onOpenAgentPanel={handleOpenAgentPanel}
+          onContextMenuSession={handleContextMenu}
+          onContextMenuAgent={handleContextMenuAgent}
+          onToggleProjectCollapsed={handleToggleProjectCollapsed}
+          onToggleGeneral={() => setGeneralCollapsed((v) => !v)}
+          onTogglePinned={() => setPinnedCollapsed((v) => !v)}
+          onToggleProjectsSection={() => setProjectsSectionCollapsed((v) => !v)}
+          onOpenProject={handleOpenProject}
+          onSortBtnClick={handleSortBtnClick}
+          onMoveSessionRealtime={moveSessionRealtime}
+        />
       </div>
 
       <div className="sidebar-footer">
@@ -656,189 +366,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
         style={{ touchAction: 'none' }}
       />
 
-      {agentMenu && (
-        <div
-          ref={menuRef}
-          className="context-menu open"
-          style={{ left: agentMenu.x, top: agentMenu.y, position: 'fixed', zIndex: 9999 }}
-        >
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => {
-              setActiveSessionId(agentMenu.sessionId);
-              setActiveAgentId(agentMenu.agentId);
-              setAgentMenu(null);
-            }}
-          >
-            <Lucide.MessageSquare size={16} />
-            <span>在主区打开</span>
-          </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => {
-              setActiveSessionId(agentMenu.sessionId);
-              setPanelAgentId(agentMenu.agentId);
-              window.dispatchEvent(
-                new CustomEvent('crish-open-agent-panel', {
-                  detail: { agentId: agentMenu.agentId },
-                }),
-              );
-              setAgentMenu(null);
-            }}
-          >
-            <Lucide.PanelRight size={16} />
-            <span>在右侧打开</span>
-          </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => {
-              const ag = sessions
-                .find((s) => s.id === agentMenu.sessionId)
-                ?.agents?.find((a) => a.id === agentMenu.agentId);
-              if (ag) {
-                void import('./AgentCard').then(({ openAgentInNewWindow }) => {
-                  openAgentInNewWindow(ag);
-                });
-              }
-              setAgentMenu(null);
-            }}
-          >
-            <Lucide.ExternalLink size={16} />
-            <span>新窗口打开</span>
-          </button>
-          <div className="context-menu-divider" />
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => {
-              const ag = sessions
-                .find((s) => s.id === agentMenu.sessionId)
-                ?.agents?.find((a) => a.id === agentMenu.agentId);
-              if (ag) {
-                void navigator.clipboard.writeText(
-                  `${ag.description}\n${ag.summary || ''}\nrun:${ag.subagentRunId}`,
-                );
-                onShowToast('已复制 agent 摘要');
-              }
-              setAgentMenu(null);
-            }}
-          >
-            <Lucide.Copy size={16} />
-            <span>复制摘要</span>
-          </button>
-        </div>
-      )}
-
-      {contextMenu && (
-        <div
-          ref={menuRef}
-          className="context-menu open"
-          style={{ left: contextMenu.x, top: contextMenu.y, position: 'fixed' }}
-        >
-          <button type="button" className="context-menu-item" onClick={() => handleAction('open-current')}>
-            <Lucide.MessageSquare size={16} />
-            <span>打开</span>
-          </button>
-          <button type="button" className="context-menu-item" onClick={() => handleAction('open-split')}>
-            <Lucide.Columns size={16} />
-            <span>拆分打开</span>
-          </button>
-          <div className="context-menu-divider" />
-          {sessions.find((s) => s.id === contextMenu.sessionId)?.isPinned ? (
-            <button type="button" className="context-menu-item" onClick={() => handleAction('unpin')}>
-              <Lucide.PinOff size={16} />
-              <span>取消固定</span>
-            </button>
-          ) : (
-            <button type="button" className="context-menu-item" onClick={() => handleAction('pin')}>
-              <Lucide.Pin size={16} />
-              <span>固定</span>
-            </button>
-          )}
-          <button type="button" className="context-menu-item" onClick={() => handleAction('archive')}>
-            <Lucide.Archive size={16} />
-            <span>归档</span>
-          </button>
-          <button type="button" className="context-menu-item" onClick={() => handleAction('branch')}>
-            <Lucide.GitBranch size={16} />
-            <span>分支</span>
-          </button>
-        </div>
-      )}
-
-      {sortDropdownOpen && sortDropdownCoords && (
-        <div
-          ref={sortMenuRef}
-          className="sort-dropdown open"
-          style={{ position: 'fixed', left: sortDropdownCoords.x, top: sortDropdownCoords.y, zIndex: 9999 }}
-        >
-          <button
-            type="button"
-            className={`sort-dropdown-item ${sortType === 'active' ? 'active' : ''}`}
-            onClick={() => {
-              setSortType('active');
-              setSortDropdownOpen(false);
-            }}
-          >
-            按活跃
-          </button>
-          <button
-            type="button"
-            className={`sort-dropdown-item ${sortType === 'name' ? 'active' : ''}`}
-            onClick={() => {
-              setSortType('name');
-              setSortDropdownOpen(false);
-            }}
-          >
-            按名称
-          </button>
-          <div className="context-menu-divider" />
-          <button
-            type="button"
-            className={`sort-dropdown-item ${groupType === 'folder' ? 'active' : ''}`}
-            onClick={() => {
-              setGroupType('folder');
-              setSortDropdownOpen(false);
-            }}
-          >
-            按项目分组
-          </button>
-          <button
-            type="button"
-            className={`sort-dropdown-item ${groupType === 'none' ? 'active' : ''}`}
-            onClick={() => {
-              setGroupType('none');
-              setSortDropdownOpen(false);
-            }}
-          >
-            平铺列表
-          </button>
-          <div className="context-menu-divider" />
-          <button
-            type="button"
-            className={`sort-dropdown-item ${filterType === 'all' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterType('all');
-              setSortDropdownOpen(false);
-            }}
-          >
-            全部
-          </button>
-          <button
-            type="button"
-            className={`sort-dropdown-item ${filterType === 'pinned' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterType('pinned');
-              setSortDropdownOpen(false);
-            }}
-          >
-            仅固定
-          </button>
-        </div>
-      )}
+      <SidebarContextMenus
+        menuRef={menuRef}
+        sortMenuRef={sortMenuRef}
+        contextMenu={contextMenu}
+        agentMenu={agentMenu}
+        sessions={sessions}
+        onSessionAction={handleAction}
+        onOpenAgentMain={handleSelectAgent}
+        onOpenAgentPanel={handleOpenAgentPanel}
+        onOpenAgentWindow={handleOpenAgentWindow}
+        onCopyAgentSummary={handleCopyAgentSummary}
+        onCloseAgentMenu={() => setAgentMenu(null)}
+        sortDropdownOpen={sortDropdownOpen}
+        sortDropdownCoords={sortDropdownCoords}
+        sortType={sortType}
+        groupType={groupType}
+        filterType={filterType}
+        onSetSortType={setSortType}
+        onSetGroupType={setGroupType}
+        onSetFilterType={setFilterType}
+        onCloseSortDropdown={() => setSortDropdownOpen(false)}
+      />
     </aside>
   );
 };
