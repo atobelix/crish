@@ -54,6 +54,7 @@ import {
   mergeGoalTasksFromAssistantText,
 } from '../api/goalModeController';
 import { SessionStreamManager } from '../api/sessionStreamManager';
+import { resolveSlashCommand } from '../api/resolveSlashCommand';
 import type { SessionGoalMode } from '../store/types';
 
 /** 从助手正文解析 checklist 并写回 session.goalMode.tasks */
@@ -204,27 +205,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
   const renameSession = useLayoutStore((s) => s.renameSession);
 
-  /** 按会话隔离流式 run：cancel / drain / 防幽灵 run */
+  /** 流生命周期：cancel / drain / goal-cancel / 续写调度（单一 manager，替代多 ref 隐式状态机） */
   const streamManagerRef = useRef<SessionStreamManager | null>(null);
   if (!streamManagerRef.current) {
     streamManagerRef.current = new SessionStreamManager();
   }
-  /** 用户点停止后的会话：跳过 /goal 自动续写，避免 cancel 仍触发 onComplete 时继续 */
-  const goalCancelledSessionsRef = useRef(new Set<string>());
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
-  /**
-   * 始终指向最新的 runStreamingAssistant，供 drain / onComplete 异步回调使用。
-   * 避免 drainQueuedAfterComplete 或旧闭包调用到过期的 options / store action 身份。
-   */
-  const runStreamingAssistantRef = useRef<
-    (
-      input: string,
-      userMsgId: string,
-      sessionIdOverride?: string,
-      streamOptions?: StreamRequestOptions,
-    ) => void
-  >(null!);
 
   /**
    * 流式正文批合并：onChunk 高频覆盖，~48ms 刷一次 updateMessageText。
@@ -249,13 +236,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
    * @returns true 表示已启动续写，调用方勿再 drain 排队
    */
   const maybeContinueGoalMode = (sid: string, assistantMsgId: string): boolean => {
-    const cancelled = goalCancelledSessionsRef.current.has(sid);
-    if (cancelled) goalCancelledSessionsRef.current.delete(sid);
+    const mgr = streamManagerRef.current!;
+    const cancelled = mgr.consumeGoalCancelled(sid);
     const st = useLayoutStore.getState();
     const sess = st.sessionsById[sid] || st.sessions.find((s) => s.id === sid);
     const asstText =
       sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
-    // 先同步 checklist 到 store，再决策
     if (sess?.goalMode?.active) {
       syncGoalTasksFromAssistantText(sid, asstText, sess.goalMode);
     }
@@ -291,9 +277,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       });
     });
 
-    setTimeout(() => {
-      runStreamingAssistantRef.current(decision.modelText, userMsgId, sid);
-    }, 0);
+    // queueMicrotask + bindStarter：不依赖 setTimeout(0)+ref 竞态
+    mgr.scheduleStart(sid, decision.modelText, userMsgId);
     return true;
   };
 
@@ -316,7 +301,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
           prompt = `${buildGoalModePrefix(gm.goal, gm.iteration ?? 0, maxIter, gm.tasks)}${next.text}`;
         }
-        runStreamingAssistantRef.current(prompt, next.id, sid);
+        mgr.scheduleStart(sid, prompt, next.id);
       }
     } finally {
       mgr.endDrainNextTick(sid);
@@ -711,8 +696,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       runId: null,
     });
   };
-  // 每轮渲染同步最新函数，确保 drain 经 ref 拿到当前闭包
-  runStreamingAssistantRef.current = runStreamingAssistant;
+  // 每轮渲染绑定最新 starter，续写/drain 经 manager.scheduleStart 调用
+  streamManagerRef.current!.bindStarter(runStreamingAssistant);
 
   const handleStopGeneration = () => {
     // 只停当前会话，其它会话的并行 run 继续
@@ -724,8 +709,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     textBatcherRef.current?.flushNow();
     const st = useLayoutStore.getState();
     // 停止生成时中断目标自动续写
-    if (st.sessions.find((s) => s.id === sid)?.goalMode?.active) {
-      goalCancelledSessionsRef.current.add(sid);
+    if (st.sessionsById[sid]?.goalMode?.active || st.sessions.find((s) => s.id === sid)?.goalMode?.active) {
+      streamManagerRef.current!.markGoalCancelled(sid);
       st.patchSession(sid, { goalMode: null });
     }
     const asst = st.sessions
@@ -772,9 +757,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       sessionId = useLayoutStore.getState().createSession({ title: '新会话' });
     }
     const rawInput = chatInput.trim();
+    const slash = resolveSlashCommand(rawInput);
 
-    // /schedule → 主对话区定时任务（与侧栏入口一致）
-    if (rawInput && /^\/schedule\b/i.test(rawInput)) {
+    // 纯导航 / 副作用 slash：不进主对话流
+    if (slash.kind === 'schedule') {
       setChatInput('');
       setSlashMenuOpen(false);
       try {
@@ -785,9 +771,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       onShowToast('已打开定时任务');
       return;
     }
-
-    // /teamwork-preview → 打开协作 agent 面板（看板）
-    if (rawInput && /^\/teamwork-preview\b/i.test(rawInput)) {
+    if (slash.kind === 'teamwork-preview') {
       setChatInput('');
       setSlashMenuOpen(false);
       useLayoutStore.getState().setPanelAgentId(null);
@@ -803,31 +787,26 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       onShowToast('协作看板');
       return;
     }
-
-    // /browser [url] → 打开右侧内置预览浏览器
-    if (rawInput && /^\/browser\b/i.test(rawInput)) {
-      const rest = rawInput.replace(/^\/browser\b/i, '').trim();
+    if (slash.kind === 'browser') {
       setChatInput('');
       setSlashMenuOpen(false);
       handleGlobalTabClick('preview');
-      if (rest) {
+      if (slash.url) {
         void import('../api/previewBrowserStore').then(({ normalizeBrowseUrl, setPreviewUrl }) => {
-          setPreviewUrl(normalizeBrowseUrl(rest));
+          setPreviewUrl(normalizeBrowseUrl(slash.url));
         });
       }
-      onShowToast(rest ? `预览浏览器 → ${rest}` : '已打开预览浏览器');
+      onShowToast(slash.url ? `预览浏览器 → ${slash.url}` : '已打开预览浏览器');
       return;
     }
-
-    // /learn <rule> → 持久化用户规则，短确认，不跑完整 agent
-    if (rawInput && /^\/learn\b/i.test(rawInput)) {
-      const ruleText = rawInput.replace(/^\/learn\b/i, '').trim();
+    if (slash.kind === 'learn') {
       setChatInput('');
       setSlashMenuOpen(false);
-      if (!ruleText) {
+      if (slash.missingArg || !slash.rule) {
         onShowToast('用法：/learn <要记住的规则>');
         return;
       }
+      const ruleText = slash.rule;
       try {
         const cwd = getWorkspacePath() || '__global__';
         const sets = await clientApi.getSettingsEx(cwd);
@@ -838,7 +817,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         }
         const next = [...prev, ruleText];
         await clientApi.saveSettingsEx(cwd, 'global', { customRules: next });
-        // 仅同步全局规则，避免空 projectText 误删引擎侧项目规则
         const globalText = rulesLinesToText(next, '# 全局规则');
         void syncRulesToDaemon({ globalText });
         onShowToast('已记住规则');
@@ -846,7 +824,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         const userMsgId = `user-msg-${Date.now()}`;
         const asstMsgId = `assistant-msg-${Date.now()}-learn`;
         useLayoutStore.setState((state) => {
-          const sess = state.sessions.find((s) => s.id === sessionId);
+          const sess = state.sessionsById[sessionId] || state.sessions.find((s) => s.id === sessionId);
           if (!sess) return;
           if (!sess.messages) sess.messages = [];
           sess.messages.push({
@@ -870,45 +848,40 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       return;
     }
 
-    // /skill:name [task] → 注入 SKILL.md 正文到模型上下文
     let modelText = rawInput;
     let displayText = rawInput;
 
-    // /goal <task> → 会话目标模式 + 系统前缀
-    if (rawInput && /^\/goal\b/i.test(rawInput)) {
-      const goal = rawInput.replace(/^\/goal\b/i, '').trim();
-      if (!goal) {
+    if (slash.kind === 'goal') {
+      if (slash.missingArg || !slash.goal) {
         setChatInput('');
         setSlashMenuOpen(false);
         onShowToast('用法：/goal <要完成的目标>');
         return;
       }
-      goalCancelledSessionsRef.current.delete(sessionId);
-      const gm = createInitialGoalMode(goal, GOAL_DEFAULT_MAX_ITERATIONS);
+      streamManagerRef.current!.clearGoalCancelled(sessionId);
+      const gm = createInitialGoalMode(slash.goal, GOAL_DEFAULT_MAX_ITERATIONS);
       useLayoutStore.getState().patchSession(sessionId, { goalMode: gm });
-      displayText = `/goal ${goal}`;
-      modelText = `${buildGoalModePrefix(goal, 0, gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS, gm.tasks)}${goal}`;
+      displayText = `/goal ${slash.goal}`;
+      modelText = `${buildGoalModePrefix(slash.goal, 0, gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS, gm.tasks)}${slash.goal}`;
       onShowToast('已进入目标模式');
     }
 
-    // /grill-me <topic> → 只提问澄清；切 plan 权限更安全
-    if (rawInput && /^\/grill-me\b/i.test(rawInput)) {
-      const topic = rawInput.replace(/^\/grill-me\b/i, '').trim();
-      if (!topic) {
+    if (slash.kind === 'grill-me') {
+      if (slash.missingArg || !slash.topic) {
         setChatInput('');
         setSlashMenuOpen(false);
         onShowToast('用法：/grill-me <要对齐的主题>');
         return;
       }
       useLayoutStore.getState().setPermissionMode('plan');
-      displayText = `/grill-me ${topic}`;
-      modelText = `${GRILL_ME_PREFIX}主题：${topic}`;
+      displayText = `/grill-me ${slash.topic}`;
+      modelText = `${GRILL_ME_PREFIX}主题：${slash.topic}`;
       onShowToast('已进入对齐提问模式（计划权限）');
     }
 
-    if (skillCommandsEnabled && rawInput && /^\/skill:/i.test(rawInput)) {
+    if (slash.kind === 'skill' && skillCommandsEnabled) {
       try {
-        const resolved = await resolveSkillSlash(rawInput);
+        const resolved = await resolveSkillSlash(slash.raw);
         if (resolved) {
           modelText = formatSkillInjection(resolved.skill, resolved.rest);
           displayText = resolved.rest
@@ -924,10 +897,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     }
 
     // 若已在目标模式且本条不是 /goal 命令本身：仍为后续普通消息注入前缀
-    if (rawInput && !/^\/goal\b/i.test(rawInput)) {
-      const liveGm = useLayoutStore
-        .getState()
-        .sessions.find((s) => s.id === sessionId)?.goalMode;
+    if (rawInput && slash.kind !== 'goal') {
+      const liveGm =
+        useLayoutStore.getState().sessionsById[sessionId]?.goalMode ||
+        useLayoutStore.getState().sessions.find((s) => s.id === sessionId)?.goalMode;
       if (liveGm?.active && liveGm.goal) {
         const maxIter = liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
         modelText = `${buildGoalModePrefix(liveGm.goal, liveGm.iteration ?? 0, maxIter, liveGm.tasks)}${modelText}`;

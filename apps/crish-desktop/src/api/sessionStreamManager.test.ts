@@ -43,4 +43,21 @@ describe('SessionStreamManager', () => {
     mgr.endDrain('s1');
     expect(mgr.beginDrain('s1')).toBe(true);
   });
+
+  it('consumeGoalCancelled is one-shot', () => {
+    const mgr = new SessionStreamManager();
+    mgr.markGoalCancelled('s1');
+    expect(mgr.consumeGoalCancelled('s1')).toBe(true);
+    expect(mgr.consumeGoalCancelled('s1')).toBe(false);
+  });
+
+  it('scheduleStart uses bound starter via microtask', async () => {
+    const mgr = new SessionStreamManager();
+    const calls: string[] = [];
+    mgr.bindStarter((input, userMsgId, sid) => {
+      calls.push(`${sid}:${userMsgId}:${input}`);
+    });
+    mgr.scheduleStart('s1', 'continue', 'u1', (fn) => fn());
+    expect(calls).toEqual(['s1:u1:continue']);
+  });
 });

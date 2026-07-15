@@ -23,39 +23,11 @@ import {
   networkUserMessage,
   softFailureMessage,
 } from './userFacingErrors';
-
-/** 从 approval-requested 抽出可读命令，避免整包 JSON */
-function extractApprovalCommandArgs(req: Record<string, unknown>): string {
-  if (typeof req.command === 'string' && req.command.trim()) return req.command.trim();
-
-  const params = req.parameters ?? req.input;
-  if (typeof params === 'string' && params.trim()) return params.trim();
-  if (params && typeof params === 'object' && !Array.isArray(params)) {
-    const p = params as Record<string, unknown>;
-    for (const key of ['command', 'cmd', 'path', 'filePath', 'target_file', 'query', 'pattern']) {
-      const v = p[key];
-      // path 允许 "." 等短路径
-      if (typeof v === 'string' && v.trim().length > 0) {
-        if (key === 'path' || key === 'filePath' || key === 'target_file') {
-          const tool = String(req.toolName ?? req.name ?? '').toLowerCase();
-          if (tool.includes('list')) return `list ${v.trim()}`;
-          if (tool.includes('read')) return `read ${v.trim()}`;
-          return v.trim();
-        }
-        return v.trim();
-      }
-    }
-    try {
-      return JSON.stringify(p);
-    } catch {
-      /* fallthrough */
-    }
-  }
-  if (typeof req.summary === 'string' && req.summary.trim() && !req.summary.startsWith('{')) {
-    return req.summary.trim();
-  }
-  return '';
-}
+import { ApprovalFlowMachine } from './approvalFlowMachine';
+import {
+  extractApprovalCommandArgs,
+  parseToolCallFields,
+} from './daemonEventSchema';
 
 function blockText(block: unknown): string {
   if (!block || typeof block !== 'object') return '';
@@ -66,27 +38,12 @@ function blockText(block: unknown): string {
 }
 
 function toolCallFields(call: unknown): { id: string; name: string; args: string; explanation: string } {
-  const c = (call && typeof call === 'object' ? call : {}) as Record<string, unknown>;
-  const id = String(c.id ?? c.toolCallId ?? '');
-  const name = String(c.name ?? c.toolName ?? 'tool');
-  let args = '';
-  if (typeof c.arguments === 'string') args = c.arguments;
-  else if (c.input !== undefined) {
-    try {
-      args = typeof c.input === 'string' ? c.input : JSON.stringify(c.input);
-    } catch {
-      args = String(c.input);
-    }
-  } else if (c.parameters !== undefined) {
-    try {
-      args = typeof c.parameters === 'string' ? c.parameters : JSON.stringify(c.parameters);
-    } catch {
-      args = String(c.parameters);
-    }
+  const parsed = parseToolCallFields(call);
+  if (parsed.ok === false) {
+    logInternalError('daemon-protocol', parsed.error);
+    return { id: `tc-${Date.now()}`, name: 'tool', args: '', explanation: '' };
   }
-  // 摘要仅作补充；展示层优先用 arguments 里的命令
-  const explanation = String(c.summary ?? c.description ?? '');
-  return { id: id || `tc-${Date.now()}`, name, args, explanation };
+  return parsed.data;
 }
 
 function toolResultFields(result: unknown): {
@@ -161,13 +118,8 @@ export function streamViaDaemon(
   let receivedTextDelta = false;
   let progressiveTimer: ReturnType<typeof setTimeout> | null = null;
   let unsub: (() => void) | null = null;
-  /** 待用户确认的审批 id；有挂起时不结束流，避免 AI 轮空被 UI 提前收口 */
-  const pendingApprovals = new Set<string>();
-  /** 已 start 未 end 的工具，收口前尽量等齐 */
-  const inflightTools = new Set<string>();
-  /** 是否已见过 run-terminal 类终态（agent-end 单独不够） */
-  let sawRunTerminal = false;
-  let deferredTerminal = false;
+  /** 审批 / 在飞工具状态机（替代四布尔散状态） */
+  const approvalFlow = new ApprovalFlowMachine();
   let endTimer: ReturnType<typeof setTimeout> | null = null;
   const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   void assistantMsgId;
@@ -183,10 +135,10 @@ export function streamViaDaemon(
    */
   const tryResumeFinish = () => {
     if (finished || cancelled) return;
-    if (!deferredTerminal) return;
-    if (!sawRunTerminal) return;
-    if (pendingApprovals.size > 0) return;
-    if (inflightTools.size > 0) return;
+    const snap = approvalFlow.snapshot();
+    if (!snap.deferredTerminal) return;
+    if (!snap.sawRunTerminal) return;
+    if (approvalFlow.shouldBlockTerminal()) return;
     finish(false);
   };
 
@@ -229,13 +181,13 @@ export function streamViaDaemon(
   const finish = (force = false) => {
     if (finished) return;
     if (!force && !cancelled) {
-      if (pendingApprovals.size > 0) {
-        deferredTerminal = true;
+      if (approvalFlow.hasPending()) {
+        approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
       // 仍有在飞工具：标记 defer，等 tool-end 重入；超时再强制收口
-      if (inflightTools.size > 0) {
-        deferredTerminal = true;
+      if (approvalFlow.hasInflight()) {
+        approvalFlow.dispatch({ type: "defer_terminal" });
         if (endTimer) clearTimeout(endTimer);
         endTimer = setTimeout(() => finish(true), 1200);
         return;
@@ -246,7 +198,10 @@ export function streamViaDaemon(
       endTimer = null;
     }
     clearProgressive();
-    deferredTerminal = false;
+    // 收口时清 deferred 标记（保留 saw/pending 由 clear_all 在真失败路径处理）
+    if (approvalFlow.isDeferredTerminal()) {
+      approvalFlow.dispatch({ type: 'force_finish' });
+    }
     finished = true;
     unsub?.();
     unsub = null;
@@ -369,7 +324,7 @@ export function streamViaDaemon(
     if (type === 'tool-start') {
       const { id, name, args, explanation } = toolCallFields(event.call);
       if (id) {
-        inflightTools.add(id);
+        approvalFlow.dispatch({ type: "tool_start", toolId: id });
         callbacks.onToolStart(id, name, args, explanation);
       }
       return;
@@ -381,7 +336,7 @@ export function streamViaDaemon(
     if (type === 'tool-end') {
       const { id, text, isError, diffs } = toolResultFields(event.result);
       if (!id) return;
-      inflightTools.delete(id);
+      approvalFlow.dispatch({ type: "tool_end", toolId: id });
       if (isError) callbacks.onToolError(id, text || 'failed');
       else callbacks.onToolSuccess(id, text || '', diffs);
       // 曾 defer 的终态：在飞工具归零后立即收口，不靠超时
@@ -431,7 +386,7 @@ export function streamViaDaemon(
           void client
             .send({ type: 'approve-tool', toolCallId, scope: 'project' })
             .catch(() => {
-              pendingApprovals.add(toolCallId);
+              approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
               if (callbacks.onToolPendingApproval) {
                 callbacks.onToolPendingApproval(toolCallId, toolName, args, explanation);
               }
@@ -440,7 +395,7 @@ export function streamViaDaemon(
         }
       }
 
-      pendingApprovals.add(toolCallId);
+      approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
       if (callbacks.onToolPendingApproval) {
         callbacks.onToolPendingApproval(toolCallId, toolName, args, explanation);
       } else {
@@ -467,15 +422,15 @@ export function streamViaDaemon(
           typeof decision === 'object' &&
           (decision as { behavior?: string }).behavior === 'deny');
       if (requestId) {
-        pendingApprovals.delete(requestId);
+        approvalFlow.dispatch({ type: "approval_resolved", toolId: requestId });
         if (callbacks.onApprovalResolved) {
           callbacks.onApprovalResolved(requestId, allowed ? 'allow' : 'deny');
         }
         // allow 后引擎还会继续，勿提前收口；
         // deny：若此前因审批 defer 过终态则收口；已见 run 终态时同样 tryResume
-        if (denied && deferredTerminal && pendingApprovals.size === 0) {
+        if (denied && approvalFlow.isDeferredTerminal() && !approvalFlow.hasPending()) {
           finish(false);
-        } else if (sawRunTerminal) {
+        } else if (approvalFlow.snapshot().sawRunTerminal) {
           tryResumeFinish();
         }
       }
@@ -491,20 +446,20 @@ export function streamViaDaemon(
       if (type === 'run-terminal' && term === 'failed') {
         surfaceFailure(event.error ?? event, 'run-terminal-failed');
       }
-      sawRunTerminal = true;
-      if (pendingApprovals.size > 0 && type !== 'run-failed' && term !== 'failed' && term !== 'cancelled') {
-        deferredTerminal = true;
+      approvalFlow.dispatch({ type: "run_terminal_seen" });
+      if (approvalFlow.hasPending() && type !== 'run-failed' && term !== 'failed' && term !== 'cancelled') {
+        approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
-      pendingApprovals.clear();
+      approvalFlow.dispatch({ type: "clear_all" });
       finish(term === 'failed' || term === 'cancelled' || type === 'run-failed');
       return;
     }
 
     // agent-end 不是最终权威：仅在长时间无 run-terminal 时兜底
     if (type === 'agent-end') {
-      if (pendingApprovals.size > 0) {
-        deferredTerminal = true;
+      if (approvalFlow.hasPending()) {
+        approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
       const reason = String((event as { reason?: string }).reason || '');
@@ -513,7 +468,7 @@ export function streamViaDaemon(
         finish(true);
         return;
       }
-      if (sawRunTerminal) {
+      if (approvalFlow.snapshot().sawRunTerminal) {
         finish(false);
         return;
       }
@@ -576,7 +531,7 @@ export function streamViaDaemon(
     if (type === 'error') {
       if (msg.runId && msg.runId !== runId) return;
       surfaceFailure(msg.message ?? msg.error ?? msg, 'daemon-error');
-      pendingApprovals.clear();
+      approvalFlow.dispatch({ type: "clear_all" });
       finish(true);
       return;
     }
@@ -592,8 +547,8 @@ export function streamViaDaemon(
       if (type === 'run-failed') {
         surfaceFailure(msg.error ?? msg.message ?? msg, 'run-ended-failed');
       }
-      sawRunTerminal = true;
-      pendingApprovals.clear();
+      approvalFlow.dispatch({ type: "run_terminal_seen" });
+      approvalFlow.dispatch({ type: "clear_all" });
       finish(type === 'run-failed');
       return;
     }
@@ -623,14 +578,14 @@ export function streamViaDaemon(
           typeof decision === 'object' &&
           (decision as { behavior?: string }).behavior === 'deny');
       if (toolCallId) {
-        pendingApprovals.delete(toolCallId);
+        approvalFlow.dispatch({ type: "approval_resolved", toolId: toolCallId });
         if (callbacks.onApprovalResolved) {
           // 未知决策按 deny，避免伪造 allow
           callbacks.onApprovalResolved(toolCallId, allowed ? 'allow' : 'deny');
         }
-        if (denied && deferredTerminal && pendingApprovals.size === 0) {
+        if (denied && approvalFlow.isDeferredTerminal() && !approvalFlow.hasPending()) {
           finish(false);
-        } else if (sawRunTerminal) {
+        } else if (approvalFlow.snapshot().sawRunTerminal) {
           tryResumeFinish();
         }
       }
@@ -683,8 +638,8 @@ export function streamViaDaemon(
   return () => {
     if (finished) return;
     cancelled = true;
-    pendingApprovals.clear();
-    inflightTools.clear();
+    approvalFlow.dispatch({ type: "clear_all" });
+    approvalFlow.dispatch({ type: "force_finish" });
     if (endTimer) {
       clearTimeout(endTimer);
       endTimer = null;

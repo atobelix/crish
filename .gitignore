@@ -73,7 +73,23 @@ tail
 timeout
 tsc-errors.txt
 tsc-errors2.txt
+tsc-errors*.txt
 code-tree.txt
+tauri-dev-restart.log
+*.log
+
+# Local tool / agent scratch tests (never commit)
+test_*.txt
+test_*.ts
+test spaces in filename.txt
+non_existent_dir/
+non_existent_dir_*/
+_find_label_bug.py
+_commit_msg.txt
+
+# Codex / MCP local scratch
+.codex/
+mcps/
 
 # Planning documents (keep only ARCHITECTURE.md)
 0613-0055-plan.md

@@ -4,6 +4,10 @@ import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/clientAp
 import { isDemoMode } from '../api/appMode';
 import { persistAllSessions } from '../api/sessionPersistence';
 import {
+  mirrorSessionsToDisk,
+  restoreSessionsFromDiskMirror,
+} from '../api/sessionDiskMirror';
+import {
   pickSessionDomain,
   sessionDomainChanged,
   type SessionDomainSlice,
@@ -365,40 +369,38 @@ export function initLayoutStorePersistence(): () => void {
     // H3：磁盘镜像更低频，避免每键写文件
     if (diskTimer) clearTimeout(diskTimer);
     diskTimer = setTimeout(() => {
-      void import('../api/sessionDiskMirror').then(({ mirrorSessionsToDisk }) => {
-        void mirrorSessionsToDisk(
-          useLayoutStore.getState().sessions,
-          useLayoutStore.getState().activeSessionId,
-          useLayoutStore.getState().folderOrder,
-        );
-      });
+      const cur = useLayoutStore.getState();
+      void mirrorSessionsToDisk(cur.sessions, cur.activeSessionId, cur.folderOrder);
     }, 2500);
   });
 
-  // localStorage 空时尝试从磁盘镜像回灌
+  // localStorage 空时尝试从磁盘镜像回灌（compare-and-swap：写入前再次确认仍为空）
   if (useLayoutStore.getState().sessions.length === 0) {
-    void import('../api/sessionDiskMirror').then(({ restoreSessionsFromDiskMirror }) => {
-      void restoreSessionsFromDiskMirror().then((restored) => {
-        if (!restored?.sessions?.length) return;
-        const cur = useLayoutStore.getState();
-        // 用户已新建会话则不覆盖
-        if (cur.sessions.length > 0) return;
-        useLayoutStore.setState((state) => {
-          state.sessions = restored.sessions;
-          state.sessionsById = buildSessionsById(restored.sessions);
-          state.activeSessionId = restored.activeSessionId;
-          state.folderOrder = restored.folderOrder;
-        });
-        try {
+    void restoreSessionsFromDiskMirror().then((restored) => {
+      if (!restored?.sessions?.length) return;
+      const cur = useLayoutStore.getState();
+      // 用户已新建会话则不覆盖
+      if (cur.sessions.length > 0) return;
+      useLayoutStore.setState((state) => {
+        // 二次检查：recipe 内仍空才写入
+        if (state.sessions.length > 0) return;
+        state.sessions = restored.sessions;
+        state.sessionsById = buildSessionsById(restored.sessions);
+        state.activeSessionId = restored.activeSessionId;
+        state.folderOrder = restored.folderOrder;
+      });
+      try {
+        if (useLayoutStore.getState().sessions === restored.sessions
+          || useLayoutStore.getState().activeSessionId === restored.activeSessionId) {
           persistAllSessions(
             restored.sessions,
             restored.activeSessionId,
             restored.folderOrder,
           );
-        } catch {
-          /* ignore */
         }
-      });
+      } catch {
+        /* ignore */
+      }
     });
   }
 
