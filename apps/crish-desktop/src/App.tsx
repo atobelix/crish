@@ -12,12 +12,23 @@ import {
 } from './components/FirstRunWizard';
 import { Sidebar } from './components/Sidebar';
 import { Workspace } from './components/Workspace';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import * as Lucide from 'lucide-react';
 import type { SettingsTabType } from './components/SettingsPanel';
 import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
 
 const SettingsPanel = lazy(() =>
-  import('./components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })),
+  import('./components/SettingsPanel')
+    .then((m) => {
+      if (!m.SettingsPanel) {
+        throw new Error('SettingsPanel 导出缺失');
+      }
+      return { default: m.SettingsPanel };
+    })
+    .catch((err) => {
+      console.error('[crish] SettingsPanel lazy load failed', err);
+      throw err;
+    }),
 );
 
 /** Devtools / internal globals attached to window (no `as any`) */
@@ -495,31 +506,32 @@ function App() {
         </div>
       )}
 
-      {/* 设置：全覆盖工作区（非居中弹窗），便于留白与长表单 */}
+      {/* 设置：全覆盖；ErrorBoundary 防止 lazy/子页崩溃导致「进不去」空白 */}
       {showSettingsOverlay && (
         <div className="settings-cover" role="dialog" aria-modal="true" aria-label="设置">
-          <Suspense
-            fallback={
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  width: '100%',
-                }}
-              >
-                加载设置…
-              </div>
-            }
+          <AppErrorBoundary
+            title="设置加载失败"
+            onReset={() => {
+              setShowSettingsOverlay(false);
+              window.setTimeout(() => setShowSettingsOverlay(true), 50);
+            }}
           >
-            <SettingsPanel
-              wsId={activeWorkspace?.id || 'ws-0'}
-              onShowToast={handleShowToast}
-              onClose={() => setShowSettingsOverlay(false)}
-              initialTab={settingsActiveTab as SettingsTabType}
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                <div className="settings-suspense-fallback" aria-busy="true">
+                  <div className="settings-suspense-skel settings-suspense-skel--nav" />
+                  <div className="settings-suspense-skel settings-suspense-skel--main" />
+                </div>
+              }
+            >
+              <SettingsPanel
+                wsId={activeWorkspace?.id || 'ws-0'}
+                onShowToast={handleShowToast}
+                onClose={() => setShowSettingsOverlay(false)}
+                initialTab={settingsActiveTab as SettingsTabType}
+              />
+            </Suspense>
+          </AppErrorBoundary>
         </div>
       )}
     </div>

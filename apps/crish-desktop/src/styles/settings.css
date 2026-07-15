@@ -393,16 +393,47 @@ select.settings-field-input {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  /* 确保覆盖层可点、可铺满（修复「进不去/空白」） */
+  pointer-events: auto;
+  isolation: isolate;
 }
 .settings-panel--cover {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   height: 100%;
   width: 100%;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-family: var(--font-sans);
+}
+.settings-suspense-fallback {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+.settings-suspense-skel {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  animation: settings-skel-pulse 1.15s ease-in-out infinite;
+}
+.settings-suspense-skel--nav {
+  width: 228px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+.settings-suspense-skel--main {
+  flex: 1;
+  margin: 28px 40px;
+  border-radius: 12px;
+  min-height: 200px;
+}
+@keyframes settings-skel-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
 }
 .settings-cover-header {
   display: flex;
@@ -584,6 +615,134 @@ select.settings-field-input {
   font-weight: 600 !important;
   letter-spacing: -0.02em;
   line-height: 1.25;
+}
+
+/* ===== 现代化设置页骨架（先用于外观等） ===== */
+.settings-pane--modern {
+  gap: 28px;
+  max-width: 720px;
+}
+.settings-page-head {
+  margin-bottom: 4px;
+}
+.settings-page-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.settings-page-desc {
+  margin: 8px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-width: 42em;
+}
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  padding: 0 2px;
+}
+.settings-list {
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  overflow: hidden;
+  background: transparent;
+}
+.settings-list--flush {
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 56px;
+  box-sizing: border-box;
+}
+.settings-list-row:last-child {
+  border-bottom: none;
+}
+.settings-list-row--clickable {
+  cursor: pointer;
+  margin: 0;
+}
+.settings-list-row--clickable:hover {
+  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+}
+.settings-list-copy {
+  flex: 1;
+  min-width: 0;
+}
+.settings-list-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+.settings-list-sub {
+  margin-top: 3px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+.settings-list-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.settings-segment-pill .ui-segment-item {
+  border-radius: 999px;
+  min-width: 52px;
+}
+.settings-list-row--profile {
+  gap: 14px;
+  justify-content: flex-start;
+}
+.settings-profile-avatar-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.settings-list-sub--mono {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.settings-list-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.settings-list-stack-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.settings-list-stack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .settings-section-header p,
 .settings-section-header + p {

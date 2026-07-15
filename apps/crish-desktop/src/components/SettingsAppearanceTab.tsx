@@ -1,5 +1,5 @@
 /**
- * 设置 · 外观：主题、代码缩进、字体、隐藏思考过程
+ * 设置 · 外观（现代化列表行：大标题、副文案、右侧控件、无脏色块）
  */
 import React, { useEffect, useState } from 'react';
 import type { Settings } from '../api/clientApi';
@@ -57,96 +57,108 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
 
   if (!settings) {
     return (
-      <div style={{ padding: '16px 0', fontSize: 12, color: 'var(--text-tertiary)' }}>
-        加载外观设置…
+      <div className="settings-pane settings-pane--loading">
+        <div className="settings-page-head">
+          <h2 className="settings-page-title">外观</h2>
+          <p className="settings-page-desc">加载中…</p>
+        </div>
       </div>
     );
   }
 
-  return (
-    <>
-      <div className="settings-section-header" style={{ marginBottom: 4 }}>
-        <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>外观</h4>
-      </div>
+  const theme = settings.theme || 'default';
+  const hideThinking = Boolean((settings as { hideThinking?: boolean }).hideThinking);
 
-      <div className="settings-rows">
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <span className="settings-row-title">主题</span>
-          </div>
-          <div className="settings-row-control">
-            <div className="ui-segment ui-segment--inline">
-              {(
-                [
-                  { id: 'default', label: '浅色' },
-                  { id: 'dark', label: '深色' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ui-segment-item ${(settings.theme || 'default') === opt.id ? 'active' : ''}`}
-                  onClick={() => {
-                    void handleUpdateSettings({ theme: opt.id });
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
+  return (
+    <div className="settings-pane settings-pane--modern">
+      <header className="settings-page-head">
+        <h2 className="settings-page-title">外观</h2>
+        <p className="settings-page-desc">主题、字体与阅读密度，影响整个应用的视觉感受。</p>
+      </header>
+
+      <section className="settings-group" aria-label="主题与布局">
+        <div className="settings-group-label">主题与布局</div>
+        <div className="settings-list">
+          <div className="settings-list-row">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">主题</div>
+              <div className="settings-list-sub">浅色适合白天；深色适合弱光环境</div>
+            </div>
+            <div className="settings-list-control">
+              <div className="ui-segment ui-segment--inline settings-segment-pill">
+                {(
+                  [
+                    { id: 'default', label: '浅色' },
+                    { id: 'dark', label: '深色' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`ui-segment-item ${theme === opt.id ? 'active' : ''}`}
+                    onClick={() => {
+                      void handleUpdateSettings({ theme: opt.id });
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          <div className="settings-list-row">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">代码缩进</div>
+              <div className="settings-list-sub">Markdown / 代码块展示时的缩进字符</div>
+            </div>
+            <div className="settings-list-control">
+              <SettingsSelect
+                value={settings.markdown?.codeBlockIndent || '  '}
+                options={[
+                  { value: '  ', label: '2 空格' },
+                  { value: '    ', label: '4 空格' },
+                  { value: '\t', label: 'Tab' },
+                ]}
+                onChange={(v) =>
+                  void handleUpdateSettings({
+                    markdown: { ...settings.markdown, codeBlockIndent: v },
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <label className="settings-list-row settings-list-row--clickable">
+            <div className="settings-list-copy">
+              <div className="settings-list-title">隐藏思考过程</div>
+              <div className="settings-list-sub">开启后对话中不展示模型思考区</div>
+            </div>
+            <div className="settings-list-control">
+              <input
+                type="checkbox"
+                className="settings-switch"
+                checked={hideThinking}
+                onChange={(e) => {
+                  void handleUpdateSettings({
+                    hideThinking: e.target.checked,
+                  } as Partial<Settings>);
+                }}
+              />
+            </div>
+          </label>
         </div>
+      </section>
 
-        <div className="settings-row">
-          <div className="settings-row-label">
-            <span className="settings-row-title">代码缩进</span>
-          </div>
-          <div className="settings-row-control">
-            <SettingsSelect
-              value={settings.markdown?.codeBlockIndent || '  '}
-              options={[
-                { value: '  ', label: '2 空格' },
-                { value: '    ', label: '4 空格' },
-                { value: '\t', label: 'Tab' },
-              ]}
-              onChange={(v) =>
-                void handleUpdateSettings({
-                  markdown: { ...settings.markdown, codeBlockIndent: v },
-                })
-              }
-            />
-          </div>
+      <section className="settings-group" aria-label="字体">
+        <div className="settings-group-label">字体</div>
+        <div className="settings-list settings-list--flush">
+          <FontSettingsSection
+            onShowToast={onShowToast}
+            onPersistSettings={(fonts) => handleUpdateSettings({ fonts })}
+          />
         </div>
-
-        <FontSettingsSection
-          onShowToast={onShowToast}
-          onPersistSettings={(fonts) =>
-            handleUpdateSettings({
-              fonts: {
-                uiFont: fonts.uiFont,
-                monoFont: fonts.monoFont,
-                monoLigatures: fonts.monoLigatures,
-                v: 1,
-              },
-            })
-          }
-        />
-
-        <label className="settings-row settings-row--toggle settings-row--rich">
-          <div className="settings-row-label">
-            <span className="settings-row-title">隐藏思考过程</span>
-            <span className="settings-row-desc">关闭后对话中不展示「思考中」状态</span>
-          </div>
-          <div className="settings-row-control">
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={!!settings.hideThinkingBlock}
-              onChange={(e) => handleUpdateSettings({ hideThinkingBlock: e.target.checked })}
-            />
-          </div>
-        </label>
-      </div>
-    </>
+      </section>
+    </div>
   );
 };
