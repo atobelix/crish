@@ -35,7 +35,6 @@ import {
   isFileModifyingTool,
 } from './chat/utils';
 import { formatTime, truncatePath } from './utils';
-import { showToast } from './ToastContainer';
 import {
   reduceChatMessages,
   removeChatMessages,

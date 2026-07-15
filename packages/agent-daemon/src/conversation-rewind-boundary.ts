@@ -337,7 +337,8 @@ function mergeMissingFacts(
 function codeForMissingFact(fact: ConversationRewindMissingFact): string {
   if (fact === "session-tree-target-leaf") return "REWIND_SESSION_TREE_TARGET_MISSING";
   if (fact === "runtime-target-leaf") return "REWIND_RUNTIME_TARGET_MISSING";
-  return "REWIND_WORKSPACE_CHECKPOINT_MISSING";
+  if (fact === "workspace-checkpoint") return "REWIND_WORKSPACE_CHECKPOINT_MISSING";
+  return "REWIND_MISSING_CHECKPOINT";
 }
 
 function messageForMissingFact(fact: ConversationRewindMissingFact): string {

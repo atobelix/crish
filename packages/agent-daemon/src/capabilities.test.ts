@@ -33,24 +33,29 @@ describe("daemon capability snapshot", () => {
     expect(capability(snapshot, "checkpoints")).toMatchObject({ state: "unsupported" });
   });
 
-  it("promotes product capabilities from explicit adapter state", () => {
+  it("does not promote product capabilities when related protocol messages are unsupported", () => {
     const snapshot = buildDaemonCapabilitySnapshot({
       providerStatus: providerStatus("ready"),
       mcpStatus: mcpStatus({ configured: false }),
       productAdapters: {
-        artifacts: productStatus("artifacts", "unsupported"),
+        artifacts: productStatus("artifacts", "experimental", ["list", "content"]),
         memory: productStatus("memory", "unsupported"),
-        checkpoints: productStatus("checkpoints", "experimental", ["list", "diff"]),
+        checkpoints: productStatus("checkpoints", "unsupported"),
       },
       lifecycle: lifecycle(),
       now: new Date(timestamp()),
     });
 
-    expect(capability(snapshot, "checkpoints")).toMatchObject({
-      state: "experimental",
-      reason: "checkpoints adapter state",
-      diagnostics: [expect.objectContaining({ code: "CHECKPOINTS_ADAPTER_STATE" })],
+    // artifacts 的 product adapter 报告 experimental，但 registry 中相关消息类型是 unsupported，
+    // 所以 capability 不应被提升
+    expect(capability(snapshot, "artifacts")).toMatchObject({
+      state: "unsupported",
     });
+    expect(capability(snapshot, "artifacts").diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "CAPABILITY_REGISTRY_MISMATCH" }),
+      ])
+    );
   });
 
   it("exposes requirements alignment through the plan document capability", () => {
@@ -200,13 +205,6 @@ function providerStatus(readiness: DaemonProviderStatusSnapshot["readiness"]): D
     apiKey: { hasApiKey: false, source: "unset" },
     hasDirectApiKey: false,
     apiKeySource: "unset",
-    accountCenter: {
-      configured: false,
-      login: "unknown",
-      quota: "unknown",
-      gateway: "unknown",
-      runtimeCredential: "unknown",
-    },
     gateway: {
       ready: readiness === "ready",
       credentialConfigured: readiness === "ready",

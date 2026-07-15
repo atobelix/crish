@@ -118,8 +118,11 @@ describe("buildDaemonTaskSnapshot", () => {
             id: "tool-1",
             sessionId: "session-1",
             cwd: "C:/repo",
-            tool: {
-              name: "shell_command",
+            toolCallId: "tool-1",
+            toolName: "shell_command",
+            parameters: { command: "npm install" },
+            summary: "npm install",
+            toolMetadata: {
               label: "Shell",
               description: "Run a command",
               category: "terminal",
@@ -127,8 +130,6 @@ describe("buildDaemonTaskSnapshot", () => {
               isReadOnly: false,
               summarize: "npm install",
             },
-            input: { command: "npm install" },
-            summary: "npm install",
             metadata: {
               risk: "network",
               reason: "Network or package-management command",
@@ -309,8 +310,11 @@ function requestedEvent(id: string): OrchestratorEvent {
       id: "tool-1",
       sessionId: "session-1",
       cwd: "C:/repo",
-      tool: {
-        name: "shell_command",
+      toolCallId: "tool-1",
+      toolName: "shell_command",
+      parameters: { command: "npm install" },
+      summary: "npm install",
+      toolMetadata: {
         label: "Shell",
         description: "Run a command",
         category: "terminal",
@@ -318,8 +322,11 @@ function requestedEvent(id: string): OrchestratorEvent {
         isReadOnly: false,
         summarize: "npm install",
       },
-      input: { command: "npm install" },
-      summary: "npm install",
+      metadata: {
+        risk: "network",
+        reason: "Network or package-management command",
+        recommendSnapshot: false,
+      },
     },
   } as unknown as AgentEvent);
 }

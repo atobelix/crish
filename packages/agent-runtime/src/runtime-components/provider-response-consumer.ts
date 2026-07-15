@@ -1,5 +1,6 @@
-import type { AgentMessage, AgentMessageBlock, JsonObject, ToolCallBlock } from "@crish/shared-types";
-import type { AgentTool, ProviderStreamEvent } from "../types";
+import type { AgentMessage, AgentMessageBlock, ProviderDiagnostic, ToolCallBlock } from "@crish/shared-types";
+import type { AgentTool } from "../types";
+import type { ProviderStreamContractEvent } from "../provider-stream-contract";
 import { createId, nowIso } from "../session";
 import { repairToolInput } from "../tools";
 
@@ -8,73 +9,110 @@ export type AssistantResponse =
   | { type: "empty-response" }
   | { type: "error"; error: string };
 
+export interface ConsumeResult {
+  response: AssistantResponse;
+  /** 在流期间收集的 provider-diagnostic 事件，供调用方 emit */
+  diagnostics: ProviderDiagnostic[];
+}
+
 export class ProviderResponseConsumer {
   async consume(
-    callIterator: AsyncIterable<ProviderStreamEvent>,
+    callIterator: AsyncIterable<ProviderStreamContractEvent>,
     tools: AgentTool[],
     signal: AbortSignal,
-  ): Promise<AssistantResponse> {
+  ): Promise<ConsumeResult> {
     const blocks: AgentMessageBlock[] = [];
+    const diagnostics: ProviderDiagnostic[] = [];
     let textBuffer = "";
     let thoughtBuffer = "";
     let error: string | undefined;
-    // Track if we've received any blocks from the provider
-    let hasContent = false;
+    let sawContent = false;
 
     for await (const event of callIterator) {
-      if (signal.aborted) return { type: "error", error: "aborted" };
-
-      hasContent = true;
+      if (signal.aborted) return { response: { type: "error", error: "aborted" }, diagnostics };
 
       switch (event.type) {
-        case "text-delta":
-          textBuffer += event.text;
-          blocks.push({ type: "text", text: event.text });
+        case "start":
+          // 流开始，无内容
           break;
 
-        case "thought-delta":
-          thoughtBuffer += event.text;
-          blocks.push({
-            type: "thought",
-            text: event.text,
-            ...(event.redacted !== undefined ? { redacted: event.redacted } : {}),
-          });
-          break;
-
-        case "tool-call": {
-          const tool = tools.find((c) => c.name === event.toolName);
-          const input = event.input ?? {};
-          const repaired = tool ? repairToolInput(tool, input) : { input, repaired: false, notes: [] };
-          blocks.push({
-            type: "tool-call",
-            id: event.id ?? createId("call"),
-            toolName: event.toolName,
-            input: repaired.input,
-          });
+        case "delta": {
+          if (event.delta.type === "text") {
+            sawContent = true;
+            textBuffer += event.delta.text;
+            blocks.push({ type: "text", text: event.delta.text });
+          } else if (event.delta.type === "thought") {
+            sawContent = true;
+            thoughtBuffer += event.delta.text;
+            blocks.push({
+              type: "thought",
+              text: event.delta.text,
+              ...(event.delta.redacted !== undefined ? { redacted: event.delta.redacted } : {}),
+            });
+          } else if (event.delta.type === "diagnostic") {
+            diagnostics.push(event.delta.diagnostic);
+          }
           break;
         }
 
-        case "provider-diagnostic":
-          // informational, not message content
+        case "tool-call": {
+          // 只在 phase=end 时收集完整的工具调用
+          if (event.phase === "end") {
+            sawContent = true;
+            const toolCall = event.toolCall;
+            const tool = tools.find((c) => c.name === toolCall.toolName);
+            const input = toolCall.input ?? {};
+            const repaired = tool ? repairToolInput(tool, input) : { input, repaired: false, notes: [] };
+            blocks.push({
+              type: "tool-call",
+              id: toolCall.id ?? createId("call"),
+              toolName: toolCall.toolName,
+              input: repaired.input,
+            });
+          }
+          break;
+        }
+
+        case "error":
+          error = event.error.message;
           break;
 
-        case "stop":
-          error = event.error;
+        case "end": {
+          if (event.error) {
+            error = event.error.message;
+          }
+          break;
+        }
+
+        case "done":
+          // 流结束信号，无额外内容
           break;
       }
     }
 
-    if (blocks.length === 0 && !error) {
-      return { type: "empty-response" };
-    }
+    const response: AssistantResponse =
+      blocks.length === 0 && !error
+        ? { type: "empty-response" }
+        : error && blocks.length === 0
+          ? { type: "error", error }
+          : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error) };
 
-    if (error && blocks.length === 0) {
-      return { type: "error", error };
-    }
+    return { response, diagnostics };
+  }
 
-    const stopReason = error ? "error" : blocks.some(b => b.type === "tool-call") ? "tool-call" as const : "stop" as const;
+  private buildMessage(
+    blocks: AgentMessageBlock[],
+    textBuffer: string,
+    thoughtBuffer: string,
+    error: string | undefined,
+  ): AgentMessage {
+    const stopReason = error
+      ? "error"
+      : blocks.some((b) => b.type === "tool-call")
+        ? ("tool-call" as const)
+        : ("stop" as const);
 
-    const message: AgentMessage = {
+    return {
       id: createId("assistant"),
       role: "assistant",
       createdAt: nowIso(),
@@ -86,7 +124,5 @@ export class ProviderResponseConsumer {
         ...(thoughtBuffer ? { thought: thoughtBuffer } : {}),
       },
     };
-
-    return { type: "message", message };
   }
 }

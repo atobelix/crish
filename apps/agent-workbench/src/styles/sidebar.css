@@ -337,7 +337,6 @@
 
 .repl-sidebar-session-row.active .repl-sidebar-session-title {
     color: var(--color-text-primary);
-    font-weight: 500;
 }
 
 /* === 运行中指示点 === */

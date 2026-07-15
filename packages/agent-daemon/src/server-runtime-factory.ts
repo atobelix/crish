@@ -398,7 +398,8 @@ export class DaemonRuntimeFactory {
     logRuntimeConfigValidation(runId, validation);
 
     // 从合并结果中提取运行时参数
-    const permissionMode = (mergedConfig.permissionMode as "ask" | "full-access") ?? "ask";
+    const permissionMode =
+      (mergedConfig.permissionMode as "ask" | "auto" | "full-access" | "plan") ?? "ask";
     const maxTurns = (mergedConfig.maxTurns as number) ?? 16;
     const subagentDepth = (mergedConfig.subagentDepth as number) ?? 0;
 
@@ -715,7 +716,10 @@ function runtimeConfigFromEnv(env: Record<string, string | undefined>): Record<s
   }
 
   const permissionMode = env.CRISH_PERMISSION_MODE ?? env.CRISH_PERMISSION_POLICY;
-  if (permissionMode !== undefined && ["ask", "full-access"].includes(permissionMode)) {
+  if (
+    permissionMode !== undefined &&
+    ["ask", "auto", "full-access", "plan"].includes(permissionMode)
+  ) {
     result.permissionMode = permissionMode;
   }
 
@@ -750,7 +754,12 @@ function runtimeConfigFromRunMetadata(metadata: JsonObject | undefined): Record<
   const maxRounds = numberMetadata(metadata, "maxRounds");
   if (maxRounds !== undefined) result.maxTurns = maxRounds;
 
-  if (metadata.permissionMode === "full-access" || metadata.permissionMode === "ask") {
+  if (
+    metadata.permissionMode === "full-access" ||
+    metadata.permissionMode === "ask" ||
+    metadata.permissionMode === "auto" ||
+    metadata.permissionMode === "plan"
+  ) {
     result.permissionMode = metadata.permissionMode;
   }
 
@@ -803,7 +812,7 @@ function providerStatusProviderFromFactory(
 function unconfiguredProviderStatusSnapshot(): DaemonProviderStatusSnapshot {
   const updatedAt = new Date().toISOString();
   return {
-    credentialMode: "account-center",
+    credentialMode: "auto",
     readiness: "missing",
     providerId: "unconfigured",
     routeId: "unconfigured",
@@ -819,13 +828,6 @@ function unconfiguredProviderStatusSnapshot(): DaemonProviderStatusSnapshot {
     },
     hasDirectApiKey: false,
     apiKeySource: "unset",
-    accountCenter: {
-      configured: false,
-      login: "unknown",
-      quota: "unknown",
-      gateway: "unknown",
-      runtimeCredential: "unknown",
-    },
     gateway: {
       ready: false,
       credentialConfigured: false,

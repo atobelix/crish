@@ -39,13 +39,26 @@ export class PermissionError extends ConexError {
 export class SessionError extends ConexError {
   constructor(
     message: string,
-    code: string,
+    code: SessionErrorCode,
     metadata?: JsonObject,
   ) {
     super(message, code, "permanent", false, metadata);
     this.name = "SessionError";
   }
 }
+
+/**
+ * Session 子系统的错误码。
+ *
+ * 对齐 Pi 的 SessionErrorCode 模式，使用联合类型替代 string，
+ * 在编译时即可捕获无效错误码。
+ */
+export type SessionErrorCode =
+  | "not_found"
+  | "invalid_session"
+  | "invalid_entry"
+  | "invalid_state"
+  | "storage";
 
 export class ProtocolError extends ConexError {
   constructor(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateDueWorkflowRuns, WorkflowScheduler } from "./workflow-scheduler";
 import type { WorkflowDefinition, WorkflowRunEntry } from "./types";
-import { validateInboundMessage, validateOutboundMessage } from "./protocol/schema/schema-dispatch";
+import { validateInboundMessage, validateOutboundMessage } from "./protocol/protocol";
 
 describe("workflow scheduler", () => {
   it("calculates daily workflows due in their configured timezone once per local day", () => {
@@ -197,8 +197,8 @@ describe("workflow protocol schema", () => {
 
     expect(invalid.ok).toBe(false);
     if (!invalid.ok) {
-      expect(invalid.error.issues.map((issue) => issue.path)).toContain("$.schedule.time");
-      expect(invalid.error.issues.map((issue) => issue.path)).toContain("$.schedule.timezone");
+      expect(invalid.error.issues.map((issue: { path: string }) => issue.path)).toContain("$.schedule.time");
+      expect(invalid.error.issues.map((issue: { path: string }) => issue.path)).toContain("$.schedule.timezone");
     }
   });
 
@@ -535,7 +535,7 @@ function lifecycleSnapshot() {
 
 function providerStatusSnapshot() {
   return {
-    credentialMode: "account-center",
+    credentialMode: "auto",
     readiness: "ready",
     providerId: "flowbit",
     routeId: "default:flowbit:mimo-v2.5",
@@ -544,19 +544,13 @@ function providerStatusSnapshot() {
     upstreamModel: "mimo-v2.5",
     endpoint: "auto",
     stream: true,
+    systemPromptWireMode: "native-system-role",
     apiKey: {
       hasApiKey: false,
       source: "unset",
     },
     hasDirectApiKey: false,
     apiKeySource: "unset",
-    accountCenter: {
-      configured: true,
-      login: "ready",
-      quota: "ready",
-      gateway: "ready",
-      runtimeCredential: "ready",
-    },
     gateway: {
       ready: true,
       credentialConfigured: true,

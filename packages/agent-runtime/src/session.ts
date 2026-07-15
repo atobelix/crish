@@ -1,7 +1,9 @@
 import { constants } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import { mkdir, open as openFile, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { AgentEvent, AgentMessage, ContextCompressionRecord } from "@crish/shared-types";
+import { SessionError } from "@crish/shared-types";
 import type { SessionEntry, SessionHeader, SessionPersistenceStore } from "./types";
 import { isRecord, errorMessage } from "@crish/shared-utils";
 
@@ -25,6 +27,23 @@ export interface MoveSessionLeafResult {
 export function createId(prefix = "id"): string {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `${prefix}_${random}`;
+}
+
+/**
+ * 生成不与已知 ID 冲突的条目 ID。
+ *
+ * 对齐 Pi 的 generateEntryId 模式：在极小概率的 UUID 碰撞下重试最多 100 次，
+ * 仍碰撞则退化为带时间戳的随机 ID。prefix 用于区分条目类型。
+ */
+function generateUniqueEntryId(prefix: string, usedIds: Set<string>): string {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const id = createId(prefix);
+    if (!usedIds.has(id)) {
+      return id;
+    }
+  }
+  // 100 次仍碰撞，退化为带更高熵的 ID
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${globalThis.crypto?.randomUUID?.() ?? ""}`;
 }
 
 export function nowIso(): string {
@@ -99,7 +118,7 @@ export async function moveSessionLeaf(
   options: MoveSessionLeafOptions = {}
 ): Promise<MoveSessionLeafResult> {
   if (!store.readAll) {
-    throw new Error("Session store must support readAll before moving the session leaf");
+    throw new SessionError("Session store must support readAll before moving the session leaf", "invalid_state");
   }
 
   const entries = await store.readAll();
@@ -130,6 +149,10 @@ export class InMemorySessionStore implements SessionPersistenceStore {
   async readAll(): Promise<SessionEntry[]> {
     return [...this.entries];
   }
+
+  async close(): Promise<void> {
+    // 内存存储无需释放资源
+  }
 }
 
 export type JsonlSessionStoreMode = "create" | "append" | "resume-or-create";
@@ -140,6 +163,7 @@ export interface JsonlSessionStoreOptions {
 
 export class JsonlSessionStore implements SessionPersistenceStore {
   private opened = false;
+  private appendHandle: FileHandle | undefined;
 
   constructor(private readonly filePath: string, private readonly options: JsonlSessionStoreOptions = {}) {}
 
@@ -156,7 +180,7 @@ export class JsonlSessionStore implements SessionPersistenceStore {
         return;
       }
       if (mode === "append") {
-        throw new Error(`Session file does not exist: ${this.filePath}`);
+        throw new SessionError(`Session file does not exist: ${this.filePath}`, "not_found");
       }
     }
     await writeSessionFileAtomically(this.filePath, migrateSessionHeader(session).header, []);
@@ -165,30 +189,101 @@ export class JsonlSessionStore implements SessionPersistenceStore {
 
   async append(entry: SessionEntry): Promise<void> {
     if (!this.opened) {
-      throw new Error("Session store must be opened before appending entries");
+      throw new SessionError("Session store must be opened before appending entries", "invalid_state");
     }
     try {
-      await appendJsonlLine(this.filePath, JSON.stringify(entry));
+      await this.appendJsonlLineWithCachedHandle(JSON.stringify(entry));
     } catch (cause) {
-      throw new Error(`Failed to append session entry to ${this.filePath}: ${errorMessage(cause)}`);
+      if (cause instanceof SessionError) {
+        throw cause;
+      }
+      throw new SessionError(
+        `Failed to append session entry to ${this.filePath}: ${errorMessage(cause)}`,
+        "storage",
+      );
     }
   }
 
   async readAll(): Promise<SessionEntry[]> {
     const parsed = await readExistingSessionFile(this.filePath);
     if (parsed?.needsRewrite) {
+      // 重写前必须释放持久化句柄，否则 Windows 上 rename 会因文件锁定失败
+      await this.releaseAppendHandle();
       await writeSessionFileAtomically(this.filePath, parsed.header, parsed.entries);
     }
     return parsed?.entries ?? [];
+  }
+
+  /**
+   * 释放持久化的追加句柄。
+   *
+   * 正常运行期间 append() 会复用同一个文件句柄以提升吞吐，
+   * 在关闭/卸载场景下应调用此方法确保句柄被释放。
+   */
+  async close(): Promise<void> {
+    await this.releaseAppendHandle();
+    this.opened = false;
+  }
+
+  private async releaseAppendHandle(): Promise<void> {
+    if (this.appendHandle) {
+      try {
+        await this.appendHandle.close();
+      } catch {
+        // 忽略关闭错误
+      }
+      this.appendHandle = undefined;
+    }
+  }
+
+  /**
+   * 使用持久化句柄追加一行 JSONL。
+   *
+   * 相比每次打开/关闭文件，缓存句柄可显著提升吞吐。
+   * 句柄失效时会自动释放并让下次 append 重新打开。
+   */
+  private async appendJsonlLineWithCachedHandle(line: string): Promise<void> {
+    if (!this.appendHandle) {
+      this.appendHandle = await openFile(this.filePath, constants.O_APPEND | constants.O_RDWR);
+    }
+    const handle = this.appendHandle;
+    try {
+      const stat = await handle.stat();
+      if (stat.size === 0) {
+        throw new SessionError(`Session file is empty before append: ${this.filePath}`, "invalid_session");
+      }
+      let prefix = "";
+      const tail = Buffer.alloc(1);
+      await handle.read(tail, 0, 1, stat.size - 1);
+      if (tail[0] !== 10) {
+        prefix = "\n";
+      }
+      await handle.writeFile(`${prefix}${line}\n`, "utf8");
+      await handle.sync();
+    } catch (cause) {
+      // 句柄可能已失效（文件被移动/删除等），释放并让下次 append 重新打开
+      try {
+        await handle.close();
+      } catch {
+        // 忽略关闭错误
+      }
+      this.appendHandle = undefined;
+      throw cause;
+    }
   }
 }
 
 export class SessionRecorder {
   private leafId: string | null;
   private appendQueue: Promise<void> = Promise.resolve();
+  private readonly usedIds: Set<string>;
 
   constructor(private readonly store: SessionPersistenceStore, initialLeafId: string | null = null) {
     this.leafId = initialLeafId;
+    this.usedIds = new Set();
+    if (initialLeafId !== null) {
+      this.usedIds.add(initialLeafId);
+    }
   }
 
   async recordMessage(message: AgentMessage): Promise<SessionMessageEntry> {
@@ -196,11 +291,12 @@ export class SessionRecorder {
     await this.enqueueAppend(async () => {
       const entry: SessionMessageEntry = {
         type: "message",
-        id: createId("entry"),
+        id: generateUniqueEntryId("entry", this.usedIds),
         parentId: this.leafId,
         timestamp: nowIso(),
         message
       };
+      this.usedIds.add(entry.id);
       this.leafId = entry.id;
       messageEntry = entry;
       await this.store.append(entry);
@@ -212,11 +308,12 @@ export class SessionRecorder {
     await this.enqueueAppend(async () => {
       const entry: SessionEntry = {
         type: "event",
-        id: createId("event"),
+        id: generateUniqueEntryId("event", this.usedIds),
         parentId: this.leafId,
         timestamp: nowIso(),
         event
       };
+      this.usedIds.add(entry.id);
       await this.store.append(entry);
     });
   }
@@ -226,11 +323,12 @@ export class SessionRecorder {
     await this.enqueueAppend(async () => {
       const entry: SessionCompactionEntry = {
         type: "compaction",
-        id: createId("compact_entry"),
+        id: generateUniqueEntryId("compact_entry", this.usedIds),
         parentId: this.leafId,
         timestamp: nowIso(),
         record
       };
+      this.usedIds.add(entry.id);
       this.leafId = entry.id;
       compactionEntry = entry;
       await this.store.append(entry);
@@ -243,12 +341,13 @@ export class SessionRecorder {
     await this.enqueueAppend(async () => {
       const entry: SessionCheckpointEntry = {
         type: "checkpoint",
-        id: createId("checkpoint"),
+        id: generateUniqueEntryId("checkpoint", this.usedIds),
         parentId: this.leafId,
         timestamp: nowIso(),
         label,
         metadata
       };
+      this.usedIds.add(entry.id);
       this.leafId = entry.id;
       checkpointEntry = entry;
       await this.store.append(entry);
@@ -261,13 +360,14 @@ export class SessionRecorder {
     await this.enqueueAppend(async () => {
       const entry: SessionLeafPointerEntry = {
         type: "leaf-pointer",
-        id: createId("leaf_pointer"),
+        id: generateUniqueEntryId("leaf_pointer", this.usedIds),
         parentId: this.leafId,
         timestamp: nowIso(),
         targetLeafId,
         ...(reason !== undefined ? { reason } : {}),
         ...(metadata !== undefined ? { metadata } : {})
       };
+      this.usedIds.add(entry.id);
       this.leafId = targetLeafId;
       pointerEntry = entry;
       await this.store.append(entry);
@@ -296,10 +396,13 @@ function assertValidSessionLeafTarget(entries: SessionEntry[], targetLeafId: str
   if (targetLeafId === null) return;
   const target = entries.find((entry) => entry.id === targetLeafId);
   if (!target) {
-    throw new Error(`Session leaf target ${targetLeafId} not found`);
+    throw new SessionError(`Session leaf target ${targetLeafId} not found`, "not_found");
   }
   if (target.type === "event" || target.type === "leaf-pointer") {
-    throw new Error(`Session leaf target ${targetLeafId} must be a message, checkpoint, or compaction entry`);
+    throw new SessionError(
+      `Session leaf target ${targetLeafId} must be a message, checkpoint, or compaction entry`,
+      "invalid_entry",
+    );
   }
 }
 
@@ -312,12 +415,12 @@ function buildSessionPath(entries: SessionEntry[], leafId: string | null): Sessi
 
   while (currentId !== null) {
     if (seen.has(currentId)) {
-      throw new Error(`Session entry parent cycle detected at ${currentId}`);
+      throw new SessionError(`Session entry parent cycle detected at ${currentId}`, "invalid_session");
     }
     const entry = byId.get(currentId);
     if (!entry) {
       if (reversedPath.length === 0) {
-        throw new Error(`Session entry ${currentId} not found`);
+        throw new SessionError(`Session entry ${currentId} not found`, "not_found");
       }
       break;
     }
@@ -376,11 +479,14 @@ async function readExistingSessionFile(filePath: string): Promise<ParsedSessionF
 function parseSessionHeader(line: string, filePath: string): { header: SessionHeader; needsRewrite: boolean } {
   const parsed = parseJsonLine(line);
   if (!isRecord(parsed) || parsed.type !== "session") {
-    throw new Error(`Invalid session header in ${filePath}`);
+    throw new SessionError(`Invalid session header in ${filePath}`, "invalid_session");
   }
 
   if (parsed.version !== undefined && parsed.version !== SESSION_FILE_VERSION) {
-    throw new Error(`Unsupported session file version ${String(parsed.version)} in ${filePath}`);
+    throw new SessionError(
+      `Unsupported session file version ${String(parsed.version)} in ${filePath}`,
+      "invalid_session",
+    );
   }
 
   return migrateSessionHeader(parsed);
@@ -394,7 +500,7 @@ function migrateSessionHeader(value: unknown): { header: SessionHeader; needsRew
     typeof value.cwd !== "string" ||
     typeof value.createdAt !== "string"
   ) {
-    throw new Error("Invalid session header");
+    throw new SessionError("Invalid session header", "invalid_session");
   }
 
   return {
@@ -488,40 +594,23 @@ async function writeSessionFileAtomically(filePath: string, header: SessionHeade
   } catch (cause) {
     await handle.close().catch(() => undefined);
     await unlink(tempPath).catch(() => undefined);
-    throw new Error(`Failed to write session file ${filePath}: ${errorMessage(cause)}`);
+    throw new SessionError(`Failed to write session file ${filePath}: ${errorMessage(cause)}`, "storage");
   }
   try {
     await handle.close();
   } catch (cause) {
     await unlink(tempPath).catch(() => undefined);
-    throw new Error(`Failed to close temporary session file ${tempPath}: ${errorMessage(cause)}`);
+    throw new SessionError(
+      `Failed to close temporary session file ${tempPath}: ${errorMessage(cause)}`,
+      "storage",
+    );
   }
 
   try {
     await rename(tempPath, filePath);
   } catch (cause) {
     await unlink(tempPath).catch(() => undefined);
-    throw new Error(`Failed to replace session file ${filePath}: ${errorMessage(cause)}`);
-  }
-}
-
-async function appendJsonlLine(filePath: string, line: string): Promise<void> {
-  const handle = await openFile(filePath, constants.O_APPEND | constants.O_RDWR);
-  try {
-    const fileStat = await handle.stat();
-    if (fileStat.size === 0) {
-      throw new Error(`Session file is empty before append: ${filePath}`);
-    }
-    let prefix = "";
-    const tail = Buffer.alloc(1);
-    await handle.read(tail, 0, 1, fileStat.size - 1);
-    if (tail[0] !== 10) {
-      prefix = "\n";
-    }
-    await handle.writeFile(`${prefix}${line}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
+    throw new SessionError(`Failed to replace session file ${filePath}: ${errorMessage(cause)}`, "storage");
   }
 }
 

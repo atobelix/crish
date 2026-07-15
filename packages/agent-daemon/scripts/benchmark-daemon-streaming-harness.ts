@@ -14,8 +14,6 @@ interface BenchmarkSample {
   index: number;
   stream: StreamMetrics;
   cancel: CancelMetrics;
-  daemonStreamMetrics?: DaemonStreamingMetrics;
-  daemonCancelMetrics?: DaemonStreamingMetrics;
 }
 
 interface StreamMetrics {
@@ -33,19 +31,6 @@ interface CancelMetrics {
   tokensBeforeCancel: number;
   settled: boolean;
   terminalEvent: string;
-}
-
-interface DaemonStreamingMetrics {
-  textDeltaCount: number;
-  providerDiagnosticCount: number;
-  firstTextDeltaLatencyMs?: number;
-  firstProviderResponseLatencyMs?: number;
-  providerStreamDurationMs?: number;
-  tokensPerSecond?: number;
-  eventsPerSecond?: number;
-  cancelRequestedCount?: number;
-  cancelObserved?: boolean;
-  cancelLatencyMs?: number;
 }
 
 class PacedTokenProvider implements AgentProvider {
@@ -160,14 +145,7 @@ const summary = {
     eventsPerSecond: summarize(samples.map((sample) => sample.stream.eventsPerSecond)),
     totalMs: summarize(samples.map((sample) => sample.stream.totalMs)),
     cancelLatencyMs: summarize(samples.map((sample) => sample.cancel.cancelLatencyMs)),
-  },
     cancelSettledCount: samples.filter((sample) => sample.cancel.settled && sample.cancel.abortObserved).length,
-  daemonMetrics: {
-    firstTextDeltaLatencyMs: summarize(samples.map((sample) => sample.daemonStreamMetrics?.firstTextDeltaLatencyMs ?? Number.NaN)),
-    tokensPerSecond: summarize(samples.map((sample) => sample.daemonStreamMetrics?.tokensPerSecond ?? Number.NaN)),
-    eventsPerSecond: summarize(samples.map((sample) => sample.daemonStreamMetrics?.eventsPerSecond ?? Number.NaN)),
-    cancelLatencyMs: summarize(samples.map((sample) => sample.daemonCancelMetrics?.cancelLatencyMs ?? Number.NaN)),
-    cancelObservedCount: samples.filter((sample) => sample.daemonCancelMetrics?.cancelObserved).length,
   },
 };
 
@@ -186,7 +164,6 @@ async function runSample(input: {
   });
   input.providers.set(streamRunId, streamProvider);
   const stream = await measureCompletedStream(input.ws, streamRunId);
-  const daemonStreamMetrics = await readDaemonStreamingMetrics(input.ws, streamRunId);
   input.providers.delete(streamRunId);
 
   const cancelRunId = `bench_cancel_${input.index}_${Date.now()}`;
@@ -197,15 +174,12 @@ async function runSample(input: {
   });
   input.providers.set(cancelRunId, cancelProvider);
   const cancel = await measureCancelledStream(input.ws, cancelRunId, cancelProvider);
-  const daemonCancelMetrics = await readDaemonStreamingMetrics(input.ws, cancelRunId);
   input.providers.delete(cancelRunId);
 
   return {
     index: input.index,
     stream,
     cancel,
-    daemonStreamMetrics,
-    daemonCancelMetrics,
   };
 }
 
@@ -289,19 +263,6 @@ async function waitForRunEvent(runId: string, eventType: string): Promise<any[]>
     await sleep(10);
   }
   throw new Error(`Timed out waiting for ${eventType} on ${runId}`);
-}
-
-async function readDaemonStreamingMetrics(ws: WebSocket, runId: string): Promise<DaemonStreamingMetrics | undefined> {
-  const requestId = `metrics_${runId}`;
-  const pending = withTimeout(
-    collectMessages(ws, (message) => message.type === "metrics-response" && message.requestId === requestId),
-    timeoutMs,
-    `metrics ${runId}`
-  );
-  ws.send(JSON.stringify({ type: "get-metrics", runId, includeRuns: true, requestId }));
-  const messages = await pending;
-  const response = messages.at(-1);
-  return response?.summary?.snapshot?.streaming as DaemonStreamingMetrics | undefined;
 }
 
 async function openClient(port: number): Promise<WebSocket> {

@@ -22,18 +22,7 @@ import {
 } from "../plan-document-store.js";
 import type { PlanDocumentStore } from "../plan-document-store.js";
 import type { DaemonMessageTransport } from "./workflow-handlers.js";
-
-// ─── Helpers ───────────────────────────────────────────────
-
-function correlateResponse<T extends { type: string }>(
-  response: T,
-  msg: DaemonCorrelationFields
-): T & DaemonCorrelationFields {
-  return {
-    ...response,
-    correlationId: msg.correlationId,
-  };
-}
+import { correlateResponse } from "./run-handlers.js";
 
 // ─── Error dispatcher ──────────────────────────────────────
 

@@ -17,6 +17,7 @@ macro_rules! common_commands {
     () => {
         tauri::generate_handler![
             sidecar::workbench_status,
+            sidecar::workbench_daemon_endpoint,
             sidecar::workbench_connection_status,
             sidecar::workbench_provider_diagnostics,
             sidecar::workbench_restart_daemon,
@@ -156,28 +157,41 @@ fn main() {
             sidecar::init_state();
             config::init_api_config_store();
 
-            // Auto-start the daemon in background so it's ready before
-            // the first frontend command.  The connection is established
-            // lazily; foreground commands will wait if still starting.
+            // Product: engine is part of the app. Start sidecar immediately and
+            // keep retrying so the UI never sits in a permanent "shell-only" state.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let app_dir = match crate::host_paths::app_dir() {
                     Ok(d) => d,
                     Err(e) => {
-                        eprintln!("[Sidecar][daemon.startup] app_dir() failed: {e}");
+                        eprintln!("[Sidecar][engine.startup] app_dir() failed: {e}");
                         return;
                     }
                 };
-                match crate::sidecar::ensure_sidecar_connected(&handle, &app_dir).await {
-                    Ok(sender) => {
-                        println!(
-                            "[Sidecar][daemon.startup] Auto-started daemon (generation={}, pid={:?})",
-                            sender.generation,
-                            crate::sidecar::sidecar_supervisor_snapshot().pid,
-                        );
-                    }
-                    Err(e) => {
-                        eprintln!("[Sidecar][daemon.startup] Auto-start failed (will retry on first command): {e}");
+
+                let mut attempt: u32 = 0;
+                loop {
+                    attempt = attempt.saturating_add(1);
+                    match crate::sidecar::ensure_sidecar_connected(&handle, &app_dir).await {
+                        Ok(sender) => {
+                            println!(
+                                "[Sidecar][engine.startup] ready (attempt={}, generation={}, pid={:?})",
+                                attempt,
+                                sender.generation,
+                                crate::sidecar::sidecar_supervisor_snapshot().pid,
+                            );
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[Sidecar][engine.startup] attempt {} failed (will retry): {e}",
+                                attempt
+                            );
+                            // Cap backoff so product recovers quickly after transient failures
+                            let delay_ms = (300u64 * 2u64.saturating_pow(attempt.min(5)))
+                                .min(5_000);
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        }
                     }
                 }
             });

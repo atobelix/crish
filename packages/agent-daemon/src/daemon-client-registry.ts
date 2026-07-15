@@ -3,7 +3,7 @@ import type { DaemonCorrelationFields, DaemonOutboundMessage } from "./types.js"
 import {
   encodeOutboundMessage,
   formatProtocolValidationError,
-} from "./protocol/schema/schema-dispatch.js";
+} from "./protocol/protocol.js";
 
 export interface ConnectedClient {
   ws: WebSocket;

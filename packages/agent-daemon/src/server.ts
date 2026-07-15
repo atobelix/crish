@@ -25,7 +25,6 @@ import {
   resolveDaemonEventLogPath,
   resolveDaemonCheckpointManifestPath,
   resolveDaemonMemoryStorePath,
-  resolveDaemonMetricsStorePath,
   resolveDaemonPlanDocumentStorePath,
   resolveDaemonRuntimeSessionDir,
   resolveDaemonScopedContextStorePath,
@@ -35,7 +34,7 @@ import {
 import {
   formatProtocolValidationError,
   validateInboundMessage,
-} from "./protocol/schema/schema-dispatch.js";
+} from "./protocol/protocol.js";
 import {
   DaemonClientRegistry,
   type ConnectedClient,
@@ -63,8 +62,6 @@ import { WorkflowScheduler } from "./workflow-scheduler.js";
 import type { WorkflowSchedulerTickResult } from "./workflow-scheduler.js";
 import { FileWorkflowStore } from "./workflow-store.js";
 import { FilePlanDocumentStore } from "./plan-document-store.js";
-import { DaemonMetricsCollector } from "./metrics-collector.js";
-import { FileMetricsStore } from "./metrics-store.js";
 import { FileScopedContextStore } from "./scoped-context-store.js";
 import { FileSessionMetadataStore } from "./session-metadata-store.js";
 import { DaemonBackgroundTaskManager } from "./background-task-manager.js";
@@ -90,16 +87,16 @@ export class DaemonServer {
   private eventLogPath!: string;
   private workflowStore!: FileWorkflowStore;
   private planDocumentStore!: FilePlanDocumentStore;
-  private metricsStore!: FileMetricsStore;
   private scopedContextStore!: FileScopedContextStore;
   private sessionMetadataStore!: FileSessionMetadataStore;
-  private metricsCollector!: DaemonMetricsCollector;
   private workflowScheduler!: WorkflowScheduler;
   private runtimeFactory!: DaemonRuntimeFactory;
   private backgroundTasks!: DaemonBackgroundTaskManager;
   private requestHandlers!: DaemonRequestHandlers;
   private subagentBridge!: DaemonSubagentBridge;
   private configUpdateHandler?: (update: DaemonRuntimeConfigUpdate) => void;
+  private pendingProviderFactory?: (runId: string, cwd: string) => AgentRuntimeOptions["provider"] | Promise<AgentRuntimeOptions["provider"]>;
+  private pendingToolFactory?: DaemonToolFactory;
   private stopPromise?: Promise<void>;
   private workflowSchedulerTimer?: NodeJS.Timeout;
   private workflowSchedulerTickTask?: Promise<WorkflowSchedulerTickResult>;
@@ -114,11 +111,19 @@ export class DaemonServer {
   setProviderFactory(
     factory: (runId: string, cwd: string) => AgentRuntimeOptions["provider"] | Promise<AgentRuntimeOptions["provider"]>
   ): void {
-    this.runtimeFactory.setProviderFactory(factory);
+    if (this.runtimeFactory) {
+      this.runtimeFactory.setProviderFactory(factory);
+    } else {
+      this.pendingProviderFactory = factory;
+    }
   }
 
   setToolFactory(factory: DaemonToolFactory): void {
-    this.runtimeFactory.setToolFactory(factory);
+    if (this.runtimeFactory) {
+      this.runtimeFactory.setToolFactory(factory);
+    } else {
+      this.pendingToolFactory = factory;
+    }
   }
 
   setConfigUpdateHandler(handler: (update: DaemonRuntimeConfigUpdate) => void): void {
@@ -138,8 +143,6 @@ export class DaemonServer {
     this.sessionMetadataStore = new FileSessionMetadataStore(resolveDaemonSessionMetadataStorePath(this.config));
     this.approvalQueue = new ApprovalQueue({ defaultTimeoutMs: this.config.approvalTimeoutMs });
     this.eventStore = new DaemonEventStore(this.eventLogPath);
-    this.metricsStore = new FileMetricsStore(resolveDaemonMetricsStorePath(this.config));
-    this.metricsCollector = new DaemonMetricsCollector(this.metricsStore);
     this.backgroundTasks = new DaemonBackgroundTaskManager({
       defaultWorkspaceRoot: this.config.defaultCwd,
       managerOptions: { defaultTimeoutMs: 30 * 60_000, maxOutputBytes: 500_000 },
@@ -161,6 +164,14 @@ export class DaemonServer {
       startRun: (request) => this.startDurableRun(request),
       cancelRun: (runId, reason) => this.orchestrator.cancelRun(runId, reason),
     });
+    if (this.pendingProviderFactory) {
+      this.runtimeFactory.setProviderFactory(this.pendingProviderFactory);
+      this.pendingProviderFactory = undefined;
+    }
+    if (this.pendingToolFactory) {
+      this.runtimeFactory.setToolFactory(this.pendingToolFactory);
+      this.pendingToolFactory = undefined;
+    }
     this.orchestrator = new AgentOrchestrator({
       eventStore: this.eventStore,
       createRunEngine: this.runtimeFactory.createRunEngineFactory(),
@@ -174,7 +185,6 @@ export class DaemonServer {
       approvalQueue: this.approvalQueue,
       config: this.config,
       runtimeFactory: this.runtimeFactory,
-      metricsStore: this.metricsStore,
       transport: this.clients,
       subagentBridge: this.subagentBridge,
       workflowStore: this.workflowStore,
@@ -189,7 +199,6 @@ export class DaemonServer {
       backgroundTasks: this.backgroundTasks,
       workflowStore: this.workflowStore,
       planDocumentStore: this.planDocumentStore,
-      metricsStore: this.metricsStore,
       scopedContextStore: this.scopedContextStore,
       sessionMetadataStore: this.sessionMetadataStore,
       transport: this.clients,
@@ -212,8 +221,6 @@ export class DaemonServer {
 
     try {
       await this.orchestrator.restoreFromEventStore();
-      await this.metricsStore.restore();
-      await this.rebuildMetricsFromOrchestratorEvents();
     } catch (error) {
       this.lifecycle.recordError({
         code: "EVENT_STORE_RESTORE_FAILED",
@@ -292,8 +299,6 @@ export class DaemonServer {
       this.waitForMessageTasks(5_000), failures);
     await this.runStopStep("RUNTIME_FACTORY_CLOSE_FAILED", "Failed to close daemon runtime factory", () =>
       this.runtimeFactory.close(), failures);
-    await this.runStopStep("METRICS_STORE_CLOSE_FAILED", "Failed to close daemon metrics store", () =>
-      this.metricsStore.close(), failures);
     await this.runStopStep("EVENT_STORE_CLOSE_FAILED", "Failed to close daemon event store", () =>
       this.eventStore.close(), failures);
 
@@ -327,10 +332,6 @@ export class DaemonServer {
 
   getPlanDocumentStorePath(): string {
     return this.planDocumentStore.filePath;
-  }
-
-  getMetricsStorePath(): string {
-    return this.metricsStore.filePath;
   }
 
   getScopedContextStorePath(): string {
@@ -488,7 +489,7 @@ export class DaemonServer {
       type: "welcome",
       protocolVersion: serverVersion,
       serverName: "crish-daemon",
-      capabilities: ["run-task", "approval", "pending-input", "workflow", "metrics", "git", "plan-document"],
+      capabilities: ["run-task", "approval", "pending-input", "workflow", "git", "plan-document"],
     });
   }
 
@@ -725,15 +726,6 @@ export class DaemonServer {
     const result = await Promise.race([settled, timedOut]);
     if (result === "timed-out" && this.messageTasks.size > 0) {
       console.warn(`[Daemon] Shutdown timed out waiting for ${this.messageTasks.size} message task(s)`);
-    }
-  }
-
-  private async rebuildMetricsFromOrchestratorEvents(): Promise<void> {
-    if (!this.metricsStore.isEmpty()) return;
-    for (const session of this.orchestrator.listSessions()) {
-      for (const event of await this.orchestrator.readSessionEvents(session.id)) {
-        await this.metricsCollector.recordOrchestratorEvent(event);
-      }
     }
   }
 

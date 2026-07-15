@@ -9,14 +9,9 @@
 import type { WebSocket } from "ws";
 import type {
   ApproveToolMessage,
-  DaemonCorrelationFields,
-  DaemonOutboundMessage,
   DenyToolMessage,
-  ListApprovalHistoryMessage,
 } from "../types.js";
 import type { ApprovalQueue } from "../approval-queue.js";
-import type { AgentOrchestrator } from "@crish/agent-orchestrator";
-import { createApprovalHistoryResponse } from "../approval-history-query-handlers.js";
 
 interface ApprovalHandlerTransport {
   send(ws: WebSocket, message: unknown): boolean;
@@ -53,16 +48,4 @@ export function handleDenyTool(
       decision: "denied",
     });
   }
-}
-
-export async function handleListApprovalHistory(
-  ws: WebSocket,
-  msg: ListApprovalHistoryMessage & DaemonCorrelationFields,
-  orchestrator: AgentOrchestrator,
-  approvalQueue: ApprovalQueue,
-  transport: ApprovalHandlerTransport,
-  correlateResponse: <T extends DaemonOutboundMessage>(response: T, msg: DaemonCorrelationFields) => T
-): Promise<void> {
-  const response = await createApprovalHistoryResponse(orchestrator, approvalQueue, msg);
-  transport.send(ws, correlateResponse(response, msg));
 }

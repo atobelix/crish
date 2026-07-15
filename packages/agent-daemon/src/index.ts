@@ -26,7 +26,6 @@ import {
   createDaemonProviderRuntimeConfigFromEnv,
   DAEMON_PROVIDER_CONFIG_PRECEDENCE,
 } from "./daemon-provider-gateway.js";
-import { createAccountCenterProviderCredentialResolverFromEnv } from "./account-center-provider.js";
 
 export { DaemonServer } from "./server.js";
 export { ApprovalQueue } from "./approval-queue.js";
@@ -48,25 +47,6 @@ export type {
   DaemonProviderRuntimeConfigSources,
   DaemonProviderRuntimeConfigUpdate,
 } from "./daemon-provider-gateway.js";
-export {
-  AccountCenterProviderClient,
-  AccountCenterProviderCredentialResolver,
-  AccountCenterProviderError,
-  createAccountCenterProviderConfigFromEnv,
-  createAccountCenterProviderCredentialResolverFromEnv,
-  hasAccountCenterProviderConfig,
-  isAccountCenterProviderConfigured,
-} from "./account-center-provider.js";
-export type {
-  AccountCenterFetch,
-  AccountCenterProviderClientOptions,
-  AccountCenterProviderCredentialResolverOptions,
-  AccountCenterProviderEnvConfig,
-  AccountCenterProviderErrorCode,
-  AccountCenterProviderErrorKind,
-  AccountCenterRuntimeCredential,
-  AccountCenterRuntimeCredentialRequest,
-} from "./account-center-provider.js";
 export {
   DAEMON_SUBAGENT_BRIDGE_KIND,
   DEFAULT_MAX_SUBAGENT_DEPTH,
@@ -166,21 +146,11 @@ export async function startDaemon(config?: Partial<DaemonConfig>): Promise<Daemo
     stream: DAEMON_DEFAULT_PROVIDER.stream,
     credentialMode: DAEMON_DEFAULT_PROVIDER.credentialMode,
   });
-  const accountCenterProviderResolver = createAccountCenterProviderCredentialResolverFromEnv(process.env, {
-    accountId: providerConfig.accountId,
-    providerId: providerConfig.providerId,
-    model: providerConfig.model,
-  });
-  const providerGateway = createDaemonProviderGatewayController(
-    providerConfig,
-    accountCenterProviderResolver ? { credentialResolver: accountCenterProviderResolver } : {}
-  );
+  const providerGateway = createDaemonProviderGatewayController(providerConfig);
 
   const providerStatus = providerGateway.getStatusSnapshot();
-  if (providerStatus.readiness === "missing" && providerStatus.credentialMode !== "account-center" && !accountCenterProviderResolver) {
-    console.error("[Daemon] WARNING: No provider credential configured. Set CRISH_API_KEY, FLOWBIT_API_KEY, OPENAI_API_KEY, or account-center env.");
-  } else if (providerStatus.credentialMode !== "direct" && accountCenterProviderResolver && !accountCenterProviderResolver.configured) {
-    console.error("[Daemon] WARNING: Account-center provider is incomplete. Set CRISH_ACCOUNT_CENTER_URL/FLOWBIT_ACCOUNT_CENTER_URL and CRISH_ACCOUNT_TOKEN/FLOWBIT_ACCOUNT_TOKEN.");
+  if (providerStatus.readiness === "missing") {
+    console.error("[Daemon] WARNING: No provider credential configured. Set CRISH_API_KEY, FLOWBIT_API_KEY, or OPENAI_API_KEY.");
   }
 
   // 设置 Provider 工厂
@@ -233,9 +203,11 @@ const isMainModule = (() => {
 if (isMainModule) {
   const config: Partial<DaemonConfig> = {};
 
-  // 支持通过环境变量或命令行参数配置
+  // 支持通过环境变量配置；CLI 默认 8765 方便桌面端直连
   if (process.env.DAEMON_PORT) {
     config.port = Number(process.env.DAEMON_PORT);
+  } else {
+    config.port = 8765;
   }
   if (process.env.DAEMON_MAX_CONCURRENT) {
     config.maxConcurrentRuns = Number(process.env.DAEMON_MAX_CONCURRENT);

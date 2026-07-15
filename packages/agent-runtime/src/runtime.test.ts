@@ -243,12 +243,18 @@ describe("AgentRuntime", () => {
 
     expect(events.map((event) => event.type)).toContain("approval-requested");
     expect(events.map((event) => event.type)).toContain("approval-resolved");
-    // Note: The approval-requested event is yielded BEFORE the permission policy runs,
-    // so metadata is not yet set on the event's request at that point.
-    // The approvalHandler callback (above) correctly verifies metadata during the approval flow.
-    const approvalEvent = events.find((event) => event.type === "approval-requested") as unknown as { request: { id: string; tool: { name: string } } };
+    // 仅 strategy=ask 时广播 approval-requested，且 request 已带上 decision metadata
+    const approvalEvent = events.find((event) => event.type === "approval-requested") as unknown as {
+      request: { id: string; toolName: string; toolCallId?: string; metadata?: Record<string, unknown> };
+    };
     expect(approvalEvent.request.id).toBeDefined();
-    expect(approvalEvent.request.tool.name).toBe("write");
+    expect(approvalEvent.request.toolCallId).toBe(approvalEvent.request.id);
+    expect(approvalEvent.request.toolName).toBe("write");
+    expect(approvalEvent.request.metadata).toMatchObject({
+      risk: "write",
+      reason: "Write requires confirmation",
+      recommendSnapshot: true,
+    });
   });
 
   it("uses the smart project permission policy when no explicit policy is provided", async () => {
@@ -289,8 +295,8 @@ describe("AgentRuntime", () => {
     expect(executed).toBe(false);
     const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
     expect(toolEnd?.result.isError).toBe(true);
-    // hardline block reasons may be localized (Chinese or English)
-    expect(toolEnd?.result.output.text).toMatch(/Blocked hardline|被阻止/);
+    // hardline block reasons may be localized
+    expect(toolEnd?.result.output.text).toMatch(/Hardline|hardline|Blocked/);
   });
 
   it("returns a tool-result error instead of executing invalid tool input", async () => {

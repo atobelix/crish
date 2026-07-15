@@ -233,8 +233,9 @@ export const RUNTIME_CONFIG_SCHEMA: ConfigSchema = {
       mergeStrategy: "override",
       required: false,
       defaultValue: "ask",
-      validate: (v) => typeof v === "string" && ["ask", "full-access"].includes(v),
-      validateMessage: "permissionMode must be ask or full-access"
+      validate: (v) =>
+        typeof v === "string" && ["ask", "auto", "full-access", "plan"].includes(v),
+      validateMessage: "permissionMode must be ask, auto, full-access, or plan"
     },
     "subagentDepth": {
       mergeStrategy: "override",

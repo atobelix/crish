@@ -6,7 +6,7 @@ export { ToolExecutor, ProgressEventQueue, type ToolExecutionCompletion, type To
 export type { TokenEstimator as TokenEstimatorInterface } from "./token-estimator";
 export { UsageBasedTokenEstimator } from "./token-estimator";
 export { ProviderResponseConsumer } from "./provider-response-consumer";
-export type { AssistantResponse } from "./provider-response-consumer";
+export type { AssistantResponse, ConsumeResult } from "./provider-response-consumer";
 export { SingleToolExecutor } from "./single-tool-executor";
 export type { ToolMiddlewareHook } from "./single-tool-executor";
 export { ContextCompressionGate } from "./context-compression-gate";

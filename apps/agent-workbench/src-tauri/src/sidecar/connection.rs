@@ -464,7 +464,7 @@ fn clear_sidecar_daemon_endpoint() {
     }
 }
 
-fn active_sidecar_daemon_endpoint() -> Option<SidecarDaemonEndpoint> {
+pub(crate) fn active_sidecar_daemon_endpoint() -> Option<SidecarDaemonEndpoint> {
     let endpoint = sidecar_daemon_endpoint()
         .get()
         .and_then(|endpoint| endpoint.lock().ok().and_then(|guard| guard.clone()))?;

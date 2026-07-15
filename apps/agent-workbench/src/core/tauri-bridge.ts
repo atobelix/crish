@@ -632,6 +632,29 @@ export class TauriBridge {
   }
 
   /**
+   * 获取 daemon WebSocket 端点信息
+   *
+   * 用于前端直连 daemon，取代 Rust sidecar 透传层。
+   * 返回的 url 可直接用于建立 WebSocket 连接。
+   */
+  async getDaemonEndpoint(): Promise<{
+    available: boolean;
+    url: string | null;
+    port: number | null;
+    pid: number | null;
+    buildHash: string | null;
+  }> {
+    if (!isTauri) return {
+      available: false,
+      url: null,
+      port: null,
+      pid: null,
+      buildHash: null,
+    };
+    return await invoke('workbench_daemon_endpoint');
+  }
+
+  /**
    * 获取工作台状态
    */
   async getStatus(): Promise<WorkbenchStatus> {

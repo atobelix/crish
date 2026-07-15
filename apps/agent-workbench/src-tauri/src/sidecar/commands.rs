@@ -10,6 +10,27 @@ use tokio_tungstenite::tungstenite::Message;
 // ==================== Connection Status Commands ====================
 
 #[tauri::command]
+pub(crate) async fn workbench_daemon_endpoint() -> Result<Value, String> {
+    let endpoint = active_sidecar_daemon_endpoint();
+    match endpoint {
+        Some(endpoint) => Ok(serde_json::json!({
+            "available": true,
+            "url": format!("ws://127.0.0.1:{}/", endpoint.port),
+            "port": endpoint.port,
+            "pid": endpoint.pid,
+            "buildHash": endpoint.build_hash,
+        })),
+        None => Ok(serde_json::json!({
+            "available": false,
+            "url": null,
+            "port": null,
+            "pid": null,
+            "buildHash": null,
+        })),
+    }
+}
+
+#[tauri::command]
 pub(crate) async fn workbench_connection_status() -> Result<Value, String> {
     let snapshot = sidecar_supervisor_snapshot();
     let connected = matches!(snapshot.state, SidecarSupervisorState::Ready);

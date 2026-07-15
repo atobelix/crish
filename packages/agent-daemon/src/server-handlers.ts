@@ -1,4 +1,4 @@
-﻿import type { WebSocket } from "ws";
+import type { WebSocket } from "ws";
 import type { JsonObject } from "@crish/shared-types";
 import {
   AgentOrchestrator,
@@ -28,7 +28,6 @@ import {
 import {
   handleApproveTool as handleApproveToolExtracted,
   handleDenyTool as handleDenyToolExtracted,
-  handleListApprovalHistory as handleListApprovalHistoryExtracted,
 } from "./handlers/approval-handlers.js";
 import {
   handleEnqueuePendingInput as handleEnqueuePendingInputExtracted,
@@ -94,8 +93,6 @@ import type {
   DaemonMcpStatusSnapshot,
   DaemonProviderStatusSnapshot,
   DaemonProviderCredentialMode,
-  GetMetricsMessage,
-  GetMetricsSnapshotMessage,
 } from "./types.js";
 import type { ConnectedClient } from "./daemon-client-registry.js";
 import {
@@ -114,8 +111,6 @@ import {
   type PlanDocumentStore,
 } from "./plan-document-store.js";
 import type { DaemonBackgroundTaskManager } from "./background-task-manager.js";
-import type { FileMetricsStore } from "./metrics-store.js";
-import { createGetMetricsResponse } from "./metrics-query-handlers.js";
 import type { ScopedContextStore } from "./scoped-context-store.js";
 import type { FileSessionMetadataStore } from "./session-metadata-store.js";
 
@@ -137,7 +132,6 @@ interface DaemonRequestHandlersOptions {
   backgroundTasks: DaemonBackgroundTaskManager;
   workflowStore: WorkflowStore;
   planDocumentStore: PlanDocumentStore;
-  metricsStore: FileMetricsStore;
   scopedContextStore: ScopedContextStore;
   sessionMetadataStore: FileSessionMetadataStore;
   transport: DaemonMessageTransport;
@@ -196,10 +190,6 @@ export class DaemonRequestHandlers {
 
       case "deny-tool":
         handleDenyToolExtracted(msg, this.options.approvalQueue, this.options.transport);
-        break;
-
-      case "list-approval-history":
-        await handleListApprovalHistoryExtracted(ws, msg, this.options.orchestrator, this.options.approvalQueue, this.options.transport, correlateResponse);
         break;
 
       case "cancel-run":
@@ -292,11 +282,6 @@ export class DaemonRequestHandlers {
 
       case "list-pending-inputs":
         handleListPendingInputsExtracted(ws, msg, this.options.orchestrator, this.options.transport, correlateResponse);
-        break;
-
-      case "get-metrics":
-      case "get-metrics-snapshot":
-        this.handleGetMetrics(ws, msg);
         break;
 
       case "list-workflows":
@@ -476,15 +461,5 @@ export class DaemonRequestHandlers {
           correlationFrom(msg)
         );
     }
-  }
-
-  private handleGetMetrics(
-    ws: WebSocket,
-    msg: (GetMetricsMessage | GetMetricsSnapshotMessage) & DaemonCorrelationFields
-  ): void {
-    this.options.transport.send(
-      ws,
-      createGetMetricsResponse(this.options.metricsStore, msg)
-    );
   }
 }

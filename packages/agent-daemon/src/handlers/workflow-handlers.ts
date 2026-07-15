@@ -24,6 +24,10 @@ import {
 import type { WorkflowStore } from "../workflow-store.js";
 import type { ConnectedClient } from "../daemon-client-registry.js";
 import type { WorkflowRunAccepted } from "../workflow-scheduler.js";
+import {
+  correlateResponse,
+  correlationFrom,
+} from "./run-handlers.js";
 
 // ─── Error class ───────────────────────────────────────────
 
@@ -47,22 +51,6 @@ export interface DaemonMessageTransport {
     runId?: string,
     correlation?: DaemonCorrelationFields
   ): boolean;
-}
-
-// ─── Correlate helper ──────────────────────────────────────
-
-function correlateResponse<T extends { type: string }>(
-  response: T,
-  msg: DaemonCorrelationFields
-): T & DaemonCorrelationFields {
-  return {
-    ...response,
-    correlationId: msg.correlationId,
-  };
-}
-
-function correlationFrom(msg: DaemonCorrelationFields): DaemonCorrelationFields {
-  return { correlationId: msg.correlationId };
 }
 
 // ─── Error dispatcher ──────────────────────────────────────

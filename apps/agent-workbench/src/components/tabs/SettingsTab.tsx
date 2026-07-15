@@ -3,7 +3,7 @@ import type { JSX } from 'preact';
 import { appState } from '../../core/app-state';
 import { eventBus } from '../../core/event-bus';
 import ProviderSettingsPanel from '../ProviderSettingsPanel';
-import { McpSubTab, MemorySubTab } from './ToolsTab';
+import { McpSubTab, MemorySubTab, type ToolsSubTab } from './ToolsTab';
 import {
   IconPalette, IconMoon, IconSun, IconBot, IconChat, IconShield, IconCheck, IconZap,
   IconSettings, IconKey, IconUser, IconTerminal,

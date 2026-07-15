@@ -11,7 +11,6 @@ export const DAEMON_PROTOCOL_CAPABILITIES = [
   "git",
   "mcp",
   "memory",
-  "metrics",
   "mutation",
   "plan-document",
   "rewind",
@@ -31,8 +30,8 @@ interface DaemonProtocolMessageGroup {
 
 export const DAEMON_PROTOCOL_MESSAGE_GROUPS = {
   approval: {
-    inbound: ["approve-tool", "deny-tool", "list-approval-history"],
-    outbound: ["approval-requested", "approval-resolved", "approval-history-listed"],
+    inbound: ["approve-tool", "deny-tool"],
+    outbound: ["approval-requested", "approval-resolved"],
   },
   artifacts: {
     inbound: ["list-artifacts", "get-artifact-content"],
@@ -61,8 +60,9 @@ export const DAEMON_PROTOCOL_MESSAGE_GROUPS = {
     outbound: ["config-updated"],
   },
   daemon: {
-    inbound: ["ping", "get-status", "list-capabilities"],
+    inbound: ["hello", "ping", "get-status", "list-capabilities"],
     outbound: [
+      "welcome",
       "daemon-ready",
       "error",
       "pong",
@@ -85,10 +85,6 @@ export const DAEMON_PROTOCOL_MESSAGE_GROUPS = {
   memory: {
     inbound: ["list-memories", "delete-memory"],
     outbound: ["memories-listed", "memory-deleted"],
-  },
-  metrics: {
-    inbound: ["get-metrics", "get-metrics-snapshot"],
-    outbound: ["metrics-response"],
   },
   mutation: {
     inbound: ["list-mutation-leases"],

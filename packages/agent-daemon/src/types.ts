@@ -15,7 +15,6 @@ import type {
   PlanDocument,
   PlanDocumentPatch,
   PlanDocumentSummary,
-  RuntimeMetricsSnapshot,
   ScopedContextActivation,
   ScopedContextCandidate,
   ScopedContextDiagnostic,
@@ -49,7 +48,6 @@ export type DaemonInboundMessage = (
   | RunTaskMessage
   | ApproveToolMessage
   | DenyToolMessage
-  | ListApprovalHistoryMessage
   | CancelRunMessage
   | HelloMessage
   | PingMessage
@@ -65,8 +63,6 @@ export type DaemonInboundMessage = (
   | CancelPendingInputMessage
   | DispatchPendingInputMessage
   | ListPendingInputsMessage
-  | GetMetricsMessage
-  | GetMetricsSnapshotMessage
   | ListWorkflowsMessage
   | CreateWorkflowMessage
   | UpdateWorkflowMessage
@@ -116,7 +112,6 @@ export type DaemonOutboundMessage = (
   | EventMessage
   | ApprovalRequestedMessage
   | ApprovalResolvedMessage
-  | ApprovalHistoryListedMessage
   | ErrorMessage
   | PongMessage
   | StatusResponseMessage
@@ -134,7 +129,6 @@ export type DaemonOutboundMessage = (
   | PendingInputCancelledMessage
   | PendingInputDispatchedMessage
   | PendingInputsListedMessage
-  | MetricsResponseMessage
   | WorkflowsListedMessage
   | WorkflowCreatedMessage
   | WorkflowUpdatedMessage
@@ -197,8 +191,8 @@ export interface RunTaskMessage {
   maxRounds?: number;
   maxStalledRounds?: number;
   backgroundDrainTimeoutMs?: number;
-  /** 权限模式："ask" = 需要审批，"full-access" = 全部自动允许 */
-  permissionMode?: "ask" | "full-access";
+  /** 权限模式："ask" = 需要审批，"full-access" = 全部自动允许，"plan" = 只读+仅可写计划文档 */
+  permissionMode?: "ask" | "auto" | "full-access" | "plan";
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
@@ -218,17 +212,6 @@ export interface ApproveToolMessage {
 export interface DenyToolMessage {
   type: "deny-tool";
   toolCallId: string;
-}
-
-export interface ListApprovalHistoryMessage {
-  type: "list-approval-history";
-  sessionId?: string;
-  runId?: string;
-  toolName?: string;
-  status?: ApprovalProtocolStatus;
-  decision?: ApprovalProtocolStatus;
-  risk?: string;
-  limit?: number;
 }
 
 export interface CancelRunMessage {
@@ -327,20 +310,6 @@ export interface ReadRunEventsMessage {
 export interface GetRunSnapshotMessage {
   type: "get-run-snapshot";
   runId: string;
-}
-
-export interface GetMetricsMessage {
-  type: "get-metrics";
-  runId?: string;
-  sessionId?: string;
-  includeRuns?: boolean;
-}
-
-export interface GetMetricsSnapshotMessage {
-  type: "get-metrics-snapshot";
-  runId?: string;
-  sessionId?: string;
-  includeRuns?: boolean;
 }
 
 export interface ListWorkflowsMessage {
@@ -620,6 +589,9 @@ export interface DaemonReadyMessage {
 export interface EventMessage {
   type: "event";
   runId: string;
+  orchestratorEventId?: string;
+  sequence?: number;
+  timestamp?: string;
   event: AgentEvent;
 }
 
@@ -753,65 +725,6 @@ export interface ApprovalStatusSnapshot {
   metadata?: JsonObject;
 }
 
-export type ApprovalHistorySource = "event-log" | "live-queue";
-
-export interface ApprovalHistoryFilters {
-  sessionId?: string;
-  runId?: string;
-  toolName?: string;
-  status?: ApprovalProtocolStatus;
-  risk?: string;
-}
-
-export interface ApprovalHistoryEntry {
-  toolCallId: string;
-  runId: string;
-  sessionId?: string;
-  toolName: string;
-  summary: string;
-  input: JsonObject;
-  createdAt: number;
-  status: ApprovalProtocolStatus;
-  timeoutMs: number | null;
-  expiresAt: number | null;
-  remainingMs: number | null;
-  resolvedAt?: number;
-  expiredAt?: number;
-  reason?: string;
-  expiredReason?: string;
-  risk?: string;
-  riskReason?: string;
-  requiresDoubleConfirm?: boolean;
-  recommendSnapshot?: boolean;
-  metadata?: JsonObject;
-  requestSequence?: number;
-  resolvedSequence?: number;
-  source: ApprovalHistorySource;
-  live?: boolean;
-  updatedAt: number;
-}
-
-export interface ApprovalHistoryDiagnostics {
-  queryMs: number;
-  eventCount: number;
-  projectedCount: number;
-  liveOverlayCount: number;
-  filteredOutCount: number;
-  limit: number;
-  truncated: boolean;
-}
-
-export interface ApprovalHistoryListedMessage {
-  type: "approval-history-listed";
-  approvals: ApprovalHistoryEntry[];
-  eventLog: OrchestratorEventLogMetadata;
-  filters: ApprovalHistoryFilters;
-  total: number;
-  returned: number;
-  truncated: boolean;
-  diagnostics: ApprovalHistoryDiagnostics;
-}
-
 export type DaemonLifecycleState = "starting" | "ready" | "stopping" | "stopped" | "degraded";
 
 export type DaemonLifecycleDiagnosticSource =
@@ -869,16 +782,11 @@ export interface DaemonLifecycleSnapshot {
   mcpReadiness: DaemonMcpReadiness;
 }
 
-export type DaemonProviderCredentialMode = "direct" | "account-center" | "auto";
+export type DaemonProviderCredentialMode = "direct" | "auto";
 
 export type DaemonProviderReadiness =
   | "ready"
   | "missing"
-  | "login-required"
-  | "insufficient-quota"
-  | "gateway-unavailable"
-  | "credential-unavailable"
-  | "invalid-response"
   | "unknown";
 
 export type DaemonSystemPromptWireMode = "native-system-role" | "user-prefix";
@@ -898,11 +806,6 @@ export interface DaemonProviderRedactedApiKeyStatus {
   last4?: string;
 }
 
-export type DaemonAccountLoginStatus = "ready" | "required" | "unknown";
-export type DaemonAccountQuotaStatus = "ready" | "insufficient" | "unknown";
-export type DaemonAccountGatewayStatus = "ready" | "unavailable" | "unknown";
-export type DaemonAccountRuntimeCredentialStatus = "ready" | "unavailable" | "unknown";
-
 export interface DaemonProviderDiagnostic {
   code: string;
   message: string;
@@ -911,17 +814,6 @@ export interface DaemonProviderDiagnostic {
   status?: number;
   detail?: string;
   metadata?: JsonObject;
-}
-
-export interface DaemonAccountCenterStatusSnapshot {
-  configured: boolean;
-  accountId?: string;
-  login: DaemonAccountLoginStatus;
-  quota: DaemonAccountQuotaStatus;
-  gateway: DaemonAccountGatewayStatus;
-  runtimeCredential: DaemonAccountRuntimeCredentialStatus;
-  lastCheckedAt?: string;
-  lastDiagnostic?: DaemonProviderDiagnostic;
 }
 
 export interface DaemonProviderGatewayStatusSnapshot {
@@ -953,7 +845,6 @@ export interface DaemonProviderStatusSnapshot {
   apiKey: DaemonProviderRedactedApiKeyStatus;
   hasDirectApiKey: boolean;
   apiKeySource: DaemonProviderApiKeySource;
-  accountCenter: DaemonAccountCenterStatusSnapshot;
   gateway: DaemonProviderGatewayStatusSnapshot;
   lastDiagnostic?: DaemonProviderDiagnostic;
   updatedAt: string;
@@ -1141,55 +1032,6 @@ export interface DaemonEventReadDiagnostics {
   truncated?: boolean;
   maxEvents?: number;
   queryMs: number;
-}
-
-export type DaemonMetricsStoreStatus = "ok" | "degraded";
-
-export interface DaemonMetricsDiagnostic {
-  code: string;
-  message: string;
-  updatedAt: string;
-  path?: string;
-  detail?: string;
-}
-
-export interface DaemonMetricsRunRecord {
-  runId: string;
-  sessionId: string;
-  updatedAt: string;
-  snapshot: RuntimeMetricsSnapshot;
-}
-
-export interface DaemonMetricsSummary {
-  scope: "global" | "session" | "run";
-  runCount: number;
-  sessionCount: number;
-  snapshot: RuntimeMetricsSnapshot;
-}
-
-export interface DaemonMetricsSource {
-  kind: "jsonl";
-  path: string;
-  generation: number;
-  status: DaemonMetricsStoreStatus;
-  badLineCount: number;
-}
-
-export interface DaemonMetricsQueryResult {
-  status: DaemonMetricsStoreStatus;
-  query: {
-    runId?: string;
-    sessionId?: string;
-    includeRuns: boolean;
-  };
-  source: DaemonMetricsSource;
-  summary: DaemonMetricsSummary;
-  runs?: DaemonMetricsRunRecord[];
-  diagnostic?: DaemonMetricsDiagnostic;
-}
-
-export interface MetricsResponseMessage extends DaemonMetricsQueryResult {
-  type: "metrics-response";
 }
 
 export interface WorkflowsListedMessage {
@@ -1807,8 +1649,6 @@ export interface DaemonConfig {
   workflowStorePath: string;
   /** Daemon-owned editable plan documents JSON file */
   planDocumentStorePath: string;
-  /** Daemon-owned metrics JSON file */
-  metricsStorePath: string;
   /** Daemon-owned scoped rules and skills JSON file */
   scopedContextStorePath: string;
   /** Daemon-owned memory JSON file */
@@ -1819,7 +1659,7 @@ export interface DaemonConfig {
 
 export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
   port: 0, // 动态分配
-  maxConcurrentRuns: 5,
+  maxConcurrentRuns: 10,
   runtimeIdleTimeoutMs: 5 * 60 * 1000, // 5 分钟
   approvalTimeoutMs: 5 * 60 * 1000,
   defaultCwd: process.cwd(),
@@ -1827,7 +1667,6 @@ export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
   sessionEventLogDir: join(defaultDaemonDataDir(), "events"),
   workflowStorePath: join(defaultDaemonDataDir(), "workflows.json"),
   planDocumentStorePath: join(defaultDaemonDataDir(), "plan-documents.json"),
-  metricsStorePath: join(defaultDaemonDataDir(), "metrics.json"),
   scopedContextStorePath: join(defaultDaemonDataDir(), "scoped-context.json"),
   memoryStorePath: join(defaultDaemonDataDir(), "memories.jsonl"),
   workflowSchedulerIntervalMs: 30_000,

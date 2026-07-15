@@ -10,7 +10,6 @@ import {
   type OpenAICompatibleTransport,
   type SystemPromptWireMode,
   profileFromProviderRouteOffer,
-  type ProviderCredentialResolver,
   type ProviderEndpointSupport,
   type ProviderFactoryPlan,
   type ProviderGateway,
@@ -31,7 +30,6 @@ import {
   type ConfigSourcePriority,
 } from "@crish/agent-runtime";
 import type {
-  DaemonAccountCenterStatusSnapshot,
   DaemonProviderApiKeySource,
   DaemonProviderCredentialMode,
   DaemonProviderDiagnostic,
@@ -84,8 +82,6 @@ export interface DaemonProviderRuntimeConfigSources {
 }
 
 export interface DaemonProviderGatewayControllerOptions {
-  credentialResolver?: ProviderCredentialResolver;
-  accountCenterStatusProvider?: () => DaemonAccountCenterStatusSnapshot | undefined;
   routes?: ProviderRouteOffer[] | (() => ProviderRouteOffer[]);
 }
 
@@ -181,19 +177,13 @@ export class DaemonProviderGatewayController {
     const credentialMode = this.config.credentialMode;
     const activeCredentialMode = this.activeCredentialMode();
     const apiKey = redactedApiKeyStatus(this.config);
-    const accountCenter =
-      this.options.accountCenterStatusProvider?.() ??
-      resolverAccountCenterStatus(this.options.credentialResolver) ??
-      emptyAccountCenterStatus(this.config.accountId);
-    const lastDiagnostic = accountCenter.lastDiagnostic ?? this.lastDiagnostic;
+    const lastDiagnostic = this.lastDiagnostic;
     const readiness = resolveReadiness({
       credentialMode: activeCredentialMode,
       hasDirectApiKey: apiKey.hasApiKey,
-      accountCenter,
-      plan: this.lastPlan,
       lastDiagnostic,
     });
-    const updatedAt = this.lastStatusAt ?? accountCenter.lastCheckedAt ?? new Date().toISOString();
+    const updatedAt = this.lastStatusAt ?? new Date().toISOString();
 
     return {
       credentialMode,
@@ -209,12 +199,10 @@ export class DaemonProviderGatewayController {
       apiKey,
       hasDirectApiKey: apiKey.hasApiKey,
       apiKeySource: apiKey.source,
-      accountCenter,
       gateway: {
         ready: readiness === "ready",
         credentialConfigured:
-          this.lastPlan?.credentialConfigured ??
-          (activeCredentialMode === "direct" ? apiKey.hasApiKey : accountCenter.configured),
+          this.lastPlan?.credentialConfigured ?? apiKey.hasApiKey,
         routeDecision: this.lastPlan?.routeDecision ?? [],
         ...(this.lastPlan?.code ? { code: this.lastPlan.code } : {}),
         selectedRouteId: this.lastPlan?.selectedRoute?.routeId ?? this.config.routeId,
@@ -231,9 +219,8 @@ export class DaemonProviderGatewayController {
     };
   }
 
-  private activeCredentialMode(): "direct" | "account-center" {
-    if (this.config.credentialMode !== "auto") return this.config.credentialMode;
-    return this.config.apiKey ? "direct" : "account-center";
+  private activeCredentialMode(): "direct" {
+    return "direct";
   }
 
   private request(metadata: Partial<DaemonProviderFactoryMetadata> = {}): ProviderRouteRequest {
@@ -260,8 +247,7 @@ export class DaemonProviderGatewayController {
 
   private createGateway(): ProviderGateway {
     return new DefaultProviderGateway({
-      routes: this.routesForPlanning(),
-      credentialResolver: this.options.credentialResolver
+      routes: this.routesForPlanning()
     });
   }
 
@@ -719,7 +705,7 @@ function nonEmpty(value: string | undefined): string | undefined {
 
 function normalizeCredentialMode(value: string | undefined): DaemonProviderCredentialMode | undefined {
   const normalized = nonEmpty(value);
-  if (normalized === "direct" || normalized === "account-center" || normalized === "auto") return normalized;
+  if (normalized === "direct" || normalized === "auto") return normalized;
   return undefined;
 }
 
@@ -742,7 +728,6 @@ function defaultSystemPromptWireMode(config: {
   baseUrl: string;
   credentialMode: DaemonProviderCredentialMode;
 }): SystemPromptWireMode {
-  if (config.credentialMode === "account-center") return "user-prefix";
   return isOfficialOpenAIBaseUrl(config.baseUrl) ? "native-system-role" : "user-prefix";
 }
 
@@ -817,57 +802,14 @@ interface DaemonProviderFactoryWithStatus {
   getProviderStatusSnapshot(): DaemonProviderStatusSnapshot;
 }
 
-function emptyAccountCenterStatus(accountId: string | undefined): DaemonAccountCenterStatusSnapshot {
-  return {
-    configured: false,
-    ...(accountId ? { accountId } : {}),
-    login: "unknown",
-    quota: "unknown",
-    gateway: "unknown",
-    runtimeCredential: "unknown",
-  };
-}
-
-function resolverAccountCenterStatus(
-  resolver: ProviderCredentialResolver | undefined
-): DaemonAccountCenterStatusSnapshot | undefined {
-  const candidate = resolver as
-    | (ProviderCredentialResolver & {
-        getStatusSnapshot?: () => DaemonAccountCenterStatusSnapshot;
-      })
-    | undefined;
-  return typeof candidate?.getStatusSnapshot === "function"
-    ? candidate.getStatusSnapshot()
-    : undefined;
-}
-
 function resolveReadiness(input: {
-  credentialMode: "direct" | "account-center";
+  credentialMode: "direct";
   hasDirectApiKey: boolean;
-  accountCenter: DaemonAccountCenterStatusSnapshot;
-  plan?: ProviderGatewayPlan;
   lastDiagnostic?: DaemonProviderDiagnostic;
 }): DaemonProviderReadiness {
   if (input.credentialMode === "direct") {
     return input.hasDirectApiKey ? "ready" : "missing";
   }
-
-  if (input.plan?.ok) return "ready";
-  if (!input.accountCenter.configured) return "missing";
-  if (input.accountCenter.login === "required") return "login-required";
-  if (input.accountCenter.quota === "insufficient") return "insufficient-quota";
-  if (input.accountCenter.gateway === "unavailable") return "gateway-unavailable";
-  if (input.lastDiagnostic?.code === "account_center_invalid_response") return "invalid-response";
-  if (input.accountCenter.runtimeCredential === "unavailable") return "credential-unavailable";
-  if (
-    input.accountCenter.login === "ready" &&
-    input.accountCenter.quota === "ready" &&
-    input.accountCenter.gateway === "ready" &&
-    input.accountCenter.runtimeCredential === "ready"
-  ) {
-    return "ready";
-  }
-  if (input.plan?.code === "provider_credential_missing") return "credential-unavailable";
   return "unknown";
 }
 
@@ -887,40 +829,10 @@ function toProviderDiagnostic(cause: unknown, updatedAt: string): DaemonProvider
     };
   }
 
-  if (isAccountCenterLikeError(cause)) {
-    return {
-      code: cause.code,
-      message: cause.message,
-      updatedAt,
-      kind: cause.kind,
-      ...(typeof cause.status === "number" ? { status: cause.status } : {}),
-      ...(typeof cause.detail === "string" ? { detail: cause.detail } : {}),
-      ...(isJsonObject(cause.metadata) ? { metadata: cause.metadata } : {}),
-    };
-  }
-
   const message = cause instanceof Error ? cause.message : String(cause);
   return {
     code: "provider_gateway_unavailable",
     message: message || "Provider gateway is unavailable.",
     updatedAt,
   };
-}
-
-function isAccountCenterLikeError(value: unknown): value is {
-  code: string;
-  message: string;
-  kind: string;
-  status?: number;
-  detail?: string;
-  metadata?: JsonObject;
-} {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { name?: unknown }).name === "AccountCenterProviderError" &&
-    typeof (value as { code?: unknown }).code === "string" &&
-    typeof (value as { message?: unknown }).message === "string" &&
-    typeof (value as { kind?: unknown }).kind === "string"
-  );
 }

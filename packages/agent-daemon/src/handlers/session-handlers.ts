@@ -69,12 +69,26 @@ function isActiveRunStatus(status: RunStatus): boolean {
   return status === "queued" || status === "running" || status === "awaiting-approval" || status === "cancelling";
 }
 
-function codeForBoundaryApplyBlock(result: { status: string; code?: string }): string {
-  return result.code ?? `REWIND_BOUNDARY_${result.status.toUpperCase()}`;
+function codeForBoundaryApplyBlock(result: {
+  status: string;
+  code?: string;
+  diagnostics?: Array<{ code: string; blocked: boolean }>;
+}): string {
+  if (result.code) return result.code;
+  const blocked = result.diagnostics?.find((item) => item.blocked);
+  if (blocked) return blocked.code;
+  return `REWIND_BOUNDARY_${result.status.toUpperCase()}`;
 }
 
-function messageForBoundaryApplyBlock(result: { status: string; message?: string }): string {
-  return result.message ?? `Conversation rewind boundary resolution returned status: ${result.status}`;
+function messageForBoundaryApplyBlock(result: {
+  status: string;
+  message?: string;
+  diagnostics?: Array<{ message: string; blocked: boolean }>;
+}): string {
+  if (result.message) return result.message;
+  const blocked = result.diagnostics?.find((item) => item.blocked);
+  if (blocked) return blocked.message;
+  return `Conversation rewind boundary resolution returned status: ${result.status}`;
 }
 
 function approvalDecisionFromRuntimeEvent(
@@ -184,7 +198,7 @@ export function handlePreviewConversationRewind(
       )
     );
   } catch (error) {
-    sendConversationRewindError(ws, error, transport);
+    sendConversationRewindError(ws, error, transport, msg);
   }
 }
 
@@ -205,7 +219,7 @@ export async function handleResolveConversationRewindBoundary(
     });
     transport.send(ws, correlateResponse({ type: "conversation-rewind-boundary", ...result }, msg));
   } catch (error) {
-    sendConversationRewindError(ws, error, transport);
+    sendConversationRewindError(ws, error, transport, msg);
   }
 }
 
@@ -232,7 +246,7 @@ export async function handlePreviewConversationRewindByBoundary(
     });
     transport.send(ws, correlateResponse({ type: "conversation-rewind-boundary", ...result }, msg));
   } catch (error) {
-    sendConversationRewindError(ws, error, transport);
+    sendConversationRewindError(ws, error, transport, msg);
   }
 }
 
@@ -254,7 +268,7 @@ export async function handleApplyConversationRewind(
     };
     deps.transport.send(ws, correlateResponse(response, msg));
   } catch (error) {
-    sendConversationRewindError(ws, error, deps.transport);
+    sendConversationRewindError(ws, error, deps.transport, msg);
   }
 }
 
@@ -636,13 +650,14 @@ async function recordConversationRewindAudit(
 function sendConversationRewindError(
   ws: WebSocket,
   error: unknown,
-  transport: SessionTransport
+  transport: SessionTransport,
+  correlation?: DaemonCorrelationFields
 ): void {
   if (error instanceof DaemonConversationRewindError) {
-    transport.sendError(ws, error.code, error.message, undefined, undefined);
+    transport.sendError(ws, error.code, error.message, undefined, correlation);
     return;
   }
-  transport.sendError(ws, "CONVERSATION_REWIND_ERROR", errorMessage(error), undefined, undefined);
+  transport.sendError(ws, "CONVERSATION_REWIND_ERROR", errorMessage(error), undefined, correlation);
 }
 
 function delay(ms: number): Promise<void> {

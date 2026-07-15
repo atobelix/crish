@@ -1640,18 +1640,18 @@ function isJsonObject(value: JsonValue | undefined): value is JsonObject {
 }
 
 function formatCommandResult(result: ProcessRunResult): string {
-  const output = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter(Boolean).join("\n");
-  return [
-    `Exit code: ${result.exitCode ?? "null"}`,
-    `Wall time: ${(result.durationMs / 1000).toFixed(1)} seconds`,
-    ...(result.signal ? [`Signal: ${result.signal}`] : []),
-    ...(result.timedOut ? ["Timed out: true"] : []),
-    ...(result.cancelled ? ["Cancelled: true"] : []),
-    ...(result.truncated ? ["Output truncated: true"] : []),
-    ...(result.terminationDiagnostics.length > 0 ? ["Termination diagnostics: present"] : []),
-    "Output:",
-    output
-  ].join("\n");
+  // 对话层只要结果正文；exit/wall 等元数据由 UI 按需处理，勿塞进 tool output
+  const output = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter(Boolean).join("\n").trim();
+  if (result.timedOut) {
+    return output ? `${output}\n\n(命令超时)` : "(命令超时)";
+  }
+  if (result.cancelled) {
+    return output ? `${output}\n\n(已取消)` : "(已取消)";
+  }
+  if (result.exitCode !== 0 && result.exitCode !== null) {
+    return output ? `${output}\n\n(exit ${result.exitCode})` : `(exit ${result.exitCode})`;
+  }
+  return output || "(无输出)";
 }
 
 async function* walkFiles(root: string, context: ToolExecutionContext, maxFiles: number): AsyncIterable<string> {

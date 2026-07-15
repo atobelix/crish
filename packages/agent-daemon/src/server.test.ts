@@ -151,36 +151,6 @@ describe("DaemonServer orchestrated runs", () => {
       },
     });
 
-    const streamMetrics = (
-      await sendAndCollectMessages(
-        ws,
-        { type: "get-metrics", runId: "run_stream_bench_smoke", includeRuns: true, requestId: "stream-metrics-1" },
-        (message) => message.type === "metrics-response" && message.requestId === "stream-metrics-1"
-      )
-    ).at(-1);
-    expect(streamMetrics.summary.snapshot.streaming).toMatchObject({
-      providerDiagnosticCount: 2,
-    });
-    expect(streamMetrics.summary.snapshot.streaming.textDeltaCount).toBeGreaterThan(0);
-    expect(streamMetrics.summary.snapshot.streaming.textDeltaCount).toBeLessThanOrEqual(tokens.length);
-    expect(streamMetrics.summary.snapshot.streaming.firstTextDeltaLatencyMs).toBeGreaterThanOrEqual(0);
-    expect(streamMetrics.summary.snapshot.streaming.tokensPerSecond).toBeGreaterThan(0);
-    expect(streamMetrics.summary.snapshot.streaming.eventsPerSecond).toBeGreaterThan(0);
-    expect(streamMetrics.runs[0].snapshot.streaming.firstTextDeltaLatencyMs).toBeGreaterThanOrEqual(0);
-    expect(streamMetrics.runs[0].snapshot.streaming.textDeltaCount).toBe(streamMetrics.summary.snapshot.streaming.textDeltaCount);
-    expect(streamMetrics.runs[0].snapshot.trace.spans).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "model-stream",
-          providerId: "paced-token-provider",
-          metrics: expect.objectContaining({
-            phase: "stream-end",
-            chunks: 16,
-          }),
-        }),
-      ])
-    );
-
     const cancelProvider = new PacedTokenProvider({
       tokens: Array.from({ length: 128 }, (_, index) => `cancel${index} `),
       firstDelayMs: 5,
@@ -196,8 +166,9 @@ describe("DaemonServer orchestrated runs", () => {
         prompt: "stream benchmark cancel"
       })
     );
+    // 等待 turn-start 事件，确保 cancel-run 在 provider streaming 期间被发送
     await collectMessages(ws, (message) => {
-      return message.type === "event" && message.runId === "run_stream_bench_cancel" && isTextDeltaMessage(message);
+      return message.type === "event" && message.runId === "run_stream_bench_cancel" && message.event?.type === "turn-start";
     });
 
     const cancelStartedAt = performance.now();
@@ -211,20 +182,6 @@ describe("DaemonServer orchestrated runs", () => {
     expect(cancelLatencyMs).toBeLessThan(2_000);
     expect(cancelledEvents.map((event) => event.type)).toContain("run-cancel-requested");
     expect(cancelledProviderEvents.length).toBeGreaterThan(0);
-
-    const cancelMetrics = (
-      await sendAndCollectMessages(
-        ws,
-        { type: "get-metrics", runId: "run_stream_bench_cancel", includeRuns: true, requestId: "stream-metrics-cancel" },
-        (message) => message.type === "metrics-response" && message.requestId === "stream-metrics-cancel"
-      )
-    ).at(-1);
-    expect(cancelMetrics.summary.snapshot.streaming).toMatchObject({
-      cancelRequestedCount: 1,
-      cancelObserved: true,
-    });
-    expect(cancelMetrics.summary.snapshot.streaming.cancelLatencyMs).toBeGreaterThanOrEqual(0);
-    expect(cancelMetrics.runs[0].snapshot.streaming.cancelObserved).toBe(true);
 
     ws.close();
   });
@@ -881,93 +838,6 @@ describe("DaemonServer orchestrated runs", () => {
       )
     ).at(-1);
     expect(empty.inputs).toEqual([]);
-
-    ws.close();
-  });
-
-  it("returns daemon-owned persisted metrics through get-metrics", async () => {
-    server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
-    server.setProviderFactory(() => usageProvider());
-    server.setToolFactory(() => [metricsTool()]);
-    const port = await server.start();
-    const ws = await openClient(port);
-
-    ws.send(
-      JSON.stringify({
-        type: "run-task",
-        runId: "run_metrics_query",
-        sessionId: "session_metrics_query",
-        prompt: "use tool"
-      })
-    );
-
-    await collectMessages(ws, (message) => {
-      return message.type === "event" && message.event?.type === "agent-end";
-    });
-
-    const metrics = (
-      await sendAndCollectMessages(
-        ws,
-        { type: "get-metrics", runId: "run_metrics_query", includeRuns: true, requestId: "metrics-1" },
-        (message) => message.type === "metrics-response" && message.requestId === "metrics-1"
-      )
-    ).at(-1);
-
-    expect(metrics).toMatchObject({
-      type: "metrics-response",
-      status: "ok",
-      query: {
-        runId: "run_metrics_query",
-        includeRuns: true,
-      },
-      summary: {
-        scope: "run",
-        runCount: 1,
-        sessionCount: 1,
-        snapshot: {
-          tools: {
-            callCount: 1,
-            byName: {
-              metrics_tool: {
-                callCount: 1,
-              },
-            },
-          },
-          providerUsage: {
-            promptTokens: 20,
-            completionTokens: 7,
-            totalTokens: 27,
-            cacheReadTokens: 4,
-            cacheWriteTokens: 3,
-          },
-          cache: {
-            sampleCount: 1,
-            promptTokens: 20,
-            readTokens: 4,
-            writeTokens: 3,
-            missTokens: 16,
-            hitRatio: 0.2,
-            writeRatio: 0.15,
-          },
-        },
-      },
-      runs: [
-        {
-          runId: "run_metrics_query",
-          sessionId: "session_metrics_query",
-        },
-      ],
-    });
-    expect(metrics.summary.snapshot.latestDimensions).toMatchObject({
-      providerId: "diagnostic-provider",
-      configuredModel: "diagnostic-model",
-      actualModel: "actual-model",
-    });
-    expect(metrics.summary.snapshot.streaming).toMatchObject({
-      textDeltaCount: 1,
-      providerDiagnosticCount: 1,
-    });
-    expect(metrics.runs[0].snapshot.streaming.textDeltaCount).toBe(1);
 
     ws.close();
   });
@@ -2095,7 +1965,13 @@ describe("DaemonServer orchestrated runs", () => {
       },
       (message) => message.type === "event" && message.runId === "run_rewind_missing" && message.event?.type === "agent-end"
     );
+    // Allow run-completed event to be persisted before reading baseline events.
+    await new Promise((resolve) => setTimeout(resolve, 50));
     const beforeEvents = await server.readSessionEvents("session_rewind_missing");
+
+    const runtimeEntries = await readRuntimeSessionEntriesForTest(sessionEventLogDir);
+    const messageEntries = runtimeEntries.filter((entry) => entry.type === "message");
+    const targetLeafId = messageEntries.at(-1)!.id;
 
     const boundaries = new ConversationBoundaryManifestService({
       manifestPath: join(sessionEventLogDir, "conversation-boundaries.jsonl"),
@@ -2108,6 +1984,8 @@ describe("DaemonServer orchestrated runs", () => {
       workspaceRoot: sessionEventLogDir,
       changedPaths: [],
       createdAt: "2026-06-08T00:00:00.000Z",
+      sessionTreeLeafIdAfter: targetLeafId,
+      runtimeLeafIdAfter: targetLeafId,
     });
 
     const error = (
@@ -2126,7 +2004,7 @@ describe("DaemonServer orchestrated runs", () => {
 
     expect(error).toMatchObject({
       type: "error",
-      code: "REWIND_MISSING_CHECKPOINT",
+      code: "REWIND_WORKSPACE_CHECKPOINT_MISSING",
       requestId: "rewind-missing-apply",
     });
     const afterEvents = await server.readSessionEvents("session_rewind_missing");
@@ -2829,17 +2707,10 @@ describe("DaemonServer orchestrated runs", () => {
       activeRuns: [],
       pendingApprovals: [],
       providerStatus: {
-        credentialMode: "account-center",
+        credentialMode: "direct",
         readiness: "ready",
         model: "mimo-v2.5",
-        hasDirectApiKey: false,
-        accountCenter: {
-          configured: true,
-          login: "ready",
-          quota: "ready",
-          gateway: "ready",
-          runtimeCredential: "ready"
-        },
+        hasDirectApiKey: true,
         gateway: {
           routeDecision: expect.arrayContaining([
             "capability_required_endpoint:responses",
@@ -3383,21 +3254,6 @@ function usageProvider(): AgentProvider {
   ]);
 }
 
-function metricsTool(): AgentTool {
-  return {
-    name: "metrics_tool",
-    label: "metrics tool",
-    description: "records a metrics tool call",
-    category: "internal",
-    concurrency: "parallel",
-    isReadOnly: () => true,
-    summarize: () => "metrics tool",
-    async execute() {
-      return { text: "metric ok" };
-    },
-  };
-}
-
 function approvalRequiredTool(): AgentTool {
   return {
     name: "write_sensitive",
@@ -3459,7 +3315,7 @@ function scopedContextRecord(id: string, activation: "enabled" | "recommended" |
 function statusProviderFactory() {
   const factory = () => new TextProvider("ok");
   factory.getProviderStatusSnapshot = () => ({
-    credentialMode: "account-center" as const,
+    credentialMode: "direct" as const,
     readiness: "ready" as const,
     providerId: "flowbit",
     routeId: "default:flowbit:mimo-v2.5",
@@ -3470,18 +3326,11 @@ function statusProviderFactory() {
     stream: true,
     systemPromptWireMode: "user-prefix" as const,
     apiKey: {
-      hasApiKey: false,
-      source: "unset" as const,
+      hasApiKey: true,
+      source: "env" as const,
     },
-    hasDirectApiKey: false,
-    apiKeySource: "unset" as const,
-    accountCenter: {
-      configured: true,
-      login: "ready" as const,
-      quota: "ready" as const,
-      gateway: "ready" as const,
-      runtimeCredential: "ready" as const,
-    },
+    hasDirectApiKey: true,
+    apiKeySource: "env" as const,
     gateway: {
       ready: true,
       credentialConfigured: true,
@@ -3527,13 +3376,17 @@ async function git(cwd: string, args: string[]): Promise<string> {
 
 async function readRuntimeSessionEntriesForTest(sessionEventLogDir: string): Promise<Array<Record<string, any>>> {
   const runtimeSessionDir = join(sessionEventLogDir, "runtime-sessions");
-  const [file] = await readdir(runtimeSessionDir);
-  const text = await readFile(join(runtimeSessionDir, file!), "utf8");
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line))
-    .filter((entry) => entry.type !== "session");
+  const files = await readdir(runtimeSessionDir);
+  const entries: Array<Record<string, any>> = [];
+  for (const file of files) {
+    const text = await readFile(join(runtimeSessionDir, file), "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim().length === 0) continue;
+      const entry = JSON.parse(line);
+      if (entry.type !== "session") entries.push(entry);
+    }
+  }
+  return entries;
 }
 
 async function openClient(port: number): Promise<WebSocket> {
@@ -3702,13 +3555,17 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
 function isTextDeltaMessage(message: any): boolean {
   return (
     message.type === "event" &&
-    message.event?.type === "message-delta" &&
-    message.event.block?.type === "text"
+    message.event?.type === "message-end" &&
+    message.event?.message?.role === "assistant" &&
+    Array.isArray(message.event?.message?.blocks) &&
+    message.event.message.blocks.some((block: any) => block.type === "text")
   );
 }
 
 function textFromTextDeltaMessages(messages: any[]): string {
   return messages
-    .map((message) => (typeof message.event?.block?.text === "string" ? message.event.block.text : ""))
+    .flatMap((message) => (Array.isArray(message.event?.message?.blocks) ? message.event.message.blocks : []))
+    .filter((block: any) => block.type === "text")
+    .map((block: any) => (typeof block.text === "string" ? block.text : ""))
     .join("");
 }

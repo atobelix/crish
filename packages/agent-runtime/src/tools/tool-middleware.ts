@@ -1,19 +1,18 @@
 /**
  * ToolMiddleware — 工具中间件接口与内置实现（Layer 3）
  *
- * 所有业务逻辑（权限、物化、Checkpoint、脱敏）通过 ToolMiddleware 管线注入，
+ * 所有业务逻辑（权限、物化、Checkpoint）通过 ToolMiddleware 管线注入，
  * 而不是硬编码在 ToolExecutor 或 AgentSessionLoop 中。
  *
  * 中间件生命周期：
  * 1. beforeExecute → 可阻止执行（proceed: false）或修改输入
  * 2. 工具执行（execute）
- * 3. afterExecute → 可修改输出（如物化大输出、脱敏）
+ * 3. afterExecute → 可修改输出（如物化大输出）
  *
  * 内置中间件：
  * - PermissionMiddleware：对接 PermissionDecider
  * - CheckpointMiddleware：对接 CheckpointManager
  * - OutputMaterializationMiddleware：对接 ContextManager.materializeOutput
- * - SecretRedactionMiddleware：对接 SecretRedactor
  */
 
 import type {
@@ -30,9 +29,7 @@ import type { RegisteredTool } from "./tool-definition";
 import type { RuntimePermissionPolicy, RuntimePermissionRequest } from "../types";
 import type { ContextManager } from "../runtime-components/context-manager";
 import type { CheckpointManager, CheckpointMetadata } from "../checkpoint/checkpoint-manager";
-import type { SecretRedactor } from "../secrets-obfuscation";
 import { createId, nowIso } from "../session";
-import { stripNonSerializable } from "@crish/shared-utils";
 
 // ─── ToolMiddleware 接口 ─────────────────────────────────────────
 
@@ -158,7 +155,24 @@ export class PermissionMiddleware implements ToolMiddleware {
     );
 
     if (decision.behavior === "ask") {
-      const serializableRequest = stripNonSerializable(request) as unknown as PermissionRequest;
+      // 构造可序列化的 PermissionRequest：从 RuntimePermissionRequest 提取扁平字段，
+      // 避免将 AgentTool（含 execute/summarize 等函数）泄漏到事件流。
+      const serializableRequest: PermissionRequest = {
+        id: request.id,
+        sessionId: request.sessionId,
+        cwd: request.cwd,
+        toolCallId: request.id,
+        toolName: tool.name,
+        parameters: input,
+        summary: request.summary,
+        toolMetadata: {
+          category: tool.category,
+          isReadOnly: tool.isReadOnly(input),
+          fatalOnError: tool.fatalOnError,
+          concurrency: tool.concurrency,
+        },
+        ...(request.metadata !== undefined ? { metadata: request.metadata } : {}),
+      };
       events.push({
         type: "approval-requested",
         sessionId: ctx.sessionId,
@@ -312,46 +326,6 @@ export class OutputMaterializationMiddleware implements ToolMiddleware {
     if (materialized === output) return {};
 
     return { output: materialized };
-  }
-}
-
-// ─── SecretRedactionMiddleware ────────────────────────────────────
-
-/**
- * 脱敏中间件 — 对接 SecretRedactor。
- *
- * 在 afterExecute 中：
- * - 如果配置了 SecretRedactor，对工具输出文本执行脱敏处理
- * - 将敏感信息替换为占位符，防止泄露到上下文中
- */
-export interface SecretRedactionMiddlewareOptions {
-  /** SecretRedactor 实例（可选） */
-  secretRedactor?: SecretRedactor;
-}
-
-export class SecretRedactionMiddleware implements ToolMiddleware {
-  readonly name = "secret-redaction";
-
-  constructor(private readonly options: SecretRedactionMiddlewareOptions) {}
-
-  async afterExecute(
-    tool: RegisteredTool,
-    input: JsonObject,
-    output: ToolOutput,
-    ctx: ToolExecutionContext
-  ): Promise<MiddlewareAfterResult> {
-    if (!this.options.secretRedactor) return {};
-    if (typeof output.text !== "string") return {};
-
-    const redacted = this.options.secretRedactor.redactText(output.text);
-    if (redacted.value === output.text) return {};
-
-    return {
-      output: {
-        ...output,
-        text: redacted.value,
-      },
-    };
   }
 }
 

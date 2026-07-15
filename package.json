@@ -4,6 +4,7 @@
   "private": true,
   "description": "Crish - Tauri Workbench and agent daemon runtime",
   "workspaces": [
+    "apps/crish-desktop",
     "apps/agent-workbench",
     "packages/agent-runtime",
     "packages/agent-orchestrator",
@@ -13,25 +14,30 @@
     "packages/decision-engine"
   ],
   "scripts": {
-    "dev:workbench": "npm --workspace @crish/agent-workbench run dev",
+    "dev:desktop": "npm --workspace @crish/crish-desktop run dev",
+    "dev:workbench": "npm --workspace @crish/agent-workbench run tauri -- dev",
+    "dev:workbench:legacy-ui": "npm --workspace @crish/agent-workbench run dev:legacy-ui",
     "dev:cli": "npm --workspace @crish/agent-workbench run cli",
-    "build:workbench": "npm --workspace @crish/agent-workbench run build",
+    "build:desktop": "npm --workspace @crish/crish-desktop run build",
+    "build:workbench": "npm --workspace @crish/crish-desktop run build",
     "build:shared-types": "npm --workspace @crish/shared-types run build",
     "build:runtime": "npm --workspace @crish/agent-runtime run build",
     "build:orchestrator": "npm --workspace @crish/agent-orchestrator run build",
     "build:packages": "npm run build:shared-types && npm run build:runtime && npm run build:orchestrator",
     "build:daemon": "npm run build:packages && npm --workspace @crish/agent-daemon run build",
     "build:daemon-binary": "node scripts/bundle-daemon.mjs",
-    "build:product": "npm run build:daemon && npm run build:workbench && npm run build:daemon-binary",
+    "build:product": "npm run build:daemon && npm run build:desktop && npm run build:daemon-binary",
     "cli": "npm run dev:cli",
     "daemon": "tsx --conditions development packages/agent-daemon/src/index.ts",
+    "daemon:port": "tsx --conditions development packages/agent-daemon/src/index.ts",
     "daemon:dist": "node packages/agent-daemon/dist/index.js",
     "bench:daemon": "node packages/agent-daemon/scripts/benchmark-daemon-startup.mjs",
-    "check:core": "npm run check:runtime && npm run check:orchestrator && npm run check:daemon && npm run check:workbench",
+    "check:core": "npm run check:runtime && npm run check:orchestrator && npm run check:daemon && npm run check:workbench && npm run check:desktop",
     "check:runtime": "tsc -p packages/agent-runtime/tsconfig.json --noEmit",
     "check:orchestrator": "tsc -p packages/agent-orchestrator/tsconfig.json --noEmit",
     "check:daemon": "tsc -p packages/agent-daemon/tsconfig.json --noEmit",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
+    "check:desktop": "npm --workspace @crish/crish-desktop run typecheck",
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
     "test": "vitest run"
   },
@@ -42,5 +48,8 @@
     "tsx": "^4.22.4",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
   }
 }

@@ -26,6 +26,9 @@
     "build:js": "esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap",
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
+  "dependencies": {
+    "@crish/decision-engine": "*"
+  },
   "devDependencies": {
     "@crish/shared-utils": "*",
     "@types/node": "^25.6.0",

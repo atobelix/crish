@@ -54,7 +54,7 @@ export function GlobalSearch() {
           id: `session-${s.id}`,
           type: 'session',
           title,
-          subtitle: s.projectFolder ? `项目: ${s.projectFolder.split(/[\\/]/).pop()}` : undefined,
+          subtitle: s.workingDirectory ? `项目: ${s.workingDirectory.split(/[\\/]/).pop()}` : undefined,
           action: () => { appState.switchSession(s.id); setOpen(false); },
         });
       }

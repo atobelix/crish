@@ -26,7 +26,6 @@ import type { ContextCompressionRuntimeOptions } from "../types";
 import type { PromptAssemblyContextBlock } from "../prompt-assembly";
 import { ContextCompressor, type ContextCompressionResult } from "../context-compression";
 import { projectMessagesForProvider, type ContextProjectionOptions } from "../context-projection";
-import type { SecretRedactor } from "../secrets-obfuscation";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -38,7 +37,6 @@ import { safeArtifactName } from "../runtime-helpers";
 export interface ContextManagerOptions {
   compression?: ContextCompressionRuntimeOptions;
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
-  secretRedactor?: SecretRedactor;
   /** 当前工作目录（用于工具输出物化路径） */
   cwd?: string;
   /** 会话 ID（用于工具输出物化路径） */
@@ -77,25 +75,23 @@ export class ContextManager {
   }
 
   /**
-   * 为 Provider 投影消息（预算控制、脱敏、blob 外部化）
+   * 为 Provider 投影消息（预算控制、blob 外部化）
    */
   projectForProvider(messages: AgentMessage[]): AgentMessage[] {
     return projectMessagesForProvider(messages, {
-      toolOutputBudget: this.options.toolOutputBudget,
-      secretRedactor: this.options.secretRedactor
+      toolOutputBudget: this.options.toolOutputBudget
     });
   }
 
   /**
-   * 投影系统提示词（脱敏处理）
+   * 投影系统提示词
    */
   projectSystemPrompt(systemPrompt: string | undefined): string | undefined {
-    if (!this.options.secretRedactor || systemPrompt === undefined) return systemPrompt;
-    return this.options.secretRedactor.redactText(systemPrompt).value;
+    return systemPrompt;
   }
 
   /**
-   * 投影提示词上下文块（脱敏处理）
+   * 投影提示词上下文块
    */
   projectPromptContext(context: {
     stableContext?: PromptAssemblyContextBlock[];
@@ -106,18 +102,16 @@ export class ContextManager {
   } {
     if (!context) return {};
     return {
-      stableContext: this.projectPromptContextBlocks(context.stableContext),
-      volatileContext: this.projectPromptContextBlocks(context.volatileContext)
+      stableContext: context.stableContext,
+      volatileContext: context.volatileContext
     };
   }
 
   /**
-   * 还原 Provider 返回的工具输入（反脱敏）
+   * 还原 Provider 返回的工具输入
    */
   restoreProviderToolInput(input: JsonObject): JsonObject {
-    if (!this.options.secretRedactor) return input;
-    const restored = this.options.secretRedactor.restoreJson(input);
-    return restored && typeof restored === "object" && !Array.isArray(restored) ? (restored as JsonObject) : input;
+    return input;
   }
 
   /**
@@ -205,19 +199,5 @@ export class ContextManager {
     const sessionId = this.options.sessionId ?? "default";
     if (configured) return isAbsolute(configured) ? configured : resolve(cwd, configured);
     return resolve(cwd, ".codex", "agent-artifacts", sessionId);
-  }
-
-  /**
-   * 投影上下文块（脱敏处理）
-   */
-  private projectPromptContextBlocks(
-    blocks: PromptAssemblyContextBlock[] | undefined
-  ): PromptAssemblyContextBlock[] | undefined {
-    if (!blocks || blocks.length === 0) return undefined;
-    if (!this.options.secretRedactor) return blocks;
-    return blocks.map((block) => ({
-      ...block,
-      content: this.options.secretRedactor!.redactJson(block.content).value
-    }));
   }
 }

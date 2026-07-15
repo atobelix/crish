@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm --prefix ../crish-desktop run dev",
+    "dev:legacy-ui": "vite",
+    "build": "npm --prefix ../crish-desktop run build",
+    "build:legacy-ui": "vite build",
     "tauri": "tauri",
     "cli": "node ../../node_modules/vite-node/vite-node.mjs --config vite.config.ts src/cli/main.ts",
     "cli:check": "tsc --noEmit && npm run command-registry:check",
@@ -14,6 +16,7 @@
   "dependencies": {
     "@crish/agent-runtime": "file:../../packages/agent-runtime",
     "@crish/shared-types": "file:../../packages/shared-types",
+    "@crish/crish-desktop": "file:../crish-desktop",
     "@tauri-apps/api": "^2.8.0",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.2.0",

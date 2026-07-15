@@ -25,6 +25,7 @@ import {
   type RunStatus,
 } from "@crish/agent-orchestrator";
 import { ApprovalQueue } from "../approval-queue.js";
+import { DaemonApprovalHandler } from "../daemon-approval-handler.js";
 import {
   broadcastApprovalRequested as broadcastApprovalRequestedExtracted,
   broadcastExpiredApprovalResolved as broadcastExpiredApprovalResolvedExtracted,
@@ -48,7 +49,6 @@ import {
 } from "./workflow-handlers.js";
 import type { WorkflowDueRun, WorkflowRunAccepted } from "../workflow-scheduler.js";
 import { WorkflowStoreConflictError, type WorkflowStore } from "../workflow-store.js";
-import type { FileMetricsStore } from "../metrics-store.js";
 import {
   runtimeSessionStorePath,
 } from "../conversation-rewind-boundary.js";
@@ -88,7 +88,7 @@ export interface OrchestratedRunInput {
   maxRounds?: number;
   maxStalledRounds?: number;
   backgroundDrainTimeoutMs?: number;
-  permissionMode?: "ask" | "full-access";
+  permissionMode?: "ask" | "auto" | "full-access" | "plan";
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
@@ -142,7 +142,6 @@ export interface RunHandlerOptions {
   approvalQueue: ApprovalQueue;
   config: DaemonConfig;
   runtimeFactory: DaemonRuntimeFactory;
-  metricsStore: FileMetricsStore;
   transport: DaemonMessageTransport;
   subagentBridge: DaemonSubagentBridge;
   workflowStore: WorkflowStore;
@@ -395,15 +394,6 @@ export class RunHandler {
       await input.onStarted?.({ runId: handle.runId, sessionId: handle.sessionId });
 
       for await (const orchestratorEvent of handle.events) {
-        if (orchestratorEvent.type === "run-cancel-requested" || orchestratorEvent.type === "run-cancelled") {
-          void this.options.metricsStore.recordRunLifecycle({
-            runId: input.runId,
-            sessionId: input.sessionId,
-            eventType: orchestratorEvent.type,
-            timestamp: orchestratorEvent.timestamp,
-          });
-        }
-
         if (orchestratorEvent.type === "run-failed") {
           terminal = "failed";
           terminalError = stringPayload(orchestratorEvent.payload, "error") ?? "Run failed";
@@ -414,17 +404,13 @@ export class RunHandler {
           );
           this.options.approvalQueue.clearRun(input.runId, "run-failed");
           // 推送 run-terminal 事件给客户端
-          eventSink.send({
-            type: "event",
+          this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
+            type: "run-terminal",
             runId: input.runId,
-            event: {
-              type: "run-terminal",
-              runId: input.runId,
-              sessionId: input.sessionId,
-              terminal: "failed",
-              error: terminalError,
-              timestamp: orchestratorEvent.timestamp,
-            },
+            sessionId: input.sessionId,
+            terminal: "failed",
+            error: terminalError,
+            timestamp: orchestratorEvent.timestamp,
           });
           continue;
         }
@@ -432,31 +418,23 @@ export class RunHandler {
         if (orchestratorEvent.type === "run-completed") {
           terminal = "completed";
           // 推送 run-terminal 事件给客户端
-          eventSink.send({
-            type: "event",
+          this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
+            type: "run-terminal",
             runId: input.runId,
-            event: {
-              type: "run-terminal",
-              runId: input.runId,
-              sessionId: input.sessionId,
-              terminal: "completed",
-              timestamp: orchestratorEvent.timestamp,
-            },
+            sessionId: input.sessionId,
+            terminal: "completed",
+            timestamp: orchestratorEvent.timestamp,
           });
         }
         if (orchestratorEvent.type === "run-cancelled") {
           terminal = "cancelled";
           // 推送 run-terminal 事件给客户端
-          eventSink.send({
-            type: "event",
+          this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
+            type: "run-terminal",
             runId: input.runId,
-            event: {
-              type: "run-terminal",
-              runId: input.runId,
-              sessionId: input.sessionId,
-              terminal: "cancelled",
-              timestamp: orchestratorEvent.timestamp,
-            },
+            sessionId: input.sessionId,
+            terminal: "cancelled",
+            timestamp: orchestratorEvent.timestamp,
           });
         }
 
@@ -468,12 +446,6 @@ export class RunHandler {
         if (!event || typeof event !== "object" || typeof (event as { type?: unknown }).type !== "string") {
           continue;
         }
-
-        void this.options.metricsStore.recordAgentEvent({
-          runId: input.runId,
-          sessionId: input.sessionId,
-          event,
-        });
 
         await boundaryContext.observe(orchestratorEvent, event);
 
@@ -488,11 +460,7 @@ export class RunHandler {
           this.broadcastExpiredApprovalResolved(event);
         }
 
-        eventSink.send({
-          type: "event",
-          runId: input.runId,
-          event,
-        });
+        this.sendRunEvent(eventSink, input.runId, orchestratorEvent, event);
       }
 
       const currentRun = this.options.orchestrator.getRun(input.runId);
@@ -510,8 +478,10 @@ export class RunHandler {
       console.error(`[Daemon] Error in orchestrated run ${input.runId}:`, error);
       this.sendError(input.ws, "RUN_ERROR", errorMessage(error), input.runId, input.correlation);
       this.options.approvalQueue.clearRun(input.runId, "run-error");
+      DaemonApprovalHandler.clearRun(input.runId);
       await input.onTerminal?.("failed", errorMessage(error));
     } finally {
+      DaemonApprovalHandler.clearRun(input.runId);
       admissionLease?.release();
     }
   }
@@ -576,6 +546,22 @@ export class RunHandler {
   }
 
   // ─── Private: Error dispatch ───────────────────────────────
+
+  private sendRunEvent(
+    eventSink: RunEventSink,
+    runId: string,
+    orchestratorEvent: OrchestratorEvent,
+    event: AgentEvent
+  ): void {
+    eventSink.send({
+      type: "event",
+      runId,
+      orchestratorEventId: orchestratorEvent.id,
+      sequence: orchestratorEvent.sequence,
+      timestamp: orchestratorEvent.timestamp,
+      event,
+    });
+  }
 
   private sendError(
     ws: WebSocket | undefined,

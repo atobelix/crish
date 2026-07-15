@@ -8,6 +8,10 @@ import type {
   DaemonProviderStatusSnapshot,
 } from "./types.js";
 import type { DaemonProductAdapterStatusSnapshot } from "./daemon-product-adapters.js";
+import {
+  DAEMON_INBOUND_MESSAGE_REGISTRY,
+  DAEMON_OUTBOUND_MESSAGE_REGISTRY,
+} from "./protocol/registry.js";
 
 export interface BuildDaemonCapabilitySnapshotInput {
   providerStatus: DaemonProviderStatusSnapshot;
@@ -78,25 +82,15 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
     id: "approval.queue",
     title: "Approval queue",
     state: "implemented",
-    reason: "Approval request, resolution, timeout, status snapshots, and event-log-backed history queries are owned by agent-daemon.",
+    reason: "Approval request, resolution, timeout, and status snapshots are owned by agent-daemon.",
     owner: "agent-daemon",
     relatedMessageTypes: [
       "approve-tool",
       "deny-tool",
-      "list-approval-history",
       "approval-requested",
       "approval-resolved",
-      "approval-history-listed",
     ],
     relatedTauriCommands: ["workbench_approve_tool", "workbench_deny_tool"],
-  },
-  {
-    id: "metrics.query",
-    title: "Metrics query",
-    state: "implemented",
-    reason: "Daemon metrics are persisted and queryable through the daemon metrics store.",
-    owner: "agent-daemon",
-    relatedMessageTypes: ["get-metrics", "get-metrics-snapshot", "metrics-response"],
   },
   {
     id: "workflow.scheduler",
@@ -254,8 +248,8 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
   {
     id: "checkpoints",
     title: "Checkpoints",
-    state: "unsupported",
-    reason: "Checkpoint manifests can inform rewind boundaries, but list/restore/diff APIs have no runtime adapter yet.",
+    state: "experimental",
+    reason: "Checkpoint manifests can inform rewind boundaries; list/restore/diff APIs are experimental and may lack a full runtime adapter.",
     owner: "agent-runtime",
     relatedMessageTypes: [
       "list-checkpoints",
@@ -325,9 +319,22 @@ function applyRuntimeState(
 
   const productStatus = productStatusForCapability(definition.id, input.productAdapters);
   if (productStatus) {
-    state = productStatus.state;
-    reason = productStatus.reason;
-    diagnostics.push(...productStatus.diagnostics);
+    // Product adapter 不能将 capability 提升到高于其相关消息类型在 registry 中的实现状态
+    const registryState = minRegistryStateForCapability(definition.relatedMessageTypes);
+    if (registryState === "unsupported" && (productStatus.state === "implemented" || productStatus.state === "experimental")) {
+      state = "unsupported";
+      reason = `Product adapter reports ${productStatus.state}, but related protocol messages are not yet implemented in the daemon registry.`;
+      diagnostics.push({
+        code: "CAPABILITY_REGISTRY_MISMATCH",
+        message: reason,
+        severity: "warning",
+        updatedAt: generatedAt,
+      });
+    } else {
+      state = productStatus.state;
+      reason = productStatus.reason;
+      diagnostics.push(...productStatus.diagnostics);
+    }
   }
 
   if (input.lifecycle?.eventStore.status === "failed" && affectsEventStore(definition.id)) {
@@ -369,4 +376,25 @@ function productStatusForCapability(
   if (capabilityId === "memory") return snapshot.memory;
   if (capabilityId === "checkpoints") return snapshot.checkpoints;
   return undefined;
+}
+
+/**
+ * 检查 capability 相关的所有消息类型在 registry 中的最低实现状态。
+ * 如果任一消息类型是 unsupported，则返回 "unsupported"。
+ * 否则返回 "implemented"（表示至少所有消息类型都已注册为非 unsupported）。
+ */
+function minRegistryStateForCapability(
+  relatedMessageTypes: string[]
+): "unsupported" | "implemented" {
+  const allRegistries = new Map([
+    ...Object.entries(DAEMON_INBOUND_MESSAGE_REGISTRY),
+    ...Object.entries(DAEMON_OUTBOUND_MESSAGE_REGISTRY),
+  ]);
+  for (const type of relatedMessageTypes) {
+    const entry = allRegistries.get(type);
+    if (!entry || entry.state === "unsupported") {
+      return "unsupported";
+    }
+  }
+  return "implemented";
 }

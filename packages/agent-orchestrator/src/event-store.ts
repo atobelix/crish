@@ -192,6 +192,13 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private latchedFailure?: OrchestratorEventStoreError;
   private cachedEvents?: OrchestratorEvent[];
   private cachedEventsBySession = new Map<string, OrchestratorEvent[]>();
+  /**
+   * 持久化的追加写文件句柄。
+   *
+   * 避免每次 append 都打开/关闭文件，显著提升吞吐。
+   * 在 close() 或写入失败时释放。
+   */
+  private appendHandle?: import("node:fs/promises").FileHandle;
   private cachedEventsByRun = new Map<string, OrchestratorEvent[]>();
   private cachedSessionSummaries = new Map<string, MutableSessionEventSummary>();
   private sessionSummaryCacheReady = false;
@@ -289,7 +296,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         const byteOffset = this.currentFileSize;
         const byteLength = Buffer.byteLength(serialized, "utf8") + 1; // +1 for newline
 
-        await appendJsonlLine(this.filePath, serialized);
+        await this.appendLineWithCachedHandle(serialized);
         this.currentFileSize += byteLength;
 
         // 追踪字节偏移
@@ -687,6 +694,48 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     // 关闭前确保索引已持久化
     if (this.indexDirty) {
       await this.flushIndex();
+    }
+    // 释放持久化的追加写句柄
+    if (this.appendHandle) {
+      try {
+        await this.appendHandle.close();
+      } catch {
+        // 句柄释放失败不应阻断 close
+      }
+      this.appendHandle = undefined;
+    }
+  }
+
+  /**
+   * 使用持久化句柄追加一行 JSONL。
+   *
+   * 相比每次打开/关闭文件，缓存句柄可显著提升吞吐。
+   * 句柄失效时会自动重新打开。
+   */
+  private async appendLineWithCachedHandle(line: string): Promise<void> {
+    if (!this.appendHandle) {
+      this.appendHandle = await openFile(this.filePath, constants.O_APPEND | constants.O_RDWR);
+    }
+    const handle = this.appendHandle;
+    try {
+      const stat = await handle.stat();
+      let prefix = "";
+      if (stat.size > 0) {
+        const tail = Buffer.alloc(1);
+        await handle.read(tail, 0, 1, stat.size - 1);
+        if (tail[0] !== 10) prefix = "\n";
+      }
+      await handle.writeFile(`${prefix}${line}\n`, "utf8");
+      await handle.sync();
+    } catch (cause) {
+      // 句柄可能已失效（文件被移动/删除等），释放并让下次 append 重新打开
+      try {
+        await handle.close();
+      } catch {
+        // 忽略关闭错误
+      }
+      this.appendHandle = undefined;
+      throw cause;
     }
   }
 
@@ -1094,23 +1143,6 @@ export function createOrchestratorEventStoreHeader(
     eventLogId: input.eventLogId && input.eventLogId.length > 0 ? input.eventLogId : `eventlog_${randomUUID()}`,
     generation: input.generation && input.generation > 0 ? input.generation : 1
   };
-}
-
-async function appendJsonlLine(filePath: string, line: string): Promise<void> {
-  const handle = await openFile(filePath, constants.O_APPEND | constants.O_RDWR);
-  try {
-    const stat = await handle.stat();
-    let prefix = "";
-    if (stat.size > 0) {
-      const tail = Buffer.alloc(1);
-      await handle.read(tail, 0, 1, stat.size - 1);
-      if (tail[0] !== 10) prefix = "\n";
-    }
-    await handle.writeFile(`${prefix}${line}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
 }
 
 function parseJsonLine(line: string): unknown {

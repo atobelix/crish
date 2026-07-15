@@ -20,7 +20,5 @@ export {
   type CheckpointMiddlewareOptions,
   OutputMaterializationMiddleware,
   type OutputMaterializationMiddlewareOptions,
-  SecretRedactionMiddleware,
-  type SecretRedactionMiddlewareOptions,
   MiddlewarePipeline,
 } from "./tool-middleware";

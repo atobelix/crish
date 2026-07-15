@@ -118,7 +118,6 @@ export interface AgentRuntimeOptions {
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
   recovery?: AgentRecoveryRuntimeOptions;
   toolExecution?: ToolExecutionRuntimeOptions;
-  secrets?: false | AgentRuntimeSecretsOptions;
   workspaceMutationCoordinator?: WorkspaceMutationCoordinator;
   subagentDepth?: number;
   connectionManager?: import("./provider-transport/connection-manager").ConnectionManager;
@@ -132,24 +131,6 @@ export interface AgentRuntimePromptContext {
   metadata?: JsonObject;
 }
 
-export interface AgentRuntimeSecretsOptions {
-  enabled?: boolean;
-  redactor?: import("./secrets-obfuscation").SecretRedactor;
-  env?: Record<string, string | undefined>;
-  registerProcessEnv?: boolean;
-  registerDefaultPatterns?: boolean;
-  apiKeyEnv?: string;
-  patterns?: string[];
-  ignorePatterns?: string[];
-  autoDetect?: boolean;
-  excludeKeys?: string[];
-  excludePatterns?: string[];
-  maskLength?: number;
-  maskChar?: string;
-  dryRun?: boolean;
-  onRedact?: (key: string) => void;
-}
-
 export interface AgentRecoveryRuntimeOptions {
   enabled?: boolean;
   maxConsecutiveToolErrors?: number;
@@ -161,6 +142,12 @@ export interface SessionPersistenceStore {
   open(session: SessionHeader): Promise<void>;
   append(entry: SessionEntry): Promise<void>;
   readAll?(): Promise<SessionEntry[]>;
+  /**
+   * 释放底层资源（如持久化文件句柄）。
+   *
+   * 实现可选。运行结束时调用以确保资源不泄漏。
+   */
+  close?(): Promise<void>;
 }
 
 export interface SessionMessageStoreOptions {

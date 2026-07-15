@@ -28,7 +28,7 @@ export interface DaemonSubagentToolOptions {
   cwd: string;
   depth: number;
   maxDepth?: number;
-  permissionMode: "ask" | "full-access";
+  permissionMode: "ask" | "auto" | "full-access" | "plan";
   maxTurns?: number;
   startRun(request: StartRunRequest): Promise<OrchestratorRunHandle>;
   cancelRun(runId: string, reason?: string): boolean;

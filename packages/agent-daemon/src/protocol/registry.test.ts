@@ -22,7 +22,7 @@ import {
   OUTBOUND_MESSAGE_TYPES,
   validateInboundMessage,
   validateOutboundMessage,
-} from "./schema";
+} from "./protocol";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SOURCE_ROOT = resolve(__dirname, "..");
@@ -44,14 +44,18 @@ describe("daemon protocol registry", () => {
     const handledTypes = extractCases(
       source,
       "async handleInboundMessage",
-      "  private async handleRunTaskWithOrchestrator"
+      "    default:"
     );
 
-    expect(new Set(handledTypes)).toEqual(new Set(DAEMON_INBOUND_MESSAGE_TYPES));
+    // hello is handled separately during the WebSocket handshake (server.ts),
+    // not in the regular inbound message switch.
+    const expectedHandled = new Set(DAEMON_INBOUND_MESSAGE_TYPES);
+    expectedHandled.delete("hello" as never);
+    expect(new Set(handledTypes)).toEqual(expectedHandled);
   });
 
   it("has inbound schema validators for every registered message type", () => {
-    const source = readFileSync(resolve(__dirname, "schema.ts"), "utf8");
+    const source = readFileSync(resolve(__dirname, "protocol.ts"), "utf8");
     const schemaCases = extractCases(
       source,
       "export function validateInboundMessage",
@@ -62,7 +66,7 @@ describe("daemon protocol registry", () => {
   });
 
   it("has outbound schema validators for every registered message type", () => {
-    const source = readFileSync(resolve(__dirname, "schema.ts"), "utf8");
+    const source = readFileSync(resolve(__dirname, "protocol.ts"), "utf8");
     const schemaCases = extractCases(
       source,
       "export function validateOutboundMessage",
@@ -73,7 +77,7 @@ describe("daemon protocol registry", () => {
   });
 
   it("keeps capability groups aligned with registry and schema validators", () => {
-    const source = readFileSync(resolve(__dirname, "schema.ts"), "utf8");
+    const source = readFileSync(resolve(__dirname, "protocol.ts"), "utf8");
     const inboundSchemaCases = extractCases(
       source,
       "export function validateInboundMessage",
@@ -265,8 +269,6 @@ function inboundMessageSamples(): Array<{ type: string; [key: string]: unknown }
     { type: "cancel-pending-input", inputId: "pending_1", sessionId: "session_1", reason: "user-cancelled" },
     { type: "dispatch-pending-input", inputId: "pending_1", sessionId: "session_1", targetRunId: "run_2" },
     { type: "list-pending-inputs", sessionId: "session_1" },
-    { type: "get-metrics", runId: "run_1", includeRuns: true },
-    { type: "get-metrics-snapshot", sessionId: "session_1", includeRuns: true },
     { type: "list-workflows" },
     {
       type: "create-workflow",
@@ -352,7 +354,7 @@ function inboundMessageSamples(): Array<{ type: string; [key: string]: unknown }
 
 function outboundMessageSamples(): Array<{ type: string; [key: string]: unknown }> {
   return [
-    { type: "daemon-ready", port: 12345 },
+    { type: "daemon-ready", port: 12345, protocolVersion: 1, buildHash: "abc123" },
     { type: "event", runId: "run_1", event: { type: "agent-start" } },
     {
       type: "approval-requested",
@@ -450,13 +452,6 @@ function outboundMessageSamples(): Array<{ type: string; [key: string]: unknown 
       event: orchestratorEvent("pending-input-dispatched"),
     },
     { type: "pending-inputs-listed", inputs: [pendingInputRecord()], sessionId: "session_1" },
-    {
-      type: "metrics-response",
-      status: "ok",
-      query: { runId: "run_1", includeRuns: true },
-      source: metricsSource(),
-      summary: metricsSummary(),
-    },
     { type: "workflows-listed", workflows: [workflowDefinition()] },
     { type: "workflow-created", workflow: workflowDefinition() },
     { type: "workflow-updated", workflow: workflowDefinition() },
@@ -732,13 +727,6 @@ function providerStatusSnapshot() {
     apiKey: { hasApiKey: false, source: "unset" },
     hasDirectApiKey: false,
     apiKeySource: "unset",
-    accountCenter: {
-      configured: false,
-      login: "unknown",
-      quota: "unknown",
-      gateway: "unknown",
-      runtimeCredential: "unknown",
-    },
     gateway: {
       ready: true,
       credentialConfigured: true,
@@ -869,86 +857,6 @@ function taskSnapshot() {
       updatedAt: timestamp(),
       metadata: {},
     },
-  };
-}
-
-function metricsSummary() {
-  return {
-    scope: "run",
-    runCount: 1,
-    sessionCount: 1,
-    snapshot: {
-      sessionId: "session_1",
-      eventCount: 0,
-      turnCount: 0,
-      tools: {
-        callCount: 0,
-        errorCount: 0,
-        errorRate: 0,
-        timeoutCount: 0,
-        timeoutRate: 0,
-        cancelCount: 0,
-        cancelRate: 0,
-        durationMs: { count: 0 },
-        byName: {},
-      },
-      providerUsage: {
-        sampleCount: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        reasoningTokens: 0,
-      },
-      providerLatencyMs: { count: 0 },
-      cache: {
-        sampleCount: 0,
-        promptTokens: 0,
-        readTokens: 0,
-        writeTokens: 0,
-        missTokens: 0,
-        hitRatio: 0,
-        writeRatio: 0,
-      },
-      failures: {
-        errorCount: 0,
-        runtimeErrorCount: 0,
-        agentErrorCount: 0,
-        providerErrorCount: 0,
-        contextCompressionErrorCount: 0,
-        timeoutCount: 0,
-        cancelCount: 0,
-      },
-      trace: {
-        traceId: "session_1",
-        sessionId: "session_1",
-        spanCount: 1,
-        errorCount: 0,
-        spans: [
-          {
-            spanId: "conversation:session_1",
-            traceId: "session_1",
-            sessionId: "session_1",
-            kind: "conversation",
-            name: "conversation",
-            status: "ok",
-          },
-        ],
-        recentErrors: [],
-      },
-      dimensions: [],
-    },
-  };
-}
-
-function metricsSource() {
-  return {
-    kind: "jsonl",
-    path: "C:/Software/conex/metrics.jsonl",
-    generation: 1,
-    status: "ok",
-    badLineCount: 0,
   };
 }
 

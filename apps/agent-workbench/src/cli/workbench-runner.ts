@@ -1,12 +1,14 @@
 import type {
   AgentEvent,
   AgentMessage,
-  BackgroundCommandEvent,
-  BackgroundCommandManager,
-  ProviderUsage,
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
   ToolBatchResult
+} from "@crish/shared-types";
+import type {
+  BackgroundCommandEvent,
+  BackgroundCommandManager,
+  ProviderUsage,
 } from "@crish/agent-runtime";
 import { applyBackgroundCommandEventToWorkbench } from "../shared/background-command-bridge";
 import { applyDisclosureDiagnosticsToSnapshot, type WorkbenchCommandDiagnosticInput } from "../shared/disclosure-diagnostics";
@@ -452,7 +454,7 @@ async function applyAgentEvent(
             id: agentEvent.request.id,
             kind: "danger",
             title: agentEvent.request.summary,
-            detail: agentEvent.request.tool.description,
+            detail: agentEvent.request.toolMetadata?.category ?? agentEvent.request.toolName,
             primaryAction: "允许",
             secondaryAction: "拒绝"
           }
@@ -824,7 +826,7 @@ function evidenceKindForTool(result: ToolBatchResult): "command" | "check" | "de
 
 function assistantText(message: AgentMessage): string {
   return message.blocks
-    .filter((block) => block.type === "text")
+    .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("");
 }

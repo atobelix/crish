@@ -49,6 +49,7 @@ export { DEFAULT_MAX_TURNS, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS, DEFAULT_STEERING_
 
 // 错误
 export { ConexError, ProviderError, PermissionError, SessionError, ProtocolError } from "./errors";
+export type { SessionErrorCode } from "./errors";
 
 // Provider 默认配置
 export type { CrishProviderCredentialMode, CrishProviderEndpoint, CrishDefaultProviderConfig } from "./provider-defaults";

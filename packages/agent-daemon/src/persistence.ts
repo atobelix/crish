@@ -7,7 +7,6 @@ export const DAEMON_CONVERSATION_BOUNDARY_MANIFEST_FILE = "conversation-boundari
 export const DAEMON_CHECKPOINT_MANIFEST_FILE = "conversation-checkpoints.jsonl";
 export const DAEMON_WORKFLOW_STORE_FILE = "workflows.json";
 export const DAEMON_PLAN_DOCUMENT_STORE_FILE = "plan-documents.json";
-export const DAEMON_METRICS_STORE_FILE = "metrics.jsonl";
 export const DAEMON_SCOPED_CONTEXT_STORE_FILE = "scoped-context.json";
 export const DAEMON_MEMORY_STORE_FILE = "memories.jsonl";
 export const DAEMON_SESSION_METADATA_STORE_FILE = "session-metadata.json";
@@ -32,12 +31,6 @@ export function normalizeDaemonConfig(config: Partial<DaemonConfig> = {}): Daemo
         (config.sessionEventLogDir
           ? join(sessionEventLogDir, DAEMON_PLAN_DOCUMENT_STORE_FILE)
           : merged.planDocumentStorePath)
-    ),
-    metricsStorePath: resolve(
-      config.metricsStorePath ??
-        (config.sessionEventLogDir
-          ? join(sessionEventLogDir, DAEMON_METRICS_STORE_FILE)
-          : merged.metricsStorePath)
     ),
     scopedContextStorePath: resolve(
       config.scopedContextStorePath ??
@@ -78,10 +71,6 @@ export function resolveDaemonWorkflowStorePath(config: Pick<DaemonConfig, "workf
 
 export function resolveDaemonPlanDocumentStorePath(config: Pick<DaemonConfig, "planDocumentStorePath">): string {
   return resolve(config.planDocumentStorePath);
-}
-
-export function resolveDaemonMetricsStorePath(config: Pick<DaemonConfig, "metricsStorePath">): string {
-  return resolve(config.metricsStorePath);
 }
 
 export function resolveDaemonScopedContextStorePath(

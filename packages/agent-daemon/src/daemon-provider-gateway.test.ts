@@ -5,7 +5,7 @@ import {
   createDaemonProviderRuntimeConfig,
   createDaemonProviderRuntimeConfigFromEnv,
 } from "./daemon-provider-gateway";
-import { createTextMessage, type ProviderCredentialResolver, type ProviderStreamEvent } from "@crish/agent-runtime";
+import { createTextMessage, type ProviderStreamEvent } from "@crish/agent-runtime";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -642,150 +642,6 @@ describe("DaemonProviderGatewayController", () => {
     });
   });
 
-  it("uses an account-backed credential resolver when direct api keys are absent", async () => {
-    const resolver: ProviderCredentialResolver & { getStatusSnapshot(): unknown } = {
-      resolveCredential({ credentialSource }) {
-        expect(credentialSource.type).toBe("account");
-        return {
-          id: "acct-key",
-          source: "account",
-          providerId: "account-center",
-          accountId: credentialSource.type === "account" ? credentialSource.accountId : undefined,
-          apiKey: "account-runtime-key",
-          baseUrl: "https://account-gateway.example/v1",
-        };
-      },
-      getStatusSnapshot() {
-        return {
-          configured: true,
-          accountId: "acct_1",
-          login: "ready",
-          quota: "ready",
-          gateway: "ready",
-          runtimeCredential: "ready",
-        };
-      },
-    };
-    const controller = new DaemonProviderGatewayController(
-      {
-        credentialMode: "account-center",
-        accountId: "acct_1",
-        baseUrl: "https://fallback.example/v1",
-        model: "mimo-v2.5",
-        providerId: "account-center",
-      },
-      { credentialResolver: resolver }
-    );
-
-    const plan = await controller.planProvider();
-    expect(plan).toMatchObject({
-      ok: true,
-      credential: {
-        source: "account",
-        accountId: "acct_1",
-        apiKey: "account-runtime-key",
-      },
-      selectedRoute: {
-        credentialSourceType: "account",
-      },
-    });
-
-    const provider = await createDaemonProviderFactory(controller)("run_account", "C:/workspace");
-    expect(provider.id).toBe("account-center");
-    expect(controller.getStatusSnapshot()).toMatchObject({
-      credentialMode: "account-center",
-      readiness: "ready",
-      accountCenter: {
-        configured: true,
-        login: "ready",
-        quota: "ready",
-        gateway: "ready",
-        runtimeCredential: "ready",
-      },
-      gateway: {
-        ready: true,
-        selectedEndpointSupport: "auto",
-        selectedStreamingSupport: "streaming",
-        selectedCredentialSource: {
-          type: "account",
-          providerId: "account-center",
-        },
-      },
-    });
-  });
-
-  it("keeps account-center routing explicit even when a direct api key is configured", async () => {
-    const resolver: ProviderCredentialResolver = {
-      resolveCredential({ credentialSource }) {
-        expect(credentialSource.type).toBe("account");
-        return {
-          id: "acct-key",
-          source: "account",
-          providerId: "account-center",
-          apiKey: "account-runtime-key",
-          baseUrl: "https://account-gateway.example/v1",
-        };
-      },
-    };
-    const controller = new DaemonProviderGatewayController(
-      {
-        credentialMode: "account-center",
-        apiKey: "sk-should-not-use",
-        baseUrl: "https://direct.example/v1",
-        model: "mimo-v2.5",
-        providerId: "flowbit",
-      },
-      { credentialResolver: resolver }
-    );
-
-    const plan = await controller.planProvider();
-
-    expect(plan).toMatchObject({
-      ok: true,
-      selectedRoute: {
-        credentialSourceType: "account",
-      },
-      credential: {
-        source: "account",
-        apiKey: "account-runtime-key",
-      },
-    });
-    expect(JSON.stringify(controller.getStatusSnapshot())).not.toContain("sk-should-not-use");
-    expect(controller.getStatusSnapshot()).toMatchObject({
-      credentialMode: "account-center",
-      apiKey: {
-        hasApiKey: true,
-        source: "unknown",
-        last4: "-use",
-      },
-    });
-  });
-
-  it("fails with a typed gateway decision when no credential can be resolved", async () => {
-    const controller = new DaemonProviderGatewayController({
-      credentialMode: "account-center",
-      baseUrl: "https://gateway.example/v1",
-      model: "mimo-v2.5",
-      providerId: "flowbit",
-    });
-
-    await expect(controller.createProvider({ runId: "run_missing", cwd: "C:/workspace" })).rejects.toThrow(
-      /provider_credential_missing/
-    );
-    expect(controller.getStatusSnapshot()).toMatchObject({
-      credentialMode: "account-center",
-      readiness: "missing",
-      apiKey: {
-        hasApiKey: false,
-        source: "unset",
-      },
-      gateway: {
-        ready: false,
-        code: "provider_credential_missing",
-      },
-    });
-  });
-
   it("normalizes environment configuration into the product provider path", () => {
     const config = createDaemonProviderRuntimeConfigFromEnv(
       {
@@ -881,7 +737,7 @@ describe("DaemonProviderGatewayController", () => {
     });
   });
 
-  it("resolves provider config precedence as runtime, workspace, user, env, then default", () => {
+  it("resolves provider config precedence as runtime, env, user, workspace, then default", () => {
     const config = createDaemonProviderRuntimeConfig({
       defaults: {
         credentialMode: "auto",
@@ -906,18 +762,18 @@ describe("DaemonProviderGatewayController", () => {
         model: "workspace-model",
       },
       runtimeConfig: {
-        credentialMode: "account-center",
+        credentialMode: "auto",
         apiKey: "",
         baseUrl: "https://runtime.example",
       },
     });
 
     expect(config).toMatchObject({
-      credentialMode: "account-center",
+      credentialMode: "auto",
       apiKey: undefined,
       apiKeySource: "unset",
       baseUrl: "https://runtime.example",
-      model: "workspace-model",
+      model: "env-model",
     });
   });
 });

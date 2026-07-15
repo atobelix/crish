@@ -12,7 +12,6 @@ import {
 import { ConversationEngine, ProviderCallGateway, ContextManager } from "./runtime-components";
 import { TokenTracker } from "./provider-transport/token-tracker";
 import { PermissionEngine, HardlineBlockRule, DEFAULT_HARDLINE_REGISTRY } from "@crish/decision-engine";
-import { SecretRedactor, SecretRegistry } from "./secrets-obfuscation";
 import { buildSessionContextFromEntries, createId, findSessionLeafId, InMemorySessionStore, nowIso, SessionRecorder } from "./session";
 import { AgentInputQueue } from "./agent-input-queue";
 import { DEFAULT_MAX_TURNS, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS } from "@crish/shared-types";
@@ -46,19 +45,6 @@ function createDefaultPermissionPolicy(): RuntimePermissionPolicy {
   };
 }
 
-function createRuntimeSecretRedactor(options: AgentRuntimeOptions["secrets"]): SecretRedactor | undefined {
-  if (options === false || options?.enabled === false) return undefined;
-  if (options?.redactor) return options.redactor;
-
-  // AgentRuntimeSecretsOptions is a superset of SecretRegistryOptions/RegisterEnvOptions/SecretRedactorOptions
-  // The SecretRegistry accepts the same field names as AgentRuntimeSecretsOptions, so passing through is safe.
-  const registry = new SecretRegistry(options as any);
-  const env = options?.env ?? (options?.registerProcessEnv === false ? {} : process.env);
-  registry.registerEnv(env, options as any);
-  if (options?.registerDefaultPatterns !== false) registry.registerDefaultPatterns();
-  return new SecretRedactor(registry, options as any);
-}
-
 export class AgentRuntime {
   private readonly sessionId: string;
   private readonly abortController = new AbortController();
@@ -75,7 +61,6 @@ export class AgentRuntime {
   constructor(private readonly options: AgentRuntimeOptions) {
     this.sessionId = options.sessionId ?? createId("session");
     this.permissionPolicy = options.permissionPolicy ?? createDefaultPermissionPolicy();
-    const secretRedactor = createRuntimeSecretRedactor(options.secrets);
     this.tokenTracker = options.tokenTracker ?? new TokenTracker();
     this.providerGateway = new ProviderCallGateway({
       connectionManager: options.connectionManager,
@@ -84,7 +69,6 @@ export class AgentRuntime {
     this.contextManager = new ContextManager({
       compression: options.contextCompression,
       toolOutputBudget: options.toolOutputBudget,
-      secretRedactor,
       cwd: options.cwd,
       sessionId: this.sessionId,
     });
@@ -193,6 +177,7 @@ export class AgentRuntime {
       recorder,
       this.sessionId,
       this.tokenTracker,
+      this.permissionPolicy,
       this.options.extensionRegistry,
     );
 
@@ -201,6 +186,10 @@ export class AgentRuntime {
       return yield* loop.run(userInput);
     } finally {
       this.activeInputQueue = null;
+      // 释放会话存储的持久化句柄（如 JsonlSessionStore 缓存的文件句柄）
+      if (sessionStore.close) {
+        await sessionStore.close().catch(() => undefined);
+      }
     }
   }
 

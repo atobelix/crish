@@ -251,9 +251,20 @@ export function formatProcessPreview(stdout: string, stderr: string): string {
     .join("\n\n");
 }
 
+/**
+ * 规范化 Windows 命令。
+ * - cmd 风格管道（findstr / dir | / 2>）走 cmd.exe，避免 PowerShell 包装破坏 |
+ * - 其余用 PowerShell，并把 && 拆成可失败退出的分段
+ */
 export function normalizePowerShellCommand(command: string): string {
-  const segments = splitPowerShellAndOperators(command);
-  if (segments.length <= 1) return command;
+  const trimmed = command.trim();
+  if (shouldRunViaCmdExe(trimmed)) {
+    // 双引号转义后交给 cmd /s /c
+    const escaped = trimmed.replace(/"/g, '""');
+    return `cmd.exe /d /s /c "${escaped}"`;
+  }
+  const segments = splitPowerShellAndOperators(trimmed);
+  if (segments.length <= 1) return trimmed;
   return segments
     .map((segment, index) =>
       index === 0
@@ -261,6 +272,22 @@ export function normalizePowerShellCommand(command: string): string {
         : `if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; if (-not $?) { exit 1 }; ${segment}`
     )
     .join("; ");
+}
+
+/** 典型 cmd 管道 / 重定向：用 cmd.exe 执行更可靠 */
+function shouldRunViaCmdExe(command: string): boolean {
+  // 已是显式 powershell 则不转
+  if (/^\s*(powershell|pwsh)(\.exe)?\b/i.test(command)) return false;
+  // findstr / find 管道
+  if (/\|\s*(findstr|find)(\.exe)?\b/i.test(command)) return true;
+  if (/\b(findstr|find)(\.exe)?\b/i.test(command) && /\|/.test(command)) return true;
+  // 经典 cmd 重定向
+  if (/\b2>&?1\b/.test(command) || /\b1>\s*2\b/.test(command)) return true;
+  // dir/type/echo 带管道
+  if (/^(dir|type|echo|copy|move|del|mkdir|rmdir)\b/i.test(command) && /\|/.test(command)) return true;
+  // head 在 PowerShell 不是原生命令，管道时常失败
+  if (/\|\s*head\b/i.test(command)) return true;
+  return false;
 }
 
 // ─── 内部工具 ─────────────────────────────────────────────

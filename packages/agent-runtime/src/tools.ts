@@ -459,6 +459,30 @@ export function askForMutatingToolsPolicy(options?: {
   };
 }
 
+/**
+ * 创建权限策略。
+ *
+ * mode:
+ * - "full-access" - 允许所有非 hardline 工具
+ * - "project" - 只读工具自动允许，变更工具需审批
+ * - "plan" - 只读工具自动允许，变更工具拒绝（仅允许写入计划文档）
+ * - "ask" - 只读工具自动允许，变更工具需审批
+ */
+export function createPermissionPolicy(options: { mode: "full-access" | "project" | "plan" | "ask" }): RuntimePermissionPolicy {
+  switch (options.mode) {
+    case "full-access":
+      return allowAllPermissionPolicy;
+    case "project":
+    case "ask":
+      return askForMutatingToolsPolicy({ allowReadOnly: true });
+    case "plan":
+      return askForMutatingToolsPolicy({
+        allowReadOnly: true,
+        mutatingDecision: { behavior: "deny", reason: "Plan mode: only plan documents may be written" },
+      });
+  }
+}
+
 function validateJsonValue(value: unknown, rawSchema: unknown, path: string): string[] {
   const schema = schemaRecord(rawSchema);
   if (!schema) return [];

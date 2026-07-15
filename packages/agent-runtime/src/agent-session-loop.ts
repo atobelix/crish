@@ -31,12 +31,12 @@ import { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS, DEFAULT_MAX_TURNS } from "@crish/sha
 import type {
   AgentRuntimeOptions,
   AgentTool,
+  RuntimePermissionPolicy,
   RuntimePermissionRequest,
-  ProviderStreamEvent,
 } from "./types";
+import type { ProviderStreamContractEvent } from "./provider-stream-contract";
 import { ConversationEngine, ToolExecutor, ProviderCallGateway, ContextManager, ProgressEventQueue, ProviderResponseConsumer, ContextCompressionGate, SingleToolExecutor } from "./runtime-components";
 import type { ToolExecuteHook } from "./runtime-components";
-import type { AssistantResponse } from "./runtime-components";
 import { TokenTracker } from "./provider-transport/token-tracker";
 import {
   flushEvents,
@@ -54,10 +54,9 @@ import {
 } from "./runtime-helpers";
 import { assemblePromptForProvider, type PromptAssemblyContextBlock } from "./prompt-assembly";
 import { type ProviderStreamFinishReason } from "./provider-stream-contract";
-import { SecretRedactor, SecretRegistry } from "./secrets-obfuscation";
 import { createId, createTextMessage, nowIso, SessionRecorder } from "./session";
-import { stripNonSerializable, combineAbortSignals } from "@crish/shared-utils";
-import { repairToolInput, validateToolInput } from "./tools";
+import { combineAbortSignals } from "@crish/shared-utils";
+import { validateToolInput } from "./tools";
 import {
   createAgentSessionMachine,
   shouldStopForMaxTurns,
@@ -110,17 +109,6 @@ function positiveIntegerLocal(value: number | undefined, fallback: number): numb
   return fallback;
 }
 
-function createSessionSecretRedactor(options: AgentRuntimeOptions["secrets"]): SecretRedactor | undefined {
-  if (options === false || options?.enabled === false) return undefined;
-  if (options?.redactor) return options.redactor;
-
-  const registry = new SecretRegistry(options as any);
-  const env = options?.env ?? (options?.registerProcessEnv === false ? {} : process.env);
-  registry.registerEnv(env, options as any);
-  if (options?.registerDefaultPatterns !== false) registry.registerDefaultPatterns();
-  return new SecretRedactor(registry, options as any);
-}
-
 // ─── AgentSessionLoop ─────────────────────────────────────
 
 export class AgentSessionLoop {
@@ -133,6 +121,7 @@ export class AgentSessionLoop {
   private readonly providerConsumer: ProviderResponseConsumer;
   private readonly compressionGate: ContextCompressionGate;
   private readonly singleToolExecutor: SingleToolExecutor;
+  private readonly permissionPolicy: RuntimePermissionPolicy;
 
   constructor(
     private readonly options: AgentRuntimeOptions,
@@ -145,6 +134,7 @@ export class AgentSessionLoop {
     private readonly recorder: SessionRecorder,
     private readonly sessionId: string,
     private readonly tokenTracker: TokenTracker,
+    permissionPolicy: RuntimePermissionPolicy,
     extensionRegistry?: ExtensionRegistry,
   ) {
     const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
@@ -157,6 +147,7 @@ export class AgentSessionLoop {
     this.providerConsumer = new ProviderResponseConsumer();
     this.compressionGate = new ContextCompressionGate(contextManager);
     this.singleToolExecutor = new SingleToolExecutor(this.toolExecution.timeoutMs, []);
+    this.permissionPolicy = permissionPolicy;
 
     this.extensionRegistry = extensionRegistry ?? new ExtensionRegistry();
     this.composedHooks = this.extensionRegistry.collectHooks();
@@ -294,9 +285,21 @@ export class AgentSessionLoop {
         // ── streaming: 调用 Provider，收集助手消息 ────────────
         case "streaming": {
           const callIterator = this.buildProviderCall();
-          const assistantResult = await this.providerConsumer.consume(
+          const consumeResult = await this.providerConsumer.consume(
             callIterator, this.tools, this.abortController.signal
           );
+
+          // emit 在流期间收集的 provider-diagnostic 事件
+          for (const diagnostic of consumeResult.diagnostics) {
+            yield* this.emitEvent({
+              type: "provider-diagnostic",
+              sessionId: this.sessionId,
+              diagnostic,
+              timestamp: nowIso(),
+            });
+          }
+
+          const assistantResult = consumeResult.response;
 
           if (assistantResult.type === "error") {
             if (this.abortController.signal.aborted) {
@@ -560,39 +563,9 @@ export class AgentSessionLoop {
       return result;
     }
 
-    const validationErrors = validateToolInput(tool, toolCall.input);
-    if (validationErrors.length > 0) {
-      const advice = validationAdviceForToolInput(tool, toolCall.input, validationErrors);
-      const result = this.toToolBatchResult(
-        call,
-        startedAt,
-        { text: [`Tool input validation failed:`, ...validationErrors.map((error) => `- ${error}`), ...advice].join("\n") },
-        true
-      );
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
-      return result;
-    }
-
-    const permission = yield* this.resolvePermission(tool, toolCall.input);
-    if (permission.behavior !== "allow") {
-      if (isExpiredApprovalDecision(permission)) {
-        yield* this.emitEvent(
-          {
-            type: "runtime-error",
-            sessionId: this.sessionId,
-            timestamp: nowIso(),
-            error: permission.reason ?? "Approval expired"
-          }
-        );
-        throw new Error(permission.reason ?? "Approval expired");
-      }
-      const result = this.toToolBatchResult(call, startedAt, { text: permission.reason ?? "Tool execution denied" }, true);
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
-      return result;
-    }
-
     // ★ Hook: beforeToolCall — 如果注册了 Hook，在工具执行前拦截
     let effectiveInput = toolCall.input;
+    let inputModifiedByHook = false;
     if (this.composedHooks.beforeToolCall) {
       const hookCtx: HookContext = {
         sessionId: this.sessionId,
@@ -615,13 +588,57 @@ export class AgentSessionLoop {
       }
       if (beforeResult.modifiedInput) {
         effectiveInput = beforeResult.modifiedInput;
+        inputModifiedByHook = true;
       }
+    }
+
+    const effectiveToolCall: ToolCallBlock = inputModifiedByHook ? { ...toolCall, input: effectiveInput } : toolCall;
+    if (inputModifiedByHook) {
+      yield* this.emitEvent({
+        type: "tool-input-repaired",
+        sessionId: this.sessionId,
+        timestamp: nowIso(),
+        toolCallId: toolCall.id,
+        toolName: toolCall.toolName,
+        notes: ["beforeToolCall modified tool input"],
+      });
+    }
+
+    const validationErrors = validateToolInput(tool, effectiveInput);
+    if (validationErrors.length > 0) {
+      const advice = validationAdviceForToolInput(tool, effectiveInput, validationErrors);
+      const result = this.toToolBatchResult(
+        call,
+        startedAt,
+        { text: [`Tool input validation failed:`, ...validationErrors.map((error) => `- ${error}`), ...advice].join("\n") },
+        true
+      );
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      return result;
+    }
+
+    const permission = yield* this.resolvePermission(tool, effectiveInput, toolCall.id);
+    if (permission.behavior !== "allow") {
+      if (isExpiredApprovalDecision(permission)) {
+        yield* this.emitEvent(
+          {
+            type: "runtime-error",
+            sessionId: this.sessionId,
+            timestamp: nowIso(),
+            error: permission.reason ?? "Approval expired"
+          }
+        );
+        throw new Error(permission.reason ?? "Approval expired");
+      }
+      const result = this.toToolBatchResult(call, startedAt, { text: permission.reason ?? "Tool execution denied" }, true);
+      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      return result;
     }
 
     if (signal.aborted) {
       const cause = abortReason(signal);
       const output = await this.materializeLargeToolOutput(
-        toolCall,
+        effectiveToolCall,
         { text: isToolTimeoutCause(cause) ? `Tool execution timed out` : `Tool execution cancelled` }
       );
       const result = this.toToolBatchResult(call, startedAt, output, true);
@@ -639,19 +656,58 @@ export class AgentSessionLoop {
       sessionId: this.sessionId,
       cwd: this.options.cwd,
       signal,
-      emit: (_update) => { /* 进度事件由 ToolExecutor 的批次事件机制处理 */ },
+      emit: (update) => {
+        toolEventQueue.push({
+          type: "event",
+          event: {
+            type: "tool-update",
+            sessionId: this.sessionId,
+            batchId,
+            toolCallId: toolCall.id,
+            update,
+            timestamp: nowIso(),
+          },
+        });
+      },
       metadata: { subagentDepth: this.options.subagentDepth ?? 0 }
     };
 
-    const execResult = await this.singleToolExecutor.execute(
-      toolCall,
+    void this.singleToolExecutor.execute(
+      effectiveToolCall,
       (input, ctx) => tool.execute(input, ctx),
       context,
       signal,
+    ).then(
+      (result) => {
+        toolEventQueue.push({ type: "result", result });
+      },
+      (cause) => {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        toolEventQueue.push({
+          type: "result",
+          result: { output: { text: message }, isError: true },
+        });
+      }
     );
 
+    let execResult: Awaited<ReturnType<SingleToolExecutor["execute"]>> | undefined;
+    while (!execResult) {
+      const next = await toolEventQueue.next();
+      if (next.done) break;
+      if (next.value.type === "event") {
+        yield* this.emitEvent(next.value.event);
+        continue;
+      }
+      execResult = next.value.result;
+    }
+    toolEventQueue.close();
+
+    if (!execResult) {
+      execResult = { output: { text: "Tool execution ended without a result" }, isError: true };
+    }
+
     if (!execResult.isError) {
-      let materializedOutput = await this.materializeLargeToolOutput(toolCall, execResult.output);
+      let materializedOutput = await this.materializeLargeToolOutput(effectiveToolCall, execResult.output);
 
       if (this.composedHooks.afterToolCall) {
         const hookCtx: HookContext = {
@@ -672,7 +728,7 @@ export class AgentSessionLoop {
           return result;
         }
         if (afterResult.modifiedOutput) {
-          materializedOutput = await this.materializeLargeToolOutput(toolCall, afterResult.modifiedOutput);
+          materializedOutput = await this.materializeLargeToolOutput(effectiveToolCall, afterResult.modifiedOutput);
         }
       }
 
@@ -690,7 +746,7 @@ export class AgentSessionLoop {
       runtimeToolExecution: { status: "timeout", timedOut: true, timeoutMs: this.toolExecution.timeoutMs }
     } : undefined;
     const errorOutput = await this.materializeLargeToolOutput(
-      toolCall,
+      effectiveToolCall,
       { text: causeText, ...(structuredJson ? { json: structuredJson } : {}) }
     );
     const result = this.toToolBatchResult(call, startedAt, errorOutput, true);
@@ -702,33 +758,107 @@ export class AgentSessionLoop {
     return this.contextManager.materializeOutput(toolCall, output);
   }
 
+  /**
+   * 先策略判定，仅 ask 时广播 approval-requested 并挂起。
+   * toolCallId 与真实工具调用 id 对齐，避免桌面批准打空。
+   */
   private async *resolvePermission(
     tool: AgentTool,
-    input: JsonObject
+    input: JsonObject,
+    toolCallId: string
   ): AsyncGenerator<AgentEvent, PermissionDecision> {
     const request: RuntimePermissionRequest = {
-      id: createId("approval"),
+      id: toolCallId,
       sessionId: this.sessionId,
       cwd: this.options.cwd,
       tool,
       input,
-      summary: tool.summarize(input)
+      summary: tool.summarize(input),
     };
 
-    // Yield event with serialized-only tool data (strip functions like isReadOnly/summarize/execute)
-    // The live `tool` reference is preserved in `request` for the internal permission flow below.
-    const serializableRequest = stripNonSerializable(request) as unknown as PermissionRequest;
-    yield* this.emitEvent({ type: "approval-requested", sessionId: this.sessionId, request: serializableRequest, timestamp: nowIso() });
+    // 构造可序列化的 PermissionRequest：从 RuntimePermissionRequest 提取扁平字段，
+    // 避免将 AgentTool（含 execute/summarize 等函数）泄漏到事件流。
+    const serializableRequest: PermissionRequest = {
+      id: toolCallId,
+      sessionId: request.sessionId,
+      cwd: request.cwd,
+      toolCallId,
+      toolName: tool.name,
+      parameters: input,
+      summary: request.summary,
+      toolMetadata: {
+        category: tool.category,
+        isReadOnly: tool.isReadOnly(input),
+        fatalOnError: tool.fatalOnError,
+        concurrency: tool.concurrency,
+      },
+      ...(request.metadata !== undefined ? { metadata: request.metadata } : {}),
+    };
 
-    let decision = await this.options.permissionPolicy!.decide(request);
-    if (decision.behavior === "ask" && this.options.approvalHandler) {
-      decision = await this.options.approvalHandler.requestApproval(serializableRequest);
+    // 先判定：allow/deny 不广播 approval-requested（避免只读误弹确认）
+    let decision = await this.permissionPolicy.decide(request);
+
+    if (decision.behavior === "allow") {
+      return decision;
     }
 
-    yield* this.emitEvent(
-      { type: "approval-resolved", sessionId: this.sessionId, requestId: request.id, decision, timestamp: nowIso() },
-    );
-    return decision;
+    if (decision.behavior === "deny") {
+      yield* this.emitEvent({
+        type: "approval-resolved",
+        sessionId: this.sessionId,
+        requestId: toolCallId,
+        decision,
+        timestamp: nowIso(),
+      });
+      return decision;
+    }
+
+    // behavior === "ask"：仅此刻请求人工确认并阻塞后续工具
+    if (decision.behavior === "ask" && this.options.approvalHandler) {
+      const decisionMetadata: JsonObject = {
+        ...(decision.metadata ?? {}),
+        ...(decision.reason !== undefined ? { reason: decision.reason } : {}),
+      };
+      const requestWithDecisionMetadata: PermissionRequest = {
+        ...serializableRequest,
+        ...(Object.keys(decisionMetadata).length > 0
+          ? { metadata: { ...(serializableRequest.metadata ?? {}), ...decisionMetadata } }
+          : {}),
+      };
+
+      yield* this.emitEvent({
+        type: "approval-requested",
+        sessionId: this.sessionId,
+        request: requestWithDecisionMetadata,
+        timestamp: nowIso(),
+      });
+
+      decision = await this.options.approvalHandler.requestApproval(requestWithDecisionMetadata);
+
+      yield* this.emitEvent({
+        type: "approval-resolved",
+        sessionId: this.sessionId,
+        requestId: toolCallId,
+        decision,
+        timestamp: nowIso(),
+      });
+      return decision;
+    }
+
+    // ask 但无 handler：安全默认拒绝
+    const denied: PermissionDecision = {
+      behavior: "deny",
+      reason: decision.reason ?? "Approval required but no approval handler configured",
+      metadata: { ...(decision.metadata ?? {}), matchedRule: "daemon-ask-no-handler" },
+    };
+    yield* this.emitEvent({
+      type: "approval-resolved",
+      sessionId: this.sessionId,
+      requestId: toolCallId,
+      decision: denied,
+      timestamp: nowIso(),
+    });
+    return denied;
   }
 
   private async *recordToolCheckpointEvents(result: ToolBatchResult, recorder: SessionRecorder): AsyncGenerator<AgentEvent> {
@@ -834,7 +964,7 @@ export class AgentSessionLoop {
   /**
    * 构建 Provider 调用，返回流迭代器。
    */
-  private buildProviderCall(): AsyncIterable<ProviderStreamEvent> {
+  private buildProviderCall(): AsyncIterable<ProviderStreamContractEvent> {
     const messages = this.conversation.getMessagesMutable();
     const providerSystemPrompt = this.contextManager.projectSystemPrompt(this.options.systemPrompt);
     const providerMessages = this.contextManager.projectForProvider(messages);
@@ -850,10 +980,11 @@ export class AgentSessionLoop {
       systemPrompt: promptAssembly.payload.systemPrompt,
       messages: promptAssembly.payload.messages,
       tools: promptAssembly.payload.tools,
+      promptAssembly: promptAssembly.metadata,
       signal: this.abortController.signal,
     };
 
-    return this.providerGateway.call(this.options.provider, providerRequest) as unknown as AsyncIterable<ProviderStreamEvent>;
+    return this.providerGateway.call(this.options.provider, providerRequest);
   }
 
   /**

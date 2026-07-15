@@ -159,7 +159,7 @@ describe("DaemonRuntimeFactory workspace mutation coordinators", () => {
     factory.setProviderFactory(providerFactory);
 
     expect(factory.getProviderStatusSnapshot()).toMatchObject({
-      credentialMode: "account-center",
+      credentialMode: "direct",
       readiness: "ready",
       model: "mimo-v2.5",
     });
@@ -603,7 +603,6 @@ function createFactory(options: {
       sessionEventLogDir: "/tmp/test-events",
       workflowStorePath: "/tmp/test-workflows.json",
       planDocumentStorePath: "/tmp/test-plan-docs.json",
-      metricsStorePath: "/tmp/test-metrics.json",
       scopedContextStorePath: "/tmp/test-scoped-context.json",
       memoryStorePath: "/tmp/test-memories.jsonl",
       workflowSchedulerIntervalMs: 30_000,
@@ -729,7 +728,7 @@ function createStatusProviderFactory(): (() => EmptyProvider) & {
 
 function createStatusSnapshot() {
   return {
-    credentialMode: "account-center" as const,
+    credentialMode: "direct" as const,
     readiness: "ready" as const,
     providerId: "flowbit",
     routeId: "default:flowbit:mimo-v2.5",
@@ -739,18 +738,11 @@ function createStatusSnapshot() {
     endpoint: "auto",
     stream: true,
     apiKey: {
-      hasApiKey: false,
-      source: "unset" as const,
+      hasApiKey: true,
+      source: "env" as const,
     },
-    hasDirectApiKey: false,
-    apiKeySource: "unset" as const,
-    accountCenter: {
-      configured: true,
-      login: "ready" as const,
-      quota: "ready" as const,
-      gateway: "ready" as const,
-      runtimeCredential: "ready" as const,
-    },
+    hasDirectApiKey: true,
+    apiKeySource: "env" as const,
     gateway: {
       ready: true,
       credentialConfigured: true,
