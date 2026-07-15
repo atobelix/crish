@@ -683,7 +683,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: 1,
-            background: '#fafafa',
+            background: 'var(--bg-secondary)',
             flexShrink: 0,
           }}
         >
@@ -755,7 +755,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
 
         {/* Right Content Area */}
-        <div ref={contentAreaRef} style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+        <div ref={contentAreaRef} style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', background: 'var(--bg-primary)' }}>
           {loading && (
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2.5px', background: 'var(--border-color)', overflow: 'hidden', zIndex: 100 }}>
               <div style={{ width: '30%', height: '100%', background: 'var(--accent-color)', borderRadius: '1px', animation: 'loading-bar 1.2s infinite linear' }} />
@@ -1320,7 +1320,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                               width: 6,
                               height: 6,
                               borderRadius: '50%',
-                              background: isEnabled ? 'var(--accent-green)' : 'var(--text-tertiary)',
+                              background: isEnabled ? 'var(--text-secondary)' : 'var(--bg-active)',
                               flexShrink: 0,
                             }}
                           />
@@ -1348,7 +1348,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                               width: 32,
                               height: 18,
                               borderRadius: 9,
-                              backgroundColor: isEnabled ? 'var(--accent-green)' : 'var(--border-color)',
+                              backgroundColor: isEnabled ? 'var(--text-secondary)' : 'var(--border-color)',
                               padding: 2,
                               cursor: 'pointer',
                               display: 'flex',
@@ -1361,7 +1361,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                                 width: 14,
                                 height: 14,
                                 borderRadius: '50%',
-                                backgroundColor: '#fff',
+                                backgroundColor: 'var(--bg-primary)',
                               }}
                             />
                           </div>
@@ -1595,7 +1595,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         width: 14,
                         left: settings.enableSkillCommands ? 16 : 2,
                         bottom: 2,
-                        backgroundColor: 'white',
+                        backgroundColor: 'var(--bg-primary)',
                         borderRadius: '50%',
                       }}
                     />
