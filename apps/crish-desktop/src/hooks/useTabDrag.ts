@@ -18,12 +18,10 @@ export function useTabDrag({
   cardsLength,
   onShowToast,
 }: UseTabDragOptions) {
-  const {
-    setDraggedTab,
-    mergeTab,
-    detachTabToStandalone,
-    closeTabInGroup,
-  } = useLayoutStore();
+  const setDraggedTab = useLayoutStore((s) => s.setDraggedTab);
+  const mergeTab = useLayoutStore((s) => s.mergeTab);
+  const detachTabToStandalone = useLayoutStore((s) => s.detachTabToStandalone);
+  const closeTabInGroup = useLayoutStore((s) => s.closeTabInGroup);
 
   const handleTabPointerDown = React.useCallback(
     (e: React.PointerEvent<HTMLDivElement>, cardId: string) => {

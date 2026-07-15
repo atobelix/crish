@@ -35,16 +35,23 @@ export type SubagentStatus = "started" | "running" | "completed" | "failed";
  * 防止 subagent 无限递归和过度并行：
  * - maxDepth: 最大递归深度（0 表示禁止嵌套，默认 2）
  * - maxSiblings: 同一父 agent 下最大并行 subagent 数量（默认 4）
+ * - maxConcurrent: 全局同时运行的 subagent 上限（默认 6）
  */
 export interface SubagentDepthGuard {
   maxDepth: number;
   maxSiblings: number;
+  /** 全局并发上限；超过则拒绝创建 */
+  maxConcurrent?: number;
 }
 
 export const DEFAULT_SUBAGENT_DEPTH_GUARD: SubagentDepthGuard = {
   maxDepth: 2,
   maxSiblings: 4,
+  maxConcurrent: 6,
 };
+
+/** 模块级全局活跃 subagent 计数（跨工具实例共享） */
+let activeSubagentCount = 0;
 
 /**
  * 递归深度上下文
@@ -127,6 +134,8 @@ export interface SubagentToolOptions {
 }
 
 export function createSubagentTool(options: SubagentToolOptions): AgentTool {
+  // 并行 subagent 共享同一 InMemoryContextState 时，对写操作串行化，避免交错突变
+  const withContextStateLock = createAsyncMutex();
   return defineTool({
     name: options.name ?? "run_subagent",
     label: options.label ?? "Run sub-agent",
@@ -157,7 +166,7 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
       const description = stringField(input, "description") ?? prompt.slice(0, 120);
       const mode = subagentMode(input);
 
-      // ─── 递归深度守卫 ───────────────────────────────
+      // ─── 递归深度守卫（早退，不占用并发配额） ───────────────────────────────
       const guard = options.depthGuard ?? DEFAULT_SUBAGENT_DEPTH_GUARD;
       const parentDepth = extractDepthContext(context);
       const currentDepth = parentDepth.currentDepth + 1;
@@ -172,31 +181,25 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
           }
         };
       }
+
+      // ─── 全局并发上限（检查与自增连续，避免 await 点竞态） ───────────────────────────────
+      const maxConcurrent = guard.maxConcurrent ?? DEFAULT_SUBAGENT_DEPTH_GUARD.maxConcurrent ?? 6;
+      if (activeSubagentCount >= maxConcurrent) {
+        return {
+          text: `Sub-agent creation denied: maximum concurrent sub-agents (${maxConcurrent}) exceeded. Active: ${activeSubagentCount}.`,
+          json: {
+            error: "max-concurrent-exceeded",
+            maxConcurrent,
+            active: activeSubagentCount,
+            description
+          }
+        };
+      }
+      activeSubagentCount += 1;
+
       const subagentId = createId("agent");
       const parentSessionId = context.sessionId;
       const parentToolCallId = context.toolCallId;
-      const provider = await resolveMaybe(options.provider, input, context);
-      const tools = await resolveMaybe(options.tools ?? [], input, context);
-      const permissionPolicy = await resolveMaybe(options.permissionPolicy, input, context);
-      const forkPolicy = forkPolicyField(input) ?? (await resolveMaybe(options.forkPolicy ?? "summary", input, context));
-      const policyPack = await resolveMaybe(options.policyPack ?? [], input, context);
-      const { projectProgress, recentSubagentTasks } = await resolveSubagentProjectProgress(options, input, context);
-      const parentContextState = await options.contextState?.snapshotForCompression();
-      const contextPack = buildSubagentContextPack({
-        forkPolicy,
-        mode,
-        prompt,
-        description,
-        cwd: options.cwd,
-        parentSessionId,
-        parentToolCallId,
-        baseSystemPrompt: options.systemPrompt,
-        policyPack,
-        projectProgress,
-        recentSubagentTasks,
-        contextState: parentContextState,
-        taskCard: options.taskCard
-      });
       const stats: SubagentRunStats = { toolUses: 0, turns: 0, events: {} };
       const timeline: SubagentProgressEvent[] = [];
       const emitProgress = async (
@@ -214,39 +217,69 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         context.emit({ json: { subagent: progressToJson(progress) } });
         await options.onProgress?.(progress);
       };
-
-      options.contextState?.addTask(description, subagentId);
-      options.contextState?.recordEvent(`Sub-agent ${description} started in ${mode} mode.`);
-      const runtime = new AgentRuntime({
-        sessionId: subagentId,
-        cwd: options.cwd,
-        systemPrompt: `${contextPack.stablePrefix}\n\n${contextPack.volatileContext}`,
-        provider,
-        tools,
-        toolSources: options.toolSources,
-        permissionPolicy,
-        approvalHandler: options.approvalHandler,
-        maxTurns: options.maxTurns,
-        subagentDepth: currentDepth,
-      });
-
-      await emitProgress({
-        subagentId,
-        description,
-        mode,
-        status: "started",
-        summary: "sub-agent started"
-      });
-      context.emit({
-        text: `Sub-agent started: ${description}`,
-        json: { subagentId, description, mode, status: "started", contextPack: contextPack.metadata }
-      });
-
       let messages: AgentMessage[] = [];
       let status: SubagentRunResult["status"] = "completed";
       let failure = "";
       let finalReason: Extract<AgentEvent, { type: "agent-end" }>["reason"] | undefined;
+      let contextPackMetadata: JsonObject = {};
+      let setupStarted = false;
+
       try {
+        // resolveMaybe / context pack / AgentRuntime 构造均可能抛错，必须进入 failed 进度路径
+        const provider = await resolveMaybe(options.provider, input, context);
+        const tools = await resolveMaybe(options.tools ?? [], input, context);
+        const permissionPolicy = await resolveMaybe(options.permissionPolicy, input, context);
+        const forkPolicy = forkPolicyField(input) ?? (await resolveMaybe(options.forkPolicy ?? "summary", input, context));
+        const policyPack = await resolveMaybe(options.policyPack ?? [], input, context);
+        const { projectProgress, recentSubagentTasks } = await resolveSubagentProjectProgress(options, input, context);
+        const parentContextState = await options.contextState?.snapshotForCompression();
+        const contextPack = buildSubagentContextPack({
+          forkPolicy,
+          mode,
+          prompt,
+          description,
+          cwd: options.cwd,
+          parentSessionId,
+          parentToolCallId,
+          baseSystemPrompt: options.systemPrompt,
+          policyPack,
+          projectProgress,
+          recentSubagentTasks,
+          contextState: parentContextState,
+          taskCard: options.taskCard
+        });
+        contextPackMetadata = contextPack.metadata;
+
+        await withContextStateLock(() => {
+          options.contextState?.addTask(description, subagentId);
+          options.contextState?.recordEvent(`Sub-agent ${description} started in ${mode} mode.`);
+        });
+        const runtime = new AgentRuntime({
+          sessionId: subagentId,
+          cwd: options.cwd,
+          systemPrompt: `${contextPack.stablePrefix}\n\n${contextPack.volatileContext}`,
+          provider,
+          tools,
+          toolSources: options.toolSources,
+          permissionPolicy,
+          approvalHandler: options.approvalHandler,
+          maxTurns: options.maxTurns,
+          subagentDepth: currentDepth,
+        });
+
+        setupStarted = true;
+        await emitProgress({
+          subagentId,
+          description,
+          mode,
+          status: "started",
+          summary: "sub-agent started"
+        });
+        context.emit({
+          text: `Sub-agent started: ${description}`,
+          json: { subagentId, description, mode, status: "started", contextPack: contextPack.metadata }
+        });
+
         const iterator = runtime.run(contextPack.taskCard);
         while (true) {
           const next = await iterator.next();
@@ -275,15 +308,19 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
           event: "runtime-error",
           error: failure
         });
+      } finally {
+        activeSubagentCount = Math.max(0, activeSubagentCount - 1);
       }
 
       const finalText = extractFinalAssistantText(messages);
       const completionSummary = buildCompletionSummary({ description, mode, status, finalText, failure, stats });
-      if (status === "completed") {
-        options.contextState?.completeTask(subagentId, completionSummary);
-      } else {
-        options.contextState?.recordEvent(`Sub-agent ${description} failed: ${failure}`);
-      }
+      await withContextStateLock(() => {
+        if (status === "completed") {
+          options.contextState?.completeTask(subagentId, completionSummary);
+        } else {
+          options.contextState?.recordEvent(`Sub-agent ${description} failed: ${failure}`);
+        }
+      });
       await emitProgress({
         subagentId,
         description,
@@ -294,20 +331,22 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         error: failure || undefined,
         finalReason
       });
-      context.emit({
-        text: `Sub-agent finished: ${description}`,
-        json: {
-          subagentId,
-          description,
-          mode,
-          status,
-          stats: statsToJson(stats),
-          completionSummary,
-          contextPack: contextPack.metadata,
-          ...(finalReason ? { finalReason } : {}),
-          ...(failure ? { error: failure } : {})
-        }
-      });
+      if (setupStarted || status === "failed") {
+        context.emit({
+          text: `Sub-agent finished: ${description}`,
+          json: {
+            subagentId,
+            description,
+            mode,
+            status,
+            stats: statsToJson(stats),
+            completionSummary,
+            contextPack: contextPackMetadata,
+            ...(finalReason ? { finalReason } : {}),
+            ...(failure ? { error: failure } : {})
+          }
+        });
+      }
 
       const result: SubagentRunResult = {
         subagentId,
@@ -321,7 +360,7 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         completionSummary,
         finalReason,
         error: failure || undefined,
-        contextPack: contextPack.metadata,
+        contextPack: contextPackMetadata,
         timeline
       };
       return {
@@ -437,6 +476,22 @@ async function resolveMaybe<T>(
   context: ToolExecutionContext
 ): Promise<T> {
   return typeof value === "function" ? (value as (input: JsonObject, context: ToolExecutionContext) => T | Promise<T>)(input, context) : value;
+}
+
+/**
+ * 轻量 async mutex：将回调排入单链队列，保证并行 subagent 对共享 contextState 的写串行。
+ * 读路径（如 snapshotForCompression）仍可在 await 间隙交错，写操作本身保持原子顺序。
+ */
+function createAsyncMutex(): <T>(fn: () => T | Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return function runExclusive<T>(fn: () => T | Promise<T>): Promise<T> {
+    const run = tail.then(fn, fn);
+    tail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  };
 }
 
 async function resolveSubagentProjectProgress(

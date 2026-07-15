@@ -555,7 +555,13 @@ export function streamViaDaemon(
     }
     if (type === 'subagent-ended') {
       if (msg.runId && msg.runId !== runId) return;
-      const st = msg.status === 'failed' ? 'failed' : 'completed';
+      const raw = String(msg.status ?? '').toLowerCase();
+      const st: 'completed' | 'failed' | 'stopped' =
+        /cancel|stopp?ed|abort/i.test(raw)
+          ? 'stopped'
+          : /fail|error/i.test(raw)
+            ? 'failed'
+            : 'completed';
       callbacks.onSubagentEnded?.({
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),

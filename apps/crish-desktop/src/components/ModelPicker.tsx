@@ -61,7 +61,20 @@ export const ModelPicker: React.FC<Props> = ({
 
   return (
     <div className="mpick mpick--slim" role="listbox" aria-label="选择模型" onClick={(e) => e.stopPropagation()}>
-      {error ? <div className="mpick-error">{error}</div> : null}
+      {error ? (
+        <button
+          type="button"
+          className="mpick-error mpick-error--action"
+          onClick={() => {
+            onClose();
+            onOpenSettings();
+          }}
+          title="打开模型设置"
+        >
+          <span className="mpick-error-text">{error}</span>
+          <span className="mpick-error-link">打开设置</span>
+        </button>
+      ) : null}
 
       <div className="mpick-scroll">
         {configured.length === 0 ? (

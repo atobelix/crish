@@ -1,7 +1,7 @@
 /**
  * 右侧默认总览：计划、改动文件（git + 对话 diff）、Agent、上下文摘要
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import {
@@ -63,7 +63,15 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
     return activeDiffSource ? [activeDiffSource] : [];
   }, [diffFiles, activeDiffSource]);
 
-  const refreshGit = useCallback(async () => {
+  /** focus 刷新节流：距上次成功/尝试刷新不足 30s 则跳过；project-changed / 手动刷新仍立即 */
+  const lastGitRefreshAtRef = useRef(0);
+
+  const refreshGit = useCallback(async (opts?: { force?: boolean }) => {
+    const now = Date.now();
+    if (!opts?.force && now - lastGitRefreshAtRef.current < 30_000) {
+      return;
+    }
+    lastGitRefreshAtRef.current = now;
     setGitLoading(true);
     setGitErr(null);
     try {
@@ -83,12 +91,12 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
   }, []);
 
   useEffect(() => {
-    void refreshGit();
+    void refreshGit({ force: true });
     const onProject = () => {
-      void refreshGit();
+      void refreshGit({ force: true });
     };
     window.addEventListener('crish-project-changed', onProject);
-    // 工具结束或会话推进时轻量刷新（节流由调用方控制频率）
+    // 窗口 focus 时节流刷新（30s 内不重复打 Git）
     const onFocus = () => {
       void refreshGit();
     };
@@ -308,7 +316,9 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
                             ? '运行中'
                             : a.status === 'failed'
                               ? '失败'
-                              : '完成'}
+                              : a.status === 'stopped'
+                                ? '已停止'
+                                : '完成'}
                         </em>
                       </span>
                     </button>
@@ -347,7 +357,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
                 className="overview-icon-btn"
                 title="刷新 Git 状态"
                 disabled={gitLoading}
-                onClick={() => void refreshGit()}
+                onClick={() => void refreshGit({ force: true })}
               >
                 <Lucide.RefreshCw size={14} strokeWidth={1.75} className={gitLoading ? 'spin' : ''} />
               </button>

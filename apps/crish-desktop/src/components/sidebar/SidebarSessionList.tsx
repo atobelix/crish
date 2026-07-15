@@ -205,6 +205,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
     const agents = s.agents || [];
     const agentRunning = agents.some((a) => a.status === 'running');
+    const sessionRunning = isRunning || agentRunning;
     // 整树仅一行「当前」高亮：主对话激活时不高亮嵌套 agent
     const sessionActive = s.id === activeSessionId && !activeAgentId;
     const timeLabel = formatSessionListTime(s, nowTick);
@@ -212,10 +213,10 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       <li
         key={s.id}
         data-session-id={s.id}
-        className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''}`}
+        className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${sessionRunning ? 'is-running' : ''}`}
       >
         <div
-          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''}`}
+          className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''} ${sessionRunning ? 'is-running' : ''}`}
           onClick={() => onSelectSession(s.id)}
           onContextMenu={(e) => onContextMenuSession(e, s.id)}
           onPointerDown={isDraggable ? (e) => startSessionDrag(e, s.id, s.folder) : undefined}
@@ -224,7 +225,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             {displayText}
           </span>
           <span className="session-trailing">
-            {isRunning || agentRunning ? (
+            {sessionRunning ? (
               <span className="session-running-spinner" title="处理中" />
             ) : (
               <>
@@ -278,7 +279,11 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                       <span className="session-running-spinner" title="运行中" />
                     ) : (
                       <span className="session-agent-status">
-                        {ag.status === 'failed' ? '失败' : '完成'}
+                        {ag.status === 'failed'
+                          ? '失败'
+                          : ag.status === 'stopped'
+                            ? '已停止'
+                            : '完成'}
                       </span>
                     )}
                   </button>

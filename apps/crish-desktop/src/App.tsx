@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { useLayoutStore } from './store/layoutStore';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useLayoutStore, initLayoutStorePersistence } from './store/layoutStore';
 import { clientApi } from './api/clientApi';
 import { ensureDaemonConnected } from './api/daemonChatBridge';
 import { bootstrapDesktopBackend, getDesktopDaemonClient } from './api/daemonClient';
@@ -13,9 +13,12 @@ import {
 import { Sidebar } from './components/Sidebar';
 import { Workspace } from './components/Workspace';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { ToastStack } from './components/ToastStack';
+import { useToastQueue } from './hooks/useToastQueue';
 import * as Lucide from 'lucide-react';
 import type { SettingsTabType } from './components/SettingsPanel';
 import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
+import { emitUiEvent, onUiEvent } from './api/uiEvents';
 
 const SettingsPanel = lazy(() =>
   import('./components/SettingsPanel')
@@ -42,19 +45,17 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
-  const {
-    workspaces,
-    activeWorkspaceIndex,
-    uiSize,
-    sidebarCollapsed,
-    setSidebarCollapsed,
-    showSettingsOverlay,
-    setShowSettingsOverlay,
-    settingsActiveTab,
-    setAppSettings,
-  } = useLayoutStore();
+  const workspaces = useLayoutStore((s) => s.workspaces);
+  const activeWorkspaceIndex = useLayoutStore((s) => s.activeWorkspaceIndex);
+  const uiSize = useLayoutStore((s) => s.uiSize);
+  const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
+  const showSettingsOverlay = useLayoutStore((s) => s.showSettingsOverlay);
+  const setShowSettingsOverlay = useLayoutStore((s) => s.setShowSettingsOverlay);
+  const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
+  const setAppSettings = useLayoutStore((s) => s.setAppSettings);
 
-  const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
+  const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const activeWorkspace = workspaces[activeWorkspaceIndex];
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
@@ -66,9 +67,11 @@ function App() {
 
   const pickWorkspaceFolder = async () => {
     try {
-      const mod: any = await (Function('return import("@tauri-apps/plugin-dialog")')() as Promise<any>).catch(
-        () => null,
-      );
+      // Optional desktop plugin (not always installed in browser/dev); avoid Function()
+      const dialogSpec = '@tauri-apps/plugin-dialog';
+      const mod = (await import(/* @vite-ignore */ dialogSpec).catch(() => null)) as {
+        open?: (opts: { directory: boolean; multiple: boolean }) => Promise<string | string[] | null>;
+      } | null;
       if (mod?.open) {
         const selected = await mod.open({ directory: true, multiple: false });
         if (typeof selected === 'string' && selected) {
@@ -81,7 +84,7 @@ function App() {
       /* fall through */
     }
     // No native dialog: open polished in-chat project picker instead of window.prompt
-    window.dispatchEvent(new CustomEvent('crish-open-project-picker'));
+    emitUiEvent('open-project-picker');
   };
   /** Product: block main chrome until engine has connected at least once. */
   const [engineReady, setEngineReady] = useState(
@@ -100,6 +103,9 @@ function App() {
       w.AUTO_FOLD_DELAY = 5000;
     }
   }, []);
+
+  // 会话 index / JSONL 防抖落盘 + 磁盘镜像回灌（demo 模式 no-op）
+  useEffect(() => initLayoutStorePersistence(), []);
 
   // Initial load theme & settings sync
   useEffect(() => {
@@ -235,33 +241,36 @@ function App() {
     document.documentElement.setAttribute('data-ui-size', uiSize);
   }, [uiSize]);
 
-  // Bind Ctrl+, keyboard shortcut to toggle settings overlay
+  // 全局快捷键：Ctrl/Cmd+, 切换设置；双击 Esc（300ms 内）分叉当前会话
   useEffect(() => {
+    let lastEscTime = 0;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
         const show = useLayoutStore.getState().showSettingsOverlay;
         useLayoutStore.getState().setShowSettingsOverlay(!show);
+        return;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Double Escape keybinding to branch active session
-  useEffect(() => {
-    let lastEscTime = 0;
-    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         const now = Date.now();
         if (now - lastEscTime <= 300) {
           e.preventDefault();
-          const activeSess = useLayoutStore.getState().sessions.find(
-            s => s.id === useLayoutStore.getState().activeSessionId
-          );
+          const state = useLayoutStore.getState();
+          const oldSessionId = state.activeSessionId;
+          const activeSess = state.sessions.find((s) => s.id === oldSessionId);
           if (activeSess) {
-            useLayoutStore.getState().branchSession(activeSess.id, `${activeSess.title} - 双击ESC分叉`);
-            handleShowToast(`已通过双击 Escape 快捷分叉会话: ${activeSess.title}`);
+            state.branchSession(activeSess.id, `${activeSess.title} - 双击ESC分叉`);
+            const newBranchId = useLayoutStore.getState().activeSessionId;
+            handleShowToast(`已通过双击 Escape 快捷分叉会话: ${activeSess.title}`, () => {
+              const st = useLayoutStore.getState();
+              // 无 deleteSession：归档新分叉并切回原会话
+              if (newBranchId && newBranchId !== oldSessionId) {
+                st.archiveSession(newBranchId);
+              }
+              if (oldSessionId) {
+                st.setActiveSessionId(oldSessionId);
+              }
+            });
           }
         }
         lastEscTime = now;
@@ -269,7 +278,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [handleShowToast]);
 
   // Connect and subscribe to WebSocket Telemetry
   useEffect(() => {
@@ -281,20 +290,9 @@ function App() {
 
   // Native folder pick → projectStore (no trust wall)
   useEffect(() => {
-    const onPick = () => {
+    return onUiEvent('pick-workspace', () => {
       void pickWorkspaceFolder();
-    };
-    window.addEventListener('crish-pick-workspace', onPick);
-    return () => window.removeEventListener('crish-pick-workspace', onPick);
-  }, []);
-
-  const handleShowToast = useCallback((message: string, onUndo?: () => void) => {
-    setToast({ message, onUndo });
-    // Auto close toast after 5 seconds
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 5000);
-    return () => clearTimeout(timer);
+    });
   }, []);
 
   const winCtl = async (action: 'minimize' | 'toggleMaximize' | 'close') => {
@@ -322,7 +320,16 @@ function App() {
       ) : null}
       {showFirstRun && (
         <FirstRunWizard
-          onDone={() => setShowFirstRun(false)}
+          onDone={() => {
+            setShowFirstRun(false);
+            // U5：空会话时轻提示下一步
+            const st = useLayoutStore.getState();
+            const sess = st.sessions.find((s) => s.id === st.activeSessionId);
+            const empty = !sess?.messages?.length;
+            if (empty) {
+              handleShowToast('下一步：选择项目或直接提问');
+            }
+          }}
           onOpenSettings={() => {
             setShowFirstRun(false);
             useLayoutStore.getState().openSettings('models');
@@ -445,23 +452,7 @@ function App() {
         onShowToast={handleShowToast}
       />
 
-      {/* Floating Dark Toast Notification alerts */}
-      {toast && (
-        <div className="toast-alert">
-          <span>{toast.message}</span>
-          {toast.onUndo && (
-            <button
-              className="toast-undo-btn"
-              onClick={() => {
-                toast.onUndo?.();
-                setToast(null);
-              }}
-            >
-              撤销
-            </button>
-          )}
-        </div>
-      )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Centered Lightweight Approval Dialog and Floating Plan Panel removed for clean UI */}
       

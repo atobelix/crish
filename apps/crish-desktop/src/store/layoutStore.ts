@@ -308,59 +308,72 @@ export const useLayoutStore = create<LayoutStore>()(
   }))
 );
 
-if (typeof window !== 'undefined') {
-  (window as any).useLayoutStore = useLayoutStore;
-
-  // Product: debounce-persist session index + JSONL bodies (demo keeps ephemeral mock)
-  if (!isDemoMode()) {
-    let persistTimer: ReturnType<typeof setTimeout> | null = null;
-    let diskTimer: ReturnType<typeof setTimeout> | null = null;
-    useLayoutStore.subscribe((state) => {
-      if (persistTimer) clearTimeout(persistTimer);
-      persistTimer = setTimeout(() => {
-        try {
-          persistAllSessions(state.sessions, state.activeSessionId, state.folderOrder);
-        } catch (e) {
-          console.warn('[sessionPersistence] save failed', e);
-        }
-      }, 350);
-      // H3：磁盘镜像更低频，避免每键写文件
-      if (diskTimer) clearTimeout(diskTimer);
-      diskTimer = setTimeout(() => {
-        void import('../api/sessionDiskMirror').then(({ mirrorSessionsToDisk }) => {
-          void mirrorSessionsToDisk(
-            useLayoutStore.getState().sessions,
-            useLayoutStore.getState().activeSessionId,
-            useLayoutStore.getState().folderOrder,
-          );
-        });
-      }, 2500);
-    });
-
-    // localStorage 空时尝试从磁盘镜像回灌
-    if (useLayoutStore.getState().sessions.length === 0) {
-      void import('../api/sessionDiskMirror').then(({ restoreSessionsFromDiskMirror }) => {
-        void restoreSessionsFromDiskMirror().then((restored) => {
-          if (!restored?.sessions?.length) return;
-          const cur = useLayoutStore.getState();
-          // 用户已新建会话则不覆盖
-          if (cur.sessions.length > 0) return;
-          useLayoutStore.setState((state) => {
-            state.sessions = restored.sessions;
-            state.activeSessionId = restored.activeSessionId;
-            state.folderOrder = restored.folderOrder;
-          });
-          try {
-            persistAllSessions(
-              restored.sessions,
-              restored.activeSessionId,
-              restored.folderOrder,
-            );
-          } catch {
-            /* ignore */
-          }
-        });
-      });
-    }
+/**
+ * 挂载会话持久化订阅（session index + 磁盘镜像）与空会话磁盘回灌。
+ * demo 模式不持久化，直接返回 no-op cleanup。
+ * 由 App 在 mount 时调用一次，unmount 时执行返回的 cleanup。
+ * （window.useLayoutStore 由 App.tsx 以 CrishWindow 类型挂载，此处不再重复 attach）
+ */
+export function initLayoutStorePersistence(): () => void {
+  // Product: debounce-persist session index + JSONL bodies（demo 保持内存假数据，不写盘）
+  if (isDemoMode()) {
+    return () => undefined;
   }
+
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  let diskTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const unsub = useLayoutStore.subscribe((state) => {
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      try {
+        persistAllSessions(state.sessions, state.activeSessionId, state.folderOrder);
+      } catch (e) {
+        console.warn('[sessionPersistence] save failed', e);
+      }
+    }, 350);
+    // H3：磁盘镜像更低频，避免每键写文件
+    if (diskTimer) clearTimeout(diskTimer);
+    diskTimer = setTimeout(() => {
+      void import('../api/sessionDiskMirror').then(({ mirrorSessionsToDisk }) => {
+        void mirrorSessionsToDisk(
+          useLayoutStore.getState().sessions,
+          useLayoutStore.getState().activeSessionId,
+          useLayoutStore.getState().folderOrder,
+        );
+      });
+    }, 2500);
+  });
+
+  // localStorage 空时尝试从磁盘镜像回灌
+  if (useLayoutStore.getState().sessions.length === 0) {
+    void import('../api/sessionDiskMirror').then(({ restoreSessionsFromDiskMirror }) => {
+      void restoreSessionsFromDiskMirror().then((restored) => {
+        if (!restored?.sessions?.length) return;
+        const cur = useLayoutStore.getState();
+        // 用户已新建会话则不覆盖
+        if (cur.sessions.length > 0) return;
+        useLayoutStore.setState((state) => {
+          state.sessions = restored.sessions;
+          state.activeSessionId = restored.activeSessionId;
+          state.folderOrder = restored.folderOrder;
+        });
+        try {
+          persistAllSessions(
+            restored.sessions,
+            restored.activeSessionId,
+            restored.folderOrder,
+          );
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+  }
+
+  return () => {
+    if (persistTimer) clearTimeout(persistTimer);
+    if (diskTimer) clearTimeout(diskTimer);
+    unsub();
+  };
 }

@@ -244,12 +244,17 @@ export class OpenAICompatibleProvider implements AgentProvider {
     // 每个 stream() 调用独立跟踪 wire mode，不跨 run 共享
     const wireModeCache = new Map<ResolvedOpenAICompatibleEndpoint, SystemPromptWireMode>();
 
+    // 多 endpoint 重试结构（三层，避免用 attempt=maxAttempts 等副作用跳出）：
+    // 1) endpoint 层：当前 endpoint 不可用时 fall through 到下一个
+    // 2) attempt 层：可重试的传输/HTTP 错误，递增 attempt
+    // 3) wireMode 内循环：同一 attempt 内因 system-role 兼容问题切换 wireMode 后原地重试
     for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex++) {
       const endpoint = endpoints[endpointIndex]!;
       const url = `${this.baseUrl}${this.requestPath(endpoint)}`;
-      for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
+      attemptLoop: for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
         let wireMode = wireModeCache.get(endpoint) ?? this.defaultSystemPromptWireMode();
         let retriedSystemPromptCompatibility = false;
+        // wireMode 兼容重试：continue 留在本 attempt；break 进入下一 attempt；break attemptLoop 换 endpoint
         while (true) {
           const attemptStartedAt = Date.now();
           yield* this.diagnostic({
@@ -348,8 +353,8 @@ export class OpenAICompatibleProvider implements AgentProvider {
                 errorKind: providerError.kind,
                 reason: trimDiagnosticReason(error)
               });
-              attempt = retry.maxAttempts;
-              break;
+              // 放弃当前 endpoint 的剩余 attempt，直接切换到下一 endpoint
+              break attemptLoop;
             }
             const retryable = attempt < retry.maxAttempts && providerError.retryable && withinRetryBudget(startedAt, retry.totalBudgetMs);
             yield* this.diagnostic({

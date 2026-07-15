@@ -123,8 +123,23 @@ function isTransientProviderError(message: string): boolean {
   );
 }
 
-function sleepMs(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * 可中止的 sleep：与 AbortSignal 竞态，避免重试等待阻塞 abort。
+ */
+function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function conversationNeedsTextSynthesis(conversation: ConversationEngine): boolean {
@@ -255,6 +270,7 @@ export class AgentSessionLoop {
     while (!this.machine.is("done")) {
       const state = this.machine.getCurrent();
 
+      try {
       switch (state) {
         // ── awaiting-input: 从队列中取输入，注入对话 ──────────
         case "awaiting-input": {
@@ -439,7 +455,7 @@ export class AgentSessionLoop {
                 },
                 timestamp: nowIso(),
               } as AgentEvent);
-              await sleepMs(waitMs);
+              await sleepMs(waitMs, this.abortController.signal);
               this.dispatch("NO_PROGRESS_CONTINUE");
               break;
             }
@@ -453,6 +469,23 @@ export class AgentSessionLoop {
                 ),
               );
               this.dispatch("INPUT_AVAILABLE");
+              break;
+            }
+            // 致命 provider 错误：走 onError hook，并对外暴露 runtime-error
+            const providerError = new Error(errMsg);
+            const action = this.handleErrorWithHook(providerError, state);
+            yield* this.emitEvent({
+              type: "runtime-error",
+              sessionId: this.sessionId,
+              timestamp: nowIso(),
+              error: errMsg,
+            });
+            if (action === "retry") {
+              this.dispatch("NO_PROGRESS_CONTINUE");
+              break;
+            }
+            if (action === "skip") {
+              this.dispatchErrorRecovery(state);
               break;
             }
             endReason = "error";
@@ -669,6 +702,29 @@ export class AgentSessionLoop {
         // ── idle/done: 不应到达 ────────────────────────────
         default:
           break;
+      }
+      } catch (cause) {
+        // 未预期异常：交给 onError hook 决定 retry / skip / abort
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        const action = this.handleErrorWithHook(error, state);
+        yield* this.emitEvent({
+          type: "runtime-error",
+          sessionId: this.sessionId,
+          timestamp: nowIso(),
+          error: error.message,
+        });
+        if (action === "retry") {
+          // 保持当前状态，下一轮循环重试
+          continue;
+        }
+        if (action === "skip") {
+          // 跳过本次错误，尽量推进到下一安全状态
+          this.dispatchErrorRecovery(state);
+          continue;
+        }
+        endReason = "error";
+        endError = error.message;
+        this.dispatchFatalError(state);
       }
     }
 
@@ -1169,7 +1225,7 @@ export class AgentSessionLoop {
   }
 
   /**
-   * 通过 Hook 系统处理错误
+   * 通过 Hook 系统处理错误（onError 未注册时默认 abort）
    */
   private handleErrorWithHook(error: Error, state: string): "retry" | "skip" | "abort" {
     if (this.composedHooks.onError) {
@@ -1182,6 +1238,68 @@ export class AgentSessionLoop {
       return this.composedHooks.onError(error, errorCtx);
     }
     return "abort";
+  }
+
+  /**
+   * skip 策略：按当前状态尽量推进，避免卡死；转移失败时回退到 abort。
+   */
+  private dispatchErrorRecovery(state: AgentSessionState): void {
+    const tryDispatch = (event: AgentSessionEvent): boolean => {
+      try {
+        this.dispatch(event);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let ok = false;
+    switch (state) {
+      case "preparing-turn":
+        ok = tryDispatch("TURN_PREPARED");
+        break;
+      case "streaming":
+        ok = tryDispatch("NO_PROGRESS_CONTINUE");
+        break;
+      case "steering-evaluation":
+        ok = tryDispatch("STEERING_COMPLETE");
+        break;
+      case "executing-tools":
+        ok = tryDispatch("TOOLS_COMPLETE");
+        break;
+      case "awaiting-input":
+        ok = tryDispatch("NO_INPUT");
+        break;
+      case "turn-complete":
+        ok = tryDispatch("SHOULD_STOP");
+        break;
+      default:
+        break;
+    }
+    if (!ok) this.dispatchFatalError(state);
+  }
+
+  /**
+   * abort 策略：将状态机送入错误终止路径（吞掉二次 INVALID_TRANSITION）。
+   */
+  private dispatchFatalError(state: AgentSessionState): void {
+    const tryDispatch = (event: AgentSessionEvent): boolean => {
+      try {
+        this.dispatch(event);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (state === "streaming") {
+      if (tryDispatch("PROVIDER_ERROR")) return;
+    } else if (state === "executing-tools") {
+      if (tryDispatch("ABORT")) return;
+    } else if (state === "turn-complete") {
+      if (tryDispatch("FINISH")) return;
+    } else if (state !== "done") {
+      if (tryDispatch("ERROR")) return;
+    }
+    // 兜底：已在 done 或转移失败时不再抛出
   }
 }
 

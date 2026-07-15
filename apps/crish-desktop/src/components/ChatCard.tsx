@@ -28,7 +28,10 @@ import { clientApi } from '../api/clientApi';
 import { openFileInPanel } from '../api/workspaceFsApi';
 import { AgentCard } from './AgentCard';
 import { useChatStream } from '../hooks/useChatStream';
+import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
+import { useThinkingTimer } from '../hooks/useThinkingTimer';
 import { ChatDemoChrome } from './ChatDemoChrome';
+import { emitUiEvent, onUiEvent } from '../api/uiEvents';
 
 interface ChatCardProps {
   wsId: string;
@@ -38,22 +41,20 @@ interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
 }
 
-export const ChatCard: React.FC<ChatCardProps> = ({
+export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   wsId,
   colIdx: _colIdx,
   groupIdx: _groupIdx,
   onShowToast,
   handleGlobalTabClick
 }) => {
-  const {
-    sessions,
-    activeSessionId,
-    activeAgentId,
-    setActiveAgentId,
-    withdrawMessage,
-    setActiveDiffSource,
-    appSettings,
-  } = useLayoutStore();
+  const sessions = useLayoutStore((s) => s.sessions);
+  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const activeAgentId = useLayoutStore((s) => s.activeAgentId);
+  const setActiveAgentId = useLayoutStore((s) => s.setActiveAgentId);
+  const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
+  const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
+  const appSettings = useLayoutStore((s) => s.appSettings);
 
   const [engineModel, setEngineModel] = useState('');
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -72,20 +73,13 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const modelChoices = flattenModelChoices();
 
   useEffect(() => {
-    const onProj = () => setProjectTick((n) => n + 1);
-    const onOpenPicker = () => setShowProjectPicker(true);
-    const onOpenScheduled = () => setMainSurface('scheduled');
-    const onBackChat = () => setMainSurface('chat');
-    window.addEventListener('crish-project-changed', onProj);
-    window.addEventListener('crish-open-project-picker', onOpenPicker);
-    window.addEventListener('crish-open-scheduled', onOpenScheduled);
-    window.addEventListener('crish-open-chat', onBackChat);
-    return () => {
-      window.removeEventListener('crish-project-changed', onProj);
-      window.removeEventListener('crish-open-project-picker', onOpenPicker);
-      window.removeEventListener('crish-open-scheduled', onOpenScheduled);
-      window.removeEventListener('crish-open-chat', onBackChat);
-    };
+    const offs = [
+      onUiEvent('project-changed', () => setProjectTick((n) => n + 1)),
+      onUiEvent('open-project-picker', () => setShowProjectPicker(true)),
+      onUiEvent('open-scheduled', () => setMainSurface('scheduled')),
+      onUiEvent('open-chat', () => setMainSurface('chat')),
+    ];
+    return () => offs.forEach((off) => off());
   }, []);
 
   useEffect(() => {
@@ -146,19 +140,20 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
 
-  // 进行中消息的待确认（主会话 + 协作 agent；时间线 approval-card + 底部提示）
+  // 当前会话待审批工具（主会话 + 协作 agent；时间线内联卡 + 底部 sticky 条）
   let pendingApprovalMsgId = '';
+  let pendingApprovalToolId = '';
   let pendingApprovalCount = 0;
   let pendingApprovalSummary = '';
   const scanPending = (msgs: typeof messages) => {
     for (const m of msgs) {
       if (!m.toolCalls) continue;
-      if (m.status === 'completed' || m.status === 'queued') continue;
       for (const tc of m.toolCalls) {
         if (tc.status !== 'pending_approval') continue;
         pendingApprovalCount += 1;
-        if (!pendingApprovalMsgId) {
+        if (!pendingApprovalToolId) {
           pendingApprovalMsgId = m.id;
+          pendingApprovalToolId = tc.id;
           pendingApprovalSummary = toolHumanLabel(tc);
         }
       }
@@ -202,14 +197,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
 
 
 
-  // Smart auto-scroll refs
-  const chatFlowRef = useRef<HTMLDivElement>(null);
-  const userScrolledRef = useRef(false);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-
-  // Thinking timer
-  const [thinkingSeconds, setThinkingSeconds] = useState(0);
-  const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { chatFlowRef, showScrollToBottom, scrollToBottom } = useChatAutoScroll(messages);
+  // Thinking timer: start when AI is processing, clear when done
+  const isProcessing = messages.some((m) => m.status === 'processing');
+  const thinkingSeconds = useThinkingTimer(isProcessing);
 
   // Slash commands：固定 + 技能（enableSkillCommands）
   // 正式模式仅保留已实现或有明确动作的命令；演示命令仅 demo
@@ -232,9 +223,10 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const [skillSlash, setSkillSlash] = useState<SkillSlashCommand[]>([]);
   const [skillCommandsEnabled, setSkillCommandsEnabled] = useState(true);
 
+  // 技能斜杠命令：挂载时加载一次；设置变更（crish-skills-changed）时重载，不随会话切换重扫
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    const load = async (force = false) => {
       try {
         const settings = await clientApi.getSettings();
         if (cancelled) return;
@@ -244,16 +236,22 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           setSkillSlash([]);
           return;
         }
-        const { commands } = await getSkillSlashCommandsCached();
+        const { commands } = await getSkillSlashCommandsCached(force);
         if (!cancelled) setSkillSlash(commands);
       } catch {
         /* ignore */
       }
-    })();
+    };
+    void load(false);
+    const onSkillsChanged = () => {
+      void load(true);
+    };
+    window.addEventListener('crish-skills-changed', onSkillsChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener('crish-skills-changed', onSkillsChanged);
     };
-  }, [activeSessionId]);
+  }, []);
 
   // AI 正文里的路径按钮 → 侧栏文件
   useEffect(() => {
@@ -293,51 +291,6 @@ export const ChatCard: React.FC<ChatCardProps> = ({
   const filteredCommands = allSlashCommands.filter((c) =>
     c.cmd.toLowerCase().startsWith(chatInput.toLowerCase()),
   );
-
-  // Thinking timer: start when AI is processing, clear when done
-  const isProcessing = messages.some(m => m.status === 'processing');
-  useEffect(() => {
-    if (isProcessing) {
-      setThinkingSeconds(0);
-      thinkingIntervalRef.current = setInterval(() => {
-        setThinkingSeconds(prev => prev + 1);
-      }, 1000);
-    } else {
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current);
-        thinkingIntervalRef.current = null;
-      }
-    }
-    return () => {
-      if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
-    };
-  }, [isProcessing]);
-
-  // Smart scroll: auto-scroll only when user hasn't manually scrolled up
-  useEffect(() => {
-    const el = chatFlowRef.current;
-    if (!el || userScrolledRef.current) return;
-    el.scrollTop = el.scrollHeight;
-    setShowScrollToBottom(false);
-  }, [messages]);
-
-  // Detect user scroll-up to stop auto-scroll
-  useEffect(() => {
-    const el = chatFlowRef.current;
-    if (!el) return;
-    const handleScroll = () => {
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-      if (atBottom) {
-        userScrolledRef.current = false;
-        setShowScrollToBottom(false);
-      } else {
-        userScrolledRef.current = true;
-        setShowScrollToBottom(true);
-      }
-    };
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const {
     runNotice,
@@ -578,7 +531,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
                 type="button"
                 className="ui-btn ui-btn-ghost ui-btn-sm"
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent('crish-open-overview'));
+                  emitUiEvent('open-overview');
                 }}
               >
                 总览
@@ -599,13 +552,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
             type="button"
             className="chat-scroll-fab"
             title="回到最新"
-            onClick={() => {
-              userScrolledRef.current = false;
-              setShowScrollToBottom(false);
-              if (chatFlowRef.current) {
-                chatFlowRef.current.scrollTop = chatFlowRef.current.scrollHeight;
-              }
-            }}
+            onClick={scrollToBottom}
           >
             <Lucide.ChevronDown size={16} strokeWidth={2} />
           </button>
@@ -637,18 +584,30 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           </div>
         ) : null}
 
-        {/* 审批提示条：不是快捷功能；一点滚到时间线卡片 */}
-        {!activeAgent && pendingApprovalCount > 0 && pendingApprovalMsgId ? (
+        {/* 审批 sticky 条：固定在输入区上方；点击滚到首个待审批工具 */}
+        {!activeAgent && pendingApprovalCount > 0 ? (
           <button
             type="button"
             className="approval-dock"
             onClick={() => {
-              // 主时间线有审批卡则滚动；否则打开含 pending 的协作 agent
-              const el = document.querySelector(
-                `.approval-card[data-msg="${pendingApprovalMsgId}"], .approval-card`,
-              );
+              const byTool = pendingApprovalToolId
+                ? document.querySelector(
+                    `.approval-card[data-tool-id="${CSS.escape(pendingApprovalToolId)}"], [data-tool-id="${CSS.escape(pendingApprovalToolId)}"]`,
+                  )
+                : null;
+              const byMsg = pendingApprovalMsgId
+                ? document.querySelector(`.approval-card[data-msg="${CSS.escape(pendingApprovalMsgId)}"]`)
+                : null;
+              const el = byTool || byMsg || document.querySelector('.approval-card');
               if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (el instanceof HTMLElement) {
+                  try {
+                    el.focus({ preventScroll: true });
+                  } catch {
+                    /* ignore */
+                  }
+                }
                 return;
               }
               const sess = useLayoutStore
@@ -669,8 +628,7 @@ export const ChatCard: React.FC<ChatCardProps> = ({
           >
             <span className="approval-dock-dot" aria-hidden />
             <span className="approval-dock-label">
-              需要权限
-              {pendingApprovalCount > 1 ? ` · ${pendingApprovalCount} 项` : ''}
+              {pendingApprovalCount} 个操作待审批
             </span>
             <span className="approval-dock-summary" title={pendingApprovalSummary}>
               {pendingApprovalSummary || '有操作等待你确认'}
@@ -942,4 +900,4 @@ export const ChatCard: React.FC<ChatCardProps> = ({
       </div>
     </div>
   );
-};
+});

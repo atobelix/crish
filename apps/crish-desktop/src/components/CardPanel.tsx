@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import * as Lucide from 'lucide-react';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { RuntimePanel } from './RuntimePanel';
 import { ChatCard } from './ChatCard';
 import { PreviewCard } from './PreviewCard';
@@ -11,6 +12,7 @@ import { AgentCard } from './AgentCard';
 import { FilesCard } from './FilesCard';
 import { OverviewCard } from './OverviewCard';
 import { useTabDrag } from '../hooks/useTabDrag';
+import { onUiEvent } from '../api/uiEvents';
 
 interface CardPanelProps {
   wsId: string;
@@ -20,38 +22,33 @@ interface CardPanelProps {
   heightRatio?: number;
 }
 
-export const CardPanel: React.FC<CardPanelProps> = ({
+export const CardPanel: React.FC<CardPanelProps> = React.memo(({
   wsId,
   colIdx,
   groupIdx,
   onShowToast,
   heightRatio,
 }) => {
-  const {
-    workspaces,
-    sessions,
-    activeSessionId,
-    draggedTab,
-    closeTabInGroup,
-    setPanelAgentId,
-  } = useLayoutStore();
+  const workspaces = useLayoutStore((s) => s.workspaces);
+  const sessions = useLayoutStore((s) => s.sessions);
+  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const draggedTab = useLayoutStore((s) => s.draggedTab);
+  const closeTabInGroup = useLayoutStore((s) => s.closeTabInGroup);
+  const setPanelAgentId = useLayoutStore((s) => s.setPanelAgentId);
   const [tabAddOpen, setTabAddOpen] = React.useState(false);
   const [tabAddPos, setTabAddPos] = React.useState<{ top: number; left: number } | null>(null);
   const tabsBarRef = React.useRef<HTMLDivElement>(null);
   const tabAddBtnRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
-    const onOpenAgent = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ agentId?: string }>).detail;
+    return onUiEvent('open-agent-panel', (detail) => {
       if (detail?.agentId) setPanelAgentId(detail.agentId);
       handleGlobalTabClick('agent');
-    };
-    window.addEventListener('crish-open-agent-panel', onOpenAgent);
-    return () => window.removeEventListener('crish-open-agent-panel', onOpenAgent);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
 
-  // 文件 / 终端 / 总览：外部入口先展开右侧对应面板
+  // 文件 / 终端：仍用未迁入 UiEventMap 的裸事件；总览走类型化总线
   React.useEffect(() => {
     const onOpenFile = () => {
       handleGlobalTabClick('files');
@@ -59,16 +56,15 @@ export const CardPanel: React.FC<CardPanelProps> = ({
     const onOpenTerm = () => {
       handleGlobalTabClick('terminal');
     };
-    const onOpenOverview = () => {
-      handleGlobalTabClick('overview');
-    };
     window.addEventListener('crish-open-file', onOpenFile);
     window.addEventListener('crish-open-terminal', onOpenTerm);
-    window.addEventListener('crish-open-overview', onOpenOverview);
+    const offOverview = onUiEvent('open-overview', () => {
+      handleGlobalTabClick('overview');
+    });
     return () => {
       window.removeEventListener('crish-open-file', onOpenFile);
       window.removeEventListener('crish-open-terminal', onOpenTerm);
-      window.removeEventListener('crish-open-overview', onOpenOverview);
+      offOverview();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId]);
@@ -364,95 +360,97 @@ export const CardPanel: React.FC<CardPanelProps> = ({
 
       {/* Switch Panel Contents dynamically based on activeCardId */}
       <div className="card-body">
-        {activeCardId === 'chat' && (
-          <ChatCard 
-            wsId={wsId} 
-            colIdx={colIdx} 
-            groupIdx={groupIdx} 
-            onShowToast={onShowToast} 
-            handleGlobalTabClick={handleGlobalTabClick} 
-          />
-        )}
-        {activeCardId === 'preview' && (
-          <PreviewCard 
-            wsId={wsId} 
-            onShowToast={onShowToast} 
-          />
-        )}
-        {activeCardId === 'overview' && (
-          <OverviewCard
-            wsId={wsId}
-            onOpenPanel={handleGlobalTabClick}
-            onShowToast={onShowToast}
-          />
-        )}
-        {activeCardId === 'files' && (
-          <FilesCard onShowToast={onShowToast} />
-        )}
-        {activeCardId === 'diff' && (
-          <DiffCard 
-            onShowToast={onShowToast} 
-          />
-        )}
-        {activeCardId === 'tasks' && (
-          <TasksCard />
-        )}
-        {activeCardId === 'terminal' && (
-          <TerminalCard />
-        )}
-        {activeCardId === 'settings' && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', gap: '8px', padding: '32px' }}>
-            <Lucide.Settings size={24} style={{ opacity: 0.4 }} />
-            <span style={{ fontSize: '12px', textAlign: 'center', lineHeight: 1.5 }}>系统设置已升级为全屏覆盖面板。<br/>可在侧边栏底部点击齿轮图标，或使用 <code>Ctrl + ,</code> 打开。</span>
-          </div>
-        )}
-        {activeCardId === 'runtime' && (
-          <RuntimePanel wsId={wsId} onShowToast={onShowToast} />
-        )}
-        {activeCardId === 'agent' && (
-          <AgentCard
-            onClose={() => {
-              useLayoutStore.getState().setPanelAgentId(null);
-              handleTabClick('chat');
-            }}
-          />
-        )}
-        {activeCardId === 'plan' && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: 'var(--text-tertiary)',
-              gap: 12,
-              padding: 32,
-              textAlign: 'center',
-            }}
-          >
-            <Lucide.ListTodo size={24} style={{ opacity: 0.4 }} />
-            <span style={{ fontSize: 13, lineHeight: 1.55, maxWidth: 280 }}>
-              计划进度已并入<strong style={{ color: 'var(--text-secondary)' }}>总览</strong>
-              （进行中步骤、计划模式确认、任务入口）。
-            </span>
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={() => handleGlobalTabClick('overview')}
+        <AppErrorBoundary compact>
+          {activeCardId === 'chat' && (
+            <ChatCard
+              wsId={wsId}
+              colIdx={colIdx}
+              groupIdx={groupIdx}
+              onShowToast={onShowToast}
+              handleGlobalTabClick={handleGlobalTabClick}
+            />
+          )}
+          {activeCardId === 'preview' && (
+            <PreviewCard
+              wsId={wsId}
+              onShowToast={onShowToast}
+            />
+          )}
+          {activeCardId === 'overview' && (
+            <OverviewCard
+              wsId={wsId}
+              onOpenPanel={handleGlobalTabClick}
+              onShowToast={onShowToast}
+            />
+          )}
+          {activeCardId === 'files' && (
+            <FilesCard onShowToast={onShowToast} />
+          )}
+          {activeCardId === 'diff' && (
+            <DiffCard
+              onShowToast={onShowToast}
+            />
+          )}
+          {activeCardId === 'tasks' && (
+            <TasksCard />
+          )}
+          {activeCardId === 'terminal' && (
+            <TerminalCard />
+          )}
+          {activeCardId === 'settings' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)', gap: '8px', padding: '32px' }}>
+              <Lucide.Settings size={24} style={{ opacity: 0.4 }} />
+              <span style={{ fontSize: '12px', textAlign: 'center', lineHeight: 1.5 }}>系统设置已升级为全屏覆盖面板。<br/>可在侧边栏底部点击齿轮图标，或使用 <code>Ctrl + ,</code> 打开。</span>
+            </div>
+          )}
+          {activeCardId === 'runtime' && (
+            <RuntimePanel wsId={wsId} onShowToast={onShowToast} />
+          )}
+          {activeCardId === 'agent' && (
+            <AgentCard
+              onClose={() => {
+                useLayoutStore.getState().setPanelAgentId(null);
+                handleTabClick('chat');
+              }}
+            />
+          )}
+          {activeCardId === 'plan' && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: 'var(--text-tertiary)',
+                gap: 12,
+                padding: 32,
+                textAlign: 'center',
+              }}
             >
-              打开总览
-            </button>
-            <button
-              type="button"
-              className="overview-link"
-              onClick={() => handleGlobalTabClick('tasks')}
-            >
-              或打开任务面板
-            </button>
-          </div>
-        )}
+              <Lucide.ListTodo size={24} style={{ opacity: 0.4 }} />
+              <span style={{ fontSize: 13, lineHeight: 1.55, maxWidth: 280 }}>
+                计划进度已并入<strong style={{ color: 'var(--text-secondary)' }}>总览</strong>
+                （进行中步骤、计划模式确认、任务入口）。
+              </span>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                onClick={() => handleGlobalTabClick('overview')}
+              >
+                打开总览
+              </button>
+              <button
+                type="button"
+                className="overview-link"
+                onClick={() => handleGlobalTabClick('tasks')}
+              >
+                或打开任务面板
+              </button>
+            </div>
+          )}
+        </AppErrorBoundary>
       </div>
     </div>
   );
-};
+});

@@ -84,13 +84,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     setPickerInlineError,
   } = options;
 
-  const {
-    activeSessionId,
-    setActiveDiffSource,
-    addTerminalLine,
-    upsertSessionAgent,
-    renameSession,
-  } = useLayoutStore();
+  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
+  const addTerminalLine = useLayoutStore((s) => s.addTerminalLine);
+  const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
+  const renameSession = useLayoutStore((s) => s.renameSession);
 
   /**
    * 按会话隔离流式 run：多会话可并行，互不覆盖 cancel。
@@ -111,6 +109,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   const drainingSessionsRef = useRef(new Set<string>());
   /** 本轮 run 内是否已自动打开过侧栏，避免每个工具都抢焦点 */
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
+  /**
+   * 始终指向最新的 runStreamingAssistant，供 drain / onComplete 异步回调使用。
+   * 避免 drainQueuedAfterComplete 或旧闭包调用到过期的 options / store action 身份。
+   */
+  const runStreamingAssistantRef = useRef<
+    (input: string, userMsgId: string, sessionIdOverride?: string) => void
+  >(null!);
 
   /** 运行级错误横幅（不进 AI 正文） */
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);
@@ -130,7 +135,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       if (next?.text) {
         st.setSessionMessageStatus(sid, next.id, 'processing');
         // 排队消息的 text 即当时展示文案（含附件摘要）；作为下一轮 prompt
-        runStreamingAssistant(next.text, next.id, sid);
+        // 经 ref 调最新实现，避免 drain 闭包里的函数身份过期
+        runStreamingAssistantRef.current(next.text, next.id, sid);
       }
     } finally {
       // 下一帧再允许，避免与本次 onComplete 叠压
@@ -178,6 +184,42 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       toolCalls: []
     });
 
+    // find-or-add tool call on the streaming assistant message
+    const upsertToolCall = (
+      toolId: string,
+      name: string,
+      args: string | undefined,
+      explanation: string | undefined,
+      status: 'running' | 'pending_approval',
+    ) => {
+      toolNames[toolId] = name;
+      const live = useLayoutStore.getState();
+      const existing = live.sessions
+        .find((s) => s.id === sid)
+        ?.messages?.find((m) => m.id === assistantMsgId)
+        ?.toolCalls?.find((t) => t.id === toolId);
+      if (existing) {
+        live.updateMessageToolCall(sid, assistantMsgId, toolId, {
+          name,
+          arguments: args,
+          explanation,
+          status,
+        });
+      } else {
+        live.addMessageToolCall(sid, assistantMsgId, {
+          id: toolId,
+          name,
+          arguments: args,
+          explanation,
+          status,
+        });
+      }
+      if (isShellToolName(name) && args) {
+        // 镜像到终端面板，但不自动抢开侧栏
+        addTerminalLine(`$ ${args}`, sid);
+      }
+    };
+
     const cancel = streamAssistantResponseApi(input, {
       onRunMeta: ({ runId }) => {
         localRunId = runId;
@@ -195,46 +237,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         store.updateMessageThinking(sid, assistantMsgId, thought);
       },
       onToolStart: (toolId, name, args, explanation) => {
-        toolNames[toolId] = name;
-        store.addMessageToolCall(sid, assistantMsgId, {
-          id: toolId,
-          name,
-          arguments: args,
-          explanation,
-          status: 'running'
-        });
-
-        if (isShellToolName(name) && args) {
-          // 镜像到终端面板，但不自动抢开侧栏
-          addTerminalLine(`$ ${args}`, sid);
-        }
+        upsertToolCall(toolId, name, args, explanation, 'running');
       },
       onToolPendingApproval: (toolId, name, args, explanation) => {
-        toolNames[toolId] = name;
-        // 若已有同 id 工具则更新，否则新增
-        const existing = store.sessions
-          .find((s) => s.id === sid)
-          ?.messages?.find((m) => m.id === assistantMsgId)
-          ?.toolCalls?.find((t) => t.id === toolId);
-        if (existing) {
-          store.updateMessageToolCall(sid, assistantMsgId, toolId, {
-            name,
-            arguments: args,
-            explanation,
-            status: 'pending_approval',
-          });
-        } else {
-          store.addMessageToolCall(sid, assistantMsgId, {
-            id: toolId,
-            name,
-            arguments: args,
-            explanation,
-            status: 'pending_approval',
-          });
-        }
-        if (isShellToolName(name) && args) {
-          addTerminalLine(`$ ${args}`, sid);
-        }
+        upsertToolCall(toolId, name, args, explanation, 'pending_approval');
       },
       onApprovalResolved: (toolId, decision) => {
         toolNames[toolId] = toolNames[toolId] || 'tool';
@@ -311,11 +317,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
             for (const m of sess.messages) {
               const tc = m.toolCalls?.find((t) => t.id === toolId);
               if (!tc) continue;
-              const failed = /fail|error|cancel/i.test(String(info.status || ''));
-              tc.status = failed ? 'error' : 'success';
+              const st = String(info.status || '');
+              const failed = /fail|error/i.test(st);
+              const stopped = st === 'stopped' || /cancel|stopp?ed|abort/i.test(st);
+              tc.status = failed || stopped ? 'error' : 'success';
               const body =
                 summary.trim() ||
-                (failed ? '协作未完成' : '协作已完成');
+                (failed ? '协作未完成' : stopped ? '协作已停止' : '协作已完成');
               tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
             }
           }
@@ -503,6 +511,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       runId: null,
     });
   };
+  // 每轮渲染同步最新函数，确保 drain 经 ref 拿到当前闭包
+  runStreamingAssistantRef.current = runStreamingAssistant;
 
   const handleStopGeneration = () => {
     // 只停当前会话，其它会话的并行 run 继续

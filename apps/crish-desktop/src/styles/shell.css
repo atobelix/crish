@@ -292,6 +292,27 @@ body {
   margin-top: 4px;
 }
 
+/* 面板/工作区内嵌：不占满视口，可撑满父级高度 */
+.app-error-boundary--compact {
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  padding: 16px;
+  background: transparent;
+}
+.app-error-card--compact {
+  max-width: 360px;
+  padding: 16px 14px;
+  gap: 10px;
+}
+.app-error-boundary--compact .app-error-title {
+  font-size: var(--font-size-base, 14px);
+}
+.app-error-boundary--compact .app-error-msg {
+  max-height: 80px;
+  font-size: var(--font-size-xs, 12px);
+}
+
 .plan-mode-ribbon {
   display: flex;
   align-items: center;
@@ -1572,6 +1593,31 @@ body {
   transition: all 0.1s ease;
 }
 
+/* Toast stack (multiple, bottom-centered) */
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  z-index: 10000;
+  pointer-events: none;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast-stack .toast-alert {
+  pointer-events: auto;
+  position: relative;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  width: max-content;
+  max-width: 100%;
+}
+
 /* Toast alert notification */
 .toast-alert {
   position: fixed;
@@ -1609,11 +1655,11 @@ body {
 
 @keyframes slideInUp {
   from {
-    transform: translateX(-50%) translateY(12px);
+    transform: translateY(12px);
     opacity: 0;
   }
   to {
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -2740,6 +2786,22 @@ select.ui-input {
   animation: spin 1s linear infinite;
   flex-shrink: 0;
 }
+/* 运行中会话：整行轻量脉冲，不抢选中态 */
+.crish-sidebar .session-item.is-running:not(.active) {
+  animation: session-running-pulse 2.2s ease-in-out infinite;
+}
+.crish-sidebar .session-item-wrap.is-running > .session-item.active {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent, #3b82f6) 55%, transparent);
+}
+@keyframes session-running-pulse {
+  0%,
+  100% {
+    background: transparent;
+  }
+  50% {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent);
+  }
+}
 /* Drag ghost: theme tokens (position/size remain inline) */
 .sidebar-drag-ghost {
   background: var(--bg-elevated);
@@ -2849,6 +2911,10 @@ select.ui-input {
   color: var(--text-primary);
 }
 .agent-card-badge--failed {
+  background: var(--accent-red-light, var(--bg-tertiary));
+  color: var(--accent-red, var(--text-secondary));
+}
+.agent-card-badge--stopped {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
 }

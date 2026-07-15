@@ -399,4 +399,23 @@ describe("context compression", () => {
     expect(result?.messages).not.toBe(messages);
     expect(result?.summaryMessage).toBe(result?.messages[0]);
   });
+
+  it("returns null when summarizer throws instead of crashing preparing-turn", async () => {
+    const messages = compressibleMessages();
+    const compressor = new ContextCompressor({
+      contextWindowTokens: 128,
+      thresholdTokens: 1,
+      targetRecentTokens: 1,
+      minRecentMessages: 1,
+      minMessagesToCompress: 1,
+      summarizer: {
+        async summarize() {
+          throw new Error("summarizer unavailable");
+        }
+      }
+    });
+
+    await expect(compressor.maybeCompress(messages)).resolves.toBeNull();
+    await expect(compressor.compress(messages, "manual")).resolves.toBeNull();
+  });
 });

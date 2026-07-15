@@ -79,7 +79,8 @@ export interface SessionAgent {
   parentToolCallId?: string;
   description: string;
   mode: string;
-  status: 'running' | 'completed' | 'failed';
+  /** running=执行中; completed=成功结束; failed=异常失败; stopped=用户停止/取消（非失败） */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   summary?: string;
   /** 子 agent 时间线（与主对话同结构，便于复用渲染） */
   messages: SessionMessage[];

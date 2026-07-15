@@ -745,4 +745,7 @@ export async function getSkillSlashCommandsCached(force = false): Promise<{
 
 export function invalidateSkillSlashCache() {
   slashCache = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+  }
 }

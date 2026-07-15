@@ -135,6 +135,10 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             <Lucide.Columns2 size={16} strokeWidth={1.75} />
             <span>拆分打开</span>
           </button>
+          <button type="button" className="context-menu-item" onClick={() => onSessionAction('open-new')}>
+            <Lucide.ExternalLink size={16} strokeWidth={1.75} />
+            <span>在新窗口打开</span>
+          </button>
           <div className="context-menu-divider" />
           {sessions.find((s) => s.id === contextMenu.sessionId)?.isPinned ? (
             <button type="button" className="context-menu-item" onClick={() => onSessionAction('unpin')}>

@@ -62,7 +62,13 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   }, [open, live.messages?.length, live.status]);
 
   const statusLabel =
-    live.status === 'running' ? '运行中' : live.status === 'failed' ? '失败' : '完成';
+    live.status === 'running'
+      ? '运行中'
+      : live.status === 'failed'
+        ? '失败'
+        : live.status === 'stopped'
+          ? '已停止'
+          : '完成';
 
   const handleSend = async () => {
     const text = input.trim();
@@ -342,6 +348,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                                     <ApprovalAskCard
                                       key={tc.id}
                                       msgId={msg.id}
+                                      toolId={tc.id}
                                       summary={summary}
                                       cmd={cmd && cmd !== summary ? cmd : techFull || undefined}
                                       onAllow={() => {

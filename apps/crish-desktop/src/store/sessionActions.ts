@@ -95,13 +95,57 @@ export interface SessionActions {
 type ImmerSet = (recipe: (state: SessionStoreSlice) => void) => void;
 type StoreGet = () => SessionStoreSlice;
 
+type SessionsHolder = { sessions: SessionState[] };
+
+/**
+ * 会话 / 消息查找 helpers。
+ * 仍是 O(n) 线性扫描；Map 索引与 immer draft 不友好，故用集中 helper 减少重复双 find。
+ * 热路径（流式 update*）经 getSessionMessage 一次拿到 session+message。
+ */
+function getSessionById(
+  state: SessionsHolder,
+  sessionId: string,
+): SessionState | undefined {
+  return state.sessions.find((s) => s.id === sessionId);
+}
+
+function getSessionIndex(state: SessionsHolder, sessionId: string): number {
+  return state.sessions.findIndex((s) => s.id === sessionId);
+}
+
+function getMessageById(
+  messages: SessionMessage[] | undefined,
+  messageId: string,
+): SessionMessage | undefined {
+  return messages?.find((m) => m.id === messageId);
+}
+
+function getSessionMessage(
+  state: SessionsHolder,
+  sessionId: string,
+  messageId: string,
+): { session: SessionState; message: SessionMessage } | undefined {
+  const session = getSessionById(state, sessionId);
+  if (!session?.messages) return undefined;
+  const message = getMessageById(session.messages, messageId);
+  if (!message) return undefined;
+  return { session, message };
+}
+
+function getSessionAgent(
+  session: SessionState,
+  agentId: string,
+): SessionAgent | undefined {
+  return session.agents?.find((a) => a.id === agentId);
+}
+
 /**
  * 创建会话域 actions，供 layoutStore 的 immer((set,get)=>({...})) 展开。
  */
 export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActions {
   return {
     addMessage: (_wsId, sessionId, message) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) {
         if (!sess.messages) sess.messages = [];
 
@@ -126,9 +170,9 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     withdrawMessage: (_wsId, sessionId, messageId) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const idx = sess.messages.findIndex(m => m.id === messageId);
+      const sess = getSessionById(state, sessionId);
+      if (sess?.messages) {
+        const idx = sess.messages.findIndex((m) => m.id === messageId);
         if (idx !== -1) {
           sess.messages = sess.messages.slice(0, idx);
         }
@@ -136,22 +180,17 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     respondToApproval: (_wsId, sessionId, messageId, toolCallId, status) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg && msg.toolCalls) {
-          const tc = msg.toolCalls.find(t => t.id === toolCallId);
-          if (tc) {
-            if (status === 'success') {
-              // mock 流会轮询 status===success；daemon 路径随后 tool-end 会覆盖
-              tc.status = 'success';
-              tc.output = '已批准，正在执行\u2026';
-            } else {
-              tc.status = 'error';
-              tc.output = '权限被拒绝。';
-            }
-          }
-        }
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit?.message.toolCalls) return;
+      const tc = hit.message.toolCalls.find((t) => t.id === toolCallId);
+      if (!tc) return;
+      if (status === 'success') {
+        // mock 流会轮询 status===success；daemon 路径随后 tool-end 会覆盖
+        tc.status = 'success';
+        tc.output = '已批准，正在执行\u2026';
+      } else {
+        tc.status = 'error';
+        tc.output = '权限被拒绝。';
       }
     }),
 
@@ -171,127 +210,109 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     updateMessageText: (sessionId, messageId, text) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg) {
-          const prev = msg.text || '';
-          msg.text = text;
-          if (!msg.blocks) msg.blocks = [];
-          let offset = typeof msg.streamTextOffset === 'number' ? msg.streamTextOffset : 0;
-          // 全文缩短/重写：重置偏移，避免 segment 变成整篇导致正文重复
-          if (text.length < offset || (prev && text.length < prev.length && !prev.startsWith(text) && !text.startsWith(prev.slice(0, Math.min(prev.length, text.length))))) {
-            offset = 0;
-            msg.streamTextOffset = 0;
-            // 清掉仅 text 块后按新全文重建末段；保留 tool 块
-            msg.blocks = msg.blocks.filter((b) => b.type === 'tool_call');
-          }
-          const segment = text.length >= offset ? text.slice(offset) : text;
-          const lastBlock = msg.blocks[msg.blocks.length - 1];
-          if (lastBlock && lastBlock.type === 'text') {
-            lastBlock.content = segment;
-          } else if (segment.length > 0) {
-            msg.blocks.push({ type: 'text' as const, content: segment });
-          }
-        }
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit) return;
+      const msg = hit.message;
+      const prev = msg.text || '';
+      msg.text = text;
+      if (!msg.blocks) msg.blocks = [];
+      let offset = typeof msg.streamTextOffset === 'number' ? msg.streamTextOffset : 0;
+      // 全文缩短/重写：重置偏移，避免 segment 变成整篇导致正文重复
+      if (text.length < offset || (prev && text.length < prev.length && !prev.startsWith(text) && !text.startsWith(prev.slice(0, Math.min(prev.length, text.length))))) {
+        offset = 0;
+        msg.streamTextOffset = 0;
+        // 清掉仅 text 块后按新全文重建末段；保留 tool 块
+        msg.blocks = msg.blocks.filter((b) => b.type === 'tool_call');
+      }
+      const segment = text.length >= offset ? text.slice(offset) : text;
+      const lastBlock = msg.blocks[msg.blocks.length - 1];
+      if (lastBlock && lastBlock.type === 'text') {
+        lastBlock.content = segment;
+      } else if (segment.length > 0) {
+        msg.blocks.push({ type: 'text' as const, content: segment });
       }
     }),
 
     updateMessageThinking: (sessionId, messageId, thinking) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg) {
-          // 支持累计全文或引擎推送的完整思考
-          msg.thinking = thinking;
-        }
-      }
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit) return;
+      // 支持累计全文或引擎推送的完整思考
+      hit.message.thinking = thinking;
     }),
 
     addMessageToolCall: (sessionId, messageId, toolCall) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg) {
-          if (!msg.toolCalls) msg.toolCalls = [];
-          if (!msg.blocks) msg.blocks = [];
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit) return;
+      const msg = hit.message;
+      if (!msg.toolCalls) msg.toolCalls = [];
+      if (!msg.blocks) msg.blocks = [];
 
-          const mergeInto = (target: MessageToolCall) => {
-            if (
-              (target.status === 'success' || target.status === 'error') &&
-              toolCall.status === 'running'
-            ) {
-              if (!target.arguments && toolCall.arguments) target.arguments = toolCall.arguments;
-              if (!target.explanation && toolCall.explanation) target.explanation = toolCall.explanation;
-              return;
-            }
-            const prevStatus = target.status;
-            const prevOut = target.output;
-            const prevArgs = target.arguments;
-            Object.assign(target, toolCall);
-            if (!toolCall.arguments && prevArgs) target.arguments = prevArgs;
-            if (!toolCall.output && prevOut) target.output = prevOut;
-            if (
-              (prevStatus === 'success' || prevStatus === 'error') &&
-              toolCall.status === 'running'
-            ) {
-              target.status = prevStatus;
-            }
-          };
-
-          // 仅按 id 合并；同签名不同 id 视为两次真实调用
-          const existing = msg.toolCalls.find((t) => t.id === toolCall.id);
-          if (existing) {
-            mergeInto(existing);
-            return;
-          }
-
-          msg.streamTextOffset = (msg.text || '').length;
-          const lastB = msg.blocks[msg.blocks.length - 1];
-          if (lastB && lastB.type === 'text' && !(lastB.content || '').trim()) {
-            msg.blocks.pop();
-          }
-          msg.toolCalls.push(toolCall);
-          if (!msg.blocks.some((b) => b.type === 'tool_call' && b.id === toolCall.id)) {
-            msg.blocks.push({ type: 'tool_call' as const, id: toolCall.id });
-          }
+      const mergeInto = (target: MessageToolCall) => {
+        if (
+          (target.status === 'success' || target.status === 'error') &&
+          toolCall.status === 'running'
+        ) {
+          if (!target.arguments && toolCall.arguments) target.arguments = toolCall.arguments;
+          if (!target.explanation && toolCall.explanation) target.explanation = toolCall.explanation;
+          return;
         }
+        const prevStatus = target.status;
+        const prevOut = target.output;
+        const prevArgs = target.arguments;
+        Object.assign(target, toolCall);
+        if (!toolCall.arguments && prevArgs) target.arguments = prevArgs;
+        if (!toolCall.output && prevOut) target.output = prevOut;
+        if (
+          (prevStatus === 'success' || prevStatus === 'error') &&
+          toolCall.status === 'running'
+        ) {
+          target.status = prevStatus;
+        }
+      };
+
+      // 仅按 id 合并；同签名不同 id 视为两次真实调用
+      const existing = msg.toolCalls.find((t) => t.id === toolCall.id);
+      if (existing) {
+        mergeInto(existing);
+        return;
+      }
+
+      msg.streamTextOffset = (msg.text || '').length;
+      const lastB = msg.blocks[msg.blocks.length - 1];
+      if (lastB && lastB.type === 'text' && !(lastB.content || '').trim()) {
+        msg.blocks.pop();
+      }
+      msg.toolCalls.push(toolCall);
+      if (!msg.blocks.some((b) => b.type === 'tool_call' && b.id === toolCall.id)) {
+        msg.blocks.push({ type: 'tool_call' as const, id: toolCall.id });
       }
     }),
 
     updateMessageToolCall: (sessionId, messageId, toolCallId, updates) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg) {
-          if (!msg.toolCalls) msg.toolCalls = [];
-          const tc = msg.toolCalls.find(t => t.id === toolCallId);
-          if (tc) {
-            if (
-              (tc.status === 'success' || tc.status === 'error') &&
-              updates.status === 'running'
-            ) {
-              const { status: _s, ...rest } = updates;
-              Object.assign(tc, rest);
-              return;
-            }
-            Object.assign(tc, updates);
-          }
-          // 不对齐 id 时不猜「最近 running」，避免写错行
-        }
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit) return;
+      const msg = hit.message;
+      if (!msg.toolCalls) msg.toolCalls = [];
+      const tc = msg.toolCalls.find((t) => t.id === toolCallId);
+      if (!tc) return;
+      if (
+        (tc.status === 'success' || tc.status === 'error') &&
+        updates.status === 'running'
+      ) {
+        const { status: _s, ...rest } = updates;
+        Object.assign(tc, rest);
+        return;
       }
+      Object.assign(tc, updates);
+      // 不对齐 id 时不猜「最近 running」，避免写错行
     }),
 
     setSessionMessageStatus: (sessionId, messageId, status, thinkingTime) => set((state) => {
-      const sess = state.sessions.find(s => s.id === sessionId);
-      if (sess && sess.messages) {
-        const msg = sess.messages.find(m => m.id === messageId);
-        if (msg) {
-          msg.status = status;
-          if (thinkingTime !== undefined) {
-            msg.thinkingTime = thinkingTime;
-          }
-        }
+      const hit = getSessionMessage(state, sessionId, messageId);
+      if (!hit) return;
+      hit.message.status = status;
+      if (thinkingTime !== undefined) {
+        hit.message.thinkingTime = thinkingTime;
       }
     }),
 
@@ -304,7 +325,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     upsertSessionAgent: (sessionId, agent) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (!sess) return;
       if (!sess.agents) sess.agents = [];
       const i = sess.agents.findIndex((a) => a.id === agent.id);
@@ -317,18 +338,20 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     }),
 
     patchSessionAgent: (sessionId, agentId, patch) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
-      const ag = sess?.agents?.find((a) => a.id === agentId);
+      const sess = getSessionById(state, sessionId);
+      if (!sess) return;
+      const ag = getSessionAgent(sess, agentId);
       if (!ag) return;
       Object.assign(ag, patch);
     }),
 
     appendSessionAgentMessage: (sessionId, agentId, message) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
-      const ag = sess?.agents?.find((a) => a.id === agentId);
+      const sess = getSessionById(state, sessionId);
+      if (!sess) return;
+      const ag = getSessionAgent(sess, agentId);
       if (!ag) return;
       if (!ag.messages) ag.messages = [];
-      const existing = ag.messages.find((m) => m.id === message.id);
+      const existing = getMessageById(ag.messages, message.id);
       if (existing) {
         Object.assign(existing, message);
       } else {
@@ -347,7 +370,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       });
       // 正式版：切换会话时同步工作区 cwd（folder = projectId 或 对话）
       if (!isDemoMode() && id) {
-        const sess = get().sessions.find((s) => s.id === id);
+        const sess = getSessionById(get(), id);
         if (sess) {
           void import('../api/projectStore').then(({ activateWorkspaceForSessionFolder }) => {
             activateWorkspaceForSessionFolder(sess.folder);
@@ -361,7 +384,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
               void hydrateSessionMessagesFromDaemon(id).then((res) => {
                 if (!res.ok) return;
                 set((state) => {
-                  const s = state.sessions.find((x) => x.id === id);
+                  const s = getSessionById(state, id);
                   if (!s) return;
                   // 水合期间用户可能已发消息，勿覆盖非空
                   if (s.messages && s.messages.length > 0) {
@@ -402,7 +425,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     },
 
     renameSession: (sessionId, title) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) {
         sess.title = title.slice(0, 48) || sess.title;
       }
@@ -413,7 +436,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         (opts?.id && String(opts.id).trim()) || `sess-${Date.now()}`;
       set((state) => {
         // 已存在则仅激活（定时 workflow 复用引擎 sessionId）
-        const existing = state.sessions.find((s) => s.id === id);
+        const existing = getSessionById(state, id);
         if (existing) {
           state.activeSessionId = id;
           if (opts?.title && existing.title === '新会话') {
@@ -444,27 +467,27 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
     },
 
     pinSession: (sessionId) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) sess.isPinned = true;
     }),
 
     unpinSession: (sessionId) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) sess.isPinned = false;
     }),
 
     archiveSession: (sessionId) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) sess.isArchived = true;
     }),
 
     unarchiveSession: (sessionId) => set((state) => {
-      const sess = state.sessions.find((s) => s.id === sessionId);
+      const sess = getSessionById(state, sessionId);
       if (sess) sess.isArchived = false;
     }),
 
     branchSession: (sessionId, newTitle) => set((state) => {
-      const original = state.sessions.find((s) => s.id === sessionId);
+      const original = getSessionById(state, sessionId);
       if (!original) return;
 
       const newSess: SessionState = {
@@ -478,13 +501,13 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
         messages: original.messages ? JSON.parse(JSON.stringify(original.messages)) : [],
       };
       // 分叉会话紧插在原会话之后
-      const idx = state.sessions.findIndex((s) => s.id === sessionId);
+      const idx = getSessionIndex(state, sessionId);
       state.sessions.splice(idx + 1, 0, newSess);
       state.activeSessionId = newSess.id; // 自动聚焦新分叉
     }),
 
     moveSessionRealtime: (sessionId, targetSessionId, targetFolder, isPinned) => set((state) => {
-      const sessIdx = state.sessions.findIndex((s) => s.id === sessionId);
+      const sessIdx = getSessionIndex(state, sessionId);
       if (sessIdx === -1) return;
 
       const [sess] = state.sessions.splice(sessIdx, 1);
@@ -492,7 +515,7 @@ export function createSessionActions(set: ImmerSet, get: StoreGet): SessionActio
       sess.folder = targetFolder;
 
       if (targetSessionId) {
-        const tIdx = state.sessions.findIndex((s) => s.id === targetSessionId);
+        const tIdx = getSessionIndex(state, targetSessionId);
         if (tIdx !== -1) {
           state.sessions.splice(tIdx, 0, sess);
         } else {

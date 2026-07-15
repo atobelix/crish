@@ -3,6 +3,8 @@ import type { AgentTool, ToolSource } from "./types";
 import { errorMessage } from "@crish/shared-utils";
 
 export const DEFAULT_MCP_STARTUP_GATE_TIMEOUT_MS = 250;
+/** waitForReady 默认超时（刷新工具 / 执行工具前等待 ready） */
+export const DEFAULT_MCP_WAIT_FOR_READY_TIMEOUT_MS = 30_000;
 export const DEFAULT_MCP_DIAGNOSTIC_LIMIT = 50;
 
 export type McpServerLifecycleState = "discovering" | "starting" | "ready" | "degraded" | "reconnecting" | "stopped";
@@ -398,7 +400,8 @@ export class McpServerController {
   }
 
   private async runRefresh(): Promise<McpServerOperationResult> {
-    const ready = await this.waitForReady();
+    // 带超时等待 ready，避免 refresh 无限挂起
+    const ready = await this.waitForReady(DEFAULT_MCP_WAIT_FOR_READY_TIMEOUT_MS);
     if (!ready || !this.connection) {
       const diagnostic = this.createDiagnostic(
         "MCP_SERVER_UNAVAILABLE",
@@ -437,7 +440,8 @@ export class McpServerController {
   }
 
   private async executeManagedTool(toolName: string, input: JsonObject, context: ToolExecutionContext): Promise<ToolOutput> {
-    const ready = await this.waitForReady();
+    // 带超时等待 ready，避免工具执行前无限挂起
+    const ready = await this.waitForReady(DEFAULT_MCP_WAIT_FOR_READY_TIMEOUT_MS);
     if (!ready) {
       const diagnostic = this.createDiagnostic(
         "MCP_SERVER_UNAVAILABLE",

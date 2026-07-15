@@ -54,6 +54,11 @@ const DEFAULT_TARGET_RECENT_RATIO = 0.25;
 const DEFAULT_MIN_RECENT_MESSAGES = 4;
 const DEFAULT_MIN_MESSAGES_TO_COMPRESS = 4;
 const DEFAULT_MAX_SUMMARY_TOKENS = 4_000;
+/**
+ * 启发式 token 估算的安全系数：阈值比较时略提前触发压缩，降低“估少了导致上下文溢出”的风险。
+ * 不引入 tiktoken 等重依赖；实际 usage 仍优先用 provider 回报的 totalTokens。
+ */
+const TOKEN_ESTIMATE_SAFETY_FACTOR = 1.15;
 
 export class ContextCompressor {
   constructor(private readonly options: ContextCompressionRuntimeOptions) {}
@@ -93,21 +98,29 @@ export class ContextCompressor {
       toolOutputBudget: this.options.toolOutputBudget ?? { inlineChars: 4_000 },
       includeThought: false
     });
-    const summary = await this.options.summarizer.summarize({
-      trigger,
-      reason: decision.reason,
-      policy: decision.policy,
-      handoffIntent: decision.handoffIntent,
-      serializedConversation,
-      previousSummary: state.previousCompressionSummary,
-      recentSuccessfulCommands: commandFacts.successful,
-      recentFailedDiagnostics: commandFacts.failed,
-      completedTaskSummaries: state.completedTaskSummaries,
-      pendingTasks: state.pendingTasks,
-      sessionEvents: state.sessionEvents,
-      fileSnapshotHints: state.fileSnapshotHints,
-      maxSummaryTokens: this.options.maxSummaryTokens ?? DEFAULT_MAX_SUMMARY_TOKENS
-    });
+    // summarizer 失败时跳过本轮压缩，避免未捕获异常打断 preparing-turn
+    let summary: string;
+    try {
+      summary = await this.options.summarizer.summarize({
+        trigger,
+        reason: decision.reason,
+        policy: decision.policy,
+        handoffIntent: decision.handoffIntent,
+        serializedConversation,
+        previousSummary: state.previousCompressionSummary,
+        recentSuccessfulCommands: commandFacts.successful,
+        recentFailedDiagnostics: commandFacts.failed,
+        completedTaskSummaries: state.completedTaskSummaries,
+        pendingTasks: state.pendingTasks,
+        sessionEvents: state.sessionEvents,
+        fileSnapshotHints: state.fileSnapshotHints,
+        maxSummaryTokens: this.options.maxSummaryTokens ?? DEFAULT_MAX_SUMMARY_TOKENS
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.warn(`[context-compression] summarizer failed, skip compression this turn: ${message}`);
+      return null;
+    }
     const tokensAfter = estimateContextTokens([createCompressionSummaryMessage(summary), ...kept]).tokens;
     const structuredSummary = createStructuredSummary({
       kind: "context-compression",
@@ -256,7 +269,9 @@ function createCompressionDecision(
   hasEnoughMessages: boolean
 ): ContextCompressionDecision {
   const reason = reasonForTrigger(trigger);
-  const thresholdExceeded = tokensBefore >= thresholdTokens;
+  // 阈值门控使用带安全系数的估算值，提前压缩；tokensBefore 仍保留原始估算便于记录/展示
+  const tokensForThreshold = applyTokenEstimateSafetyFactor(tokensBefore);
+  const thresholdExceeded = tokensForThreshold >= thresholdTokens;
   const thresholdGated = isThresholdGatedTrigger(trigger);
   const policy: ContextCompressionPolicyMetadata = {
     tier: tierForReason(reason),
@@ -274,6 +289,11 @@ function createCompressionDecision(
     tokensBefore,
     thresholdTokens
   };
+}
+
+/** 对近似 token 估算施加安全系数，仅用于 shouldCompress 阈值比较。 */
+export function applyTokenEstimateSafetyFactor(estimatedTokens: number): number {
+  return Math.ceil(estimatedTokens * TOKEN_ESTIMATE_SAFETY_FACTOR);
 }
 
 function reasonForTrigger(trigger: ContextCompressionTrigger): ContextCompressionReason {
@@ -372,6 +392,17 @@ function filePathsFromSnapshotHints(hints: string[], predicate: (hint: string) =
   return [...paths].sort();
 }
 
+/**
+ * 估算上下文 token 用量（近似值，非精确 tokenizer）。
+ *
+ * 策略：
+ * - 优先使用最近一条带 `usage.totalTokens` 的 assistant 消息作为基准，再累加其后消息的启发式估算；
+ * - 若无 usage，则对全部消息做 chars/4 启发式估算；
+ * - 压缩摘要边界之前的旧 usage 会被忽略，避免“压缩后仍用压缩前 usage”导致虚高。
+ *
+ * 注意：该值是 approximate，阈值门控应通过 {@link applyTokenEstimateSafetyFactor} 略提前触发压缩。
+ * 未引入 tiktoken 等重量级依赖，以保持包体与冷启动开销可控。
+ */
 export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEstimate {
   const latestCompressionSummary = findLatestCompressionSummary(messages);
   let usageInfo: { usage: ProviderUsage; index: number } | undefined;
@@ -416,6 +447,7 @@ function messageCreatedAtMs(message: AgentMessage): number {
   return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
+/** 单条消息的启发式 token 估算（约 chars/4，非模型真实 tokenizer）。 */
 export function estimateMessageTokens(message: AgentMessage): number {
   const chars = message.blocks.reduce((sum, block) => sum + estimateBlockChars(block), 0);
   return Math.ceil(chars / 4);
@@ -501,22 +533,46 @@ export function extractRecentTerminalCommandFacts(messages: AgentMessage[], limi
   return { successful: successful.reverse(), failed: failed.reverse() };
 }
 
+/**
+ * 保证 retained 窗口内每个 tool-result 都能配对到其 tool-call。
+ * 预构建 id→消息下标映射，避免反复 slice 导致的 O(n²)。
+ */
 function includeRequiredToolCallMessages(messages: AgentMessage[], firstKeptIndex: number): number {
+  // toolCallId → 包含对应 tool-call 的消息下标
+  const callIndexById = new Map<string, number>();
+  // 每条消息中出现的 tool-result 所依赖的 toolCallId 列表
+  const resultIdsByMessage: string[][] = new Array(messages.length);
+  for (let i = 0; i < messages.length; i++) {
+    const resultIds: string[] = [];
+    for (const block of messages[i]!.blocks) {
+      if (block.type === "tool-call") callIndexById.set(block.id, i);
+      if (block.type === "tool-result") resultIds.push(block.toolCallId);
+    }
+    resultIdsByMessage[i] = resultIds;
+  }
+
   let index = firstKeptIndex;
-  for (;;) {
-    const kept = messages.slice(index);
-    const resultIds = new Set<string>();
-    const callIds = new Set<string>();
-    for (const message of kept) {
-      for (const block of message.blocks) {
-        if (block.type === "tool-result") resultIds.add(block.toolCallId);
-        if (block.type === "tool-call") callIds.add(block.id);
+  while (index > 0) {
+    let earliestMissingCall = index;
+    let hasMissing = false;
+    for (let i = index; i < messages.length; i++) {
+      for (const toolCallId of resultIdsByMessage[i]!) {
+        const callIndex = callIndexById.get(toolCallId);
+        // call 不在 retained 窗口内则需要向前扩展
+        if (callIndex === undefined) {
+          // 全量历史中也没有对应 call：与旧逻辑一致，最终回退到 0
+          return 0;
+        }
+        if (callIndex < index) {
+          hasMissing = true;
+          earliestMissingCall = Math.min(earliestMissingCall, callIndex);
+        }
       }
     }
-    const missing = [...resultIds].some((id) => !callIds.has(id));
-    if (!missing || index === 0) return index;
-    index -= 1;
+    if (!hasMissing) return index;
+    index = earliestMissingCall;
   }
+  return 0;
 }
 
 function includeLatestUserMessage(messages: AgentMessage[], firstKeptIndex: number): number {

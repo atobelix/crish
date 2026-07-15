@@ -540,9 +540,14 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               onChange={(e) => {
                 const v = e.target.checked;
                 setEnableCommands(v);
-                void clientApi.saveSettingsEx(getWorkspacePath() || '', 'global', {
-                  enableSkillCommands: v,
-                });
+                void clientApi
+                  .saveSettingsEx(getWorkspacePath() || '', 'global', {
+                    enableSkillCommands: v,
+                  })
+                  .finally(() => {
+                    // 通知 ChatCard 重载斜杠技能命令（非会话切换）
+                    window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+                  });
               }}
             />
             <span>

@@ -57,9 +57,11 @@ type Props = {
 
 async function pickFolderNative(): Promise<string | null> {
   try {
-    const mod: any = await (Function('return import("@tauri-apps/plugin-dialog")')() as Promise<any>).catch(
-      () => null,
-    );
+    // Optional desktop plugin; avoid Function() dynamic import
+    const dialogSpec = '@tauri-apps/plugin-dialog';
+    const mod = (await import(/* @vite-ignore */ dialogSpec).catch(() => null)) as {
+      open?: (opts: { directory: boolean; multiple: boolean }) => Promise<string | string[] | null>;
+    } | null;
     if (mod?.open) {
       const selected = await mod.open({ directory: true, multiple: false });
       if (typeof selected === 'string' && selected) return selected;

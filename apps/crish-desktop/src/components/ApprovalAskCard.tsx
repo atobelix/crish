@@ -6,6 +6,8 @@ import * as Lucide from 'lucide-react';
 
 type Props = {
   msgId: string;
+  /** 工具调用 id，供底部审批条 scrollIntoView */
+  toolId?: string;
   summary: string;
   cmd?: string;
   busy?: boolean;
@@ -55,6 +57,7 @@ function plainQuestion(summary: string, cmd?: string): string {
 
 export const ApprovalAskCard: React.FC<Props> = ({
   msgId,
+  toolId,
   summary,
   cmd,
   busy,
@@ -66,7 +69,14 @@ export const ApprovalAskCard: React.FC<Props> = ({
   const question = plainQuestion(summary, cmd);
 
   return (
-    <div className="approval-card" role="region" aria-label="需要你的确认" data-msg={msgId}>
+    <div
+      className="approval-card"
+      role="region"
+      aria-label="需要你的确认"
+      data-msg={msgId}
+      data-tool-id={toolId || undefined}
+      tabIndex={-1}
+    >
       <div className="approval-card-top">
         <span className="approval-card-badge">
           <Lucide.ShieldQuestion size={14} strokeWidth={1.75} />

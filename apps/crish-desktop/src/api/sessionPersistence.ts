@@ -138,8 +138,8 @@ export function loadSessionAgents(sessionId: string): SessionAgent[] {
   return list.map((a) => ({
     ...a,
     messages: sanitizeMessagesForHydrate(a.messages || []),
-    // 重开时 running 收成中断
-    status: a.status === 'running' ? 'failed' : a.status,
+    // 重开时 running 收成已停止（非失败）
+    status: a.status === 'running' ? 'stopped' : a.status,
     summary:
       a.status === 'running'
         ? a.summary || '上次会话中断，协作 agent 未完成'

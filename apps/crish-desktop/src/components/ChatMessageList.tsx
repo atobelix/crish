@@ -2,7 +2,7 @@
  * 消息列表渲染：空状态 + user/assistant bubbles + 工具时间线。
  * 从 ChatCard 剪切粘贴，保持 className；状态机/stream 仍在 ChatCard。
  */
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
 import {
@@ -51,7 +51,7 @@ function formatTime(ts?: number) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-export const ChatMessageList: React.FC<ChatMessageListProps> = ({
+const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   messages,
   agents,
   activeSessionId,
@@ -73,14 +73,49 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onApprovalAllow,
   onApprovalDeny,
 }) => {
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  /** 按会话保留工具展开态，切换 session 不互相冲掉 */
+  const [expandedToolsBySession, setExpandedToolsBySession] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
   const [expandedUserMsgs, setExpandedUserMsgs] = useState<Record<string, boolean>>({});
   const activeProject = getActiveProject();
+  const sessionKey = activeSessionId || '_';
+  const expandedTools = expandedToolsBySession[sessionKey] || {};
 
   /** 切换展开；须传入当前展示态，避免 defaultOpen=true 时首次点击仍为 true */
-  const toggleTool = (toolId: string, currentlyOpen: boolean) => {
-    setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
-  };
+  const toggleTool = useCallback(
+    (toolId: string, currentlyOpen: boolean) => {
+      setExpandedToolsBySession((prev) => ({
+        ...prev,
+        [sessionKey]: {
+          ...(prev[sessionKey] || {}),
+          [toolId]: !currentlyOpen,
+        },
+      }));
+    },
+    [sessionKey],
+  );
+
+  /** 代码块「复制」按钮（markdown 注入的 .md-code-copy） */
+  const handleMarkdownClick = useCallback(
+    (e: React.MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      const btn = t?.closest?.('.md-code-copy') as HTMLElement | null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const fromAttr = btn.getAttribute('data-copy');
+      const fromPre =
+        btn.closest('.md-code-block')?.querySelector('pre')?.textContent ?? '';
+      const text = fromAttr != null && fromAttr !== '' ? fromAttr : fromPre;
+      if (!text) return;
+      void navigator.clipboard.writeText(text).then(
+        () => onShowToast('已复制'),
+        () => onShowToast('复制失败'),
+      );
+    },
+    [onShowToast],
+  );
 
   const toolStackProps = {
     agents,
@@ -174,7 +209,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   )?.id;
 
   return (
-    <>
+    <div className="chat-message-list" onClick={handleMarkdownClick}>
       {messages.map((msg, index) => {
         const prevMsg = index > 0 ? messages[index - 1] : null;
         const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
@@ -416,6 +451,8 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           </div>
         );
       })}
-    </>
+    </div>
   );
 };
+
+export const ChatMessageList = React.memo(ChatMessageListInner);

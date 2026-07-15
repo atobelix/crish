@@ -214,6 +214,7 @@ function CompactToolRow({
       <ApprovalAskCard
         key={rowKey}
         msgId={mid}
+        toolId={tc.id}
         summary={summary}
         cmd={tech && tech !== summary ? tech : techFull || undefined}
         busy={approvalBusy}

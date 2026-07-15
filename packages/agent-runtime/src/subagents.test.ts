@@ -242,4 +242,76 @@ describe("subagent tool", () => {
 
     expect(observedMode).toBe("verify");
   });
+
+  it("emits failed progress and structured error when provider resolve throws before start", async () => {
+    const progressStatuses: string[] = [];
+    const tool = createSubagentTool({
+      cwd: "C:/repo",
+      provider: async () => {
+        throw new Error("provider resolve failed");
+      },
+      onProgress: (event) => {
+        progressStatuses.push(event.status);
+      }
+    });
+    const context: ToolExecutionContext = {
+      toolCallId: "call",
+      sessionId: "parent",
+      cwd: "C:/repo",
+      signal: new AbortController().signal,
+      emit: () => undefined
+    };
+
+    const output = await tool.execute({ prompt: "do work", description: "setup fail" }, context);
+    const json = output.json as Record<string, unknown>;
+
+    expect(json).toMatchObject({
+      status: "failed",
+      error: "provider resolve failed",
+      description: "setup fail"
+    });
+    expect(progressStatuses).toContain("failed");
+    expect(String(json.completionSummary)).toContain("provider resolve failed");
+  });
+
+  it("denies creation when global maxConcurrent is exceeded", async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const blockingTool = createSubagentTool({
+      cwd: "C:/repo",
+      depthGuard: { maxDepth: 2, maxSiblings: 4, maxConcurrent: 1 },
+      provider: async () => {
+        await hold;
+        return createScriptedProvider([[{ type: "text-delta", text: "done" }, { type: "stop", reason: "stop" }]]);
+      }
+    });
+    const deniedTool = createSubagentTool({
+      cwd: "C:/repo",
+      depthGuard: { maxDepth: 2, maxSiblings: 4, maxConcurrent: 1 },
+      provider: createScriptedProvider([[{ type: "text-delta", text: "never" }, { type: "stop", reason: "stop" }]])
+    });
+    const context: ToolExecutionContext = {
+      toolCallId: "call",
+      sessionId: "parent",
+      cwd: "C:/repo",
+      signal: new AbortController().signal,
+      emit: () => undefined
+    };
+
+    const running = blockingTool.execute({ prompt: "hold", description: "holder" }, context);
+    // 让 holder 先占住全局并发配额
+    await Promise.resolve();
+    const denied = await deniedTool.execute({ prompt: "overflow", description: "denied child" }, context);
+    release();
+    await running;
+
+    expect(denied.json).toMatchObject({
+      error: "max-concurrent-exceeded",
+      maxConcurrent: 1,
+      description: "denied child"
+    });
+    expect(String(denied.text)).toContain("maximum concurrent");
+  });
 });

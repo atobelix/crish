@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { WorkspaceState, CardGroupState, ColumnState } from '../store/layoutStore';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { CardPanel } from './CardPanel';
 import * as Lucide from 'lucide-react';
 
@@ -9,10 +10,13 @@ interface WorkspaceProps {
   onShowToast: (message: string) => void;
 }
 
-export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
-  const { resizeColumns, resizeGroups, closeWorkspace, workspaces } = useLayoutStore();
-  const draggedTab = useLayoutStore((state) => state.draggedTab);
-  const dropPreview = useLayoutStore((state) => state.dropPreview);
+export const Workspace: React.FC<WorkspaceProps> = React.memo(({ ws, onShowToast }) => {
+  const resizeColumns = useLayoutStore((s) => s.resizeColumns);
+  const resizeGroups = useLayoutStore((s) => s.resizeGroups);
+  const closeWorkspace = useLayoutStore((s) => s.closeWorkspace);
+  const workspaces = useLayoutStore((s) => s.workspaces);
+  const draggedTab = useLayoutStore((s) => s.draggedTab);
+  const dropPreview = useLayoutStore((s) => s.dropPreview);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Column Resizer Pointer Events
@@ -253,110 +257,112 @@ export const Workspace: React.FC<WorkspaceProps> = ({ ws, onShowToast }) => {
         </div>
       )}
 
-      {/* Main Column Grid */}
-      <div className="workspace-canvas">
-        {renderedColumns.map((col, colIdx) => {
-          // Calculate cumulative width ratios to position col-splitter resizer elements
-          let leftOffsetPercent = 0;
-          for (let i = 0; i < colIdx; i++) {
-            leftOffsetPercent += renderedColumns[i].widthRatio * 100;
-          }
+      {/* Main Column Grid — isolated so a panel crash doesn't blank the whole workspace chrome */}
+      <AppErrorBoundary compact>
+        <div className="workspace-canvas">
+          {renderedColumns.map((col, colIdx) => {
+            // Calculate cumulative width ratios to position col-splitter resizer elements
+            let leftOffsetPercent = 0;
+            for (let i = 0; i < colIdx; i++) {
+              leftOffsetPercent += renderedColumns[i].widthRatio * 100;
+            }
 
-          return (
-            <React.Fragment key={col.id}>
-              {/* Column splitter handle (rendered before all columns except column 0, and not for placeholder columns) */}
-              {colIdx > 0 && col.origColIdx !== -1 && renderedColumns[colIdx - 1].origColIdx !== -1 && (
+            return (
+              <React.Fragment key={col.id}>
+                {/* Column splitter handle (rendered before all columns except column 0, and not for placeholder columns) */}
+                {colIdx > 0 && col.origColIdx !== -1 && renderedColumns[colIdx - 1].origColIdx !== -1 && (
+                  <div
+                    className="col-splitter"
+                    onPointerDown={(e) => handleColResizerPointerDown(e, col.origColIdx - 1)}
+                    style={{
+                      left: `calc(${leftOffsetPercent}% - 3px)`,
+                    }}
+                  />
+                )}
+
+                {/* Column Element */}
                 <div
-                  className="col-splitter"
-                  onPointerDown={(e) => handleColResizerPointerDown(e, col.origColIdx - 1)}
+                  className="workspace-column"
                   style={{
-                    left: `calc(${leftOffsetPercent}% - 3px)`,
+                    width: `${col.widthRatio * 100}%`,
+                    flex: '0 0 auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100%',
+                    position: 'relative',
+                    minWidth: 0,
                   }}
-                />
-              )}
+                >
+                  {col.groups.map((group, groupIdx) => {
+                    let topOffsetPercent = 0;
+                    for (let i = 0; i < groupIdx; i++) {
+                      topOffsetPercent += col.groups[i].heightRatio * 100;
+                    }
 
-              {/* Column Element */}
-              <div
-                className="workspace-column"
-                style={{
-                  width: `${col.widthRatio * 100}%`,
-                  flex: '0 0 auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%',
-                  position: 'relative',
-                  minWidth: 0,
-                }}
-              >
-                {col.groups.map((group, groupIdx) => {
-                  let topOffsetPercent = 0;
-                  for (let i = 0; i < groupIdx; i++) {
-                    topOffsetPercent += col.groups[i].heightRatio * 100;
-                  }
+                    return (
+                      <React.Fragment key={group.id}>
+                        {/* Card Group splitter handle (rendered before all groups except group 0, and not for placeholder groups) */}
+                        {groupIdx > 0 && group.origGroupIdx !== -1 && col.groups[groupIdx - 1].origGroupIdx !== -1 && (
+                          <div
+                            className="group-splitter"
+                            onPointerDown={(e) =>
+                              handleGroupResizerPointerDown(e, col.origColIdx, group.origGroupIdx - 1)
+                            }
+                            style={{
+                              top: `calc(${topOffsetPercent}% - 3px)`,
+                            }}
+                          />
+                        )}
 
-                  return (
-                    <React.Fragment key={group.id}>
-                      {/* Card Group splitter handle (rendered before all groups except group 0, and not for placeholder groups) */}
-                      {groupIdx > 0 && group.origGroupIdx !== -1 && col.groups[groupIdx - 1].origGroupIdx !== -1 && (
-                        <div
-                          className="group-splitter"
-                          onPointerDown={(e) =>
-                            handleGroupResizerPointerDown(e, col.origColIdx, group.origGroupIdx - 1)
-                          }
-                          style={{
-                            top: `calc(${topOffsetPercent}% - 3px)`,
-                          }}
-                        />
-                      )}
+                        {/* Card Group */}
+                        {group.origGroupIdx === -1 ? (
+                          <div
+                            className="workspace-card placeholder-card-group"
+                            style={{
+                              height: `${group.heightRatio * 100}%`,
+                              flex: '0 0 auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              minHeight: 0,
+                              border: '1.5px dashed var(--accent-color, #333333)',
+                              background: 'rgba(55, 65, 81, 0.03)',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              fontSize: '11px',
+                              color: 'var(--text-secondary)',
+                              margin: '4px',
+                              borderRadius: '6px',
+                              boxSizing: 'border-box',
+                            }}
+                          >
+                            <Lucide.Plus size={16} style={{ marginBottom: '4px', opacity: 0.6 }} />
+                            <span>{group.cards[0].title}</span>
+                          </div>
+                        ) : (
+                          <CardPanel
+                            wsId={ws.id}
+                            colIdx={col.origColIdx}
+                            groupIdx={group.origGroupIdx}
+                            onShowToast={onShowToast}
+                            heightRatio={group.heightRatio}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
 
-                      {/* Card Group */}
-                      {group.origGroupIdx === -1 ? (
-                        <div
-                          className="workspace-card placeholder-card-group"
-                          style={{
-                            height: `${group.heightRatio * 100}%`,
-                            flex: '0 0 auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            minHeight: 0,
-                            border: '1.5px dashed var(--accent-color, #333333)',
-                            background: 'rgba(55, 65, 81, 0.03)',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)',
-                            margin: '4px',
-                            borderRadius: '6px',
-                            boxSizing: 'border-box',
-                          }}
-                        >
-                          <Lucide.Plus size={16} style={{ marginBottom: '4px', opacity: 0.6 }} />
-                          <span>{group.cards[0].title}</span>
-                        </div>
-                      ) : (
-                        <CardPanel
-                          wsId={ws.id}
-                          colIdx={col.origColIdx}
-                          groupIdx={group.origGroupIdx}
-                          onShowToast={onShowToast}
-                          heightRatio={group.heightRatio}
-                        />
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      {/* Drag Indicator drop overlay layer */}
-      <div
-        id={`drop-indicator-${ws.id}`}
-        className="drop-indicator"
-        style={{ display: 'none' }}
-      />
+        {/* Drag Indicator drop overlay layer */}
+        <div
+          id={`drop-indicator-${ws.id}`}
+          className="drop-indicator"
+          style={{ display: 'none' }}
+        />
+      </AppErrorBoundary>
     </div>
   );
-};
+});

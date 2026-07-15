@@ -152,8 +152,9 @@ export function parseMarkdownToHtml(raw: string): string {
     } catch {
       inner = escapeHtml(body);
     }
+    // 容器 + 复制按钮；data-copy 存原始代码（属性转义）
     fences.push(
-      `<pre class="md-code-block hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre>`,
+      `<div class="md-code-block"><button type="button" class="md-code-copy" data-copy="${escapeHtml(body)}" title="复制">复制</button><pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`,
     );
     return `\n%%FENCE${i}%%\n`;
   });
@@ -286,7 +287,8 @@ export function parseMarkdownToHtml(raw: string): string {
         t.startsWith('<hr') ||
         t.startsWith('<img') ||
         t.startsWith('<table') ||
-        t.startsWith('<div class="md-table')
+        t.startsWith('<div class="md-table') ||
+        t.startsWith('<div class="md-code-block')
       ) {
         return t;
       }

@@ -343,7 +343,13 @@ function AgentLaunchPad({
                 <Lucide.Bot size={14} strokeWidth={1.75} />
                 <span className="agent-launch-item-t">{a.description || a.mode || a.id}</span>
                 <span className={`agent-card-badge agent-card-badge--${a.status}`}>
-                  {a.status === 'running' ? '运行中' : a.status === 'failed' ? '失败' : '完成'}
+                  {a.status === 'running'
+                    ? '运行中'
+                    : a.status === 'failed'
+                      ? '失败'
+                      : a.status === 'stopped'
+                        ? '已停止'
+                        : '完成'}
                 </span>
               </button>
             ))}
@@ -364,7 +370,7 @@ interface AgentCardProps {
   onOpenWindow?: () => void;
 }
 
-export const AgentCard: React.FC<AgentCardProps> = ({
+export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   agentId,
   parentSessionId,
   embedded,
@@ -414,11 +420,21 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           .getState()
           .sessions.find((s) => s.id === sess.id)
           ?.agents?.find((a) => a.id === agent.id);
-        if (live?.status === 'running' && /complete|success|failed|cancel|error/i.test(st.status)) {
+        if (live?.status === 'running' && /complete|success|failed|cancel|error|stopp?ed|abort/i.test(st.status)) {
+          const raw = String(st.status);
+          const nextStatus: 'completed' | 'failed' | 'stopped' = /cancel|stopp?ed|abort/i.test(raw)
+            ? 'stopped'
+            : /fail|error/i.test(raw)
+              ? 'failed'
+              : 'completed';
           patchSessionAgent(sess.id, agent.id, {
-            status: /fail|error|cancel/i.test(st.status) ? 'failed' : 'completed',
+            status: nextStatus,
             endedAt: Date.now(),
-            summary: live.summary || st.latestError || st.progress,
+            summary:
+              live.summary ||
+              st.latestError ||
+              st.progress ||
+              (nextStatus === 'stopped' ? '已停止' : undefined),
           });
         }
       }
@@ -644,7 +660,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
       void getDesktopCancel(agent.subagentRunId);
     }
     patchSessionAgent(parentSessId, agent.id, {
-      status: 'failed',
+      status: 'stopped',
       summary: agent.summary || '已停止',
       endedAt: Date.now(),
     });
@@ -660,7 +676,13 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             {agent.description || '协作 agent'}
           </span>
           <span className={`agent-card-badge agent-card-badge--${agent.status}`}>
-            {running ? '运行中' : agent.status === 'failed' ? '失败' : '完成'}
+            {running
+              ? '运行中'
+              : agent.status === 'failed'
+                ? '失败'
+                : agent.status === 'stopped'
+                  ? '已停止'
+                  : '完成'}
           </span>
           {agent.mode ? <span className="agent-card-mode">{agent.mode}</span> : null}
         </div>
@@ -768,7 +790,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
       </div>
     </div>
   );
-};
+});
 
 function shortPath(p: string): string {
   const parts = p.replace(/\\/g, '/').split('/');
@@ -855,6 +877,7 @@ function AgentMessageRow({
                     <ApprovalAskCard
                       key={tc.id}
                       msgId={msg.id}
+                      toolId={tc.id}
                       summary={summary}
                       cmd={cmd && cmd !== summary ? cmd : techFull || undefined}
                       onAllow={() => {
@@ -946,7 +969,7 @@ function AgentMessageRow({
   );
 }
 
-/** 新窗口打开 agent 只读快照 */
+/** 新窗口打开 agent 只读快照（Blob URL，避免 document.write） */
 export function openAgentInNewWindow(agent: SessionAgent): void {
   const w = window.open('', '_blank', 'noopener,noreferrer,width=720,height=900');
   if (!w) return;
@@ -956,10 +979,18 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  const statusLabel =
+    agent.status === 'running'
+      ? '运行中'
+      : agent.status === 'failed'
+        ? '失败'
+        : agent.status === 'stopped'
+          ? '已停止'
+          : '完成';
   const lines: string[] = [];
   lines.push(`<h1>${esc(agent.description || '协作 agent')}</h1>`);
   lines.push(
-    `<p class="meta">${esc(agent.mode)} · ${esc(agent.status)}${
+    `<p class="meta">${esc(agent.mode)} · ${esc(statusLabel)}${
       agent.summary ? ' · ' + esc(agent.summary) : ''
     }</p>`,
   );
@@ -977,7 +1008,7 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
       }
     }
   }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(
+  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(
     agent.description || 'agent',
   )}</title>
 <style>
@@ -986,7 +1017,23 @@ h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px
 .u{background:#e8eef8;padding:10px 12px;border-radius:12px;margin:10px 0 10px auto;max-width:85%;width:fit-content}
 .a{background:#fff;border:1px solid #eee;padding:10px 12px;border-radius:12px;margin:10px 0;white-space:pre-wrap}
 .t{font-size:12px;color:#666;margin:6px 0 6px 8px}pre{white-space:pre-wrap;font-size:11px;background:#f4f4f5;padding:8px;border-radius:6px}
-</style></head><body>${lines.join('\n')}</body></html>`);
-  w.document.close();
+</style></head><body>${lines.join('\n')}</body></html>`;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const revoke = () => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
+  };
+  try {
+    w.addEventListener('load', revoke, { once: true });
+  } catch {
+    /* ignore */
+  }
+  // 兜底：部分环境 load 不可靠
+  window.setTimeout(revoke, 60_000);
+  w.location.href = url;
 }
 

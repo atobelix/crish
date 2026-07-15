@@ -52,7 +52,7 @@ export interface StreamCallbacks {
   onSubagentEnded?: (info: {
     subagentId: string;
     subagentRunId: string;
-    status: 'completed' | 'failed';
+    status: 'completed' | 'failed' | 'stopped';
     summary?: string;
   }) => void;
 }
