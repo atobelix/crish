@@ -132,24 +132,45 @@ export async function moveSessionLeaf(
   };
 }
 
+/**
+ * InMemorySessionStore 的容量上限。
+ *
+ * 该 store 在 runtime.ts 中作为未提供持久化 store 时的默认 fallback，
+ * 长会话或 daemon 长跑场景下 entries 会单调增长导致内存泄漏。
+ * 使用 BoundedMap 以 entry.id 为 key 存储，超容量时按 FIFO 淘汰最旧条目，
+ * 既保留按 id 去重的语义，又提供强制容量约束。
+ */
+const IN_MEMORY_SESSION_STORE_CAPACITY = 500;
+
 export class InMemorySessionStore implements SessionPersistenceStore {
   header: SessionHeader | null = null;
-  entries: SessionEntry[] = [];
+  private readonly entriesStore = new BoundedMap<string, SessionEntry>(IN_MEMORY_SESSION_STORE_CAPACITY);
 
   async open(session: SessionHeader): Promise<void> {
     this.header = session;
   }
 
   async append(entry: SessionEntry): Promise<void> {
-    this.entries.push(entry);
+    this.entriesStore.set(entry.id, entry);
   }
 
   async readAll(): Promise<SessionEntry[]> {
-    return [...this.entries];
+    return this.entriesStore.values();
   }
 
   async close(): Promise<void> {
     // 内存存储无需释放资源
+  }
+
+  /**
+   * 按插入顺序返回所有 entries 的快照数组（受容量上限约束，超容量时淘汰最旧）。
+   *
+   * 兼容历史 API：原为 public 数组字段，外部调用方（含测试）依赖
+   * `.find / .filter / .at(-1) / .length` 等数组操作。改为 getter 返回快照数组，
+   * 既保留数组接口，又确保所有访问经过 BoundedMap 的容量约束。
+   */
+  get entries(): SessionEntry[] {
+    return this.entriesStore.values();
   }
 }
 

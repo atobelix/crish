@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
 import { useLayoutStore, initLayoutStorePersistence } from './store/layoutStore';
 import { getSessionById } from './store/sessionStore';
 import {

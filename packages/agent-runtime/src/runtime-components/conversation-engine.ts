@@ -284,6 +284,7 @@ export class ConversationEngine {
    */
   replaceMessages(messages: AgentMessage[]): void {
     this.messages = [...messages];
+    this.refreshFrozenView();
   }
 
   /**
