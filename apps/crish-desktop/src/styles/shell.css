@@ -1819,7 +1819,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   min-height: var(--ws-row2-tab-h) !important;
   max-height: var(--ws-row2-tab-h);
   padding: 0 12px 0 12px !important;
-  min-width: 0 !important;
+  min-width: 96px !important;
   max-width: 220px;
   margin: 0 0 -1px !important;
   border-radius: var(--ws-row2-tab-radius) !important;
@@ -2039,6 +2039,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: none !important;
 }
 
+/* [Migrated to Workspace.module.css]
 .workspace-section {
   position: relative;
   height: 100%;
@@ -2047,7 +2048,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 !important; /* Flattened padding */
+  padding: 0 !important;
 }
 
 .workspace-canvas {
@@ -2055,24 +2056,23 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: 100%;
   position: relative;
   display: flex;
-  gap: 0 !important; /* Flattened column gap */
+  gap: 0 !important;
 }
 
 .workspace-column {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 0 !important; /* Flattened card gap */
+  gap: 0 !important;
   position: relative;
-  min-width: 0; /* allow side columns to shrink without blowing flex siblings */
-  /* Smooth width transition when columns are added/removed via togglePanel */
+  min-width: 0;
   transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Suppress transition during manual resize drag */
 .resizing-active .workspace-column {
   transition: none !important;
 }
+*/
 .resizing-active iframe,
 .resizing-active webview {
   pointer-events: none !important;
@@ -2094,7 +2094,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   border: none !important;
   border-right: 1px solid var(--border-subtle) !important;
   border-bottom: 1px solid var(--border-subtle) !important;
-  transition: height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: height 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Suppress card transition during manual resize drag or window resizing */
@@ -2433,8 +2433,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   stroke-linejoin: round;
 }
 
-/* --- SPLITTERS RESIZERS --- */
-/* 命中区略宽；可见线 1px，中间实、两头收到 0；悬停略加强 */
+/* [Migrated to Workspace.module.css]
 .col-splitter {
   width: 5px;
   cursor: col-resize;
@@ -2530,6 +2529,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
     transparent 100%
   );
 }
+*/
 
 /* --- CARD SUBHEADERS --- */
 .card-subheader {
@@ -5037,7 +5037,7 @@ body {
 /* 3) Sidebar density：间距阶梯 --space-*，行高对齐 --row-height */
 .crish-sidebar .sidebar-scroll {
   gap: var(--space-1, 4px);
-  padding: 0 var(--space-1, 4px) var(--space-2, 6px) 6px !important;
+  padding: 0 2px var(--space-2, 6px) 6px !important;
 }
 .crish-sidebar .sb-list-scroll {
   padding-bottom: var(--space-2, 6px);

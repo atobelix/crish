@@ -261,6 +261,19 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     }
   }, []);
 
+  // 保证侧栏收起/展开状态与全局 CSS 变量同步，防拖拽关闭后点击无响应
+  useEffect(() => {
+    if (document.body.classList.contains('is-resizing')) {
+      return;
+    }
+    if (sidebarCollapsed) {
+      document.documentElement.style.setProperty('--sidebar-width', '0px');
+    } else {
+      document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidthPx}px`);
+      window.dispatchEvent(new Event('crish-sidebar-resize'));
+    }
+  }, [sidebarCollapsed, sidebarWidthPx]);
+
   useEffect(() => {
     return onUiEvent('update-changed', () => {
       setUpdateAvailableState(isUpdateAvailable());

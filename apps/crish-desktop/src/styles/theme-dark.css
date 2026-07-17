@@ -137,7 +137,7 @@ html[data-theme="dark"] .card-tab.active {
 }
 
 html[data-theme="dark"] .tool-result-body {
-  background: transparent;
+  border-color: var(--border-color);
 }
 
 /* Active rows use color-mix(text-primary) in shell.css — theme-agnostic, no dark rgba override */
@@ -645,7 +645,6 @@ html[data-theme="dark"] .tool-row-ico-slot {
   color: var(--text-tertiary);
 }
 html[data-theme="dark"] .tool-result-body {
-  background: transparent;
   color: var(--text-secondary);
 }
 html[data-theme="dark"] .tool-result-pre {

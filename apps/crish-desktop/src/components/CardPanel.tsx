@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useLayoutStore } from '../store/layoutStore';
+import styles from './CardPanel.module.css';
 import {
   useSessionStore,
   selectActiveSession,
@@ -148,32 +149,23 @@ function PanelBodyEmpty({
 }) {
   return (
     <div
-      className="panel-body-empty"
+      className={`${styles.empty} panel-body-empty`}
       role="status"
       aria-live="polite"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        padding: '20px 16px',
-        minHeight: 120,
-        textAlign: 'center',
-        color: 'var(--text-secondary, #6b7280)',
-        fontSize: 'var(--font-size-sm, 13px)',
-        lineHeight: 1.45,
-      }}
     >
-      <Lucide.LayoutPanelLeft size={22} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
-      <div style={{ fontWeight: 500, color: 'var(--text-primary, #111)' }}>{title}</div>
-      <div style={{ maxWidth: 240 }}>{hint}</div>
+      <Lucide.LayoutPanelLeft
+        size={22}
+        strokeWidth={1.5}
+        aria-hidden
+        className={styles.emptyIcon}
+      />
+      <div className={styles.emptyTitle}>{title}</div>
+      <div className={styles.emptyHint}>{hint}</div>
       <button
         type="button"
-        className="card-action-btn"
+        className={`${styles.emptyBtn} card-action-btn`}
         onClick={onOpenOverview}
         aria-label="打开总览侧栏"
-        style={{ marginTop: 4 }}
       >
         打开总览
       </button>
@@ -549,7 +541,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
 
   return (
     <div
-      className={`workspace-card ${activeCardId === 'chat' ? 'flat-layout' : ''} ${isDraggingThisGroup ? 'drag-ghost-hidden' : ''} ${insetChatChrome ? 'workspace-card--no-chat-chrome' : ''}`}
+      className={`${styles.card} workspace-card ${activeCardId === 'chat' ? 'flat-layout' : ''} ${isDraggingThisGroup ? 'drag-ghost-hidden' : ''} ${insetChatChrome ? 'workspace-card--no-chat-chrome' : ''}`}
       data-group-id={group.id}
       data-col-idx={colIdx}
       data-group-idx={groupIdx}
@@ -559,10 +551,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
       aria-label={regionLabel}
       style={{
         height: `${(heightRatio !== undefined ? heightRatio : group.heightRatio) * 100}%`,
-        flex: '0 0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
       }}
     >
       {/* inset 聊天列：第二行 = 会话标签（宽度=聊天列，右侧留给工具标签） */}
@@ -628,6 +616,13 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                 onClick={() => handleTabClick(c.id)}
                 onPointerDown={(e) => handleTabPointerDown(e, c.id)}
                 onKeyDown={(e) => onTabKeyDown(e, c.id, index)}
+                onAuxClick={(e) => {
+                  if (e.button === 1 && isClosableTab(c.id)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeToolTab(c.id, resolveFocusAfterClose(c.id));
+                  }
+                }}
                 style={{ touchAction: 'none' }}
                 title={hint}
                 aria-label={hint}
@@ -724,33 +719,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
               document.body,
             )
           : null}
-        
-        <div className="card-header-right">
-          <button
-            type="button"
-            ref={sideActionBtnRef}
-            className="card-action-btn"
-            title={activeCardId === 'chat' ? '打开总览侧栏' : '收起侧栏'}
-            aria-label={activeCardId === 'chat' ? '打开总览侧栏' : '收起侧栏'}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (activeCardId === 'chat') {
-                handleGlobalTabClick('overview');
-              } else {
-                // 收起侧栏：只压工具列宽度，保留标签与面板状态（会话内可再开）
-                // 与标签 X 关闭不同——X 才真正卸掉内容
-                pendingFocusCardIdRef.current = '__side__';
-                useLayoutStore.setState((state) => {
-                  const w = state.workspaces.find((x) => x.id === wsId);
-                  if (!w) return;
-                  collapseToolColumnPreserve(w);
-                });
-              }
-            }}
-          >
-            <IconSidebarRight size={15} aria-hidden />
-          </button>
-        </div>
       </div>
       ) : null}
 
@@ -797,18 +765,11 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                 return (
                   <div
                     key={id}
-                    className="card-body-pane"
+                    className={`${styles.pane} card-body-pane`}
                     data-panel-id={id}
                     data-active={active ? '1' : '0'}
                     hidden={!active}
                     aria-hidden={!active}
-                    style={{
-                      display: active ? 'flex' : 'none',
-                      flexDirection: 'column',
-                      flex: 1,
-                      minHeight: 0,
-                      minWidth: 0,
-                    }}
                   >
                     {id === 'preview' ? (
                       <PreviewCard wsId={wsId} onShowToast={onShowToast} />

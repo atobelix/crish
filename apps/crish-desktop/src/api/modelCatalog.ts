@@ -7,6 +7,7 @@
  */
 
 import { loadProfiles, type ProviderProfile } from './providerProfiles';
+import { getDesktopDaemonClient } from './daemonClient';
 import { invokeResult } from './tauriInvoke';
 
 const META_KEY = 'crish_model_meta_v1';
@@ -660,6 +661,34 @@ export async function scanProviderModels(
   const url = modelsListUrl(fresh.baseUrl);
   if (!url) return { ok: false, models: [], error: '未配置地址（Base URL）' };
 
+  const client = getDesktopDaemonClient();
+  if (client.isConnected()) {
+    try {
+      const res = await client.request<{ ok: boolean; models?: string[]; error?: string }>(
+        {
+          type: 'probe-provider-models',
+          profileId: fresh.id,
+          baseUrl: fresh.baseUrl,
+          apiKey: key,
+        },
+        'provider-models-probed'
+      );
+      if (res.ok && res.models) {
+        for (const m of res.models) {
+          const ctx = guessContextLength(m);
+          if (ctx) {
+            upsertModelMeta(fresh.id, m, { contextLength: ctx });
+          }
+        }
+        return { ok: true, models: res.models };
+      } else {
+        return { ok: false, models: [], error: res.error || '获取失败' };
+      }
+    } catch (e: any) {
+      console.warn('Daemon scan models failed, falling back...', e);
+    }
+  }
+
   try {
     const res = await httpRequest(url, {
       method: 'GET',
@@ -752,6 +781,36 @@ export async function testProviderModel(
     });
     return r;
   }
+  const client = getDesktopDaemonClient();
+  if (client.isConnected()) {
+    try {
+      const res = await client.request<{ ok: boolean; latencyMs?: number; error?: string }>(
+        {
+          type: 'probe-provider-chat',
+          profileId: fresh.id,
+          baseUrl: fresh.baseUrl,
+          apiKey: key,
+          model,
+        },
+        'provider-chat-probed'
+      );
+      if (res.ok) {
+        upsertModelMeta(fresh.id, model, {
+          lastTest: { ok: true, latencyMs: res.latencyMs, at: Date.now() },
+        });
+        return { ok: true, latencyMs: res.latencyMs };
+      } else {
+        const error = res.error || '连通失败';
+        upsertModelMeta(fresh.id, model, {
+          lastTest: { ok: false, latencyMs: res.latencyMs, at: Date.now(), error },
+        });
+        return { ok: false, latencyMs: res.latencyMs, error };
+      }
+    } catch (e: any) {
+      console.warn('Daemon test model failed, falling back...', e);
+    }
+  }
+
   const started = performance.now();
   try {
     const res = await httpRequest(url, {

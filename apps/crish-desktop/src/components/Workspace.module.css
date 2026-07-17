@@ -1,0 +1,258 @@
+.section {
+  position: relative;
+  height: 100%;
+  flex: 1;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 !important; /* Flattened padding */
+  opacity: 1;
+  transition: opacity var(--transition-fast, 0.15s) ease, outline var(--transition-fast, 0.15s) ease;
+}
+
+.section[data-ws-split="true"]:not([data-ws-active="true"]) {
+  opacity: 0.92;
+}
+
+.section[data-ws-split="true"][data-ws-active="true"] {
+  outline: 1px solid color-mix(in srgb, var(--text-primary, #111) 8%, transparent);
+  outline-offset: -1px;
+}
+
+.live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.splitChrome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-1, 4px) var(--space-3, 8px);
+  min-height: var(--control-height-sm, 28px);
+  background-color: var(--bg-primary);
+  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-color));
+  font-size: var(--font-size-xs, 11px);
+  line-height: var(--line-height-tight, 1.25);
+  color: var(--text-secondary);
+  border-radius: 0;
+  margin-bottom: 0;
+  gap: var(--space-2, 6px);
+  flex-shrink: 0;
+}
+
+.splitInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+}
+
+.splitLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.splitSubLabel {
+  margin-left: var(--space-2, 6px);
+  opacity: 0.75;
+  font-size: var(--font-size-xs, 11px);
+}
+
+.splitActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-shrink: 0;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  gap: 0 !important; /* Flattened column gap */
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 0 !important; /* Flattened card gap */
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:global(.resizing-active) .column,
+:global(.window-resizing) .column,
+.column[data-resizing="true"] {
+  transition: none !important;
+}
+
+.colSplitter {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  transition: left 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.colSplitter::after {
+  content: '';
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  transition: opacity 0.15s ease, width 0.15s ease;
+  pointer-events: none;
+}
+
+.colSplitter:hover::after,
+.colSplitter[data-active="true"]::after {
+  width: 1.5px;
+  opacity: 1;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
+    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    transparent 100%
+  );
+}
+
+.groupSplitter {
+  height: 5px;
+  cursor: row-resize;
+  background: transparent;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  transition: top 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:global(.resizing-active) .colSplitter,
+:global(.window-resizing) .colSplitter,
+:global(.resizing-active) .groupSplitter,
+:global(.window-resizing) .groupSplitter {
+  transition: none !important;
+}
+
+.groupSplitter::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  transition: opacity 0.15s ease, height 0.15s ease;
+  pointer-events: none;
+}
+
+.groupSplitter:hover::after,
+.groupSplitter[data-active="true"]::after {
+  height: 1.5px;
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
+    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    transparent 100%
+  );
+}
+
+.placeholderCol {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-4, 16px);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 12px);
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1.5px dashed var(--border-color);
+  border-radius: 8px;
+  margin: var(--space-3, 8px);
+  flex: 1;
+}
+
+.placeholderColTitle {
+  font-weight: var(--font-weight-medium, 500);
+  margin-bottom: var(--space-1, 4px);
+  color: var(--text-secondary);
+}
+
+.placeholderCardGroup {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1.5px dashed var(--accent-color, #333333);
+  background: rgba(55, 65, 81, 0.03);
+  justify-content: center;
+  align-items: center;
+  font-size: var(--font-size-xs, 11px);
+  line-height: var(--line-height-tight, 1.25);
+  color: var(--text-secondary);
+  margin: var(--space-1, 4px);
+  border-radius: var(--radius-sm, 6px);
+  box-sizing: border-box;
+  gap: var(--space-1, 4px);
+  padding: var(--space-2, 6px);
+}
+
+.placeholderCardGroup svg {
+  opacity: 0.6;
+}
+
+.dropIndicator {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--accent-color, #1a73e8) 12%, transparent);
+  border: 1.5px solid var(--accent-color, #1a73e8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, #1a73e8) 25%, transparent);
+}

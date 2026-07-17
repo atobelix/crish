@@ -6,6 +6,7 @@
  * - 去掉「工作总览」标题重复、上下文空统计、神秘图标条
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './OverviewCard.module.css';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import {
@@ -245,7 +246,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
 
   return (
     <div
-      className="overview-card overview-card--lean"
+      className={`${styles.card} ${styles.lean}`}
       role="region"
       aria-label="总览"
       data-git-loading={gitLoading ? '1' : '0'}
@@ -253,15 +254,15 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     >
       {/* 仅有信息时一行：分支 / 目标 / 当前工具 — 无「工作总览」重复标题 */}
       {branch || goalMode || progress.total > 0 || liveTool ? (
-        <div className="overview-meta-line" aria-label="会话状态">
+        <div className={styles.metaLine} aria-label="会话状态">
           {branch ? (
-            <span className="overview-meta-chip" title={branch}>
+            <span className={styles.metaChip} title={branch}>
               <Lucide.GitBranch size={12} strokeWidth={1.75} aria-hidden />
               {branch}
             </span>
           ) : null}
           {wsPath ? (
-            <span className="overview-meta-chip" title={wsPath}>
+            <span className={styles.metaChip} title={wsPath}>
               {basename(wsPath)}
             </span>
           ) : null}
@@ -271,7 +272,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
       {goalMode || progress.total > 0 ? (
         <button
           type="button"
-          className="overview-live-row overview-live-row--goal"
+          className={`${styles.liveRow} ${styles['liveRow--goal']}`}
           title={goalMode?.goal || '打开任务'}
           aria-label={
             goalMode
@@ -283,10 +284,10 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
           <Lucide.Target
             size={14}
             strokeWidth={1.75}
-            className="overview-live-ico"
+            className={styles.liveIco}
             aria-hidden
           />
-          <span className="overview-item-name">
+          <span className={styles.itemName}>
             {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
           </span>
           <em>
@@ -301,12 +302,12 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
 
       {liveTool ? (
         <div
-          className="overview-live-row"
+          className={styles.liveRow}
           aria-live="polite"
           aria-label={`${liveToolLabel}${liveToolStatus ? `，${liveToolStatus}` : ''}`}
         >
-          <span className="overview-dot live" aria-hidden="true" />
-          <span className="overview-item-name" title={liveToolLabel}>
+          <span className={`${styles.dot} ${styles.live}`} aria-hidden="true" />
+          <span className={styles.itemName} title={liveToolLabel}>
             {liveToolLabel}
           </span>
           <em>{liveToolStatus}</em>
@@ -314,11 +315,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
       ) : null}
 
       {/* 协作体：有列表才显示分区；点行 = 右侧打开，不废话 */}
-      <section className="overview-sec" aria-labelledby="overview-sec-agents">
+      <section className={styles.sec} aria-labelledby="overview-sec-agents">
         <button
           type="button"
           id="overview-sec-agents"
-          className="overview-sec-h"
+          className={styles.secH}
           aria-expanded={openSec.agents}
           aria-controls="overview-sec-agents-b"
           onClick={() => toggle('agents')}
@@ -326,20 +327,20 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
           <Lucide.Bot size={15} strokeWidth={1.75} aria-hidden />
           <span>协作体</span>
           {sortedAgents.length > 0 ? (
-            <span className="overview-pill">
+            <span className={styles.pill}>
               {runningAgentCount > 0 ? `${runningAgentCount} 运行` : sortedAgents.length}
             </span>
           ) : null}
           <Lucide.ChevronDown
             size={14}
-            className={`overview-chev ${openSec.agents ? 'open' : ''}`}
+            className={`${styles.chev} ${openSec.agents ? styles.open : ''}`}
             aria-hidden
           />
         </button>
         {openSec.agents ? (
-          <div className="overview-sec-b" id="overview-sec-agents-b">
+          <div className={styles.secB} id="overview-sec-agents-b">
             {sortedAgents.length > 0 ? (
-              <ul className="overview-list overview-list--agents" aria-label="协作体列表">
+              <ul className={`${styles.list} ${styles['list--agents']}`} aria-label="协作体列表">
                 {sortedAgents.map((a) => {
                   const name = agentOneLineLabel(a.description, a.id);
                   const st = agentStatusLabel(a.status);
@@ -347,7 +348,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                     <li key={a.id}>
                       <button
                         type="button"
-                        className="overview-item-btn overview-item-btn--agent"
+                        className={`${styles.itemBtn} ${styles['itemBtn--agent']}`}
                         title={name}
                         aria-label={`${name}，${st}`}
                         onClick={() => {
@@ -357,11 +358,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                         }}
                       >
                         <span
-                          className={`overview-dot ${a.status === 'running' ? 'live' : ''}`}
+                          className={`${styles.dot} ${a.status === 'running' ? styles.live : ''}`}
                           aria-hidden="true"
                         />
-                        <span className="overview-item-main">
-                          <span className="overview-item-name">{name}</span>
+                        <span className={styles.itemMain}>
+                          <span className={styles.itemName}>{name}</span>
                           <em>{st}</em>
                         </span>
                       </button>
@@ -370,7 +371,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                 })}
               </ul>
             ) : (
-              <p className="overview-empty overview-empty--quiet" role="status">
+              <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
                 无
               </p>
             )}
@@ -378,12 +379,12 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         ) : null}
       </section>
 
-      <section className="overview-sec" aria-labelledby="overview-sec-files">
-        <div className="overview-sec-h-row">
+      <section className={styles.sec} aria-labelledby="overview-sec-files">
+        <div className={styles.secHRow}>
           <button
             type="button"
             id="overview-sec-files"
-            className="overview-sec-h"
+            className={styles.secH}
             aria-expanded={openSec.files}
             aria-controls="overview-sec-files-b"
             onClick={() => toggle('files')}
@@ -391,17 +392,17 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             <Lucide.GitBranch size={15} strokeWidth={1.75} aria-hidden />
             <span>改动</span>
             {fileCount > 0 ? (
-              <span className="overview-pill">{fileCount}</span>
+              <span className={styles.pill}>{fileCount}</span>
             ) : null}
             <Lucide.ChevronDown
               size={14}
-              className={`overview-chev ${openSec.files ? 'open' : ''}`}
+              className={`${styles.chev} ${openSec.files ? styles.open : ''}`}
               aria-hidden
             />
           </button>
           <button
             type="button"
-            className="overview-icon-btn"
+            className={styles.iconBtn}
             title="刷新"
             aria-label={gitLoading ? '正在刷新' : '刷新 Git'}
             disabled={gitLoading}
@@ -424,12 +425,12 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         </div>
         {openSec.files ? (
           <div
-            className="overview-sec-b"
+            className={styles.secB}
             id="overview-sec-files-b"
             aria-busy={gitLoading || Boolean(openingPath)}
           >
             {git?.found && git.branch ? (
-              <p className="overview-empty overview-empty--quiet" role="status">
+              <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
                 分支 {git.branch}
                 {git.clean ? ' · 干净' : ''}
               </p>
@@ -437,18 +438,18 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
 
             {/* 诊断：无 git / 非仓库 / 超时 — 可操作，不无限转圈 */}
             {!gitLoading && gitHelp ? (
-              <div className="overview-git-help" role="status">
-                <div className="overview-inline-err" role="alert">
+              <div className={styles.gitHelp} role="status">
+                <div className={styles.inlineErr} role="alert">
                   {gitHelp.title}
                 </div>
                 {gitHelp.hint ? (
-                  <p className="overview-empty overview-empty--quiet">{gitHelp.hint}</p>
+                  <p className={`${styles.empty} ${styles.emptyQuiet}`}>{gitHelp.hint}</p>
                 ) : null}
-                <div className="overview-git-actions">
+                <div className={styles.gitActions}>
                   {gitHelp.action === 'download-git' ? (
                     <button
                       type="button"
-                      className="overview-link"
+                      className={styles.link}
                       onClick={() => void openGitDownloadPage()}
                     >
                       下载 Git
@@ -457,7 +458,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                   {gitHelp.action === 'init-repo' ? (
                     <button
                       type="button"
-                      className="overview-link"
+                      className={styles.link}
                       title="打开终端，在工作区执行 git init"
                       onClick={() => onOpenPanel('terminal')}
                     >
@@ -467,7 +468,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                   {gitHelp.action === 'retry' || gitHelp.action === 'download-git' || gitHelp.action === 'init-repo' ? (
                     <button
                       type="button"
-                      className="overview-link"
+                      className={styles.link}
                       onClick={() => void refreshGit({ force: true })}
                     >
                       重试
@@ -478,13 +479,13 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             ) : null}
 
             {actionErr ? (
-              <div className="overview-inline-err" role="alert">
+              <div className={styles.inlineErr} role="alert">
                 {actionErr}
               </div>
             ) : null}
 
             {gitFiles.length > 0 ? (
-              <ul className="overview-list" aria-label="Git 改动文件">
+              <ul className={styles.list} aria-label="Git 改动文件">
                 {gitFiles.map((f) => {
                   const opening = openingPath === f.path;
                   const stLabel = gitStatusLabel(f.status);
@@ -492,7 +493,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                     <li key={f.path}>
                       <button
                         type="button"
-                        className="overview-item-btn"
+                        className={styles.itemBtn}
                         disabled={Boolean(openingPath)}
                         aria-busy={opening}
                         aria-label={
@@ -509,8 +510,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                         >
                           {String(f.status).slice(0, 1)}
                         </span>
-                        <span className="overview-item-main mono">
-                          <span className="overview-item-name" title={f.path}>
+                        <span className={`${styles.itemMain} ${styles.mono}`}>
+                          <span className={styles.itemName} title={f.path}>
                             {basename(f.path)}
                           </span>
                           <em>
@@ -525,12 +526,12 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                 })}
               </ul>
             ) : convoFiles.length > 0 ? (
-              <ul className="overview-list" aria-label="对话改动文件">
+              <ul className={styles.list} aria-label="对话改动文件">
                 {convoFiles.map((f) => (
                   <li key={f.filePath}>
                     <button
                       type="button"
-                      className="overview-item-btn"
+                      className={styles.itemBtn}
                       aria-label={`打开 ${basename(f.filePath)}`}
                       onClick={() => {
                         setActiveDiffSource(f);
@@ -538,8 +539,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                       }}
                     >
                       <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
-                      <span className="overview-item-main mono">
-                        <span className="overview-item-name" title={f.filePath}>
+                      <span className={`${styles.itemMain} ${styles.mono}`}>
+                        <span className={styles.itemName} title={f.filePath}>
                           {basename(f.filePath)}
                         </span>
                         <em>
@@ -551,11 +552,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                 ))}
               </ul>
             ) : !gitHelp && !gitLoading ? (
-              <p className="overview-empty overview-empty--quiet" role="status">
+              <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
                 {git?.found && git.clean ? '干净' : '无改动'}
               </p>
             ) : gitLoading ? (
-              <p className="overview-empty overview-empty--quiet" role="status">
+              <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
                 读取 Git…
               </p>
             ) : null}
@@ -563,7 +564,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             {hasFileList ? (
               <button
                 type="button"
-                className="overview-link"
+                className={styles.link}
                 onClick={() => onOpenPanel('diff')}
               >
                 查看变更

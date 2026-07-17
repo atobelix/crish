@@ -1,0 +1,49 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 16px;
+  min-height: 120px;
+  text-align: center;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.45;
+}
+
+.emptyIcon {
+  opacity: 0.55;
+}
+
+.emptyTitle {
+  font-weight: 500;
+  color: var(--text-primary, #111);
+}
+
+.emptyHint {
+  max-width: 240px;
+}
+
+.emptyBtn {
+  margin-top: 4px;
+}
+
+.card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane[hidden] {
+  display: none !important;
+}

@@ -19,6 +19,7 @@ import type {
   WorkspaceActions,
   WorkspaceStoreSlice,
 } from './workspaceActions';
+import { expandToolColumnIfCollapsed } from './layoutHelpers';
 
 /** 工作区域 facade：切片状态 + actions */
 export type WorkspaceFacade = WorkspaceStoreSlice & WorkspaceActions;
@@ -147,6 +148,8 @@ export function focusExistingPanelCard(wsId: string, cardId: string): boolean {
         if (g.cards.some((card) => card.id === cardId)) {
           g.activeCardId = cardId;
           found = true;
+          // 已有标签但列被收起时：展开，保留内容
+          expandToolColumnIfCollapsed(ws);
           return;
         }
       }

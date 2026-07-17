@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
+import styles from './Workspace.module.css';
 import type { CardGroupState, ColumnState } from '../store/layoutStore';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CardPanel } from './CardPanel';
@@ -350,50 +351,25 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   return (
     <div
       ref={containerRef}
-      className={`workspace-section${isActiveWorkspace ? ' workspace-section--active' : ''}${isSplitMode ? ' workspace-section--split' : ''}${isEmptyWorkspace ? ' workspace-section--empty' : ''}`}
+      className={`${styles.section} workspace-section`}
       role="region"
       aria-label={regionLabel}
       aria-current={isSplitMode && isActiveWorkspace ? 'true' : undefined}
       data-ws-id={ws.id}
       data-ws-active={isActiveWorkspace ? 'true' : 'false'}
       data-ws-empty={isEmptyWorkspace ? 'true' : 'false'}
+      data-ws-split={isSplitMode ? 'true' : 'false'}
       data-ws-ordinal={ordinal}
       onPointerDownCapture={focusThisWorkspace}
       onFocusCapture={focusThisWorkspace}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        height: '100%',
-        flex: 1,
-        minWidth: 0,
-        // 非活动拆分：略降对比，焦点工作区更清晰
-        opacity: isSplitMode && !isActiveWorkspace ? 0.92 : 1,
-        outline:
-          isSplitMode && isActiveWorkspace
-            ? '1px solid color-mix(in srgb, var(--text-primary, #111) 8%, transparent)'
-            : undefined,
-        outlineOffset: isSplitMode && isActiveWorkspace ? -1 : undefined,
-      }}
     >
       {/* 读屏：标签拖放落点（与 CardPanel tablist 协同） */}
       <div
         ref={liveRegionRef}
-        className="workspace-dnd-live"
+        className={`${styles.live} workspace-dnd-live`}
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        style={{
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: 'hidden',
-          clip: 'rect(0, 0, 0, 0)',
-          whiteSpace: 'nowrap',
-          border: 0,
-        }}
       >
         {dropLiveMessage}
       </div>
@@ -401,51 +377,15 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
       {/* Workspace top close controls (for split views) */}
       {isSplitMode && (
         <div
-          className="workspace-split-chrome"
+          className={`${styles.splitChrome} workspace-split-chrome`}
           role="toolbar"
           aria-label={`拆分工作区 ${ordinal} 工具栏`}
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: 'var(--space-1, 4px) var(--space-3, 8px)',
-            minHeight: 'var(--control-height-sm, 28px)',
-            backgroundColor: 'var(--bg-primary)',
-            borderBottom:
-              'var(--hairline-width, 1px) solid var(--hairline, var(--border-color))',
-            fontSize: 'var(--font-size-xs, 11px)',
-            lineHeight: 'var(--line-height-tight, 1.25)',
-            color: 'var(--text-secondary)',
-            borderRadius: 0,
-            marginBottom: 0,
-            gap: 'var(--space-2, 6px)',
-            flexShrink: 0,
-          }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-1, 4px)',
-              minWidth: 0,
-            }}
-          >
+          <div className={styles.splitInfo}>
             <Lucide.Columns size={12} strokeWidth={1.75} aria-hidden />
-            <span
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <span className={styles.splitLabel}>
               拆分工作区 {ordinal}
-              <span
-                style={{
-                  marginLeft: 'var(--space-2, 6px)',
-                  opacity: 0.75,
-                  fontSize: 'var(--font-size-xs, 11px)',
-                }}
-              >
+              <span className={styles.splitSubLabel}>
                 · {colCountLabel}
                 {isActiveWorkspace ? ' · 当前焦点' : ''}
               </span>
@@ -469,7 +409,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
           <WorkspaceEmptyState wsId={ws.id} onActivate={focusThisWorkspace} />
         ) : (
           <div
-            className="workspace-canvas"
+            className={`${styles.canvas} workspace-canvas`}
             role="group"
             aria-label={`${regionLabel}画布，${colCountLabel}`}
           >
@@ -504,7 +444,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
                   {/* Column splitter handle */}
                   {showColSplitter && (
                     <div
-                      className="col-splitter"
+                      className={`${styles.colSplitter} col-splitter`}
                       role="separator"
                       aria-orientation="vertical"
                       aria-label={`调整第 ${splitterLeftIdx + 1} 与第 ${splitterLeftIdx + 2} 列宽度`}
@@ -556,7 +496,11 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
 
                   {/* Column Element */}
                   <div
-                    className={`workspace-column${isPlaceholderCol ? ' workspace-column--placeholder' : ''}`}
+                    className={
+                      isPlaceholderCol
+                        ? `${styles.placeholderCol} workspace-column--placeholder`
+                        : `${styles.column} workspace-column`
+                    }
                     role={isPlaceholderCol ? 'status' : 'group'}
                     aria-label={
                       isPlaceholderCol
@@ -565,15 +509,14 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
                     }
                     data-col-idx={col.origColIdx}
                     data-placeholder={isPlaceholderCol ? 'true' : undefined}
-                    style={{
-                      width: `${col.widthRatio * 100}%`,
-                      flex: '0 0 auto',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      height: '100%',
-                      position: 'relative',
-                      minWidth: 0,
-                    }}
+                    style={
+                      isPlaceholderCol
+                        ? undefined
+                        : {
+                            width: `${col.widthRatio * 100}%`,
+                            flex: '0 0 auto',
+                          }
+                    }
                   >
                     {col.groups.map((group, groupIdx) => {
                       let topOffsetPercent = 0;
@@ -608,7 +551,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
                           {/* Card Group splitter handle */}
                           {showGroupSplitter && (
                             <div
-                              className="group-splitter"
+                              className={`${styles.groupSplitter} group-splitter`}
                               role="separator"
                               aria-orientation="horizontal"
                               aria-label={`调整第 ${col.origColIdx + 1} 列内面板高度`}
@@ -644,36 +587,18 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
                           {/* Card Group */}
                           {isPlaceholderGroup ? (
                             <div
-                              className="workspace-card placeholder-card-group"
+                              className={`${styles.placeholderCardGroup} workspace-card placeholder-card-group`}
                               role="status"
                               aria-live="polite"
                               aria-label={group.cards[0]?.title || '释放以拆分'}
                               style={{
                                 height: `${group.heightRatio * 100}%`,
-                                flex: '0 0 auto',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                minHeight: 0,
-                                border:
-                                  '1.5px dashed var(--accent-color, #333333)',
-                                background: 'rgba(55, 65, 81, 0.03)',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                fontSize: 'var(--font-size-xs, 11px)',
-                                lineHeight: 'var(--line-height-tight, 1.25)',
-                                color: 'var(--text-secondary)',
-                                margin: 'var(--space-1, 4px)',
-                                borderRadius: 'var(--radius-sm, 6px)',
-                                boxSizing: 'border-box',
-                                gap: 'var(--space-1, 4px)',
-                                padding: 'var(--space-2, 6px)',
                               }}
                             >
                               <Lucide.Plus
                                 size={16}
                                 strokeWidth={1.75}
                                 aria-hidden
-                                style={{ opacity: 0.6 }}
                               />
                               <span>{group.cards[0].title}</span>
                             </div>

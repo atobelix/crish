@@ -847,16 +847,16 @@
 }
 /* 工具结果：挂在摘要下方；固定 margin，避免展开时摘要行上跳 */
 .tool-result-body {
-  margin: 0 0 4px 22px;
-  padding: 4px 0 6px;
+  margin: 4px 0 6px 22px;
+  padding: 8px 12px;
   max-height: min(40vh, 320px);
   overflow-x: auto;
   overflow-y: auto;
-  border: none;
-  border-radius: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
   position: relative;
-  background: transparent;
-  box-shadow: none;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
   /* 去掉顶部 mask 透明带，否则展开瞬间像摘要被顶/抽走 */
   -webkit-mask-image: none;
   mask-image: none;

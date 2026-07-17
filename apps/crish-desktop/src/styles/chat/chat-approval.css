@@ -834,8 +834,8 @@
 }
 .approval-card-input:focus {
   outline: none;
-  border-color: var(--text-tertiary);
-  box-shadow: var(--focus-ring);
+  border-color: color-mix(in srgb, var(--border-color) 75%, var(--text-primary) 25%);
+  box-shadow: none;
 }
 .approval-card-count {
   align-self: flex-end;

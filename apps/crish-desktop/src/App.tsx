@@ -5,6 +5,7 @@ import {
   archiveSession,
   branchSession,
   createSession,
+  focusOrOpenPanel,
   getSessionStoreState,
   openSettings,
   setActiveSessionId,
@@ -35,13 +36,14 @@ import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
 import { emitUiEvent, onUiEvent } from './api/uiEvents';
 import { createDebounced } from './api/debouncedValue';
 import { getActiveModelId, getActiveProfileId } from './api/providerProfiles';
-import { IconSidebarLeft } from './components/SidebarToggleIcons';
+import { IconSidebarLeft, IconSidebarRight } from './components/SidebarToggleIcons';
 import { CheatsheetModal } from './components/CheatsheetModal';
 import {
   listProjects,
   rebindSessionFoldersToProjects,
   rememberProjectFolderAlias,
 } from './api/projectStore';
+import { collapseToolColumnPreserve } from './store/layoutHelpers';
 
 /** 浏览器标签 / 任务栏标题（中文产品壳；html 内默认 crish-desktop 仅作占位） */
 const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
@@ -84,6 +86,35 @@ function App() {
   const setShowSettingsOverlay = useLayoutStore((s) => s.setShowSettingsOverlay);
   const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
+
+  const workspaces = useLayoutStore((s) => s.workspaces);
+  const activeWorkspaceIndex = useLayoutStore((s) => s.activeWorkspaceIndex);
+  const activeWorkspace = workspaces[activeWorkspaceIndex];
+
+  const isRightSidebarCollapsed = useMemo(() => {
+    if (!activeWorkspace) return true;
+    const toolCol = activeWorkspace.columns.find((c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-'));
+    if (!toolCol) return true;
+    return toolCol.widthRatio < 0.08;
+  }, [activeWorkspace]);
+
+  const toggleRightSidebar = useCallback(() => {
+    if (!activeWorkspace) return;
+    const wsId = activeWorkspace.id;
+    const toolCol = activeWorkspace.columns.find((c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-'));
+    const isCollapsed = !toolCol || toolCol.widthRatio < 0.08;
+
+    if (isCollapsed) {
+      const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
+      focusOrOpenPanel(wsId, activeCardId);
+    } else {
+      useLayoutStore.setState((state) => {
+        const w = state.workspaces.find((x) => x.id === wsId);
+        if (!w) return;
+        collapseToolColumnPreserve(w);
+      });
+    }
+  }, [activeWorkspace]);
 
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
@@ -626,6 +657,16 @@ function App() {
             </button>
           </div>
           <div className="app-header-right no-drag" role="toolbar" aria-label="顶栏操作">
+            <button
+              type="button"
+              className={`header-btn no-drag ${!isRightSidebarCollapsed ? 'active' : ''}`}
+              title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+              aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+              aria-pressed={!isRightSidebarCollapsed}
+              onClick={toggleRightSidebar}
+            >
+              <IconSidebarRight size={15} aria-hidden="true" />
+            </button>
             <button
               type="button"
               className="header-btn"

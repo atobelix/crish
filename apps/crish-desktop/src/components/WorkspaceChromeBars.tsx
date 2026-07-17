@@ -39,7 +39,7 @@ import {
 import { EMPTY_SESSION_TITLE, sessionListDisplayTitle } from '../api/sessionTitle';
 import { createSession, focusOrOpenPanel, setActiveSessionId } from '../api/storeAccess';
 import { useLayoutStore } from '../store/layoutStore';
-import { isChatColumn } from '../store/layoutHelpers';
+import { collapseToolColumnPreserve, isChatColumn } from '../store/layoutHelpers';
 import { selectActiveSessionId, useSessionField } from '../store/sessionStore';
 import { emitUiEvent } from '../api/uiEvents';
 import { IconSidebarRight } from './SidebarToggleIcons';
@@ -243,6 +243,40 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
   };
 }
 
+function useRightSidebarState() {
+  const activeWs = useLayoutStore((st) => {
+    const i = st.activeWorkspaceIndex;
+    return st.workspaces[i] || st.workspaces[0] || null;
+  });
+
+  const isRightSidebarCollapsed = useMemo(() => {
+    if (!activeWs) return true;
+    const toolCol = activeWs.columns.find((c) => !isChatColumn(c));
+    if (!toolCol) return true;
+    return toolCol.widthRatio < 0.08;
+  }, [activeWs]);
+
+  const toggleRightSidebar = useCallback(() => {
+    if (!activeWs) return;
+    const wsId = activeWs.id;
+    const toolCol = activeWs.columns.find((c) => !isChatColumn(c));
+    const isCollapsed = !toolCol || toolCol.widthRatio < 0.08;
+
+    if (isCollapsed) {
+      const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
+      focusOrOpenPanel(wsId, activeCardId);
+    } else {
+      useLayoutStore.setState((state) => {
+        const w = state.workspaces.find((x) => x.id === wsId);
+        if (!w) return;
+        collapseToolColumnPreserve(w);
+      });
+    }
+  }, [activeWs]);
+
+  return { isRightSidebarCollapsed, toggleRightSidebar };
+}
+
 /** 加号展开菜单：点击外关闭 */
 function useChromeAddMenu() {
   const [open, setOpen] = useState(false);
@@ -281,9 +315,8 @@ export const WorkspaceStrip: React.FC<Props> = ({
   onWinClose,
 }) => {
   const s = useWorkspaceChromeState(onAddProject);
-  const showTrail = Boolean(
-    onOpenRuntime || onOpenHelp || onWinMinimize || onWinMaximize || onWinClose,
-  );
+  const { isRightSidebarCollapsed, toggleRightSidebar } = useRightSidebarState();
+  const showTrail = true; // Always show trail for the right sidebar toggle button
   const add = useChromeAddMenu();
 
   return (
@@ -378,6 +411,15 @@ export const WorkspaceStrip: React.FC<Props> = ({
           aria-label="顶栏操作"
           data-tauri-drag-region="false"
         >
+          <button
+            type="button"
+            className={`ws-chrome-trail-btn no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''}`}
+            title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+            aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+            onClick={toggleRightSidebar}
+          >
+            <IconSidebarRight size={15} aria-hidden />
+          </button>
           {onOpenRuntime ? (
             <button
               type="button"
@@ -443,25 +485,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
 export const SessionStrip: React.FC<Props> = ({ className }) => {
   const s = useWorkspaceChromeState();
   const add = useChromeAddMenu();
-  const activeWs = useLayoutStore((st) => {
-    const i = st.activeWorkspaceIndex;
-    return st.workspaces[i] || st.workspaces[0] || null;
-  });
-  /** 右侧工具列已收起/不存在时，会话行补上打开总览按钮 */
-  const hasRightToolPanel = useMemo(() => {
-    if (!activeWs) return false;
-    return activeWs.columns.some(
-      (col) =>
-        !isChatColumn(col) &&
-        col.groups.some((g) => g.cards.some((c) => c.id && c.id !== 'chat')),
-    );
-  }, [activeWs]);
-
-  const openRightPanel = useCallback(() => {
-    const wsId = activeWs?.id;
-    if (!wsId) return;
-    focusOrOpenPanel(wsId, 'overview');
-  }, [activeWs?.id]);
+  const { isRightSidebarCollapsed, toggleRightSidebar } = useRightSidebarState();
 
   return (
     <div
@@ -540,19 +564,17 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
           ) : null}
         </div>
       </div>
-      {!hasRightToolPanel ? (
-        <div className="ws-chrome-trail" role="toolbar" aria-label="打开右侧面板">
-          <button
-            type="button"
-            className="ws-chrome-trail-btn"
-            title="打开总览侧栏"
-            aria-label="打开总览侧栏"
-            onClick={openRightPanel}
-          >
-            <IconSidebarRight size={15} aria-hidden />
-          </button>
-        </div>
-      ) : null}
+      <div className="ws-chrome-trail" role="toolbar" aria-label="右侧面板">
+        <button
+          type="button"
+          className={`ws-chrome-trail-btn ${!isRightSidebarCollapsed ? 'is-active' : ''}`}
+          title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+          aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+          onClick={toggleRightSidebar}
+        >
+          <IconSidebarRight size={15} aria-hidden />
+        </button>
+      </div>
     </div>
   );
 };
