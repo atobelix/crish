@@ -15,7 +15,23 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { BoundedMap } from "@crish/shared-utils";
+import { BoundedMap, RingBuffer } from "@crish/shared-utils";
+
+/**
+ * 默认活跃 Span 容量上限。
+ *
+ * activeSpans 仅保存已启动但未结束的 Span。并发请求场景下 500 足够；
+ * 超容量时 FIFO 淘汰最旧活跃 Span，被淘汰的 Span 后续 endSpan 将静默 no-op
+ * （endSpan 已有 !span 提前返回分支）。
+ */
+const DEFAULT_MAX_ACTIVE_SPANS = 500;
+
+/**
+ * 默认每个 Span 的事件容量上限。
+ *
+ * 用 RingBuffer 实现 O(1) 入队 + 自动覆盖最旧事件，避免数组 push 无界增长。
+ */
+const DEFAULT_MAX_EVENTS_PER_SPAN = 100;
 
 // ─── 追踪核心类型 ─────────────────────────────────────────
 
@@ -38,8 +54,8 @@ export interface TraceSpan {
   status: "ok" | "error" | "timeout";
   /** 标签 */
   tags: Record<string, string>;
-  /** 事件日志 */
-  events: SpanEvent[];
+  /** 事件日志（有界 RingBuffer，超容量自动覆盖最旧事件） */
+  events: RingBuffer<SpanEvent>;
   /** 来源层 */
   sourceLayer: string;
 }
@@ -86,14 +102,24 @@ export interface TraceQueryResult {
 
 export class TraceManager {
   private traces: BoundedMap<string, TraceSpan[]>;
-  private activeSpans = new Map<string, TraceSpan>();
+  private activeSpans: BoundedMap<string, TraceSpan>;
   private maxTraces: number;
   private maxSpansPerTrace: number;
+  private maxActiveSpans: number;
+  private maxEventsPerSpan: number;
 
-  constructor(options?: { maxTraces?: number; maxSpansPerTrace?: number }) {
+  constructor(options?: {
+    maxTraces?: number;
+    maxSpansPerTrace?: number;
+    maxActiveSpans?: number;
+    maxEventsPerSpan?: number;
+  }) {
     this.maxTraces = options?.maxTraces ?? 1000;
     this.maxSpansPerTrace = options?.maxSpansPerTrace ?? 500;
+    this.maxActiveSpans = options?.maxActiveSpans ?? DEFAULT_MAX_ACTIVE_SPANS;
+    this.maxEventsPerSpan = options?.maxEventsPerSpan ?? DEFAULT_MAX_EVENTS_PER_SPAN;
     this.traces = new BoundedMap<string, TraceSpan[]>(this.maxTraces);
+    this.activeSpans = new BoundedMap<string, TraceSpan>(this.maxActiveSpans);
   }
 
   /**
@@ -110,7 +136,7 @@ export class TraceManager {
       startedAt: Date.now(),
       status: "ok",
       tags: tags ?? {},
-      events: [],
+      events: new RingBuffer<SpanEvent>(this.maxEventsPerSpan),
       sourceLayer
     };
 
@@ -138,17 +164,17 @@ export class TraceManager {
       startedAt: Date.now(),
       status: "ok",
       tags: tags ?? {},
-      events: [],
+      events: new RingBuffer<SpanEvent>(this.maxEventsPerSpan),
       sourceLayer: context.sourceLayer
     };
 
-    this.activeSpans.set(spanId, span);
-
+    // 仅当 Span 能被记入其所属 Trace 时才纳入 activeSpans；否则该 Span 会成为
+    // 孤儿（active 但不在任何 trace 中，永远无法被 query/getTraceChain 检索）。
+    // 超容量时返回的 context 仍让调用方继续推进，但 addSpanEvent/endSpan 对其静默 no-op。
     const traceSpans = this.traces.get(context.traceId);
-    if (traceSpans) {
-      if (traceSpans.length < this.maxSpansPerTrace) {
-        traceSpans.push(span);
-      }
+    if (traceSpans && traceSpans.length < this.maxSpansPerTrace) {
+      traceSpans.push(span);
+      this.activeSpans.set(spanId, span);
     }
 
     return {
@@ -180,7 +206,8 @@ export class TraceManager {
     const span = this.activeSpans.get(spanId);
     if (!span) return;
 
-    span.events.push({
+    // RingBuffer.pushOverwritingOldest：O(1) 入队，超容量自动覆盖最旧事件
+    span.events.pushOverwritingOldest({
       timestamp: Date.now(),
       name,
       attributes

@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { AgentEvent, AgentMessage, ContextCompressionRecord } from "@crish/shared-types";
 import { SessionError } from "@crish/shared-types";
 import type { SessionEntry, SessionHeader, SessionPersistenceStore } from "./types";
-import { AsyncMutex, errorMessage, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, errorMessage, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
 
 const SESSION_FILE_VERSION = 1;
 export type SessionLeafPointerEntry = Extract<SessionEntry, { type: "leaf-pointer" }>;

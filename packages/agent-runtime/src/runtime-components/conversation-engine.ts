@@ -74,10 +74,39 @@ export interface ConversationSnapshot {
 
 export class ConversationEngine {
   private messages: AgentMessage[] = [];
+  /**
+   * 消息列表的只读视图引用（frozen view）。
+   *
+   * 系统化设计：
+   * - 该字段始终与 `this.messages` 保持同步（别名引用）。
+   * - 对于 in-place 变更（push），别名自动保持有效，因为两者指向同一数组。
+   * - 对于重赋值变更（replaceMessages / restoreFromSnapshot），通过 refreshFrozenView() 刷新引用。
+   * - 所有变更方法统一调用 refreshFrozenView()，保证该字段始终指向最新数组，
+   *   即使未来 `messages` 改为 copy-on-write 模式也无需调整调用方。
+   *
+   * 契约：getMessages() 返回此引用（O(1)，无拷贝）。
+   * 调用方必须将返回的数组视为只读；如需修改请自行 `.slice()` 拷贝，
+   * 或直接使用 getMessagesMutable() 获取可变引用。
+   */
+  private frozenMessages: AgentMessage[] = this.messages;
   private turnCount = 0;
   private lastTurnAt?: string;
 
   constructor(private readonly options: ConversationEngineOptions) {}
+
+  /**
+   * 刷新 frozenMessages 别名引用。
+   *
+   * 在每次消息变更后调用：
+   * - in-place 变更（push）：no-op，因两者本就指向同一数组。
+   * - 重赋值变更（this.messages = ...）：更新别名指向新数组。
+   *
+   * 统一在所有变更点调用，确保 frozenMessages 永远与 messages 同步，
+   * 为 getMessages() 提供 O(1) 无拷贝返回的保证。
+   */
+  private refreshFrozenView(): void {
+    this.frozenMessages = this.messages;
+  }
 
   /**
    * 初始化对话（添加系统提示）
@@ -117,6 +146,7 @@ export class ConversationEngine {
       createdAt: nowIso()
     };
     this.messages.push(message);
+    this.refreshFrozenView();
     return message;
   }
 

@@ -623,12 +623,22 @@ export class AgentSessionLoop {
           if (toolResults.every((block) => !block.isError)) {
             this.steeringCoordinator.resetSteeringCount();
           }
-          for (const block of toolResults) {
+          // 同一次 provider 响应中的所有 tool_call 的结果合并为单条 tool 消息：
+          // - AgentMessage.blocks 本就是 AgentMessageBlock[]，多 block 是一等公民
+          // - openai-request-build.ts 的 buildChatMessages / buildResponsesInput 会按
+          //   block 维度展开为多条 wire message（OpenAI 协议要求每条 tool 消息只挂一个
+          //   tool_call_id），因此 wire 层输出与逐条追加完全一致
+          // - Anthropic 原生协议本就要求单条 user 消息携带多个 tool_result block
+          // - context-projection / context-compression / prompt-assembly / runtime-helpers
+          //   均按 block 维度遍历 tool 角色消息，批量结构无需特殊适配
+          // 这样每轮工具批次的消息数从 N+1（assistant + N 条 tool）降为 2，
+          // 消除 N 倍消息膨胀，同时不改变任何 provider 的线上请求体。
+          if (toolResults.length > 0) {
             const message: AgentMessage = {
               id: createId("tool"),
               role: "tool",
               createdAt: nowIso(),
-              blocks: [block]
+              blocks: toolResults
             };
             yield* this.recordMessage(message, this.conversation, this.recorder);
           }

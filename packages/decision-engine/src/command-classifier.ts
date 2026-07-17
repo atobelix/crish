@@ -139,6 +139,83 @@ const DESTRUCTIVE_PATTERNS: RegExp[] = [
 
 const PROCESS_PATTERNS: RegExp[] = [/\b(taskkill|Stop-Process|kill|pkill|killall)\b/i];
 
+/**
+ * SAFE_READ_PATTERNS 首词分派表。
+ *
+ * SAFE_READ 是最大 pattern 组（41 条，全部 ^ 锚定首词），且大部分命令是只读的，
+ * 会走到 classifySingle 的 SAFE_READ 步骤。按首词分派可将候选集从 41 缩小到 2-7。
+ *
+ * 其他 pattern 组（DESTRUCTIVE/SECRET/EXTERNAL/NETWORK/PROCESS/WRITE）多用 \b 任意位置
+ * 匹配，无法安全按首词缩小，保持全量测试。
+ *
+ * 维护：新增 SAFE_READ pattern 时需同步更新此分派表。未命中分派表的命令回退到
+ * 测试全部 SAFE_READ_PATTERNS，保证行为等价。
+ */
+const SAFE_READ_DISPATCH: ReadonlyMap<string, RegExp[]> = (() => {
+  const m = new Map<string, RegExp[]>();
+  const add = (word: string, ...patterns: RegExp[]) => {
+    const arr = m.get(word);
+    if (arr) arr.push(...patterns);
+    else m.set(word, [...patterns]);
+  };
+  const register = (words: string[], pattern: RegExp) => {
+    for (const w of words) add(w, pattern);
+  };
+  const P = SAFE_READ_PATTERNS;
+  // 定位/目录
+  add("pwd", P[0]!, P[38]!);
+  add("cd", P[1]!);
+  add("get-location", P[2]!);
+  register(["ls", "dir", "get-childitem"], P[39]!); // 组合管道
+  add("ls", P[3]!);
+  add("dir", P[4]!);
+  add("tree", P[5]!);
+  add("get-childitem", P[6]!);
+  add("ll", P[7]!);
+  // 文件阅读
+  register(["cat", "type", "get-content", "more", "less"], P[8]!);
+  register(["cat", "type", "get-content"], P[40]!); // 组合管道
+  register(["head", "tail"], P[9]!);
+  // 搜索
+  register(["rg", "grep", "egrep", "fgrep", "findstr", "find", "ag", "ack"], P[10]!);
+  add("select-string", P[11]!);
+  add("where", P[12]!, P[14]!); // where 和 where.exe 共享
+  add("which", P[13]!);
+  add("where.exe", P[14]!);
+  // 文件/磁盘信息
+  register(["stat", "file", "wc", "du", "df", "lsblk", "blkid"], P[15]!);
+  register(["get-item", "get-itemproperty", "get-acl"], P[16]!);
+  // 进程/服务/系统信息
+  register(["ps", "top", "htop", "pgrep"], P[17]!);
+  register(["get-process", "get-service", "get-date", "get-computerinfo", "get-hotfix"], P[18]!);
+  register(["select-object", "where-object", "measure-object", "format-table", "format-list", "sort-object"], P[19]!);
+  register(["netstat", "ss", "ipconfig", "ifconfig", "systeminfo", "hostname", "whoami", "uname"], P[20]!);
+  add("ip", P[21]!);
+  // Git 只读（多条）
+  add("git", P[22]!, P[23]!, P[24]!, P[25]!, P[26]!);
+  // 包/工具只读
+  add("npm", P[27]!);
+  add("pnpm", P[28]!);
+  add("yarn", P[29]!);
+  add("npx", P[30]!);
+  register(["tsc", "vitest", "jest", "mocha", "eslint", "prettier"], P[31]!);
+  register(["pip", "pip3"], P[32]!);
+  add("cargo", P[33]!);
+  add("go", P[34]!);
+  add("dotnet", P[35]!);
+  // 版本查询（多工具共享）
+  register(["node", "npm", "pnpm", "yarn", "python", "python3", "pip", "pip3", "git", "cargo", "go", "rustc", "java", "javac"], P[36]!);
+  register(["node", "npm", "pnpm", "yarn", "python", "python3", "git", "cargo", "go"], P[37]!);
+  return m;
+})();
+
+/** 提取命令首词（小写），用于 SAFE_READ 分派表查询 */
+function extractFirstWord(raw: string): string {
+  const trimmed = raw.trimStart();
+  const end = trimmed.search(/\s/);
+  return (end === -1 ? trimmed : trimmed.slice(0, end)).toLowerCase();
+}
+
 /** 按 && / ; / | 切段（尊重引号） */
 function splitCommandSegments(command: string): string[] {
   const segments: string[] = [];
@@ -199,7 +276,11 @@ function classifySingle(raw: string): CommandClassification {
   if (PROCESS_PATTERNS.some((p) => p.test(raw))) {
     return { risk: "process", reason: "Process management" };
   }
-  if (SAFE_READ_PATTERNS.some((p) => p.test(raw))) {
+  // SAFE_READ 按首词分派：未命中分派表的命令回退到测试全部 SAFE_READ_PATTERNS
+  const firstWord = extractFirstWord(raw);
+  const candidates = SAFE_READ_DISPATCH.get(firstWord);
+  const readPatterns = candidates ?? SAFE_READ_PATTERNS;
+  if (readPatterns.some((p) => p.test(raw))) {
     return { risk: "read", reason: "Read-only command" };
   }
   if (WRITE_PATTERNS.some((p) => p.test(raw))) {
