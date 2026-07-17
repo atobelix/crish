@@ -303,6 +303,8 @@ export class DaemonServer {
       this.requestHandlers.waitForBackgroundWorkflowRuns(5_000), failures);
     await this.runStopStep("MESSAGE_TASK_DRAIN_FAILED", "Failed to drain daemon message tasks", () =>
       this.waitForMessageTasks(5_000), failures);
+    await this.runStopStep("BACKGROUND_TASKS_DISPOSE_FAILED", "Failed to dispose background tasks", () =>
+      this.disposeBackgroundTasks(), failures);
     await this.runStopStep("RUNTIME_FACTORY_CLOSE_FAILED", "Failed to close daemon runtime factory", () =>
       this.runtimeFactory.close(), failures);
     await this.runStopStep("EVENT_STORE_CLOSE_FAILED", "Failed to close daemon event store", () =>
@@ -733,6 +735,17 @@ export class DaemonServer {
     if (result === "timed-out" && this.messageTasks.size > 0) {
       console.warn(`[Daemon] Shutdown timed out waiting for ${this.messageTasks.size} message task(s)`);
     }
+  }
+
+  /**
+   * 关停后台任务管理器：终止全部运行中子进程、清理定时器、清空 tasks Map。
+   * 同时清理 subagent bridge 的孤儿追踪记录（运行未正常收尾的子代理）。
+   */
+  private async disposeBackgroundTasks(): Promise<void> {
+    this.backgroundTasks.dispose();
+    // subagent bridge 的 activeSubagents 在 run-handlers finally 中按 run 清理，
+    // 但若 run 未正常 settle（超时），孤儿条目会残留；关停时兜底全清。
+    this.subagentBridge.clearAll();
   }
 
   private async runStopStep(

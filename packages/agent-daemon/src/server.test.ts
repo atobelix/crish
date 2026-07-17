@@ -3561,13 +3561,14 @@ async function seedWorkflowStore(
   sessionEventLogDir: string,
   workflow: WorkflowDefinition
 ): Promise<void> {
+  // WorkflowStore 拆分为 workflows.json (workflows only) + workflows-runs.json (runs only)。
+  // seed 时无 runs，仅写 workflows 文件；runs 文件不存在时 store 会按空数组处理。
   await writeFile(
     join(sessionEventLogDir, "workflows.json"),
     `${JSON.stringify(
       {
         version: WORKFLOW_STORE_VERSION,
         workflows: [workflow],
-        runs: [],
       },
       null,
       2

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPath, isNodeError, clone, isJsonObject } from "@crish/shared-utils";
+import { isRecord, errorMessage, fsyncPath, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
 import type {
   DaemonScopedContextDiagnostic,
   DaemonScopedContextStoreStatus,
@@ -52,11 +52,12 @@ export class FileScopedContextStore implements ScopedContextStore {
 
   async list(filter: ScopedContextListFilter = {}): Promise<ScopedContextQueryResult> {
     const load = await this.readState();
+    // state.records 在写入时已 deepFreeze；filter 产出新数组，items 仍为 frozen 引用，
+    // 不必深拷贝每条 record。sort 操作发生在新生成的浅拷贝数组上，不影响 frozen state。
     const records = load.records
       .filter((record) => filter.scope === undefined || record.scope === filter.scope)
       .filter((record) => filter.kind === undefined || record.kind === filter.kind)
-      .sort(compareRecords)
-      .map(clone);
+      .sort(compareRecords);
     return {
       status: load.diagnostic ? "degraded" : this.status,
       records,
@@ -112,7 +113,9 @@ export class FileScopedContextStore implements ScopedContextStore {
     await this.pending;
     try {
       const state = await this.load();
-      return { records: clone(state.records), ...(this.diagnostic ? { diagnostic: this.diagnostic } : {}) };
+      // state.records 是 frozen 数组引用；list() 会通过 filter 产出新的浅拷贝数组，
+      // 这里直接返回 frozen 引用即可，避免每次读都做全 records 深拷贝。
+      return { records: state.records, ...(this.diagnostic ? { diagnostic: this.diagnostic } : {}) };
     } catch (error) {
       const diagnostic = this.recordDiagnostic(
         "SCOPED_CONTEXT_STORE_READ_FAILED",
@@ -149,6 +152,9 @@ export class FileScopedContextStore implements ScopedContextStore {
       }
       const nextState = cloneState(current);
       const result = operation(nextState);
+      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      // 即使 writeState 最终未 persisted，nextState 也只是被丢弃，提前 freeze 无副作用。
+      deepFreeze(nextState);
       const writeResult = await this.writeState(nextState);
       if (writeResult.persisted) {
         this.state = nextState;
@@ -171,7 +177,7 @@ export class FileScopedContextStore implements ScopedContextStore {
       text = await readFile(this.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        this.state = emptyState();
+        this.state = deepFreeze(emptyState());
         return this.state;
       }
       throw error;
@@ -189,7 +195,8 @@ export class FileScopedContextStore implements ScopedContextStore {
       throw new Error(`Scoped context store has invalid data: ${issues.join("; ")}`);
     }
 
-    this.state = clone(parsed as ScopedContextStoreState);
+    // JSON.parse 产出全新对象（无外部引用），可直接冻结作为不可变 state。
+    this.state = deepFreeze(parsed as ScopedContextStoreState);
     this.diagnostic = undefined;
     return this.state;
   }

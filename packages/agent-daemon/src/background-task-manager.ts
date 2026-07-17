@@ -5,10 +5,14 @@ import {
   type BackgroundCommandSnapshot,
   type BackgroundCommandStartInput,
 } from "@crish/agent-runtime";
+import { BoundedMap } from "@crish/shared-utils";
 import type {
   DaemonBackgroundTaskDiagnostic,
   DaemonBackgroundTaskSnapshot,
 } from "./types.js";
+
+/** workspace manager 上限：daemon 长跑场景下可能切换多个 workspace，按 FIFO 淘汰最旧。 */
+const MAX_WORKSPACE_MANAGERS = 50;
 
 export interface DaemonBackgroundTaskStartInput extends BackgroundCommandStartInput {
   workspaceRoot?: string;
@@ -31,7 +35,7 @@ export class DaemonBackgroundTaskError extends Error {
 }
 
 export class DaemonBackgroundTaskManager {
-  private readonly managers = new Map<string, BackgroundCommandManager>();
+  private readonly managers = new BoundedMap<string, BackgroundCommandManager>(MAX_WORKSPACE_MANAGERS);
 
   constructor(
     private readonly options: {
@@ -87,8 +91,7 @@ export class DaemonBackgroundTaskManager {
     const includeHistory = query.includeHistory ?? true;
     const tasks = this.allRuntimeTasks()
       .map(daemonTaskFromRuntimeTask)
-      .filter((task) => (includeHistory ? true : task.state === "running"))
-      .filter((task) => (query.state ? task.state === query.state : true))
+      .filter((task) => (includeHistory || task.state === "running") && (query.state ? task.state === query.state : true))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     return limitTasks(tasks, query.limit);
   }
@@ -102,8 +105,7 @@ export class DaemonBackgroundTaskManager {
     ]);
     const tasks = this.allRuntimeTasks()
       .map(daemonTaskFromRuntimeTask)
-      .filter((task) => terminal.has(task.state))
-      .filter((task) => (query.state ? task.state === query.state : true))
+      .filter((task) => terminal.has(task.state) && (query.state ? task.state === query.state : true))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     return limitTasks(tasks, query.limit);
   }
@@ -121,6 +123,24 @@ export class DaemonBackgroundTaskManager {
         error instanceof Error ? error.message : String(error)
       );
     }
+  }
+
+  /**
+   * 关停全部 workspace 的全部后台任务并清理追踪状态。
+   *
+   * 异常路径兜底：daemon 关停时调用。逐个 dispose 每个 workspace 的
+   * BackgroundCommandManager，终止运行中子进程 + 清理定时器 + 清空 Map。
+   * 幂等：多次调用安全（managers Map dispose 后清空）。
+   */
+  dispose(): void {
+    for (const manager of this.managers.values()) {
+      try {
+        manager.dispose();
+      } catch (error) {
+        console.error("[DaemonBackgroundTaskManager] dispose failed:", error);
+      }
+    }
+    this.managers.clear();
   }
 
   private allRuntimeTasks(): BackgroundCommandSnapshot[] {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { isRecord, errorMessage, fsyncPath, fsyncDirectoryPath, isNodeError, clone } from "@crish/shared-utils";
+import { basename, dirname, join } from "node:path";
+import { isRecord, errorMessage, fsyncPathAsync, fsyncDirectoryPathAsync, isNodeError, clone, deepFreeze, deepEqual } from "@crish/shared-utils";
 import {
   PlanDocumentPatchError,
   PlanDocumentValidationError,
@@ -17,9 +17,23 @@ import {
 
 export const PLAN_DOCUMENT_STORE_VERSION = 1;
 
+/**
+ * In-memory store state: holds full PlanDocument objects assembled from the
+ * index file + per-document content files. Used internally by mutate/get.
+ */
 export interface PlanDocumentStoreState {
   version: typeof PLAN_DOCUMENT_STORE_VERSION;
   documents: PlanDocument[];
+}
+
+/**
+ * Persisted index state: small file atomically rewritten on every mutation.
+ * Stores PlanDocumentSummary entries sufficient for listPlanDocuments().
+ * Full document content lives in per-id content files under contentDir.
+ */
+export interface PlanDocumentIndexState {
+  version: typeof PLAN_DOCUMENT_STORE_VERSION;
+  summaries: PlanDocumentSummary[];
 }
 
 export interface PlanDocumentStore {
@@ -83,6 +97,7 @@ export class PlanDocumentStoreValidationError extends PlanDocumentStoreError {
 
 export class FilePlanDocumentStore implements PlanDocumentStore {
   private state?: PlanDocumentStoreState;
+  private indexState?: PlanDocumentIndexState;
   private pending: Promise<void> = Promise.resolve();
 
   constructor(
@@ -91,10 +106,9 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
   ) {}
 
   async listPlanDocuments(): Promise<PlanDocumentSummary[]> {
-    const state = await this.readState();
-    return cloneState(state)
-      .documents.map((document) => summarizePlanDocument(document))
-      .sort(compareSummaries);
+    // listPlanDocuments only reads the small index file — no content file I/O.
+    const index = await this.readIndex();
+    return [...index.summaries].sort(compareSummaries);
   }
 
   async getPlanDocument(documentId: string): Promise<PlanDocument> {
@@ -103,7 +117,8 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
     if (!document) {
       throw new PlanDocumentNotFoundError(documentId);
     }
-    return clone(document);
+    // 直接返回 frozen 引用：state 在写入时已 deepFreeze，调用方无法 mutate。
+    return document;
   }
 
   async createPlanDocument(input: CreatePlanDocumentInput): Promise<PlanDocument> {
@@ -150,6 +165,24 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
     });
   }
 
+  /**
+   * Content directory derived from the index file path.
+   * e.g. "plan-documents.json" -> "plan-documents/"
+   */
+  private get contentDir(): string {
+    const base = basename(this.filePath).replace(/\.[^.]+$/, "");
+    return join(dirname(this.filePath), base);
+  }
+
+  private documentFilePath(documentId: string): string {
+    return join(this.contentDir, `${documentId}.json`);
+  }
+
+  private async readIndex(): Promise<PlanDocumentIndexState> {
+    await this.pending;
+    return this.loadIndex();
+  }
+
   private async readState(): Promise<PlanDocumentStoreState> {
     await this.pending;
     return this.load();
@@ -158,10 +191,14 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
   private async mutate<T>(operation: (state: PlanDocumentStoreState) => T): Promise<T> {
     const next = this.pending.then(async () => {
       const current = await this.load();
+      const previousState = this.state;
       const nextState = cloneState(current);
       const result = operation(nextState);
-      await this.writeState(nextState);
+      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      deepFreeze(nextState);
+      await this.writeState(nextState, previousState);
       this.state = nextState;
+      this.indexState = deepFreeze(indexFromState(nextState));
       return result;
     });
 
@@ -172,16 +209,16 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
     return next;
   }
 
-  private async load(): Promise<PlanDocumentStoreState> {
-    if (this.state) return this.state;
+  private async loadIndex(): Promise<PlanDocumentIndexState> {
+    if (this.indexState) return this.indexState;
 
     let text: string;
     try {
       text = await readFile(this.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        this.state = emptyState();
-        return this.state;
+        this.indexState = deepFreeze(emptyIndexState());
+        return this.indexState;
       }
       throw new PlanDocumentStoreReadError(
         this.filePath,
@@ -208,26 +245,140 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
       );
     }
 
-    this.state = clone(parsed as PlanDocumentStoreState);
+    // JSON.parse 产出全新对象（无外部引用），可直接冻结作为不可变 state。
+    this.indexState = deepFreeze(parsed as PlanDocumentIndexState);
+    return this.indexState;
+  }
+
+  private async load(): Promise<PlanDocumentStoreState> {
+    if (this.state) return this.state;
+
+    const index = await this.loadIndex();
+
+    const documents: PlanDocument[] = [];
+    for (const summary of index.summaries) {
+      const document = await this.readDocumentFile(summary.id);
+      documents.push(document);
+    }
+
+    const state: PlanDocumentStoreState = {
+      version: index.version,
+      documents,
+    };
+    this.state = deepFreeze(state);
     return this.state;
   }
 
-  private async writeState(state: PlanDocumentStoreState): Promise<void> {
-    const tmpPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+  private async readDocumentFile(documentId: string): Promise<PlanDocument> {
+    const contentPath = this.documentFilePath(documentId);
+    let text: string;
     try {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-      if (this.options.fsync !== false) {
-        fsyncPath(tmpPath, "r+");
+      text = await readFile(contentPath, "utf8");
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        throw new PlanDocumentStoreReadError(
+          contentPath,
+          `Plan document content file missing for ${documentId}: ${contentPath}`
+        );
       }
-      await rename(tmpPath, this.filePath);
+      throw new PlanDocumentStoreReadError(
+        contentPath,
+        `Failed to read plan document content ${contentPath}: ${errorMessage(error)}`
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      throw new PlanDocumentStoreReadError(
+        contentPath,
+        `Plan document content ${contentPath} is not valid JSON: ${errorMessage(error)}`
+      );
+    }
+
+    const validation = validatePlanDocument(parsed as PlanDocument);
+    if (validation.errors.length > 0) {
+      throw new PlanDocumentStoreReadError(
+        contentPath,
+        `Plan document content ${contentPath} has invalid data`,
+        validation.errors
+      );
+    }
+
+    return parsed as PlanDocument;
+  }
+
+  /**
+   * Split-index write strategy:
+   * 1. Write changed/new content files FIRST. If a crash occurs here, the old
+   *    index remains valid (no dangling references to missing content).
+   * 2. Write the index file (atomic rename). After this, new content is referenced.
+   * 3. Delete removed content files (best-effort, after index no longer references them).
+   */
+  private async writeState(
+    state: PlanDocumentStoreState,
+    previous: PlanDocumentStoreState | undefined
+  ): Promise<void> {
+    const indexState = indexFromState(state);
+
+    const previousDocs = new Map<string, PlanDocument>(
+      (previous?.documents ?? []).map((doc) => [doc.id, doc])
+    );
+    const currentIds = new Set(state.documents.map((doc) => doc.id));
+
+    // 1. Write changed/new content files before index update.
+    for (const document of state.documents) {
+      const prev = previousDocs.get(document.id);
+      if (!prev || !deepEqual(prev, document)) {
+        await this.writeDocumentFile(document);
+      }
+    }
+
+    // 2. Write index file (atomic).
+    await this.writeIndexFile(indexState);
+
+    // 3. Delete removed content files (best-effort).
+    for (const [id] of previousDocs) {
+      if (!currentIds.has(id)) {
+        await this.deleteDocumentFile(id);
+      }
+    }
+  }
+
+  private async atomicWriteJsonFile(targetPath: string, data: unknown): Promise<void> {
+    const tmpPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(dirname(targetPath), { recursive: true });
+      await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      if (this.options.fsync !== false) {
+        await fsyncPathAsync(tmpPath, "r+");
+      }
+      await rename(tmpPath, targetPath);
       if (this.options.fsync !== false && this.options.fsyncDirectory !== false) {
         const dirFsyncMode = this.options.fsyncDirectory === true ? "strict" : "best-effort";
-        fsyncDirectoryPath(dirname(this.filePath), dirFsyncMode);
+        await fsyncDirectoryPathAsync(dirname(targetPath), dirFsyncMode);
       }
     } catch (error) {
       await rm(tmpPath, { force: true }).catch(() => undefined);
-      throw new PlanDocumentStoreWriteError(this.filePath, error);
+      throw new PlanDocumentStoreWriteError(targetPath, error);
+    }
+  }
+
+  private async writeIndexFile(index: PlanDocumentIndexState): Promise<void> {
+    await this.atomicWriteJsonFile(this.filePath, index);
+  }
+
+  private async writeDocumentFile(document: PlanDocument): Promise<void> {
+    await this.atomicWriteJsonFile(this.documentFilePath(document.id), document);
+  }
+
+  private async deleteDocumentFile(documentId: string): Promise<void> {
+    const contentPath = this.documentFilePath(documentId);
+    try {
+      await rm(contentPath, { force: true });
+    } catch {
+      // Best-effort: file doesn't exist or can't be deleted — ignore.
     }
   }
 }
@@ -238,24 +389,37 @@ export function validatePlanDocumentStoreState(value: unknown): string[] {
     return ["$: Expected object"];
   }
 
-  rejectUnknownFields(value, ["version", "documents"], "$", issues);
+  rejectUnknownFields(value, ["version", "summaries"], "$", issues);
   if (value.version !== PLAN_DOCUMENT_STORE_VERSION) {
     issues.push(`$.version: Expected ${PLAN_DOCUMENT_STORE_VERSION}`);
   }
-  if (!Array.isArray(value.documents)) {
-    issues.push("$.documents: Expected array");
+  if (!Array.isArray(value.summaries)) {
+    issues.push("$.summaries: Expected array");
   } else {
     const ids = new Set<string>();
-    value.documents.forEach((document, index) => {
-      const validation = validatePlanDocument(document as PlanDocument);
-      for (const issue of validation.errors) {
-        issues.push(`$.documents[${index}]: ${issue}`);
+    value.summaries.forEach((summary, index) => {
+      if (!isRecord(summary)) {
+        issues.push(`$.summaries[${index}]: Expected object`);
+        return;
       }
-      if (!isRecord(document) || typeof document.id !== "string") return;
-      if (ids.has(document.id)) {
-        issues.push(`$.documents: Duplicate plan document id ${document.id}`);
+      if (typeof summary.id !== "string" || summary.id.length === 0) {
+        issues.push(`$.summaries[${index}].id: Expected non-empty string`);
       }
-      ids.add(document.id);
+      if (typeof summary.version !== "number") {
+        issues.push(`$.summaries[${index}].version: Expected number`);
+      }
+      if (typeof summary.createdAt !== "string") {
+        issues.push(`$.summaries[${index}].createdAt: Expected string`);
+      }
+      if (typeof summary.updatedAt !== "string") {
+        issues.push(`$.summaries[${index}].updatedAt: Expected string`);
+      }
+      if (typeof summary.id === "string" && summary.id.length > 0) {
+        if (ids.has(summary.id)) {
+          issues.push(`$.summaries: Duplicate plan document id ${summary.id}`);
+        }
+        ids.add(summary.id);
+      }
     });
   }
 
@@ -269,10 +433,17 @@ function readRuntimeValidationIssues(error: PlanDocumentPatchError | PlanDocumen
   return [error.message];
 }
 
-function emptyState(): PlanDocumentStoreState {
+function emptyIndexState(): PlanDocumentIndexState {
   return {
     version: PLAN_DOCUMENT_STORE_VERSION,
-    documents: [],
+    summaries: [],
+  };
+}
+
+function indexFromState(state: PlanDocumentStoreState): PlanDocumentIndexState {
+  return {
+    version: state.version,
+    summaries: state.documents.map((document) => summarizePlanDocument(document)),
   };
 }
 
@@ -293,10 +464,6 @@ function rejectUnknownFields(
   }
 }
 
-
-
 function cloneState(state: PlanDocumentStoreState): PlanDocumentStoreState {
   return clone(state);
 }
-
-

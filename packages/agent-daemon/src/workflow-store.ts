@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPath, fsyncDirectoryPath, isNodeError, clone, isJsonObject } from "@crish/shared-utils";
+import { isRecord, errorMessage, fsyncPathAsync, fsyncDirectoryPathAsync, isNodeError, clone, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
 import type {
   WorkflowDefinition,
   WorkflowRunEntry,
@@ -121,13 +121,15 @@ export class FileWorkflowStore implements WorkflowStore {
 
   async listWorkflows(): Promise<WorkflowDefinition[]> {
     const state = await this.readState();
-    return cloneState(state).workflows.sort(compareByCreatedAt);
+    // state.workflows 是 frozen 数组；返回浅拷贝数组（items 仍为 frozen 引用），
+    // 以保持按 createdAt 排序的对外契约，而不必深拷贝每条 workflow。
+    return [...state.workflows].sort(compareByCreatedAt);
   }
 
   async getWorkflow(workflowId: string): Promise<WorkflowDefinition | undefined> {
     const state = await this.readState();
-    const workflow = state.workflows.find((item) => item.id === workflowId);
-    return workflow ? clone(workflow) : undefined;
+    // 直接返回 frozen 引用：state 在写入时已 deepFreeze，调用方无法 mutate。
+    return state.workflows.find((item) => item.id === workflowId);
   }
 
   async createWorkflow(
@@ -197,8 +199,10 @@ export class FileWorkflowStore implements WorkflowStore {
 
   async listRuns(workflowId?: string): Promise<WorkflowRunEntry[]> {
     const state = await this.readState();
-    return cloneState(state)
-      .runs.filter((run) => workflowId === undefined || run.workflowId === workflowId)
+    // state.runs 是 frozen 数组；filter 产出新数组，items 仍为 frozen 引用，
+    // 不必深拷贝每条 run。findWorkflowRunBySchedule 等下游 .find() 同样获得 frozen 引用。
+    return state.runs
+      .filter((run) => workflowId === undefined || run.workflowId === workflowId)
       .sort(compareRuns);
   }
 
@@ -266,6 +270,16 @@ export class FileWorkflowStore implements WorkflowStore {
     });
   }
 
+  /**
+   * Runs file path derived from the workflows file path.
+   * e.g. "workflows.json" -> "workflows-runs.json"
+   */
+  private get runsFilePath(): string {
+    const dir = dirname(this.filePath);
+    const base = basename(this.filePath).replace(/\.[^.]+$/, "");
+    return join(dir, `${base}-runs.json`);
+  }
+
   private async readState(): Promise<WorkflowStoreState> {
     await this.pending;
     return this.load();
@@ -274,9 +288,12 @@ export class FileWorkflowStore implements WorkflowStore {
   private async mutate<T>(operation: (state: WorkflowStoreState) => T): Promise<T> {
     const next = this.pending.then(async () => {
       const current = await this.load();
+      const previousState = this.state;
       const nextState = cloneState(current);
       const result = operation(nextState);
-      await this.writeState(nextState);
+      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      deepFreeze(nextState);
+      await this.writeState(nextState, previousState);
       this.state = nextState;
       return result;
     });
@@ -291,13 +308,26 @@ export class FileWorkflowStore implements WorkflowStore {
   private async load(): Promise<WorkflowStoreState> {
     if (this.state) return this.state;
 
+    const workflows = await this.loadWorkflowsFile();
+    const runs = await this.loadRunsFile();
+
+    const state: WorkflowStoreState = {
+      version: WORKFLOW_STORE_VERSION,
+      workflows,
+      runs,
+    };
+    // JSON.parse 产出全新对象（无外部引用），可直接冻结作为不可变 state。
+    this.state = deepFreeze(state);
+    return this.state;
+  }
+
+  private async loadWorkflowsFile(): Promise<WorkflowDefinition[]> {
     let text: string;
     try {
       text = await readFile(this.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        this.state = emptyState();
-        return this.state;
+        return [];
       }
       throw new WorkflowStoreReadError(
         this.filePath,
@@ -315,7 +345,7 @@ export class FileWorkflowStore implements WorkflowStore {
       );
     }
 
-    const issues = validateWorkflowStoreState(parsed);
+    const issues = validateWorkflowFileState(parsed);
     if (issues.length > 0) {
       throw new WorkflowStoreReadError(
         this.filePath,
@@ -324,31 +354,99 @@ export class FileWorkflowStore implements WorkflowStore {
       );
     }
 
-    this.state = clone(parsed as WorkflowStoreState);
-    return this.state;
+    return (parsed as { workflows: WorkflowDefinition[] }).workflows;
   }
 
-  private async writeState(state: WorkflowStoreState): Promise<void> {
-    const tmpPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+  private async loadRunsFile(): Promise<WorkflowRunEntry[]> {
+    let text: string;
     try {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-      if (this.options.fsync !== false) {
-        fsyncPath(tmpPath, "r+");
+      text = await readFile(this.runsFilePath, "utf8");
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return [];
       }
-      await rename(tmpPath, this.filePath);
+      throw new WorkflowStoreReadError(
+        this.runsFilePath,
+        `Failed to read workflow runs store ${this.runsFilePath}: ${errorMessage(error)}`
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      throw new WorkflowStoreReadError(
+        this.runsFilePath,
+        `Workflow runs store ${this.runsFilePath} is not valid JSON: ${errorMessage(error)}`
+      );
+    }
+
+    const issues = validateWorkflowRunsFileState(parsed);
+    if (issues.length > 0) {
+      throw new WorkflowStoreReadError(
+        this.runsFilePath,
+        `Workflow runs store ${this.runsFilePath} has invalid data`,
+        issues
+      );
+    }
+
+    return (parsed as { runs: WorkflowRunEntry[] }).runs;
+  }
+
+  /**
+   * Two-file split write strategy: workflows and runs are persisted in
+   * separate files. Only the file(s) whose contents actually changed are
+   * rewritten, so frequent run-status updates (updateRun/appendRun) avoid
+   * rewriting the larger workflows file (which holds prompts + metadata).
+   */
+  private async writeState(
+    state: WorkflowStoreState,
+    previous: WorkflowStoreState | undefined
+  ): Promise<void> {
+    const workflowsChanged = !previous || !deepEqual(previous.workflows, state.workflows);
+    const runsChanged = !previous || !deepEqual(previous.runs, state.runs);
+
+    if (workflowsChanged) {
+      await this.writeWorkflowsFile(state.workflows);
+    }
+    if (runsChanged) {
+      await this.writeRunsFile(state.runs);
+    }
+  }
+
+  private async atomicWriteJsonFile(targetPath: string, data: unknown): Promise<void> {
+    const tmpPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(dirname(targetPath), { recursive: true });
+      await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      if (this.options.fsync !== false) {
+        await fsyncPathAsync(tmpPath, "r+");
+      }
+      await rename(tmpPath, targetPath);
       if (this.options.fsync !== false && this.options.fsyncDirectory !== false) {
         const dirFsyncMode = this.options.fsyncDirectory === true ? "strict" : "best-effort";
-        fsyncDirectoryPath(dirname(this.filePath), dirFsyncMode);
+        await fsyncDirectoryPathAsync(dirname(targetPath), dirFsyncMode);
       }
     } catch (error) {
       await rm(tmpPath, { force: true }).catch(() => undefined);
-      throw new WorkflowStoreWriteError(this.filePath, error);
+      throw new WorkflowStoreWriteError(targetPath, error);
     }
   }
+
+  private async writeWorkflowsFile(workflows: WorkflowDefinition[]): Promise<void> {
+    await this.atomicWriteJsonFile(this.filePath, {
+      version: WORKFLOW_STORE_VERSION,
+      workflows,
+    });
+  }
+
+  private async writeRunsFile(runs: WorkflowRunEntry[]): Promise<void> {
+    await this.atomicWriteJsonFile(this.runsFilePath, {
+      version: WORKFLOW_STORE_VERSION,
+      runs,
+    });
+  }
 }
-
-
 
 export function validateWorkflowStoreState(value: unknown): string[] {
   const issues: string[] = [];
@@ -374,6 +472,56 @@ export function validateWorkflowStoreState(value: unknown): string[] {
       }
       ids.add(workflow.id);
     }
+  }
+  if (!Array.isArray(value.runs)) {
+    issues.push("$.runs: Expected array");
+  } else {
+    value.runs.forEach((run, index) =>
+      validateWorkflowRunEntry(run, `$.runs[${index}]`, issues)
+    );
+  }
+
+  return issues;
+}
+
+function validateWorkflowFileState(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) {
+    return ["$: Expected object"];
+  }
+
+  rejectUnknownFields(value, ["version", "workflows"], "$", issues);
+  if (value.version !== WORKFLOW_STORE_VERSION) {
+    issues.push(`$.version: Expected ${WORKFLOW_STORE_VERSION}`);
+  }
+  if (!Array.isArray(value.workflows)) {
+    issues.push("$.workflows: Expected array");
+  } else {
+    value.workflows.forEach((workflow, index) =>
+      validateWorkflowDefinition(workflow, `$.workflows[${index}]`, issues)
+    );
+    const ids = new Set<string>();
+    for (const workflow of value.workflows) {
+      if (!isRecord(workflow) || typeof workflow.id !== "string") continue;
+      if (ids.has(workflow.id)) {
+        issues.push(`$.workflows: Duplicate workflow id ${workflow.id}`);
+      }
+      ids.add(workflow.id);
+    }
+  }
+
+  return issues;
+}
+
+function validateWorkflowRunsFileState(value: unknown): string[] {
+  const issues: string[] = [];
+  if (!isRecord(value)) {
+    return ["$: Expected object"];
+  }
+
+  rejectUnknownFields(value, ["version", "runs"], "$", issues);
+  if (value.version !== WORKFLOW_STORE_VERSION) {
+    issues.push(`$.version: Expected ${WORKFLOW_STORE_VERSION}`);
   }
   if (!Array.isArray(value.runs)) {
     issues.push("$.runs: Expected array");
@@ -532,14 +680,6 @@ function assertWorkflowRunEntry(value: WorkflowRunEntry, path: string): void {
   if (issues.length > 0) {
     throw new WorkflowStoreConflictError(`Invalid workflow run: ${issues.join("; ")}`);
   }
-}
-
-function emptyState(): WorkflowStoreState {
-  return {
-    version: WORKFLOW_STORE_VERSION,
-    workflows: [],
-    runs: [],
-  };
 }
 
 function compareByCreatedAt(left: WorkflowDefinition, right: WorkflowDefinition): number {

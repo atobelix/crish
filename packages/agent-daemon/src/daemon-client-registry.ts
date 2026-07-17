@@ -79,8 +79,8 @@ export class DaemonClientRegistry {
 
   closeAll(code: number, reason: string): ConnectedClient[] {
     const closedClients = [...this.clients.values()];
-    for (const [ws] of this.clients) {
-      ws.close(code, reason);
+    for (const client of closedClients) {
+      client.ws.close(code, reason);
     }
     this.clients.clear();
     return closedClients;
@@ -96,9 +96,10 @@ export class DaemonClientRegistry {
     const payload = this.encodeOutbound(message);
     if (!payload) return 0;
 
+    const payloadBytes = Buffer.byteLength(payload, "utf8");
     let sent = 0;
     for (const [ws] of this.clients) {
-      if (this.sendPayload(ws, payload, "broadcast")) {
+      if (this.sendPayload(ws, payload, "broadcast", payloadBytes)) {
         sent += 1;
       }
     }
@@ -139,13 +140,13 @@ export class DaemonClientRegistry {
     return encoded.value;
   }
 
-  private sendPayload(ws: WebSocket, payload: string, operation: "send" | "broadcast"): boolean {
+  private sendPayload(ws: WebSocket, payload: string, operation: "send" | "broadcast", payloadBytes?: number): boolean {
     const client = this.clients.get(ws);
     if (!client || ws.readyState !== ws.OPEN) {
       return false;
     }
 
-    const payloadBytes = Buffer.byteLength(payload, "utf8");
+    payloadBytes ??= Buffer.byteLength(payload, "utf8");
     if (ws.bufferedAmount + payloadBytes > this.maxBufferedBytes) {
       this.reportTransportFailure(ws, {
         code: "CLIENT_SEND_BACKPRESSURE",

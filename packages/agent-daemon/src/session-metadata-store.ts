@@ -3,7 +3,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { SessionAction } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPath, fsyncDirectoryPath, isNodeError, clone, compactJsonObject, isJsonObject } from "@crish/shared-utils";
+import { isRecord, errorMessage, fsyncPathAsync, fsyncDirectoryPathAsync, isNodeError, clone, compactJsonObject, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
+
 
 export const SESSION_METADATA_STORE_VERSION = 1;
 
@@ -84,13 +85,15 @@ export class FileSessionMetadataStore {
 
   async list(): Promise<SessionMetadataRecord[]> {
     const state = await this.readState();
-    return cloneState(state).sessions.sort(compareRecords);
+    // state.sessions 是 frozen 数组；返回一个浅拷贝数组（items 仍为 frozen 引用），
+    // 以保持按 sessionId 排序的对外契约，而不必深拷贝每条 record。
+    return [...state.sessions].sort(compareRecords);
   }
 
   async get(sessionId: string): Promise<SessionMetadataRecord | undefined> {
     const state = await this.readState();
-    const record = state.sessions.find((item) => item.sessionId === sessionId);
-    return record ? clone(record) : undefined;
+    // 直接返回 frozen 引用：state 在写入时已 deepFreeze，调用方无法 mutate。
+    return state.sessions.find((item) => item.sessionId === sessionId);
   }
 
   async applyAction(
@@ -140,6 +143,8 @@ export class FileSessionMetadataStore {
       const current = await this.load();
       const nextState = cloneState(current);
       const result = operation(nextState);
+      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      deepFreeze(nextState);
       await this.writeState(nextState);
       this.state = nextState;
       return result;
@@ -160,7 +165,7 @@ export class FileSessionMetadataStore {
       text = await readFile(this.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        this.state = emptyState();
+        this.state = deepFreeze(emptyState());
         return this.state;
       }
       throw new SessionMetadataStoreReadError(
@@ -188,7 +193,8 @@ export class FileSessionMetadataStore {
       );
     }
 
-    this.state = clone(parsed as SessionMetadataStoreState);
+    // JSON.parse 产出全新对象（无外部引用），可直接冻结作为不可变 state。
+    this.state = deepFreeze(parsed as SessionMetadataStoreState);
     return this.state;
   }
 
@@ -198,12 +204,12 @@ export class FileSessionMetadataStore {
       await mkdir(dirname(this.filePath), { recursive: true });
       await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
       if (this.options.fsync !== false) {
-        fsyncPath(tmpPath, "r+");
+        await fsyncPathAsync(tmpPath, "r+");
       }
       await rename(tmpPath, this.filePath);
       if (this.options.fsync !== false && this.options.fsyncDirectory !== false) {
         const dirFsyncMode = this.options.fsyncDirectory === true ? "strict" : "best-effort";
-        fsyncDirectoryPath(dirname(this.filePath), dirFsyncMode);
+        await fsyncDirectoryPathAsync(dirname(this.filePath), dirFsyncMode);
       }
     } catch (error) {
       await rm(tmpPath, { force: true }).catch(() => undefined);
@@ -349,7 +355,7 @@ function compareRecords(left: SessionMetadataRecord, right: SessionMetadataRecor
 }
 
 function recordsEqual(left: SessionMetadataRecord, right: SessionMetadataRecord): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return deepEqual(left, right);
 }
 
 function rejectUnknownFields(

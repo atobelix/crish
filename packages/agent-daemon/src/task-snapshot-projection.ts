@@ -24,6 +24,11 @@ interface MutableMessage extends DaemonTaskMessageSnapshot {
   toolCalls?: DaemonTaskSnapshotToolCall[];
 }
 
+interface ToolCallLocation {
+  message: MutableMessage;
+  toolCall: DaemonTaskSnapshotToolCall;
+}
+
 export function buildDaemonTaskSnapshot(input: BuildDaemonTaskSnapshotInput): DaemonTaskSnapshot {
   const events = [...input.events].sort((left, right) => left.sequence - right.sequence);
   const runFromEvents = readLatestRunRecord(events);
@@ -41,12 +46,14 @@ export function buildDaemonTaskSnapshot(input: BuildDaemonTaskSnapshotInput): Da
   const pendingToolCalls = new Map<string, DaemonTaskSnapshotToolCall>();
   const approvals = new Map<string, DaemonTaskSnapshotApproval>();
   const backgroundTasks = new Map<string, DaemonBackgroundTaskSnapshot>();
+  const toolCallIndex = new Map<string, ToolCallLocation>();
   const runtimeEvents: AgentEvent[] = [];
   const state: {
     latestError?: string;
     status: RunStatus;
     updatedAt: string;
     progressLabel: string;
+    lastAssistantMessage?: MutableMessage;
   } = {
     status: run?.status ?? "queued",
     updatedAt: run?.updatedAt ?? lastEvent?.timestamp ?? new Date(0).toISOString(),
@@ -107,7 +114,7 @@ export function buildDaemonTaskSnapshot(input: BuildDaemonTaskSnapshotInput): Da
           const runtimeEvent = runtimeEventFromOrchestratorEvent(event);
           if (runtimeEvent) {
             runtimeEvents.push(runtimeEvent);
-            applyRuntimeEventProjection(runtimeEvent, event, state, messages, drafts, endedMessageIds, pendingToolCalls, approvals, backgroundTasks);
+            applyRuntimeEventProjection(runtimeEvent, event, state, messages, drafts, endedMessageIds, pendingToolCalls, approvals, backgroundTasks, toolCallIndex);
           }
         }
         break;
@@ -180,13 +187,14 @@ export function buildDaemonTaskSnapshot(input: BuildDaemonTaskSnapshotInput): Da
 function applyRuntimeEventProjection(
   runtimeEvent: AgentEvent,
   event: OrchestratorEvent,
-  state: { latestError?: string; status: RunStatus; progressLabel: string },
+  state: { latestError?: string; status: RunStatus; progressLabel: string; lastAssistantMessage?: MutableMessage },
   messages: MutableMessage[],
   drafts: Map<string, MutableMessage>,
   endedMessageIds: Set<string>,
   pendingToolCalls: Map<string, DaemonTaskSnapshotToolCall>,
   approvals: Map<string, DaemonTaskSnapshotApproval>,
-  backgroundTasks: Map<string, DaemonBackgroundTaskSnapshot>
+  backgroundTasks: Map<string, DaemonBackgroundTaskSnapshot>,
+  toolCallIndex: Map<string, ToolCallLocation>
 ): void {
   switch (runtimeEvent.type) {
     case "agent-start":
@@ -200,20 +208,33 @@ function applyRuntimeEventProjection(
       state.progressLabel = `Turn ${runtimeEvent.turnIndex + 1} finished`;
       break;
     case "message-delta":
-      applyMessageDelta(event, runtimeEvent, drafts, endedMessageIds);
+      applyMessageDelta(event, runtimeEvent, drafts, endedMessageIds, toolCallIndex);
       break;
     case "message-end": {
       const messageId = runtimeEvent.message.id;
       endedMessageIds.add(messageId);
+      const draft = drafts.get(messageId);
+      if (draft?.toolCalls) {
+        for (const tc of draft.toolCalls) toolCallIndex.delete(tc.id);
+      }
       drafts.delete(messageId);
       const message = messageFromAgentMessage(runtimeEvent.message, event);
-      if (message) messages.push(message);
+      if (message) {
+        messages.push(message);
+        if (message.role === "assistant") state.lastAssistantMessage = message;
+        if (message.toolCalls) {
+          for (const tc of message.toolCalls) {
+            toolCallIndex.set(tc.id, { message, toolCall: tc });
+          }
+        }
+      }
       break;
     }
     case "tool-start": {
       const toolCall = toolCallFromCall(runtimeEvent.call, event, "running");
       pendingToolCalls.set(toolCall.id, toolCall);
-      attachToolCall(messages, drafts, toolCall);
+      const newMessage = attachToolCall(messages, drafts, toolCall, toolCallIndex, state.lastAssistantMessage);
+      if (newMessage) state.lastAssistantMessage = newMessage;
       state.progressLabel = runtimeEvent.call.summary || `Running ${runtimeEvent.call.toolName}`;
       break;
     }
@@ -230,7 +251,7 @@ function applyRuntimeEventProjection(
     }
     case "tool-end": {
       pendingToolCalls.delete(runtimeEvent.result.id);
-      applyToolResult(messages, drafts, runtimeEvent.result);
+      applyToolResult(runtimeEvent.result, toolCallIndex);
       applyBackgroundTaskJson(runtimeEvent.result.output.json, backgroundTasks, event.timestamp);
       if (runtimeEvent.result.isError) {
         state.latestError = outputText(runtimeEvent.result.output) ?? `${runtimeEvent.result.toolName} failed`;
@@ -292,7 +313,8 @@ function applyMessageDelta(
   event: OrchestratorEvent,
   runtimeEvent: Extract<AgentEvent, { type: "message-delta" }>,
   drafts: Map<string, MutableMessage>,
-  endedMessageIds: Set<string>
+  endedMessageIds: Set<string>,
+  toolCallIndex: Map<string, ToolCallLocation>
 ): void {
   if (endedMessageIds.has(runtimeEvent.messageId)) return;
   const draft = drafts.get(runtimeEvent.messageId) ?? {
@@ -306,7 +328,9 @@ function applyMessageDelta(
     draft.content += runtimeEvent.block.text;
   }
   if (runtimeEvent.block.type === "tool-call") {
-    draft.toolCalls = [...(draft.toolCalls ?? []), toolCallFromBlock(runtimeEvent.block, event, "pending")];
+    const toolCall = toolCallFromBlock(runtimeEvent.block, event, "pending");
+    draft.toolCalls = [...(draft.toolCalls ?? []), toolCall];
+    toolCallIndex.set(toolCall.id, { message: draft, toolCall });
   }
   drafts.set(runtimeEvent.messageId, draft);
 }
@@ -355,37 +379,49 @@ function messageFromAgentMessage(message: AgentMessage, event: OrchestratorEvent
 function attachToolCall(
   messages: MutableMessage[],
   drafts: Map<string, MutableMessage>,
-  toolCall: DaemonTaskSnapshotToolCall
-): void {
-  const target = [...drafts.values()].at(-1) ?? [...messages].reverse().find((message) => message.role === "assistant");
+  toolCall: DaemonTaskSnapshotToolCall,
+  toolCallIndex: Map<string, ToolCallLocation>,
+  lastAssistantMessage: MutableMessage | undefined
+): MutableMessage | undefined {
+  const target = lastDraftValue(drafts) ?? lastAssistantMessage;
   if (!target) {
-    messages.push({
+    const message: MutableMessage = {
       id: `daemon-tool-${toolCall.id}`,
       role: "assistant",
       content: "",
       createdAt: toolCall.startedAt,
       toolCalls: [toolCall],
-    });
-    return;
+    };
+    messages.push(message);
+    toolCallIndex.set(toolCall.id, { message, toolCall });
+    return message;
   }
-  const existing = target.toolCalls?.find((candidate) => candidate.id === toolCall.id);
-  if (existing) Object.assign(existing, toolCall);
-  else target.toolCalls = [...(target.toolCalls ?? []), toolCall];
+  const indexed = toolCallIndex.get(toolCall.id);
+  const existing = indexed && indexed.message === target ? indexed.toolCall : undefined;
+  if (existing) {
+    Object.assign(existing, toolCall);
+  } else {
+    target.toolCalls = [...(target.toolCalls ?? []), toolCall];
+    toolCallIndex.set(toolCall.id, { message: target, toolCall });
+  }
+  return undefined;
+}
+
+function lastDraftValue(drafts: Map<string, MutableMessage>): MutableMessage | undefined {
+  let last: MutableMessage | undefined;
+  for (const draft of drafts.values()) last = draft;
+  return last;
 }
 
 function applyToolResult(
-  messages: MutableMessage[],
-  drafts: Map<string, MutableMessage>,
-  result: ToolBatchResult
+  result: ToolBatchResult,
+  toolCallIndex: Map<string, ToolCallLocation>
 ): void {
-  for (const message of [...messages, ...drafts.values()]) {
-    const toolCall = message.toolCalls?.find((candidate) => candidate.id === result.id);
-    if (!toolCall) continue;
-    toolCall.status = result.isError ? "failed" : "completed";
-    toolCall.output = outputText(result.output);
-    toolCall.updatedAt = message.createdAt;
-    return;
-  }
+  const indexed = toolCallIndex.get(result.id);
+  if (!indexed) return;
+  indexed.toolCall.status = result.isError ? "failed" : "completed";
+  indexed.toolCall.output = outputText(result.output);
+  indexed.toolCall.updatedAt = indexed.message.createdAt;
 }
 
 function toolCallFromBlock(

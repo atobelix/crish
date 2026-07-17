@@ -499,6 +499,12 @@ export class RunHandler {
       DaemonApprovalHandler.clearRun(input.runId);
       await input.onTerminal?.("failed", errorMessage(error));
     } finally {
+      // 异常路径兜底清理：
+      // - approvalQueue 已在 catch 中 clearRun（run-error），这里再清一次保证幂等覆盖正常完成路径
+      // - subagentBridge 必须清理：父 run 结束时子代理 "ended" 事件可能未投递
+      //   （事件流中断 / orchestrator 提前结束迭代），否则 activeSubagents Map 累积孤儿条目
+      this.options.approvalQueue.clearRun(input.runId, "run-finalize");
+      this.options.subagentBridge.clearRun(input.runId);
       DaemonApprovalHandler.clearRun(input.runId);
       admissionLease?.release();
     }

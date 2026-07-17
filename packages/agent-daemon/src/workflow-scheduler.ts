@@ -1,5 +1,15 @@
 import type { WorkflowDefinition, WorkflowRunEntry } from "./types.js";
-import type { WorkflowStore } from "./workflow-store.js";
+import { type WorkflowStore, WorkflowStoreConflictError } from "./workflow-store.js";
+import { AsyncMutex } from "@crish/shared-utils";
+
+/**
+ * 串行化 tickScheduler 调用的进程级互斥锁。
+ *
+ * 定时调度与手动触发可能并发进入 tickScheduler，跨 await 的 read-then-trigger
+ * 会让两个 tick 拿到相同的 due 列表，导致第二次 trigger 抛 WorkflowStoreConflictError。
+ * 该互斥锁确保任意时刻只有一个 tick 在执行 critical section，从根源上消除竞态。
+ */
+const tickMutex = new AsyncMutex();
 
 export interface WorkflowDueRun {
   workflow: WorkflowDefinition;
@@ -36,16 +46,25 @@ export class WorkflowScheduler {
   }
 
   async tickScheduler(now: Date = new Date()): Promise<WorkflowSchedulerTickResult> {
-    const due = await this.getDueWorkflows(now);
-    const triggered: WorkflowRunAccepted[] = [];
+    return tickMutex.runExclusive(async () => {
+      const due = await this.getDueWorkflows(now);
+      const triggered: WorkflowRunAccepted[] = [];
 
-    if (this.options.triggerWorkflow) {
-      for (const item of due) {
-        triggered.push(await this.options.triggerWorkflow(item, now));
+      if (this.options.triggerWorkflow) {
+        for (const item of due) {
+          try {
+            triggered.push(await this.options.triggerWorkflow(item, now));
+          } catch (error) {
+            // WorkflowStoreConflictError 表示该项已被其他 tick/进程触发，
+            // 属于预期的非 fatal 情况：跳过该项，继续处理后续 due 项。
+            if (error instanceof WorkflowStoreConflictError) continue;
+            throw error;
+          }
+        }
       }
-    }
 
-    return { due, triggered };
+      return { due, triggered };
+    });
   }
 }
 

@@ -115,4 +115,44 @@ export class DaemonSubagentBridge {
       ...approvalRiskFields(event.request.metadata),
     });
   }
+
+  /**
+   * 清理指定 run 的所有追踪中子代理记录。
+   *
+   * 异常路径兜底：当父 run 被 cancel / error / 超时，子代理的 "ended" 事件
+   * 可能不会被投递（事件流中断、orchestrator 提前结束迭代），导致 activeSubagents
+   * Map 累积孤儿条目。在 run-handlers 的 finally 块中调用此方法保证清理。
+   *
+   * 幂等：对不存在的 run 调用不报错，多次调用安全。
+   * 返回被清理的子代理 id 列表，供诊断/广播使用。
+   */
+  clearRun(runId: string): string[] {
+    const removed: string[] = [];
+    for (const [subagentId, info] of this.activeSubagents) {
+      if (info.runId !== runId) continue;
+      this.activeSubagents.delete(subagentId);
+      removed.push(subagentId);
+      console.log(
+        `[Daemon] Subagent cleared on run-finalize: ${subagentId} (run: ${runId})`
+      );
+    }
+    return removed;
+  }
+
+  /**
+   * 清理全部追踪中子代理记录（daemon 关停时使用）。
+   * 幂等：空 Map 调用安全。
+   */
+  clearAll(): void {
+    const count = this.activeSubagents.size;
+    this.activeSubagents.clear();
+    if (count > 0) {
+      console.log(`[Daemon] Cleared ${count} active subagent(s) on shutdown`);
+    }
+  }
+
+  /** 诊断用：当前追踪中的子代理数量。 */
+  get size(): number {
+    return this.activeSubagents.size;
+  }
 }

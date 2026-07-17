@@ -83,13 +83,13 @@ describe("FilePlanDocumentStore", () => {
     await expect(store.deletePlanDocument("missing")).rejects.toBeInstanceOf(PlanDocumentNotFoundError);
   });
 
-  it("rejects invalid persisted documents on read", async () => {
+  it("rejects invalid persisted index on read", async () => {
     const filePath = await tempStorePath();
     await writeFile(
       filePath,
       JSON.stringify({
         version: PLAN_DOCUMENT_STORE_VERSION,
-        documents: [{ id: "bad", title: "", goal: "", version: 0 }],
+        summaries: [{ id: "bad", version: "not-a-number" }],
       }),
       "utf8"
     );

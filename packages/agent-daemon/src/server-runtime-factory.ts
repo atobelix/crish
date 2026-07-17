@@ -3,7 +3,7 @@ import type {
   AgentTool,
 } from "@crish/agent-runtime";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { compactJsonObject } from "@crish/shared-utils";
+import { compactJsonObject, BoundedMap } from "@crish/shared-utils";
 import {
   BackgroundCommandManager,
   ConfigMerger,
@@ -130,11 +130,14 @@ interface DaemonRuntimeFactoryOptions {
  */
 const runtimeConfigMerger = new ConfigMerger(RUNTIME_CONFIG_SCHEMA);
 
+/** workspace mutation coordinator 上限：daemon 长跑场景下可能切换多个 workspace，按 FIFO 淘汰。 */
+const MAX_MUTATION_COORDINATORS = 50;
+
 export class DaemonRuntimeFactory {
   private providerFactory?: DaemonProviderFactory;
   private providerStatusProvider?: () => DaemonProviderStatusSnapshot;
   private toolFactory?: DaemonToolFactory;
-  private readonly mutationCoordinatorsByCwd = new Map<string, WorkspaceMutationCoordinator>();
+  private readonly mutationCoordinatorsByCwd = new BoundedMap<string, WorkspaceMutationCoordinator>(MAX_MUTATION_COORDINATORS);
   private readonly mcpManagers = new Set<McpLifecycleManager>();
   private sharedMcpManager?: McpLifecycleManager;
   private lastMcpStatus?: DaemonMcpStatusSnapshot;
