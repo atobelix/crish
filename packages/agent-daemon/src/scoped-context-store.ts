@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPath, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
+import { isRecord, errorMessage, fsyncPathAsync, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
 import type {
   DaemonScopedContextDiagnostic,
   DaemonScopedContextStoreStatus,
@@ -72,13 +72,17 @@ export class FileScopedContextStore implements ScopedContextStore {
     const normalized = normalizeScopedContextRecord(record, now);
     const mutation = await this.mutate((state) => {
       const index = state.records.findIndex((item) => item.id === normalized.id);
-      if (index >= 0) {
-        state.records[index] = normalized;
-      } else {
-        state.records.push(normalized);
-      }
-      state.records.sort(compareRecords);
-      return clone(normalized);
+      // structural sharing: 只创建新 records 数组与受影响元素，其余元素引用不变。
+      // map/扩展均产出新数组，sort 在新数组上 in-place，不影响原 frozen state.records。
+      const nextRecords =
+        index >= 0
+          ? state.records.map((item, i) => (i === index ? normalized : item))
+          : [...state.records, normalized];
+      nextRecords.sort(compareRecords);
+      return {
+        next: { ...state, records: nextRecords },
+        result: clone(normalized),
+      };
     }, () => clone(normalized));
 
     return {
@@ -90,9 +94,12 @@ export class FileScopedContextStore implements ScopedContextStore {
   async delete(recordId: string): Promise<ScopedContextDeleteResult> {
     const id = normalizeText(recordId, "recordId");
     const mutation = await this.mutate((state) => {
-      const before = state.records.length;
-      state.records = state.records.filter((record) => record.id !== id);
-      return state.records.length !== before;
+      // filter 已是 structural sharing：产出新数组，保留的元素引用不变。
+      const nextRecords = state.records.filter((record) => record.id !== id);
+      return {
+        next: { ...state, records: nextRecords },
+        result: nextRecords.length !== state.records.length,
+      };
     }, () => false);
 
     return {
@@ -130,7 +137,7 @@ export class FileScopedContextStore implements ScopedContextStore {
   }
 
   private async mutate<T>(
-    operation: (state: ScopedContextStoreState) => T,
+    operation: (state: ScopedContextStoreState) => { next: ScopedContextStoreState; result: T },
     loadFailedResult: () => T
   ): Promise<ScopedContextWriteResult & { result: T }> {
     const next = this.pending.then(async () => {
@@ -150,10 +157,10 @@ export class FileScopedContextStore implements ScopedContextStore {
           result: loadFailedResult(),
         };
       }
-      const nextState = cloneState(current);
-      const result = operation(nextState);
-      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      // structural sharing: operation 产出新 state（受影响分支为新对象，其余引用不变）。
+      // deepFreeze 幂等：已 frozen 的子树（来自 current）直接跳过，只冻结新创建的对象。
       // 即使 writeState 最终未 persisted，nextState 也只是被丢弃，提前 freeze 无副作用。
+      const { next: nextState, result } = operation(current);
       deepFreeze(nextState);
       const writeResult = await this.writeState(nextState);
       if (writeResult.persisted) {
@@ -205,8 +212,8 @@ export class FileScopedContextStore implements ScopedContextStore {
     const tmpPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-      const fileSyncDiagnostic = fsyncPathDiagnostic(
+      await writeFile(tmpPath, serializeState(state), "utf8");
+      const fileSyncDiagnostic = await fsyncPathDiagnostic(
         tmpPath,
         "SCOPED_CONTEXT_STORE_FILE_FSYNC_FAILED",
         "r+"
@@ -218,7 +225,7 @@ export class FileScopedContextStore implements ScopedContextStore {
       }
 
       await rename(tmpPath, this.filePath);
-      const dirSyncDiagnostic = fsyncPathDiagnostic(
+      const dirSyncDiagnostic = await fsyncPathDiagnostic(
         dirname(this.filePath),
         "SCOPED_CONTEXT_STORE_DIR_FSYNC_FAILED"
       );
@@ -386,13 +393,13 @@ function compareRecords(left: ScopedContextRecord, right: ScopedContextRecord): 
   );
 }
 
-function fsyncPathDiagnostic(
+async function fsyncPathDiagnostic(
   path: string,
   code: string,
   mode: "r" | "r+" = "r"
-): DaemonScopedContextDiagnostic | undefined {
+): Promise<DaemonScopedContextDiagnostic | undefined> {
   try {
-    fsyncPath(path, mode);
+    await fsyncPathAsync(path, mode);
     return undefined;
   } catch (error) {
     return {
@@ -403,6 +410,17 @@ function fsyncPathDiagnostic(
       ...(error instanceof Error && error.stack ? { detail: error.stack } : {}),
     };
   }
+}
+
+/**
+ * 序列化 state 为写入文件的字符串。
+ *
+ * 默认紧凑输出（无缩进），减小文件体积与写入开销。
+ * 设置环境变量 DEBUG_PRETTY_JSON=1 可切换为 2 空格缩进，便于调试时人工阅读。
+ */
+function serializeState(state: ScopedContextStoreState): string {
+  const pretty = process.env.DEBUG_PRETTY_JSON === "1" || process.env.DEBUG_PRETTY_JSON === "true";
+  return `${JSON.stringify(state, null, pretty ? 2 : 0)}\n`;
 }
 
 function rejectUnknownFields(
@@ -486,11 +504,6 @@ function normalizeText(value: string, label: string): string {
 
 function normalizeList(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
-}
-
-
-function cloneState(state: ScopedContextStoreState): ScopedContextStoreState {
-  return clone(state);
 }
 
 

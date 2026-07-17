@@ -373,7 +373,7 @@ export class DaemonServer {
     const mcpStatus = input?.mcpStatus ?? this.runtimeFactory.getMcpStatusSnapshot();
     const activeRunCount =
       input?.activeRunCount ??
-      this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status)).length;
+      this.orchestrator.countActiveRuns();
 
     return this.lifecycle.snapshot({
       activeRunCount,
@@ -706,18 +706,18 @@ export class DaemonServer {
   private async waitForActiveRunsToSettle(reason: string, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
-      if (activeRuns.length === 0) {
+      if (this.orchestrator.countActiveRuns() === 0) {
         return;
       }
+      const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
       for (const run of activeRuns) {
         this.orchestrator.cancelRun(run.id, reason);
       }
       await delay(25);
     }
 
-    const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
-    if (activeRuns.length > 0) {
+    if (this.orchestrator.countActiveRuns() > 0) {
+      const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
       console.warn(
         `[Daemon] Shutdown timed out waiting for active runs: ${activeRuns.map((run) => `${run.id}:${run.status}`).join(", ")}`
       );

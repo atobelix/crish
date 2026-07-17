@@ -123,7 +123,7 @@ export class FileWorkflowStore implements WorkflowStore {
     const state = await this.readState();
     // state.workflows 是 frozen 数组；返回浅拷贝数组（items 仍为 frozen 引用），
     // 以保持按 createdAt 排序的对外契约，而不必深拷贝每条 workflow。
-    return [...state.workflows].sort(compareByCreatedAt);
+    return sortWorkflowsByCreatedAt(state.workflows);
   }
 
   async getWorkflow(workflowId: string): Promise<WorkflowDefinition | undefined> {
@@ -201,9 +201,9 @@ export class FileWorkflowStore implements WorkflowStore {
     const state = await this.readState();
     // state.runs 是 frozen 数组；filter 产出新数组，items 仍为 frozen 引用，
     // 不必深拷贝每条 run。findWorkflowRunBySchedule 等下游 .find() 同样获得 frozen 引用。
-    return state.runs
-      .filter((run) => workflowId === undefined || run.workflowId === workflowId)
-      .sort(compareRuns);
+    return sortRunsByStartedAt(
+      state.runs.filter((run) => workflowId === undefined || run.workflowId === workflowId)
+    );
   }
 
   async appendRun(input: WorkflowRunCreateInput): Promise<WorkflowRunEntry> {
@@ -418,7 +418,7 @@ export class FileWorkflowStore implements WorkflowStore {
     const tmpPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(targetPath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      await writeFile(tmpPath, `${JSON.stringify(data)}\n`, "utf8");
       if (this.options.fsync !== false) {
         await fsyncPathAsync(tmpPath, "r+");
       }
@@ -682,16 +682,32 @@ function assertWorkflowRunEntry(value: WorkflowRunEntry, path: string): void {
   }
 }
 
-function compareByCreatedAt(left: WorkflowDefinition, right: WorkflowDefinition): number {
-  return Date.parse(left.createdAt) - Date.parse(right.createdAt) || left.id.localeCompare(right.id);
+// Schwartzian transform：先 map 抽出 sort key（预解析 Date.parse 一次/元素），
+// 排序后还原。避免在 comparator 内每次比较重复 parse 同一字段（O(n log n) 次 parse
+// 降为 O(n) 次）。NaN（非法日期）通过 `||` 短路落入 tie-breaker，与原行为一致。
+function sortWorkflowsByCreatedAt(workflows: readonly WorkflowDefinition[]): WorkflowDefinition[] {
+  const withKey = workflows.map((workflow) => ({
+    workflow,
+    t: Date.parse(workflow.createdAt),
+  }));
+  withKey.sort(
+    (a, b) => a.t - b.t || a.workflow.id.localeCompare(b.workflow.id)
+  );
+  return withKey.map((entry) => entry.workflow);
 }
 
-function compareRuns(left: WorkflowRunEntry, right: WorkflowRunEntry): number {
-  return (
-    Date.parse(left.startedAt) - Date.parse(right.startedAt) ||
-    left.workflowId.localeCompare(right.workflowId) ||
-    left.runId.localeCompare(right.runId)
+function sortRunsByStartedAt(runs: readonly WorkflowRunEntry[]): WorkflowRunEntry[] {
+  const withKey = runs.map((run) => ({
+    run,
+    t: Date.parse(run.startedAt),
+  }));
+  withKey.sort(
+    (a, b) =>
+      a.t - b.t ||
+      a.run.workflowId.localeCompare(b.run.workflowId) ||
+      a.run.runId.localeCompare(b.run.runId)
   );
+  return withKey.map((entry) => entry.run);
 }
 
 function rejectUnknownFields(
@@ -737,6 +753,25 @@ function requiredBoolean(
   }
 }
 
+/**
+ * Structural-sharing clone：仅浅拷贝顶层 state 与 workflows/runs 数组外壳，
+ * 复用 frozen item 引用。
+ *
+ * 安全前提（已验证所有 mutate operation 满足）：
+ *  - createWorkflow/appendRun 仅 push 新构造的 item
+ *  - updateWorkflow/updateRun 通过 `arr[i] = newObj` 替换（新对象，从不就地修改既有 item）
+ *  - deleteWorkflow 通过 `arr = arr.filter(...)` 替换数组引用
+ * 因此既有 item 引用始终不被修改，可在前后 state 间共享。
+ *
+ * 收益：
+ *  - 复杂度从 O(整棵 state 大小) 降为 O(workflows.length + runs.length)
+ *  - writeState 中 deepEqual(previous.workflows, state.workflows) 因 `a === b` 早退
+ *    退化为 O(n)（未变更 item O(1) 命中），与 split-index 写入策略协同避免无变更重写
+ */
 function cloneState(state: WorkflowStoreState): WorkflowStoreState {
-  return clone(state);
+  return {
+    version: state.version,
+    workflows: [...state.workflows],
+    runs: [...state.runs],
+  };
 }

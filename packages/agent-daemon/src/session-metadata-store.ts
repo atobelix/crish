@@ -120,15 +120,18 @@ export class FileSessionMetadataStore {
 
       const updated = applyPatch(current, patch, timestamp, source);
       assertSessionMetadataRecord(updated, "$.session");
-      if (index === -1) {
-        state.sessions.push(updated);
-      } else {
-        state.sessions[index] = updated;
-      }
+      // structural sharing: 只创建新 sessions 数组与受影响元素，其余 session 引用不变。
+      const nextSessions =
+        index === -1
+          ? [...state.sessions, updated]
+          : state.sessions.map((item, i) => (i === index ? updated : item));
 
       return {
-        record: clone(updated),
-        changed: !previous || !recordsEqual(previous, updated),
+        next: { ...state, sessions: nextSessions },
+        result: {
+          record: clone(updated),
+          changed: !previous || !recordsEqual(previous, updated),
+        },
       };
     });
   }
@@ -138,12 +141,14 @@ export class FileSessionMetadataStore {
     return this.load();
   }
 
-  private async mutate<T>(operation: (state: SessionMetadataStoreState) => T): Promise<T> {
+  private async mutate<T>(
+    operation: (state: SessionMetadataStoreState) => { next: SessionMetadataStoreState; result: T }
+  ): Promise<T> {
     const next = this.pending.then(async () => {
       const current = await this.load();
-      const nextState = cloneState(current);
-      const result = operation(nextState);
-      // 不可变 store 模式：写入前递归冻结 nextState，使读方法可安全返回 frozen 引用。
+      // structural sharing: operation 产出新 state（受影响分支为新对象，其余引用不变）。
+      // deepFreeze 幂等：已 frozen 的子树（来自 current）直接跳过，只冻结新创建的对象。
+      const { next: nextState, result } = operation(current);
       deepFreeze(nextState);
       await this.writeState(nextState);
       this.state = nextState;
@@ -202,7 +207,7 @@ export class FileSessionMetadataStore {
     const tmpPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      await writeFile(tmpPath, serializeState(state), "utf8");
       if (this.options.fsync !== false) {
         await fsyncPathAsync(tmpPath, "r+");
       }
@@ -401,10 +406,15 @@ function requiredBoolean(
   }
 }
 
-
-
-function cloneState(state: SessionMetadataStoreState): SessionMetadataStoreState {
-  return clone(state);
+/**
+ * 序列化 state 为写入文件的字符串。
+ *
+ * 默认紧凑输出（无缩进），减小文件体积与写入开销。
+ * 设置环境变量 DEBUG_PRETTY_JSON=1 可切换为 2 空格缩进，便于调试时人工阅读。
+ */
+function serializeState(state: SessionMetadataStoreState): string {
+  const pretty = process.env.DEBUG_PRETTY_JSON === "1" || process.env.DEBUG_PRETTY_JSON === "true";
+  return `${JSON.stringify(state, null, pretty ? 2 : 0)}\n`;
 }
 
 

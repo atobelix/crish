@@ -73,6 +73,8 @@ import {
   handleGetStatus as handleGetStatusExtracted,
   handleListCapabilities as handleListCapabilitiesExtracted,
   handleUpdateConfig as handleUpdateConfigExtracted,
+  handleProbeProviderModels as handleProbeProviderModelsExtracted,
+  handleProbeProviderChat as handleProbeProviderChatExtracted,
 } from "./handlers/config-handlers.js";
 import {
   handleReadSessionEvents as handleReadSessionEventsExtracted,
@@ -234,6 +236,30 @@ export class DaemonRequestHandlers {
           getLifecycleSnapshot: this.options.getLifecycleSnapshot,
           getConfigUpdateHandler: () => this.options.getConfigUpdateHandler(),
         }, correlateResponse, correlationFrom);
+        break;
+
+      case "probe-provider-models":
+        handleProbeProviderModelsExtracted(ws, msg, {
+          orchestrator: this.options.orchestrator,
+          approvalQueue: this.options.approvalQueue,
+          runtimeFactory: this.options.runtimeFactory,
+          transport: this.options.transport,
+          activeRunCount: this.options.runHandler.activeRunCount(),
+          getLifecycleSnapshot: this.options.getLifecycleSnapshot,
+          getConfigUpdateHandler: () => this.options.getConfigUpdateHandler(),
+        }, correlateResponse);
+        break;
+
+      case "probe-provider-chat":
+        handleProbeProviderChatExtracted(ws, msg, {
+          orchestrator: this.options.orchestrator,
+          approvalQueue: this.options.approvalQueue,
+          runtimeFactory: this.options.runtimeFactory,
+          transport: this.options.transport,
+          activeRunCount: this.options.runHandler.activeRunCount(),
+          getLifecycleSnapshot: this.options.getLifecycleSnapshot,
+          getConfigUpdateHandler: () => this.options.getConfigUpdateHandler(),
+        }, correlateResponse);
         break;
 
       case "list-sessions":

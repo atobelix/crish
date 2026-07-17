@@ -232,7 +232,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private acceptingAppends = true;
   private latchedFailure?: OrchestratorEventStoreError;
   private cachedEvents?: OrchestratorEvent[];
-  private cachedEventsBySession = new Map<string, OrchestratorEvent[]>();
+  /**
+   * 按 sessionId / runId 索引的缓存事件。
+   *
+   * 使用 Set 而非数组：evictCachedEventsIfNeeded 在淘汰时通过 Set.delete
+   * 完成 O(1) 移除，避免 indexOf + splice 的 O(n) 扫描。
+   * Set 的迭代顺序即插入顺序（事件按 sequence 追加，正常流程下天然有序）；
+   * 读路径会在返回前显式按 sequence 排序以应对外部写入导致的乱序。
+   */
+  private cachedEventsBySession = new Map<string, Set<OrchestratorEvent>>();
   /**
    * 批量 fsync 的 JSONL 追加写入器。
    *
@@ -240,7 +248,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * 在 close() 时释放。
    */
   private appendBatcher?: JsonlAppendBatcher;
-  private cachedEventsByRun = new Map<string, OrchestratorEvent[]>();
+  private cachedEventsByRun = new Map<string, Set<OrchestratorEvent>>();
   private cachedSessionSummaries = new Map<string, MutableSessionEventSummary>();
   private sessionSummaryCacheReady = false;
   /**
@@ -425,14 +433,37 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
     // ── 兜底：全量缓存读取（tier 3 的简化版）─
     await this.ensureEventCache();
-    return collectAfterSequence(this.cachedEventsBySession.get(sessionId) ?? [], read.afterSequence, read.maxEvents);
+    return collectAfterSequence(
+      sortedBySequence(this.cachedEventsBySession.get(sessionId)),
+      read.afterSequence,
+      read.maxEvents
+    );
   }
 
   async readRun(runId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
     assertNonEmptyId(runId, "runId", this.filePath);
     const read = normalizeReadOptions(afterSequence, options, this.filePath);
-    await this.ensureEventCache();
-    return collectAfterSequence(this.cachedEventsByRun.get(runId) ?? [], read.afterSequence, read.maxEvents);
+
+    // 热缓存路径：缓存已 warm 时直接复用 per-run Set，避免全文件扫描。
+    if (this.cachedEvents) {
+      return collectAfterSequence(
+        sortedBySequence(this.cachedEventsByRun.get(runId)),
+        read.afterSequence,
+        read.maxEvents
+      );
+    }
+
+    // 冷读路径：readAllStreaming 流式过滤匹配 runId 的事件。
+    // 不再调用 ensureEventCache 把整个 JSONL 加载进内存数组，
+    // 内存占用与匹配 runId 的事件数成正比而非与历史总量成正比。
+    // 仍需扫描全文件（runId 没有独立字节偏移索引），但不持有全量事件副本。
+    const collected: OrchestratorEvent[] = [];
+    for await (const event of this.readAllStreaming(read.afterSequence)) {
+      if (event.runId !== runId) continue;
+      collected.push(event);
+    }
+    collected.sort((left, right) => left.sequence - right.sequence);
+    return this.applyMaxEvents(collected, read.maxEvents);
   }
 
   async getMetadata(): Promise<OrchestratorEventLogMetadata> {
@@ -1008,17 +1039,23 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         return;
       }
       this.currentFileSize = stat.size;
+
+      // 仅读首部 4KB 提取 header 行，避免 readFile 把整个 JSONL（可能数百 MB）加载进内存。
+      // header 是单行 JSON，字段固定，典型 <300 字节，4KB 余量充足。
+      // 极端场景下首行超过 4KB（header 损坏或被外部写入大段数据），read 返回的字节
+      // 内不包含完整换行，parseHeader 会抛错——这与原 readFile 路径下的语义一致。
+      const headerBuffer = Buffer.alloc(4096);
+      const { bytesRead } = await handle.read(headerBuffer, 0, headerBuffer.length, 0);
+      const content = headerBuffer.toString("utf8", 0, bytesRead);
+      const headerLine = content.split(/\r?\n/).find((line) => line.trim().length > 0);
+      if (!headerLine) {
+        throw new Error(`Invalid empty orchestrator event store file: ${this.filePath}`);
+      }
+      this.applyHeader(parseHeader(headerLine, this.filePath));
+      this.headerReady = true;
     } finally {
       await handle.close();
     }
-
-    const raw = await readFile(this.filePath, "utf8");
-    const headerLine = raw.split(/\r?\n/).find((line) => line.trim().length > 0);
-    if (!headerLine) {
-      throw new Error(`Invalid empty orchestrator event store file: ${this.filePath}`);
-    }
-    this.applyHeader(parseHeader(headerLine, this.filePath));
-    this.headerReady = true;
   }
 
   private async enqueueAppend(operation: () => Promise<void>): Promise<void> {
@@ -1076,20 +1113,20 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     if (this.cachedEvents.length <= maxCached) return;
     // 保留最新的事件，淘汰最早的
     const evicted = this.cachedEvents.splice(0, this.cachedEvents.length - maxCached);
-    // 从索引中移除被淘汰的事件
+    // 从 per-session / per-run Set 中 O(1) 移除被淘汰事件。
+    // 此前用 indexOf + splice 在数组上扫描，对每个被淘汰事件都是 O(n_session) / O(n_run)，
+    // 批量淘汰（如 cache 从 15000 缩到 10000）整体 O(k·n)。Set.delete 把单次移除降到 O(1)。
     for (const event of evicted) {
-      const sessionEvents = this.cachedEventsBySession.get(event.sessionId);
-      if (sessionEvents) {
-        const index = sessionEvents.indexOf(event);
-        if (index !== -1) sessionEvents.splice(index, 1);
-        if (sessionEvents.length === 0) this.cachedEventsBySession.delete(event.sessionId);
+      const sessionSet = this.cachedEventsBySession.get(event.sessionId);
+      if (sessionSet) {
+        sessionSet.delete(event);
+        if (sessionSet.size === 0) this.cachedEventsBySession.delete(event.sessionId);
       }
       if (event.runId) {
-        const runEvents = this.cachedEventsByRun.get(event.runId);
-        if (runEvents) {
-          const index = runEvents.indexOf(event);
-          if (index !== -1) runEvents.splice(index, 1);
-          if (runEvents.length === 0) this.cachedEventsByRun.delete(event.runId);
+        const runSet = this.cachedEventsByRun.get(event.runId);
+        if (runSet) {
+          runSet.delete(event);
+          if (runSet.size === 0) this.cachedEventsByRun.delete(event.runId);
         }
       }
     }
@@ -1189,19 +1226,30 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 }
 
 function appendIndexedEvent(
-  index: Map<string, OrchestratorEvent[]>,
+  index: Map<string, Set<OrchestratorEvent>>,
   key: string,
   event: OrchestratorEvent
 ): void {
-  const events = index.get(key);
+  let events = index.get(key);
   if (!events) {
-    index.set(key, [event]);
-    return;
+    events = new Set();
+    index.set(key, events);
   }
-  events.push(event);
-  if (events.length > 1 && events.at(-2)!.sequence > event.sequence) {
-    events.sort((left, right) => left.sequence - right.sequence);
-  }
+  events.add(event);
+}
+
+/**
+ * 将 cachedEventsBySession / cachedEventsByRun 中的 Set 转为按 sequence 升序的数组。
+ *
+ * Set 的迭代顺序即插入顺序，正常流程下事件按 sequence 追加，已经天然有序。
+ * 显式排序是为了应对外部写入或崩溃恢复等乱序场景——与原数组实现在 push 后
+ * 通过 `events.sort(...)` 维持顺序的语义一致。
+ */
+function sortedBySequence(set: Set<OrchestratorEvent> | undefined): OrchestratorEvent[] {
+  if (!set || set.size === 0) return [];
+  const events = [...set];
+  events.sort((left, right) => left.sequence - right.sequence);
+  return events;
 }
 
 function collectAfterSequence(events: OrchestratorEvent[], afterSequence: number, maxEvents?: number): OrchestratorEvent[] {

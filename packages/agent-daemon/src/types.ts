@@ -103,6 +103,8 @@ export type DaemonInboundMessage = (
   | UpsertScopedContextMessage
   | DeleteScopedContextMessage
   | ResolveScopedContextMessage
+  | ProbeProviderModelsMessage
+  | ProbeProviderChatMessage
 ) & DaemonCorrelationFields;
 
 /** Daemon → 客户端的消息类型 */
@@ -168,6 +170,8 @@ export type DaemonOutboundMessage = (
   | ScopedContextUpsertedMessage
   | ScopedContextDeletedMessage
   | ScopedContextResolvedMessage
+  | ProviderModelsProbedMessage
+  | ProviderChatProbedMessage
 ) & DaemonCorrelationFields;
 
 // ---- 入站消息 ----
@@ -306,6 +310,21 @@ export interface UpdateConfigMessage {
   credentialMode?: DaemonProviderCredentialMode;
   endpoint?: OpenAICompatibleEndpoint;
   stream?: boolean;
+}
+
+export interface ProbeProviderModelsMessage {
+  type: "probe-provider-models";
+  profileId: string;
+  baseUrl: string;
+  apiKey: string;
+}
+
+export interface ProbeProviderChatMessage {
+  type: "probe-provider-chat";
+  profileId: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
 }
 
 export interface ListSessionsMessage {
@@ -896,6 +915,20 @@ export interface DaemonMcpStatusSnapshot {
 export interface ConfigUpdatedMessage {
   type: "config-updated";
   updatedFields: string[];
+}
+
+export interface ProviderModelsProbedMessage {
+  type: "provider-models-probed";
+  ok: boolean;
+  models: string[];
+  error?: string;
+}
+
+export interface ProviderChatProbedMessage {
+  type: "provider-chat-probed";
+  ok: boolean;
+  latencyMs?: number;
+  error?: string;
 }
 
 export interface SubagentStartedMessage {

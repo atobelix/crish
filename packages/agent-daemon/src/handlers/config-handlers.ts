@@ -16,6 +16,8 @@ import type {
   GetStatusMessage,
   ListCapabilitiesMessage,
   UpdateConfigMessage,
+  ProbeProviderModelsMessage,
+  ProbeProviderChatMessage,
 } from "../types.js";
 import type { RunStatus } from "@crish/shared-types";
 import type { AgentOrchestrator } from "@crish/agent-orchestrator";
@@ -202,4 +204,147 @@ export function handleUpdateConfig(
       msg
     )
   );
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return (baseUrl || "").trim().replace(/\/+$/, "");
+}
+
+function modelsListUrl(baseUrl: string): string {
+  let u = normalizeBaseUrl(baseUrl);
+  if (!u) return "";
+  u = u.replace(/\/models\/?$/i, "");
+  if (/\/v1$/i.test(u)) return `${u}/models`;
+  return `${u}/v1/models`;
+}
+
+function chatCompletionsUrl(baseUrl: string): string {
+  let u = normalizeBaseUrl(baseUrl);
+  if (!u) return "";
+  u = u.replace(/\/chat\/completions\/?$/i, "");
+  if (/\/v1$/i.test(u)) return `${u}/chat/completions`;
+  return `${u}/v1/chat/completions`;
+}
+
+export async function handleProbeProviderModels(
+  ws: WebSocket,
+  msg: ProbeProviderModelsMessage & DaemonCorrelationFields,
+  deps: ConfigHandlerDeps,
+  correlateResponse: <T extends DaemonOutboundMessage>(response: T, msg: DaemonCorrelationFields) => T
+): Promise<void> {
+  const url = modelsListUrl(msg.baseUrl);
+  if (!url) {
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-models-probed",
+      ok: false,
+      models: [],
+      error: "未配置有效的地址 (Base URL)"
+    }, msg));
+    return;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${msg.apiKey}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      deps.transport.send(ws, correlateResponse({
+        type: "provider-models-probed",
+        ok: false,
+        models: [],
+        error: `获取失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ""}`
+      }, msg));
+      return;
+    }
+
+    const data: any = await res.json();
+    const rawList = Array.isArray(data.data) ? data.data : Array.isArray(data.models) ? data.models : [];
+    const models: string[] = [];
+    for (const item of rawList) {
+      if (typeof item === "string" && item.trim()) {
+        models.push(item.trim());
+      } else if (item && typeof item === "object") {
+        const id = typeof item.id === "string" ? item.id.trim() : "";
+        if (id) models.push(id);
+      }
+    }
+    const unique = Array.from(new Set(models)).sort((a, b) => a.localeCompare(b));
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-models-probed",
+      ok: true,
+      models: unique
+    }, msg));
+  } catch (e: any) {
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-models-probed",
+      ok: false,
+      models: [],
+      error: e instanceof Error ? e.message : String(e)
+    }, msg));
+  }
+}
+
+export async function handleProbeProviderChat(
+  ws: WebSocket,
+  msg: ProbeProviderChatMessage & DaemonCorrelationFields,
+  deps: ConfigHandlerDeps,
+  correlateResponse: <T extends DaemonOutboundMessage>(response: T, msg: DaemonCorrelationFields) => T
+): Promise<void> {
+  const url = chatCompletionsUrl(msg.baseUrl);
+  if (!url) {
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-chat-probed",
+      ok: false,
+      error: "未配置有效的地址 (Base URL)"
+    }, msg));
+    return;
+  }
+
+  const started = performance.now();
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${msg.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: msg.model,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1,
+        temperature: 0
+      })
+    });
+
+    const latencyMs = Math.round(performance.now() - started);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      deps.transport.send(ws, correlateResponse({
+        type: "provider-chat-probed",
+        ok: false,
+        latencyMs,
+        error: `连通失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ""}`
+      }, msg));
+      return;
+    }
+
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-chat-probed",
+      ok: true,
+      latencyMs
+    }, msg));
+  } catch (e: any) {
+    deps.transport.send(ws, correlateResponse({
+      type: "provider-chat-probed",
+      ok: false,
+      error: e instanceof Error ? e.message : String(e)
+    }, msg));
+  }
 }

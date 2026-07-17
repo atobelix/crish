@@ -1,5 +1,15 @@
+import { BoundedMap } from "@crish/shared-utils";
 import type { JsonObject } from "@crish/shared-types";
 import type { OrchestratorSessionRecord } from "./types";
+
+/**
+ * 默认条目容量上限。
+ *
+ * session tree 的 entries 代表会话分支历史（节点 + 分支摘要）。500 条覆盖典型长会话；
+ * 超出时按 FIFO 淘汰最旧条目，旧分支路径将不可回溯（readBranchPath 会抛 not found）。
+ * 需要更长历史的调用方可通过 SessionTreeOptions.maxEntries 提升。
+ */
+const DEFAULT_MAX_ENTRIES = 500;
 
 export type SessionTreeLeafId = string | null;
 export type SessionTreeEntryType = "node" | "branch_summary";
@@ -36,6 +46,8 @@ export interface SessionTreeOptions<TPayload = JsonObject, TDetails = JsonObject
   currentLeafId?: OrchestratorSessionRecord["currentLeafId"] | null;
   now?: () => string;
   createId?: (prefix: string) => string;
+  /** 条目容量上限，超出按 FIFO 淘汰最旧。默认 500。 */
+  maxEntries?: number;
 }
 
 export interface SessionTreeAppendNodeInput<TPayload = JsonObject> {
@@ -54,15 +66,18 @@ export interface SessionTreeBranchSummaryInput<TDetails = JsonObject> {
 export type SessionTreeLeafSource = Pick<OrchestratorSessionRecord, "currentLeafId"> | string | null | undefined;
 
 export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
-  private readonly entries: SessionTreeEntry<TPayload, TDetails>[] = [];
-  private readonly byId = new Map<string, SessionTreeEntry<TPayload, TDetails>>();
+  private readonly maxEntries: number;
+  private readonly byId: BoundedMap<string, SessionTreeEntry<TPayload, TDetails>>;
   private currentLeafId: string | null = null;
+  private lastInsertedId: string | null = null;
   private readonly now: () => string;
   private readonly createId: (prefix: string) => string;
 
   constructor(options: SessionTreeOptions<TPayload, TDetails> = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createId = options.createId ?? defaultCreateId;
+    this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.byId = new BoundedMap<string, SessionTreeEntry<TPayload, TDetails>>(this.maxEntries);
     this.loadEntries(options.entries ?? []);
     this.restoreLeaf(options.currentLeafId);
   }
@@ -72,7 +87,9 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
   }
 
   getEntries(): SessionTreeEntry<TPayload, TDetails>[] {
-    return this.entries.map((entry) => cloneEntry<TPayload, TDetails>(entry));
+    // 返回 byId.values() 的新数组（浅拷贝引用，不逐条 clone）。
+    // 调用方仅读取（filter/map/.id），不修改条目本身；内部条目仍受 appendEntry 的 cloneEntry 隔离保护。
+    return this.byId.values();
   }
 
   getEntry(id: string): SessionTreeEntry<TPayload, TDetails> | undefined {
@@ -150,10 +167,12 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
         throw new Error(`Session tree cycle detected at entry ${current.id}`);
       }
       seen.add(current.id);
-      path.unshift(cloneEntry(current));
+      // push 后整体 reverse，避免 unshift 的 O(depth²) 退化
+      path.push(cloneEntry(current));
       current = current.parentId ? this.byId.get(current.parentId) : undefined;
     }
 
+    path.reverse();
     return path;
   }
 
@@ -166,16 +185,27 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
   }
 
   private loadEntries(entries: readonly SessionTreeEntry<TPayload, TDetails>[]): void {
+    // 两阶段：先对完整输入做结构校验（与容量淘汰解耦），再加载。
+    // 校验阶段使用本地 seen 集合，避免 BoundedMap 在超容量时淘汰早期父节点
+    // 而误判"父节点缺失"（淘汰是容量行为，不是结构错误）。
+    const seen = new Set<string>();
     for (const entry of entries) {
-      this.assertAvailableId(entry.id);
-      if (entry.parentId !== null && !this.byId.has(entry.parentId)) {
+      if (seen.has(entry.id)) {
+        throw new Error(`Session tree entry ${entry.id} already exists`);
+      }
+      if (entry.parentId !== null && !seen.has(entry.parentId)) {
         throw new Error(`Parent ${entry.parentId} for session tree entry ${entry.id} must appear before the child`);
       }
-      if (entry.type === "branch_summary" && entry.abandonedLeafId !== null && !this.byId.has(entry.abandonedLeafId)) {
+      if (entry.type === "branch_summary" && entry.abandonedLeafId !== null && !seen.has(entry.abandonedLeafId)) {
         throw new Error(`Abandoned leaf ${entry.abandonedLeafId} for branch summary ${entry.id} not found`);
       }
-      this.entries.push(cloneEntry(entry));
+      seen.add(entry.id);
+    }
+    // 加载阶段：BoundedMap 在超容量时自动按 FIFO 淘汰最旧条目。
+    // 超容量的旧分支路径将不可回溯（readBranchPath 会抛 not found），这是有界历史的固有取舍。
+    for (const entry of entries) {
       this.byId.set(entry.id, cloneEntry(entry));
+      this.lastInsertedId = entry.id;
     }
   }
 
@@ -192,8 +222,8 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
   }
 
   private appendEntry(entry: SessionTreeEntry<TPayload, TDetails>): void {
-    this.entries.push(cloneEntry(entry));
     this.byId.set(entry.id, cloneEntry(entry));
+    this.lastInsertedId = entry.id;
     this.currentLeafId = entry.id;
   }
 
@@ -218,7 +248,7 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
   }
 
   private lastEntryId(): string | null {
-    return this.entries.at(-1)?.id ?? null;
+    return this.lastInsertedId;
   }
 }
 

@@ -17,6 +17,8 @@ import type {
   RunTaskMessage,
   StatusResponseMessage,
   UpdateConfigMessage,
+  ProbeProviderModelsMessage,
+  ProbeProviderChatMessage,
 } from "../../types.js";
 import type {
   JsonObject,
@@ -66,6 +68,8 @@ import {
   STATUS_RESPONSE_FIELDS,
   SYSTEM_PROMPT_WIRE_MODES,
   UPDATE_CONFIG_FIELDS,
+  PROBE_PROVIDER_MODELS_FIELDS,
+  PROBE_PROVIDER_CHAT_FIELDS,
   invalid,
   isRecord,
   ok,
@@ -1052,4 +1056,46 @@ export function validateCapabilityDiagnostic(
   if ("metadata" in value && !isRecord(value.metadata)) {
     issues.push({ path: `${path}.metadata`, message: "Expected object" });
   }
+}
+
+export function validateProbeProviderModelsMessage(
+  input: UnknownRecord
+): ProtocolValidationResult<ProbeProviderModelsMessage> {
+  const issues: ProtocolValidationIssue[] = [];
+  rejectUnknownFields(input, PROBE_PROVIDER_MODELS_FIELDS, issues);
+
+  const profileId = requiredString(input, "profileId", "$.profileId", issues, { nonEmpty: true });
+  const baseUrl = requiredString(input, "baseUrl", "$.baseUrl", issues, { nonEmpty: true });
+  const apiKey = requiredString(input, "apiKey", "$.apiKey", issues, { nonEmpty: true });
+
+  if (issues.length > 0) return invalid("Invalid probe-provider-models message", issues);
+
+  return ok({
+    type: "probe-provider-models",
+    profileId: profileId!,
+    baseUrl: baseUrl!,
+    apiKey: apiKey!,
+  });
+}
+
+export function validateProbeProviderChatMessage(
+  input: UnknownRecord
+): ProtocolValidationResult<ProbeProviderChatMessage> {
+  const issues: ProtocolValidationIssue[] = [];
+  rejectUnknownFields(input, PROBE_PROVIDER_CHAT_FIELDS, issues);
+
+  const profileId = requiredString(input, "profileId", "$.profileId", issues, { nonEmpty: true });
+  const baseUrl = requiredString(input, "baseUrl", "$.baseUrl", issues, { nonEmpty: true });
+  const apiKey = requiredString(input, "apiKey", "$.apiKey", issues, { nonEmpty: true });
+  const model = requiredString(input, "model", "$.model", issues, { nonEmpty: true });
+
+  if (issues.length > 0) return invalid("Invalid probe-provider-chat message", issues);
+
+  return ok({
+    type: "probe-provider-chat",
+    profileId: profileId!,
+    baseUrl: baseUrl!,
+    apiKey: apiKey!,
+    model: model!,
+  });
 }

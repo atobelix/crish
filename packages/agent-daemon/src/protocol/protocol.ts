@@ -37,6 +37,8 @@ import {
   validateStatusResponseMessage,
   validateCapabilitiesResponseMessage,
   validateConfigUpdatedMessage,
+  validateProbeProviderModelsMessage,
+  validateProbeProviderChatMessage,
 } from "./validators/run.js";
 import {
   validateListSessionsMessage,
@@ -504,6 +506,10 @@ export function validateInboundMessage(
       return withMessageCorrelation(base.value, validateDeleteScopedContextMessage(base.value));
     case "resolve-scoped-context":
       return withMessageCorrelation(base.value, validateResolveScopedContextMessage(base.value));
+    case "probe-provider-models":
+      return withMessageCorrelation(base.value, validateProbeProviderModelsMessage(base.value));
+    case "probe-provider-chat":
+      return withMessageCorrelation(base.value, validateProbeProviderChatMessage(base.value));
   }
   return { ok: false, error: { code: "UNKNOWN_MESSAGE_TYPE", message: `Unhandled message type: ${base.value.type}`, issues: [] } };
 }

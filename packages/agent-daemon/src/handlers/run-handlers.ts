@@ -342,6 +342,7 @@ export class RunHandler {
   private async runOrchestratedTask(input: OrchestratedRunInput): Promise<void> {
     let eventSink: RunEventSink | undefined;
     let admissionLease = input.admissionLease;
+    let boundaryContext: ConversationBoundaryEmissionContext | undefined;
     try {
       admissionLease ??= this.acquireRunAdmission(input.runId);
       console.log(`[Daemon] Starting orchestrated run: ${input.runId}`);
@@ -401,7 +402,7 @@ export class RunHandler {
       let terminal: WorkflowRunStatus | undefined;
       let terminalError: string | undefined;
       eventSink = this.createRunEventSink(input);
-      const boundaryContext = new ConversationBoundaryEmissionContext({
+      boundaryContext = new ConversationBoundaryEmissionContext({
         config: this.options.config,
         sessionId: input.sessionId,
         runId: input.runId,
@@ -503,10 +504,13 @@ export class RunHandler {
       // - approvalQueue 已在 catch 中 clearRun（run-error），这里再清一次保证幂等覆盖正常完成路径
       // - subagentBridge 必须清理：父 run 结束时子代理 "ended" 事件可能未投递
       //   （事件流中断 / orchestrator 提前结束迭代），否则 activeSubagents Map 累积孤儿条目
+      // - boundaryContext 的 runtime store 句柄必须释放：findRuntimeMessageEntry /
+      //   readCurrentRuntimeLeafId 复用同一个 JsonlSessionStore 实例，run 结束时关闭避免句柄泄漏
       this.options.approvalQueue.clearRun(input.runId, "run-finalize");
       this.options.subagentBridge.clearRun(input.runId);
       DaemonApprovalHandler.clearRun(input.runId);
       admissionLease?.release();
+      await boundaryContext?.dispose();
     }
   }
 
@@ -1029,6 +1033,13 @@ class ConversationBoundaryEmissionContext {
   private readonly runtimeStorePath: string;
   private readonly emittedUserMessageIds = new Set<string>();
   private latestBoundaryUserMessageId: string | undefined;
+  /**
+   * 复用同一个 JsonlSessionStore 实例，避免 findRuntimeMessageEntry /
+   * readCurrentRuntimeLeafId 每次调用都 new store + readAll 的对象分配与
+   * mutex 重建开销；store 内部的 appendBatcher 句柄缓存也随实例复用而命中。
+   * run 结束时通过 dispose() 关闭，避免文件句柄泄漏。
+   */
+  private runtimeStore: JsonlSessionStore | undefined;
 
   constructor(private readonly options: ConversationBoundaryEmissionContextOptions) {
     this.boundaryManifest = new ConversationBoundaryManifestService({
@@ -1038,6 +1049,22 @@ class ConversationBoundaryEmissionContext {
       manifestPath: resolveDaemonCheckpointManifestPath(options.config),
     });
     this.runtimeStorePath = runtimeSessionStorePath(options.config, options.sessionId, options.cwd);
+  }
+
+  /**
+   * 释放缓存的 runtime store 句柄。在 run 结束（正常 / 异常 / 取消）时调用，
+   * 确保 JsonlSessionStore 的 appendBatcher 持有的文件句柄被释放。
+   */
+  async dispose(): Promise<void> {
+    await this.runtimeStore?.close();
+    this.runtimeStore = undefined;
+  }
+
+  private getRuntimeStore(): JsonlSessionStore {
+    if (!this.runtimeStore) {
+      this.runtimeStore = new JsonlSessionStore(this.runtimeStorePath, { mode: "append" });
+    }
+    return this.runtimeStore;
   }
 
   async observe(orchestratorEvent: OrchestratorEvent, event: AgentEvent): Promise<void> {
@@ -1130,8 +1157,7 @@ class ConversationBoundaryEmissionContext {
   }
 
   private async findRuntimeMessageEntry(messageId: string): Promise<Extract<SessionEntry, { type: "message" }> | undefined> {
-    const store = new JsonlSessionStore(this.runtimeStorePath, { mode: "append" });
-    const entries = await store.readAll();
+    const entries = await this.getRuntimeStore().readAll();
     return entries.find(
       (entry): entry is Extract<SessionEntry, { type: "message" }> =>
         entry.type === "message" && entry.message.id === messageId
@@ -1174,7 +1200,6 @@ class ConversationBoundaryEmissionContext {
   }
 
   private async readCurrentRuntimeLeafId(): Promise<string | undefined> {
-    const store = new JsonlSessionStore(this.runtimeStorePath, { mode: "append" });
-    return findSessionLeafId(await store.readAll()) ?? undefined;
+    return findSessionLeafId(await this.getRuntimeStore().readAll()) ?? undefined;
   }
 }

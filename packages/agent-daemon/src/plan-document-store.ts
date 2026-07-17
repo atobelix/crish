@@ -108,7 +108,7 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
   async listPlanDocuments(): Promise<PlanDocumentSummary[]> {
     // listPlanDocuments only reads the small index file — no content file I/O.
     const index = await this.readIndex();
-    return [...index.summaries].sort(compareSummaries);
+    return sortSummariesByCreatedAt(index.summaries);
   }
 
   async getPlanDocument(documentId: string): Promise<PlanDocument> {
@@ -255,11 +255,13 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
 
     const index = await this.loadIndex();
 
-    const documents: PlanDocument[] = [];
-    for (const summary of index.summaries) {
-      const document = await this.readDocumentFile(summary.id);
-      documents.push(document);
-    }
+    // 并行读取所有 content 文件：Promise.all 保持输入顺序，与原串行 for-await
+    // 产出相同的 documents 顺序，但冷启动延迟从 O(n × 单文件 IO) 降为
+    // O(max(单文件 IO))。任一文件失败仍由 readDocumentFile 抛出
+    // PlanDocumentStoreReadError，错误语义不变。
+    const documents = await Promise.all(
+      index.summaries.map((summary) => this.readDocumentFile(summary.id))
+    );
 
     const state: PlanDocumentStoreState = {
       version: index.version,
@@ -350,7 +352,7 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
     const tmpPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(targetPath), { recursive: true });
-      await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      await writeFile(tmpPath, `${JSON.stringify(data)}\n`, "utf8");
       if (this.options.fsync !== false) {
         await fsyncPathAsync(tmpPath, "r+");
       }
@@ -447,8 +449,20 @@ function indexFromState(state: PlanDocumentStoreState): PlanDocumentIndexState {
   };
 }
 
-function compareSummaries(left: PlanDocumentSummary, right: PlanDocumentSummary): number {
-  return Date.parse(left.createdAt) - Date.parse(right.createdAt) || left.id.localeCompare(right.id);
+// Schwartzian transform：先 map 抽出 sort key（预解析 Date.parse 一次/元素），
+// 排序后还原。避免在 comparator 内每次比较重复 parse 同一字段。NaN（非法日期）
+// 通过 `||` 短路落入 tie-breaker，与原 compareSummaries 行为一致。
+function sortSummariesByCreatedAt(
+  summaries: readonly PlanDocumentSummary[]
+): PlanDocumentSummary[] {
+  const withKey = summaries.map((summary) => ({
+    summary,
+    t: Date.parse(summary.createdAt),
+  }));
+  withKey.sort(
+    (a, b) => a.t - b.t || a.summary.id.localeCompare(b.summary.id)
+  );
+  return withKey.map((entry) => entry.summary);
 }
 
 function rejectUnknownFields(
@@ -464,6 +478,25 @@ function rejectUnknownFields(
   }
 }
 
+/**
+ * Structural-sharing clone：仅浅拷贝顶层 state 与 documents 数组外壳，
+ * 复用 frozen item 引用。
+ *
+ * 安全前提（已验证所有 mutate operation 满足）：
+ *  - createPlanDocument 仅 push 新构造的 document
+ *  - patchPlanDocument 通过 `arr[i] = applyPlanDocumentPatch(...)` 替换（返回新对象，
+ *    从不就地修改既有 document）
+ *  - deletePlanDocument 通过 `arr = arr.filter(...)` 替换数组引用
+ * 因此既有 document 引用始终不被修改，可在前后 state 间共享。
+ *
+ * 收益：
+ *  - 复杂度从 O(整棵 state 大小，含每条 document 的嵌套 steps) 降为 O(documents.length)
+ *  - writeState 中 `deepEqual(prev, document)` 因 `a === b` 早退对未变更 document
+ *    退化为 O(1)，与 split-index 写入策略协同：未变更 document 不重写 content 文件
+ */
 function cloneState(state: PlanDocumentStoreState): PlanDocumentStoreState {
-  return clone(state);
+  return {
+    version: state.version,
+    documents: [...state.documents],
+  };
 }

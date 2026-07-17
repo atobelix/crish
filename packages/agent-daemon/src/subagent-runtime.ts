@@ -380,7 +380,7 @@ function buildCompletionSummary(description: string, mode: DaemonSubagentMode, s
     }
     return `${title}已完成`;
   }
-  if (state.status === "stopped") {
+  if ((state.status as string) === "stopped") {
     return `${title}已停止`;
   }
   const err = (state.error || "").trim();

@@ -262,6 +262,23 @@ export class AgentOrchestrator {
     return [...this.runs.values()].filter((run) => !sessionId || run.sessionId === sessionId);
   }
 
+  /**
+   * 返回非终态（queued / running / awaiting-approval / cancelling）run 的数量。
+   *
+   * 供轮询场景（如 waitForActiveRunsToSettle、daemon 监控）避免 listRuns()
+   * 创建数组副本再 filter 的开销。BoundedMap.values() 仍是数组拷贝，但跳过了
+   * 调用方的二次过滤分配。sessionId 可选，用于限定作用域。
+   */
+  countActiveRuns(sessionId?: string): number {
+    let count = 0;
+    for (const run of this.runs.values()) {
+      if (isTerminalRunStatus(run.status)) continue;
+      if (sessionId && run.sessionId !== sessionId) continue;
+      count++;
+    }
+    return count;
+  }
+
   async startRun(request: StartRunRequest): Promise<OrchestratorRunHandle> {
     return this.startRunWithDriver(request, "task");
   }
@@ -367,13 +384,26 @@ export class AgentOrchestrator {
   }
 
   async restoreFromEventStore(): Promise<void> {
-    const events = await this.readAllEvents();
+    // 流式回放优先：避免将整个 JSONL 加载进内存数组。
+    // FileOrchestratorEventStore.readAllStreaming 用 createReadStream + readline
+    // 逐行解析并 yield，内存占用与单条事件成正比而非与历史总量成正比。
+    // 不支持流式（如 InMemoryOrchestratorEventStore）时退化为 readAll。
+    // 注意：必须完整回放所有事件以恢复所有 session/run 状态，
+    // bootstrapFromTail 只读尾部 1000 条会丢失早期 session，故不在此使用。
     let maxSequence = this.sequence;
-
     const replayStates = new Map<string, RestoredRunReplayState>();
-    for (const event of events) {
-      maxSequence = Math.max(maxSequence, event.sequence);
-      this.applyStoredEvent(event, replayStates);
+    const stream = streamingEventIterable(this.eventStore);
+    if (stream) {
+      for await (const event of stream) {
+        maxSequence = Math.max(maxSequence, event.sequence);
+        this.applyStoredEvent(event, replayStates);
+      }
+    } else {
+      const events = await this.readAllEvents();
+      for (const event of events) {
+        maxSequence = Math.max(maxSequence, event.sequence);
+        this.applyStoredEvent(event, replayStates);
+      }
     }
 
     this.sequence = maxSequence;
@@ -1049,6 +1079,22 @@ function collectEvents(
     if (maxEvents !== undefined && collected.length >= maxEvents) break;
   }
   return collected;
+}
+
+/**
+ * 探测 event store 是否支持流式读取。
+ *
+ * OrchestratorEventStore 公共接口不包含 readAllStreaming（仅 FileOrchestratorEventStore
+ * 等基于文件的实现提供）。通过结构性检查暴露该方法，使 restoreFromEventStore 能
+ * 优先流式回放，而 InMemoryOrchestratorEventStore 等内存实现则回退到 readAll。
+ */
+function streamingEventIterable(
+  store: OrchestratorEventStore
+): AsyncIterable<OrchestratorEvent> | undefined {
+  const candidate = store as unknown as { readAllStreaming?: unknown };
+  if (typeof candidate.readAllStreaming !== "function") return undefined;
+  const invoke = candidate.readAllStreaming as () => AsyncIterable<OrchestratorEvent>;
+  return invoke.call(store);
 }
 
 function inMemoryEventLogMetadata(): OrchestratorEventLogMetadata {

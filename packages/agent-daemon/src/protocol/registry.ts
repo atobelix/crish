@@ -91,6 +91,8 @@ export const DAEMON_INBOUND_MESSAGE_TYPES = defineInboundMessageTypes([
   "upsert-scoped-context",
   "delete-scoped-context",
   "resolve-scoped-context",
+  "probe-provider-models",
+  "probe-provider-chat",
 ] as const);
 
 export const DAEMON_OUTBOUND_MESSAGE_TYPES = defineOutboundMessageTypes([
@@ -155,6 +157,8 @@ export const DAEMON_OUTBOUND_MESSAGE_TYPES = defineOutboundMessageTypes([
   "scoped-context-upserted",
   "scoped-context-deleted",
   "scoped-context-resolved",
+  "provider-models-probed",
+  "provider-chat-probed",
 ] as const);
 
 export type DaemonInboundMessageType = typeof DAEMON_INBOUND_MESSAGE_TYPES[number];
@@ -219,6 +223,8 @@ export const DAEMON_INBOUND_MESSAGE_REGISTRY = {
   "upsert-scoped-context": { capability: "scoped-context", state: "implemented" },
   "delete-scoped-context": { capability: "scoped-context", state: "implemented" },
   "resolve-scoped-context": { capability: "scoped-context", state: "implemented" },
+  "probe-provider-models": { capability: "config", state: "implemented" },
+  "probe-provider-chat": { capability: "config", state: "implemented" },
 } satisfies Record<DaemonInboundMessageType, DaemonProtocolMessageRegistration>;
 
 export const DAEMON_OUTBOUND_MESSAGE_REGISTRY = {
@@ -283,4 +289,6 @@ export const DAEMON_OUTBOUND_MESSAGE_REGISTRY = {
   "scoped-context-upserted": { capability: "scoped-context", state: "implemented" },
   "scoped-context-deleted": { capability: "scoped-context", state: "implemented" },
   "scoped-context-resolved": { capability: "scoped-context", state: "implemented" },
+  "provider-models-probed": { capability: "config", state: "implemented" },
+  "provider-chat-probed": { capability: "config", state: "implemented" },
 } satisfies Record<DaemonOutboundMessageType, DaemonProtocolMessageRegistration>;

@@ -82,6 +82,8 @@ export const CANCEL_RUN_FIELDS = ["type", ...CORRELATION_FIELDS, "runId"] as con
 export const EMPTY_COMMAND_FIELDS = ["type", ...CORRELATION_FIELDS] as const;
 export const LIST_SESSIONS_FIELDS = ["type", ...CORRELATION_FIELDS, "includeArchived", "includeDeleted"] as const;
 export const UPDATE_CONFIG_FIELDS = ["type", ...CORRELATION_FIELDS, "apiKey", "baseUrl", "model", "credentialMode", "endpoint", "stream"] as const;
+export const PROBE_PROVIDER_MODELS_FIELDS = ["type", ...CORRELATION_FIELDS, "profileId", "baseUrl", "apiKey"] as const;
+export const PROBE_PROVIDER_CHAT_FIELDS = ["type", ...CORRELATION_FIELDS, "profileId", "baseUrl", "apiKey", "model"] as const;
 export const LIST_RUNS_FIELDS = ["type", ...CORRELATION_FIELDS, "sessionId"] as const;
 export const READ_SESSION_EVENTS_FIELDS = [
   "type",
