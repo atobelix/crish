@@ -185,11 +185,11 @@ export class DaemonRequestHandlers {
         break;
 
       case "approve-tool":
-        handleApproveToolExtracted(msg, this.options.approvalQueue, this.options.transport);
+        handleApproveToolExtracted(msg, this.options.approvalQueue, this.options.transport, ws);
         break;
 
       case "deny-tool":
-        handleDenyToolExtracted(msg, this.options.approvalQueue, this.options.transport);
+        handleDenyToolExtracted(msg, this.options.approvalQueue, this.options.transport, ws);
         break;
 
       case "cancel-run":

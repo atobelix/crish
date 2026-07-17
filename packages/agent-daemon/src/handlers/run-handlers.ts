@@ -88,13 +88,14 @@ export interface OrchestratedRunInput {
   maxRounds?: number;
   maxStalledRounds?: number;
   backgroundDrainTimeoutMs?: number;
-  permissionMode?: "ask" | "auto" | "full-access" | "plan";
+  permissionMode?: "ask" | "auto" | "full-access" | "plan" | "unattended";
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
   projectFiles?: string[];
   projectTags?: string[];
   packageNames?: string[];
+  mcpDisabledTools?: Record<string, string[]>;
   scopedContextConfig?: RunTaskMessage["scopedContextConfig"];
   /** OpenAI-style multimodal parts from desktop */
   content?: RunTaskMessage["content"];
@@ -205,6 +206,7 @@ export class RunHandler {
       hasImages: msg.hasImages,
       attachments: msg.attachments,
       packageNames: msg.packageNames,
+      mcpDisabledTools: msg.mcpDisabledTools,
       scopedContextConfig: msg.scopedContextConfig,
       correlation: msg,
     });
@@ -376,6 +378,7 @@ export class RunHandler {
           ...(input.projectFiles ? { projectFiles: input.projectFiles } : {}),
           ...(input.projectTags ? { projectTags: input.projectTags } : {}),
           ...(input.packageNames ? { packageNames: input.packageNames } : {}),
+          ...(input.mcpDisabledTools ? { mcpDisabledTools: input.mcpDisabledTools } : {}),
           ...(scopedContextConfig ? { scopedContextConfig } : {}),
           ...(runTaskConfig ? { runTaskConfig } : {}),
           ...(input.hasImages ? { hasImages: true } : {}),
@@ -874,6 +877,52 @@ function createBackendUserMessageId(runId: string): string {
   return `user_boundary_${safeIdSegment(runId)}_${randomUUID()}`;
 }
 
+/**
+ * Real product user turns vs runtime-injected synthesis/steering prompts.
+ * agent-session-loop injects role=user nudges after tools ("请基于以上工具结果…");
+ * those must not open a new rewind boundary or steal latestUserMessage association
+ * from the tool-produced workspace checkpoint.
+ */
+function isRewindBoundaryUserMessage(message: AgentMessage): boolean {
+  const metadata = message.metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    if (metadata.kind === "daemon-user-message-boundary") return true;
+    if (
+      metadata.kind === "runtime-synthesis-nudge" ||
+      metadata.generatedBy === "agent-runtime-synthesis" ||
+      metadata.synthetic === true ||
+      metadata.internal === true
+    ) {
+      return false;
+    }
+  }
+  if (typeof message.id === "string" && message.id.startsWith("user_boundary_")) {
+    return true;
+  }
+  const text = userMessagePlainText(message);
+  if (isRuntimeInternalUserPrompt(text)) {
+    return false;
+  }
+  return true;
+}
+
+function userMessagePlainText(message: AgentMessage): string {
+  return (message.blocks ?? [])
+    .filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+}
+
+function isRuntimeInternalUserPrompt(text: string): boolean {
+  if (!text) return false;
+  if (text.startsWith("【系统】")) return true;
+  if (text.includes("请基于以上工具结果") && text.includes("不要再调用工具")) return true;
+  if (text.includes("轮次将尽") && text.includes("不要再调用工具")) return true;
+  if (text.includes("请仅基于已完成的工具结果给出结论") && text.includes("不要再调用工具")) return true;
+  return false;
+}
+
 function createRunPromptMessage(
   prompt: string,
   userMessageId: string,
@@ -987,6 +1036,12 @@ class ConversationBoundaryEmissionContext {
 
   async observe(orchestratorEvent: OrchestratorEvent, event: AgentEvent): Promise<void> {
     if (event.type === "message-end" && event.message.role === "user") {
+      // Runtime synthesis nudges are role=user but not real product turns.
+      // Still refresh the active boundary leaf so rewind targets include post-tool work.
+      if (!isRewindBoundaryUserMessage(event.message)) {
+        await this.refreshLatestLeaf(orchestratorEvent);
+        return;
+      }
       await this.observeUserMessage(orchestratorEvent, event.message);
       await this.refreshLatestLeaf(orchestratorEvent, event.message.id);
       return;

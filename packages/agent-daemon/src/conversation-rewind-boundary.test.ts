@@ -331,10 +331,17 @@ describe("conversation rewind boundary daemon resolver", () => {
         permissionMode: "full-access",
       });
 
-      const boundary = await new ConversationBoundaryManifestService({
+      const boundaries = new ConversationBoundaryManifestService({
         manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-      }).findLatest({ sessionId: "session_auto_checkpoint" });
+      });
+      const boundary = await boundaries.findLatest({ sessionId: "session_auto_checkpoint" });
       expect(boundary).toBeDefined();
+      // Runtime synthesis nudges are role=user but must not become the latest product boundary.
+      expect(boundary!.userMessageId.startsWith("user_boundary_")).toBe(true);
+      const uniqueUserIds = [
+        ...new Set((await boundaries.list({ sessionId: "session_auto_checkpoint" })).map((r) => r.userMessageId)),
+      ];
+      expect(uniqueUserIds).toEqual([boundary!.userMessageId]);
       const checkpoint = await new CheckpointManifestService({
         manifestPath: resolveDaemonCheckpointManifestPath({ sessionEventLogDir }),
       }).findLatestForRewindBoundary({

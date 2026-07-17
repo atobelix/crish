@@ -369,21 +369,38 @@ function extractAssistantText(message: AgentMessage): string {
 }
 
 function buildCompletionSummary(description: string, mode: DaemonSubagentMode, state: SubagentRunState): string {
-  const softNote = state.error && state.status === "completed" ? ` (note: ${state.error})` : "";
-  const outcome =
-    state.status === "completed"
-      ? `completed${softNote}`
-      : `failed: ${state.error ?? "unknown error"}`;
-  const text = state.finalText
-    ? state.finalText.slice(0, 1_500)
-    : state.toolUses > 0
-      ? "Tools ran; model did not return a final prose summary (upstream may have errored)."
-      : "No final text response.";
-  return [
-    `${description} ${outcome}.`,
-    `mode=${mode}; turns=${state.turns}; tools=${state.toolUses}; events=${state.events}.`,
-    text,
-  ].join("\n");
+  // 用户向摘要：优先模型中文收尾；禁止 mode=/turns= 技术行进 UI
+  const title = (description || "协作任务").trim() || "协作任务";
+  if (state.finalText && state.finalText.trim()) {
+    return state.finalText.trim().slice(0, 1_500);
+  }
+  if (state.status === "completed") {
+    if (state.toolUses > 0) {
+      return `${title}已完成（${state.toolUses} 次工具 · ${state.turns} 轮）`;
+    }
+    return `${title}已完成`;
+  }
+  if (state.status === "stopped") {
+    return `${title}已停止`;
+  }
+  const err = (state.error || "").trim();
+  if (err) {
+    const short = err.length > 120 ? `${err.slice(0, 119)}…` : err;
+    return `${title}未完成：${short}`;
+  }
+  // 技术诊断仅进日志，不进 summary
+  try {
+    console.info("[subagent-summary-fallback]", {
+      mode,
+      turns: state.turns,
+      tools: state.toolUses,
+      events: state.events,
+      status: state.status,
+    });
+  } catch {
+    /* ignore */
+  }
+  return `${title}未完成`;
 }
 
 function buildDaemonSubagentBasePrompt(mode: DaemonSubagentMode): string {

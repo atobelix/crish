@@ -68,6 +68,7 @@ export const RUN_TASK_FIELDS = [
   "projectFiles",
   "projectTags",
   "packageNames",
+  "mcpDisabledTools",
   "scopedContextConfig",
   // 多模态轻量扩展（desktop image parts）
   "content",

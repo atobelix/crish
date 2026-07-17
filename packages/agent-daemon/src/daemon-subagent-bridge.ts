@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@crish/shared-types";
+import { approvalRiskFields } from "./approval-projection.js";
 import type { ApprovalQueue } from "./approval-queue.js";
 import type { DaemonOutboundMessage } from "./types.js";
 import {
@@ -100,6 +101,7 @@ export class DaemonSubagentBridge {
     runId: string
   ): void {
     const snapshot = this.approvalQueue.getApproval(event.request.id);
+    // Parity with session-handlers.broadcastApprovalRequested: risk facts on the wire
     this.broadcast({
       type: "approval-requested",
       runId,
@@ -110,6 +112,7 @@ export class DaemonSubagentBridge {
       timeoutMs: snapshot?.timeoutMs ?? this.approvalQueue.getDefaultTimeoutMs(),
       expiresAt: snapshot?.expiresAt ?? null,
       remainingMs: snapshot?.remainingMs ?? null,
+      ...approvalRiskFields(event.request.metadata),
     });
   }
 }

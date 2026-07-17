@@ -1,19 +1,23 @@
 import type { JsonObject, PermissionDecision, PermissionRequest } from "@crish/shared-types";
 import { buildIntentKey, resolveTrustZone } from "@crish/decision-engine";
-import { ApprovalQueue } from "./approval-queue.js";
+import { ApprovalQueue, type ApprovalResult, type ApprovalScope } from "./approval-queue.js";
+import { resolveApprovalTimeoutMs } from "./daemon-permission-policy.js";
 
 /**
- * 人工审批 + 意图级 run 缓存。
+ * 人工审批 + 意图级 run / always 缓存。
  *
  * 旧问题：按 toolName 放行 → 批过 shell 等于本 run 所有 shell 放行。
  * 新架构：intentKey = zone|risk|shell|规范化命令模式
  *   - `npm install express` → `npm install *`，同类 install 复用
  *   - edit 族 → `edit-family`，连续改文件不重复弹
  *   - 不同 risk/模式不会串用
+ *   - scope=always：跨 run 复用（进程内），直到 clearAlways / clearAll
  */
 export class DaemonApprovalHandler {
   /** runId → 已批准的 intentKey 集合 */
   private static readonly runIntentAllowlist = new Map<string, Set<string>>();
+  /** 跨 run 的 always 意图放行（approve-tool scope=always） */
+  private static readonly alwaysIntentAllowlist = new Set<string>();
 
   constructor(
     private readonly approvalQueue: ApprovalQueue,
@@ -48,46 +52,126 @@ export class DaemonApprovalHandler {
         command: resolution.command,
       });
 
-    const allowlist = DaemonApprovalHandler.runIntentAllowlist.get(runId);
-    if (allowlist?.has(intentKey)) {
-      const meta: JsonObject = {
-        matchedRule: "run-intent-allowlist",
-        autoApproved: true,
-        intentKey,
-        trustZone: resolution.zone,
-        risk: resolution.risk,
-      };
-      if (request.metadata?.permissionMode !== undefined) {
-        meta.permissionMode = request.metadata.permissionMode as JsonObject[string];
-      }
-      return {
-        behavior: "allow",
-        reason: "Matching operation intent already approved in this run",
-        metadata: meta,
-      };
+    const hardline =
+      request.metadata?.hardline === true ||
+      resolution.zone === "T4" ||
+      resolution.risk === "hardline";
+    const requiresDoubleConfirm =
+      request.metadata?.requiresDoubleConfirm === true ||
+      resolution.zone === "T3" ||
+      resolution.zone === "T4" ||
+      hardline;
+
+    if (DaemonApprovalHandler.alwaysIntentAllowlist.has(intentKey)) {
+      return this.autoAllowDecision(request, intentKey, resolution.zone, resolution.risk, "always-intent-allowlist");
     }
 
-    const result = await this.approvalQueue.waitForApproval(request.toolCallId, runId, {
-      toolName: request.toolName,
-      input: params,
-      summary: request.summary,
-      ...(request.metadata !== undefined
-        ? {
-            metadata: {
-              ...request.metadata,
-              intentKey,
-              trustZone: resolution.zone,
-              risk: resolution.risk,
-            },
-          }
-        : {
-            metadata: {
-              intentKey,
-              trustZone: resolution.zone,
-              risk: resolution.risk,
-            },
-          }),
+    const allowlist = DaemonApprovalHandler.runIntentAllowlist.get(runId);
+    if (allowlist?.has(intentKey)) {
+      return this.autoAllowDecision(request, intentKey, resolution.zone, resolution.risk, "run-intent-allowlist");
+    }
+
+    const baseTimeout =
+      typeof request.metadata?.approvalTimeoutMs === "number"
+        ? (request.metadata.approvalTimeoutMs as number)
+        : this.approvalQueue.getDefaultTimeoutMs();
+    const timeoutMs = resolveApprovalTimeoutMs({
+      baseTimeoutMs: baseTimeout,
+      trustZone: resolution.zone,
+      hardline,
+      requiresDoubleConfirm,
     });
+
+    const result = await this.approvalQueue.waitForApproval(
+      request.toolCallId,
+      runId,
+      {
+        toolName: request.toolName,
+        input: params,
+        summary: request.summary,
+        metadata: {
+          ...(request.metadata && typeof request.metadata === "object" ? request.metadata : {}),
+          intentKey,
+          trustZone: resolution.zone,
+          risk: resolution.risk,
+          ...(hardline ? { hardline: true } : {}),
+          ...(requiresDoubleConfirm ? { requiresDoubleConfirm: true } : {}),
+          approvalTimeoutMs: timeoutMs,
+        },
+      },
+      { timeoutMs: timeoutMs ?? 0 }
+    );
+
+    // scope=always 在 resolve 时写入 queue；此处消费并提升到 always allowlist
+    const scope = this.approvalQueue.consumeScope(request.toolCallId);
+    return this.decisionFromResult({
+      result,
+      request,
+      intentKey,
+      zone: resolution.zone,
+      risk: resolution.risk,
+      runId,
+      scope,
+      timeoutMs,
+    });
+  }
+
+  static clearRun(runId: string): void {
+    DaemonApprovalHandler.runIntentAllowlist.delete(runId);
+  }
+
+  /** Drop process-wide always intent grants (tests / config reset). */
+  static clearAlways(): void {
+    DaemonApprovalHandler.alwaysIntentAllowlist.clear();
+  }
+
+  static clearAll(): void {
+    DaemonApprovalHandler.runIntentAllowlist.clear();
+    DaemonApprovalHandler.alwaysIntentAllowlist.clear();
+  }
+
+  static hasAlwaysIntent(intentKey: string): boolean {
+    return DaemonApprovalHandler.alwaysIntentAllowlist.has(intentKey);
+  }
+
+  private autoAllowDecision(
+    request: PermissionRequest,
+    intentKey: string,
+    zone: string,
+    risk: string,
+    matchedRule: string,
+  ): PermissionDecision {
+    const meta: JsonObject = {
+      matchedRule,
+      autoApproved: true,
+      intentKey,
+      trustZone: zone,
+      risk,
+    };
+    if (request.metadata?.permissionMode !== undefined) {
+      meta.permissionMode = request.metadata.permissionMode as JsonObject[string];
+    }
+    return {
+      behavior: "allow",
+      reason:
+        matchedRule === "always-intent-allowlist"
+          ? "Matching operation intent previously approved with always scope"
+          : "Matching operation intent already approved in this run",
+      metadata: meta,
+    };
+  }
+
+  private decisionFromResult(input: {
+    result: ApprovalResult;
+    request: PermissionRequest;
+    intentKey: string;
+    zone: string;
+    risk: string;
+    runId: string;
+    scope?: ApprovalScope;
+    timeoutMs: number | null;
+  }): PermissionDecision {
+    const { result, intentKey, zone, runId, scope, timeoutMs } = input;
 
     const approvalMeta: JsonObject = {
       status: result.decision,
@@ -95,10 +179,15 @@ export class DaemonApprovalHandler {
       createdAt: result.createdAt,
       resolvedAt: result.resolvedAt ?? null,
       intentKey,
-      trustZone: resolution.zone,
+      trustZone: zone,
+      timeoutMs: result.timeoutMs ?? timeoutMs,
+      expiresAt: result.expiresAt,
     };
     if (result.expiredAt !== undefined) {
       approvalMeta.expiredAt = result.expiredAt;
+    }
+    if (scope) {
+      approvalMeta.scope = scope;
     }
 
     if (result.decision === "approved") {
@@ -108,9 +197,9 @@ export class DaemonApprovalHandler {
         DaemonApprovalHandler.runIntentAllowlist.set(runId, set);
       }
       set.add(intentKey);
-      // 编辑族：一次批准覆盖本 run 内连续改文件
-      if (intentKey.includes("|edit-family|")) {
-        set.add(intentKey);
+      // edit-family：一次批准覆盖本 run 内连续改文件（intentKey 已含 edit-family 标记）
+      if (scope === "always") {
+        DaemonApprovalHandler.alwaysIntentAllowlist.add(intentKey);
       }
       return {
         behavior: "allow",
@@ -118,7 +207,7 @@ export class DaemonApprovalHandler {
         metadata: {
           approval: approvalMeta,
           intentKey,
-          trustZone: resolution.zone,
+          trustZone: zone,
         } satisfies JsonObject,
       };
     }
@@ -134,12 +223,9 @@ export class DaemonApprovalHandler {
         approval: approvalMeta,
         softDeny: expired,
         intentKey,
-        trustZone: resolution.zone,
+        trustZone: zone,
+        ...(expired ? { expiredReason: "timeout" } : {}),
       } satisfies JsonObject,
     };
-  }
-
-  static clearRun(runId: string): void {
-    DaemonApprovalHandler.runIntentAllowlist.delete(runId);
   }
 }

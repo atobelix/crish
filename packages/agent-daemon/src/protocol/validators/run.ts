@@ -152,6 +152,27 @@ export function validateRunTaskMessage(
   const projectFiles = optionalStringArray(input, "projectFiles", "$.projectFiles", issues);
   const projectTags = optionalStringArray(input, "projectTags", "$.projectTags", issues);
   const packageNames = optionalStringArray(input, "packageNames", "$.packageNames", issues);
+  let mcpDisabledTools: RunTaskMessage["mcpDisabledTools"] | undefined;
+  if ("mcpDisabledTools" in input) {
+    if (
+      !input.mcpDisabledTools ||
+      typeof input.mcpDisabledTools !== "object" ||
+      Array.isArray(input.mcpDisabledTools)
+    ) {
+      issues.push({
+        path: "$.mcpDisabledTools",
+        message: "mcpDisabledTools must be an object of serverId -> toolName[]",
+      });
+    } else {
+      const map: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(input.mcpDisabledTools as Record<string, unknown>)) {
+        if (!k || !Array.isArray(v)) continue;
+        const tools = v.map(String).map((t) => t.trim()).filter(Boolean);
+        if (tools.length) map[k] = tools;
+      }
+      if (Object.keys(map).length > 0) mcpDisabledTools = map;
+    }
+  }
   if ("scopedContextConfig" in input) {
     validateScopedContextRuntimeConfig(input.scopedContextConfig, "$.scopedContextConfig", issues);
   }
@@ -204,6 +225,7 @@ export function validateRunTaskMessage(
     ...(projectFiles !== undefined ? { projectFiles } : {}),
     ...(projectTags !== undefined ? { projectTags } : {}),
     ...(packageNames !== undefined ? { packageNames } : {}),
+    ...(mcpDisabledTools !== undefined ? { mcpDisabledTools } : {}),
     ...("scopedContextConfig" in input ? { scopedContextConfig: input.scopedContextConfig as RunTaskMessage["scopedContextConfig"] } : {}),
     ...(content !== undefined ? { content } : {}),
     ...(hasImages !== undefined ? { hasImages } : {}),

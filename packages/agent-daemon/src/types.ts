@@ -202,14 +202,25 @@ export interface RunTaskMessage {
   maxRounds?: number;
   maxStalledRounds?: number;
   backgroundDrainTimeoutMs?: number;
-  /** 权限模式："ask" = 需要审批，"full-access" = 全部自动允许，"plan" = 只读+仅可写计划文档 */
-  permissionMode?: "ask" | "auto" | "full-access" | "plan";
+  /**
+   * 权限模式（TrustZone）：
+   * ask/auto = T0/T2 自动、T1/T3 确认、T4 拒绝
+   * full-access = T0-T3 自动、T4 仍确认
+   * plan = 仅 T0；写操作 soft-deny
+   * unattended = T0-T2 自动、T3/T4 soft-deny（无 UI 批处理）
+   */
+  permissionMode?: "ask" | "auto" | "full-access" | "plan" | "unattended";
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
   projectFiles?: string[];
   projectTags?: string[];
   packageNames?: string[];
+  /**
+   * MCP 工具禁用：serverId → toolName[]。
+   * 桌面设置页下发；注入 MCP 工具时按名过滤。
+   */
+  mcpDisabledTools?: Record<string, string[]>;
   scopedContextConfig?: ScopedContextRuntimeConfig;
   /**
    * 可选多模态 content（OpenAI chat parts）。

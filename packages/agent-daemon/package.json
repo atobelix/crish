@@ -31,6 +31,7 @@
   "dependencies": {
     "@crish/agent-orchestrator": "file:../agent-orchestrator",
     "@crish/agent-runtime": "file:../agent-runtime",
+    "@crish/decision-engine": "file:../decision-engine",
     "@crish/shared-types": "file:../shared-types",
     "@crish/shared-utils": "file:../shared-utils",
     "ws": "^8.18.0"

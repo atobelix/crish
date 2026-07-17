@@ -1,5 +1,9 @@
 export const DEFAULT_APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 export const DEFAULT_APPROVAL_RESOLUTION_RETENTION_MS = 5 * 60 * 1000;
+/** Floor for finite approval timeouts (avoids sub-100ms timer races). */
+export const MIN_APPROVAL_TIMEOUT_MS = 100;
+/** Cap for finite approval timeouts (1h) so misconfig cannot hang forever. */
+export const MAX_APPROVAL_TIMEOUT_MS = 60 * 60 * 1000;
 
 export type ApprovalDecision = "approved" | "denied" | "expired";
 export type ApprovalUserDecision = Exclude<ApprovalDecision, "expired">;
@@ -38,13 +42,13 @@ export interface ApprovalQueueSnapshot {
   expiredReason?: string;
 }
 
-interface ApprovalQueueOptions {
+export interface ApprovalQueueOptions {
   defaultTimeoutMs?: number;
   resolvedRetentionMs?: number;
   now?: () => number;
 }
 
-interface WaitForApprovalOptions {
+export interface WaitForApprovalOptions {
   timeoutMs?: number;
 }
 
@@ -93,6 +97,10 @@ export class ApprovalQueue {
     return this.defaultTimeoutMs;
   }
 
+  getResolvedRetentionMs(): number {
+    return this.resolvedRetentionMs;
+  }
+
   async waitForApproval(
     toolCallId: string,
     runId: string,
@@ -125,15 +133,42 @@ export class ApprovalQueue {
       resolve: resolvePromise,
     };
 
-    if (timeoutMs !== null) {
-      pending.timer = setTimeout(() => {
-        this.expire(toolCallId);
-      }, timeoutMs);
-      pending.timer.unref?.();
-    }
-
+    this.armTimer(pending);
     this.pending.set(toolCallId, pending);
     return promise;
+  }
+
+  /**
+   * Extend a pending approval deadline (UI "still reviewing").
+   * No-op for infinite timeouts or unknown ids. Returns the new snapshot or undefined.
+   */
+  extendTimeout(toolCallId: string, extraMs: number): ApprovalQueueSnapshot | undefined {
+    const pending = this.pending.get(toolCallId);
+    if (!pending || pending.timeoutMs === null || pending.expiresAt === null) {
+      return undefined;
+    }
+    if (!Number.isFinite(extraMs) || extraMs <= 0) {
+      return this.pendingSnapshot(pending);
+    }
+
+    const add = Math.min(
+      MAX_APPROVAL_TIMEOUT_MS,
+      Math.max(MIN_APPROVAL_TIMEOUT_MS, Math.floor(extraMs))
+    );
+    const now = this.now();
+    const remaining = Math.max(0, pending.expiresAt - now);
+    const nextTimeout = clampTimeoutMs(remaining + add);
+    if (nextTimeout === null) {
+      return this.pendingSnapshot(pending);
+    }
+
+    pending.timeoutMs = nextTimeout;
+    pending.expiresAt = now + nextTimeout;
+    this.armTimer(pending);
+    console.log(
+      `[ApprovalQueue] Extended ${toolCallId} by ${add}ms (remaining ${nextTimeout}ms)`
+    );
+    return this.pendingSnapshot(pending);
   }
 
   resolve(toolCallId: string, decision: ApprovalUserDecision, scope?: ApprovalScope): boolean {
@@ -154,6 +189,13 @@ export class ApprovalQueue {
     });
     console.log(`[ApprovalQueue] Resolved ${toolCallId} -> ${decision} (scope: ${scope || "project"})`);
     return true;
+  }
+
+  /**
+   * Peek stored scope without consuming (for late-resolve diagnostics).
+   */
+  getScope(toolCallId: string): ApprovalScope | undefined {
+    return this.scopes.get(toolCallId);
   }
 
   consumeScope(toolCallId: string): ApprovalScope | undefined {
@@ -195,22 +237,38 @@ export class ApprovalQueue {
       console.log(`[ApprovalQueue] Auto-denied ${toolCallId} (${reason})`);
     }
     this.pending.clear();
+    this.scopes.clear();
   }
 
   clearRun(runId: string, reason = "run-cancelled"): void {
-    for (const [toolCallId, pending] of this.pending) {
+    for (const [, pending] of this.pending) {
       if (pending.runId !== runId) continue;
       this.settle(pending, {
         decision: "denied",
         reason,
         resolvedAt: this.now(),
       });
-      console.log(`[ApprovalQueue] Auto-denied ${toolCallId} for run ${runId} (${reason})`);
+      console.log(`[ApprovalQueue] Auto-denied ${pending.toolCallId} for run ${runId} (${reason})`);
     }
   }
 
   get size(): number {
     return this.pending.size;
+  }
+
+  private armTimer(pending: PendingApproval): void {
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+      pending.timer = undefined;
+    }
+    if (pending.timeoutMs === null || pending.expiresAt === null) {
+      return;
+    }
+    const delay = Math.max(0, pending.expiresAt - this.now());
+    pending.timer = setTimeout(() => {
+      this.expire(pending.toolCallId);
+    }, delay);
+    pending.timer.unref?.();
   }
 
   private expire(toolCallId: string): void {
@@ -302,11 +360,25 @@ export class ApprovalQueue {
   }
 }
 
-function normalizeTimeoutMs(value: number | undefined | null, fallback: number | null): number | null {
-  if (value === undefined || value === null) return fallback;
+/**
+ * Normalize timeout: undefined/null → fallback; 0/Infinity → infinite (null);
+ * non-finite/negative → fallback; otherwise clamp to [MIN, MAX].
+ */
+export function normalizeTimeoutMs(
+  value: number | undefined | null,
+  fallback: number | null
+): number | null {
+  if (value === undefined || value === null) return clampTimeoutMs(fallback);
   if (value === 0 || value === Number.POSITIVE_INFINITY) return null;
-  if (!Number.isFinite(value) || value < 0) return fallback;
-  return Math.floor(value);
+  if (!Number.isFinite(value) || value < 0) return clampTimeoutMs(fallback);
+  return clampTimeoutMs(Math.floor(value));
+}
+
+function clampTimeoutMs(value: number | null): number | null {
+  if (value === null) return null;
+  if (!Number.isFinite(value) || value < 0) return DEFAULT_APPROVAL_TIMEOUT_MS;
+  if (value === 0) return null;
+  return Math.min(MAX_APPROVAL_TIMEOUT_MS, Math.max(MIN_APPROVAL_TIMEOUT_MS, Math.floor(value)));
 }
 
 function normalizeRetentionMs(value: number | undefined): number {

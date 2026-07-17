@@ -98,7 +98,16 @@ export interface ByteOffsetIndexFile {
   entries: ByteOffsetIndexEntry[];
 }
 
-export type OrchestratorEventStoreFailureKind = "closed" | "write-failed" | "index-write-failed";
+export type OrchestratorEventStoreFailureKind =
+  | "closed"
+  | "write-failed"
+  | "index-write-failed"
+  | "invalid-event"
+  | "duplicate-event-id"
+  | "invalid-read";
+
+/** Store-level failures that latch the writer closed for subsequent appends. */
+const LATCHING_FAILURE_KINDS = new Set<OrchestratorEventStoreFailureKind>(["write-failed"]);
 
 export class OrchestratorEventStoreError extends Error {
   readonly kind: OrchestratorEventStoreFailureKind;
@@ -156,6 +165,38 @@ export class OrchestratorEventStoreIndexWriteError extends OrchestratorEventStor
   }
 }
 
+export class OrchestratorEventStoreInvalidEventError extends OrchestratorEventStoreError {
+  constructor(filePath: string, eventId: string | undefined, reason: string) {
+    super(`Invalid orchestrator event${eventId ? ` ${eventId}` : ""}: ${reason}`, {
+      kind: "invalid-event",
+      filePath,
+      eventId
+    });
+    this.name = "OrchestratorEventStoreInvalidEventError";
+  }
+}
+
+export class OrchestratorEventStoreDuplicateIdError extends OrchestratorEventStoreError {
+  constructor(filePath: string, eventId: string) {
+    super(`Duplicate orchestrator event id ${eventId} in ${filePath}`, {
+      kind: "duplicate-event-id",
+      filePath,
+      eventId
+    });
+    this.name = "OrchestratorEventStoreDuplicateIdError";
+  }
+}
+
+export class OrchestratorEventStoreInvalidReadError extends OrchestratorEventStoreError {
+  constructor(filePath: string, reason: string) {
+    super(`Invalid orchestrator event store read: ${reason}`, {
+      kind: "invalid-read",
+      filePath
+    });
+    this.name = "OrchestratorEventStoreInvalidReadError";
+  }
+}
+
 const DEFAULT_HEADER: FileOrchestratorEventStoreHeader = {
   type: "orchestrator-event-store",
   version: ORCHESTRATOR_EVENT_STORE_FILE_VERSION,
@@ -210,6 +251,13 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    */
   private indexWriteFailureCount = 0;
   private lastIndexWriteError?: Error;
+
+  /**
+   * Known event ids for uniqueness enforcement on append.
+   * Populated from the durable log (once) and every successful append.
+   */
+  private knownEventIds = new Set<string>();
+  private eventIdsReady = false;
 
   // ─── 三层读取策略：字节偏移索引 ──────────────────────────
   /**
@@ -278,6 +326,9 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   }
 
   async append(event: OrchestratorEvent): Promise<void> {
+    // Client validation stays outside the write latch path.
+    assertAppendableEvent(event, this.filePath);
+
     if (!this.acceptingAppends) {
       throw new OrchestratorEventStoreClosedError(this.filePath, event.id);
     }
@@ -287,7 +338,20 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
     await this.enqueueAppend(async () => {
       try {
+        // Re-check inside the serialized queue so close() racing concurrent appends is deterministic.
+        if (!this.acceptingAppends) {
+          throw new OrchestratorEventStoreClosedError(this.filePath, event.id);
+        }
+        if (this.latchedFailure) {
+          throw this.latchedFailure;
+        }
+
         await this.ensureHeader();
+        await this.ensureEventIdsLoaded();
+        if (this.knownEventIds.has(event.id)) {
+          throw new OrchestratorEventStoreDuplicateIdError(this.filePath, event.id);
+        }
+
         await this.tryLoadSessionSummaryIndex();
         await this.tryLoadByteOffsetIndex();
 
@@ -302,6 +366,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         // 追踪字节偏移
         this.trackByteOffset(event.sessionId, byteOffset, byteLength);
 
+        this.knownEventIds.add(event.id);
         this.appendCachedEvent(event);
 
         // 标记索引为脏（延迟写入）
@@ -321,24 +386,34 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   }
 
   async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+    assertNonEmptyId(sessionId, "sessionId", this.filePath);
+    const read = normalizeReadOptions(afterSequence, options, this.filePath);
+
     if (!this.byteIndexLoaded) {
       await this.tryLoadByteOffsetIndex();
     }
 
     // ── 三层策略：优先使用字节偏移索引（tier 2）─
     if (this.byteIndexLoaded && this.byteOffsetIndex.has(sessionId)) {
-      const events = await this.readSessionViaByteIndex(sessionId, afterSequence);
-      if (events.length > 0) return this.applyMaxEvents(events, options.maxEvents);
+      const events = await this.readSessionViaByteIndex(sessionId, read.afterSequence);
+      // When the byte index knows the session, trust it even for empty filtered results
+      // (e.g. afterSequence past the tail) so we do not force a full cache rebuild.
+      if (events.length > 0 || read.afterSequence > 0 || read.maxEvents === 0) {
+        return this.applyMaxEvents(events, read.maxEvents);
+      }
+      // Empty unfiltered result may indicate a stale/partial byte index — fall through.
     }
 
     // ── 兜底：全量缓存读取（tier 3 的简化版）─
     await this.ensureEventCache();
-    return collectAfterSequence(this.cachedEventsBySession.get(sessionId) ?? [], afterSequence, options.maxEvents);
+    return collectAfterSequence(this.cachedEventsBySession.get(sessionId) ?? [], read.afterSequence, read.maxEvents);
   }
 
   async readRun(runId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+    assertNonEmptyId(runId, "runId", this.filePath);
+    const read = normalizeReadOptions(afterSequence, options, this.filePath);
     await this.ensureEventCache();
-    return collectAfterSequence(this.cachedEventsByRun.get(runId) ?? [], afterSequence, options.maxEvents);
+    return collectAfterSequence(this.cachedEventsByRun.get(runId) ?? [], read.afterSequence, read.maxEvents);
   }
 
   async getMetadata(): Promise<OrchestratorEventLogMetadata> {
@@ -354,14 +429,19 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       // Product session lists must be complete; tail bootstrap is diagnostic-only.
       await this.ensureEventCache();
     }
+    // Persist deferred index updates so a subsequent cold open sees the same summaries.
+    if (this.indexDirty) {
+      await this.flushIndex();
+    }
     return [...this.cachedSessionSummaries.values()]
       .map(toOrchestratorSessionEventSummary)
       .sort((left, right) => compareSessionSummaries(left, right));
   }
 
   async readAll(afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+    const read = normalizeReadOptions(afterSequence, options, this.filePath);
     await this.ensureEventCache();
-    return collectAfterSequence(this.cachedEvents ?? [], afterSequence, options.maxEvents);
+    return collectAfterSequence(this.cachedEvents ?? [], read.afterSequence, read.maxEvents);
   }
 
   /**
@@ -373,9 +453,11 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * @returns AsyncGenerator，逐个产出 OrchestratorEvent
    */
   async *readAllStreaming(afterSequence = 0): AsyncGenerator<OrchestratorEvent> {
+    const read = normalizeReadOptions(afterSequence, {}, this.filePath);
     await this.flush();
     await this.ensureHeader();
 
+    // Empty brand-new store: header only (or just-created file) yields nothing.
     const stream = createReadStream(this.filePath, { encoding: "utf8" });
     const rl = createInterface({ input: stream, crlfDelay: Infinity });
 
@@ -390,7 +472,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       }
 
       const parsed = parseJsonLine(line);
-      if (isOrchestratorEvent(parsed) && parsed.sequence > afterSequence) {
+      if (isOrchestratorEvent(parsed) && parsed.sequence > read.afterSequence) {
         yield parsed;
       }
     }
@@ -586,6 +668,47 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   }
 
   /**
+   * Ensure known event ids are loaded so append can enforce uniqueness.
+   * Prefer the warm event cache; otherwise scan the JSONL for valid event ids only.
+   */
+  private async ensureEventIdsLoaded(): Promise<void> {
+    if (this.eventIdsReady) return;
+
+    if (this.cachedEvents) {
+      for (const item of this.cachedEvents) {
+        this.knownEventIds.add(item.id);
+      }
+      this.eventIdsReady = true;
+      return;
+    }
+
+    const raw = await readFile(this.filePath, "utf8").catch((cause) => {
+      const error = cause as NodeJS.ErrnoException;
+      if (error.code === "ENOENT") return null;
+      throw cause;
+    });
+    if (!raw?.trim()) {
+      this.eventIdsReady = true;
+      return;
+    }
+
+    const lines = raw.split(/\r?\n/);
+    let headerSkipped = false;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      if (!headerSkipped) {
+        headerSkipped = true;
+        continue;
+      }
+      const parsed = parseJsonLine(line);
+      if (isOrchestratorEvent(parsed)) {
+        this.knownEventIds.add(parsed.id);
+      }
+    }
+    this.eventIdsReady = true;
+  }
+
+  /**
    * 从尾部快速启动：只读取日志尾部 N 条事件来构建 session 摘要缓存。
    *
    * 与 ensureEventCache() 的区别：
@@ -764,6 +887,11 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
     const needsSummaryIndexWrite = this.sessionSummaryCacheReady && this.metadata !== undefined;
     const needsByteIndexWrite = this.byteIndexLoaded && this.metadata !== undefined;
+    // Neither index is loadable yet — keep dirty so a later flush can persist once ready.
+    if (!needsSummaryIndexWrite && !needsByteIndexWrite) {
+      return false;
+    }
+
     let summaryIndexSynced = !needsSummaryIndexWrite;
     let byteIndexSynced = !needsByteIndexWrite;
     let anyWritten = false;
@@ -834,8 +962,13 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private async enqueueAppend(operation: () => Promise<void>): Promise<void> {
     const next = this.appendQueue.then(operation, operation).catch((cause) => {
       const failure = normalizeEventStoreFailure(cause, this.filePath);
-      this.latchedFailure ??= failure;
-      throw this.latchedFailure;
+      // Only durable write failures latch the store. Client validation errors
+      // (invalid event / duplicate id / closed) must leave subsequent appends viable.
+      if (LATCHING_FAILURE_KINDS.has(failure.kind)) {
+        this.latchedFailure ??= failure;
+        throw this.latchedFailure;
+      }
+      throw failure;
     });
     this.appendQueue = next.then(
       () => undefined,
@@ -853,9 +986,12 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     this.cachedEventsBySession = new Map();
     this.cachedEventsByRun = new Map();
     this.cachedSessionSummaries = new Map();
+    this.knownEventIds = new Set();
     for (const event of events) {
+      this.knownEventIds.add(event.id);
       this.indexCachedEvent(event);
     }
+    this.eventIdsReady = true;
     this.sessionSummaryCacheReady = true;
   }
 
@@ -919,6 +1055,17 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     const parsed = parseJsonLine(raw);
     if (!isSessionSummaryIndex(parsed, metadata)) return false;
 
+    // Deferred index flush can leave the on-disk index behind the event log. Detect that
+    // window via max sequence and force a full rebuild so cold list reads stay complete.
+    const indexMaxSequence = parsed.summaries.reduce(
+      (max, summary) => Math.max(max, summary.lastSequence ?? 0),
+      0
+    );
+    const logMaxSequence = await this.peekMaxEventSequence();
+    if (logMaxSequence > indexMaxSequence) {
+      return false;
+    }
+
     this.cachedSessionSummaries = new Map(
       parsed.summaries.map((summary) => [
         summary.sessionId,
@@ -938,6 +1085,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     );
     this.sessionSummaryCacheReady = true;
     return true;
+  }
+
+  /**
+   * Peek the highest event sequence currently present in the JSONL log.
+   * Used to detect deferred-flush session summary index staleness.
+   */
+  private async peekMaxEventSequence(): Promise<number> {
+    const tail = await this.readTailEvents(1);
+    return tail.at(-1)?.sequence ?? 0;
   }
 
   private async writeSessionSummaryIndex(): Promise<void> {
@@ -987,6 +1143,7 @@ function appendIndexedEvent(
 }
 
 function collectAfterSequence(events: OrchestratorEvent[], afterSequence: number, maxEvents?: number): OrchestratorEvent[] {
+  if (maxEvents === 0) return [];
   const collected: OrchestratorEvent[] = [];
   for (const event of events) {
     if (event.sequence <= afterSequence) continue;
@@ -1001,6 +1158,64 @@ function normalizeEventStoreFailure(cause: unknown, filePath: string): Orchestra
     return cause;
   }
   return new OrchestratorEventStoreWriteError(filePath, undefined, cause);
+}
+
+function assertAppendableEvent(event: OrchestratorEvent, filePath: string): void {
+  const eventId = isRecord(event) && typeof event.id === "string" ? event.id : undefined;
+
+  if (!isRecord(event)) {
+    throw new OrchestratorEventStoreInvalidEventError(filePath, eventId, "event must be an object");
+  }
+  if (!isOrchestratorEvent(event)) {
+    throw new OrchestratorEventStoreInvalidEventError(
+      filePath,
+      eventId,
+      "event failed structural validation (protocolVersion, id, sequence, type, sessionId, timestamp, payload)"
+    );
+  }
+  if (event.id.trim().length === 0) {
+    throw new OrchestratorEventStoreInvalidEventError(filePath, event.id, "id must be a non-empty string");
+  }
+  if (event.sessionId.trim().length === 0) {
+    throw new OrchestratorEventStoreInvalidEventError(filePath, event.id, "sessionId must be a non-empty string");
+  }
+  if (event.runId !== undefined && event.runId.trim().length === 0) {
+    throw new OrchestratorEventStoreInvalidEventError(filePath, event.id, "runId must be non-empty when provided");
+  }
+  if (event.timestamp.trim().length === 0) {
+    throw new OrchestratorEventStoreInvalidEventError(filePath, event.id, "timestamp must be a non-empty string");
+  }
+}
+
+function assertNonEmptyId(value: string, label: "sessionId" | "runId", filePath: string): void {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `${label} must be a non-empty string`);
+  }
+}
+
+function normalizeReadOptions(
+  afterSequence: number,
+  options: OrchestratorEventReadOptions,
+  filePath: string
+): { afterSequence: number; maxEvents?: number } {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new OrchestratorEventStoreInvalidReadError(
+      filePath,
+      `afterSequence must be a non-negative integer (received ${String(afterSequence)})`
+    );
+  }
+
+  const maxEvents = options.maxEvents;
+  if (maxEvents === undefined) {
+    return { afterSequence };
+  }
+  if (!Number.isInteger(maxEvents) || maxEvents < 0) {
+    throw new OrchestratorEventStoreInvalidReadError(
+      filePath,
+      `maxEvents must be a non-negative integer when provided (received ${String(maxEvents)})`
+    );
+  }
+  return { afterSequence, maxEvents };
 }
 
 function parseHeader(line: string, filePath: string): FileOrchestratorEventStoreHeader {
@@ -1159,14 +1374,17 @@ function isOrchestratorEvent(value: unknown): value is OrchestratorEvent {
     isRecord(value) &&
     value.protocolVersion === ORCHESTRATOR_PROTOCOL_VERSION &&
     typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
     typeof sequence === "number" &&
     Number.isInteger(sequence) &&
     sequence > 0 &&
     typeof value.type === "string" &&
     EVENT_TYPES.has(value.type as OrchestratorEventType) &&
     typeof value.sessionId === "string" &&
-    (value.runId === undefined || typeof value.runId === "string") &&
+    value.sessionId.trim().length > 0 &&
+    (value.runId === undefined || (typeof value.runId === "string" && value.runId.trim().length > 0)) &&
     typeof value.timestamp === "string" &&
+    value.timestamp.trim().length > 0 &&
     isRecord(value.payload)
   );
 }

@@ -388,6 +388,10 @@ export class AgentOrchestrator {
         this.emitToRun(active, "runtime-event", {
           event: runtimeEvent as unknown as JsonObject
         });
+        // Persist/broadcast before the next status transition so concurrent event
+        // consumers observe intermediate states (e.g. awaiting-approval) at delivery time,
+        // and so persistenceFailed is visible before more runtime work continues.
+        await this.waitForPendingEmits(active);
       }
 
       if (!active.persistenceFailed && !isTerminalRunStatus(run.status)) {
@@ -612,6 +616,7 @@ export class AgentOrchestrator {
         this.emitToRun(active, "runtime-event", {
           event: runtimeEvent as unknown as JsonObject
         });
+        await this.waitForPendingEmits(active);
       }
       return { events, roundContext };
     } finally {

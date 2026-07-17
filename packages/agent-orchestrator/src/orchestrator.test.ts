@@ -77,44 +77,64 @@ describe("AgentOrchestrator", () => {
   });
 
   it("marks a run as awaiting approval while runtime waits", async () => {
+    let releaseApproval!: () => void;
+    const approvalHold = new Promise<void>((resolve) => {
+      releaseApproval = resolve;
+    });
     const orchestrator = new AgentOrchestrator({
       createRunEngine: () =>
-        new FakeRunEngine([
-          {
-            type: "approval-requested",
+        new GatedApprovalRunEngine(approvalHold, {
+          sessionId: "session_b",
+          request: {
+            id: "approval_a",
             sessionId: "session_b",
-            timestamp: "2026-01-01T00:00:00.000Z",
-            request: {
-              id: "approval_a",
-              sessionId: "session_b",
-              cwd: "C:/tmp",
-              toolCallId: "approval_a",
-              toolName: "write",
-              parameters: {},
-              summary: "mutate",
-              toolMetadata: { category: "filesystem", isReadOnly: false }
-            }
-          },
-          {
-            type: "approval-resolved",
-            sessionId: "session_b",
-            timestamp: "2026-01-01T00:00:01.000Z",
-            requestId: "approval_a",
-            decision: { behavior: "allow" }
+            cwd: "C:/tmp",
+            toolCallId: "approval_a",
+            toolName: "write",
+            parameters: {},
+            summary: "mutate",
+            toolMetadata: { category: "filesystem", isReadOnly: false }
           }
-        ])
+        })
     });
 
     const handle = await orchestrator.startRun({ id: "run_b", sessionId: "session_b", cwd: "C:/tmp", input: "hello" });
+    const iterator = handle.events[Symbol.asyncIterator]();
     const statuses: string[] = [];
-    for await (const event of handle.events) {
-      const run = orchestrator.getRun("run_b");
+
+    // Drain through the approval-requested runtime event while the engine is held.
+    while (true) {
+      const next = await iterator.next();
+      expect(next.done).toBe(false);
+      const event = next.value!;
       if (event.type === "runtime-event") {
-        statuses.push(run?.status ?? "missing");
+        statuses.push(orchestrator.getRun("run_b")?.status ?? "missing");
+        break;
+      }
+    }
+
+    expect(statuses).toEqual(["awaiting-approval"]);
+    expect(orchestrator.getRun("run_b")).toMatchObject({
+      status: "awaiting-approval",
+      reason: "awaiting-approval"
+    });
+
+    releaseApproval();
+
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) break;
+      const event = next.value!;
+      if (event.type === "runtime-event") {
+        statuses.push(orchestrator.getRun("run_b")?.status ?? "missing");
       }
     }
 
     expect(statuses).toEqual(["awaiting-approval", "running"]);
+    expect(orchestrator.getRun("run_b")).toMatchObject({
+      status: "completed",
+      outcome: "completed"
+    });
   });
 
   it("persists and restores daemon-owned pending input records", async () => {
@@ -1099,6 +1119,38 @@ class FakeRunEngine {
   enqueueSteerInput(_message: AgentMessage): void {}
 }
 
+/** Emits approval-requested, waits for a gate, then approval-resolved — for intermediate status assertions. */
+class GatedApprovalRunEngine {
+  constructor(
+    private readonly hold: Promise<void>,
+    private readonly approval: {
+      sessionId: string;
+      request: Extract<AgentEvent, { type: "approval-requested" }>["request"];
+    }
+  ) {}
+
+  async *run(_input?: string | AgentMessage): AsyncIterable<AgentEvent> {
+    yield {
+      type: "approval-requested",
+      sessionId: this.approval.sessionId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      request: this.approval.request
+    };
+    await this.hold;
+    yield {
+      type: "approval-resolved",
+      sessionId: this.approval.sessionId,
+      timestamp: "2026-01-01T00:00:01.000Z",
+      requestId: this.approval.request.id,
+      decision: { behavior: "allow" }
+    };
+  }
+
+  abort(): void {}
+
+  enqueueSteerInput(_message: AgentMessage): void {}
+}
+
 class RecordingRunEngine extends FakeRunEngine {
   constructor(events: AgentEvent[], private readonly onInput: (input: string | AgentMessage) => void) {
     super(events);
@@ -1137,9 +1189,24 @@ class BlockingRunEngine {
 }
 
 class RejectingEventStore {
-  constructor(private readonly error: Error) {}
+  private remainingAllowedAppends: number;
+
+  /**
+   * @param allowAppends Number of successful appends before rejecting.
+   *   Default 1 so session-created can persist while later run/leaf events fail.
+   */
+  constructor(
+    private readonly error: Error,
+    allowAppends = 1
+  ) {
+    this.remainingAllowedAppends = allowAppends;
+  }
 
   append(): Promise<void> {
+    if (this.remainingAllowedAppends > 0) {
+      this.remainingAllowedAppends -= 1;
+      return Promise.resolve();
+    }
     return Promise.reject(this.error);
   }
 

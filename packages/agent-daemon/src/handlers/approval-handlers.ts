@@ -16,12 +16,35 @@ import type { ApprovalQueue } from "../approval-queue.js";
 interface ApprovalHandlerTransport {
   send(ws: WebSocket, message: unknown): boolean;
   broadcast(message: unknown): number;
+  sendError?(
+    ws: WebSocket,
+    code: string,
+    message: string,
+    runId?: string,
+    correlation?: { requestId?: string; clientRequestId?: string }
+  ): boolean;
+}
+
+function lateResolvePayload(
+  approvalQueue: ApprovalQueue,
+  toolCallId: string
+): { status: string | null; reason?: string; expiredAt?: number } {
+  const snapshot = approvalQueue.getApproval(toolCallId);
+  if (!snapshot) {
+    return { status: approvalQueue.getStatus(toolCallId) };
+  }
+  return {
+    status: snapshot.status,
+    ...(snapshot.reason !== undefined ? { reason: snapshot.reason } : {}),
+    ...(snapshot.expiredAt !== undefined ? { expiredAt: snapshot.expiredAt } : {}),
+  };
 }
 
 export function handleApproveTool(
   msg: ApproveToolMessage,
   approvalQueue: ApprovalQueue,
-  transport: ApprovalHandlerTransport
+  transport: ApprovalHandlerTransport,
+  ws?: WebSocket
 ): void {
   const resolved = approvalQueue.resolve(msg.toolCallId, "approved", msg.scope);
   if (resolved) {
@@ -30,14 +53,32 @@ export function handleApproveTool(
       type: "approval-resolved",
       toolCallId: msg.toolCallId,
       decision: "approved",
+      reason: "user-approved",
     });
+    return;
+  }
+
+  // Late approve after timeout / unknown id: typed feedback for the requesting client.
+  const late = lateResolvePayload(approvalQueue, msg.toolCallId);
+  console.warn(
+    `[Daemon] Late/unknown approve-tool for ${msg.toolCallId} (status=${late.status ?? "missing"})`
+  );
+  if (ws && transport.sendError) {
+    transport.sendError(
+      ws,
+      late.status === "expired" ? "APPROVAL_EXPIRED" : "APPROVAL_NOT_PENDING",
+      late.status === "expired"
+        ? `Approval ${msg.toolCallId} already expired; re-run the tool to request a new approval`
+        : `No pending approval for toolCallId: ${msg.toolCallId}`,
+    );
   }
 }
 
 export function handleDenyTool(
   msg: DenyToolMessage,
   approvalQueue: ApprovalQueue,
-  transport: ApprovalHandlerTransport
+  transport: ApprovalHandlerTransport,
+  ws?: WebSocket
 ): void {
   const resolved = approvalQueue.resolve(msg.toolCallId, "denied");
   if (resolved) {
@@ -46,6 +87,22 @@ export function handleDenyTool(
       type: "approval-resolved",
       toolCallId: msg.toolCallId,
       decision: "denied",
+      reason: "user-denied",
     });
+    return;
+  }
+
+  const late = lateResolvePayload(approvalQueue, msg.toolCallId);
+  console.warn(
+    `[Daemon] Late/unknown deny-tool for ${msg.toolCallId} (status=${late.status ?? "missing"})`
+  );
+  if (ws && transport.sendError) {
+    transport.sendError(
+      ws,
+      late.status === "expired" ? "APPROVAL_EXPIRED" : "APPROVAL_NOT_PENDING",
+      late.status === "expired"
+        ? `Approval ${msg.toolCallId} already expired`
+        : `No pending approval for toolCallId: ${msg.toolCallId}`,
+    );
   }
 }

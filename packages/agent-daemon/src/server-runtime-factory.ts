@@ -38,8 +38,11 @@ import {
   createDaemonSubagentTool,
   resolveMaxSubagentDepth,
 } from "./subagent-runtime.js";
-import { DaemonPermissionPolicy } from "./daemon-permission-policy.js";
-import type { DaemonPermissionMode } from "./daemon-permission-policy.js";
+import {
+  DaemonPermissionPolicy,
+  normalizeDaemonPermissionMode,
+  type DaemonPermissionMode,
+} from "./daemon-permission-policy.js";
 import type { DaemonConfig, DaemonProviderStatusSnapshot } from "./types.js";
 import type { ScopedContextStore } from "./scoped-context-store.js";
 import {
@@ -413,16 +416,13 @@ export class DaemonRuntimeFactory {
     const { config: mergedConfig, validation } = runtimeConfigMerger.mergeAndValidate(layers);
     logRuntimeConfigValidation(runId, validation);
 
-    // 从合并结果中提取运行时参数
-    const permissionMode =
-      (mergedConfig.permissionMode as "ask" | "auto" | "full-access" | "plan") ?? "ask";
+    // 从合并结果中提取运行时参数（非法 mode → ask，避免 silent full-access）
+    const permissionMode = normalizeDaemonPermissionMode(mergedConfig.permissionMode ?? "ask");
     // 探索型任务常需多轮读文件；16 偏紧，默认放宽到 32（仍可用 metadata/env 覆盖）
     const maxTurns = (mergedConfig.maxTurns as number) ?? 32;
     const subagentDepth = (mergedConfig.subagentDepth as number) ?? 0;
 
-    const permissionPolicy = new DaemonPermissionPolicy(
-      permissionMode
-    );
+    const permissionPolicy = new DaemonPermissionPolicy(permissionMode);
 
     const mutationCoordinator = this.getWorkspaceMutationCoordinator(run.cwd);
     const backgroundManager = this.backgroundCommandManagerForCwd(run.cwd);
@@ -464,6 +464,13 @@ export class DaemonRuntimeFactory {
       runMetadataTarget: run,
     });
 
+    // 桌面设置「MCP 工具禁用」：按 serverId/tool 名过滤，不注入被禁用的工具
+    const disabledMcp = parseMcpDisabledTools(run.metadata);
+    const filteredMcpTools =
+      disabledMcp.size === 0
+        ? mcpTools
+        : mcpTools.filter((tool) => !isMcpToolDisabledName(tool.name, disabledMcp));
+
     return {
       sessionId: session.id,
       cwd: run.cwd,
@@ -485,7 +492,7 @@ export class DaemonRuntimeFactory {
           subagentDepth,
           maxTurns,
         }),
-        ...mcpTools,
+        ...filteredMcpTools,
       ],
       maxTurns,
       permissionPolicy,
@@ -740,11 +747,8 @@ function runtimeConfigFromEnv(env: Record<string, string | undefined>): Record<s
   }
 
   const permissionMode = env.CRISH_PERMISSION_MODE ?? env.CRISH_PERMISSION_POLICY;
-  if (
-    permissionMode !== undefined &&
-    ["ask", "auto", "full-access", "plan"].includes(permissionMode)
-  ) {
-    result.permissionMode = permissionMode;
+  if (permissionMode !== undefined) {
+    result.permissionMode = normalizeDaemonPermissionMode(permissionMode);
   }
 
   const subagentDepth = env.CRISH_SUBAGENT_DEPTH;
@@ -778,13 +782,8 @@ function runtimeConfigFromRunMetadata(metadata: JsonObject | undefined): Record<
   const maxRounds = numberMetadata(metadata, "maxRounds");
   if (maxRounds !== undefined) result.maxTurns = maxRounds;
 
-  if (
-    metadata.permissionMode === "full-access" ||
-    metadata.permissionMode === "ask" ||
-    metadata.permissionMode === "auto" ||
-    metadata.permissionMode === "plan"
-  ) {
-    result.permissionMode = metadata.permissionMode;
+  if (metadata.permissionMode !== undefined) {
+    result.permissionMode = normalizeDaemonPermissionMode(metadata.permissionMode);
   }
 
   const depth = numberMetadata(metadata, "subagentDepth");
@@ -811,6 +810,37 @@ function stringArrayMetadata(metadata: JsonObject | undefined, key: string): str
   return Array.isArray(value) && value.every((item) => typeof item === "string")
     ? value
     : undefined;
+}
+
+/** metadata.mcpDisabledTools: serverId → tool names（及全局 * 名） */
+function parseMcpDisabledTools(metadata: JsonObject | undefined): Set<string> {
+  const out = new Set<string>();
+  const raw = metadata?.mcpDisabledTools;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [serverId, tools] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(tools)) continue;
+    for (const t of tools) {
+      const name = String(t).trim();
+      if (!name) continue;
+      out.add(name);
+      out.add(`${serverId}::${name}`);
+      // 常见 MCP 工具命名：mcp__server__tool
+      out.add(`mcp__${serverId}__${name}`);
+    }
+  }
+  return out;
+}
+
+function isMcpToolDisabledName(toolName: string, disabled: Set<string>): boolean {
+  if (disabled.has(toolName)) return true;
+  // mcp__server__rest → 尝试匹配 rest / server::rest
+  const m = /^mcp__(.+?)__(.+)$/i.exec(toolName);
+  if (m) {
+    const server = m[1] ?? "";
+    const rest = m[2] ?? "";
+    if (disabled.has(rest) || disabled.has(`${server}::${rest}`)) return true;
+  }
+  return false;
 }
 
 function workspaceCoordinatorKey(cwd: string): string {

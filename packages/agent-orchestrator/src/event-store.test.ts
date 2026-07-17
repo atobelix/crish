@@ -8,6 +8,9 @@ import {
   FileOrchestratorEventStore,
   ORCHESTRATOR_EVENT_STORE_FILE_VERSION,
   ORCHESTRATOR_SESSION_SUMMARY_INDEX_VERSION,
+  OrchestratorEventStoreDuplicateIdError,
+  OrchestratorEventStoreInvalidEventError,
+  OrchestratorEventStoreInvalidReadError,
 } from "./event-store";
 
 describe("FileOrchestratorEventStore", () => {
@@ -509,6 +512,150 @@ describe("FileOrchestratorEventStore", () => {
       filePath,
       eventId: "event_1"
     });
+  });
+
+  it("serves empty-store reads without requiring prior appends", async () => {
+    const filePath = join(await tempDir(tempDirs), "empty-events.jsonl");
+    const store = new FileOrchestratorEventStore(filePath);
+
+    await expect(store.readAll()).resolves.toEqual([]);
+    await expect(store.readSession("session_missing")).resolves.toEqual([]);
+    await expect(store.readRun("run_missing")).resolves.toEqual([]);
+    await expect(store.listSessionSummaries()).resolves.toEqual([]);
+    await expect(store.getMetadata()).resolves.toMatchObject({
+      eventLogId: expect.stringMatching(/^eventlog_/),
+      generation: 1,
+      schemaVersion: 1,
+      protocolVersion: ORCHESTRATOR_PROTOCOL_VERSION
+    });
+
+    const streamed: OrchestratorEvent[] = [];
+    for await (const item of store.readAllStreaming()) {
+      streamed.push(item);
+    }
+    expect(streamed).toEqual([]);
+
+    await expect(store.bootstrapFromTail()).resolves.toBe(true);
+    await expect(store.listSessionSummaries()).resolves.toEqual([]);
+    expect(store.healthCheck()).toMatchObject({
+      writable: true,
+      indexSynced: true
+    });
+  });
+
+  it("rejects invalid append payloads with typed invalid-event errors and stays writable", async () => {
+    const filePath = join(await tempDir(tempDirs), "events.jsonl");
+    const store = new FileOrchestratorEventStore(filePath);
+
+    await expect(
+      store.append({
+        ...event({ id: "event_bad", sequence: 1, sessionId: "session_a" }),
+        type: "not-a-real-type"
+      } as unknown as OrchestratorEvent)
+    ).rejects.toMatchObject({
+      name: "OrchestratorEventStoreInvalidEventError",
+      kind: "invalid-event",
+      filePath,
+      eventId: "event_bad"
+    });
+
+    await expect(
+      store.append({
+        ...event({ id: "", sequence: 1, sessionId: "session_a" })
+      })
+    ).rejects.toBeInstanceOf(OrchestratorEventStoreInvalidEventError);
+
+    await expect(
+      store.append({
+        ...event({ id: "event_bad_seq", sequence: 0, sessionId: "session_a" })
+      })
+    ).rejects.toMatchObject({ kind: "invalid-event", eventId: "event_bad_seq" });
+
+    await expect(
+      store.append({
+        ...event({ id: "event_bad_session", sequence: 1, sessionId: "   " })
+      })
+    ).rejects.toMatchObject({ kind: "invalid-event", eventId: "event_bad_session" });
+
+    // Validation failures must not latch the store.
+    const valid = event({ id: "event_ok", sequence: 1, sessionId: "session_a", runId: "run_a" });
+    await store.append(valid);
+    await expect(store.readAll()).resolves.toEqual([valid]);
+    expect(store.healthCheck().writable).toBe(true);
+  });
+
+  it("enforces event id uniqueness across warm and cold appends", async () => {
+    const filePath = join(await tempDir(tempDirs), "events.jsonl");
+    const store = new FileOrchestratorEventStore(filePath);
+    const first = event({ id: "event_unique", sequence: 1, sessionId: "session_a", runId: "run_a" });
+
+    await store.append(first);
+    await expect(
+      store.append(event({ id: "event_unique", sequence: 2, sessionId: "session_a", runId: "run_a" }))
+    ).rejects.toMatchObject({
+      name: "OrchestratorEventStoreDuplicateIdError",
+      kind: "duplicate-event-id",
+      filePath,
+      eventId: "event_unique"
+    });
+    await expect(store.readAll()).resolves.toEqual([first]);
+
+    // Cold open still sees the durable id and rejects the duplicate without latching.
+    const cold = new FileOrchestratorEventStore(filePath);
+    await expect(
+      cold.append(event({ id: "event_unique", sequence: 3, sessionId: "session_a", runId: "run_b" }))
+    ).rejects.toBeInstanceOf(OrchestratorEventStoreDuplicateIdError);
+
+    const second = event({ id: "event_other", sequence: 2, sessionId: "session_a", runId: "run_b" });
+    await cold.append(second);
+    await expect(cold.readAll()).resolves.toEqual([first, second]);
+  });
+
+  it("guards read APIs against invalid afterSequence, maxEvents, and empty ids", async () => {
+    const filePath = join(await tempDir(tempDirs), "events.jsonl");
+    const store = new FileOrchestratorEventStore(filePath);
+    const first = event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" });
+    const second = event({ id: "event_2", sequence: 2, sessionId: "session_a", runId: "run_a" });
+    const third = event({ id: "event_3", sequence: 3, sessionId: "session_b", runId: "run_b" });
+    await store.append(first);
+    await store.append(second);
+    await store.append(third);
+
+    await expect(store.readAll(0, { maxEvents: 2 })).resolves.toEqual([first, second]);
+    await expect(store.readAll(1, { maxEvents: 1 })).resolves.toEqual([second]);
+    await expect(store.readAll(0, { maxEvents: 0 })).resolves.toEqual([]);
+    await expect(store.readSession("session_a", 1)).resolves.toEqual([second]);
+    await expect(store.readRun("run_a", 0, { maxEvents: 1 })).resolves.toEqual([first]);
+
+    await expect(store.readAll(-1)).rejects.toBeInstanceOf(OrchestratorEventStoreInvalidReadError);
+    await expect(store.readAll(1.5)).rejects.toMatchObject({ kind: "invalid-read" });
+    await expect(store.readAll(0, { maxEvents: -1 })).rejects.toMatchObject({ kind: "invalid-read" });
+    await expect(store.readAll(0, { maxEvents: 1.2 })).rejects.toMatchObject({ kind: "invalid-read" });
+    await expect(store.readSession("")).rejects.toMatchObject({
+      name: "OrchestratorEventStoreInvalidReadError",
+      kind: "invalid-read"
+    });
+    await expect(store.readSession("   ")).rejects.toMatchObject({ kind: "invalid-read" });
+    await expect(store.readRun("")).rejects.toMatchObject({ kind: "invalid-read" });
+    await expect(store.readAllStreaming(-1).next()).rejects.toMatchObject({ kind: "invalid-read" });
+  });
+
+  it("does not latch the store after a rejected duplicate id", async () => {
+    const filePath = join(await tempDir(tempDirs), "events.jsonl");
+    const store = new FileOrchestratorEventStore(filePath);
+    await store.append(event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }));
+
+    await expect(
+      store.append(event({ id: "event_1", sequence: 2, sessionId: "session_a", runId: "run_a" }))
+    ).rejects.toMatchObject({ kind: "duplicate-event-id" });
+
+    const next = event({ id: "event_2", sequence: 2, sessionId: "session_a", runId: "run_a" });
+    await store.append(next);
+    await expect(store.readAll()).resolves.toEqual([
+      event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }),
+      next
+    ]);
+    expect(store.healthCheck().writable).toBe(true);
   });
 });
 

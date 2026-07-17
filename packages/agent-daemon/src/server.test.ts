@@ -2549,7 +2549,7 @@ describe("DaemonServer orchestrated runs", () => {
       workflowRunId: "run_workflow_approval_expire",
       run: {
         status: "failed",
-        error: expect.stringContaining("Approval expired"),
+        error: expect.stringMatching(/Approval (expired|timed out)/i),
       },
     });
 
@@ -2557,7 +2557,7 @@ describe("DaemonServer orchestrated runs", () => {
     expect(runs[0]).toMatchObject({
       runId: "run_workflow_approval_expire",
       status: "failed",
-      error: expect.stringContaining("Approval expired"),
+      error: expect.stringMatching(/Approval (expired|timed out)/i),
     });
 
     const resolvedStatus = (
@@ -3014,19 +3014,17 @@ describe("DaemonServer orchestrated runs", () => {
         prompt: "hold-b",
       }),
     );
+    // Single collector: sequential waits drop the sibling agent-start when both races complete.
+    const started = new Set<string>();
     await collectMessages(ws, (message) => {
-      return (
+      if (
         message.type === "event" &&
-        message.runId === "run_unlimited_a" &&
-        message.event?.type === "agent-start"
-      );
-    });
-    await collectMessages(ws, (message) => {
-      return (
-        message.type === "event" &&
-        message.runId === "run_unlimited_b" &&
-        message.event?.type === "agent-start"
-      );
+        message.event?.type === "agent-start" &&
+        (message.runId === "run_unlimited_a" || message.runId === "run_unlimited_b")
+      ) {
+        started.add(message.runId);
+      }
+      return started.has("run_unlimited_a") && started.has("run_unlimited_b");
     });
     const runningStatus = (
       await sendAndCollectMessages(ws, { type: "get-status" }, (message) => message.type === "status-response")

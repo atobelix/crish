@@ -6,6 +6,7 @@ import type {
   OrchestratorRunRecord,
   RunStatus,
 } from "@crish/agent-orchestrator";
+import { approvalRiskFields } from "./approval-projection.js";
 import type {
   DaemonBackgroundTaskSnapshot,
   DaemonTaskMessageSnapshot,
@@ -431,22 +432,6 @@ function approvalFromRequest(
     requestedAt,
     status: "pending",
     ...approvalRiskFields(metadata),
-  };
-}
-
-function approvalRiskFields(metadata: JsonObject | undefined): Pick<
-  DaemonTaskSnapshotApproval,
-  "risk" | "riskReason" | "requiresDoubleConfirm" | "recommendSnapshot" | "metadata"
-> {
-  if (!metadata) return {};
-  return {
-    ...(typeof metadata.risk === "string" ? { risk: metadata.risk } : {}),
-    ...(typeof metadata.reason === "string" ? { riskReason: metadata.reason } : {}),
-    ...(typeof metadata.requiresDoubleConfirm === "boolean"
-      ? { requiresDoubleConfirm: metadata.requiresDoubleConfirm }
-      : {}),
-    ...(typeof metadata.recommendSnapshot === "boolean" ? { recommendSnapshot: metadata.recommendSnapshot } : {}),
-    metadata,
   };
 }
 
