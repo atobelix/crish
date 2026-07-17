@@ -95,19 +95,45 @@ export function langFromFilename(name: string): string {
   return EXT_LANG[ext] || '';
 }
 
+const HIGHLIGHT_CACHE_LIMIT = 1000;
+const highlightCache = new Map<string, string>();
+
+function cleanCacheIfNeeded() {
+  if (highlightCache.size > HIGHLIGHT_CACHE_LIMIT) {
+    const keys = Array.from(highlightCache.keys()).slice(0, 100);
+    for (const key of keys) {
+      highlightCache.delete(key);
+    }
+  }
+}
+
 export function highlightCode(code: string, langHint?: string): string {
   ensureLangs();
   const raw = code.replace(/\r\n/g, '\n');
-  const lang = (langHint || '').toLowerCase().replace(/^\./, '');
+  const lang = (langHint || '').toLowerCase().replace(/^\./, '').trim();
+  
+  const cacheKey = `${lang}:${raw}`;
+  if (highlightCache.has(cacheKey)) {
+    return highlightCache.get(cacheKey)!;
+  }
+
+  let html = '';
   try {
     if (lang && hljs.getLanguage(lang)) {
-      return hljs.highlight(raw, { language: lang, ignoreIllegals: true }).value;
+      html = hljs.highlight(raw, { language: lang, ignoreIllegals: true }).value;
+    } else {
+      // 避免 hljs.highlightAuto 带来的严重 CPU 卡顿，直接进行 Plain Text 的转义渲染
+      html = escapeHtml(raw);
     }
-    return hljs.highlightAuto(raw).value;
   } catch {
-    return escapeHtml(raw);
+    html = escapeHtml(raw);
   }
+
+  cleanCacheIfNeeded();
+  highlightCache.set(cacheKey, html);
+  return html;
 }
+
 
 function escapeHtml(s: string): string {
   return s

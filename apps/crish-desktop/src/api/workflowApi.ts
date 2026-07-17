@@ -552,7 +552,7 @@ export type WorkflowDefinition = {
 async function ensureClient() {
   const client = getDesktopDaemonClient();
   if (!client.isConnected()) {
-    const ok = await client.waitUntilConnected(10_000);
+    const ok = await client.waitUntilConnected(500);
     if (!ok) return null;
   }
   return client;

@@ -336,6 +336,7 @@ const KNOWN_CONTEXT: Record<string, number> = {
 };
 
 export function guessContextLength(model: string): number | undefined {
+  if (!model) return undefined;
   const m = model.toLowerCase();
   for (const [k, v] of Object.entries(KNOWN_CONTEXT)) {
     if (m === k || m.includes(k) || k.includes(m)) return v;

@@ -5,8 +5,7 @@
  * 搜索（行高可变）/ 拖拽（需全量 drop target）时由调用方禁用。
  */
 
-/** 与 tokens --control-height 默认 32px 对齐；CSS 窗口化时固定行高 */
-export const SIDEBAR_SESSION_ROW_HEIGHT = 32;
+export const SIDEBAR_SESSION_ROW_HEIGHT = 30;
 
 /** 超过此数量启用窗口化 */
 export const SIDEBAR_WINDOW_THRESHOLD = 48;

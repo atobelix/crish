@@ -29,6 +29,21 @@ function isMissingCommandMessage(msg: string): boolean {
   );
 }
 
+let cachedInvoke: any = null;
+let tauriChecked = false;
+
+async function getTauriInvoke() {
+  if (tauriChecked) return cachedInvoke;
+  tauriChecked = true;
+  try {
+    const mod = await import('@tauri-apps/api/core');
+    cachedInvoke = mod?.invoke || null;
+  } catch {
+    cachedInvoke = null;
+  }
+  return cachedInvoke;
+}
+
 /**
  * 结构化 invoke：区分 ok / missing / error。
  */
@@ -37,9 +52,9 @@ export async function invokeResult<T = unknown>(
   args?: Record<string, unknown>,
 ): Promise<InvokeResult<T>> {
   try {
-    const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (!mod?.invoke) return { status: 'missing' };
-    const data = (await mod.invoke(cmd, args)) as T;
+    const invoke = await getTauriInvoke();
+    if (!invoke) return { status: 'missing' };
+    const data = (await invoke(cmd, args)) as T;
     return { status: 'ok', data };
   } catch (err) {
     const msg = formatInvokeError(err);

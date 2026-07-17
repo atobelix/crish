@@ -416,7 +416,7 @@ describe('providerProfiles', () => {
       JSON.stringify([
         {
           id: 'flowbit',
-          name: 'Flowbit / 默认',
+          name: 'Flowbit',
           baseUrl: 'https://api.flowbit.me',
           models: ['mimo-v2.5'],
           hasKey: false,
@@ -440,7 +440,7 @@ describe('providerProfiles', () => {
       JSON.stringify([
         {
           id: 'flowbit',
-          name: 'Flowbit / 默认',
+          name: 'Flowbit',
           baseUrl: 'https://api.flowbit.me',
           models: [],
           hasKey: false,
@@ -711,7 +711,7 @@ describe('providerProfiles', () => {
     });
 
     it('profileDisplayLabel / truncate are Chinese-safe', () => {
-      expect(profileDisplayLabel('flowbit')).toBe('Flowbit / 默认');
+      expect(profileDisplayLabel('flowbit')).toBe('Flowbit');
       expect(profileDisplayLabel({ id: 'custom', name: '我的服务商' })).toBe('我的服务商');
       expect(profileDisplayLabel({ id: 'openai', name: '  ' })).toBe('OpenAI 兼容');
       expect(profileDisplayLabel(null)).toBe('未命名服务商');

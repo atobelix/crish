@@ -895,7 +895,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         // stop/切流后忽略；系统级提示不进助手气泡
         if (!assertLive()) return;
         const asstErr = getSessionById(sid)?.messages.find((m) => m.id === assistantMsgId);
-        const lastToolErr = [...(asstErr?.toolCalls || [])].reverse().find(Boolean);
+        const lastToolErr = (asstErr?.toolCalls || []).findLast(Boolean);
         recordStreamDiag({
           sessionId: sid,
           runId: localRunId,
@@ -937,7 +937,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         const asst = getSessionById(sid)
           ?.messages.find((m) => m.id === assistantMsgId);
         // 正常收口也记一条轻量诊断，方便对照「检查点后突然停」
-        const lastTool = [...(asst?.toolCalls || [])].reverse().find(Boolean);
+        const lastTool = (asst?.toolCalls || []).findLast(Boolean);
         const runningLeft = (asst?.toolCalls || []).filter((t) => t.status === 'running').length;
         recordStreamDiag({
           sessionId: sid,

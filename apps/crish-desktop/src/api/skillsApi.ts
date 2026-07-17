@@ -11,6 +11,7 @@
 
 import { getWorkspacePath } from './projectStore';
 import { getDesktopDaemonClient } from './daemonClient';
+import { tryInvokeTauri } from './tauriInvoke';
 import { skillStableId } from './skillId';
 import {
   isAbsoluteFsPath,
@@ -396,6 +397,62 @@ export async function discoverSkills(opts?: {
   workspacePath?: string | null;
 }): Promise<DiscoverSkillsResult> {
   const workspace = (opts?.workspacePath ?? getWorkspacePath() ?? '').trim();
+  const extraDirs = getExtraSkillDirs();
+
+  const rustSkills = await tryInvokeTauri<any[]>('workbench_discover_skills', {
+    workspacePath: workspace || null,
+    extraDirs,
+  });
+
+  if (Array.isArray(rustSkills)) {
+    const skills: DesktopSkill[] = [];
+    const map = loadActivationMap();
+    const seenSkill = new Set<string>();
+
+    for (const rs of rustSkills) {
+      const name = String(rs.name);
+      const filePath = String(rs.filePath);
+      const id = skillStableId(name, filePath);
+      if (seenSkill.has(id)) continue;
+      seenSkill.add(id);
+
+      const resolved = resolveActivationFromMap(map, id, filePath);
+      if (resolved.migrated) saveActivationMap(map);
+
+      const fileActivation = skillActivation(rs.fileActivation) || (rs.system ? 'recommended' : 'recommended');
+      const activation = resolved.activation || fileActivation;
+
+      skills.push({
+        id,
+        name,
+        description: String(rs.description),
+        filePath,
+        baseDir: String(rs.baseDir),
+        content: String(rs.content),
+        raw: String(rs.raw),
+        scope: (rs.scope as SkillScope) || 'global',
+        activation,
+        tags: Array.isArray(rs.tags) ? rs.tags.map(String) : [],
+        appliesTo: Array.isArray(rs.appliesTo) ? rs.appliesTo.map(String) : [],
+        disableModelInvocation: Boolean(rs.disableModelInvocation),
+        system: Boolean(rs.system),
+      });
+    }
+
+    skills.sort((a, b) => {
+      const scopeOrder = { project: 0, workspace: 1, global: 2 };
+      const d = scopeOrder[a.scope] - scopeOrder[b.scope];
+      if (d !== 0) return d;
+      const actOrder = { enabled: 0, recommended: 1, disabled: 2 };
+      const ad = actOrder[a.activation] - actOrder[b.activation];
+      if (ad !== 0) return ad;
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
+
+    return { skills, roots: [] };
+  }
+
+  // Fallback to legacy JS discovery
   const roots: { path: string; scope: SkillScope }[] = [];
 
   if (workspace) {

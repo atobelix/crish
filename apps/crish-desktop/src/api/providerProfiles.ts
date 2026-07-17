@@ -34,7 +34,7 @@ const ACTIVE_MODEL_KEY = 'crish_active_model_id';
 const DEFAULT_PROFILES: ProviderProfile[] = [
   {
     id: 'flowbit',
-    name: 'Flowbit / 默认',
+    name: 'Flowbit',
     baseUrl: 'https://api.flowbit.me',
     models: [],
     hasKey: false,
@@ -72,7 +72,7 @@ export function getDefaultProviderProfiles(): ProviderProfile[] {
  * 自定义 id 无条目时由调用方回退到 name/id。
  */
 export const KNOWN_PROFILE_LABELS: Readonly<Record<string, string>> = {
-  flowbit: 'Flowbit / 默认',
+  flowbit: 'Flowbit',
   openai: 'OpenAI 兼容',
   deepseek: 'DeepSeek',
   anthropic: 'Anthropic 兼容',

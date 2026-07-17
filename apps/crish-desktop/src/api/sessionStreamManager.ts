@@ -128,4 +128,36 @@ export class SessionStreamManager {
       start(modelText, userMsgId, sessionId);
     });
   }
+
+  /**
+   * 清理指定会话的全部追踪状态（streams / draining / goalCancelled）。
+   *
+   * 异常路径兜底：当流异常中断（onRunError）或会话被销毁时，
+   * streams Map 与 draining/goalCancelled Set 会累积孤儿条目。
+   * 调用此方法保证单会话维度的全量清理。
+   *
+   * 幂等：对不存在的 sessionId 调用不报错，多次调用安全。
+   * 注意：不会触发 cancel 回调（与 cancelSession 不同）；仅清理追踪状态。
+   * 返回是否存在被遗弃的活跃流（供调用方决定是否 cancel）。
+   */
+  clearSession(sessionId: string): boolean {
+    const hadStream = this.streams.has(sessionId);
+    this.streams.delete(sessionId);
+    this.draining.delete(sessionId);
+    this.goalCancelled.delete(sessionId);
+    return hadStream;
+  }
+
+  /**
+   * 清理全部追踪状态（hook 卸载 / 进程退出时使用）。
+   *
+   * 注意：不会触发 cancel 回调；调用方应先遍历 streams 自行 cancel。
+   * 幂等：空状态调用安全。
+   */
+  dispose(): void {
+    this.streams.clear();
+    this.draining.clear();
+    this.goalCancelled.clear();
+    this.starter = null;
+  }
 }

@@ -206,7 +206,7 @@ export function applySubagentEventToMessages(
     } else {
       // 无 id：优先收口仍在 running 的最后一条，避免误改已完成的工具
       tc =
-        [...a.toolCalls].reverse().find((t) => t.status === 'running') ||
+        a.toolCalls.findLast((t) => t.status === 'running') ||
         a.toolCalls[a.toolCalls.length - 1];
     }
 

@@ -165,7 +165,7 @@ function mapServer(o: Record<string, unknown>, i: number): McpServerInfo {
   };
 }
 
-async function ensureConnected(timeoutMs = 8_000): Promise<boolean> {
+async function ensureConnected(timeoutMs = 500): Promise<boolean> {
   const client = getDesktopDaemonClient();
   if (client.isConnected()) return true;
   return client.waitUntilConnected(timeoutMs);

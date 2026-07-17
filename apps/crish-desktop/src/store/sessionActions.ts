@@ -919,7 +919,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
         isArchived: false,
         branchParentId: sessionId,
         timestamp: nowIsoTimestamp(),
-        messages: original.messages ? JSON.parse(JSON.stringify(original.messages)) : [],
+        messages: original.messages ? structuredClone(original.messages) : [],
         pinnedMessageIds: original.pinnedMessageIds
           ? [...original.pinnedMessageIds]
           : undefined,
