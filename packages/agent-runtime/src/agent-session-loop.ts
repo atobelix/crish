@@ -35,6 +35,7 @@ import type {
   RuntimePermissionRequest,
 } from "./types";
 import type { ProviderStreamContractEvent } from "./provider-stream-contract";
+import { classifyProviderErrorMessage } from "./provider-openai-compatible";
 import { ConversationEngine, ToolExecutor, ProviderCallGateway, ContextManager, ProgressEventQueue, ProviderResponseConsumer, ContextCompressionGate, SingleToolExecutor } from "./runtime-components";
 import type { ToolExecuteHook } from "./runtime-components";
 import { TokenTracker } from "./provider-transport/token-tracker";
@@ -52,11 +53,14 @@ import {
   unrefTimer,
   runtimeSteeringText,
 } from "./runtime-helpers";
-import { assemblePromptForProvider, type PromptAssemblyContextBlock } from "./prompt-assembly";
+import {
+  assemblePromptForProvider,
+  type PromptAssemblyContextBlock,
+  type PromptAssemblyMetadata,
+} from "./prompt-assembly";
 import { type ProviderStreamFinishReason } from "./provider-stream-contract";
 import { createId, createTextMessage, nowIso, SessionRecorder } from "./session";
-import { combineAbortSignals } from "@crish/shared-utils";
-import { validateToolInput } from "./tools";
+import { repairToolInput, validateToolInput } from "./tools";
 import {
   createAgentSessionMachine,
   shouldStopForMaxTurns,
@@ -105,22 +109,14 @@ function normalizeToolExecutionOptions(options: AgentRuntimeOptions["toolExecuti
 }
 
 /**
- * 最近一轮用户输入之后：用过工具，却几乎没有助手正文 → 需要强制收尾总结。
+ * 瞬时 provider 错误判定：委托给 provider 层的结构化分类器。
+ * 旧实现在 session-loop 本地用硬编码正则判字符串，与 provider 层的
+ * classifyHttpProviderError / classifyTransportProviderError / classifyStreamProviderError
+ * 四套分类逻辑割裂——provider 升级错误模型时 session-loop 的正则静默失效。
+ * 现统一用 classifyProviderErrorMessage 的 retryable 字段。
  */
 function isTransientProviderError(message: string): boolean {
-  const m = message.toLowerCase();
-  return (
-    /\b502\b/.test(m) ||
-    /\b503\b/.test(m) ||
-    /\b504\b/.test(m) ||
-    /\b520\b/.test(m) ||
-    /bad gateway/.test(m) ||
-    /gateway timeout/.test(m) ||
-    /rate.?limit/.test(m) ||
-    /timeout|timed out/.test(m) ||
-    /econnreset|enotfound|fetch failed|network|socket/.test(m) ||
-    /temporarily unavailable|overloaded|server error/.test(m)
-  );
+  return classifyProviderErrorMessage(message).retryable;
 }
 
 /**
@@ -201,6 +197,8 @@ export class AgentSessionLoop {
   /** 上游 502/网络等瞬时错误重试次数 */
   private providerTransientRetries = 0;
   private static readonly MAX_PROVIDER_TRANSIENT_RETRIES = 3;
+  /** 最近一次 provider 请求的 promptAssembly 元数据（写入 assistant message.metadata） */
+  private lastPromptAssembly: PromptAssemblyMetadata | undefined;
 
   constructor(
     private readonly options: AgentRuntimeOptions,
@@ -352,10 +350,37 @@ export class AgentSessionLoop {
             }
           }
 
-          // 上下文压缩
-          const compressionResult = await this.compressionGate.maybeCompress(this.conversation.getMessagesMutable());
-          if (compressionResult.compressed) {
-            this.conversation.replaceMessages(compressionResult.messages);
+          // 上下文压缩（对外发射 start/end，供桌面与 session 投影）
+          const messagesBeforeCompress = this.conversation.getMessagesMutable();
+          if (this.contextManager.shouldCompress(messagesBeforeCompress)) {
+            yield* this.emitEvent({
+              type: "context-compression-start",
+              sessionId: this.sessionId,
+              timestamp: nowIso(),
+              reason: "auto",
+              tokensBefore: messagesBeforeCompress.length,
+            });
+            const compressionResult = await this.compressionGate.maybeCompress(messagesBeforeCompress);
+            if (compressionResult.compressed) {
+              this.conversation.replaceMessages(compressionResult.messages);
+              if (compressionResult.record) {
+                await this.recorder.recordCompaction(compressionResult.record);
+              }
+              yield* this.emitEvent({
+                type: "context-compression-end",
+                sessionId: this.sessionId,
+                timestamp: nowIso(),
+                aborted: false,
+                ...(compressionResult.record ? { result: compressionResult.record } : {}),
+              });
+            } else {
+              yield* this.emitEvent({
+                type: "context-compression-end",
+                sessionId: this.sessionId,
+                timestamp: nowIso(),
+                aborted: true,
+              });
+            }
           }
 
           this.dispatch("TURN_PREPARED");
@@ -462,10 +487,13 @@ export class AgentSessionLoop {
             // 仍有工具成果：软降级，让模型基于已有结果收尾，而不是整 run 失败
             if (this.sawToolsThisRun && !this.synthesisNudgeUsed) {
               this.synthesisNudgeUsed = true;
+              // 用 system role 注入降级提示——旧实现用 user role 会把这段当成真实用户输入，
+              // 污染后续 turn 的语义（provider 会把它计入用户上下文）。
+              // system role 明确标识为系统指令，不会被当作用户发言。
               this.inputQueue.enqueue(
                 createTextMessage(
-                  "user",
-                  `【系统】上游模型暂时失败：${errMsg.slice(0, 240)}。请仅基于已完成的工具结果给出结论；不要再调用工具。若必须停止请说明原因。`,
+                  "system",
+                  `上游模型暂时失败：${errMsg.slice(0, 240)}。请仅基于已完成的工具结果给出结论；不要再调用工具。若必须停止请说明原因。`,
                 ),
               );
               this.dispatch("INPUT_AVAILABLE");
@@ -502,7 +530,7 @@ export class AgentSessionLoop {
           }
 
           // Only "message" type reaches here
-          const msg = assistantResult.message;
+          const msg = this.enrichAssistantMessage(assistantResult.message);
           this.conversation.appendMessage(msg);
           const assistantEntry = await this.recorder.recordMessage(msg);
           yield* this.recordEvent(
@@ -571,6 +599,7 @@ export class AgentSessionLoop {
             break;
           }
 
+          // Re-enter preparing-turn → streaming with injected steering in transcript
           this.dispatch("STEERING_COMPLETE");
           break;
         }
@@ -829,8 +858,21 @@ export class AgentSessionLoop {
       }
     }
 
-    const effectiveToolCall: ToolCallBlock = inputModifiedByHook ? { ...toolCall, input: effectiveInput } : toolCall;
-    if (inputModifiedByHook) {
+    // Restore secret placeholders from provider-redacted tool args, then alias-repair.
+    effectiveInput = this.restoreProviderToolInput(effectiveInput);
+    const repair = repairToolInput(tool, effectiveInput);
+    if (repair.repaired) {
+      effectiveInput = repair.input;
+      inputModifiedByHook = true;
+      yield* this.emitEvent({
+        type: "tool-input-repaired",
+        sessionId: this.sessionId,
+        timestamp: nowIso(),
+        toolCallId: toolCall.id,
+        toolName: toolCall.toolName,
+        notes: repair.notes,
+      });
+    } else if (inputModifiedByHook) {
       yield* this.emitEvent({
         type: "tool-input-repaired",
         sessionId: this.sessionId,
@@ -840,6 +882,8 @@ export class AgentSessionLoop {
         notes: ["beforeToolCall modified tool input"],
       });
     }
+
+    const effectiveToolCall: ToolCallBlock = { ...toolCall, input: effectiveInput };
 
     const validationErrors = validateToolInput(tool, effectiveInput);
     if (validationErrors.length > 0) {
@@ -975,17 +1019,46 @@ export class AgentSessionLoop {
       return result;
     }
 
-    // 错误路径 — 构造结构化错误输出
-    const isTimeout = signal.aborted && execResult.output?.json && typeof execResult.output.json === 'object' && 'timedOut' in (execResult.output.json as Record<string, unknown>);
-    const causeText = isTimeout ? "Tool execution timed out" : (execResult.output?.text ?? "Tool execution error");
-    const structuredJson: JsonObject | undefined = isTimeout ? {
-      timedOut: true,
-      runtimeToolExecution: { status: "timeout", timedOut: true, timeoutMs: this.toolExecution.timeoutMs }
-    } : undefined;
-    const errorOutput = await this.materializeLargeToolOutput(
-      effectiveToolCall,
-      { text: causeText, ...(structuredJson ? { json: structuredJson } : {}) }
-    );
+    // 错误路径 — 保留 SingleToolExecutor 的 timedOut/cancelled 元数据并补齐 runtimeToolExecution
+    const rawJson =
+      execResult.output?.json && typeof execResult.output.json === "object" && !Array.isArray(execResult.output.json)
+        ? (execResult.output.json as JsonObject)
+        : {};
+    const isTimeout = rawJson.timedOut === true;
+    const isCancelled = rawJson.cancelled === true || (signal.aborted && !isTimeout);
+    const causeText = isTimeout
+      ? "Tool execution timed out"
+      : isCancelled
+        ? (typeof execResult.output?.text === "string" && execResult.output.text
+            ? execResult.output.text
+            : "Tool execution cancelled")
+        : (execResult.output?.text ?? "Tool execution error");
+    const structuredJson: JsonObject = {
+      ...rawJson,
+      timedOut: isTimeout,
+      cancelled: isCancelled && !isTimeout,
+      runtimeToolExecution: isTimeout
+        ? {
+            status: "timeout",
+            timedOut: true,
+            timeoutMs: this.toolExecution.timeoutMs,
+            ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
+          }
+        : isCancelled
+          ? {
+              status: "cancelled",
+              cancelled: true,
+              ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
+            }
+          : {
+              status: "error",
+              ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
+            },
+    };
+    const errorOutput = await this.materializeLargeToolOutput(effectiveToolCall, {
+      text: causeText,
+      json: structuredJson,
+    });
     const result = this.toToolBatchResult(call, startedAt, errorOutput, true);
     yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
     return result;
@@ -1170,6 +1243,34 @@ export class AgentSessionLoop {
     return this.contextManager.projectPromptContext(this.options.promptContext);
   }
 
+  /** Attach promptAssembly / promptContext metadata expected by product + tests. */
+  private enrichAssistantMessage(message: AgentMessage): AgentMessage {
+    const promptContextMeta =
+      this.options.promptContext?.metadata && typeof this.options.promptContext.metadata === "object"
+        ? (this.options.promptContext.metadata as JsonObject)
+        : undefined;
+    const assembly = this.lastPromptAssembly;
+    if (!assembly && !promptContextMeta) return message;
+    return {
+      ...message,
+      metadata: {
+        ...(message.metadata ?? {}),
+        ...(assembly
+          ? {
+              promptAssembly: {
+                stablePrefixHash: assembly.stablePrefixHash,
+                toolSchemaHash: assembly.toolSchemaHash,
+                cacheStrategy: assembly.cacheStrategy,
+                version: assembly.version,
+                layout: assembly.layout,
+              },
+            }
+          : {}),
+        ...(promptContextMeta ? { promptContext: promptContextMeta } : {}),
+      },
+    };
+  }
+
   private restoreProviderToolInput(input: JsonObject): JsonObject {
     return this.contextManager.restoreProviderToolInput(input);
   }
@@ -1205,11 +1306,17 @@ export class AgentSessionLoop {
     const messages = this.conversation.getMessagesMutable();
     const providerSystemPrompt = this.contextManager.projectSystemPrompt(this.options.systemPrompt);
     const providerMessages = this.contextManager.projectForProvider(messages);
+    const promptContext = this.projectPromptContextForProvider();
     const promptAssembly = assemblePromptForProvider({
       systemPrompt: providerSystemPrompt,
       messages: providerMessages,
       tools: this.tools,
+      ...(promptContext.stableContext ? { stableContext: promptContext.stableContext } : {}),
+      ...(promptContext.volatileContext ? { volatileContext: promptContext.volatileContext } : {}),
     });
+
+    // Stash last assembly metadata for assistant message enrichment
+    this.lastPromptAssembly = promptAssembly.metadata;
 
     const providerRequest = {
       sessionId: this.sessionId,

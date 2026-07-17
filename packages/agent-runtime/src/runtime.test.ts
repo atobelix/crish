@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AgentRuntime,
+  allowAllPermissionPolicy,
   createTextMessage,
   InMemorySessionStore,
   nowIso,
@@ -353,7 +354,7 @@ describe("AgentRuntime", () => {
     const toolEnd = events.find((event): event is Extract<AgentEvent, { type: "tool-end" }> => event.type === "tool-end");
     expect(toolEnd?.result.isError).toBe(true);
     // hardline block reasons may be localized
-    expect(toolEnd?.result.output.text).toMatch(/Hardline|hardline|Blocked/);
+    expect(toolEnd?.result.output.text).toMatch(/T4|hardline|Hardline|Blocked|shutdown|denied/i);
   });
 
   it("returns a tool-result error instead of executing invalid tool input", async () => {
@@ -558,6 +559,7 @@ describe("AgentRuntime", () => {
       cwd: "C:/repo",
       provider,
       tools: [tool],
+      permissionPolicy: allowAllPermissionPolicy,
       maxTurns: 1
     });
 
@@ -1040,6 +1042,7 @@ describe("AgentRuntime", () => {
       provider,
       tools: [tool],
       sessionStore: store,
+      permissionPolicy: allowAllPermissionPolicy,
       maxTurns: 1
     });
 
@@ -1096,6 +1099,7 @@ describe("AgentRuntime", () => {
       cwd: "C:/repo",
       provider,
       tools: [tool],
+      permissionPolicy: allowAllPermissionPolicy,
       maxTurns: 1
     });
 
@@ -1154,6 +1158,7 @@ describe("AgentRuntime", () => {
     const store = new InMemorySessionStore();
     const runtime = new AgentRuntime({
       sessionId: "s_projected_context",
+      permissionPolicy: allowAllPermissionPolicy,
       cwd: "C:/repo",
       provider,
       tools: [tool],
@@ -1209,7 +1214,11 @@ describe("AgentRuntime", () => {
             yield { type: "stop", reason: "tool-call" };
             return;
           }
-          yield { type: "text-delta", text: "done" };
+          // Keep post-tool prose long enough to avoid synthesis-nudge extra turn
+          yield {
+            type: "text-delta",
+            text: "Secret echo finished successfully; no further tool calls are required.",
+          };
           yield { type: "stop", reason: "stop" };
         }
       };
@@ -1232,6 +1241,7 @@ describe("AgentRuntime", () => {
       const store = new InMemorySessionStore();
       const runtime = new AgentRuntime({
         sessionId: "s_secret_redaction",
+      permissionPolicy: allowAllPermissionPolicy,
         cwd: "C:/repo",
         systemPrompt: `system has ${secret}`,
         provider,
@@ -1294,6 +1304,7 @@ describe("AgentRuntime", () => {
       const store = new InMemorySessionStore();
       const runtime = new AgentRuntime({
         sessionId: "s_artifact",
+      permissionPolicy: allowAllPermissionPolicy,
         cwd: "C:/repo",
         provider,
         tools: [tool],
@@ -1369,6 +1380,7 @@ describe("AgentRuntime", () => {
     const store = new InMemorySessionStore();
     const runtime = new AgentRuntime({
       sessionId: "s_compress",
+      permissionPolicy: allowAllPermissionPolicy,
       cwd: "C:/repo",
       provider,
       tools: [tool],

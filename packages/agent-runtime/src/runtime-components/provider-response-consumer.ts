@@ -2,7 +2,6 @@ import type { AgentMessage, AgentMessageBlock, ProviderDiagnostic, ToolCallBlock
 import type { AgentTool } from "../types";
 import type { ProviderStreamContractEvent } from "../provider-stream-contract";
 import { createId, nowIso } from "../session";
-import { repairToolInput } from "../tools";
 
 export type AssistantResponse =
   | { type: "message"; message: AgentMessage }
@@ -77,18 +76,17 @@ export class ProviderResponseConsumer {
         }
 
         case "tool-call": {
-          // 只在 phase=end 时收集完整的工具调用
+          // 只在 phase=end 时收集完整的工具调用。
+          // 输入 alias 修复留给 AgentSessionLoop（统一发 tool-input-repaired）。
           if (event.phase === "end") {
             sawContent = true;
             const toolCall = event.toolCall;
-            const tool = tools.find((c) => c.name === toolCall.toolName);
             const input = toolCall.input ?? {};
-            const repaired = tool ? repairToolInput(tool, input) : { input, repaired: false, notes: [] };
             blocks.push({
               type: "tool-call",
               id: toolCall.id ?? createId("call"),
               toolName: toolCall.toolName,
-              input: repaired.input,
+              input,
             });
           }
           break;

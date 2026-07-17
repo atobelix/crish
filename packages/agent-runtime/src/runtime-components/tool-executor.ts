@@ -28,6 +28,7 @@ import type {
 import type { AgentTool } from "../types";
 import { validateToolInput, repairToolInput } from "../tools";
 import { createId, nowIso } from "../session";
+import { SingleToolExecutor } from "./single-tool-executor";
 
 // ─── 工具执行完成结果 ─────────────────────────────────────
 
@@ -345,8 +346,10 @@ export class ToolExecutor {
       return result;
     }
 
-    // 输入校验
-    const validationErrors = validateToolInput(tool, toolCall.input);
+    // 先修复再校验（与 AgentSessionLoop 一致）
+    const repair = repairToolInput(tool, toolCall.input);
+    const repairedInput = repair.input;
+    const validationErrors = validateToolInput(tool, repairedInput);
     if (validationErrors.length > 0) {
       const result: ToolBatchResult = {
         id: call.id,
@@ -359,10 +362,7 @@ export class ToolExecutor {
       return result;
     }
 
-    // 输入修复
-    const repair = repairToolInput(tool, toolCall.input);
-
-    // 执行并收集进度事件
+    // 执行并收集进度事件 — honor timeoutMs (was previously unused on this path)
     const progressQueue = new ProgressEventQueue<AgentEvent>();
     const context: ToolExecutionContext = {
       toolCallId: toolCall.id,
@@ -381,20 +381,13 @@ export class ToolExecutor {
       }
     };
 
-    const executionPromise = (async (): Promise<ToolExecutionCompletion> => {
-      try {
-        const output = await tool.execute(repair.input, context);
-        return { ok: true, output };
-      } catch (cause) {
-        return {
-          ok: false,
-          kind: signal.aborted ? "cancelled" : "error",
-          cause
-        };
-      }
-    })().finally(() => {
-      progressQueue.close();
-    });
+    const singleExecutor = new SingleToolExecutor(this.options.timeoutMs, []);
+    const effectiveCall: ToolCallBlock = { ...toolCall, input: repairedInput };
+    const executionPromise = singleExecutor
+      .execute(effectiveCall, (input, ctx) => tool.execute(input, ctx), context, signal)
+      .finally(() => {
+        progressQueue.close();
+      });
 
     // 产出进度事件
     while (true) {
@@ -407,8 +400,8 @@ export class ToolExecutor {
     const result: ToolBatchResult = {
       id: call.id,
       toolName: call.toolName,
-      output: completed.ok ? completed.output : { text: String(completed.cause ?? "Unknown error") },
-      isError: !completed.ok,
+      output: completed.output,
+      isError: completed.isError,
       durationMs: Date.now() - startedAt
     };
 

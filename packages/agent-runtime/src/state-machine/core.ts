@@ -26,7 +26,8 @@ export type TransitionResult<S extends StateId, E extends EventId> = TransitionO
 
 export type SideEffect =
   | { kind: "patch-context"; patch: Record<string, unknown> }
-  | { kind: "update-context"; updater: (context: Record<string, any>) => Record<string, any> };
+  /** updater 用 object 而非 Record，以兼容无索引签名的 context 接口 */
+  | { kind: "update-context"; updater: (context: object) => object };
 
 export interface TransitionRecord<S extends StateId = StateId, E extends EventId = EventId> {
   from: S;
@@ -272,7 +273,7 @@ export function transitionWith<S extends StateId, C>(
   return {
     target,
     guard: () => ({ allowed: true }),
-    effect: (context) => [{ kind: "update-context" as const, updater: (c: Record<string, any>) => updater(c as unknown as C) as unknown as Record<string, any> }],
+    effect: () => [{ kind: "update-context" as const, updater: (c: object) => updater(c as unknown as C) as unknown as object }],
   };
 }
 

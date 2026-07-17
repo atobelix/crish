@@ -31,6 +31,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { budgetTextForContext } from "../tool-output-budget";
 import { safeArtifactName } from "../runtime-helpers";
+import {
+  createSecretRedactorFromEnv,
+  type SecretRedactor,
+} from "../secrets-obfuscation";
 
 // ─── 上下文管理器配置 ─────────────────────────────────────
 
@@ -41,12 +45,18 @@ export interface ContextManagerOptions {
   cwd?: string;
   /** 会话 ID（用于工具输出物化路径） */
   sessionId?: string;
+  /**
+   * Secret redactor for provider-bound projection (default: env-based).
+   * Pass `false` to disable; pass a custom SecretRedactor for tests.
+   */
+  secretRedactor?: SecretRedactor | false;
 }
 
 // ─── 上下文管理器 ─────────────────────────────────────────
 
 export class ContextManager {
   private compressor?: ContextCompressor;
+  private readonly secretRedactor: SecretRedactor | undefined;
 
   constructor(private readonly options: ContextManagerOptions) {
     if (options.compression && options.compression.enabled !== false) {
@@ -54,6 +64,14 @@ export class ContextManager {
         ...options.compression,
         toolOutputBudget: options.compression.toolOutputBudget ?? options.toolOutputBudget
       });
+    }
+    if (options.secretRedactor === false) {
+      this.secretRedactor = undefined;
+    } else if (options.secretRedactor) {
+      this.secretRedactor = options.secretRedactor;
+    } else {
+      // Default product path: redact process.env secrets before provider wire
+      this.secretRedactor = createSecretRedactorFromEnv(process.env);
     }
   }
 
@@ -75,23 +93,27 @@ export class ContextManager {
   }
 
   /**
-   * 为 Provider 投影消息（预算控制、blob 外部化）
+   * 为 Provider 投影消息（预算控制、blob 外部化、密钥脱敏）
    */
   projectForProvider(messages: AgentMessage[]): AgentMessage[] {
-    return projectMessagesForProvider(messages, {
+    const projected = projectMessagesForProvider(messages, {
       toolOutputBudget: this.options.toolOutputBudget
     });
+    if (!this.secretRedactor) return projected;
+    return this.secretRedactor.redactMessages(projected).value;
   }
 
   /**
-   * 投影系统提示词
+   * 投影系统提示词（含密钥脱敏）
    */
   projectSystemPrompt(systemPrompt: string | undefined): string | undefined {
-    return systemPrompt;
+    if (!systemPrompt) return systemPrompt;
+    if (!this.secretRedactor) return systemPrompt;
+    return this.secretRedactor.redactText(systemPrompt).value;
   }
 
   /**
-   * 投影提示词上下文块
+   * 投影提示词上下文块（内容内的密钥同样脱敏）
    */
   projectPromptContext(context: {
     stableContext?: PromptAssemblyContextBlock[];
@@ -101,17 +123,29 @@ export class ContextManager {
     volatileContext?: PromptAssemblyContextBlock[];
   } {
     if (!context) return {};
+    if (!this.secretRedactor) {
+      return {
+        stableContext: context.stableContext,
+        volatileContext: context.volatileContext
+      };
+    }
+    const redactBlocks = (blocks: PromptAssemblyContextBlock[] | undefined) =>
+      blocks?.map((block) => {
+        const redacted = this.secretRedactor!.redactJson(block.content as never);
+        return redacted.redacted ? { ...block, content: redacted.value } : block;
+      });
     return {
-      stableContext: context.stableContext,
-      volatileContext: context.volatileContext
+      stableContext: redactBlocks(context.stableContext),
+      volatileContext: redactBlocks(context.volatileContext)
     };
   }
 
   /**
-   * 还原 Provider 返回的工具输入
+   * 还原 Provider 返回的工具输入（把 [SECRET_n] 占位符换回真值再执行工具）
    */
   restoreProviderToolInput(input: JsonObject): JsonObject {
-    return input;
+    if (!this.secretRedactor) return input;
+    return this.secretRedactor.restoreJson(input) as JsonObject;
   }
 
   /**

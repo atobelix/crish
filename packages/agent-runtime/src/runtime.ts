@@ -6,12 +6,11 @@ import {
   type AgentRuntimeOptions,
   type AgentTool,
   type RuntimePermissionPolicy,
-  type RuntimePermissionRequest,
   type SessionHeader,
 } from "./types";
 import { ConversationEngine, ProviderCallGateway, ContextManager } from "./runtime-components";
 import { TokenTracker } from "./provider-transport/token-tracker";
-import { PermissionEngine, HardlineBlockRule, DEFAULT_HARDLINE_REGISTRY } from "@crish/decision-engine";
+import { createTrustZonePermissionPolicy } from "./permission/trust-zone-policy";
 import { buildSessionContextFromEntries, createId, findSessionLeafId, InMemorySessionStore, nowIso, SessionRecorder } from "./session";
 import { AgentInputQueue } from "./agent-input-queue";
 import { DEFAULT_MAX_TURNS, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS } from "@crish/shared-types";
@@ -20,29 +19,9 @@ import { ToolRegistry } from "./tools/tool-definition";
 
 export { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS };
 
+/** Default product policy: TrustZone "ask" (project-mode semantics). No default-allow bypass. */
 function createDefaultPermissionPolicy(): RuntimePermissionPolicy {
-  const engine = new PermissionEngine([new HardlineBlockRule(DEFAULT_HARDLINE_REGISTRY)]);
-  return {
-    decide(request: RuntimePermissionRequest) {
-      const converted: import("@crish/shared-types").PermissionRequest = {
-        id: request.id,
-        sessionId: request.sessionId,
-        cwd: request.cwd,
-        toolCallId: request.id,
-        toolName: request.tool.name,
-        parameters: request.input,
-        summary: request.summary,
-        toolMetadata: {
-          category: request.tool.category,
-          isReadOnly: request.tool.isReadOnly(request.input),
-          fatalOnError: request.tool.fatalOnError,
-          concurrency: request.tool.concurrency,
-        },
-        metadata: request.metadata,
-      };
-      return engine.decide(converted);
-    },
-  };
+  return createTrustZonePermissionPolicy("ask");
 }
 
 export class AgentRuntime {

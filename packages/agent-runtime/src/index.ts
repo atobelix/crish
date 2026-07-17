@@ -41,6 +41,7 @@ export * from "./resource-uri";
 export * from "./lsp-tools";
 export * from "./scoped-context";
 export * from "./scoped-context-resources";
+export * from "./secrets-obfuscation";
 export * from "./snapshots";
 export * from "./structured-summary";
 export * from "./subagent-context-pack";

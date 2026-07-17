@@ -148,12 +148,29 @@ export class ProviderCallGateway {
     } catch (err) {
       // StreamRecovery 在所有恢复尝试均失败后抛出 StreamRecoveryError
       if (err instanceof StreamRecoveryError) {
-        // 将部分输出作为响应返回（上层可以看到已输出的文字）
+        // 将部分输出作为响应返回（上层可以看到已输出的文字 / 未完成工具调用）
         finishReason = "error";
         error = err.message;
-        // 如果有部分文字输出，保留它
         text = err.accumulator.text || text;
         thought = err.accumulator.thought || thought;
+        // Promote pending tool calls so the session loop can pair error tool-results
+        // instead of leaving orphan tool_use blocks without results.
+        if (err.accumulator.pendingToolCalls.length > 0) {
+          const seen = new Set(toolCalls.map((call) => call.id));
+          for (const pending of err.accumulator.pendingToolCalls) {
+            if (seen.has(pending.id)) continue;
+            seen.add(pending.id);
+            toolCalls.push({
+              id: pending.id,
+              toolName: pending.toolName,
+              input: pending.input,
+            });
+          }
+        }
+        if (err.orphans.length > 0 && finishReason === "error") {
+          // Signal that tool-side recovery is preferred over a hard empty error.
+          finishReason = toolCalls.length > 0 ? "tool-call" : "error";
+        }
       } else {
         // 其他未知错误
         finishReason = "error";

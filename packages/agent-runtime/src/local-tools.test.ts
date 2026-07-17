@@ -992,6 +992,38 @@ describe("local workspace tools", () => {
     await expect(read.execute({ path: "../outside.txt" }, context())).rejects.toThrow(/escapes workspace/);
   });
 
+  it("rejects empty shell commands and blank filesystem paths", async () => {
+    const shell = createTerminalCommandTool({ workspaceRoot, defaultTimeoutMs: 5_000 });
+    const read = createReadTool({ workspaceRoot });
+    const write = createWriteFileTool({ workspaceRoot });
+
+    await expect(shell.execute({ command: "" }, context())).rejects.toThrow(/command|empty|required/i);
+    await expect(shell.execute({ command: "   " }, context())).rejects.toThrow(/command|empty|required/i);
+    await expect(read.execute({ path: "" }, context())).rejects.toThrow(/path|empty|required/i);
+    await expect(write.execute({ path: "", content: "x" }, context())).rejects.toThrow(/path|empty|required|escapes/i);
+  });
+
+  it("rejects null-byte and other control characters in paths", async () => {
+    const read = createReadFileTool({ workspaceRoot });
+    await expect(read.execute({ path: "safe\0../etc/passwd" }, context())).rejects.toThrow(
+      /control character|Invalid path|null/i,
+    );
+    await expect(read.execute({ path: "notes/\nsecret" }, context())).rejects.toThrow(
+      /control character|Invalid path/i,
+    );
+  });
+
+  it("ignores non-positive maxBytes and falls back to tool default", async () => {
+    await writeFile(join(workspaceRoot, "bounded.txt"), "abcdefghij", "utf8");
+    const read = createReadFileTool({ workspaceRoot, maxBytes: 4 });
+    const viaZero = await read.execute({ path: "bounded.txt", maxBytes: 0 }, context());
+    const viaNegative = await read.execute({ path: "bounded.txt", maxBytes: -9 }, context());
+    // 0 / negative are rejected by positiveNumberField → default maxBytes=4 truncates
+    expect(viaZero.text).toMatch(/truncated|abcd/i);
+    expect((viaZero.json as { truncated?: boolean }).truncated).toBe(true);
+    expect((viaNegative.json as { truncated?: boolean }).truncated).toBe(true);
+  });
+
   it("snapshots overwritten files and can restore them", async () => {
     await writeFile(join(workspaceRoot, "tracked.txt"), "before", "utf8");
     const write = createWriteFileTool({ workspaceRoot });

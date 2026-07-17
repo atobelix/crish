@@ -92,9 +92,9 @@ export const AGENT_SESSION_DEFINITION = new StateMachineBuilder<AgentSessionStat
         effect: (_ctx, payload) => [{ kind: "patch-context" as const, patch: { toolCallCount: (payload as { count?: number })?.count ?? 0 } }]
       })],
       ["NO_TOOL_CALLS", transitionTo("turn-complete")],
-      ["STEERING_NEEDED", transitionTo("steering-evaluation", {
-        effect: (ctx) => [{ kind: "patch-context" as const, patch: { steeringCount: ctx.steeringCount + 1 } }]
-      })],
+      // Do not bump steeringCount here — RecoveryStrategy / coordinator own the budget.
+      // Incrementing before evaluate made maxSteeringMessages:1 immediately force intervention.
+      ["STEERING_NEEDED", transitionTo("steering-evaluation")],
       ["NO_PROGRESS_CONTINUE", transitionTo("preparing-turn")],
       ["INTERVENTION_REQUIRED", transitionWithPatch("turn-complete", { endReason: "error" })],
       ["ABORT", transitionTo("turn-complete", {
@@ -110,8 +110,10 @@ export const AGENT_SESSION_DEFINITION = new StateMachineBuilder<AgentSessionStat
   })
   .state("steering-evaluation", {
     transitions: [
-      ["STEERING_COMPLETE", transitionTo("turn-complete")],
+      // Injected steering must re-enter the provider loop, not stop the turn.
+      ["STEERING_COMPLETE", transitionTo("preparing-turn")],
       ["STEERING_BUDGET_EXHAUSTED", transitionWithPatch("turn-complete", { endReason: "error" })],
+      ["INTERVENTION_REQUIRED", transitionWithPatch("turn-complete", { endReason: "error" })],
       ["ABORT", transitionWithPatch("done", { endReason: "aborted" })],
       ["ERROR", transitionWithPatch("done", { endReason: "error" })],
     ]

@@ -6,6 +6,12 @@ export interface ToolMiddlewareHook {
   afterExecute?(toolCall: ToolCallBlock, ctx: ToolExecutionContext, output: ToolOutput): Promise<ToolOutput>;
 }
 
+/** Structured result of a single tool invocation (timeout / cancel / error metadata in output.json). */
+export interface SingleToolExecutionResult {
+  output: ToolOutput;
+  isError: boolean;
+}
+
 export class SingleToolExecutor {
   constructor(
     private readonly timeoutMs: number,
@@ -17,7 +23,7 @@ export class SingleToolExecutor {
     executeFn: (input: JsonObject, ctx: ToolExecutionContext) => Promise<ToolOutput>,
     context: ToolExecutionContext,
     signal: AbortSignal,
-  ): Promise<{ output: ToolOutput; isError: boolean }> {
+  ): Promise<SingleToolExecutionResult> {
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(new Error(`Timed out after ${this.timeoutMs}ms`)), this.timeoutMs);
     const combinedSignal = combineAbortSignals(signal, timeoutController.signal);
@@ -49,13 +55,34 @@ export class SingleToolExecutor {
         }),
       ]);
     } catch (cause) {
-      const isTimeout = combinedSignal.aborted && cause instanceof Error && cause.message.includes("Timed out");
-      const causeText = isTimeout ? "Tool execution timed out" : cause instanceof Error ? cause.message : String(cause);
-      output = { text: causeText, json: { timedOut: isTimeout, cancelled: !isTimeout } };
+      const causeMessage = cause instanceof Error ? cause.message : String(cause);
+      const timedOutByMessage = /timed out/i.test(causeMessage);
+      const timedOutByController = timeoutController.signal.aborted && timedOutByMessage;
+      const isTimeout = timedOutByController || (combinedSignal.aborted && timedOutByMessage);
+      // Parent/batch abort (cancel-siblings) without timeout wording → cancelled
+      const isCancelled = !isTimeout && (signal.aborted || combinedSignal.aborted || /abort|cancel/i.test(causeMessage));
+      const causeText = isTimeout
+        ? "Tool execution timed out"
+        : isCancelled
+          ? "Tool execution cancelled"
+          : causeMessage;
+      output = {
+        text: causeText,
+        json: {
+          timedOut: isTimeout,
+          cancelled: isCancelled && !isTimeout,
+          runtimeToolExecution: isTimeout
+            ? { status: "timeout", timedOut: true, timeoutMs: this.timeoutMs }
+            : isCancelled
+              ? { status: "cancelled", cancelled: true }
+              : { status: "error" },
+        },
+      };
       isError = true;
     } finally {
+      // Clear timer only — do NOT abort timeoutController after success.
+      // Aborting combinedSignal post-success falsely fires tool abort listeners.
       clearTimeout(timeoutId);
-      timeoutController.abort();
     }
 
     for (const hook of this.hooks) {

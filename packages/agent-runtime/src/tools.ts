@@ -13,14 +13,19 @@ import type {
   RuntimePermissionPolicy,
   ToolSource
 } from "./types";
+import {
+  createTrustZonePermissionPolicy,
+  type CreatePermissionPolicyMode,
+} from "./permission/trust-zone-policy";
+
 
 const TOOL_ARGUMENT_WRAPPER_KEYS = ["input", "arguments", "args", "params", "parameters", "payload"] as const;
 const TOOL_ARGUMENT_REPAIR_TEXT_LIMIT = 200_000;
 
 const FIELD_ALIASES: Record<string, string[]> = {
-  command: ["cmd", "shell", "script"],
+  command: ["cmd", "shell", "script", "cmdline", "command_line", "commandLine"],
   content: ["text", "contents", "fileContent", "file_content", "body", "data", "source", "value"],
-  cwd: ["workdir", "workingDirectory", "working_directory"],
+  cwd: ["workdir", "workingDirectory", "working_directory", "workingDir", "dir"],
   maxBytes: ["max_bytes", "limit", "bytes"],
   path: [
     "file",
@@ -40,8 +45,8 @@ const FIELD_ALIASES: Record<string, string[]> = {
     "outputPath",
     "output_path"
   ],
-  query: ["q", "keyword", "pattern", "term", "text"],
-  timeoutMs: ["timeout", "timeout_ms", "timeoutMilliseconds"]
+  query: ["q", "keyword", "pattern", "term", "text", "search"],
+  timeoutMs: ["timeout", "timeout_ms", "timeoutMilliseconds", "deadlineMs", "deadline_ms"]
 };
 
 export function defineTool(tool: AgentTool): AgentTool {
@@ -459,28 +464,30 @@ export function askForMutatingToolsPolicy(options?: {
   };
 }
 
+export {
+  TrustZonePermissionPolicy,
+  createTrustZonePermissionPolicy,
+  mapToTrustPolicyMode,
+  riskPresentationFromZone,
+  type TrustZonePermissionMode,
+  type CreatePermissionPolicyMode,
+} from "./permission/trust-zone-policy";
+
 /**
- * 创建权限策略。
+ * Create a permission policy aligned with TrustZone (same matrix as daemon).
  *
  * mode:
- * - "full-access" - 允许所有非 hardline 工具
- * - "project" - 只读工具自动允许，变更工具需审批
- * - "plan" - 只读工具自动允许，变更工具拒绝（仅允许写入计划文档）
- * - "ask" - 只读工具自动允许，变更工具需审批
+ * - "project" / "ask" / "auto" - T0/T2 auto; T1/T3 ask; T4 deny (default product mode is ask)
+ * - "full-access" - T0-T3 auto; T4 still requires confirmation (never auto-allow T4)
+ * - "plan" - only T0; mutations soft-deny; T4 hardline still hard-deny
+ * - "unattended" - T0-T2 auto; T3 soft-deny; T4 hardline hard-deny
+ *
+ * Legacy binary isReadOnly helpers remain exported for tests; product paths use TrustZone.
  */
-export function createPermissionPolicy(options: { mode: "full-access" | "project" | "plan" | "ask" }): RuntimePermissionPolicy {
-  switch (options.mode) {
-    case "full-access":
-      return allowAllPermissionPolicy;
-    case "project":
-    case "ask":
-      return askForMutatingToolsPolicy({ allowReadOnly: true });
-    case "plan":
-      return askForMutatingToolsPolicy({
-        allowReadOnly: true,
-        mutatingDecision: { behavior: "deny", reason: "Plan mode: only plan documents may be written" },
-      });
-  }
+export function createPermissionPolicy(options: {
+  mode: CreatePermissionPolicyMode;
+}): RuntimePermissionPolicy {
+  return createTrustZonePermissionPolicy(options.mode);
 }
 
 function validateJsonValue(value: unknown, rawSchema: unknown, path: string): string[] {

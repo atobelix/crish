@@ -4,9 +4,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AgentRuntime,
+  allowAllPermissionPolicy,
   createScriptedProvider,
+  createScriptedTextProvider,
   createWriteFileTool,
   defineTextTool,
+  evaluateRuntimeStageRequirements,
+  formatRuntimeStageSuiteResult,
+  stageRequirementsPassed,
+  summarizeRuntimeProbeReport,
   type ProviderStreamEvent,
   runRuntimeStageSuite,
   runRuntimeWithProbe
@@ -116,7 +122,8 @@ describe("runtime probe", () => {
           cwd: workspaceRoot,
           provider: providers[index]!,
           tools: [write],
-          initialMessages
+          initialMessages,
+          permissionPolicy: allowAllPermissionPolicy
         });
       }
     });
@@ -142,7 +149,8 @@ describe("runtime probe", () => {
         return new AgentRuntime({
           cwd: workspaceRoot,
           provider,
-          tools: [createWriteFileTool({ workspaceRoot })]
+          tools: [createWriteFileTool({ workspaceRoot })],
+          permissionPolicy: allowAllPermissionPolicy
         });
       }
     });
@@ -178,7 +186,8 @@ describe("runtime probe", () => {
         return new AgentRuntime({
           cwd: workspaceRoot,
           provider,
-          tools: [write]
+          tools: [write],
+          permissionPolicy: allowAllPermissionPolicy
         });
       }
     });
@@ -261,7 +270,8 @@ describe("runtime probe", () => {
         return new AgentRuntime({
           cwd: workspaceRoot,
           provider,
-          tools: [write]
+          tools: [write],
+          permissionPolicy: allowAllPermissionPolicy
         });
       }
     });
@@ -302,7 +312,8 @@ describe("runtime probe", () => {
           cwd: workspaceRoot,
           provider,
           tools: [write],
-          initialMessages
+          initialMessages,
+          permissionPolicy: allowAllPermissionPolicy
         });
       }
     });
@@ -348,4 +359,200 @@ describe("runtime probe", () => {
     expect(suite.stages[0]?.fallbackApplied).toBe(true);
     expect(suite.stages[0]?.attemptErrors?.join("\n")).toContain("report.md");
   });
+
+  it("tracks scripted provider callCount, stores requests, and supports exhaust policies", async () => {
+    const provider = createScriptedProvider(
+      [[{ type: "text-delta", text: "one" }, { type: "stop", reason: "stop" }]],
+      { id: "scripted-strict", onExhausted: "throw", maxStoredRequests: 2 }
+    );
+
+    const first = new AgentRuntime({ cwd: "C:/repo", provider });
+    await runRuntimeWithProbe(first, "a");
+    expect(provider.callCount).toBe(1);
+    expect(provider.getRequests()).toHaveLength(1);
+    expect(provider.getRequests()[0]?.messages.length).toBeGreaterThan(0);
+
+    const second = new AgentRuntime({ cwd: "C:/repo", provider });
+    const exhausted = await runRuntimeWithProbe(second, "b");
+    // Runtime surfaces stream failures as runtime-error / agent-end rather than rejecting the probe.
+    expect(exhausted.report.errors.join("\n")).toMatch(/exhausted after 1 step/);
+    expect(provider.callCount).toBe(2);
+
+    provider.reset();
+    expect(provider.callCount).toBe(0);
+    expect(provider.getRequests()).toHaveLength(0);
+
+    const emptyOnExhaust = createScriptedProvider(
+      [[{ type: "text-delta", text: "only" }, { type: "stop", reason: "stop" }]],
+      { onExhausted: "empty" }
+    );
+    const r1 = new AgentRuntime({ cwd: "C:/repo", provider: emptyOnExhaust });
+    await runRuntimeWithProbe(r1, "x");
+    expect(emptyOnExhaust.callCount).toBeGreaterThanOrEqual(1);
+    const afterFirst = emptyOnExhaust.callCount;
+    const r2 = new AgentRuntime({ cwd: "C:/repo", provider: emptyOnExhaust });
+    // Exhausted steps yield empty streams; runtime may retry, but must not throw.
+    const emptyProbe = await runRuntimeWithProbe(r2, "y");
+    expect(emptyOnExhaust.callCount).toBeGreaterThan(afterFirst);
+    expect(emptyProbe.report.eventCount).toBeGreaterThan(0);
+  });
+
+  it("createScriptedTextProvider yields stop-terminated replies", async () => {
+    const provider = createScriptedTextProvider(["hello", "world"], "text-script");
+    const runtime = new AgentRuntime({ cwd: "C:/repo", provider });
+    const first = await runRuntimeWithProbe(runtime, "hi");
+    expect(first.messages.at(-1)?.blocks.some((b) => b.type === "text" && b.text.includes("hello"))).toBe(true);
+
+    const runtime2 = new AgentRuntime({ cwd: "C:/repo", provider });
+    const second = await runRuntimeWithProbe(runtime2, "again");
+    expect(second.messages.at(-1)?.blocks.some((b) => b.type === "text" && b.text.includes("world"))).toBe(true);
+    expect(provider.callCount).toBe(2);
+    expect(provider.id).toBe("text-script");
+  });
+
+  it("records abortReason without treating abort as a hard error", async () => {
+    const write = createWriteFileTool({ workspaceRoot });
+    const provider = createScriptedProvider([
+      [
+        { type: "tool-call", id: "call_write", toolName: "write_file", input: { path: "early.txt", content: "ok" } },
+        { type: "stop", reason: "tool-call" }
+      ],
+      [
+        { type: "tool-call", id: "call_extra", toolName: "write_file", input: { path: "late.txt", content: "no" } },
+        { type: "stop", reason: "tool-call" }
+      ]
+    ]);
+
+    const suite = await runRuntimeStageSuite({
+      workspaceRoot,
+      stages: [
+        {
+          name: "abort-ok",
+          prompt: "write early.txt",
+          requiredFiles: ["early.txt"],
+          requiredToolCallCounts: { write_file: 1 },
+          stopWhenRequirementsMet: true
+        }
+      ],
+      createRuntime() {
+        return new AgentRuntime({
+          cwd: workspaceRoot,
+          provider,
+          tools: [write],
+          permissionPolicy: allowAllPermissionPolicy
+        });
+      }
+    });
+
+    expect(suite.errors).toEqual([]);
+    expect(suite.stages[0]?.report.abortReason).toBe("stage requirements met");
+    expect(suite.stages[0]?.report.errors).toEqual([]);
+    const summary = summarizeRuntimeProbeReport(suite.stages[0]!.report);
+    expect(summary).toContain("abort=");
+    expect(summary).toContain("tools=write_file×1");
+  });
+
+  it("evaluates assistant includes and path-escape file checks as soft requirement failures", async () => {
+    const provider = createScriptedTextProvider(["assistant says ALPHA-MARKER"]);
+    const runtime = new AgentRuntime({ cwd: workspaceRoot, provider });
+    const probe = await runRuntimeWithProbe(runtime, "speak");
+
+    const requirements = await evaluateRuntimeStageRequirements(
+      {
+        name: "check",
+        prompt: "x",
+        requiredAssistantIncludes: ["ALPHA-MARKER", "missing-token"],
+        requiredFiles: ["../escape.txt"]
+      },
+      probe.report,
+      { workspaceRoot, messages: probe.messages }
+    );
+
+    expect(requirements.find((r) => r.kind === "assistant" && r.target.includes("ALPHA-MARKER"))?.passed).toBe(true);
+    expect(requirements.find((r) => r.kind === "assistant" && r.target.includes("missing-token"))?.passed).toBe(false);
+    const escape = requirements.find((r) => r.kind === "file" && r.target === "../escape.txt");
+    expect(escape?.passed).toBe(false);
+    expect(escape?.reason).toMatch(/Path escapes workspace/i);
+    expect(stageRequirementsPassed(requirements)).toBe(false);
+  });
+
+  it("enforces maxErrors on probe error collection", async () => {
+    const tool = defineTextTool({
+      name: "fail_tool",
+      description: "Always fails",
+      category: "terminal",
+      readOnly: true,
+      execute: () => {
+        throw new Error("boom");
+      }
+    });
+    const provider = createScriptedProvider([
+      [
+        { type: "tool-call", id: "c1", toolName: "fail_tool", input: {} },
+        { type: "tool-call", id: "c2", toolName: "fail_tool", input: {} },
+        { type: "tool-call", id: "c3", toolName: "fail_tool", input: {} },
+        { type: "stop", reason: "tool-call" }
+      ],
+      [{ type: "text-delta", text: "done" }, { type: "stop", reason: "stop" }]
+    ]);
+    const runtime = new AgentRuntime({
+      cwd: workspaceRoot,
+      provider,
+      tools: [tool]
+    });
+
+    const result = await runRuntimeWithProbe(runtime, "fail thrice", { maxErrors: 2 });
+    expect(result.report.errors.length).toBeLessThanOrEqual(2);
+    expect(result.report.toolCallCount).toBe(3);
+  });
+
+  it("formats stage suite results and continues when stopOnRequirementFailure is false", async () => {
+    const provider = createScriptedTextProvider(["no tools here", "second stage"]);
+    const suite = await runRuntimeStageSuite({
+      workspaceRoot,
+      stopOnRequirementFailure: false,
+      stages: [
+        { name: "weak", prompt: "try", requiredToolCalls: ["write_file"] },
+        { name: "next", prompt: "continue", requiredAssistantIncludes: ["second"] }
+      ],
+      createRuntime({ index }) {
+        return new AgentRuntime({
+          cwd: workspaceRoot,
+          provider: index === 0 ? createScriptedTextProvider(["no tools here"]) : createScriptedTextProvider(["second stage"])
+        });
+      }
+    });
+
+    expect(suite.completedStageCount).toBe(2);
+    expect(suite.stoppedAtStage).toBeUndefined();
+    expect(suite.errors.join("\n")).toContain("write_file");
+    const formatted = formatRuntimeStageSuiteResult(suite);
+    expect(formatted).toContain("stages=2/2");
+    expect(formatted).toContain("weak");
+    expect(formatted).toContain("next");
+    expect(formatted).toContain("errorDetails:");
+  });
+
+  it("passes stage when requiredAssistantIncludes is satisfied", async () => {
+    const suite = await runRuntimeStageSuite({
+      stages: [
+        {
+          name: "speak",
+          prompt: "say ready",
+          requiredAssistantIncludes: ["ready"]
+        }
+      ],
+      createRuntime() {
+        return new AgentRuntime({
+          cwd: workspaceRoot,
+          provider: createScriptedTextProvider(["all systems ready"])
+        });
+      }
+    });
+
+    expect(suite.errors).toEqual([]);
+    expect(suite.stages[0]?.requirements.every((r) => r.passed)).toBe(true);
+    expect(stageRequirementsPassed(suite.stages[0]!.requirements)).toBe(true);
+  });
 });
+

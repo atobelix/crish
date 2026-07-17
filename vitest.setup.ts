@@ -27,3 +27,18 @@ if (typeof globalThis.window === 'undefined') {
   // @ts-expect-error test env
   globalThis.window = globalThis;
 }
+// Node vitest：sessionActions.setActiveSessionId → projectStore 会 dispatch 自定义事件
+if (typeof globalThis.window.dispatchEvent !== 'function') {
+  globalThis.window.dispatchEvent = () => true;
+}
+if (typeof globalThis.CustomEvent === 'undefined') {
+  // @ts-expect-error test env
+  globalThis.CustomEvent = class CustomEvent {
+    type: string;
+    detail: unknown;
+    constructor(type: string, init?: { detail?: unknown }) {
+      this.type = type;
+      this.detail = init?.detail;
+    }
+  };
+}

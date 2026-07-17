@@ -5,8 +5,13 @@ export interface CompressionResult {
   compressed: boolean;
   messages: AgentMessage[];
   record?: ContextCompressionRecord;
+  error?: string;
 }
 
+/**
+ * Thin gate around ContextManager.maybeCompress.
+ * Preserves original messages when compression is skipped or aborts.
+ */
 export class ContextCompressionGate {
   constructor(private readonly contextManager: ContextManager) {}
 
@@ -15,11 +20,22 @@ export class ContextCompressionGate {
 
     await this.contextManager.maybeCompress(
       messages,
-      (compressed) => { result = { compressed: true, messages: compressed }; },
+      (compressed) => {
+        // Keep any record already attached by the end callback.
+        result = { ...result, compressed: true, messages: compressed };
+      },
       async (eventType, detail) => {
         if (eventType === "compression-end") {
-          const d = detail as { record?: ContextCompressionRecord };
-          if (d.record) result.record = d.record;
+          const d = detail as { record?: ContextCompressionRecord; aborted?: boolean; error?: string };
+          if (d.record) result = { ...result, record: d.record };
+          if (d.aborted && d.error) result = { ...result, error: d.error };
+        }
+        if (eventType === "compression-error") {
+          result = {
+            ...result,
+            compressed: false,
+            error: typeof detail === "string" ? detail : "compression failed",
+          };
         }
       },
     );
