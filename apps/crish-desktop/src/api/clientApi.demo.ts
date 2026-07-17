@@ -9,6 +9,7 @@
  * clientApi methods gate with isDemoMode() and forward here when demo.
  */
 import type { CronJob, McpServer, ProviderInfo } from './clientApi';
+import type { TelemetrySyncPayload } from '../store/layoutStore';
 
 const PROVIDERS_KEY = 'crish_providers';
 const PROVIDERS_KEY_LEGACY = 'conex_pi_providers';
@@ -214,7 +215,7 @@ export const clientApiDemo = {
 
   // ── Telemetry mock stream ──────────────────────────────────────────────
 
-  subscribeTelemetry: (onData: (data: any) => void): (() => void) => {
+  subscribeTelemetry: (onData: (data: TelemetrySyncPayload) => void): (() => void) => {
     let ws: WebSocket | null = null;
     let mockInterval: ReturnType<typeof setInterval> | null = null;
     let isClosed = false;

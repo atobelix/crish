@@ -1,364 +1,272 @@
 /**
- * 协作 agent 面板：时间线 + 可交互输入（运行中 steer / 结束后新 run 续聊）。
+ * 协作体「聊天」侧栏：时间线 + 可交互输入（运行中 steer / 结束后新 run 续聊）。
+ * 标签名「聊天」；列表/入口在总览或主对话，勿从 + 菜单随意添加。
+ * 契约：仅侧栏展示；打开/切换一律 openAgentInSidePanel / browseAgentSidePanel，
+ * 永不覆盖主对话、不 spawn 主会话 ghost。
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import { browseAgentSidePanel, openAgentInSidePanel } from '../api/openAgentPanel';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionAgent, SessionMessage } from '../store/layoutStore';
 import {
-  buildAssistantTimeline,
-  extractToolCommand,
-  toolCommandPreview,
-  toolHumanLabel,
-  toolResultPreview,
-  truncateToolOutput,
-} from '../api/toolPresentation';
+  getSessionAgent,
+  selectActiveSessionId,
+  selectPanelAgentId,
+  selectSessionsById,
+  useSessionField,
+} from '../store/sessionStore';
+import { buildAssistantTimeline } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import { publishToolDiffs } from '../api/publishToolDiffs';
-import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import {
-  buildCollaboratorPrompt,
   getSubagentStatus,
   sendToSubagent,
   streamCollaboratorRun,
 } from '../api/subagentApi';
 import { getWorkspacePath } from '../api/projectStore';
-import { loadAgentProfiles, type AgentProfile } from '../api/agentProfiles';
-import { ApprovalAskCard } from './ApprovalAskCard';
+import { ComposerField } from './ChatComposer';
+import { ChatToolStack } from './ChatToolCallBlock';
 import { AgentTeamBoard } from './AgentTeamBoard';
+import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 
-/** 右侧 Agent 默认落地：新建协作对话（继承上下文 / 临时分析） */
-function AgentLaunchPad({
+/** 状态芯片文案（中文唯一来源） */
+const STATUS_LABEL: Record<SessionAgent['status'], string> = {
+  running: '运行中',
+  completed: '完成',
+  failed: '失败',
+  stopped: '已停止',
+};
+
+/** 浏览列表排序：运行中 → 失败 → 已停止 → 完成；同组新在前 */
+function rankAgentStatus(st: SessionAgent['status']): number {
+  if (st === 'running') return 0;
+  if (st === 'failed') return 1;
+  if (st === 'stopped') return 2;
+  return 3;
+}
+
+function sortAgentsForBrowse(agents: SessionAgent[]): SessionAgent[] {
+  return [...agents].sort((a, b) => {
+    const d = rankAgentStatus(a.status) - rankAgentStatus(b.status);
+    if (d !== 0) return d;
+    return (b.startedAt || 0) - (a.startedAt || 0);
+  });
+}
+
+/** 紧凑时长：侧栏密度用 */
+function formatAgentDuration(agent: SessionAgent): string | null {
+  const start = agent.startedAt;
+  if (!start || !Number.isFinite(start)) return null;
+  const end = agent.endedAt && Number.isFinite(agent.endedAt) ? agent.endedAt : Date.now();
+  const sec = Math.max(0, Math.round((end - start) / 1000));
+  if (sec < 60) return `${sec} 秒`;
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分钟`;
+  }
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return m > 0 ? `${h} 小时 ${m} 分` : `${h} 小时`;
+}
+
+function agentDisplayName(agent: SessionAgent): string {
+  return (agent.description || agent.mode || agent.id || '子智能体').trim() || '子智能体';
+}
+
+function countPendingApprovals(agent: SessionAgent): number {
+  let n = 0;
+  for (const m of agent.messages || []) {
+    for (const t of m.toolCalls || []) {
+      if (t.status === 'pending_approval') n += 1;
+    }
+  }
+  return n;
+}
+
+/** 状态芯片：统一中文 + a11y role/status */
+function AgentStatusChip({
+  status,
+  mode,
+  compact,
+}: {
+  status: SessionAgent['status'];
+  mode?: string;
+  /** 列表行更紧时不读冗长 title */
+  compact?: boolean;
+}) {
+  const label = STATUS_LABEL[status] || '未知';
+  const modeHint = mode ? `模式：${mode}` : undefined;
+  return (
+    <span
+      className={`agent-card-badge agent-card-badge--${status}`}
+      role="status"
+      data-agent-status={status}
+      aria-label={`状态：${label}${mode ? `，${modeHint}` : ''}`}
+      title={compact ? label : modeHint || label}
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Agent 侧栏空态 / 浏览列表：仅浏览本会话已有、由主 AI 拉起的子 agent。
+ * 无「人类协作任务」表单；创建只发生在 run_subagent。
+ * 打开详情仅 openAgentInSidePanel（侧栏 only）。
+ */
+function AgentBrowsePad({
   parentSessionId,
   onClose,
+  embedded,
 }: {
   parentSessionId?: string | null;
   onClose?: () => void;
+  embedded?: boolean;
 }) {
-  const sessions = useLayoutStore((s) => s.sessions);
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
-  const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
-  const setPanelAgentId = useLayoutStore((s) => s.setPanelAgentId);
-  const setActiveAgentId = useLayoutStore((s) => s.setActiveAgentId);
+  const sessionsById = useSessionField(selectSessionsById);
+  const activeSessionId = useSessionField(selectActiveSessionId);
   const parentId = parentSessionId || activeSessionId;
-  const parent = sessions.find((s) => s.id === parentId);
+  const parent = parentId ? sessionsById[parentId] : undefined;
   const agents = parent?.agents || [];
-  const [task, setTask] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [profiles] = useState<AgentProfile[]>(() => loadAgentProfiles());
-  const [profileId, setProfileId] = useState(() => loadAgentProfiles()[0]?.id || 'research');
-
-  const recentContext = useMemo(() => {
-    const msgs = parent?.messages || [];
-    const slice = msgs.slice(-6);
-    return slice
-      .map((m) => {
-        const who = m.sender === 'user' ? '用户' : '助手';
-        const text = (m.text || '').trim().slice(0, 280);
-        return text ? `${who}：${text}` : '';
-      })
-      .filter(Boolean)
-      .join('\n');
-  }, [parent?.messages]);
-
-  const startAgent = (kind: 'inherit' | 'scratch') => {
-    const sid = parentId || useLayoutStore.getState().createSession({ title: '新会话' });
-    if (!sid) return;
-    const q = task.trim();
-    if (!q) return;
-    setBusy(true);
-    const agentId = `collab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const profile = profiles.find((p) => p.id === profileId) || profiles[0];
-    const desc =
-      kind === 'inherit'
-        ? profile?.name || '继承上下文'
-        : `临时·${profile?.name || '分析'}`;
-    const roleHint = profile?.hint || '';
-    const taskBody =
-      kind === 'inherit'
-        ? [
-            roleHint ? `角色：${roleHint}` : '请基于主对话近期上下文协助决策或继续任务。',
-            recentContext ? `【主对话摘要】\n${recentContext}` : '',
-            `【用户问题】\n${q}`,
-          ]
-            .filter(Boolean)
-            .join('\n\n')
-        : [
-            roleHint ||
-              '你是临时分析助手：解释主 agent 为何这样改、评估风险与替代方案，默认不直接大改仓库。',
-            recentContext ? `【主对话片段】\n${recentContext}` : '',
-            `【用户问题】\n${q}`,
-          ]
-            .filter(Boolean)
-            .join('\n\n');
-
-    const mode = profile?.mode || (kind === 'inherit' ? 'implement' : 'research');
-    upsertSessionAgent(sid, {
-      id: agentId,
-      subagentRunId: '',
-      parentSessionId: sid,
-      parentRunId: '',
-      description: desc,
-      mode,
-      status: 'running',
-      messages: [
-        {
-          id: `agent-user-${Date.now()}`,
-          sender: 'user',
-          text: q,
-          timestamp: Date.now(),
-          status: 'completed',
-        },
-      ],
-      startedAt: Date.now(),
-    });
-    setPanelAgentId(agentId);
-    setActiveAgentId(null);
-
-    const prompt = buildCollaboratorPrompt({
-      mode,
-      description: desc,
-      task: taskBody,
-      parentSessionTitle: parent?.title,
-    });
-    const asstId = `agent-asst-${Date.now().toString(36)}`;
-    useLayoutStore.getState().appendSessionAgentMessage(sid, agentId, {
-      id: asstId,
-      sender: 'assistant',
-      text: '',
-      thinking: '正在处理…',
-      timestamp: Date.now(),
-      status: 'processing',
-      toolCalls: [],
-      blocks: [],
-    });
-
-    const patchAsst = (fn: (m: SessionMessage) => void) => {
-      useLayoutStore.setState((state) => {
-        const ag = state.sessions.find((s) => s.id === sid)?.agents?.find((a) => a.id === agentId);
-        const m = ag?.messages?.find((x) => x.id === asstId);
-        if (m) fn(m);
-      });
-    };
-
-    streamCollaboratorRun(prompt, agentId, {
-      onRunMeta: ({ runId }) => {
-        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
-          subagentRunId: runId,
-          parentRunId: runId,
-          status: 'running',
-        });
-      },
-      onThought: (t) =>
-        patchAsst((m) => {
-          m.thinking = t;
-        }),
-      onChunk: (c) =>
-        patchAsst((m) => {
-          m.text = c;
-          if (m.thinking === '正在处理…') m.thinking = '';
-        }),
-      onToolStart: (toolId, name, args, explanation) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          if (!m.toolCalls.some((t) => t.id === toolId)) {
-            m.toolCalls.push({
-              id: toolId,
-              name,
-              arguments: args,
-              explanation,
-              status: 'running',
-            });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onToolSuccess: (toolId, output, diffs) => {
-        let resolved: import('../store/layoutStore').FileDiff[] = [];
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          const displayOut = sanitizeToolDisplayOutput(output || '');
-          resolved = resolveToolDiffs({
-            name: tc.name || '',
-            args: tc.arguments,
-            output: displayOut,
-            structuredDiffs: diffs,
-          });
-          tc.status = 'success';
-          tc.output = displayOut || output || '完成';
-          if (resolved.length) tc.diffs = resolved;
-        });
-        publishToolDiffs(resolved);
-      },
-      onToolError: (toolId, error) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (tc) {
-            tc.status = 'error';
-            tc.output = sanitizeToolDisplayOutput(error || '') || error || '失败';
-          }
-        });
-      },
-      onToolPendingApproval: (toolId, name, args, explanation) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          const existing = m.toolCalls.find((t) => t.id === toolId);
-          if (existing) {
-            existing.status = 'pending_approval';
-            existing.arguments = args || existing.arguments;
-            if (explanation) existing.explanation = explanation;
-          } else {
-            m.toolCalls.push({
-              id: toolId,
-              name,
-              arguments: args,
-              explanation,
-              status: 'pending_approval',
-            });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onApprovalResolved: (toolId, decision) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          if (decision === 'allow') {
-            tc.status = 'running';
-            tc.output = '执行中…';
-          } else {
-            tc.status = 'error';
-            tc.output = '未获批准';
-          }
-        });
-      },
-      onRunError: (message) => {
-        patchAsst((m) => {
-          m.status = 'completed';
-          m.text = (m.text || '') + (m.text ? '\n' : '') + (message || '运行失败');
-          if (m.thinking === '正在处理…') m.thinking = '';
-        });
-        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
-          status: 'failed',
-          endedAt: Date.now(),
-          summary: message || '运行失败',
-        });
-        setBusy(false);
-      },
-      onComplete: () => {
-        patchAsst((m) => {
-          m.status = 'completed';
-          if (m.thinking === '正在处理…') m.thinking = '';
-        });
-        useLayoutStore.getState().patchSessionAgent(sid, agentId, {
-          status: 'completed',
-          endedAt: Date.now(),
-        });
-        setBusy(false);
-      },
-    });
-  };
+  const sorted = useMemo(() => sortAgentsForBrowse(agents), [agents]);
+  const runningCount = useMemo(
+    () => agents.filter((a) => a.status === 'running').length,
+    [agents],
+  );
+  const pendingTotal = useMemo(
+    () => agents.reduce((n, a) => n + countPendingApprovals(a), 0),
+    [agents],
+  );
 
   return (
-    <div className="agent-card agent-card--launch">
+    <div
+      className="agent-card agent-card--launch agent-card--dense"
+      data-agent-side-only="1"
+      data-agent-panel="browse"
+      role="region"
+      aria-label="协作体聊天列表"
+    >
       <header className="agent-card-header agent-card-header--slim">
         <div className="agent-card-title-row">
-          <Lucide.Bot size={16} strokeWidth={1.75} />
-          <span className="agent-card-title">协作</span>
+          <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
+          <span className="agent-card-title">聊天</span>
           {agents.length > 0 ? (
-            <span className="agent-card-badge">{agents.length}</span>
+            <span
+              className="agent-card-badge"
+              title={`共 ${agents.length} 个`}
+              aria-label={`共 ${agents.length} 个子智能体`}
+            >
+              {agents.length}
+            </span>
+          ) : null}
+          {runningCount > 0 ? (
+            <span
+              className="agent-card-badge agent-card-badge--running"
+              role="status"
+              aria-label={`${runningCount} 个运行中`}
+              title="运行中"
+            >
+              {runningCount} 运行
+            </span>
+          ) : null}
+          {pendingTotal > 0 ? (
+            <span
+              className="agent-card-badge"
+              role="status"
+              aria-label={`${pendingTotal} 项待审批`}
+              title="待审批工具"
+            >
+              {pendingTotal} 待批
+            </span>
           ) : null}
         </div>
         {onClose ? (
-          <button type="button" className="agent-card-btn" title="关闭" onClick={onClose}>
-            <Lucide.X size={16} />
+          <button
+            type="button"
+            className="agent-card-btn"
+            title={embedded ? '返回' : '关闭侧栏'}
+            aria-label={embedded ? '返回' : '关闭侧栏'}
+            onClick={onClose}
+          >
+            {embedded ? <Lucide.ChevronLeft size={14} aria-hidden /> : <Lucide.X size={14} aria-hidden />}
           </button>
         ) : null}
       </header>
 
-      {/* 多 agent 才展示看板；单 agent 用下方紧凑列表 */}
-      {agents.length > 1 ? <AgentTeamBoard agents={agents} compact /> : null}
-
       <div className="agent-launch-body">
-        <textarea
-          className="agent-launch-input"
-          placeholder="描述协作任务…"
-          value={task}
-          rows={2}
-          disabled={busy}
-          onChange={(e) => setTask(e.target.value)}
-        />
-        {profiles.length > 0 ? (
-          <div className="agent-launch-profiles" role="listbox" aria-label="智能体角色">
-            {profiles.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                role="option"
-                aria-selected={profileId === p.id}
-                className={`agent-launch-profile ${profileId === p.id ? 'is-on' : ''}`}
-                title={p.hint}
-                onClick={() => setProfileId(p.id)}
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="agent-launch-actions">
-          <button
-            type="button"
-            className="ui-btn ui-btn-primary ui-btn-sm"
-            disabled={busy || !task.trim()}
-            title="带上主对话近期消息"
-            onClick={() => startAgent('inherit')}
+        {agents.length === 0 ? (
+          <div
+            className="agent-card-empty-hint agent-card-empty-hint--pad"
+            role="status"
+            aria-live="polite"
           >
-            <Lucide.GitBranch size={15} strokeWidth={1.75} />
-            继承上下文
-          </button>
-          <button
-            type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
-            disabled={busy || !task.trim()}
-            title="临时分析窗口"
-            onClick={() => startAgent('scratch')}
-          >
-            <Lucide.MessageCircleQuestion size={15} strokeWidth={1.75} />
-            临时分析
-          </button>
-        </div>
-
-        {agents.length === 1 ? (
-          <div className="agent-launch-list">
-            <div className="agent-launch-list-h">本会话</div>
-            {agents.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className="agent-launch-item"
-                onClick={() => {
-                  setPanelAgentId(a.id);
-                }}
-              >
-                <Lucide.Bot size={14} strokeWidth={1.75} />
-                <span className="agent-launch-item-t">{a.description || a.mode || a.id}</span>
-                <span className={`agent-card-badge agent-card-badge--${a.status}`}>
-                  {a.status === 'running'
-                    ? '运行中'
-                    : a.status === 'failed'
-                      ? '失败'
-                      : a.status === 'stopped'
-                        ? '已停止'
-                        : '完成'}
-                </span>
-              </button>
-            ))}
+            <p className="agent-card-empty-p" style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+              <Lucide.Bot size={16} strokeWidth={1.5} aria-hidden />
+              <span>暂无子智能体</span>
+            </p>
+            <p className="agent-card-empty-p">
+              子智能体由主对话里的 AI 自动拉起，无需人工委派。
+            </p>
+            <p className="agent-card-empty-p agent-card-empty-p--muted">
+              有协作时会出现在消息时间线；点开后仅在侧栏查看，不覆盖主对话。
+            </p>
           </div>
-        ) : null}
+        ) : (
+          <div className="agent-launch-list" role="list" aria-label="本会话子智能体">
+            <div className="agent-launch-list-h" id="agent-launch-list-heading">
+              本会话 · AI 已拉起
+            </div>
+            {sorted.map((a) => {
+              const name = agentDisplayName(a);
+              const pending = countPendingApprovals(a);
+              const dur = formatAgentDuration(a);
+              const titleBits = [
+                name,
+                STATUS_LABEL[a.status],
+                a.mode ? `模式 ${a.mode}` : '',
+                pending ? `${pending} 项待批` : '',
+                dur || '',
+                (a.summary || '').trim().slice(0, 80),
+              ].filter(Boolean);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  role="listitem"
+                  className="agent-launch-item"
+                  data-agent-id={a.id}
+                  data-agent-status={a.status}
+                  aria-label={`${name}，${STATUS_LABEL[a.status]}${
+                    pending ? `，${pending} 项待批` : ''
+                  }。在侧栏打开`}
+                  title={titleBits.join(' · ')}
+                  onClick={() => {
+                    // 侧栏 only：禁止主列全屏 / 新会话 ghost
+                    openAgentInSidePanel(a.id, {
+                      sessionId: parentId || undefined,
+                    });
+                  }}
+                >
+                  <Lucide.Bot size={13} strokeWidth={1.75} aria-hidden />
+                  <span className="agent-launch-item-t">{name}</span>
+                  {pending > 0 ? (
+                    <span
+                      className="agent-card-badge"
+                      aria-hidden
+                      title={`${pending} 项待批`}
+                    >
+                      待批
+                    </span>
+                  ) : null}
+                  <AgentStatusChip status={a.status} mode={a.mode} compact />
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -368,9 +276,15 @@ interface AgentCardProps {
   agentId?: string | null;
   /** 所属主会话；缺省取 activeSessionId */
   parentSessionId?: string | null;
+  /**
+   * 历史 prop：曾表示主列内嵌全屏。现仅影响关闭钮图标（返回 vs X），
+   * 面板始终在侧栏，永不覆盖主对话。
+   */
   embedded?: boolean;
   onClose?: () => void;
+  /** @deprecated 侧栏 only，忽略；保留类型兼容 */
   onOpenRight?: () => void;
+  /** @deprecated 侧栏 only，忽略；保留类型兼容 */
   onOpenWindow?: () => void;
 }
 
@@ -379,54 +293,69 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   parentSessionId,
   embedded,
   onClose,
-  onOpenRight,
-  onOpenWindow,
 }) => {
-  const sessions = useLayoutStore((s) => s.sessions);
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
-  const panelAgentId = useLayoutStore((s) => s.panelAgentId);
+  const sessionsById = useSessionField(selectSessionsById);
+  const activeSessionId = useSessionField(selectActiveSessionId);
+  const panelAgentId = useSessionField(selectPanelAgentId);
   const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
   const appendSessionAgentMessage = useLayoutStore((s) => s.appendSessionAgentMessage);
 
   const id = agentId ?? panelAgentId;
+
   const parentId = parentSessionId || activeSessionId;
+  // 优先 O(1) sessionsById；找不到再扫 index 值，不再订阅 sessions 整表
   const sess =
-    sessions.find((s) => s.id === parentId) ||
-    sessions.find((s) => s.agents?.some((a) => a.id === id));
+    (parentId ? sessionsById[parentId] : undefined) ||
+    (id
+      ? Object.values(sessionsById).find((s) => s.agents?.some((a) => a.id === id))
+      : undefined);
   const agent =
-    sess?.agents?.find((a) => a.id === id) ||
-    sessions.flatMap((s) => s.agents || []).find((a) => a.id === id);
+    (sess && id ? sess.agents?.find((a) => a.id === id) : undefined) ||
+    (id
+      ? Object.values(sessionsById)
+          .flatMap((s) => s.agents || [])
+          .find((a) => a.id === id)
+      : undefined);
 
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [isComposing, setIsComposing] = useState(false);
-  /** 聚焦单 agent 时是否展开顶部协作看板（默认收起，减噪） */
-  const [showTeamBoard, setShowTeamBoard] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  /** 切换 agent 时递增，强制 ComposerField 重挂载以 autoFocus + 清空草稿 */
+  const [composerEpoch, setComposerEpoch] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
   const followUpCancelRef = useRef<null | (() => void)>(null);
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const siblingAgents = sess?.agents || [];
+  const lastAgentIdRef = useRef<string | null | undefined>(undefined);
+  /** 焦点代数：切换 agent 后丢弃旧 send finally 的 setSending */
+  const focusGenRef = useRef(0);
 
+  /** 侧栏 only：切换/回浏览一律清草稿 + 停本卡 follow-up 流，不串输入 */
+  const resetComposerForFocusChange = useCallback(() => {
+    focusGenRef.current += 1;
+    followUpCancelRef.current?.();
+    followUpCancelRef.current = null;
+    setInput('');
+    setSendError('');
+    setSending(false);
+    setIsComposing(false);
+    setComposerEpoch((n) => n + 1);
+  }, []);
+
+  // 侧栏切换子 agent 或回浏览列表：清草稿/错误/流，不串会话输入
   useEffect(() => {
-    if (!showMoreMenu) return;
-    const onDoc = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowMoreMenu(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [showMoreMenu]);
+    const prev = lastAgentIdRef.current;
+    // 首次挂载仅记录，不清（避免无故丢草稿）
+    if (prev === undefined) {
+      lastAgentIdRef.current = id ?? null;
+      return;
+    }
+    const next = id ?? null;
+    if (prev !== next) {
+      resetComposerForFocusChange();
+      lastAgentIdRef.current = next;
+    }
+  }, [id, resetComposerForFocusChange]);
 
   // 自动滚到底
   useEffect(() => {
@@ -443,10 +372,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
       if (!st || !sess) return;
       if (st.status && st.status !== 'running' && st.status !== 'unknown') {
         // 仅当仍显示 running 时纠正
-        const live = useLayoutStore
-          .getState()
-          .sessions.find((s) => s.id === sess.id)
-          ?.agents?.find((a) => a.id === agent.id);
+        const live = getSessionAgent(sess.id, agent.id);
         if (live?.status === 'running' && /complete|success|failed|cancel|error|stopp?ed|abort/i.test(st.status)) {
           const raw = String(st.status);
           const nextStatus: 'completed' | 'failed' | 'stopped' = /cancel|stopp?ed|abort/i.test(raw)
@@ -481,9 +407,10 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 
   if (!agent || !sess) {
     return (
-      <AgentLaunchPad
+      <AgentBrowsePad
         parentSessionId={parentId}
         onClose={onClose}
+        embedded={embedded}
       />
     );
   }
@@ -491,6 +418,10 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const parentSessId = sess.id;
   const running = agent.status === 'running';
   const canSend = input.trim().length > 0 && !sending;
+  const titleName = agentDisplayName(agent);
+  const durationLabel = formatAgentDuration(agent);
+  const pendingApproval = countPendingApprovals(agent);
+  const msgCount = (agent.messages || []).length;
 
   const applyLocalUserMessage = (text: string) => {
     appendSessionAgentMessage(parentSessId, agent.id, {
@@ -506,14 +437,19 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    const gen = focusGenRef.current;
+    const boundAgentId = agent.id;
     setSendError('');
     setSending(true);
     setInput('');
 
     try {
+      // 切换焦点后勿再写旧 agent 的发送态
+      if (focusGenRef.current !== gen || lastAgentIdRef.current !== boundAgentId) return;
       if (running && agent.subagentRunId) {
         applyLocalUserMessage(text);
         const res = await sendToSubagent(agent.subagentRunId, text);
+        if (focusGenRef.current !== gen || lastAgentIdRef.current !== boundAgentId) return;
         if (!res.ok) {
           setSendError(res.error || '发送失败');
           // 若 run 已结束，降级为 follow-up run
@@ -529,7 +465,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
         await startFollowUpRun(text);
       }
     } finally {
-      setSending(false);
+      if (focusGenRef.current === gen) setSending(false);
     }
   };
 
@@ -556,7 +492,10 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 
       const patchAsst = (fn: (m: SessionMessage) => void) => {
         useLayoutStore.setState((state) => {
-          const s = state.sessions.find((x) => x.id === parentSessId);
+          // 优先 O(1) sessionsById，与主对话/sessionIndex 一致
+          const s =
+            state.sessionsById[parentSessId] ||
+            state.sessions.find((x) => x.id === parentSessId);
           const ag = s?.agents?.find((a) => a.id === agent.id);
           const m = ag?.messages?.find((x) => x.id === asstId);
           if (m) fn(m);
@@ -626,13 +565,16 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             }
           });
         },
-        onToolPendingApproval: (toolId, name, args, explanation) => {
+        onToolPendingApproval: (toolId, name, args, explanation, approvalMeta) => {
           patchAsst((m) => {
             if (!m.toolCalls) m.toolCalls = [];
+            if (!m.blocks) m.blocks = [];
             const existing = m.toolCalls.find((t) => t.id === toolId);
             if (existing) {
               existing.status = 'pending_approval';
               existing.arguments = args || existing.arguments;
+              if (explanation) existing.explanation = explanation;
+              if (approvalMeta) existing.approvalMeta = approvalMeta;
             } else {
               m.toolCalls.push({
                 id: toolId,
@@ -640,7 +582,11 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
                 arguments: args,
                 explanation,
                 status: 'pending_approval',
+                ...(approvalMeta ? { approvalMeta } : {}),
               });
+              if (!m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)) {
+                m.blocks.push({ type: 'tool_call', id: toolId });
+              }
             }
           });
         },
@@ -693,133 +639,157 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     });
   };
 
-  const hasRareActions =
-    siblingAgents.length > 1 ||
-    (!embedded && Boolean(onOpenRight || onOpenWindow));
+  const siblingAgents = sess.agents || [];
+  const regionLabel = `${titleName} · ${STATUS_LABEL[agent.status]}`;
 
   return (
-    <div className={`agent-card ${embedded ? 'agent-card--embedded' : ''}`}>
-      {/* 顶栏：标题 + 状态徽章；停止/关闭常显；窗口/看板进 ⋯ */}
+    <div
+      className={`agent-card agent-card--dense ${embedded ? 'agent-card--embedded' : ''}`}
+      role="region"
+      aria-label={regionLabel}
+      aria-busy={running || sending || undefined}
+      data-agent-side-only="1"
+      data-agent-panel="detail"
+      data-agent-id={agent.id}
+      data-agent-status={agent.status}
+    >
+      {/* 侧栏单 agent 详情：无人工委派；多 agent 用 AgentTeamBoard 在侧栏内切换 */}
       <header className="agent-card-header agent-card-header--slim">
         <div className="agent-card-title-row">
-          <Lucide.Bot size={15} strokeWidth={1.75} />
-          <span className="agent-card-title" title={agent.description || agent.mode || ''}>
-            {agent.description || '协作 agent'}
-          </span>
+          {/* 返回浏览列表：不关 tab、不碰主列；browse 会触发 id 清空 → 清草稿 */}
+          {siblingAgents.length > 0 ? (
+            <button
+              type="button"
+              className="agent-card-btn"
+              title="返回子智能体列表"
+              aria-label="返回子智能体列表"
+              onClick={() => {
+                // 先本地清草稿，再 browse（store 异步时仍不串输入）
+                resetComposerForFocusChange();
+                lastAgentIdRef.current = null;
+                browseAgentSidePanel({ sessionId: parentSessId });
+              }}
+            >
+              <Lucide.ChevronLeft size={14} aria-hidden />
+            </button>
+          ) : null}
+          <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
           <span
-            className={`agent-card-badge agent-card-badge--${agent.status}`}
-            title={agent.mode ? `模式：${agent.mode}` : undefined}
+            className="agent-card-title"
+            title={[
+              titleName,
+              agent.mode ? `模式：${agent.mode}` : '',
+              durationLabel || '',
+              (agent.summary || '').trim().slice(0, 120),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           >
-            {running
-              ? '运行中'
-              : agent.status === 'failed'
-                ? '失败'
-                : agent.status === 'stopped'
-                  ? '已停止'
-                  : '完成'}
+            {titleName}
           </span>
+          <AgentStatusChip status={agent.status} mode={agent.mode} />
+          {pendingApproval > 0 ? (
+            <span
+              className="agent-card-badge"
+              role="status"
+              aria-label={`${pendingApproval} 项工具待审批`}
+              title="待审批"
+            >
+              {pendingApproval} 待批
+            </span>
+          ) : null}
+          {durationLabel ? (
+            <span
+              className="agent-card-badge"
+              title={running ? '已运行时长' : '总时长'}
+              aria-label={running ? `已运行 ${durationLabel}` : `用时 ${durationLabel}`}
+            >
+              {durationLabel}
+            </span>
+          ) : null}
         </div>
         <div className="agent-card-actions">
           {running ? (
             <button
               type="button"
               className="agent-card-btn agent-card-btn--danger"
-              title="停止"
-              aria-label="停止"
+              title="停止子智能体"
+              aria-label="停止子智能体"
               onClick={handleStop}
             >
-              <Lucide.Square size={13} fill="currentColor" />
+              <Lucide.Square size={12} fill="currentColor" aria-hidden />
             </button>
-          ) : null}
-          {hasRareActions ? (
-            <div className="agent-more-wrap" ref={moreMenuRef}>
-              <button
-                type="button"
-                className={`agent-card-btn${showMoreMenu ? ' is-on' : ''}`}
-                title="更多"
-                aria-label="更多"
-                aria-haspopup="menu"
-                aria-expanded={showMoreMenu}
-                onClick={() => setShowMoreMenu((v) => !v)}
-              >
-                <Lucide.MoreHorizontal size={15} strokeWidth={1.75} />
-              </button>
-              {showMoreMenu ? (
-                <div className="agent-more-menu" role="menu" aria-label="更多操作">
-                  {siblingAgents.length > 1 ? (
-                    <button
-                      type="button"
-                      className="agent-more-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setShowTeamBoard((v) => !v);
-                        setShowMoreMenu(false);
-                      }}
-                    >
-                      <Lucide.LayoutGrid size={14} strokeWidth={1.75} />
-                      <span>{showTeamBoard ? '收起协作看板' : '协作看板'}</span>
-                    </button>
-                  ) : null}
-                  {!embedded && onOpenRight ? (
-                    <button
-                      type="button"
-                      className="agent-more-item"
-                      role="menuitem"
-                      onClick={() => {
-                        onOpenRight();
-                        setShowMoreMenu(false);
-                      }}
-                    >
-                      <Lucide.PanelRight size={14} strokeWidth={1.75} />
-                      <span>在右侧打开</span>
-                    </button>
-                  ) : null}
-                  {!embedded && onOpenWindow ? (
-                    <button
-                      type="button"
-                      className="agent-more-item"
-                      role="menuitem"
-                      onClick={() => {
-                        onOpenWindow();
-                        setShowMoreMenu(false);
-                      }}
-                    >
-                      <Lucide.ExternalLink size={14} strokeWidth={1.75} />
-                      <span>新窗口打开</span>
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
           ) : null}
           {onClose ? (
             <button
               type="button"
               className="agent-card-btn"
-              title={embedded ? '返回主对话' : '关闭'}
-              aria-label={embedded ? '返回主对话' : '关闭'}
+              title={embedded ? '返回' : '关闭侧栏'}
+              aria-label={embedded ? '返回' : '关闭侧栏'}
               onClick={onClose}
             >
-              {embedded ? <Lucide.ArrowLeft size={15} /> : <Lucide.X size={15} />}
+              {embedded ? (
+                <Lucide.ChevronLeft size={14} aria-hidden />
+              ) : (
+                <Lucide.X size={14} aria-hidden />
+              )}
             </button>
           ) : null}
         </div>
       </header>
 
-      {siblingAgents.length > 1 && showTeamBoard ? (
-        <AgentTeamBoard agents={siblingAgents} activeId={agent.id} compact />
+      {siblingAgents.length > 1 ? (
+        <AgentTeamBoard
+          agents={siblingAgents}
+          activeId={agent.id}
+          compact
+          sessionId={parentSessId}
+          onSelect={(nextId) => {
+            // 切换即清草稿（TeamBoard 已跳过 active 重选）；再开侧栏 only
+            if (nextId === agent.id) return;
+            resetComposerForFocusChange();
+            lastAgentIdRef.current = nextId;
+            openAgentInSidePanel(nextId, { sessionId: parentSessId });
+          }}
+        />
       ) : null}
 
-      <div className="agent-card-body" ref={bodyRef}>
-        {(agent.messages || []).length === 0 ? (
-          <div className="agent-card-empty-msgs">
+      <div
+        className="agent-card-body"
+        ref={bodyRef}
+        role="log"
+        aria-label={`${titleName} 的消息`}
+        aria-relevant="additions"
+        aria-busy={running || undefined}
+      >
+        {msgCount === 0 ? (
+          <div className="agent-card-empty-msgs" role="status" aria-live="polite">
             {running ? (
               <>
-                <span className="loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                <span>处理中…</span>
+                <span
+                  className="loading-spinner"
+                  style={{ width: 12, height: 12, borderWidth: 1.5 }}
+                  aria-hidden
+                />
+                <span>正在处理…</span>
               </>
             ) : (
-              <span>暂无消息</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Lucide.MessageSquare size={13} strokeWidth={1.75} aria-hidden />
+                  暂无消息
+                </span>
+                <span className="agent-card-empty-p agent-card-empty-p--muted" style={{ margin: 0 }}>
+                  可在下方输入，继续与子智能体对话
+                </span>
+              </span>
             )}
           </div>
         ) : (
@@ -827,64 +797,49 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             <AgentMessageRow
               key={msg.id}
               msg={msg}
-              parentSessionId={parentId || ''}
+              parentSessionId={parentSessId}
               agentId={agent.id}
             />
           ))
         )}
       </div>
 
-      <div className="agent-card-input-bar">
-        {sendError ? <div className="agent-card-send-error">{sendError}</div> : null}
-        <div className="agent-card-input-row">
-          <textarea
-            className="agent-card-textarea"
-            rows={1}
-            placeholder={running ? '补充指示…' : '继续对话…'}
-            title={
-              running
-                ? '运行中：消息会注入当前回合'
-                : getWorkspacePath()
-                  ? `新一轮 · ${shortPath(getWorkspacePath()!)}`
-                  : '将开启新一轮'
-            }
-            value={input}
-            disabled={sending}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (isComposing) return;
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                void handleSend();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="agent-card-send"
-            disabled={!canSend}
-            onClick={() => void handleSend()}
-            title="发送"
-            aria-label="发送"
-          >
-            {sending ? (
-              <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
-            ) : (
-              <Lucide.Send size={15} />
-            )}
-          </button>
-        </div>
+      {/* 与主对话同一 ComposerField + footer 渐变；侧栏 denser：maxLines=3 */}
+      <div
+        className="chat-footer agent-card-composer agent-card-composer--dense"
+        data-agent-composer="dense"
+      >
+        {sendError ? (
+          <div className="agent-card-send-error" role="alert" aria-live="assertive">
+            {sendError}
+          </div>
+        ) : null}
+        <ComposerField
+          key={`agent-composer-${agent.id}-${composerEpoch}`}
+          value={input}
+          onChange={setInput}
+          onSend={() => {
+            void handleSend();
+          }}
+          canSend={canSend}
+          disabled={sending}
+          isComposing={isComposing}
+          setIsComposing={setIsComposing}
+          isProcessing={running}
+          onStop={handleStop}
+          processingSendLabel="发送"
+          placeholder={running ? '补充指示…' : '继续对话…'}
+          ariaLabel={running ? '向子智能体补充指示' : '继续与子智能体对话'}
+          dense
+          maxLines={3}
+          autoFocus
+        />
       </div>
     </div>
   );
 });
 
-function shortPath(p: string): string {
-  const parts = p.replace(/\\/g, '/').split('/');
-  return parts.slice(-2).join('/') || p;
-}
+AgentCard.displayName = 'AgentCard';
 
 async function getDesktopCancel(runId: string): Promise<void> {
   try {
@@ -905,6 +860,18 @@ function AgentMessageRow({
   parentSessionId: string;
   agentId: string;
 }) {
+  const hideThinkingBlock = useLayoutStore((s) => Boolean(s.appSettings?.hideThinkingBlock));
+  /** 与主对话一致：工具默认折叠，按行展开 */
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
+    setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
+  }, []);
+  // ApprovalAskCard 二次确认后落地：busy + remember 白名单
+  const { approvalBusy, onApprovalAllow, onApprovalDeny } = useAgentToolApproval(
+    parentSessionId,
+    agentId,
+  );
+
   if (msg.sender === 'user') {
     // 任务提示 / 用户输入：左侧对齐，与主对话用户气泡略有区别
     return (
@@ -914,14 +881,17 @@ function AgentMessageRow({
     );
   }
   const timeline = buildAssistantTimeline(msg);
+  const showThinking =
+    !hideThinkingBlock &&
+    Boolean(msg.thinking && msg.thinking.trim() && msg.thinking !== '正在处理…');
   return (
     <div className="msg-row msg-row-assistant agent-msg">
-      {msg.thinking && msg.thinking.trim() && msg.thinking !== '正在处理…' ? (
+      {showThinking ? (
         <details className="msg-thinking-fold">
           <summary className="msg-thinking-fold-sum">
             <span className="msg-thinking-fold-label">思考</span>
           </summary>
-          <div className="msg-thinking-fold-body">{msg.thinking.slice(0, 4000)}</div>
+          <div className="msg-thinking-fold-body">{msg.thinking!.slice(0, 4000)}</div>
         </details>
       ) : null}
       <div className="msg-assistant-body">
@@ -940,116 +910,34 @@ function AgentMessageRow({
             return (
               <div
                 key={item.key}
-                className="msg-assistant-text md-rendered"
+                className="msg-timeline-text msg-assistant-text md-rendered"
                 dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(body) }}
               />
             );
           }
           return (
-            <div key={item.key} className="tool-stack agent-tool-stack">
-              {item.items.map((ti) => {
-                if (ti.kind === 'group') {
-                  return (
-                    <div key={ti.id} className="tool-row tool-row-group">
-                      <div className="tool-row-head tool-row-head--static">
-                        <span className="tool-row-summary">{ti.label}</span>
-                      </div>
-                    </div>
-                  );
-                }
-                const tc = ti.tc;
-                if (tc.status === 'pending_approval') {
-                  const summary = toolHumanLabel(tc);
-                  const techFull = extractToolCommand(tc.arguments || '');
-                  const cmd = toolCommandPreview(tc, 72);
-                  return (
-                    <ApprovalAskCard
-                      key={tc.id}
-                      msgId={msg.id}
-                      toolId={tc.id}
-                      summary={summary}
-                      cmd={cmd && cmd !== summary ? cmd : techFull || undefined}
-                      onAllow={() => {
-                        useLayoutStore.setState((state) => {
-                          const ag = state.sessions
-                            .find((s) => s.id === parentSessionId)
-                            ?.agents?.find((a) => a.id === agentId);
-                          const m = ag?.messages?.find((x) => x.id === msg.id);
-                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
-                          if (t) {
-                            t.status = 'running';
-                            t.output = '执行中…';
-                          }
-                        });
-                        void daemonApproveTool(tc.id);
-                      }}
-                      onAllowRemember={() => {
-                        useLayoutStore.setState((state) => {
-                          const ag = state.sessions
-                            .find((s) => s.id === parentSessionId)
-                            ?.agents?.find((a) => a.id === agentId);
-                          const m = ag?.messages?.find((x) => x.id === msg.id);
-                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
-                          if (t) {
-                            t.status = 'running';
-                            t.output = '执行中…';
-                          }
-                        });
-                        void daemonApproveTool(tc.id);
-                      }}
-                      onDeny={() => {
-                        useLayoutStore.setState((state) => {
-                          const ag = state.sessions
-                            .find((s) => s.id === parentSessionId)
-                            ?.agents?.find((a) => a.id === agentId);
-                          const m = ag?.messages?.find((x) => x.id === msg.id);
-                          const t = m?.toolCalls?.find((x) => x.id === tc.id);
-                          if (t) {
-                            t.status = 'error';
-                            t.output = '已拒绝';
-                          }
-                        });
-                        void daemonDenyTool(tc.id);
-                      }}
-                    />
-                  );
-                }
-                const summary = toolHumanLabel(tc);
-                const techFull = extractToolCommand(tc.arguments || '');
-                const cmd = toolCommandPreview(tc, 72);
-                const preview = toolResultPreview(tc);
-                const out = truncateToolOutput(tc.output || '', 8, 800);
-                return (
-                  <div key={tc.id} className="tool-row">
-                    <div className="tool-row-head tool-row-head--static">
-                      <span className="tool-row-text">
-                        <span className="tool-row-summary" title={summary}>
-                          {summary}
-                        </span>
-                        {cmd ? (
-                          <code className="tool-row-cmd" title={techFull || cmd}>
-                            {cmd}
-                          </code>
-                        ) : null}
-                      </span>
-                      {preview ? (
-                        <span className="tool-row-result-preview">{preview}</span>
-                      ) : null}
-                    </div>
-                    {out ? (
-                      <div className="tool-result-body">
-                        <pre className="tool-result-pre">{out}</pre>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+            <div key={item.key} className="msg-timeline-tools agent-tool-stack">
+              <ChatToolStack
+                items={item.items}
+                msgId={msg.id}
+                agents={[]}
+                activeSessionId={parentSessionId}
+                expandedTools={expandedTools}
+                onToggleTool={onToggleTool}
+                approvalBusy={approvalBusy}
+                pendingApprovalMsgId={msg.id}
+                onOpenDiff={() => {}}
+                onOpenPath={() => {}}
+                onOpenTerminal={() => {}}
+                onApprovalAllow={onApprovalAllow}
+                onApprovalDeny={onApprovalDeny}
+              />
             </div>
           );
         })}
         {msg.status === 'processing' && !(msg.text || '').trim() ? (
-          <div className="agent-msg-live">
-            <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
+          <div className="agent-msg-live" role="status" aria-live="polite">
+            <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} aria-hidden />
             生成中…
           </div>
         ) : null}
@@ -1058,7 +946,7 @@ function AgentMessageRow({
   );
 }
 
-/** 新窗口打开 agent 只读快照（Blob URL，避免 document.write） */
+/** 新窗口打开 agent 只读快照（Blob URL，避免 document.write）；非侧栏主路径 */
 export function openAgentInNewWindow(agent: SessionAgent): void {
   const w = window.open('', '_blank', 'noopener,noreferrer,width=720,height=900');
   if (!w) return;
@@ -1068,18 +956,11 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  const statusLabel =
-    agent.status === 'running'
-      ? '运行中'
-      : agent.status === 'failed'
-        ? '失败'
-        : agent.status === 'stopped'
-          ? '已停止'
-          : '完成';
+  const statusLabel = STATUS_LABEL[agent.status] || '完成';
   const lines: string[] = [];
-  lines.push(`<h1>${esc(agent.description || '协作 agent')}</h1>`);
+  lines.push(`<h1>${esc(agent.description || '协作智能体')}</h1>`);
   lines.push(
-    `<p class="meta">${esc(agent.mode)} · ${esc(statusLabel)}${
+    `<p class="meta">${esc(agent.mode || '')} · ${esc(statusLabel)}${
       agent.summary ? ' · ' + esc(agent.summary) : ''
     }</p>`,
   );
@@ -1089,16 +970,26 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
     } else {
       lines.push(`<div class="a">${esc(m.text || '')}</div>`);
       for (const tc of m.toolCalls || []) {
+        const tcStatus =
+          tc.status === 'success'
+            ? '成功'
+            : tc.status === 'error'
+              ? '失败'
+              : tc.status === 'running'
+                ? '执行中'
+                : tc.status === 'pending_approval'
+                  ? '待审批'
+                  : String(tc.status || '');
         lines.push(
-          `<div class="t"><b>${esc(tc.name)}</b> ${esc(tc.status)}<pre>${esc(
+          `<div class="t"><b>${esc(tc.name)}</b> ${esc(tcStatus)}<pre>${esc(
             (tc.output || '').slice(0, 2000),
           )}</pre></div>`,
         );
       }
     }
   }
-  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(
-    agent.description || 'agent',
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><title>${esc(
+    agent.description || '子智能体',
   )}</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#222;background:#fafafa}
@@ -1125,4 +1016,3 @@ h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px
   window.setTimeout(revoke, 60_000);
   w.location.href = url;
 }
-

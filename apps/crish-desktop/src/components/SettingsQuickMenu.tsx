@@ -1,17 +1,66 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+/**
+ * 侧栏「设置」快捷菜单：主题 + 常用入口；不进全屏设置。
+ * 菜单 fixed 定位，避免挡住聊天气泡 / 被裁切。
+ *
+ * 键盘：↑↓ / Home / End 漫游；Esc / Tab 关闭并还原焦点到触发钮。
+ * 主题段用 menuitemradio；入口项 SettingsTabType 字面量，避免 string 漂移。
+ */
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
+import type { SettingsTabType } from '../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../api/themeStore';
-import { isUpdateAvailable } from '../api/updateStore';
 
 interface Props {
   onShowToast?: (msg: string) => void;
 }
 
-/**
- * 侧栏「设置」快捷菜单：主题 + 入口；不进全屏设置。
- * 菜单 fixed 定位，避免挡住聊天气泡 / 被裁切。
- */
+/** 可聚焦控件：主题 radio + 菜单项（不含禁用） */
+const FOCUSABLE_SEL =
+  'button.ui-segment-item:not(:disabled), button.sb-quick-item:not(:disabled):not([aria-disabled="true"])';
+
+function listFocusable(root: HTMLElement | null): HTMLButtonElement[] {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLButtonElement>(FOCUSABLE_SEL));
+}
+
+/** 快捷入口：label 中文；tab 仅 SettingsTabType 或 undefined（全部设置） */
+type QuickEntry = {
+  id: string;
+  label: string;
+  title: string;
+  ariaLabel: string;
+  icon: React.ReactNode;
+  tab?: SettingsTabType;
+};
+
+const QUICK_ENTRIES: readonly QuickEntry[] = [
+  {
+    id: 'models',
+    label: '模型与密钥',
+    title: '打开模型与 API 密钥设置',
+    ariaLabel: '打开模型与密钥设置',
+    icon: <Lucide.Cpu size={16} strokeWidth={1.75} aria-hidden />,
+    tab: 'models',
+  },
+  {
+    id: 'appearance',
+    label: '外观与字体',
+    title: '打开外观与字体设置',
+    ariaLabel: '打开外观与字体设置',
+    icon: <Lucide.Palette size={16} strokeWidth={1.75} aria-hidden />,
+    tab: 'appearance',
+  },
+  {
+    id: 'all',
+    label: '全部设置',
+    title: '打开全部设置',
+    ariaLabel: '打开全部设置',
+    icon: <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />,
+    // 无 tab：进入设置默认页
+  },
+] as const;
+
 export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [theme, setThemeLocal] = useState<UiTheme>(() => readStoredTheme());
@@ -21,6 +70,23 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   const openSettings = useLayoutStore((s) => s.openSettings);
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  /** Escape / Tab / 键盘激活关闭时还原触发钮焦点；外侧点击不抢焦点 */
+  const restoreOnCloseRef = useRef(false);
+  const menuId = useId();
+  const themeGroupId = useId();
+
+  const closeMenu = useCallback((opts?: { restoreFocus?: boolean }) => {
+    const restore = !!opts?.restoreFocus;
+    restoreOnCloseRef.current = restore;
+    setOpen(false);
+    if (restore) {
+      queueMicrotask(() => {
+        btnRef.current?.focus();
+        restoreOnCloseRef.current = false;
+      });
+    }
+  }, []);
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) {
@@ -28,7 +94,8 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
       return;
     }
     const r = btnRef.current.getBoundingClientRect();
-    const width = Math.min(260, Math.max(220, r.width));
+    // 略加宽：中文标签 + 图标更稳，仍贴侧栏宽度
+    const width = Math.min(280, Math.max(228, r.width + 8));
     let left = r.left;
     if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
     if (left < 8) left = 8;
@@ -38,75 +105,169 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
 
   useEffect(() => {
     if (!open) return;
+    restoreOnCloseRef.current = false;
+
     const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        // 鼠标点外侧：关闭且不抢焦点
+        restoreOnCloseRef.current = false;
         setOpen(false);
       }
     };
-    const onScroll = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      restoreOnCloseRef.current = true;
+      setOpen(false);
+      queueMicrotask(() => {
+        btnRef.current?.focus();
+        restoreOnCloseRef.current = false;
+      });
+    };
+    const onViewport = () => {
+      // 滚动/缩放会错位 fixed 菜单：关闭不抢焦点
+      restoreOnCloseRef.current = false;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey, true);
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onViewport);
+    // capture：侧栏内部滚动也关掉，避免菜单悬空
+    window.addEventListener('scroll', onViewport, true);
     return () => {
       document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey, true);
-      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onViewport);
+      window.removeEventListener('scroll', onViewport, true);
+      if (restoreOnCloseRef.current) {
+        btnRef.current?.focus();
+        restoreOnCloseRef.current = false;
+      }
     };
   }, [open]);
+
+  // 打开后聚焦首个可操作控件，便于键盘立即操作
+  useEffect(() => {
+    if (!open || !menuPos) return;
+    const t = window.requestAnimationFrame(() => {
+      const first = listFocusable(menuRef.current)[0];
+      first?.focus();
+    });
+    return () => window.cancelAnimationFrame(t);
+  }, [open, menuPos]);
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const items = listFocusable(menuRef.current);
+    if (items.length === 0) return;
+    const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+    const safeIdx = idx >= 0 ? idx : 0;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      items[(safeIdx + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      items[(safeIdx - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      // 离开菜单：关闭并还原触发钮，避免焦点逃到背后
+      e.preventDefault();
+      closeMenu({ restoreFocus: true });
+    }
+  };
 
   const applyTheme = (t: UiTheme) => {
     setTheme(t);
     setThemeLocal(t);
   };
 
-  const go = (tab?: string) => {
-    setOpen(false);
+  const go = (tab?: SettingsTabType) => {
+    closeMenu({ restoreFocus: true });
     openSettings(tab);
   };
 
+  const triggerLabel = open ? '关闭快捷设置菜单' : '打开快捷设置菜单';
+  void onShowToast;
+  const isDark = theme === 'dark';
+
   return (
-    <div className="sb-quick-wrap" ref={rootRef}>
+    <div className="sb-quick-wrap" ref={rootRef} data-density="compact">
       <button
         ref={btnRef}
         type="button"
-        className={`sidebar-footer-settings ${open ? 'is-open' : ''}`}
+        className={`sidebar-footer-settings${open ? ' is-open' : ''}`}
         title="快捷设置"
+        aria-label={triggerLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => {
+          if (open) {
+            // 再次点击触发钮关闭：焦点已在钮上，无需再 restore
+            restoreOnCloseRef.current = false;
+            setOpen(false);
+          } else {
+            setOpen(true);
+          }
+        }}
       >
-        <Lucide.Settings size={16} strokeWidth={1.75} />
+        <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
         <span>设置</span>
-        <Lucide.ChevronUp size={14} strokeWidth={1.75} className="sb-quick-chev" />
+        <Lucide.ChevronUp size={14} strokeWidth={1.75} className="sb-quick-chev" aria-hidden />
       </button>
 
       {open && menuPos && (
         <div
+          id={menuId}
+          ref={menuRef}
           className="sb-quick-menu"
           role="menu"
+          aria-label="快捷设置"
+          aria-orientation="vertical"
+          data-density="compact"
           style={{
             left: menuPos.left,
             bottom: menuPos.bottom,
             width: Math.max(menuPos.width, 240),
           }}
+          onKeyDown={onMenuKeyDown}
+          onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="sb-quick-section">
-            <div className="sb-quick-label">外观</div>
-            <div className="ui-segment ui-segment--inline sb-quick-segment">
+          <div className="sb-quick-section" role="none">
+            <div className="sb-quick-label" id={themeGroupId}>
+              外观
+            </div>
+            <div
+              className="ui-segment ui-segment--inline sb-quick-segment"
+              role="group"
+              aria-labelledby={themeGroupId}
+            >
               <button
                 type="button"
-                className={`ui-segment-item ${theme !== 'dark' ? 'active' : ''}`}
+                className={`ui-segment-item${isDark ? '' : ' active'}`}
+                role="menuitemradio"
+                aria-checked={!isDark}
+                tabIndex={-1}
+                title="浅色主题"
+                aria-label="浅色主题"
                 onClick={() => applyTheme('default')}
               >
                 浅色
               </button>
               <button
                 type="button"
-                className={`ui-segment-item ${theme === 'dark' ? 'active' : ''}`}
+                className={`ui-segment-item${isDark ? ' active' : ''}`}
+                role="menuitemradio"
+                aria-checked={isDark}
+                tabIndex={-1}
+                title="深色主题"
+                aria-label="深色主题"
                 onClick={() => applyTheme('dark')}
               >
                 深色
@@ -114,42 +275,24 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             </div>
           </div>
 
-          <div className="sb-quick-divider" />
+          <div className="sb-quick-divider" role="separator" />
 
-          <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go('models')}>
-            <Lucide.Cpu size={16} strokeWidth={1.75} />
-            <span>模型与密钥</span>
-          </button>
-          <button
-            type="button"
-            className="sb-quick-item"
-            role="menuitem"
-            onClick={() => go('appearance')}
-          >
-            <Lucide.Palette size={16} strokeWidth={1.75} />
-            <span>外观与字体</span>
-          </button>
-          <button type="button" className="sb-quick-item" role="menuitem" onClick={() => go()}>
-            <Lucide.Settings size={16} strokeWidth={1.75} />
-            <span>全部设置</span>
-          </button>
+          {QUICK_ENTRIES.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className="sb-quick-item"
+              role="menuitem"
+              tabIndex={-1}
+              title={entry.title}
+              aria-label={entry.ariaLabel}
+              onClick={() => go(entry.tab)}
+            >
+              {entry.icon}
+              <span>{entry.label}</span>
+            </button>
+          ))}
 
-          <div className="sb-quick-divider" />
-
-          <button
-            type="button"
-            className="sb-quick-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onShowToast?.(
-                isUpdateAvailable() ? '正在检查更新…' : '当前已是最新版本',
-              );
-            }}
-          >
-            <Lucide.RefreshCw size={16} strokeWidth={1.75} />
-            <span>检查更新</span>
-          </button>
         </div>
       )}
     </div>

@@ -1,12 +1,27 @@
 /**
- * 设置 · 规则：自定义规范列表 / 编辑全局或项目规则文件
- * Design system v2：settings-pane--modern + group/list/feature
+ * 设置 · 规则：短规则、预设与全文编辑；成功静默，仅失败提示。
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { clientApi, type Settings } from '../api/clientApi';
-import { getWorkspacePath } from '../api/projectStore';
-import { syncRulesToDaemon, textToRuleLines } from '../api/rulesApi';
+import {
+  clientApi,
+  normalizeCustomRules,
+  normalizeSettingsText,
+  type Settings,
+} from '../api/clientApi';
+import {
+  getWorkspacePath,
+  listSettingsScopeProjects,
+  projectFolderLabel,
+} from '../api/projectStore';
+import {
+  rulesLinesToText,
+  syncRulesToDaemon,
+  textToRuleLines,
+} from '../api/rulesApi';
+import { formatEngineDegradeToast } from '../hooks/useToastQueue';
+import { useLayoutStore } from '../store/layoutStore';
+import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -14,7 +29,11 @@ type Props = {
   onBlockingOverlayChange?: (blocking: boolean) => void;
 };
 
-/** 一键添加的常用工程规范（与手动添加走同一路径） */
+/** 作用域：global 或项目路径 */
+type ScopeKey = string;
+const SCOPE_GLOBAL = 'global';
+
+/** 常用规则预设 */
 const RULE_PRESETS: string[] = [
   '修改前先说明方案并等待确认',
   '保持既有代码风格，不随意重构无关代码',
@@ -23,209 +42,521 @@ const RULE_PRESETS: string[] = [
   '优先最小改动，避免大范围无关修改',
 ];
 
+/** 空全文模板 */
+const EMPTY_GLOBAL_TEMPLATE = '# 全局规则\n\n';
+const EMPTY_PROJECT_TEMPLATE = '# 项目规则\n\n';
+
+/** 规范化单条规则 */
+function normalizeRuleLine(raw: string): string {
+  return normalizeSettingsText(raw);
+}
+
+/** 去重 */
+function dedupeRuleLines(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = normalizeRuleLine(line);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 export const SettingsRulesTab: React.FC<Props> = ({
   onShowToast,
   onBlockingOverlayChange,
 }) => {
-  const cwd = getWorkspacePath() || '__global__';
-  const workspacePath =
-    typeof localStorage !== 'undefined' ? localStorage.getItem('crish_workspace') : null;
-  const hasWorkspace = Boolean(workspacePath);
+  const workspacePath = getWorkspacePath() || '';
+  /** 已打开过的项目 + 当前 cwd（文件夹名） */
+  const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
 
+  const [scopeKey, setScopeKey] = useState<ScopeKey>(() => {
+    const projects = listSettingsScopeProjects();
+    const cwd = getWorkspacePath() || '';
+    if (cwd) {
+      const hit = projects.find(
+        (p) => p.path.replace(/\\/g, '/').toLowerCase() === cwd.replace(/\\/g, '/').toLowerCase(),
+      );
+      return hit?.path || cwd || SCOPE_GLOBAL;
+    }
+    return SCOPE_GLOBAL;
+  });
   const [customRules, setCustomRules] = useState<string[]>([]);
-  const [globalRules, setGlobalRules] = useState('');
-  const [projectRules, setProjectRules] = useState('');
+  const [editorText, setEditorText] = useState(EMPTY_GLOBAL_TEMPLATE);
   const [newRuleText, setNewRuleText] = useState('');
-  const [editingRuleFileType, setEditingRuleFileType] = useState<'global' | 'project' | null>(null);
+  const [editingOpen, setEditingOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadTick, setLoadTick] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
+  const fullEditorBtnRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
+  const prevEditingOpen = useRef(false);
+
+  const titleId = useId();
+  const descId = useId();
+  const addInputId = useId();
+  const listLabelId = useId();
+
+  const isGlobal = scopeKey === SCOPE_GLOBAL;
+  const activeProject = useMemo(
+    () =>
+      !isGlobal
+        ? scopeProjects.find(
+            (p) =>
+              p.path.replace(/\\/g, '/').toLowerCase() ===
+              scopeKey.replace(/\\/g, '/').toLowerCase(),
+          ) || null
+        : null,
+    [isGlobal, scopeKey, scopeProjects],
+  );
+  const scopeLabel = isGlobal
+    ? '全局'
+    : activeProject?.name || projectFolderLabel(scopeKey);
+  const storagePath = isGlobal ? '全局设置' : scopeKey;
+
+  const scopeOptions = useMemo(() => {
+    const opts: { value: string; label: string; hint?: string }[] = [
+      { value: SCOPE_GLOBAL, label: '全局', hint: '所有项目共用' },
+    ];
+    for (const p of scopeProjects) {
+      opts.push({
+        value: p.path,
+        label: p.name || projectFolderLabel(p.path),
+        hint: p.path,
+      });
+    }
+    return opts;
+  }, [scopeProjects]);
+
+  const ruleCount = customRules.length;
+  const headMeta = `${ruleCount} 条`;
+  const emptyHint = '可点常用项，或自己输入一条规则';
+
+  // 项目列表随打开/关闭变化
+  useEffect(() => {
+    const sync = () => setScopeProjects(listSettingsScopeProjects());
+    sync();
+    window.addEventListener('crish-project-changed', sync);
+    return () => window.removeEventListener('crish-project-changed', sync);
+  }, []);
+
+  /** 按作用域加载规则（全局 or 具体项目路径） */
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const sets = await clientApi.getSettingsEx(cwd);
-        if (cancelled || !sets) return;
-        const rulesJoined = (sets.customRules || []).join('\n');
-        setCustomRules(sets.customRules || []);
-        setGlobalRules(
-          rulesJoined ||
-            '# 全局规则\n\n- 在敏感修改前先征得确认\n- 保持既有代码风格与格式\n',
+        let lines: string[] = [];
+        if (isGlobal) {
+          const sets = await clientApi.getSettingsEx('__global__');
+          if (cancelled || !sets) return;
+          lines = dedupeRuleLines(normalizeCustomRules(sets.customRules));
+        } else {
+          const partial = await clientApi.getProjectSettingsPartial(scopeKey);
+          if (cancelled) return;
+          lines = dedupeRuleLines(normalizeCustomRules(partial.customRules));
+        }
+        setCustomRules(lines);
+        setEditorText(
+          lines.length > 0
+            ? rulesLinesToText(lines, isGlobal ? '# 全局规则' : `# ${scopeLabel} 规则`)
+            : isGlobal
+              ? EMPTY_GLOBAL_TEMPLATE
+              : EMPTY_PROJECT_TEMPLATE,
         );
-        setProjectRules('# 项目规则\n\n（打开项目后可在此补充项目专属约定）\n');
+        setLoadError(null);
+        setLoaded(true);
       } catch (err) {
-        onShowToast('读取规则失败：' + String(err));
+        if (!cancelled) {
+          const msg = '读取规则失败：' + String(err);
+          setLoadError(msg);
+          setLoaded(false);
+          onShowToast(msg);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cwd, onShowToast]);
+  }, [scopeKey, isGlobal, scopeLabel, onShowToast, loadTick]);
 
   useEffect(() => {
-    onBlockingOverlayChange?.(Boolean(editingRuleFileType));
+    onBlockingOverlayChange?.(editingOpen);
     return () => onBlockingOverlayChange?.(false);
-  }, [editingRuleFileType, onBlockingOverlayChange]);
+  }, [editingOpen, onBlockingOverlayChange]);
 
   useEffect(() => {
-    if (!editingRuleFileType) return;
+    if (!editingOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
-      setEditingRuleFileType(null);
+      if (saving) return;
+      setEditingOpen(false);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [editingRuleFileType]);
+  }, [editingOpen, saving]);
 
-  const persistCustomRules = async (rules: string[]) => {
+  // 弹层开：聚焦正文；关：焦点回到「全文」按钮
+  useEffect(() => {
+    if (editingOpen && !prevEditingOpen.current) {
+      const t = window.setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+      prevEditingOpen.current = true;
+      return () => window.clearTimeout(t);
+    }
+    if (!editingOpen && prevEditingOpen.current) {
+      prevEditingOpen.current = false;
+      const t = window.setTimeout(() => {
+        fullEditorBtnRef.current?.focus();
+      }, 0);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [editingOpen]);
+
+  const handleScopeChange = (value: string) => {
+    if (!value) return;
+    if (value !== SCOPE_GLOBAL) {
+      const ok = scopeProjects.some(
+        (p) =>
+          p.path.replace(/\\/g, '/').toLowerCase() ===
+          value.replace(/\\/g, '/').toLowerCase(),
+      );
+      if (!ok && value !== workspacePath) {
+        onShowToast('未找到该项目，请先在侧栏打开');
+        return;
+      }
+    }
+    setScopeKey(value);
+    setLoaded(false);
+  };
+
+  /**
+   * 本机写入当前作用域 customRules；成功静默。
+   * @returns 合并后的行；失败已 toast 并返回 null
+   */
+  const persistCustomRules = async (rules: string[]): Promise<string[] | null> => {
+    const safe = dedupeRuleLines(normalizeCustomRules(rules));
     try {
-      const merged = await clientApi.saveSettingsEx(cwd, 'global', { customRules: rules } as Partial<Settings>);
-      setCustomRules(merged.customRules || rules);
+      if (isGlobal) {
+        const merged = await clientApi.saveSettingsEx('__global__', 'global', {
+          customRules: safe,
+        } as Partial<Settings>);
+        const next = dedupeRuleLines(
+          normalizeCustomRules(merged.customRules ?? safe),
+        );
+        setCustomRules(next);
+        useLayoutStore.getState().setAppSettings(merged);
+        setEditorText(
+          next.length > 0
+            ? rulesLinesToText(next, '# 全局规则')
+            : EMPTY_GLOBAL_TEMPLATE,
+        );
+        return next;
+      }
+      await clientApi.saveSettingsEx(scopeKey, 'project', {
+        customRules: safe,
+      } as Partial<Settings>);
+      setCustomRules(safe);
+      setEditorText(
+        safe.length > 0
+          ? rulesLinesToText(safe, `# ${scopeLabel} 规则`)
+          : EMPTY_PROJECT_TEMPLATE,
+      );
+      return safe;
     } catch (err) {
       onShowToast('更新设置失败：' + String(err));
+      return null;
     }
   };
 
-  const handleSaveRules = async (scopeType: 'global' | 'project') => {
-    const text = scopeType === 'global' ? globalRules : projectRules;
-    const lines = textToRuleLines(text);
-    await persistCustomRules(lines);
-    const sync = await syncRulesToDaemon({
-      globalText: globalRules,
-      projectText: projectRules,
-    });
-    if (sync.daemonSynced) {
-      onShowToast(
-        scopeType === 'global'
-          ? '全局规则已保存并同步到引擎'
-          : '项目规则已保存并同步到引擎',
-      );
-    } else {
-      onShowToast(
-        sync.error
-          ? `规则已保存在本机；引擎未同步：${sync.error}`
-          : '规则已保存在本机；引擎未连接时仅本地生效',
-      );
-    }
-    if (sync.truncated) {
-      onShowToast('规则较长，同步到引擎时已截断（本机仍保留全文）');
+  /**
+   * 引擎同步：全成功静默；未连接/失败用降级 toast；截断单独警告。
+   */
+  const syncEngineQuiet = async (opts: {
+    globalText: string;
+    projectText?: string;
+  }) => {
+    const sync = await syncRulesToDaemon(opts);
+    if (!sync.daemonSynced) {
+      onShowToast(formatEngineDegradeToast(sync.error));
+    } else if (sync.truncated) {
+      onShowToast('规则较长，引擎侧已截断');
     }
   };
 
-  const addRuleIfNew = (text: string, successMsg = '智能体规范规则已添加') => {
-    const trimmed = text.trim();
+  const handleSaveRules = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const lines = dedupeRuleLines(textToRuleLines(editorText));
+      const saved = await persistCustomRules(lines);
+      if (!saved) return;
+      if (isGlobal) {
+        await syncEngineQuiet({
+          globalText:
+            saved.length > 0
+              ? rulesLinesToText(saved, '# 全局规则')
+              : EMPTY_GLOBAL_TEMPLATE,
+        });
+      } else {
+        // 项目：推送全局现状 + 本项目全文
+        let globalText = EMPTY_GLOBAL_TEMPLATE;
+        try {
+          const g = await clientApi.getSettingsEx('__global__');
+          const gl = dedupeRuleLines(normalizeCustomRules(g.customRules));
+          globalText =
+            gl.length > 0 ? rulesLinesToText(gl, '# 全局规则') : EMPTY_GLOBAL_TEMPLATE;
+        } catch {
+          /* keep empty template */
+        }
+        await syncEngineQuiet({
+          globalText,
+          projectText: editorText,
+        });
+      }
+      setEditingOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addRuleIfNew = async (text: string) => {
+    if (saving) return false;
+    const trimmed = normalizeRuleLine(text);
     if (!trimmed) {
       onShowToast('请输入规则内容');
       return false;
     }
-    if (customRules.includes(trimmed)) {
+    if (customRules.some((r) => normalizeRuleLine(r) === trimmed)) {
       onShowToast('该规则已存在');
       return false;
     }
-    void persistCustomRules([...customRules, trimmed]);
-    onShowToast(successMsg);
-    return true;
-  };
-
-  const handleAddCustomRule = () => {
-    if (addRuleIfNew(newRuleText)) {
-      setNewRuleText('');
+    setSaving(true);
+    try {
+      const next = await persistCustomRules([...customRules, trimmed]);
+      if (!next) return false;
+      // 与 /learn 同路径：本机成功后推引擎；成功静默
+      if (isGlobal) {
+        void syncEngineQuiet({
+          globalText: rulesLinesToText(next, '# 全局规则'),
+        });
+      } else {
+        void syncEngineQuiet({
+          globalText: EMPTY_GLOBAL_TEMPLATE,
+          projectText: rulesLinesToText(next, `# ${scopeLabel} 规则`),
+        });
+      }
+      return true;
+    } finally {
+      setSaving(false);
     }
   };
 
+  const handleAddCustomRule = () => {
+    void addRuleIfNew(newRuleText).then((ok) => {
+      if (ok) {
+        setNewRuleText('');
+        // 成功静默：输入清空 + 列表增长
+        addInputRef.current?.focus();
+      }
+    });
+  };
+
   const handleAddPreset = (preset: string) => {
-    addRuleIfNew(preset, '已添加预设规范');
+    void addRuleIfNew(preset);
   };
 
   const handleDeleteCustomRule = (index: number) => {
-    const updated = customRules.filter((_, i) => i !== index);
-    void persistCustomRules(updated);
-    onShowToast('智能体规范规则已删除');
+    if (saving) return;
+    void (async () => {
+      setSaving(true);
+      try {
+        const updated = customRules.filter((_, i) => i !== index);
+        const next = await persistCustomRules(updated);
+        if (!next) return;
+        if (isGlobal) {
+          void syncEngineQuiet({
+            globalText:
+              next.length > 0
+                ? rulesLinesToText(next, '# 全局规则')
+                : EMPTY_GLOBAL_TEMPLATE,
+          });
+        } else {
+          void syncEngineQuiet({
+            globalText: EMPTY_GLOBAL_TEMPLATE,
+            projectText:
+              next.length > 0
+                ? rulesLinesToText(next, `# ${scopeLabel} 规则`)
+                : EMPTY_PROJECT_TEMPLATE,
+          });
+        }
+      } finally {
+        setSaving(false);
+      }
+    })();
   };
 
-  return (
-    <div className="settings-pane settings-pane--modern">
-      <header className="settings-page-head">
-        <h2 className="settings-page-title">规则</h2>
-        <p className="settings-page-desc">
-          约束智能体的行为边界：编码风格、确认节奏、禁止操作等。短规则适合日常约定；长文规则可在下方编辑全文。
-        </p>
-      </header>
+  const openFullEditor = () => {
+    if (!isGlobal && !scopeKey) {
+      onShowToast('请先选择项目');
+      return;
+    }
+    setEditingOpen(true);
+  };
 
-      {/* 作用域：工作区 + 打开全文编辑 */}
-      <section className="settings-group" aria-label="作用域">
-        <div className="settings-group-label">作用域</div>
-        <div className="settings-list settings-list--spaced">
-          <div className="settings-list-row settings-list-row--stack">
-            <div className="settings-list-copy">
-              <div className="settings-list-title">
-                {hasWorkspace ? '当前工作区' : '全局（未打开项目）'}
+  const busy = saving;
+
+  if (!loaded && loadError) {
+    return (
+      <div className="settings-pane settings-pane--modern settings-pane--rules">
+        <header className="settings-page-head">
+          <div className="settings-head-inline">
+            <h2 className="settings-page-title">规则</h2>
+          </div>
+        </header>
+        <section className="settings-group" aria-label="错误">
+          <div className="settings-list">
+            <div className="settings-list-row settings-list-row--rule">
+              <div className="settings-list-copy">
+                <div
+                  className="settings-list-title settings-list-empty"
+                  role="alert"
+                >
+                  {loadError}
+                </div>
               </div>
-              <div
-                className={
-                  hasWorkspace
-                    ? 'settings-list-sub settings-list-sub--mono'
-                    : 'settings-list-sub'
-                }
-                title={workspacePath || undefined}
-              >
-                {hasWorkspace
-                  ? workspacePath
-                  : '尚未打开项目时，短规则与全局规则文件作用于所有对话。'}
+              <div className="settings-list-control">
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  aria-label="重新加载规则"
+                  onClick={() => {
+                    setLoadError(null);
+                    setLoadTick((n) => n + 1);
+                  }}
+                >
+                  重试
+                </button>
               </div>
             </div>
-            <div className="settings-list-stack-controls">
-              <div className="settings-list-stack-actions">
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  onClick={() => setEditingRuleFileType('global')}
-                >
-                  编辑全局规则
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  onClick={() => {
-                    if (!hasWorkspace) {
-                      onShowToast('请先打开项目后再编辑项目规则');
-                      return;
-                    }
-                    setEditingRuleFileType('project');
-                  }}
-                  disabled={!hasWorkspace}
-                  title={
-                    hasWorkspace
-                      ? '编辑当前工作区的项目规则'
-                      : '打开项目后可编辑项目规则'
-                  }
-                >
-                  编辑项目规则
-                </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <div className="settings-pane settings-pane--modern settings-pane--rules">
+        <header className="settings-page-head">
+          <div className="settings-head-inline">
+            <h2 className="settings-page-title">规则</h2>
+          </div>
+        </header>
+        <div
+          className="settings-list"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="settings-list-row settings-list-row--rule">
+            <div className="settings-list-copy">
+              <div className="settings-list-title settings-list-empty">
+                加载中…
               </div>
-              {!hasWorkspace ? (
-                <div className="settings-list-sub">
-                  项目规则需在工作区内生效；可在空对话页选择或打开项目。
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    );
+  }
 
-      {/* 自定义短规则列表 */}
-      <section className="settings-group" aria-label="短规则">
-        <div className="settings-group-label">短规则</div>
-        {customRules.length === 0 ? (
-          <p className="settings-list-sub" style={{ margin: 0 }}>
-            暂无细化规范。可从下方预设一键添加，或自行输入日常开发约定。
-          </p>
-        ) : (
-          <div className="settings-list">
-            {customRules.map((rule, idx) => (
-              <div key={`${idx}-${rule.slice(0, 24)}`} className="settings-list-row">
+  return (
+    <div
+      className="settings-pane settings-pane--modern settings-pane--rules"
+      aria-busy={busy || undefined}
+    >
+      <header className="settings-page-head">
+        <div className="settings-head-inline">
+          <h2 className="settings-page-title">规则</h2>
+          <div className="settings-head-tools">
+            <SettingsSelect
+              value={scopeKey}
+              options={scopeOptions}
+              onChange={handleScopeChange}
+              disabled={busy}
+              placeholder="选择范围…"
+            />
+            <button
+              ref={fullEditorBtnRef}
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={openFullEditor}
+              title={`编辑${scopeLabel}全文`}
+              aria-label={`编辑${scopeLabel}全文`}
+              disabled={busy}
+            >
+              编辑全文
+            </button>
+            {ruleCount > 0 ? (
+              <span
+                className="settings-head-meta"
+                title={`${scopeLabel}规则条数`}
+                aria-live="polite"
+              >
+                {headMeta}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </header>
+
+      <section className="settings-group" aria-labelledby={listLabelId}>
+        <div className="settings-group-label" id={listLabelId}>
+          当前规则
+          <span className="settings-group-count">{scopeLabel}</span>
+        </div>
+        <div
+          className="settings-list settings-list--rules"
+          role="list"
+          aria-label={`${scopeLabel}短规则列表`}
+        >
+          {ruleCount === 0 ? (
+            <div
+              className="settings-list-row settings-list-row--rule"
+              role="status"
+              title={emptyHint}
+            >
+              <div className="settings-list-copy">
+                <div className="settings-list-title settings-list-empty">
+                  还没有规则
+                </div>
+                <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
+                  可点下方常用项，或自己输入
+                </div>
+              </div>
+            </div>
+          ) : (
+            customRules.map((rule, idx) => (
+              <div
+                key={`${idx}-${rule.slice(0, 24)}`}
+                className="settings-list-row settings-list-row--rule"
+                role="listitem"
+              >
                 <div className="settings-list-copy">
-                  <div className="settings-list-title" style={{ fontWeight: 400 }}>
+                  <div
+                    className="settings-list-title settings-rule-item-text"
+                    title={rule}
+                  >
                     {rule}
                   </div>
                 </div>
@@ -234,251 +565,184 @@ export const SettingsRulesTab: React.FC<Props> = ({
                     type="button"
                     onClick={() => handleDeleteCustomRule(idx)}
                     className="ui-btn ui-btn-ghost ui-btn-sm danger"
-                    title="删除规则"
+                    title="删除此规则"
                     aria-label={`删除规则：${rule}`}
+                    disabled={busy}
                   >
-                    <Lucide.Trash2 size={14} />
+                    <Lucide.Trash2 size={14} aria-hidden />
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </section>
 
-      {/* 快速预设 */}
       <section className="settings-group" aria-label="快速添加">
-        <div className="settings-group-label">快速添加</div>
-        <div className="settings-list settings-list--spaced">
-          <div className="settings-list-row settings-list-row--stack">
-            <div className="settings-list-copy">
-              <div className="settings-list-sub" style={{ marginTop: 0 }}>
-                常用工程约定，点击即可加入短规则（已存在的不会重复添加）。
+        <div className="settings-group-label">添加</div>
+        <div className="settings-list settings-list--rules">
+          <div
+            className="settings-list-row settings-list-row--rule settings-list-row--presets"
+            title="点击加入；已有的会变灰"
+          >
+            <div className="settings-list-copy settings-list-copy--shrink">
+              <div className="settings-list-title">常用</div>
+              <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
+                一键加入
               </div>
             </div>
-            <div className="settings-list-stack-controls">
-              <div className="settings-list-stack-actions">
-                {RULE_PRESETS.map((preset) => {
-                  const exists = customRules.includes(preset);
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      onClick={() => handleAddPreset(preset)}
-                      disabled={exists}
-                      title={exists ? '已添加' : `添加：${preset}`}
-                      style={{
-                        maxWidth: '100%',
-                        whiteSpace: 'normal',
-                        height: 'auto',
-                        minHeight: 28,
-                        padding: '6px 10px',
-                        textAlign: 'left',
-                        lineHeight: 1.35,
-                        opacity: exists ? 0.45 : 1,
-                      }}
-                    >
-                      {preset}
-                    </button>
-                  );
-                })}
+            <div
+              className="settings-list-control settings-list-control--chips"
+              role="group"
+              aria-label="常用规则预设"
+            >
+              {RULE_PRESETS.map((preset) => {
+                const exists = customRules.some(
+                  (r) => normalizeRuleLine(r) === normalizeRuleLine(preset),
+                );
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`settings-rule-preset${exists ? ' is-disabled' : ''}`}
+                    onClick={() => handleAddPreset(preset)}
+                    disabled={exists || busy}
+                    title={exists ? '已添加' : `添加：${preset}`}
+                    aria-label={
+                      exists ? `已添加：${preset}` : `添加预设：${preset}`
+                    }
+                  >
+                    {preset}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            className="settings-list-row settings-list-row--rule"
+            title="回车即可添加"
+          >
+            <div className="settings-list-copy settings-list-copy--shrink">
+              <label className="settings-list-title" htmlFor={addInputId}>
+                自定义
+              </label>
+              <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
+                输入后添加
               </div>
+            </div>
+            <div className="settings-list-control settings-list-control--inline-form">
+              <input
+                ref={addInputRef}
+                id={addInputId}
+                type="text"
+                placeholder="写一条规则…"
+                value={newRuleText}
+                onChange={(e) => setNewRuleText(e.target.value)}
+                className="settings-field-input settings-field-input--sm settings-field-input--grow"
+                disabled={busy}
+                aria-label="自定义规则"
+                autoComplete="off"
+                spellCheck={false}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCustomRule();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleAddCustomRule}
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={busy || !normalizeRuleLine(newRuleText)}
+                aria-label="添加规则"
+                title={`加入${scopeLabel}短规则`}
+              >
+                添加
+              </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 手动添加 */}
-      <section className="settings-group" aria-label="添加规范">
-        <div className="settings-group-label">添加规范</div>
-        <div className="settings-list settings-list--spaced">
-          <div className="settings-list-row settings-list-row--stack">
-            <div className="settings-list-copy">
-              <div className="settings-list-title">自定义短规则</div>
-              <div className="settings-list-sub">
-                一句话约束即可，例如：提交代码前确保完成 lint 测试
-              </div>
-            </div>
-            <div className="settings-list-stack-controls">
-              <div className="settings-list-stack-actions">
-                <input
-                  type="text"
-                  placeholder="输入规则内容…"
-                  value={newRuleText}
-                  onChange={(e) => setNewRuleText(e.target.value)}
-                  className="settings-field-input"
-                  style={{ flex: 1, minWidth: 160 }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddCustomRule();
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomRule}
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                >
-                  添加
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 同步 / AGENTS.md 提示 */}
-      <section className="settings-group" aria-label="说明">
-        <div className="settings-group-label">说明</div>
-        <div className="settings-feature">
-          <div className="settings-feature-title">规则如何生效</div>
-          <div className="settings-feature-body">
-            保存全局 / 项目规则全文后，会写入本机设置，并在引擎已连接时同步为 scoped
-            context，供智能体在对话中遵循。引擎未连接时仅本机生效。正式版暂不自动写入仓库
-            AGENTS.md；若项目已有 AGENTS.md / Claude.md，引擎侧仍可按仓库约定读取。
-          </div>
-        </div>
-      </section>
-
-      {editingRuleFileType && (
+      {editingOpen ? (
         <div
-          className="custom-modal-backdrop"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.45)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 20000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+          className="settings-dialog-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (saving) return;
+            if (e.target === e.currentTarget) setEditingOpen(false);
           }}
         >
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="settings-rules-modal-title"
-            style={{
-              width: 'min(580px, calc(100vw - 32px))',
-              background: 'var(--bg-elevated, var(--bg-primary))',
-              borderRadius: 12,
-              boxShadow: 'var(--shadow-2xl)',
-              border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            className="settings-dialog settings-dialog--rules"
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: 16,
-                padding: '18px 20px 14px',
-                borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  id="settings-rules-modal-title"
-                  style={{
-                    margin: 0,
-                    fontSize: 16,
-                    fontWeight: 600,
-                    letterSpacing: '-0.02em',
-                    color: 'var(--text-primary)',
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {editingRuleFileType === 'global' ? '编辑全局规则' : '编辑项目规则'}
-                </div>
-                <p
-                  style={{
-                    margin: '6px 0 0',
-                    fontSize: 12.5,
-                    color: 'var(--text-tertiary)',
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {editingRuleFileType === 'global'
-                    ? '适用于所有对话。保存后写入本机，并在引擎连接时同步（暂不自动写 AGENTS.md）。'
-                    : '适用于当前工作区。保存后写入本机设置，后续可对接项目文件。'}
-                </p>
+            <div className="settings-dialog-head">
+              <div id={titleId} className="settings-dialog-title">
+                编辑{scopeLabel}规则
               </div>
               <button
                 type="button"
-                onClick={() => setEditingRuleFileType(null)}
+                onClick={() => {
+                  if (!saving) setEditingOpen(false);
+                }}
                 className="ui-btn ui-btn-ghost ui-btn-sm"
-                aria-label="关闭"
-                style={{ flexShrink: 0 }}
+                aria-label="关闭全文编辑"
+                disabled={saving}
               >
-                <Lucide.X size={16} />
+                <Lucide.X size={16} aria-hidden />
               </button>
             </div>
 
-            <div
-              style={{
-                padding: '16px 20px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-              }}
-            >
+            <div className="settings-dialog-body">
+              <p id={descId} className="settings-list-meta" hidden>
+                {`保存后写入 ${storagePath} · 成功不提示`}
+              </p>
               <textarea
-                className="settings-field-input"
-                value={editingRuleFileType === 'global' ? globalRules : projectRules}
-                onChange={(e) => {
-                  if (editingRuleFileType === 'global') {
-                    setGlobalRules(e.target.value);
-                  } else {
-                    setProjectRules(e.target.value);
-                  }
-                }}
+                ref={textareaRef}
+                className="settings-field-input settings-dialog-textarea"
+                value={editorText}
+                onChange={(e) => setEditorText(e.target.value)}
                 rows={12}
-                style={{
-                  width: '100%',
-                  minHeight: 220,
-                  height: 'auto',
-                  padding: '10px 12px',
-                  fontSize: 12,
-                  fontFamily: 'var(--font-mono)',
-                  resize: 'vertical',
-                  lineHeight: 1.5,
-                }}
+                spellCheck={false}
+                disabled={saving}
+                aria-label={`${scopeLabel}规则正文`}
+                placeholder="每行一条规则；# 开头为标题"
               />
+            </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  justifyContent: 'flex-end',
+            <div className="settings-dialog-foot">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!saving) setEditingOpen(false);
                 }}
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={saving}
               >
-                <button
-                  type="button"
-                  onClick={() => setEditingRuleFileType(null)}
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSaveRules(editingRuleFileType);
-                    setEditingRuleFileType(null);
-                  }}
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                >
-                  保存规则
-                </button>
-              </div>
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSaveRules();
+                }}
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={saving}
+                aria-busy={saving || undefined}
+              >
+                {saving ? '保存中…' : '保存'}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

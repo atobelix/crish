@@ -1,6 +1,9 @@
 /**
  * 模型目录元数据：启用状态、上下文长度、扫描与连通测试。
  * 与 providerProfiles 配合：提供商上级，模型下级。
+ *
+ * 纯目录辅助（normalize / dedupe / usable / default pick）不写死远程 vendor 演示 id；
+ * 空 catalog 不得回落 mimo 等硬编码默认。
  */
 
 import { loadProfiles, type ProviderProfile } from './providerProfiles';
@@ -8,13 +11,31 @@ import { invokeResult } from './tauriInvoke';
 
 const META_KEY = 'crish_model_meta_v1';
 
+/** 模型能力开关（手配；扫描不发明） */
+export type ModelCapabilityKey = 'tools' | 'vision' | 'reasoning';
+
+export const MODEL_CAPABILITY_OPTIONS: ReadonlyArray<{
+  key: ModelCapabilityKey;
+  label: string;
+}> = [
+  { key: 'tools', label: '工具调用' },
+  { key: 'vision', label: '视觉' },
+  { key: 'reasoning', label: '推理' },
+];
+
+export type ModelCapabilities = Partial<Record<ModelCapabilityKey, boolean>>;
+
 export type ModelMeta = {
   profileId: string;
   model: string;
+  /** 展示名称（可与 model id 不同） */
+  displayName?: string;
   /** 默认 true */
   enabled: boolean;
   /** 上下文 token 上限（可手改） */
   contextLength?: number;
+  /** 支持的能力 */
+  capabilities?: ModelCapabilities;
   lastTest?: {
     ok: boolean;
     latencyMs?: number;
@@ -23,10 +44,258 @@ export type ModelMeta = {
   };
 };
 
+/**
+ * Picker / 目录扁平项（纯数据结构，可脱离 LS 运算）。
+ * 仅承载用户真实配置过的 profile+model，不表示远程演示表。
+ */
+export type CatalogModelEntry = {
+  profileId: string;
+  profileName: string;
+  model: string;
+  hasKey: boolean;
+};
+
 type MetaMap = Record<string, ModelMeta>;
 
 function metaKey(profileId: string, model: string): string {
   return `${profileId}::${model}`;
+}
+
+// ─── 纯目录辅助（无 LS / 无网络副作用）─────────────────────────────────────
+
+/**
+ * Unicode 安全 trim（中文/全角空格）：NFC 后去首尾空白（含 \u3000）。
+ * 用于 model id / profileId 规范化；不发明 id。
+ */
+export function normalizeModelIdText(raw: unknown): string {
+  if (raw == null) return '';
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    return '';
+  }
+  let s = String(raw);
+  try {
+    s = s.normalize('NFC');
+  } catch {
+    /* ignore environments without normalize */
+  }
+  return s.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
+}
+
+/** 目录项去重键：profileId::model（与 meta 存储键同形） */
+export function catalogEntryKey(
+  entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined,
+): string {
+  if (!entry) return '';
+  const profileId = normalizeModelIdText(entry.profileId);
+  const model = normalizeModelIdText(entry.model);
+  if (!profileId || !model) return '';
+  return `${profileId}::${model}`;
+}
+
+/**
+ * 规范化单条目录项（纯）。
+ * profileId / model 必填；空 name 回退 profileId；非法 → null。
+ */
+export function normalizeCatalogEntry(
+  raw: Partial<CatalogModelEntry> | null | undefined,
+): CatalogModelEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const profileId = normalizeModelIdText(raw.profileId);
+  const model = normalizeModelIdText(raw.model);
+  if (!profileId || !model) return null;
+  const profileName = normalizeModelIdText(raw.profileName) || profileId;
+  return {
+    profileId,
+    profileName,
+    model,
+    hasKey: Boolean(raw.hasKey),
+  };
+}
+
+/**
+ * 规范化目录列表（纯）：丢弃非法项；不发明演示模型。
+ * 非法入参 → []。
+ */
+export function normalizeCatalogEntries(list: unknown): CatalogModelEntry[] {
+  if (!Array.isArray(list)) return [];
+  const out: CatalogModelEntry[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const e = normalizeCatalogEntry(item as Partial<CatalogModelEntry>);
+    if (e) out.push(e);
+  }
+  return out;
+}
+
+/**
+ * 保序去重（纯）：同 profileId+model 先到优先。
+ * 不合并跨供应商的同名 model（id 可撞名）。
+ */
+export function dedupeCatalogEntries(
+  list: readonly CatalogModelEntry[] | null | undefined,
+): CatalogModelEntry[] {
+  if (!list || list.length === 0) return [];
+  const seen = new Set<string>();
+  const out: CatalogModelEntry[] = [];
+  for (const raw of list) {
+    const e = normalizeCatalogEntry(raw);
+    if (!e) continue;
+    const k = catalogEntryKey(e);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(e);
+  }
+  return out;
+}
+
+export type UsableCatalogOpts = {
+  /** 为 true 时仅保留已配密钥的项；默认 false */
+  requireKey?: boolean;
+};
+
+/** 目录项是否可用（纯）：非空 id + 可选密钥要求 */
+export function isUsableCatalogEntry(
+  entry: CatalogModelEntry | null | undefined,
+  opts?: UsableCatalogOpts,
+): boolean {
+  if (!entry) return false;
+  const profileId = normalizeModelIdText(entry.profileId);
+  const model = normalizeModelIdText(entry.model);
+  if (!profileId || !model) return false;
+  if (opts?.requireKey && !entry.hasKey) return false;
+  return true;
+}
+
+/** 过滤可用目录项（纯） */
+export function filterUsableCatalogEntries(
+  list: readonly CatalogModelEntry[] | null | undefined,
+  opts?: UsableCatalogOpts,
+): CatalogModelEntry[] {
+  if (!list || list.length === 0) return [];
+  return list.filter((e) => isUsableCatalogEntry(e, opts));
+}
+
+export type PickDefaultCatalogOpts = {
+  preferredProfileId?: string | null;
+  preferredModel?: string | null;
+  /** 优先有密钥项；默认 true */
+  preferKeyed?: boolean;
+  /** 仅在有密钥集合中挑选；默认 false */
+  requireKey?: boolean;
+};
+
+/**
+ * 从目录选默认项（纯）。
+ * - 空列表 / 无可用项 → null（**绝不**发明 mimo 或其它远程 vendor 演示 id）
+ * - 优先 preferred profile+model → preferred model → preferred profile
+ * - 再优先 hasKey，最后取首个可用
+ */
+export function pickDefaultCatalogEntry(
+  list: readonly CatalogModelEntry[] | null | undefined,
+  opts?: PickDefaultCatalogOpts,
+): CatalogModelEntry | null {
+  const usable = filterUsableCatalogEntries(dedupeCatalogEntries(list ?? []), {
+    requireKey: opts?.requireKey,
+  });
+  if (usable.length === 0) return null;
+
+  const prefProfile = normalizeModelIdText(opts?.preferredProfileId ?? '');
+  const prefModel = normalizeModelIdText(opts?.preferredModel ?? '');
+
+  if (prefProfile && prefModel) {
+    const hit = usable.find((e) => e.profileId === prefProfile && e.model === prefModel);
+    if (hit) return hit;
+  }
+  if (prefModel) {
+    const hit = usable.find((e) => e.model === prefModel);
+    if (hit) return hit;
+  }
+  if (prefProfile) {
+    const hit = usable.find((e) => e.profileId === prefProfile);
+    if (hit) return hit;
+  }
+
+  const preferKeyed = opts?.preferKeyed !== false;
+  if (preferKeyed) {
+    const keyed = usable.find((e) => e.hasKey);
+    if (keyed) return keyed;
+  }
+  return usable[0] ?? null;
+}
+
+/**
+ * 从 profile 列表构建目录项（纯，不读 meta LS）。
+ * 跳过禁用供应商与空 model；可选 isModelEnabled 过滤 meta 禁用。
+ * 结果已经 normalize + dedupe + usable。
+ */
+export function buildCatalogEntriesFromProfiles(
+  profiles: readonly Pick<
+    ProviderProfile,
+    'id' | 'name' | 'models' | 'enabled' | 'hasKey' | 'apiKey'
+  >[] | null | undefined,
+  isModelEnabled?: (profileId: string, model: string) => boolean,
+): CatalogModelEntry[] {
+  if (!profiles || profiles.length === 0) return [];
+  const raw: CatalogModelEntry[] = [];
+  for (const p of profiles) {
+    if (!p || p.enabled === false) continue;
+    const profileId = normalizeModelIdText(p.id);
+    if (!profileId) continue;
+    const profileName = normalizeModelIdText(p.name) || profileId;
+    const hasKey = Boolean(p.hasKey || (typeof p.apiKey === 'string' && p.apiKey.trim()));
+    const models = Array.isArray(p.models) ? p.models : [];
+    for (const m of models) {
+      const model = normalizeModelIdText(m);
+      if (!model) continue;
+      if (isModelEnabled && !isModelEnabled(profileId, model)) continue;
+      raw.push({ profileId, profileName, model, hasKey });
+    }
+  }
+  return filterUsableCatalogEntries(dedupeCatalogEntries(raw));
+}
+
+/** 展示标签：「供应商 · 模型」；空 → 中文「未选择模型」 */
+export function catalogEntryDisplayLabel(
+  entry: CatalogModelEntry | null | undefined,
+): string {
+  if (!entry) return '未选择模型';
+  const name = normalizeModelIdText(entry.profileName) || normalizeModelIdText(entry.profileId);
+  const model = normalizeModelIdText(entry.model);
+  if (!name && !model) return '未选择模型';
+  if (!name) return model;
+  if (!model) return name;
+  return `${name} · ${model}`;
+}
+
+/** 启用状态中文标签（纯） */
+export function formatModelEnabledLabel(enabled: boolean | null | undefined): string {
+  return enabled === false ? '已禁用' : '已启用';
+}
+
+/** 连通测试结果中文标签（纯） */
+export function formatLastTestLabel(
+  lastTest: ModelMeta['lastTest'] | null | undefined,
+): string {
+  if (!lastTest) return '未测试';
+  if (lastTest.ok) {
+    const ms =
+      typeof lastTest.latencyMs === 'number' && Number.isFinite(lastTest.latencyMs)
+        ? ` ${Math.round(lastTest.latencyMs)}ms`
+        : '';
+    return `连通正常${ms}`;
+  }
+  const err = typeof lastTest.error === 'string' ? lastTest.error.trim() : '';
+  return err ? `连通失败：${err}` : '连通失败';
+}
+
+/**
+ * 空目录守卫（纯）：无任何可用目录项时 true。
+ * 调用方据此不得注入硬编码演示默认。
+ */
+export function isEmptyCatalog(
+  list: readonly CatalogModelEntry[] | null | undefined,
+): boolean {
+  return filterUsableCatalogEntries(dedupeCatalogEntries(list ?? [])).length === 0;
 }
 
 function loadMap(): MetaMap {
@@ -100,7 +369,9 @@ export function getModelMeta(profileId: string, model: string): ModelMeta {
 export function upsertModelMeta(
   profileId: string,
   model: string,
-  patch: Partial<Pick<ModelMeta, 'enabled' | 'contextLength' | 'lastTest'>>,
+  patch: Partial<
+    Pick<ModelMeta, 'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities'>
+  >,
 ): ModelMeta {
   const map = loadMap();
   const k = metaKey(profileId, model);
@@ -110,7 +381,16 @@ export function upsertModelMeta(
     ...patch,
     profileId,
     model,
+    capabilities:
+      patch.capabilities !== undefined
+        ? { ...(prev.capabilities || {}), ...patch.capabilities }
+        : prev.capabilities,
   };
+  // 空展示名不落盘
+  if (typeof next.displayName === 'string') {
+    const dn = next.displayName.trim();
+    next.displayName = dn || undefined;
+  }
   map[k] = next;
   saveMap(map);
   return next;
@@ -128,11 +408,81 @@ export function setModelContextLength(
   return upsertModelMeta(profileId, model, { contextLength });
 }
 
-export function formatContextLabel(n?: number): string {
-  if (!n || n <= 0) return '—';
+export function setModelDisplayName(
+  profileId: string,
+  model: string,
+  displayName: string | undefined,
+): ModelMeta {
+  return upsertModelMeta(profileId, model, {
+    displayName: displayName?.trim() || undefined,
+  });
+}
+
+export function setModelCapability(
+  profileId: string,
+  model: string,
+  key: ModelCapabilityKey,
+  on: boolean,
+): ModelMeta {
+  const prev = getModelMeta(profileId, model);
+  return upsertModelMeta(profileId, model, {
+    capabilities: { ...(prev.capabilities || {}), [key]: on },
+  });
+}
+
+/** 模型 id 变更时迁移元数据键 */
+export function moveModelMeta(
+  profileId: string,
+  fromModel: string,
+  toModel: string,
+): ModelMeta | null {
+  const from = normalizeModelIdText(fromModel);
+  const to = normalizeModelIdText(toModel);
+  if (!from || !to || from === to) return getModelMeta(profileId, to || from);
+  const map = loadMap();
+  const prev = map[metaKey(profileId, from)] || getModelMeta(profileId, from);
+  const next: ModelMeta = { ...prev, profileId, model: to };
+  delete map[metaKey(profileId, from)];
+  map[metaKey(profileId, to)] = next;
+  saveMap(map);
+  return next;
+}
+
+/** 展示名：优先 displayName，否则 model id */
+export function formatModelDisplayName(
+  profileId: string,
+  model: string,
+  meta?: ModelMeta | null,
+): string {
+  const m = meta || getModelMeta(profileId, model);
+  const dn = typeof m.displayName === 'string' ? m.displayName.trim() : '';
+  return dn || model;
+}
+
+/** 能力摘要，如「工具 · 视觉」；全关/无 → 空串 */
+export function formatCapabilitiesLabel(caps?: ModelCapabilities | null): string {
+  if (!caps) return '';
+  const parts: string[] = [];
+  for (const opt of MODEL_CAPABILITY_OPTIONS) {
+    if (caps[opt.key]) parts.push(opt.label);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * 上下文长度展示（纯）：空/非法 → 中文破折号「—」。
+ * 百万级用 M，千级用 k（与设置页 / Picker 一致）。
+ */
+export function formatContextLabel(n?: number | null): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return '—';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
-  return String(n);
+  return String(Math.round(n));
+}
+
+/** 上下文长度中文前缀标签，如「上下文 128k」；未知 →「上下文 —」 */
+export function formatContextLabelZh(n?: number | null): string {
+  return `上下文 ${formatContextLabel(n)}`;
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -440,4 +790,24 @@ export async function testProviderModel(
 /** 启用中的提供商（有密钥的优先展示） */
 export function listPickerProfiles(): ProviderProfile[] {
   return loadProfiles().filter((p) => p.enabled !== false);
+}
+
+/**
+ * Picker 用：仅返回真实配置在 profile 中、且 meta 未禁用的模型。
+ * 经 normalize → dedupe → usable 管道；不写死 vendor 演示表。
+ * 空列表时返回 []（调用方不得回落 mimo 等硬编码默认）。
+ */
+export function listAvailablePickerModels(): CatalogModelEntry[] {
+  return buildCatalogEntriesFromProfiles(listPickerProfiles(), (profileId, model) => {
+    const meta = getModelMeta(profileId, model);
+    return meta.enabled !== false;
+  });
+}
+
+/**
+ * 从当前本机目录挑选默认模型（读 LS，无副作用）。
+ * 空 catalog → null，**不**发明远程 vendor 默认。
+ */
+export function pickDefaultFromLocalCatalog(opts?: PickDefaultCatalogOpts): CatalogModelEntry | null {
+  return pickDefaultCatalogEntry(listAvailablePickerModels(), opts);
 }

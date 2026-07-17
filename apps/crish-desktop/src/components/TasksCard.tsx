@@ -1,14 +1,28 @@
 /**
- * AI 多步进度板：解析助手 checklist + 引擎工具步骤 + 本机备忘。
- * 正式版不伪造引擎计划；goalMode 仅在会话字段存在时展示。
+ * AI 多步进度板：
+ * - 进度百分比 / 计数 **仅**来自 goalMode.tasks 或助手 markdown checklist
+ * - 每个 shell/读文件工具 **不算** 进度项，只作「当前步骤」一行提示
+ * - 本机备忘独立，不计入整体进度
+ * - Agent 入口一律 openAgentInSidePanel / openAgentPanelBrowse
+ * - 解析规则只读委托 goalModeController，保证 /goal 与任务板同源
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
+import {
+  selectActiveSession,
+  selectActiveSessionId,
+  useSessionField,
+} from '../store/sessionStore';
 import { isDemoMode } from '../api/appMode';
 import { toolHumanLabel } from '../api/toolPresentation';
+import { openAgentInSidePanel, openAgentPanelBrowse } from '../api/openAgentPanel';
 import { emitUiEvent } from '../api/uiEvents';
 import type { MessageToolCall, SessionMessage, SessionState } from '../store/layoutStore';
+import {
+  computeGoalTaskProgress,
+  parseChecklistTasks,
+} from '../api/goalModeController';
 
 type MemoTask = { id: string; text: string; done: boolean };
 
@@ -18,23 +32,125 @@ export type ChecklistItem = {
   done: boolean;
 };
 
-/** 解析 markdown 任务列表：`- [ ]` / `- [x]` / `* [ ]` / `* [x]` */
-export function parseMarkdownChecklist(text: string | undefined | null): ChecklistItem[] {
-  if (!text) return [];
-  const items: ChecklistItem[] = [];
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
-    if (!m) continue;
-    const body = m[2].trim();
-    if (!body) continue;
-    items.push({
-      id: `cl-${i}-${body.slice(0, 48)}`,
-      text: body,
-      done: m[1].toLowerCase() === 'x',
-    });
+/** 进度来源：goal 优先于助手 markdown；工具/备忘永不成为 source */
+export type ProgressSource = 'goal' | 'checklist' | 'none';
+
+export type SessionProgressResolved = {
+  items: ChecklistItem[];
+  source: ProgressSource;
+  /** goalMode 是否仍在自动续写 */
+  goalActive: boolean;
+  /** 有 goal 文案时（含达上限后 inactive）供横幅展示 */
+  goalText: string | null;
+  goalIteration: number;
+  goalMaxIterations: number | null;
+};
+
+/** 进度条数据：只吃 checklist/goal items，绝不吃 toolCalls 长度（委托 goal 同源算法） */
+export function computeChecklistProgress(items: ChecklistItem[] | undefined | null): {
+  total: number;
+  done: number;
+  open: number;
+  pct: number;
+} {
+  const base = computeGoalTaskProgress(items ?? []);
+  const open = Math.max(0, base.total - base.done);
+  return { total: base.total, done: base.done, open, pct: base.pct };
+}
+
+/** 未完成项数量（清单区「待完成」）；与 computeChecklistProgress.open 对齐 */
+export function countOpenChecklistItems(items: ChecklistItem[] | undefined | null): number {
+  if (!items?.length) return 0;
+  return items.reduce((n, t) => n + (t.done ? 0 : 1), 0);
+}
+
+/**
+ * 卡片头计数文案。total≤0 时返回 null（由调用方决定「目标中」等兜底）。
+ * 仅反映 checklist/goal，不含工具与备忘。
+ */
+export function formatTasksHeadCountLabel(opts: {
+  done: number;
+  total: number;
+  open: number;
+  pct: number;
+}): string | null {
+  const total = Math.max(0, opts.total | 0);
+  if (total <= 0) return null;
+  const done = Math.max(0, Math.min(opts.done | 0, total));
+  const open = Math.max(0, opts.open | 0);
+  const pct = Math.max(0, Math.min(100, opts.pct | 0));
+  if (open === 0 && done >= total) return `已完成 · ${done}/${total}`;
+  return `${done}/${total}${pct > 0 ? ` · ${pct}%` : ''}${
+    open > 0 ? ` · 待完成 ${open}` : ''
+  }`;
+}
+
+/** 清单 section 右侧计数（与头栏同源 done/total/open） */
+export function formatChecklistSectionCount(opts: {
+  done: number;
+  total: number;
+  open: number;
+}): string {
+  const total = Math.max(0, opts.total | 0);
+  const done = Math.max(0, Math.min(opts.done | 0, total));
+  const open = Math.max(0, opts.open | 0);
+  if (total > 0 && open === 0) return `${done}/${total} · 完成`;
+  return `${done}/${total}${open > 0 ? ` · 待 ${open}` : ''}`;
+}
+
+/** 无 goal 横幅时的独立进度条 meta（左标签 + 右分数） */
+export function formatStandaloneProgressMeta(opts: {
+  done: number;
+  total: number;
+  open: number;
+  pct: number;
+}): { left: string; right: string } {
+  const total = Math.max(0, opts.total | 0);
+  const done = Math.max(0, Math.min(opts.done | 0, total));
+  const open = Math.max(0, opts.open | 0);
+  const pct = Math.max(0, Math.min(100, opts.pct | 0));
+  const allDone = total > 0 && open === 0;
+  return {
+    left: allDone ? '已完成' : '进度',
+    right: `${done}/${total} · ${pct}%${open > 0 ? ` · 待 ${open}` : ''}`,
+  };
+}
+
+/**
+ * 目标横幅轮次/结束态文案（1-based 轮次；结束时附缺口）。
+ * 只读 progress 字段，不写 store。
+ */
+export function formatGoalBannerStatus(opts: {
+  goalActive: boolean;
+  iteration: number;
+  maxIterations: number | null;
+  openCount: number;
+}): { text: string; title?: string } {
+  if (opts.goalActive) {
+    const iter = Math.max(0, opts.iteration | 0) + 1;
+    const max =
+      typeof opts.maxIterations === 'number' && opts.maxIterations > 0
+        ? `/${opts.maxIterations}`
+        : '';
+    return { text: `${iter}${max}` };
   }
-  return items;
+  const open = Math.max(0, opts.openCount | 0);
+  return {
+    text: `已结束${open > 0 ? ` · 缺口 ${open}` : ''}`,
+    title: '目标模式已结束，保留未完成清单',
+  };
+}
+
+/**
+ * 解析 markdown 任务列表。
+ * 与 goalModeController.parseChecklistTasks 同一规则，保证 /goal 与 TasksCard 进度一致。
+ */
+export function parseMarkdownChecklist(text: string | undefined | null): ChecklistItem[] {
+  return parseChecklistTasks(text).map((t) => ({
+    id: t.id,
+    text: t.text,
+    done: t.done,
+  }));
 }
 
 /** 自后向前找最近一条含 checklist 的助手消息（流式中取最新正文） */
@@ -46,18 +162,231 @@ export function findLatestAssistantChecklist(messages: SessionMessage[] | undefi
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.sender !== 'assistant') continue;
+    // 用户消息里的 `- [ ]` 永不计入进度；空正文跳过
+    if (!(m.text || '').trim()) continue;
     const items = parseMarkdownChecklist(m.text);
     if (items.length > 0) return { messageId: m.id, items };
   }
   return { messageId: null, items: [] };
 }
 
-function toolStatusLabel(status: MessageToolCall['status']): string {
+/**
+ * 会话进度完整解析：goalMode.tasks 优先，否则最近助手 markdown checklist。
+ * 工具调用 / 备忘永不进入 items，也不改变 source。
+ */
+export function resolveSessionProgress(
+  session: Pick<SessionState, 'messages' | 'goalMode'> | null | undefined,
+): SessionProgressResolved {
+  const gm = session?.goalMode;
+  const goalText = gm?.goal?.trim() ? gm.goal.trim() : null;
+  const goalActive = Boolean(gm?.active);
+  const goalIteration = gm?.iteration ?? 0;
+  const goalMaxIterations =
+    typeof gm?.maxIterations === 'number' ? gm.maxIterations : null;
+
+  const goalTasks = gm?.tasks;
+  if (goalTasks && goalTasks.length > 0) {
+    return {
+      items: goalTasks.map((t) => ({
+        id: t.id,
+        text: t.text,
+        done: Boolean(t.done),
+      })),
+      source: 'goal',
+      goalActive,
+      goalText,
+      goalIteration,
+      goalMaxIterations,
+    };
+  }
+
+  const fromMd = findLatestAssistantChecklist(session?.messages).items;
+  return {
+    items: fromMd,
+    source: fromMd.length > 0 ? 'checklist' : 'none',
+    goalActive,
+    goalText,
+    goalIteration,
+    goalMaxIterations,
+  };
+}
+
+/**
+ * 会话进度项唯一解析：goalMode.tasks 优先，否则最近助手 markdown checklist。
+ * 工具调用 / 备忘永不进入此列表。Overview / ribbon 兼容入口。
+ */
+export function resolveSessionProgressItems(
+  session: Pick<SessionState, 'messages' | 'goalMode'> | null | undefined,
+): ChecklistItem[] {
+  return resolveSessionProgress(session).items;
+}
+
+/** 工具状态短标签（当前工具一行右侧） */
+export function formatToolStatusLabel(status: MessageToolCall['status']): string {
   if (status === 'running') return '进行中';
   if (status === 'pending_approval') return '待确认';
   if (status === 'error') return '失败';
   if (status === 'success') return '完成';
   return '步骤';
+}
+
+/**
+ * 当前工具单行展示：label + 状态；null 表示无 live 工具。
+ * 不计进度；不列历史命令。
+ */
+export function formatLiveToolLine(
+  tool: MessageToolCall | null | undefined,
+): { label: string; statusLabel: string; isApproval: boolean } | null {
+  if (!tool?.id) return null;
+  if (tool.status !== 'running' && tool.status !== 'pending_approval') return null;
+  return {
+    label: toolHumanLabel(tool),
+    statusLabel: formatToolStatusLabel(tool.status),
+    isApproval: tool.status === 'pending_approval',
+  };
+}
+
+/**
+ * 仅取当前正在执行 / 待确认的单个工具。
+ * 优先 pending_approval（用户需动作），否则最近 running；不列历史、不计进度。
+ * 主会话与协作 agent 工具一并扫描。
+ */
+export function findCurrentLiveTool(
+  session: Pick<SessionState, 'messages' | 'agents'> | null | undefined,
+): MessageToolCall | null {
+  if (!session) return null;
+  const tools: MessageToolCall[] = [
+    ...(session.messages?.flatMap((m) => m.toolCalls || []) || []),
+    ...(session.agents || []).flatMap((a) =>
+      (a.messages || []).flatMap((m) => m.toolCalls || []),
+    ),
+  ];
+  let latestApproval: MessageToolCall | null = null;
+  let latestRunning: MessageToolCall | null = null;
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const t = tools[i];
+    if (!t?.id) continue;
+    if (t.status === 'pending_approval' && !latestApproval) {
+      latestApproval = t;
+    } else if (t.status === 'running' && !latestRunning) {
+      latestRunning = t;
+    }
+    if (latestApproval && latestRunning) break;
+  }
+  return latestApproval || latestRunning;
+}
+
+/**
+ * 是否展示目标横幅：active 始终展示；inactive 但有未完成 goal 任务时保留文案（达上限缺口）。
+ * checklist 源或无文案的收口态不展示横幅。只读，不写 store。
+ */
+export function shouldShowGoalBanner(
+  progress: Pick<SessionProgressResolved, 'goalActive' | 'goalText' | 'items' | 'source'>,
+): boolean {
+  if (progress.goalActive) return true;
+  // 达上限 / 结束后仍有 goal 清单缺口：保留横幅，避免只剩无上下文的勾选
+  if (progress.source !== 'goal') return false;
+  if (!progress.goalText) return false;
+  return countOpenChecklistItems(progress.items) > 0;
+}
+
+/** 清单区标题：goal 源用「目标清单」，助手 checklist / none 用「清单」 */
+export function checklistSectionTitle(source: ProgressSource): string {
+  return source === 'goal' ? '目标清单' : '清单';
+}
+
+/**
+ * progressbar 中文 aria-valuetext（与计数同源，不读工具/备忘）。
+ * 供目标横幅与独立进度条共用，避免只报百分比无分数。
+ */
+export function formatProgressAriaText(opts: {
+  done: number;
+  total: number;
+  open: number;
+  pct: number;
+}): string {
+  const total = Math.max(0, opts.total | 0);
+  const done = Math.max(0, Math.min(opts.done | 0, total));
+  const open = Math.max(0, opts.open | 0);
+  const pct = Math.max(0, Math.min(100, opts.pct | 0));
+  if (total <= 0) return '暂无进度';
+  if (open === 0 && done >= total) return `已完成 ${done}/${total}`;
+  return `进度 ${done}/${total}，${pct}%${open > 0 ? `，待完成 ${open}` : ''}`;
+}
+
+/**
+ * 目标横幅右侧分数：完成态「完成」；进行中带 %（密度紧凑，不含「待」以免与缺口文案重复）。
+ */
+export function formatGoalBannerProgressLabel(opts: {
+  done: number;
+  total: number;
+  open: number;
+  pct: number;
+}): string {
+  const total = Math.max(0, opts.total | 0);
+  if (total <= 0) return '';
+  const done = Math.max(0, Math.min(opts.done | 0, total));
+  const open = Math.max(0, opts.open | 0);
+  const pct = Math.max(0, Math.min(100, opts.pct | 0));
+  if (open === 0) return `${done}/${total} · 完成`;
+  return `${done}/${total} · ${pct}%`;
+}
+
+/**
+ * 目标进行中但清单尚未落地时：展示空清单区（避免只剩横幅无上下文）。
+ * 仅备忘/工具时不占位，避免空「清单」块噪音。
+ */
+export function shouldShowEmptyChecklistSection(opts: {
+  itemCount: number;
+  goalActive: boolean;
+  showGoalBanner: boolean;
+  source: ProgressSource;
+}): boolean {
+  if ((opts.itemCount | 0) > 0) return false;
+  if (opts.goalActive || opts.showGoalBanner) return true;
+  return opts.source === 'goal';
+}
+
+/** 空清单区中文提示（不发明进度项） */
+export function formatEmptyChecklistHint(opts: {
+  goalActive: boolean;
+  showGoalBanner: boolean;
+  source: ProgressSource;
+}): string {
+  if (opts.goalActive) return '清单生成中，完成后将同步进度';
+  if (opts.showGoalBanner || opts.source === 'goal') {
+    return '目标已结束，暂无保留清单项';
+  }
+  return '暂无清单项';
+}
+
+/** 协作 Agent 入口：中文标签 + title/aria 同源 */
+export function formatAgentBoardLinkLabel(agentCount: number): {
+  text: string;
+  title: string;
+  ariaLabel: string;
+} {
+  const n = Math.max(0, agentCount | 0);
+  if (n <= 1) {
+    return {
+      text: '协作',
+      title: '在侧栏打开协作 Agent',
+      ariaLabel: '在侧栏打开协作 Agent',
+    };
+  }
+  return {
+    text: `协作 · ${n}`,
+    title: `浏览 ${n} 个协作 Agent`,
+    ariaLabel: `浏览 ${n} 个协作 Agent`,
+  };
+}
+
+/** 清单项屏幕阅读标签（完成态可感知） */
+export function formatChecklistItemAriaLabel(
+  item: Pick<ChecklistItem, 'text' | 'done'>,
+): string {
+  const t = (item.text || '').trim() || '未命名项';
+  return item.done ? `已完成：${t}` : `未完成：${t}`;
 }
 
 /**
@@ -89,52 +418,31 @@ export function useSuggestOpenTasksOnChecklist(session: SessionState | undefined
 
 export const TasksCard: React.FC = () => {
   const demo = isDemoMode();
-  const sessions = useLayoutStore((s) => s.sessions);
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const activeSessionId = useSessionField(selectActiveSessionId);
+  const session = useSessionField(selectActiveSession);
   const permissionMode = useLayoutStore((s) => s.permissionMode);
   const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
   const planApproved = useLayoutStore((s) => s.planApproved);
   const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
   const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const setPanelAgentId = useLayoutStore((s) => s.setPanelAgentId);
   const inPlanMode = permissionMode === 'plan' || planModeEnabled;
 
-  const session = sessions.find((s) => s.id === activeSessionId);
   const agents = session?.agents || [];
 
-  const checklist = useMemo(() => {
-    // 目标模式优先用 session.goalMode.tasks（与续写绑定）；否则解析助手 checklist
-    const goalTasks = session?.goalMode?.tasks;
-    if (goalTasks && goalTasks.length > 0) {
-      return goalTasks.map((t) => ({
-        id: t.id,
-        text: t.text,
-        done: Boolean(t.done),
-      }));
-    }
-    return findLatestAssistantChecklist(session?.messages).items;
-  }, [session?.messages, session?.goalMode?.tasks]);
+  /** 进度唯一来源：goalMode.tasks 优先，否则助手 markdown checklist（工具不计） */
+  const progressResolved = useMemo(
+    () => resolveSessionProgress(session),
+    [session?.messages, session?.goalMode],
+  );
+  const checklist = progressResolved.items;
+  const progressSource = progressResolved.source;
 
-  const engineSteps = useMemo(() => {
-    // 主会话 + 协作 agent 工具步骤
-    const tools: MessageToolCall[] = [
-      ...(session?.messages?.flatMap((m) => m.toolCalls || []) || []),
-      ...(session?.agents || []).flatMap((a) =>
-        (a.messages || []).flatMap((m) => m.toolCalls || []),
-      ),
-    ];
-    // 最近步骤倒序，去重 id，最多 40
-    const seen = new Set<string>();
-    const list: MessageToolCall[] = [];
-    for (let i = tools.length - 1; i >= 0; i--) {
-      const t = tools[i];
-      if (!t?.id || seen.has(t.id)) continue;
-      seen.add(t.id);
-      list.push(t);
-      if (list.length >= 40) break;
-    }
-    return list;
-  }, [session?.messages, session?.agents]);
+  /** 最多一条当前工具，不计入进度百分比 */
+  const currentTool = useMemo(
+    () => findCurrentLiveTool(session),
+    [session?.messages, session?.agents],
+  );
+  const liveToolLine = useMemo(() => formatLiveToolLine(currentTool), [currentTool]);
 
   const [memos, setMemos] = useState<MemoTask[]>(() =>
     demo
@@ -148,32 +456,93 @@ export const TasksCard: React.FC = () => {
   const [newIncomingTask, setNewIncomingTask] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!demo) return;
     setMemos((prev) => prev.map((t) => (t.id === 't2' ? { ...t, done: planApproved } : t)));
   }, [planApproved, demo]);
 
-  const doneEngine = engineSteps.filter((t) => t.status === 'success').length;
-  const liveEngine = engineSteps.filter(
-    (t) => t.status === 'running' || t.status === 'pending_approval',
-  ).length;
-  const doneChecklist = checklist.filter((c) => c.done).length;
+  // 进度仅统计 AI checklist / goal，不含 shell 工具与备忘
+  const {
+    total: totalTrack,
+    done: doneTrack,
+    open: openTrack,
+    pct,
+  } = useMemo(() => computeChecklistProgress(checklist), [checklist]);
   const doneMemo = memos.filter((t) => t.done).length;
-  const doneToolTerminal = engineSteps.filter(
-    (t) => t.status === 'success' || t.status === 'error',
-  ).length;
 
-  const totalTrack = checklist.length + engineSteps.length + memos.length;
-  const doneTrack = doneChecklist + doneToolTerminal + doneMemo;
-  const pct = totalTrack ? Math.round((doneTrack / totalTrack) * 100) : 0;
+  const showGoalBanner = shouldShowGoalBanner(progressResolved);
+  const goalActive = progressResolved.goalActive;
+  const progressCountOpts = useMemo(
+    () => ({
+      done: doneTrack,
+      total: totalTrack,
+      open: openTrack,
+      pct,
+    }),
+    [doneTrack, totalTrack, openTrack, pct],
+  );
+  const headCountLabel = useMemo(
+    () => formatTasksHeadCountLabel(progressCountOpts),
+    [progressCountOpts],
+  );
+  const goalBannerStatus = useMemo(
+    () =>
+      formatGoalBannerStatus({
+        goalActive,
+        iteration: progressResolved.goalIteration,
+        maxIterations: progressResolved.goalMaxIterations,
+        openCount: openTrack,
+      }),
+    [
+      goalActive,
+      progressResolved.goalIteration,
+      progressResolved.goalMaxIterations,
+      openTrack,
+    ],
+  );
+  const sectionCountLabel = useMemo(
+    () =>
+      formatChecklistSectionCount({
+        done: doneTrack,
+        total: totalTrack,
+        open: openTrack,
+      }),
+    [doneTrack, totalTrack, openTrack],
+  );
+  const standaloneProgressMeta = useMemo(
+    () => formatStandaloneProgressMeta(progressCountOpts),
+    [progressCountOpts],
+  );
+  const progressAriaText = useMemo(
+    () => formatProgressAriaText(progressCountOpts),
+    [progressCountOpts],
+  );
+  const goalBannerProgressLabel = useMemo(
+    () => formatGoalBannerProgressLabel(progressCountOpts),
+    [progressCountOpts],
+  );
+  const agentLink = useMemo(
+    () => formatAgentBoardLinkLabel(agents.length),
+    [agents.length],
+  );
+  const showEmptyChecklist = shouldShowEmptyChecklistSection({
+    itemCount: checklist.length,
+    goalActive,
+    showGoalBanner,
+    source: progressSource,
+  });
+  const emptyChecklistHint = formatEmptyChecklistHint({
+    goalActive,
+    showGoalBanner,
+    source: progressSource,
+  });
 
-  const goalMode = session?.goalMode?.active ? session.goalMode : null;
   const empty =
     checklist.length === 0 &&
-    engineSteps.length === 0 &&
+    !currentTool &&
     memos.length === 0 &&
     !isAddingTask &&
-    !goalMode;
+    !showGoalBanner;
 
   const handleAddTask = () => {
     if (!newIncomingTask.trim()) return;
@@ -185,22 +554,39 @@ export const TasksCard: React.FC = () => {
     setIsAddingTask(false);
   };
 
-  const openAgentBoard = () => {
-    const first = agents[0];
-    if (first?.id) setPanelAgentId(first.id);
-    emitUiEvent('open-agent-panel', first?.id ? { agentId: first.id } : {});
+  const removeMemo = (id: string) => {
+    setMemos((prev) => prev.filter((x) => x.id !== id));
   };
+
+  const openAgentBoard = () => {
+    // 与侧栏 / Overview 一致：单 agent 直开；多个先浏览列表
+    if (agents.length === 1 && agents[0]?.id) {
+      openAgentInSidePanel(agents[0].id, { sessionId: activeSessionId || undefined });
+    } else {
+      openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
+    }
+  };
+
+  const listTitle = checklistSectionTitle(progressSource);
 
   return (
     <div className="tasks-card">
       <div className="card-subheader tasks-card-head">
         <div className="tasks-card-head-left">
-          <span className="tasks-card-title">AI 进度</span>
-          {totalTrack > 0 ? (
-            <span className="tasks-card-count">
-              {doneTrack}/{totalTrack}
-              {pct > 0 ? ` · ${pct}%` : ''}
-              {liveEngine > 0 ? ` · ${liveEngine} 进行中` : ''}
+          <span className="tasks-card-title" id="tasks-card-title">
+            AI 进度
+          </span>
+          {headCountLabel ? (
+            <span
+              className="tasks-card-count"
+              title="仅统计清单/目标，不含工具与备忘"
+              aria-live="polite"
+            >
+              {headCountLabel}
+            </span>
+          ) : goalActive ? (
+            <span className="tasks-card-count" aria-live="polite">
+              目标进行中
             </span>
           ) : null}
         </div>
@@ -209,62 +595,91 @@ export const TasksCard: React.FC = () => {
             <button
               type="button"
               className="tasks-agent-link"
-              title="打开协作 Agent 看板"
+              title={agentLink.title}
+              aria-label={agentLink.ariaLabel}
               onClick={openAgentBoard}
             >
-              查看协作看板
+              {agentLink.text}
             </button>
           ) : null}
           <button
             type="button"
             className="sub-btn"
             title="添加备忘"
+            aria-label={isAddingTask ? '取消添加备忘' : '添加备忘'}
+            aria-expanded={isAddingTask}
             onClick={() => setIsAddingTask(!isAddingTask)}
           >
-            <Lucide.Plus size={16} />
+            <Lucide.Plus size={16} aria-hidden />
           </button>
         </div>
       </div>
 
-      <div className="tasks-card-body">
-        {goalMode ? (
-          <div className="tasks-goal-banner">
+      <div className="tasks-card-body" aria-labelledby="tasks-card-title">
+        {showGoalBanner ? (
+          <div
+            className={`tasks-goal-banner${goalActive ? '' : ' tasks-goal-banner--ended'}`}
+            role="region"
+            aria-label={goalActive ? '目标进行中' : '目标已结束'}
+            aria-busy={goalActive && totalTrack === 0}
+          >
             <div className="tasks-goal-banner-top">
-              <Lucide.Target size={14} className="tasks-goal-icon" />
+              <Lucide.Target size={14} className="tasks-goal-icon" aria-hidden />
               <span className="tasks-goal-label">目标</span>
-              <span className="tasks-goal-iter">
-                第 {(goalMode.iteration ?? 0) + 1}
-                {typeof goalMode.maxIterations === 'number'
-                  ? ` / ${goalMode.maxIterations}`
-                  : ''}{' '}
-                轮
+              <span
+                className="tasks-goal-iter"
+                title={
+                  goalBannerStatus.title ||
+                  (goalActive ? `当前轮次 ${goalBannerStatus.text}` : undefined)
+                }
+                aria-label={
+                  goalActive
+                    ? `轮次 ${goalBannerStatus.text}`
+                    : goalBannerStatus.text
+                }
+              >
+                {goalActive ? `轮次 ${goalBannerStatus.text}` : goalBannerStatus.text}
               </span>
             </div>
-            <div className="tasks-goal-text" title={goalMode.goal}>
-              {goalMode.goal || '（未设置目标文案）'}
+            <div
+              className="tasks-goal-text"
+              title={progressResolved.goalText || undefined}
+            >
+              {progressResolved.goalText || '（未设置目标）'}
             </div>
+            {totalTrack > 0 ? (
+              <div className="tasks-goal-progress">
+                <div
+                  className="tasks-progress-track"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={pct}
+                  aria-valuetext={progressAriaText}
+                  aria-label="目标进度"
+                >
+                  <div className="tasks-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="tasks-goal-pct" title={progressAriaText}>
+                  {goalBannerProgressLabel}
+                </span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {inPlanMode ? (
-          <div className="tasks-plan-banner">
+          <div className="tasks-plan-banner" role="region" aria-label="计划模式">
             <div className="tasks-plan-banner-t">
-              计划模式：AI 只规划不改文件。审阅后可批准执行。
+              计划模式 · 只规划不改文件
+              {planApproved ? ' · 已批准' : ''}
             </div>
             <div className="tasks-plan-banner-actions">
               <button
                 type="button"
-                className="overview-chip"
-                title="继续留在计划模式，只规划不改文件"
-                onClick={() => {
-                  /* 继续留在计划模式 */
-                }}
-              >
-                继续计划
-              </button>
-              <button
-                type="button"
                 className={`overview-chip ${planApproved ? 'active' : ''}`}
+                aria-pressed={planApproved}
+                aria-label="批准计划并开始执行"
                 onClick={() => {
                   setPermissionMode('ask');
                   setPlanApproved(true);
@@ -274,39 +689,22 @@ export const TasksCard: React.FC = () => {
               </button>
             </div>
           </div>
-        ) : null}
-
-        {inPlanMode || planApproved ? (
-          <section className="tasks-section">
-            <div className="tasks-section-h">当前计划状态</div>
-            <div className="tasks-plan-status">
-              <span className={`tasks-plan-status-dot ${planApproved ? 'is-yes' : ''}`} />
-              <span>{planApproved ? '已批准' : '未批准'}</span>
-              {inPlanMode ? (
-                <span className="tasks-plan-status-meta">· 计划模式中</span>
-              ) : planApproved ? (
-                <span className="tasks-plan-status-meta">· 可执行</span>
-              ) : null}
-            </div>
-          </section>
+        ) : planApproved ? (
+          <div
+            className="tasks-plan-status tasks-plan-status--solo"
+            role="status"
+          >
+            <span className="tasks-plan-status-dot is-yes" aria-hidden />
+            <span>计划已批准 · 可执行</span>
+          </div>
         ) : null}
 
         {empty ? (
-          <div className="tasks-empty">
-            <Lucide.ListChecks size={28} style={{ opacity: 0.35 }} />
-            <div>暂无 AI 进度</div>
+          <div className="tasks-empty" role="status">
+            <div className="tasks-empty-title">暂无进度</div>
             <div className="tasks-empty-sub">
-              助手在回复中写出 <code>- [ ]</code> 清单，或调用工具后，这里会汇总进度；也可手动添加备忘。
+              AI 用 <code>- [ ]</code> 清单或 <code>/goal</code> 同步进度；工具调用与备忘不计进度。
             </div>
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={() => {
-                emitUiEvent('open-overview');
-              }}
-            >
-              打开总览
-            </button>
           </div>
         ) : null}
 
@@ -316,46 +714,67 @@ export const TasksCard: React.FC = () => {
               className="settings-field-input"
               style={{ flex: 1 }}
               placeholder="新备忘…"
+              aria-label="备忘内容"
               value={newIncomingTask}
               onChange={(e) => setNewIncomingTask(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAddTask();
+                if (e.key === 'Escape') {
+                  setIsAddingTask(false);
+                  setNewIncomingTask('');
+                }
               }}
               autoFocus
             />
-            <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={handleAddTask}>
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              aria-label="确认添加备忘"
+              onClick={handleAddTask}
+            >
               添加
             </button>
           </div>
         ) : null}
 
-        {totalTrack > 0 ? (
+        {/* 无 goal 条时才单独显示进度条，避免与 goal 区重复 */}
+        {!showGoalBanner && totalTrack > 0 ? (
           <div className="tasks-progress-block">
             <div className="tasks-progress-meta">
-              <span>整体进度</span>
-              <span>{pct}%</span>
+              <span>{standaloneProgressMeta.left}</span>
+              <span>{standaloneProgressMeta.right}</span>
             </div>
-            <div className="tasks-progress-track" aria-hidden>
+            <div
+              className="tasks-progress-track"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct}
+              aria-valuetext={progressAriaText}
+              aria-label="清单进度"
+            >
               <div className="tasks-progress-fill" style={{ width: `${pct}%` }} />
             </div>
           </div>
         ) : null}
 
         {checklist.length > 0 ? (
-          <section className="tasks-section">
+          <section className="tasks-section" aria-label={listTitle}>
             <div className="tasks-section-h">
-              <span>AI 进度</span>
-              <span className="tasks-section-count">
-                {doneChecklist}/{checklist.length}
-              </span>
+              <span>{listTitle}</span>
+              <span className="tasks-section-count">{sectionCountLabel}</span>
             </div>
             <ul className="tasks-checklist">
               {checklist.map((item) => (
                 <li
                   key={item.id}
                   className={`tasks-check-item ${item.done ? 'is-done' : ''}`}
+                  aria-label={formatChecklistItemAriaLabel(item)}
                 >
-                  <span className={`tasks-check-mark ${item.done ? 'checked' : ''}`} aria-hidden>
+                  <span
+                    className={`tasks-check-mark ${item.done ? 'checked' : ''}`}
+                    aria-hidden
+                  >
                     {item.done ? <Lucide.Check size={12} strokeWidth={2.5} /> : null}
                   </span>
                   <span className="tasks-check-text">{item.text}</span>
@@ -363,72 +782,77 @@ export const TasksCard: React.FC = () => {
               ))}
             </ul>
           </section>
-        ) : null}
-
-        {engineSteps.length > 0 ? (
-          <section className="tasks-section">
+        ) : showEmptyChecklist ? (
+          <section className="tasks-section" aria-label={listTitle}>
             <div className="tasks-section-h">
-              <span>工具步骤</span>
-              <span className="tasks-section-count">
-                {doneEngine}/{engineSteps.length}
-                {liveEngine > 0 ? ` · ${liveEngine} 进行中` : ''}
-              </span>
+              <span>{listTitle}</span>
+              <span className="tasks-section-count">0 项</span>
             </div>
-            <ul className="tasks-step-list">
-              {engineSteps.map((t) => {
-                const label = toolHumanLabel(t);
-                const st = toolStatusLabel(t.status);
-                const live = t.status === 'running' || t.status === 'pending_approval';
-                const failed = t.status === 'error';
-                const done = t.status === 'success';
-                return (
-                  <li
-                    key={t.id}
-                    className={`tasks-step ${live ? 'is-live' : ''} ${failed ? 'is-error' : ''} ${done ? 'is-done' : ''}`}
-                  >
-                    <span
-                      className={`tasks-step-dot ${live ? 'live' : ''} ${failed ? 'err' : ''} ${done ? 'ok' : ''}`}
-                    />
-                    <div className="tasks-step-main">
-                      <span className="tasks-step-label" title={label}>
-                        {label}
-                      </span>
-                      <span className="tasks-step-meta">{st}</span>
-                    </div>
-                    {done ? (
-                      <Lucide.Check size={14} className="tasks-step-check" strokeWidth={2.25} />
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <p className="tasks-empty-sub" role="status" style={{ margin: '4px 0 0' }}>
+              {emptyChecklistHint}
+            </p>
           </section>
         ) : null}
 
-        {memos.length > 0 || isAddingTask ? (
-          <section className="tasks-section">
+        {/* 当前工具仅一行，不计入进度、不列历史命令 */}
+        {liveToolLine ? (
+          <div
+            className={`tasks-live-tool${liveToolLine.isApproval ? ' is-approval' : ''}`}
+            role="status"
+            aria-live="polite"
+            aria-label={`当前步骤：${liveToolLine.label}，${liveToolLine.statusLabel}（不计进度）`}
+            title="工具调用不计进度"
+          >
+            <span
+              className={`tasks-step-dot ${liveToolLine.isApproval ? 'err' : 'live'}`}
+              aria-hidden
+            />
+            <span className="tasks-live-tool-label" title={liveToolLine.label}>
+              {liveToolLine.label}
+            </span>
+            <span className="tasks-live-tool-meta">{liveToolLine.statusLabel}</span>
+          </div>
+        ) : null}
+
+        {/* 仅有备忘时才出区；添加行已在上方，避免空「备忘」块 */}
+        {memos.length > 0 ? (
+          <section className="tasks-section tasks-section--memo" aria-label="备忘">
             <div className="tasks-section-h">
               <span>备忘</span>
-              {memos.length > 0 ? (
-                <span className="tasks-section-count">
-                  {doneMemo}/{memos.length}
-                </span>
-              ) : null}
+              <span className="tasks-section-count">
+                {doneMemo}/{memos.length} · 不计进度
+              </span>
             </div>
             <div className="tasks-memo-list">
               {memos.map((t) => (
-                <label key={t.id} className="tasks-memo-item">
-                  <input
-                    type="checkbox"
-                    checked={t.done}
-                    onChange={() =>
-                      setMemos((prev) =>
-                        prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)),
-                      )
-                    }
-                  />
-                  <span className={t.done ? 'is-done' : ''}>{t.text}</span>
-                </label>
+                <div
+                  key={t.id}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 4, minWidth: 0 }}
+                >
+                  <label className="tasks-memo-item" style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={t.done}
+                      aria-label={t.done ? `取消完成：${t.text}` : `标为完成：${t.text}`}
+                      onChange={() =>
+                        setMemos((prev) =>
+                          prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)),
+                        )
+                      }
+                    />
+                    <span className={t.done ? 'is-done' : ''}>{t.text}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="sub-btn"
+                    title="删除备忘"
+                    aria-label={`删除备忘：${t.text}`}
+                    onClick={() => removeMemo(t.id)}
+                    style={{ flexShrink: 0, padding: 2, opacity: 0.7 }}
+                  >
+                    <Lucide.X size={12} strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
               ))}
             </div>
           </section>

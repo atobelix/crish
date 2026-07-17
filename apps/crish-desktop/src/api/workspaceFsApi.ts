@@ -92,12 +92,34 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   throw new Error('当前环境无法浏览本地目录（需桌面壳）');
 }
 
+/** 首屏预览行数；长文件可再分段加载 */
+export const FILE_PREVIEW_CHUNK_LINES = 400;
+/** 后端硬上限对齐 fs_commands MAX_TEXT_FILE_LINES */
+export const FILE_PREVIEW_MAX_LINES = 5000;
+
+/**
+ * 下一段预览行预算（纯函数，供 UI 与单测共用）。
+ * 返回 null 表示已达上限，不应再请求。
+ */
+export function nextFilePreviewLineBudget(
+  currentBudget: number,
+  chunk: number = FILE_PREVIEW_CHUNK_LINES,
+  max: number = FILE_PREVIEW_MAX_LINES,
+): number | null {
+  const cur = Math.max(0, Math.floor(currentBudget));
+  const step = Math.max(1, Math.floor(chunk));
+  const cap = Math.max(1, Math.floor(max));
+  if (cur >= cap) return null;
+  return Math.min(cap, cur + step);
+}
+
 export async function readTextFile(
   filePath: string,
-  maxLines = 4000,
+  maxLines = FILE_PREVIEW_CHUNK_LINES,
 ): Promise<FsReadResult> {
   if (!filePath) throw new Error('路径为空');
   const path = resolveWorkspacePath(filePath);
+  const lines = Math.max(1, Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines)));
 
   const res = await invokeResult<{
     content?: string;
@@ -106,7 +128,7 @@ export async function readTextFile(
     truncated?: boolean;
   }>('read_file_content', {
     path,
-    maxLines,
+    maxLines: lines,
     workspaceRoot: workspaceRootArg(),
   });
 
@@ -186,11 +208,11 @@ export function pathRelativeToRoot(full: string, root: string): string {
 
 export function detectFileKind(name: string): 'text' | 'image' | 'pdf' | 'table' | 'binary' {
   const n = name.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(n)) return 'image';
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(n)) return 'image';
   if (/\.pdf$/i.test(n)) return 'pdf';
   if (/\.(csv|tsv)$/i.test(n)) return 'table';
   if (
-    /\.(txt|md|markdown|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|less|html|htm|xml|yml|yaml|toml|ini|env|py|rs|go|java|kt|c|cpp|h|hpp|cs|php|rb|sh|bash|zsh|ps1|bat|cmd|log|sql|graphql|vue|svelte|lock|gitignore|dockerignore|editorconfig|prettierrc|eslintrc|conf|cfg|properties|gradle|swift|m|mm)$/i.test(
+    /\.(txt|md|markdown|mdx|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|less|html|htm|xml|yml|yaml|toml|ini|env|py|rs|go|java|kt|c|cpp|h|hpp|cs|php|rb|sh|bash|zsh|ps1|bat|cmd|log|sql|graphql|vue|svelte|lock|gitignore|dockerignore|editorconfig|prettierrc|eslintrc|conf|cfg|properties|gradle|swift|m|mm|r|lua|vim|dart|scala|clj|ex|exs|erl|hs|ml|fs|fsx|nim|zig|v|sv|vhdl|asm|s|tex|rst|adoc|org)$/i.test(
       n,
     ) ||
     n === 'dockerfile' ||
@@ -201,6 +223,11 @@ export function detectFileKind(name: string): 'text' | 'image' | 'pdf' | 'table'
     return 'text';
   }
   return 'binary';
+}
+
+/** Markdown / MDX：可渲染预览 */
+export function isMarkdownFilename(name: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(name || '');
 }
 
 /** 简易 CSV / TSV → 行列（预览用） */

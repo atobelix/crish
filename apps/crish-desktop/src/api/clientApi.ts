@@ -14,8 +14,6 @@
  * 转发约定：
  *   if (isDemoMode()) return clientApiDemo.xxx(...)
  *   else return [] | no-op  // HONEST-HIDE
- *
- * 兼容：`export const piClientApi = clientApi`（勿再新建 piClientApi.ts）
  */
 import { isDemoMode } from './appMode';
 import { clientApiDemo } from './clientApi.demo';
@@ -119,8 +117,277 @@ export interface Settings {
   sessionDir?: string;
   httpProxy?: string;
   httpIdleTimeoutMs?: number;
-  /** 回答风格（本机偏好；不强制进引擎协议） */
-  responseStyle?: 'minimal' | 'low' | 'medium' | 'high';
+  /** 回答风格（本机偏好；写入 appSettings，下游可订阅） */
+  responseStyle?: ResponseStyle;
+  /** 优先合并工具标签页（与 layoutStore.tabModeEnabled 双写） */
+  tabModeEnabled?: boolean;
+  /**
+   * MCP 工具禁用表：serverId → toolName[]。
+   * 写入本机设置；run-task 时下发给引擎，过滤不注入的 MCP 工具。
+   */
+  mcpDisabledTools?: Record<string, string[]>;
+}
+
+/** 回答风格四档（设置 · 个性化） */
+export type ResponseStyle = 'minimal' | 'low' | 'medium' | 'high';
+
+export type ThinkingLevel = NonNullable<Settings['defaultThinkingLevel']>;
+
+export const RESPONSE_STYLE_IDS: readonly ResponseStyle[] = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+] as const;
+
+export const THINKING_LEVEL_IDS: readonly ThinkingLevel[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+] as const;
+
+export const RESPONSE_STYLE_OPTIONS: ReadonlyArray<{ value: ResponseStyle; label: string }> = [
+  { value: 'minimal', label: '简洁' },
+  { value: 'low', label: '标准' },
+  { value: 'medium', label: '详细' },
+  { value: 'high', label: '深入' },
+];
+
+/** 中文标签 → responseStyle（容错旧/手填配置） */
+const RESPONSE_STYLE_LABEL_MAP: Readonly<Record<string, ResponseStyle>> = {
+  简洁: 'minimal',
+  标准: 'low',
+  详细: 'medium',
+  深入: 'high',
+};
+
+/**
+ * Unicode-safe trim for settings strings（中文 / 全角空格 \u3000）。
+ * 非 string/number/boolean → ''。
+ */
+export function normalizeSettingsText(raw: unknown): string {
+  if (raw == null) return '';
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    return '';
+  }
+  let s = String(raw);
+  try {
+    s = s.normalize('NFC');
+  } catch {
+    /* ignore environments without String.normalize */
+  }
+  return s.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
+}
+
+export function normalizeResponseStyle(raw: unknown): ResponseStyle {
+  if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high') return raw;
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const t = normalizeSettingsText(raw);
+    const lower = t.toLowerCase();
+    if (lower === 'minimal' || lower === 'low' || lower === 'medium' || lower === 'high') {
+      return lower;
+    }
+    const fromLabel = RESPONSE_STYLE_LABEL_MAP[t];
+    if (fromLabel) return fromLabel;
+  }
+  return 'medium';
+}
+
+export function normalizeThinkingLevel(raw: unknown): ThinkingLevel {
+  if (
+    raw === 'off' ||
+    raw === 'minimal' ||
+    raw === 'low' ||
+    raw === 'medium' ||
+    raw === 'high' ||
+    raw === 'xhigh'
+  ) {
+    return raw;
+  }
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const t = normalizeSettingsText(raw).toLowerCase();
+    if (
+      t === 'off' ||
+      t === 'minimal' ||
+      t === 'low' ||
+      t === 'medium' ||
+      t === 'high' ||
+      t === 'xhigh'
+    ) {
+      return t;
+    }
+  }
+  return 'medium';
+}
+
+/** Coerce loose LS / JSON values to boolean; unknown → fallback. */
+export function normalizeSettingsBool(raw: unknown, fallback: boolean): boolean {
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') {
+    if (raw === 1) return true;
+    if (raw === 0) return false;
+    return fallback;
+  }
+  if (typeof raw === 'string') {
+    const t = normalizeSettingsText(raw).toLowerCase();
+    if (t === 'true' || t === '1' || t === 'yes' || t === 'on' || t === '是') return true;
+    if (t === 'false' || t === '0' || t === 'no' || t === 'off' || t === '否') return false;
+  }
+  return fallback;
+}
+
+/**
+ * customRules：仅保留非空字符串（中文规则原文保留，仅 trim 首尾空白/全角空格）。
+ * 非法类型 → []。
+ */
+export function normalizeCustomRules(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
+      continue;
+    }
+    const t = normalizeSettingsText(item);
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * 安全解析 settings JSON。损坏 / 非对象 / 数组根 → null。
+ */
+export function parseSettingsJson(raw: unknown): Partial<Settings> | null {
+  if (raw == null) return null;
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    const t = raw.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
+    if (!t) return null;
+    try {
+      value = JSON.parse(t);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Partial<Settings>;
+}
+
+/**
+ * 仅规范化 partial patch 中出现的字段（项目 scope 覆写用，不补默认）。
+ */
+export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const o = raw as Record<string, unknown>;
+  const out: Partial<Settings> = { ...(raw as Partial<Settings>) };
+
+  if ('responseStyle' in o) out.responseStyle = normalizeResponseStyle(o.responseStyle);
+  if ('defaultThinkingLevel' in o) {
+    out.defaultThinkingLevel = normalizeThinkingLevel(o.defaultThinkingLevel);
+  }
+  if ('hideThinkingBlock' in o) {
+    out.hideThinkingBlock = normalizeSettingsBool(o.hideThinkingBlock, false);
+  }
+  if ('tabModeEnabled' in o) {
+    // 默认合并标签：缺失/非法时 true
+    out.tabModeEnabled = normalizeSettingsBool(o.tabModeEnabled, true);
+  }
+  if ('quietStartup' in o) {
+    out.quietStartup = normalizeSettingsBool(o.quietStartup, true);
+  }
+  if ('enableSkillCommands' in o) {
+    out.enableSkillCommands = normalizeSettingsBool(o.enableSkillCommands, true);
+  }
+  if ('enableAnalytics' in o) {
+    out.enableAnalytics = normalizeSettingsBool(o.enableAnalytics, false);
+  }
+  if ('collapseChangelog' in o) {
+    out.collapseChangelog = normalizeSettingsBool(o.collapseChangelog, false);
+  }
+  if ('enableInstallTelemetry' in o) {
+    out.enableInstallTelemetry = normalizeSettingsBool(o.enableInstallTelemetry, false);
+  }
+  if ('customRules' in o) out.customRules = normalizeCustomRules(o.customRules);
+  if ('mcpDisabledTools' in o && o.mcpDisabledTools && typeof o.mcpDisabledTools === 'object' && !Array.isArray(o.mcpDisabledTools)) {
+    const map: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(o.mcpDisabledTools as Record<string, unknown>)) {
+      if (!k || !Array.isArray(v)) continue;
+      const tools = v.map(String).map((t) => t.trim()).filter(Boolean);
+      if (tools.length) map[k] = tools;
+    }
+    out.mcpDisabledTools = map;
+  }
+  if ('defaultProvider' in o) out.defaultProvider = normalizeSettingsText(o.defaultProvider);
+  if ('defaultModel' in o) out.defaultModel = normalizeSettingsText(o.defaultModel);
+  if ('theme' in o) {
+    const theme = normalizeSettingsText(o.theme);
+    out.theme = theme || 'default';
+  }
+  if ('shellPath' in o) out.shellPath = normalizeSettingsText(o.shellPath);
+  if ('shellCommandPrefix' in o) {
+    out.shellCommandPrefix = normalizeSettingsText(o.shellCommandPrefix);
+  }
+  if ('sessionDir' in o) out.sessionDir = normalizeSettingsText(o.sessionDir);
+  if ('lastChangelogVersion' in o) {
+    out.lastChangelogVersion = normalizeSettingsText(o.lastChangelogVersion);
+  }
+  if ('httpProxy' in o) out.httpProxy = normalizeSettingsText(o.httpProxy);
+
+  if ('fonts' in o && o.fonts && typeof o.fonts === 'object' && !Array.isArray(o.fonts)) {
+    const f = o.fonts as Record<string, unknown>;
+    out.fonts = {
+      ...(o.fonts as Settings['fonts']),
+      uiFont:
+        'uiFont' in f
+          ? normalizeSettingsText(f.uiFont) || 'auto'
+          : (o.fonts as Settings['fonts'])?.uiFont,
+      monoFont:
+        'monoFont' in f
+          ? normalizeSettingsText(f.monoFont) || 'auto'
+          : (o.fonts as Settings['fonts'])?.monoFont,
+      monoLigatures:
+        'monoLigatures' in f
+          ? normalizeSettingsBool(f.monoLigatures, false)
+          : (o.fonts as Settings['fonts'])?.monoLigatures,
+    };
+  }
+
+  return out;
+}
+
+/** 深拷贝默认 settings（嵌套对象独立）。 */
+export function getDefaultSettings(): Settings {
+  return deepMergeSettings({}, DEFAULT_SETTINGS) as Settings;
+}
+
+/**
+ * 以 DEFAULT 为底合并并规范化完整 settings 载荷。
+ * 非对象 / 损坏输入 → 纯默认。
+ */
+export function normalizeSettingsPayload(raw: unknown): Settings {
+  const partial = parseSettingsJson(raw) ?? (raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as Partial<Settings>)
+    : null);
+  if (!partial) return getDefaultSettings();
+  const merged = deepMergeSettings(getDefaultSettings(), normalizeSettingsPartial(partial)) as Settings;
+  // 始终再夹一次关键枚举 / 布尔，避免 DEFAULT 缺键或 merge 漏网
+  return {
+    ...merged,
+    responseStyle: normalizeResponseStyle(merged.responseStyle),
+    defaultThinkingLevel: normalizeThinkingLevel(merged.defaultThinkingLevel),
+    hideThinkingBlock: normalizeSettingsBool(merged.hideThinkingBlock, false),
+    tabModeEnabled: normalizeSettingsBool(merged.tabModeEnabled, true),
+    quietStartup: normalizeSettingsBool(merged.quietStartup, true),
+    enableSkillCommands: normalizeSettingsBool(merged.enableSkillCommands, true),
+    enableAnalytics: normalizeSettingsBool(merged.enableAnalytics, false),
+    customRules: normalizeCustomRules(merged.customRules),
+    defaultProvider: normalizeSettingsText(merged.defaultProvider),
+    defaultModel: normalizeSettingsText(merged.defaultModel),
+    theme: normalizeSettingsText(merged.theme) || 'default',
+    sessionDir: normalizeSettingsText(merged.sessionDir ?? ''),
+  };
 }
 
 /** Demo / layoutStore shape; formal models use providerProfiles. */
@@ -182,6 +449,7 @@ const DEFAULT_SETTINGS: Settings = {
   themes: [],
   sessionDir: '',
   responseStyle: 'medium',
+  tabModeEnabled: true,
 };
 
 function lsGet(key: string, legacy?: string): string | null {
@@ -207,32 +475,82 @@ const initSettingsDb = () => {
   }
 };
 
-// Recursive deep merge helper
-export function deepMergeSettings(target: any, source: any): any {
-  if (!source) return target;
-  if (!target) return source;
-  const output = { ...target };
-  for (const key of Object.keys(source)) {
-    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      output[key] = deepMergeSettings(target[key], source[key]);
+/** Recursive deep merge for settings-like plain objects (arrays replaced, nested objects cloned). */
+export function deepMergeSettings<T extends object, S extends object = Partial<T>>(
+  target: T | null | undefined,
+  source: S | null | undefined,
+): T & S {
+  if (!source) return (target ?? ({} as T)) as T & S;
+  if (!target) return deepMergeSettings({} as T, source);
+  const output: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  for (const key of Object.keys(source as object)) {
+    const srcVal = (source as Record<string, unknown>)[key];
+    const tgtVal = output[key];
+    if (Array.isArray(srcVal)) {
+      // Replace arrays wholesale (customRules etc.); shallow-copy to avoid aliasing
+      output[key] = srcVal.slice();
+    } else if (srcVal && typeof srcVal === 'object') {
+      const base =
+        tgtVal && typeof tgtVal === 'object' && !Array.isArray(tgtVal)
+          ? (tgtVal as object)
+          : {};
+      output[key] = deepMergeSettings(base, srcVal as object);
     } else {
-      output[key] = source[key];
+      output[key] = srcVal;
     }
   }
-  return output;
+  return output as T & S;
 }
 
-// Exclusive file write lock implementation
-let isWritingSettings = false;
-async function acquireWriteLock(): Promise<void> {
-  while (isWritingSettings) {
-    await new Promise(resolve => setTimeout(resolve, 30));
+/**
+ * 设置写入锁：优先用 Web Locks API（navigator.locks）实现真正的跨窗口互斥。
+ * Tauri 多窗口各自有独立 JS 上下文，进程内变量不共享——
+ * 旧实现两窗口同时 saveSettings 会产生 write-after-write 竞态。
+ * navigator.locks 在同源所有 webview 间提供 OS 级互斥，是最干净的方案。
+ * 降级：旧环境无 navigator.locks 时退化为进程内标志（仍有竞态，但至少单窗口顺序）。
+ */
+const SETTINGS_LOCK_NAME = 'crish-settings-write';
+const SETTINGS_LOCK_TIMEOUT_MS = 2_000;
+
+async function withSettingsWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks) {
+    // Web Locks API：跨窗口互斥，自动排队，finally 释放
+    return new Promise<T>((resolve, reject) => {
+      navigator.locks.request(
+        SETTINGS_LOCK_NAME,
+        { mode: 'exclusive', ifAvailable: false },
+        async (lock) => {
+          if (!lock) {
+            // 未获取锁（不应发生在 ifAvailable:false 模式，但兜底）
+            try {
+              return resolve(await fn());
+            } catch (e) {
+              return reject(e);
+            }
+          }
+          try {
+            resolve(await fn());
+          } catch (e) {
+            reject(e);
+          }
+        },
+      );
+    });
+  }
+  // 降级：进程内标志 + 超时
+  const deadline = Date.now() + SETTINGS_LOCK_TIMEOUT_MS;
+  while (isWritingSettings && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
   }
   isWritingSettings = true;
+  try {
+    return await fn();
+  } finally {
+    isWritingSettings = false;
+  }
 }
-function releaseWriteLock(): void {
-  isWritingSettings = false;
-}
+
+let isWritingSettings = false;
 
 /**
  * Project-scoped settings key. Opening a project means the user chose that
@@ -260,21 +578,48 @@ export const clientApi = {
     return clientApi.saveSettingsEx('__global__', 'global', updates);
   },
 
+  /**
+   * 仅读项目局部设置（不合并全局）。用于规则/技能等「按具体项目」编辑，
+   * 避免 getSettingsEx 合并后把全局 customRules 误显示成项目规则。
+   */
+  getProjectSettingsPartial: async (cwd: string): Promise<Partial<Settings>> => {
+    initSettingsDb();
+    if (!cwd || cwd === '__global__') return {};
+    const projectSettingsStr = localStorage.getItem(projectSettingsKey(cwd));
+    if (!projectSettingsStr) return {};
+    const parsed = parseSettingsJson(projectSettingsStr);
+    if (!parsed) return {};
+    return normalizeSettingsPartial(parsed);
+  },
+
   getSettingsEx: async (cwd: string): Promise<Settings> => {
     initSettingsDb();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    let globalSettings: Settings = DEFAULT_SETTINGS as Settings;
-    try {
-      const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
-      if (raw) globalSettings = JSON.parse(raw) as Settings;
-    } catch {
-      // 损坏时回退默认，避免设置页永久「加载中」
-      try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
-      } catch {
-        /* ignore */
+    // localStorage 是同步 API，无需人为延迟。
+    // 旧实现的 20ms 延迟是「模拟异步 IO」遗留，会让设置页每次 tab 切换累计延迟。
+    // 始终以 DEFAULT 为底再叠存储 + 字段规范化，避免旧 LS 缺键 / 脏枚举
+    let globalSettings: Settings = getDefaultSettings();
+    const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+    if (raw) {
+      const parsed = parseSettingsJson(raw);
+      if (parsed) {
+        globalSettings = normalizeSettingsPayload(parsed);
+      } else {
+        // 损坏 / 非对象 JSON：先备份原值再回退默认，避免静默丢弃用户设置。
+        // 旧实现直接覆盖，用户损坏的设置无任何恢复途径。
+        try {
+          const rawStr = typeof raw === 'string' ? raw : '';
+          if (rawStr) {
+            localStorage.setItem(
+              `${SETTINGS_KEY}__corrupt_backup_${Date.now()}`,
+              rawStr,
+            );
+          }
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(getDefaultSettings()));
+        } catch {
+          /* ignore */
+        }
+        globalSettings = getDefaultSettings();
       }
-      globalSettings = DEFAULT_SETTINGS as Settings;
     }
 
     if (!cwd || cwd === '__global__') {
@@ -286,43 +631,63 @@ export const clientApi = {
       return globalSettings;
     }
 
-    try {
-      const projectSettings = JSON.parse(projectSettingsStr);
-      return deepMergeSettings(globalSettings, projectSettings);
-    } catch {
+    const projectPartial = parseSettingsJson(projectSettingsStr);
+    if (!projectPartial) {
       return globalSettings;
     }
+    return normalizeSettingsPayload(
+      deepMergeSettings(globalSettings, normalizeSettingsPartial(projectPartial)),
+    );
   },
 
   saveSettingsEx: async (cwd: string, scope: 'global' | 'project', updates: Partial<Settings>): Promise<Settings> => {
     initSettingsDb();
-    await acquireWriteLock();
-    try {
-      await new Promise(resolve => setTimeout(resolve, 150));
+    return withSettingsWriteLock(async () => {
+      const safeUpdates = normalizeSettingsPartial(updates);
 
       if (scope === 'global') {
-        const current = JSON.parse(lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)!);
-        const merged = deepMergeSettings(current, updates);
+        let current: Settings = getDefaultSettings();
+        const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+        if (raw) {
+          const parsed = parseSettingsJson(raw);
+          if (parsed) {
+            current = normalizeSettingsPayload(parsed);
+          }
+        }
+        const merged = normalizeSettingsPayload(deepMergeSettings(current, safeUpdates));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
         return merged;
       } else {
         const projKey = projectSettingsKey(cwd);
         const currentStr = localStorage.getItem(projKey);
-        const current = currentStr ? JSON.parse(currentStr) : {};
-        const merged = deepMergeSettings(current, updates);
+        let current: Record<string, unknown> = {};
+        const parsedProj = parseSettingsJson(currentStr);
+        if (parsedProj) {
+          current = { ...parsedProj } as Record<string, unknown>;
+        }
+        const merged = normalizeSettingsPartial(
+          deepMergeSettings(current, safeUpdates),
+        );
         localStorage.setItem(projKey, JSON.stringify(merged));
 
-        const globalSettings = JSON.parse(lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)!);
-        return deepMergeSettings(globalSettings, merged);
+        let globalSettings: Settings = getDefaultSettings();
+        const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+        if (raw) {
+          const parsed = parseSettingsJson(raw);
+          if (parsed) {
+            globalSettings = normalizeSettingsPayload(parsed);
+          }
+        }
+        return normalizeSettingsPayload(deepMergeSettings(globalSettings, merged));
       }
-    } finally {
-      releaseWriteLock();
-    }
+    });
   },
 
   // ── Telemetry：正式 no-op；demo → clientApi.demo ───────────────────────
 
-  subscribeTelemetry: (onData: (data: any) => void): (() => void) => {
+  subscribeTelemetry: (
+    onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void,
+  ): (() => void) => {
     if (!isDemoMode()) return () => undefined;
     return clientApiDemo.subscribeTelemetry(onData);
   },
@@ -393,6 +758,3 @@ export const clientApi = {
     return clientApiDemo.deleteMcpServer(id);
   },
 };
-
-/** @deprecated use clientApi */
-export const piClientApi = clientApi;

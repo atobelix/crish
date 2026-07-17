@@ -1,25 +1,84 @@
-/* 模型选择：层级列表（提供商 > 模型）— 底栏仅切换 */
+/* 模型选择：紧凑展开面板（思考强度 + 扁平列表，无下拉/无手填 id） */
 .mpick {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   right: 0;
-  width: min(300px, 92vw);
-  max-height: min(360px, 55vh);
+  width: min(260px, 90vw);
+  max-height: min(360px, 52vh);
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-subtle);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
   border-radius: 12px;
-  box-shadow: var(--shadow-lg);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, #000 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 4%, transparent);
   z-index: 20000;
   overflow: hidden;
 }
-.mpick--slim .mpick-provider-actions,
-.mpick--slim .mpick-model-actions,
-.mpick--slim .mpick-add-row {
-  display: none !important;
+
+.mpick--menu {
+  width: min(248px, 90vw);
+  max-height: min(340px, 50vh);
 }
-.mpick-model-main--row {
+
+.mpick-think {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+.mpick-think-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding-left: 2px;
+  letter-spacing: 0.02em;
+}
+.mpick-think-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.mpick-think-chip {
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-secondary);
+  border-radius: 7px;
+  padding: 6px 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.2;
+  text-align: center;
+  min-width: 0;
+}
+.mpick-think-chip:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.mpick-think-chip.is-on {
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.mpick-think-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mpick-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.mpick-menu-item {
   width: 100%;
   display: flex;
   align-items: center;
@@ -33,20 +92,78 @@
   color: var(--text-primary);
   text-align: left;
 }
-.mpick-model-main--row:hover {
+.mpick-menu-item:hover:not(:disabled) {
   background: var(--bg-hover);
 }
-.mpick-model-main--row.is-selected {
+.mpick-menu-item.is-selected {
   background: var(--bg-active);
 }
-.mpick-model-ico {
+.mpick-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mpick-menu-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.mpick-menu-item-name {
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mpick-menu-item-meta {
+  font-size: 11px;
   color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mpick-check {
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
+.mpick-empty {
+  padding: 14px 12px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.mpick-empty-title {
+  color: var(--text-secondary);
+}
+.mpick-empty-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 20em;
+}
+
+.mpick-link-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.mpick-link-btn:hover {
+  background: var(--bg-hover);
+}
+
 .mpick-error {
-  margin: 8px 10px 0;
-  padding: 8px 10px;
+  margin: 6px 8px 0;
+  padding: 7px 8px;
   border-radius: 8px;
   background: var(--accent-red-light, #fef2f2);
   color: var(--accent-red, #b91c1c);
@@ -57,16 +174,13 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  width: calc(100% - 20px);
+  gap: 8px;
+  width: calc(100% - 16px);
   box-sizing: border-box;
   border: none;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-}
-.mpick-error--action:hover {
-  filter: brightness(0.98);
 }
 .mpick-error-text {
   flex: 1;
@@ -74,345 +188,15 @@
 }
 .mpick-error-link {
   flex-shrink: 0;
-  font-size: var(--font-size-xs);
+  font-size: 12px;
   text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
-  opacity: 0.9;
-}
-
-.mpick-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.mpick-empty {
-  padding: 20px 14px;
-  text-align: center;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.mpick-link-btn {
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  padding: 6px 12px;
-  min-height: var(--control-height-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  font-family: inherit;
-  cursor: pointer;
-  color: var(--text-primary);
-}
-
-.mpick-provider {
-  border-radius: 10px;
-  margin-bottom: 4px;
-}
-
-.mpick-provider.is-active {
-  background: var(--bg-secondary);
-}
-
-.mpick-provider.is-disabled {
-  opacity: 0.65;
-}
-
-.mpick-provider-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.mpick-provider-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 6px 8px;
-  min-height: var(--control-height);
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--text-primary);
-}
-
-.mpick-provider-main:hover {
-  background: var(--bg-hover);
-}
-
-.mpick-chev {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  transition: transform 0.12s ease;
-  width: var(--icon-size-sm);
-  height: var(--icon-size-sm);
-}
-
-.mpick-chev.open {
-  transform: rotate(90deg);
-}
-
-.mpick-provider-ico {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  width: var(--icon-size);
-  height: var(--icon-size);
-}
-
-.mpick-provider-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.mpick-provider-name {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mpick-provider-meta {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-}
-
-.mpick-provider-actions {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding-right: 4px;
-  flex-shrink: 0;
-}
-
-.mpick-icon-btn {
-  width: var(--control-height);
-  height: var(--control-height);
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.mpick-icon-btn svg {
-  width: var(--icon-size);
-  height: var(--icon-size);
-}
-
-.mpick-icon-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.mpick-icon-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.mpick-icon-btn.danger:hover:not(:disabled) {
-  color: var(--accent-red, #b91c1c);
-  background: var(--accent-red-light, #fef2f2);
-}
-
-.mpick-models {
-  padding: 0 4px 8px 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mpick-empty-models {
-  padding: 8px 10px;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-}
-
-.mpick-provider-err {
-  margin: 2px 4px 6px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: 1.4;
-  word-break: break-word;
-}
-
-.mpick-model {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  border-radius: 8px;
-  min-height: var(--control-height);
-}
-
-.mpick-model:hover {
-  background: var(--bg-hover);
-}
-
-.mpick-model.is-selected {
-  background: var(--bg-active);
-}
-
-.mpick-model.is-off {
-  opacity: 0.5;
-}
-
-.mpick-model-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 6px 8px;
-  min-height: var(--control-height);
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--text-primary);
-}
-
-.mpick-model-main:disabled {
-  cursor: default;
-}
-
-.mpick-model-name {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mpick-model-ctx {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  min-width: 40px;
-  text-align: right;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.mpick-model.is-off .mpick-model-main {
-  pointer-events: none;
-  cursor: not-allowed;
-}
-
-.mpick-check {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.mpick-model-actions {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding-right: 2px;
-  flex-shrink: 0;
-  opacity: 0.55;
-}
-
-.mpick-model:hover .mpick-model-actions,
-.mpick-model.is-selected .mpick-model-actions {
-  opacity: 1;
-}
-
-.mpick-ctx-input {
-  width: 72px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 4px 6px;
-  height: var(--control-height-sm);
-  font-size: var(--font-size-xs);
-  font-family: var(--font-mono, inherit);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  outline: none;
-}
-
-.mpick-add-row {
-  display: flex;
-  gap: 6px;
-  padding: 6px 4px 2px;
-  align-items: center;
-}
-
-.mpick-add-row input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0 10px;
-  height: var(--control-height);
-  font-size: var(--font-size-base);
-  font-family: inherit;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  outline: none;
-}
-
-.mpick-add-row input:focus {
-  border-color: var(--text-tertiary);
-  background: var(--bg-primary);
-}
-
-.mpick-add-btn {
-  border: 1px solid var(--border-color);
-  background: var(--bg-active);
-  border-radius: 8px;
-  padding: 0 12px;
-  height: var(--control-height);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  font-family: inherit;
-  cursor: pointer;
-  color: var(--text-primary);
-  flex-shrink: 0;
-}
-
-.mpick-add-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .mpick-footer {
   border-top: 1px solid var(--border-subtle);
-  padding: 6px 8px;
+  padding: 4px 6px;
   flex-shrink: 0;
 }
-
 .mpick-footer-btn {
   display: flex;
   align-items: center;
@@ -420,22 +204,34 @@
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: 8px;
-  padding: 0 10px;
-  min-height: var(--control-height);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
+  border-radius: 6px;
+  padding: 0 8px;
+  min-height: 30px;
+  font-size: var(--font-size-sm);
   font-family: inherit;
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
 }
-
 .mpick-footer-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .mpick {
+/* 兼容旧类名（若别处引用） */
+.mpick--slim .mpick-provider-actions,
+.mpick--slim .mpick-model-actions {
+  display: none !important;
+}
+
+html[data-theme='dark'] .mpick {
   background: var(--bg-elevated);
+}
+
+.mpick-section-label {
+  flex-shrink: 0;
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
 }

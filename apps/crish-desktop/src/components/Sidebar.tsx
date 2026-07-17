@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
+import { useSidebarSessions } from '../store/sessionStore';
 import * as Lucide from 'lucide-react';
 import { canUseDemoMode, getAppMode, isDemoMode, switchAppMode } from '../api/appMode';
 import {
@@ -7,21 +8,35 @@ import {
   listProjects,
   type ProjectEntry,
 } from '../api/projectStore';
-import { sessionListDisplayTitle } from '../api/sessionTitle';
-import { downloadSessionMarkdown } from '../api/sessionExport';
+import { EMPTY_SESSION_TITLE, sessionListDisplayTitle } from '../api/sessionTitle';
+import { tryDownloadSessionMarkdown } from '../api/sessionExport';
+import { getSessionStoreState } from '../api/storeAccess';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 import { isUpdateAvailable } from '../api/updateStore';
+import { clearAgentPanelFocus } from '../api/openAgentPanel';
 import { emitUiEvent, onUiEvent } from '../api/uiEvents';
 import { SidebarNav } from './sidebar/SidebarNav';
 import { SidebarSessionList } from './sidebar/SidebarSessionList';
 import {
   SidebarContextMenus,
-  type AgentContextMenuState,
+  archiveUndoToastMessage,
+  branchUndoToastMessage,
+  BRANCH_TITLE_SUFFIX,
+  clampContextMenuPosition,
   type SessionContextMenuState,
+  type SessionMenuAction,
 } from './sidebar/SidebarContextMenus';
+import type { ShowToastFn } from '../hooks/useToastQueue';
+
+/** 侧栏宽度合法区间（与拖拽 / 键盘步进共用） */
+const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MAX = 360;
+const SIDEBAR_WIDTH_DEFAULT = 240;
+const SIDEBAR_RESIZE_STEP = 12;
+const SIDEBAR_RESIZE_STEP_LARGE = 24;
 
 interface SidebarProps {
-  onShowToast: (message: string, onUndo?: () => void) => void;
+  onShowToast: ShowToastFn;
   hoverExpanded?: boolean;
   onHoverEnter?: () => void;
   onHoverLeave?: () => void;
@@ -142,11 +157,12 @@ h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px
 }
 
 /**
- * Sidebar design notes (distinct from Claude):
- * - Soft pill primary CTA (outline/elevated white), not solid black brand bar
- * - Quiet text nav, section labels as microcaps
- * - Projects = folders; Conversations = flat recents when ungrouped
- * - Footer: settings + optional dev mode chip — no gateway marketing text
+ * 侧栏壳层设计要点（与 Claude 区分）：
+ * - 主 CTA 为轻量描边胶囊，非实心品牌条
+ * - 导航文案安静；分区标签为 microcaps
+ * - 项目 = 文件夹；未分组时对话为扁平最近列表
+ * - 底栏：设置 + 可选开发模式芯片，无网关营销文案
+ * - 新建仅走 store.createSession（复用空壳，防幽灵会话）
  */
 export const Sidebar: React.FC<SidebarProps> = React.memo(({
   onShowToast,
@@ -156,24 +172,25 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   onOpenRuntime: _onOpenRuntime,
   searchQuery = '',
 }) => {
-  const sessions = useLayoutStore((s) => s.sessions);
+  // zustand v5 需 traditional equality：无搜索忽略正文流式，有搜索退回引用比较
+  const searchTrimmed = searchQuery.trim();
+  const isSearching = searchTrimmed.length > 0;
+  const sessions = useSidebarSessions(isSearching);
   const activeSessionId = useLayoutStore((s) => s.activeSessionId);
-  const activeAgentId = useLayoutStore((s) => s.activeAgentId);
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setActiveSessionId = useLayoutStore((s) => s.setActiveSessionId);
-  const setActiveAgentId = useLayoutStore((s) => s.setActiveAgentId);
-  const setPanelAgentId = useLayoutStore((s) => s.setPanelAgentId);
   const createSession = useLayoutStore((s) => s.createSession);
   const pinSession = useLayoutStore((s) => s.pinSession);
   const unpinSession = useLayoutStore((s) => s.unpinSession);
   const archiveSession = useLayoutStore((s) => s.archiveSession);
   const unarchiveSession = useLayoutStore((s) => s.unarchiveSession);
   const branchSession = useLayoutStore((s) => s.branchSession);
+  const renameSession = useLayoutStore((s) => s.renameSession);
   const splitScreenWorkspace = useLayoutStore((s) => s.splitScreenWorkspace);
   const moveSessionRealtime = useLayoutStore((s) => s.moveSessionRealtime);
 
   const [contextMenu, setContextMenu] = useState<SessionContextMenuState | null>(null);
-  const [agentMenu, setAgentMenu] = useState<AgentContextMenuState | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState('chat');
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -187,10 +204,14 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false);
   const [generalCollapsed, setGeneralCollapsed] = useState(false);
   const [updateAvailable, setUpdateAvailableState] = useState(() => isUpdateAvailable());
+  /** 当前侧栏像素宽（拖拽/键盘同步，供分隔条 a11y） */
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_WIDTH_DEFAULT);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  /** 连点「新对话」防抖：createSession 已复用空壳，仍避免同帧重复 emit */
+  const newSessionLockRef = useRef(false);
 
   // 持久化排序/分组/筛选，刷新后恢复
   useEffect(() => {
@@ -201,6 +222,11 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       /* ignore */
     }
   }, [sortType, groupType, filterType]);
+
+  // 再扫：切「仅置顶」时展开置顶区，避免筛完却看不见（与 partition 空壳过滤配合）
+  useEffect(() => {
+    if (filterType === 'pinned') setPinnedCollapsed(false);
+  }, [filterType]);
 
   useEffect(() => {
     return onUiEvent('project-changed', () => {
@@ -214,8 +240,17 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     try {
       const raw = localStorage.getItem('crish_sidebar_width');
       const n = raw ? parseInt(raw, 10) : NaN;
-      if (!Number.isNaN(n) && n >= 200 && n <= 360) {
+      if (!Number.isNaN(n) && n >= SIDEBAR_WIDTH_MIN && n <= SIDEBAR_WIDTH_MAX) {
         document.documentElement.style.setProperty('--sidebar-width', `${n}px`);
+        setSidebarWidthPx(n);
+      } else {
+        const cssW = parseInt(
+          getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'),
+          10,
+        );
+        if (!Number.isNaN(cssW) && cssW >= SIDEBAR_WIDTH_MIN) {
+          setSidebarWidthPx(Math.min(cssW, SIDEBAR_WIDTH_MAX));
+        }
       }
     } catch {
       /* ignore */
@@ -232,29 +267,34 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     const handleOutsideClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
-        setAgentMenu(null);
       }
       if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
         const sortBtn = (e.target as HTMLElement).closest('.sort-btn');
         if (!sortBtn) setSortDropdownOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+        setSortDropdownOpen(false);
+      }
+    };
     document.addEventListener('click', handleOutsideClick);
-    return () => document.removeEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
-    setAgentMenu(null);
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+    setRenamingSessionId(null);
+    const { x, y } = clampContextMenuPosition(e.clientX, e.clientY);
+    setContextMenu({ x, y, sessionId });
   };
 
-  const handleContextMenuAgent = (e: React.MouseEvent, sessionId: string, agentId: string) => {
-    setContextMenu(null);
-    setAgentMenu({ x: e.clientX, y: e.clientY, sessionId, agentId });
-  };
-
-  const handleAction = (action: string) => {
+  const handleAction = (action: SessionMenuAction) => {
     if (!contextMenu) return;
     const { sessionId } = contextMenu;
     const targetSession = sessions.find((s) => s.id === sessionId);
@@ -267,37 +307,55 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         break;
       case 'open-split':
         setActiveSessionId(sessionId);
-        setActiveAgentId(null);
+        clearAgentPanelFocus();
         splitScreenWorkspace(sessionId);
         break;
       case 'open-new': {
-        // 在新窗口打开：只读会话快照（与 agent「新窗口打开」一致）
         openSessionInNewWindow(targetSession);
         break;
       }
+      case 'rename':
+        // 内联重命名；无 toast
+        setRenamingSessionId(sessionId);
+        break;
       case 'pin':
+        // 置顶即时生效，不 toast
         pinSession(sessionId);
         break;
       case 'unpin':
         unpinSession(sessionId);
         break;
-      case 'archive':
+      case 'archive': {
+        // 归档可撤销：文案与 ChatCard/App 分叉路径同构（已归档: 标题 + Undo）
+        const title = sessionListDisplayTitle(targetSession);
         archiveSession(sessionId);
-        onShowToast(`已归档: ${sessionListDisplayTitle(targetSession)}`, () => {
+        onShowToast(archiveUndoToastMessage(title), () => {
           unarchiveSession(sessionId);
         });
         break;
+      }
       case 'branch': {
-        const newTitle = `${sessionListDisplayTitle(targetSession)} - 分支`;
+        // 分叉可撤销：toast + Undo 归档新分叉并切回原会话（与顶栏/ESC 路径一致）
+        const title = sessionListDisplayTitle(targetSession);
+        const newTitle = `${title}${BRANCH_TITLE_SUFFIX}`;
+        const oldId = sessionId;
         branchSession(sessionId, newTitle);
+        const newBranchId = getSessionStoreState().activeSessionId;
+        onShowToast(branchUndoToastMessage(title), () => {
+          if (newBranchId && newBranchId !== oldId) {
+            archiveSession(newBranchId);
+          }
+          setActiveSessionId(oldId);
+        });
         break;
       }
       case 'export': {
-        try {
-          downloadSessionMarkdown(targetSession);
-          onShowToast('已导出 Markdown');
-        } catch {
-          onShowToast('导出失败');
+        // 成功静默（浏览器下载即反馈）；仅失败 toast。分叉/归档均可导出。
+        const result = tryDownloadSessionMarkdown(targetSession, new Date(), {
+          sessionsById: useLayoutStore.getState().sessionsById,
+        });
+        if (result.ok === false) {
+          onShowToast(result.error || '导出失败');
         }
         break;
       }
@@ -306,78 +364,132 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     }
   };
 
-  const handleNewSession = () => {
-    createSession({ title: '新会话' });
-    setActiveNav('chat');
-    emitUiEvent('open-chat');
-  };
+  const persistSidebarWidth = useCallback((px: number) => {
+    try {
+      localStorage.setItem('crish_sidebar_width', String(px));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-  const handleOpenScheduled = () => {
+  const applySidebarWidth = useCallback(
+    (px: number, opts?: { persist?: boolean; collapse?: boolean }) => {
+      if (opts?.collapse) {
+        useLayoutStore.setState({ sidebarCollapsed: true });
+        document.documentElement.style.setProperty('--sidebar-width', '0px');
+        return;
+      }
+      const capped = Math.min(Math.max(px, SIDEBAR_WIDTH_MIN), SIDEBAR_WIDTH_MAX);
+      useLayoutStore.setState({ sidebarCollapsed: false });
+      document.documentElement.style.setProperty('--sidebar-width', `${capped}px`);
+      setSidebarWidthPx(capped);
+      if (opts?.persist !== false) persistSidebarWidth(capped);
+    },
+    [persistSidebarWidth],
+  );
+
+  /**
+   * 唯一新建入口：仅 store.createSession（内部复用空壳 + 剪枝同伴，误触不刷幽灵列表）。
+   * 不自造 session id、不走 slash/聊天流。标题统一 EMPTY_SESSION_TITLE。
+   * 若当前筛「仅置顶」，切回全部，否则新建未置顶会话会被 partition 滤掉、侧栏无反馈。
+   * 再扫：展开「对话」区，保证活动空壳在窗口化/折叠后仍可见。
+   */
+  const handleNewSession = useCallback(() => {
+    if (newSessionLockRef.current) return;
+    newSessionLockRef.current = true;
+    try {
+      if (filterType === 'pinned') setFilterType('all');
+      setGeneralCollapsed(false);
+      // activate 默认 true → 复用同 folder 空壳；无则 mint 一条「新会话」
+      createSession({ title: EMPTY_SESSION_TITLE });
+      setActiveNav('chat');
+      setRenamingSessionId(null);
+      emitUiEvent('open-chat');
+    } finally {
+      // 微任务释放：同一次点击冒泡 / 双击不会叠两次 UI 事件
+      queueMicrotask(() => {
+        newSessionLockRef.current = false;
+      });
+    }
+  }, [createSession, filterType]);
+
+  const handleCommitRename = useCallback(
+    (sessionId: string, title: string) => {
+      setRenamingSessionId(null);
+      if (!title) return;
+      renameSession(sessionId, title);
+    },
+    [renameSession],
+  );
+
+  const handleOpenScheduled = useCallback(() => {
     setActiveNav('scheduled');
     // 主对话区展示定时任务，不进设置页
     emitUiEvent('open-scheduled');
-  };
+  }, []);
 
-  const handleSelectSession = (id: string) => {
-    setActiveSessionId(id);
-    setActiveAgentId(null);
-    setActiveNav('chat');
-    emitUiEvent('open-chat');
-  };
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      setActiveSessionId(id);
+      clearAgentPanelFocus();
+      setActiveNav('chat');
+      setRenamingSessionId(null);
+      // 再扫：选中后退出「仅置顶」以外的折叠干扰——若会话未置顶且对话区折叠则展开
+      const target = sessions.find((s) => s.id === id);
+      if (target && !target.isPinned) {
+        setGeneralCollapsed(false);
+        // 项目会话：展开对应项目组，避免选中却在折叠文件夹里
+        if (target.folder) {
+          setCollapsedProjects((prev) =>
+            prev[target.folder!] ? { ...prev, [target.folder!]: false } : prev,
+          );
+        }
+      }
+      emitUiEvent('open-chat');
+    },
+    [sessions, setActiveSessionId],
+  );
 
-  const handleSelectAgent = (sessionId: string, agentId: string) => {
-    setActiveSessionId(sessionId);
-    setActiveAgentId(agentId);
-  };
-
-  const handleOpenAgentPanel = (sessionId: string, agentId: string) => {
-    setActiveSessionId(sessionId);
-    setPanelAgentId(agentId);
-    emitUiEvent('open-agent-panel', { agentId });
-  };
-
-  const handleOpenAgentWindow = (sessionId: string, agentId: string) => {
-    const ag = sessions.find((s) => s.id === sessionId)?.agents?.find((a) => a.id === agentId);
-    if (ag) {
-      void import('./AgentCard').then(({ openAgentInNewWindow }) => {
-        openAgentInNewWindow(ag);
-      });
-    }
-  };
-
-  const handleCopyAgentSummary = (sessionId: string, agentId: string) => {
-    const ag = sessions.find((s) => s.id === sessionId)?.agents?.find((a) => a.id === agentId);
-    if (ag) {
-      void navigator.clipboard.writeText(
-        `${ag.description}\n${ag.summary || ''}\nrun:${ag.subagentRunId}`,
-      );
-      onShowToast('已复制 agent 摘要');
-    }
-  };
-
-  const handleOpenProject = (id: string) => {
+  const handleOpenProject = useCallback((id: string) => {
     setActiveProjectId(id);
     setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
-  };
+  }, []);
 
-  const handleToggleProjectCollapsed = (id: string) => {
+  const handleToggleProjectCollapsed = useCallback((id: string) => {
     setCollapsedProjects((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  }, []);
+
+  const handleToggleGeneral = useCallback(() => {
+    setGeneralCollapsed((v) => !v);
+  }, []);
+
+  const handleTogglePinned = useCallback(() => {
+    setPinnedCollapsed((v) => !v);
+  }, []);
+
+  const handleToggleProjectsSection = useCallback(() => {
+    setProjectsSectionCollapsed((v) => !v);
+  }, []);
+
+  const handleAddProject = useCallback(() => {
+    emitUiEvent('pick-workspace');
+  }, []);
+
+  const handleStartRename = useCallback((id: string) => {
+    setRenamingSessionId(id);
+  }, []);
+
+  const handleCancelRename = useCallback(() => {
+    setRenamingSessionId(null);
+  }, []);
 
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth =
       parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'), 10) ||
-      240;
+      SIDEBAR_WIDTH_DEFAULT;
     let isCurrentlyCollapsed = useLayoutStore.getState().sidebarCollapsed;
-    const persistWidth = (px: number) => {
-      try {
-        localStorage.setItem('crish_sidebar_width', String(px));
-      } catch {
-        /* ignore */
-      }
-    };
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       let newWidth = startWidth + dx;
@@ -388,12 +500,13 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         }
         document.documentElement.style.setProperty('--sidebar-width', '0px');
       } else {
-        if (newWidth > 360) newWidth = 360;
+        if (newWidth > SIDEBAR_WIDTH_MAX) newWidth = SIDEBAR_WIDTH_MAX;
         if (isCurrentlyCollapsed) {
           isCurrentlyCollapsed = false;
           useLayoutStore.setState({ sidebarCollapsed: false });
         }
         document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
+        if (newWidth >= SIDEBAR_WIDTH_MIN) setSidebarWidthPx(newWidth);
       }
     };
     const handlePointerUp = (upEvent: PointerEvent) => {
@@ -401,44 +514,107 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       window.removeEventListener('pointerup', handlePointerUp);
       const finalWidth = startWidth + (upEvent.clientX - startX);
       if (finalWidth < 80) {
-        useLayoutStore.setState({ sidebarCollapsed: true });
-        document.documentElement.style.setProperty('--sidebar-width', '0px');
+        applySidebarWidth(0, { collapse: true, persist: false });
       } else {
-        const capped = Math.min(Math.max(finalWidth, 200), 360);
-        useLayoutStore.setState({ sidebarCollapsed: false });
-        document.documentElement.style.setProperty('--sidebar-width', `${capped}px`);
-        persistWidth(capped);
+        applySidebarWidth(finalWidth, { persist: true });
       }
     };
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
   };
 
-  const handleSortBtnClick = (e: React.MouseEvent) => {
+  /** 键盘调整侧栏宽：←/→ 微调，Shift 加大步进，Home/End 到边界 */
+  const handleSidebarResizeKeyDown = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? SIDEBAR_RESIZE_STEP_LARGE : SIDEBAR_RESIZE_STEP;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      applySidebarWidth(sidebarWidthPx - step);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      applySidebarWidth(sidebarWidthPx + step);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      applySidebarWidth(SIDEBAR_WIDTH_MIN);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      applySidebarWidth(SIDEBAR_WIDTH_MAX);
+    }
+  };
+
+  const handleSortBtnClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const btn = e.currentTarget as HTMLElement;
     const rect = btn.getBoundingClientRect();
     setSortDropdownCoords({ x: rect.left, y: rect.top + rect.height + 4 });
-    setSortDropdownOpen(!sortDropdownOpen);
-  };
+    setSortDropdownOpen((open) => !open);
+  }, []);
+
+  /** 折叠且非悬停展开：对读屏隐藏壳层，避免焦点进不可见控件 */
+  const chromeHidden = Boolean(sidebarCollapsed && !hoverExpanded);
+
+  /** 顶栏搜索状态：侧栏壳层播报（搜索输入在顶栏，结果在此） */
+  const searchStatusText = useMemo(() => {
+    if (!isSearching) return '';
+    const q = searchTrimmed.length > 24 ? `${searchTrimmed.slice(0, 24)}…` : searchTrimmed;
+    return `正在筛选会话：${q}`;
+  }, [isSearching, searchTrimmed]);
+
+  const filterLabel =
+    filterType === 'pinned' ? '仅置顶' : '全部会话';
+  const densityHint = isSearching ? 'search' : filterType === 'pinned' ? 'pinned' : 'default';
 
   return (
     <aside
       ref={sidebarRef}
       className={`sidebar crish-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${hoverExpanded ? 'temp-expanded' : ''}`}
+      role="navigation"
+      aria-label="侧栏导航"
+      data-sidebar-filter={filterType}
+      data-sidebar-density={densityHint}
+      data-searching={isSearching ? '1' : '0'}
+      data-sidebar-collapsed={sidebarCollapsed ? '1' : '0'}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
     >
-      <div className="sidebar-scroll">
-        <SidebarNav
-          activeNav={activeNav}
-          onNewSession={handleNewSession}
-          onOpenScheduled={handleOpenScheduled}
-        />
+      {/* 顶栏搜索结果状态：输入在 header，读屏在此同步播报（无 sr-only token，clip 隐藏） */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        {searchStatusText}
+        {!isSearching && filterType === 'pinned' ? `筛选：${filterLabel}` : null}
+      </div>
+
+      {/* 折叠且非悬停时隐藏主 chrome，分隔条仍可键盘操作以展开 */}
+      <div
+        className="sidebar-scroll"
+        data-sidebar-chrome="scroll"
+        aria-hidden={chromeHidden || undefined}
+        inert={chromeHidden ? true : undefined}
+      >
+        {/* 新建 / 定时：中文文案即可见名；新建仅 createSession 空壳路径 */}
+        <div role="group" aria-label="侧栏快捷操作：新建对话与定时任务">
+          <SidebarNav
+            activeNav={activeNav}
+            onNewSession={handleNewSession}
+            onOpenScheduled={handleOpenScheduled}
+          />
+        </div>
         <SidebarSessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
-          activeAgentId={activeAgentId}
           searchQuery={searchQuery}
           sortType={sortType}
           groupType={groupType}
@@ -448,34 +624,40 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           generalCollapsed={generalCollapsed}
           pinnedCollapsed={pinnedCollapsed}
           projectsSectionCollapsed={projectsSectionCollapsed}
+          renamingSessionId={renamingSessionId}
           onSelectSession={handleSelectSession}
-          onSelectAgent={handleSelectAgent}
-          onOpenAgentPanel={handleOpenAgentPanel}
           onContextMenuSession={handleContextMenu}
-          onContextMenuAgent={handleContextMenuAgent}
           onToggleProjectCollapsed={handleToggleProjectCollapsed}
-          onToggleGeneral={() => setGeneralCollapsed((v) => !v)}
-          onTogglePinned={() => setPinnedCollapsed((v) => !v)}
-          onToggleProjectsSection={() => setProjectsSectionCollapsed((v) => !v)}
+          onToggleGeneral={handleToggleGeneral}
+          onTogglePinned={handleTogglePinned}
+          onToggleProjectsSection={handleToggleProjectsSection}
           onOpenProject={handleOpenProject}
           onSortBtnClick={handleSortBtnClick}
           onNewSession={handleNewSession}
-          onAddProject={() => {
-            emitUiEvent('pick-workspace');
-          }}
+          onAddProject={handleAddProject}
           onMoveSessionRealtime={moveSessionRealtime}
+          onStartRename={handleStartRename}
+          onCommitRename={handleCommitRename}
+          onCancelRename={handleCancelRename}
         />
       </div>
 
-      <div className="sidebar-footer">
+      <div
+        className="sidebar-footer"
+        role="contentinfo"
+        aria-label="侧栏底栏"
+        aria-hidden={chromeHidden || undefined}
+        inert={chromeHidden ? true : undefined}
+      >
         {canUseDemoMode() && (
           <button
             type="button"
             className={`sb-mode-chip ${isDemoMode() ? 'is-demo' : ''}`}
             title="开发切换：正式 / 演示（正式包不会出现）"
+            aria-label={isDemoMode() ? '当前演示模式，点击切换为正式' : '当前正式模式，点击切换为演示'}
+            aria-pressed={isDemoMode()}
             onClick={() => {
               const next = getAppMode() === 'demo' ? 'normal' : 'demo';
-              onShowToast(next === 'demo' ? '切换到演示模式…' : '切换到正式模式…');
               switchAppMode(next);
             }}
           >
@@ -488,10 +670,19 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             <button
               type="button"
               className="sidebar-footer-update is-visible"
-              title="有新版本可用"
-              onClick={() => onShowToast('正在检查更新…')}
+              title="有新版本，点击安装更新"
+              aria-label="安装更新"
+              onClick={() => {
+                void (async () => {
+                  const { applyUpdateWhenIdle } = await import('../api/updateStore');
+                  const r = await applyUpdateWhenIdle();
+                  onShowToast?.(r.message);
+                  if (r.ok) setUpdateAvailableState(false);
+                })();
+              }}
             >
-              <Lucide.Download size={16} />
+              <Lucide.Download size={14} aria-hidden />
+              <span className="sidebar-footer-update-label">更新</span>
             </button>
           ) : null}
         </div>
@@ -500,7 +691,18 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       <div
         className="sidebar-resizer"
         id="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整侧栏宽度"
+        aria-valuemin={SIDEBAR_WIDTH_MIN}
+        aria-valuemax={SIDEBAR_WIDTH_MAX}
+        aria-valuenow={sidebarCollapsed ? 0 : sidebarWidthPx}
+        aria-valuetext={
+          sidebarCollapsed ? '已收起' : `侧栏宽度 ${sidebarWidthPx} 像素`
+        }
+        tabIndex={0}
         onPointerDown={handleSidebarResizeStart}
+        onKeyDown={handleSidebarResizeKeyDown}
         style={{ touchAction: 'none' }}
       />
 
@@ -508,14 +710,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         menuRef={menuRef}
         sortMenuRef={sortMenuRef}
         contextMenu={contextMenu}
-        agentMenu={agentMenu}
         sessions={sessions}
         onSessionAction={handleAction}
-        onOpenAgentMain={handleSelectAgent}
-        onOpenAgentPanel={handleOpenAgentPanel}
-        onOpenAgentWindow={handleOpenAgentWindow}
-        onCopyAgentSummary={handleCopyAgentSummary}
-        onCloseAgentMenu={() => setAgentMenu(null)}
         sortDropdownOpen={sortDropdownOpen}
         sortDropdownCoords={sortDropdownCoords}
         sortType={sortType}
@@ -529,3 +725,5 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     </aside>
   );
 });
+
+Sidebar.displayName = 'Sidebar';

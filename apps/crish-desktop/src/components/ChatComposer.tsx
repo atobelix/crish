@@ -1,15 +1,273 @@
 /**
- * 主对话输入区：slash 菜单、textarea、发送/停止、附件条、+ 菜单 / 权限 / 更多。
- * 从 ChatCard 抽出以降低巨石组件变更风险。
+ * 主对话输入区：slash 菜单、textarea、发送/停止、附件条、+ 菜单 / 权限。
+ * 会话次要动作（搜索/导出）在 card-header ChatHeaderMore。
+ * 子 agent 通过 ComposerField 复用同一视觉与增高逻辑（侧栏 AgentCard / 内联 InlineAgentPanel）。
  */
-import React from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import * as Lucide from 'lucide-react';
+import { slashMenuPick } from '../api/resolveSlashCommand';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import type { PermissionMode } from '../api/permissionModes';
 import type { ChatAttachment } from '../hooks/useChatStream';
+import {
+  COMPOSER_DENSE_LINE_HEIGHT,
+  COMPOSER_LINE_HEIGHT,
+  COMPOSER_MAX_LINES,
+  useAutoGrowTextarea,
+} from '../hooks/useAutoGrowTextarea';
 
 export type SlashCommandItem = { cmd: string; desc: string };
+
+/** 与主对话同款输入壳：input-container + 发送钮 + 自动增高（默认 ≤4 行滚动） */
+export type ComposerFieldProps = {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  canSend: boolean;
+  placeholder?: string;
+  disabled?: boolean;
+  isComposing: boolean;
+  setIsComposing: (v: boolean) => void;
+  /** 流式/子 agent 运行中：显示发送（或排队）+ 停止 */
+  isProcessing?: boolean;
+  onStop?: () => void;
+  /**
+   * 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。
+   */
+  processingSendLabel?: string;
+  /** 处理中时的占位提示（中文） */
+  processingPlaceholder?: string;
+  onPaste?: (e: React.ClipboardEvent) => void;
+  /** 额外按键（slash 等）；返回 true 表示已处理 */
+  onKeyDownExtra?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean | void;
+  className?: string;
+  /** 输入框内前缀区（slash 菜单等） */
+  leading?: React.ReactNode;
+  /** 侧栏 / 内联 denser：收紧 pad + 略紧行高，仍同一套半透壳与 grow */
+  dense?: boolean;
+  /** 打开侧栏 agent 时自动聚焦 */
+  autoFocus?: boolean;
+  /** 无障碍标签（默认随 placeholder） */
+  ariaLabel?: string;
+  /**
+   * 覆盖默认 maxLines（默认 COMPOSER_MAX_LINES=4；dense 侧栏/内联常传 3）。
+   * 仍走 useAutoGrowTextarea 同一测量路径。
+   */
+  maxLines?: number;
+  /** 斜杠 / 弹出层：aria-expanded */
+  ariaExpanded?: boolean;
+  /** 关联 listbox / menu id */
+  ariaControls?: string;
+  /** listbox | menu 等 */
+  ariaHasPopup?: boolean | 'false' | 'true' | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog';
+  /** 当前高亮 option id */
+  ariaActivedescendant?: string;
+  ariaAutocomplete?: 'none' | 'inline' | 'list' | 'both';
+  /** 可选 textarea id（供外部 label / controls） */
+  textAreaId?: string;
+  /** 外壳 ref（便于父级 focus 回输入框） */
+  containerRef?: React.Ref<HTMLDivElement>;
+};
+
+export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
+  value,
+  onChange,
+  onSend,
+  canSend,
+  placeholder = '输入消息…',
+  disabled,
+  isComposing,
+  setIsComposing,
+  isProcessing,
+  onStop,
+  processingSendLabel = '排队',
+  processingPlaceholder,
+  onPaste,
+  onKeyDownExtra,
+  className,
+  leading,
+  dense = false,
+  autoFocus,
+  ariaLabel,
+  maxLines = COMPOSER_MAX_LINES,
+  ariaExpanded,
+  ariaControls,
+  ariaHasPopup,
+  ariaActivedescendant,
+  ariaAutocomplete,
+  textAreaId,
+  containerRef,
+}) => {
+  // 主列默认最多 10 行；非法/缺省回落 COMPOSER_MAX_LINES
+  const lines =
+    typeof maxLines === 'number' && Number.isFinite(maxLines)
+      ? maxLines
+      : COMPOSER_MAX_LINES;
+  const { ref: taRef, resize, maxLines: resolvedLines } = useAutoGrowTextarea(
+    value,
+    lines,
+  );
+  const lineHeightToken = dense ? COMPOSER_DENSE_LINE_HEIGHT : COMPOSER_LINE_HEIGHT;
+
+  // autoFocus 挂载后字体/布局可能尚未稳定，再量一次避免首帧单行假矮
+  useEffect(() => {
+    if (!autoFocus) return;
+    const id = requestAnimationFrame(resize);
+    return () => cancelAnimationFrame(id);
+  }, [autoFocus, resize]);
+
+  /**
+   * 空发送护栏：disabled / !canSend 一律不触发 onSend。
+   * 父级 canSend 已含 trim/附件；此处防御重复点击与 Enter 竞态。
+   */
+  const trySend = useCallback(() => {
+    if (disabled || !canSend) return;
+    onSend();
+  }, [disabled, canSend, onSend]);
+
+  const resolvedPlaceholder =
+    isProcessing && processingPlaceholder ? processingPlaceholder : placeholder;
+
+  const sendDisabled = !canSend || Boolean(disabled);
+  const sendTitle = sendDisabled
+    ? isProcessing
+      ? '请输入要排队的消息'
+      : '请输入消息或添加附件'
+    : isProcessing
+      ? processingSendLabel === '排队'
+        ? '加入队列，当前回复结束后发送'
+        : '发送补充指示'
+      : '发送 (Enter)';
+  const sendAria = sendDisabled
+    ? isProcessing
+      ? '无法排队：请先输入内容'
+      : '无法发送：请输入消息或添加附件'
+    : isProcessing
+      ? processingSendLabel
+      : '发送';
+
+  return (
+    <div
+      ref={containerRef}
+      className={`input-container${dense ? ' input-container--dense' : ''}${className ? ` ${className}` : ''}`}
+      data-composer-field="1"
+      data-composer-dense={dense ? '1' : '0'}
+      data-composer-max-lines={resolvedLines}
+      style={
+        {
+          position: 'relative',
+          // 与 hook / CSS token 同步，避免侧栏与主列行数/行高漂移
+          ['--composer-max-lines' as string]: String(resolvedLines),
+          ['--composer-line-height' as string]: String(lineHeightToken),
+        } as React.CSSProperties
+      }
+    >
+      {leading}
+      <textarea
+        id={textAreaId}
+        ref={taRef}
+        className="composer-textarea"
+        placeholder={resolvedPlaceholder}
+        rows={1}
+        value={value}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        // 主对话斜杠：combobox + listbox；子 agent 不传 popup 属性，保持普通文本框
+        role={
+          ariaHasPopup === 'listbox' || typeof ariaExpanded === 'boolean'
+            ? 'combobox'
+            : undefined
+        }
+        aria-label={ariaLabel || resolvedPlaceholder}
+        aria-multiline="true"
+        aria-expanded={ariaExpanded}
+        aria-controls={ariaControls}
+        aria-haspopup={ariaHasPopup}
+        aria-activedescendant={ariaActivedescendant}
+        aria-autocomplete={ariaAutocomplete}
+        aria-disabled={disabled || undefined}
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        // 无白底回归：行内再钉一层，不依赖 UA / autofill 实色
+        style={{
+          background: 'transparent',
+          backgroundColor: 'transparent',
+          // 与 CSS token 同值，首帧 font metrics 未就绪时 hook 仍可读
+          lineHeight: lineHeightToken,
+        }}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={() => {
+          setIsComposing(false);
+          // IME 结束后再量一次（中文候选确认后行数可能变）
+          requestAnimationFrame(resize);
+        }}
+        onChange={(e) => {
+          onChange(e.target.value);
+          // 同步增高（value 尚未 commit 时）
+          requestAnimationFrame(resize);
+        }}
+        onInput={() => {
+          // 粘贴/撤销等非 onChange 路径
+          requestAnimationFrame(resize);
+        }}
+        onPaste={onPaste}
+        onKeyDown={(e) => {
+          if (isComposing) return;
+          if (onKeyDownExtra?.(e) === true) return;
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            trySend();
+          }
+        }}
+      />
+      <div className="chat-input-buttons">
+        {isProcessing ? (
+          <>
+            <button
+              type="button"
+              className="send-btn queue-btn"
+              title={sendTitle}
+              aria-label={sendAria}
+              onClick={trySend}
+              disabled={sendDisabled}
+            >
+              {processingSendLabel}
+            </button>
+            {onStop ? (
+              <button
+                type="button"
+                className="send-btn send-btn--stop"
+                title="停止生成"
+                aria-label="停止生成"
+                onClick={onStop}
+              >
+                <Lucide.Square size={16} fill="currentColor" />
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <button
+            type="button"
+            className="send-btn"
+            title={sendTitle}
+            aria-label={sendAria}
+            onClick={trySend}
+            disabled={sendDisabled}
+          >
+            {disabled ? (
+              <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+            ) : (
+              <Lucide.CornerDownLeft size={16} />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+ComposerField.displayName = 'ComposerField';
 
 export type ChatComposerProps = {
   chatInput: string;
@@ -33,21 +291,10 @@ export type ChatComposerProps = {
   onFilesSelected: (files: File[]) => void | Promise<void>;
   showPlusMenu: boolean;
   setShowPlusMenu: (v: boolean) => void;
-  showMoreMenu: boolean;
-  setShowMoreMenu: (v: boolean) => void;
-  showMsgFilter: boolean;
-  setShowMsgFilter: React.Dispatch<React.SetStateAction<boolean>>;
-  setLocalMsgFilter: (v: string) => void;
-  moreMenuRef: React.RefObject<HTMLDivElement | null>;
   permissionMode: PermissionMode;
   onPermissionChange: (m: PermissionMode) => void;
-  onExportMarkdown: () => void;
-  canExport: boolean;
   onOpenSchedule: () => void;
-  onShowToast: (msg: string) => void;
-  /** 关闭其它互斥菜单（模型下拉等） */
   onCloseSiblingMenus?: () => void;
-  /** 右侧动作区（模型选择等） */
   rightActions?: React.ReactNode;
 };
 
@@ -73,184 +320,246 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onFilesSelected,
   showPlusMenu,
   setShowPlusMenu,
-  showMoreMenu,
-  setShowMoreMenu,
-  showMsgFilter,
-  setShowMsgFilter,
-  setLocalMsgFilter,
-  moreMenuRef,
   permissionMode,
   onPermissionChange,
-  onExportMarkdown,
-  canExport,
   onOpenSchedule,
-  onShowToast: _onShowToast,
   onCloseSiblingMenus,
   rightActions,
 }) => {
+  const listboxId = useId();
+  const plusMenuId = useId();
+  const textAreaDomId = useId();
+  const slashRootRef = useRef<HTMLDivElement>(null);
+  const activeItemRef = useRef<HTMLDivElement | null>(null);
+  const fieldContainerRef = useRef<HTMLDivElement>(null);
+  const plusBtnRef = useRef<HTMLButtonElement>(null);
+
+  const safeIndex = useMemo(() => {
+    if (filteredCommands.length === 0) return 0;
+    return Math.min(Math.max(0, slashSelectedIndex), filteredCommands.length - 1);
+  }, [filteredCommands.length, slashSelectedIndex]);
+
+  // 过滤结果变短时钳制选中下标，避免越界高亮
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    if (slashSelectedIndex !== safeIndex) {
+      setSlashSelectedIndex(safeIndex);
+    }
+  }, [slashMenuOpen, slashSelectedIndex, safeIndex, setSlashSelectedIndex]);
+
+  // 键盘/过滤切换后把 active 项滚入视野
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    activeItemRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [slashMenuOpen, safeIndex, filteredCommands.length]);
+
+  // 点菜单外关闭（与 + 菜单同契约）
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (slashRootRef.current?.contains(t)) return;
+      // 输入框内继续打字不关；仅真正外部点击
+      const el = t as HTMLElement | null;
+      if (el?.closest?.('.input-container')) return;
+      setSlashMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [slashMenuOpen, setSlashMenuOpen]);
+
+  const focusComposerTextarea = useCallback(() => {
+    const root = fieldContainerRef.current;
+    const ta =
+      root?.querySelector?.('textarea.composer-textarea') ??
+      root?.querySelector?.('textarea');
+    if (ta instanceof HTMLTextAreaElement) {
+      ta.focus();
+    }
+  }, []);
+
+  const applySlashSelection = useCallback(
+    (cmd: string) => {
+      setSlashMenuOpen(false);
+      const pick = slashMenuPick(cmd);
+      if (pick.action === 'open-schedule') {
+        // 纯导航：只开定时面板，清空输入，绝不走 onSend（防幽灵会话）
+        setChatInput('');
+        onOpenSchedule();
+        requestAnimationFrame(focusComposerTextarea);
+        return;
+      }
+      // fill：写入规范文本（常带尾空格待续参），焦点回输入框继续编辑
+      setChatInput(pick.text);
+      requestAnimationFrame(focusComposerTextarea);
+    },
+    [focusComposerTextarea, onOpenSchedule, setChatInput, setSlashMenuOpen],
+  );
+
+  const optionId = (i: number) => `${listboxId}-opt-${i}`;
+
+  const slashActiveDesc =
+    slashMenuOpen && filteredCommands.length > 0
+      ? optionId(safeIndex)
+      : undefined;
+
   return (
     <>
-      <div className="input-container" style={{ position: 'relative' }}>
-        {slashMenuOpen && filteredCommands.length > 0 && (
-          <div
-            className="slash-commands-popover"
-            style={{
-              position: 'absolute',
-              bottom: 'calc(100% + 8px)',
-              left: 0,
-              width: 260,
-              background: 'var(--bg-primary)',
-              borderRadius: 12,
-              boxShadow: 'var(--shadow-lg)',
-              padding: 6,
-              zIndex: 15,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
-            {filteredCommands.map((c, i) => (
-              <div
-                key={c.cmd}
-                className={`slash-command-item ${i === slashSelectedIndex ? 'active' : ''}`}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  background: i === slashSelectedIndex ? 'var(--accent-light)' : 'transparent',
-                  color: i === slashSelectedIndex ? 'var(--accent-color)' : 'var(--text-secondary)',
-                }}
-                onClick={() => {
-                  setSlashMenuOpen(false);
-                  if (c.cmd === '/schedule') {
-                    setChatInput('');
-                    onOpenSchedule();
-                    return;
-                  }
-                  setChatInput(c.cmd + ' ');
-                }}
-                onMouseEnter={() => setSlashSelectedIndex(i)}
-              >
-                <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>
-                  {c.cmd}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{c.desc}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <textarea
-          placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
-          rows={1}
-          value={chatInput}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onChange={(e) => {
-            const val = (e.target as HTMLTextAreaElement).value;
-            setChatInput(val);
-            if (val.startsWith('/') && !val.includes(' ')) {
-              setSlashMenuOpen(true);
-              void loadSkillSlash();
-            } else {
-              setSlashMenuOpen(false);
-            }
-          }}
-          onPaste={(e) => {
-            void onPasteImage(e);
-          }}
-          onKeyDown={(e) => {
-            if (isComposing) return;
-            if (slashMenuOpen && filteredCommands.length > 0) {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSlashSelectedIndex((prev) => (prev + 1) % filteredCommands.length);
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSlashSelectedIndex(
-                  (prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length,
-                );
-              } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const selectedCmd = filteredCommands[slashSelectedIndex].cmd;
-                setSlashMenuOpen(false);
-                if (selectedCmd === '/schedule') {
-                  setChatInput('');
-                  onOpenSchedule();
-                  return;
-                }
-                setChatInput(selectedCmd + ' ');
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                setSlashMenuOpen(false);
-              }
-            } else if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              onSend();
-            }
-          }}
-          style={{ flex: 1 }}
-        />
-
-        <div className="chat-input-buttons">
-          {isProcessing ? (
-            <>
-              <button
-                type="button"
-                className="send-btn queue-btn"
-                title="加入队列，当前回复结束后发送"
-                onClick={onSend}
-                disabled={!canSend}
-              >
-                排队
-              </button>
-              <button
-                type="button"
-                className="send-btn"
-                title="停止生成"
-                onClick={onStop}
-                style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-              >
-                <Lucide.Square size={16} fill="currentColor" />
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="send-btn"
-              title="发送 (Enter)"
-              onClick={onSend}
-              disabled={!canSend}
+      <ComposerField
+        containerRef={fieldContainerRef}
+        textAreaId={textAreaDomId}
+        value={chatInput}
+        onChange={(val) => {
+          setChatInput(val);
+          if (val.startsWith('/') && !val.includes(' ')) {
+            setSlashMenuOpen(true);
+            setShowPlusMenu(false);
+            setSlashSelectedIndex(0);
+            void loadSkillSlash();
+          } else {
+            setSlashMenuOpen(false);
+          }
+        }}
+        onSend={onSend}
+        canSend={canSend}
+        isComposing={isComposing}
+        setIsComposing={setIsComposing}
+        isProcessing={isProcessing}
+        onStop={onStop}
+        onPaste={(e) => {
+          void onPasteImage(e);
+        }}
+        placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
+        processingPlaceholder="输入排队消息…（当前回复结束后发送，可粘贴截图）"
+        ariaLabel="主对话输入"
+        ariaExpanded={slashMenuOpen}
+        ariaControls={slashMenuOpen ? listboxId : undefined}
+        ariaHasPopup="listbox"
+        ariaActivedescendant={slashActiveDesc}
+        ariaAutocomplete="list"
+        leading={
+          slashMenuOpen ? (
+            <div
+              ref={slashRootRef}
+              id={listboxId}
+              className="slash-commands-popover"
+              role="listbox"
+              aria-label="斜杠命令"
+              aria-activedescendant={slashActiveDesc}
             >
-              <Lucide.CornerDownLeft size={16} />
-            </button>
-          )}
-        </div>
-      </div>
+              {filteredCommands.length === 0 ? (
+                <div className="slash-command-empty" role="presentation">
+                  无匹配命令
+                </div>
+              ) : (
+                filteredCommands.map((c, i) => {
+                  const active = i === safeIndex;
+                  return (
+                    <div
+                      key={c.cmd}
+                      id={optionId(i)}
+                      ref={active ? activeItemRef : undefined}
+                      role="option"
+                      aria-selected={active}
+                      className={`slash-command-item${active ? ' is-active' : ''}`}
+                      onClick={() => applySlashSelection(c.cmd)}
+                      onMouseEnter={() => setSlashSelectedIndex(i)}
+                    >
+                      <span className="slash-command-cmd">{c.cmd}</span>
+                      <span className="slash-command-desc">{c.desc}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : null
+        }
+        onKeyDownExtra={(e) => {
+          if (!slashMenuOpen) return false;
+          const n = filteredCommands.length;
+
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setSlashMenuOpen(false);
+            // 焦点留在输入框
+            requestAnimationFrame(focusComposerTextarea);
+            return true;
+          }
+          if (e.key === 'Tab') {
+            // Tab 收起菜单，允许默认焦点移动
+            setSlashMenuOpen(false);
+            return false;
+          }
+          if (n === 0) {
+            // 无匹配时 Enter 不发送残缺 slash-only（防空壳会话）
+            if (e.key === 'Enter' && !e.shiftKey) {
+              const bare = chatInput.trim();
+              if (bare === '/' || bare === '／') {
+                e.preventDefault();
+                return true;
+              }
+            }
+            return false;
+          }
+
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSlashSelectedIndex((prev) => (prev + 1) % n);
+            return true;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSlashSelectedIndex((prev) => (prev - 1 + n) % n);
+            return true;
+          }
+          if (e.key === 'Home') {
+            e.preventDefault();
+            setSlashSelectedIndex(0);
+            return true;
+          }
+          if (e.key === 'End') {
+            e.preventDefault();
+            setSlashSelectedIndex(n - 1);
+            return true;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const selected = filteredCommands[safeIndex];
+            // 菜单确认只 fill / 导航，绝不直接 onSend
+            if (selected) applySlashSelection(selected.cmd);
+            return true;
+          }
+          return false;
+        }}
+      />
 
       {attachments.length > 0 && (
-        <div className="chat-attach-strip" aria-label="附件">
+        <div
+          className="chat-attach-strip"
+          role="list"
+          aria-label={`附件，共 ${attachments.length} 个`}
+        >
           {attachments.map((a) => (
             <span
               key={a.name}
+              role="listitem"
               className={`chat-attach-chip ${a.dataUrl ? 'chat-attach-chip--image' : ''}`}
               title={a.name}
             >
               {a.dataUrl ? (
                 <img src={a.dataUrl} alt={a.name} className="chat-attach-thumb" />
               ) : (
-                <Lucide.Paperclip size={14} className="chat-attach-icon" />
+                <Lucide.Paperclip size={14} className="chat-attach-icon" aria-hidden />
               )}
               <span className="chat-attach-name">{a.name}</span>
               <button
                 type="button"
                 className="ui-btn ui-btn-ghost chat-attach-remove"
-                aria-label={`移除 ${a.name}`}
+                aria-label={`移除附件 ${a.name}`}
+                title={`移除 ${a.name}`}
                 onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
               >
-                <Lucide.X size={14} />
+                <Lucide.X size={14} aria-hidden />
               </button>
             </span>
           ))}
@@ -261,98 +570,68 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         ref={fileInputRef as React.RefObject<HTMLInputElement>}
         type="file"
         multiple
+        aria-hidden
+        tabIndex={-1}
         style={{ display: 'none' }}
         onChange={async (e) => {
           const files = Array.from(e.target.files || []);
           e.target.value = '';
           if (!files.length) return;
           await onFilesSelected(files);
+          // 选完文件后焦点回输入框，便于继续打字发送
+          requestAnimationFrame(focusComposerTextarea);
         }}
       />
 
       <div className="footer-actions">
         <div className="left-actions" style={{ position: 'relative' }}>
           <button
+            ref={plusBtnRef}
             type="button"
             className={`plus-btn ${showPlusMenu ? 'is-open' : ''}`}
-            title="添加"
+            title="添加文件、技能、扩展…"
+            aria-label="打开添加菜单"
+            aria-haspopup="menu"
+            aria-expanded={showPlusMenu}
+            aria-controls={showPlusMenu ? plusMenuId : undefined}
             onClick={() => {
               if (showPlusMenu) {
                 setShowPlusMenu(false);
+                requestAnimationFrame(() => plusBtnRef.current?.focus());
               } else {
                 setShowPlusMenu(true);
+                setSlashMenuOpen(false);
                 onCloseSiblingMenus?.();
-                setShowMoreMenu(false);
               }
             }}
           >
-            <Lucide.Plus size={16} />
+            <Lucide.Plus size={16} aria-hidden />
           </button>
           <ComposePlusMenu
+            id={plusMenuId}
             open={showPlusMenu}
             onClose={() => setShowPlusMenu(false)}
             onAddFiles={() => fileInputRef.current?.click()}
+            onInsertSkillSlash={() => {
+              // 打开斜杠菜单：以 / 起头触发技能/指令
+              if (!chatInput.startsWith('/')) {
+                setChatInput(chatInput ? `/${chatInput}` : '/');
+              }
+              setSlashMenuOpen(true);
+              void loadSkillSlash();
+              requestAnimationFrame(focusComposerTextarea);
+            }}
+            restoreFocusRef={plusBtnRef}
           />
           <PermissionModeMenu
             mode={permissionMode}
             onChange={(m) => {
               onPermissionChange(m);
               setShowPlusMenu(false);
+              setSlashMenuOpen(false);
               onCloseSiblingMenus?.();
-              setShowMoreMenu(false);
             }}
           />
-          <div className="chat-more-wrap" ref={moreMenuRef as React.RefObject<HTMLDivElement>}>
-            <button
-              type="button"
-              className={`plus-btn${showMoreMenu ? ' is-open' : ''}${showMsgFilter ? ' is-on' : ''}`}
-              title="更多"
-              aria-label="更多"
-              aria-haspopup="menu"
-              aria-expanded={showMoreMenu}
-              onClick={() => {
-                setShowMoreMenu(!showMoreMenu);
-                setShowPlusMenu(false);
-                onCloseSiblingMenus?.();
-              }}
-            >
-              <Lucide.MoreHorizontal size={16} />
-            </button>
-            {showMoreMenu ? (
-              <div className="chat-more-menu" role="menu" aria-label="更多操作">
-                <button
-                  type="button"
-                  className="chat-more-item"
-                  role="menuitem"
-                  aria-pressed={showMsgFilter}
-                  onClick={() => {
-                    setShowMsgFilter((v) => {
-                      const next = !v;
-                      if (!next) setLocalMsgFilter('');
-                      return next;
-                    });
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <Lucide.Search size={15} strokeWidth={1.75} />
-                  <span>{showMsgFilter ? '关闭搜索' : '搜索本会话'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="chat-more-item"
-                  role="menuitem"
-                  disabled={!canExport}
-                  onClick={() => {
-                    onExportMarkdown();
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <Lucide.FileDown size={15} strokeWidth={1.75} />
-                  <span>导出 Markdown</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
         </div>
         <div className="right-actions">{rightActions}</div>
       </div>

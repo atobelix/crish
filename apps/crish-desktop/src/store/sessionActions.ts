@@ -1,12 +1,32 @@
 /**
  * 会话 / 消息 / agent 相关 action 实现。
- * 仍挂在同一 useLayoutStore，不单独建 zustand store。
+ * 仍挂在同一 useLayoutStore（Phase 1）；对外请用 sessionStore.ts 的 useSessionStore 门面。
  */
 
 import { isDemoMode } from '../api/appMode';
-import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
-import type { PermissionMode } from '../api/permissionModes';
-import { fillDefaultSessionTitles, maybeAutoTitleFromMessages } from '../api/sessionTitle';
+import {
+  GENERAL_FOLDER,
+  canonicalSessionFolder,
+  getActiveProjectId,
+} from '../api/projectStore';
+import {
+  persistPermissionMode,
+  planModeEnabledFor,
+  type PermissionMode,
+} from '../api/permissionModes';
+import {
+  EMPTY_SESSION_TITLE,
+  findReusableEmptyShell,
+  isDefaultSessionTitle,
+  isEmptyShellSession,
+  maybeAutoTitleFromMessages,
+  prepareSessionsForUi,
+  pruneEmptyShellSessions,
+  sanitizeSessionTitleText,
+  shellPruneKeepIds,
+  truncateSessionTitle,
+} from '../api/sessionTitle';
+import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -15,11 +35,15 @@ import type {
   SessionState,
 } from './types';
 import {
+  deleteSessionFromIndexed,
   getSessionById,
   getSessionIndex,
   reindexSessionsById,
   type SessionsIndexed,
 } from './sessionIndex';
+
+/** 手动 rename / 分叉标题码点上限（略宽于侧栏自动标题 28） */
+const MANUAL_SESSION_TITLE_MAX_LEN = 48;
 
 /**
  * 会话域 action 需要读写的 store 切片（避免与 layoutStore 循环 import）。
@@ -55,7 +79,20 @@ export interface SessionActions {
   ) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   renameSession: (sessionId: string, title: string) => void;
-  createSession: (opts?: { title?: string; folder?: string; id?: string }) => string;
+  /**
+   * @param opts.activate 默认 true。定时任务占位会话传 false，避免抢走当前对话焦点。
+   */
+  createSession: (opts?: {
+    title?: string;
+    folder?: string;
+    id?: string;
+    activate?: boolean;
+  }) => string;
+  /**
+   * 删除会话（数组 + 索引）。活动中则切到邻近非归档会话；顺带清终端缓冲与幽灵空壳。
+   * @returns 是否删除了条目
+   */
+  deleteSession: (sessionId: string) => boolean;
   pinSession: (sessionId: string) => void;
   unpinSession: (sessionId: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -138,11 +175,162 @@ function getSessionMessage(
   return { session, message };
 }
 
+/** 工具调用增量相对当前字段是否有实质变化（浅比较；diffs 比引用） */
+function toolCallPatchHasChanges(
+  tc: MessageToolCall,
+  updates: Partial<MessageToolCall>,
+): boolean {
+  for (const key of Object.keys(updates) as Array<keyof MessageToolCall>) {
+    if (tc[key] !== updates[key]) return true;
+  }
+  return false;
+}
+
 function getSessionAgent(
   session: SessionState,
   agentId: string,
 ): SessionAgent | undefined {
   return session.agents?.find((a) => a.id === agentId);
+}
+
+/**
+ * 清洗并按码点截断用户/程序写入的标题（CJK / emoji UTF-8 安全）。
+ * 空输入 → null（调用方决定回落默认或保留旧值）。
+ */
+function normalizeWritableSessionTitle(
+  raw: string | null | undefined,
+  maxLen: number = MANUAL_SESSION_TITLE_MAX_LEN,
+): string | null {
+  const cleaned = sanitizeSessionTitleText(raw);
+  if (!cleaned) return null;
+  return truncateSessionTitle(cleaned, maxLen);
+}
+
+/** 仅当现标题仍是默认占位时写入清洗后的新标题 */
+function applyTitleIfDefault(
+  sess: SessionState,
+  rawTitle: string | null | undefined,
+): void {
+  if (rawTitle == null) return;
+  if (!isDefaultSessionTitle(sess.title)) return;
+  const next = normalizeWritableSessionTitle(rawTitle);
+  if (next) sess.title = next;
+}
+
+/**
+ * 删除/归档后的活动回落：
+ * 1) 邻近非归档且非空壳
+ * 2) 任意非归档非空壳
+ * 3) 邻近非归档（含空壳，避免无焦点）
+ * 4) 任意其它会话（含归档）
+ */
+function pickFallbackActiveSessionId(
+  state: SessionsIndexed,
+  removedId: string,
+  removedIndex: number,
+): string {
+  const sessions = state.sessions;
+  const isCandidate = (s: SessionState | undefined): s is SessionState =>
+    Boolean(s && s.id && s.id !== removedId);
+
+  const scanNeighbors = (
+    pred: (s: SessionState) => boolean,
+  ): string | null => {
+    for (let i = removedIndex + 1; i < sessions.length; i++) {
+      const s = sessions[i];
+      if (isCandidate(s) && pred(s)) return s.id;
+    }
+    for (let i = removedIndex - 1; i >= 0; i--) {
+      const s = sessions[i];
+      if (isCandidate(s) && pred(s)) return s.id;
+    }
+    return null;
+  };
+
+  const scanAll = (pred: (s: SessionState) => boolean): string | null => {
+    for (const s of sessions) {
+      if (isCandidate(s) && pred(s)) return s.id;
+    }
+    return null;
+  };
+
+  // 优先有内容的邻近会话，避免把 active 落到即将被 prune 的幽灵壳
+  const solid = (s: SessionState) => !s.isArchived && !isEmptyShellSession(s);
+
+  return (
+    scanNeighbors(solid) ||
+    scanAll(solid) ||
+    scanNeighbors((s) => !s.isArchived) ||
+    scanAll((s) => !s.isArchived) ||
+    scanAll(() => true) ||
+    ''
+  );
+}
+
+/** 清掉会话终端缓冲；若当前视图挂在该会话则同步清空 terminalLines */
+function dropTerminalForSession(
+  state: SessionStoreSlice,
+  sessionId: string,
+): void {
+  if (!sessionId) return;
+  if (state.terminalBySession && sessionId in state.terminalBySession) {
+    delete state.terminalBySession[sessionId];
+  }
+  if (state.activeSessionId === sessionId) {
+    state.terminalLines = [];
+  }
+}
+
+/** 剪空壳并在引用变化时 reindex；顺带 GC 已消失会话的 terminal 缓冲 */
+function pruneEmptyShellsInPlace(
+  state: SessionStoreSlice,
+  keepIds: Iterable<string>,
+): void {
+  const pruned = pruneEmptyShellSessions(state.sessions, { keepIds });
+  if (pruned !== state.sessions) {
+    state.sessions = pruned;
+    reindexSessionsById(state);
+  }
+  // 与 setSessions 同源：列表已无的会话勿泄漏 terminalBySession
+  if (state.terminalBySession) {
+    for (const tid of Object.keys(state.terminalBySession)) {
+      if (!state.sessionsById[tid]) {
+        delete state.terminalBySession[tid];
+      }
+    }
+  }
+}
+
+/**
+ * createSession 复用路径：find 与 set 之间壳可能被写消息 / 置顶 / 改标题 / 归档。
+ * 须在 draft 内再验一次；不合格则零写入，由调用方 mint 新会话。
+ */
+function isStillReusableEmptyShell(
+  sess: SessionState,
+  folder: string,
+): boolean {
+  if (sess.isArchived) return false;
+  if (!isEmptyShellSession(sess)) return false;
+  // 与 findReusableEmptyShell 同 folder 契约（含幽灵 proj-* 规范后比较）
+  if (canonicalSessionFolder(sess.folder) !== canonicalSessionFolder(folder)) {
+    return false;
+  }
+  return true;
+}
+
+/** 若标题仍默认且消息可推导，写中文安全短标题（可选碰撞后缀） */
+function maybeAutoTitleSession(
+  state: SessionsIndexed,
+  sess: SessionState,
+): void {
+  const existingTitles = state.sessions
+    .filter((s) => s.id !== sess.id)
+    .map((s) => s.title);
+  const auto = maybeAutoTitleFromMessages(sess.title, sess.messages, {
+    existingTitles,
+    excludeTitle: sess.title,
+  });
+  if (auto) sess.title = auto;
 }
 
 /**
@@ -156,26 +344,35 @@ export function createSessionActions<T extends SessionStoreSlice>(
   return {
     addMessage: (_wsId, sessionId, message) => set((state) => {
       const sess = getSessionById(state, sessionId);
-      if (sess) {
-        if (!sess.messages) sess.messages = [];
+      if (!sess) return;
+      if (!sess.messages) sess.messages = [];
 
-        // 注意：正式审批由 daemonChatBridge 处理；此处不再伪造「自动授权成功」输出
-        const newMsg = {
-          ...message,
-          blocks: message.blocks || []
-        };
-        if (newMsg.blocks.length === 0) {
-          if (newMsg.text) {
-            newMsg.blocks.push({ type: 'text' as const, content: newMsg.text });
-          }
-          if (newMsg.toolCalls) {
-            newMsg.toolCalls.forEach(tc => {
-              newMsg.blocks.push({ type: 'tool_call' as const, id: tc.id });
-            });
-          }
+      // 注意：正式审批由 daemonChatBridge 处理；此处不再伪造「自动授权成功」输出
+      const newMsg = {
+        ...message,
+        blocks: message.blocks || [],
+      };
+      if (newMsg.blocks.length === 0) {
+        if (newMsg.text) {
+          newMsg.blocks.push({ type: 'text' as const, content: newMsg.text });
         }
+        if (newMsg.toolCalls) {
+          newMsg.toolCalls.forEach((tc) => {
+            newMsg.blocks.push({ type: 'tool_call' as const, id: tc.id });
+          });
+        }
+      }
 
-        sess.messages.push(newMsg);
+      sess.messages.push(newMsg);
+      // 活动触达写 ISO，侧栏相对时间可老化；勿写「刚刚」字面量
+      const ts =
+        typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
+          ? new Date(message.timestamp).toISOString()
+          : nowIsoTimestamp();
+      sess.timestamp = ts;
+      // 首条用户消息：默认标题 → 中文安全短标题（用户手改不覆盖）
+      if (message.sender === 'user') {
+        maybeAutoTitleSession(state, sess);
       }
     }),
 
@@ -211,8 +408,10 @@ export function createSessionActions<T extends SessionStoreSlice>(
     }),
 
     setSessions: (sessions) => set((state) => {
-      // 合并远程后补默认标题（有消息则推导）
-      state.sessions = fillDefaultSessionTitles(sessions);
+      // 与 hydrate/diskMirror 同源：fillDefault + shellPruneKeepIds(active)
+      // keep 仅 active：daemon sync / 落盘恢复后不应保留多余幽灵；定时真实标题不剪
+      // 不 invent 远程空壳：prepare 内 prune 会丢掉非 keep 的默认幽灵
+      state.sessions = prepareSessionsForUi(sessions, state.activeSessionId || null);
       reindexSessionsById(state);
       // 合并远程会话后补齐侧栏分组顺序
       for (const s of state.sessions) {
@@ -220,9 +419,20 @@ export function createSessionActions<T extends SessionStoreSlice>(
           state.folderOrder.push(s.folder);
         }
       }
-      // 活动会话若已被移除则清空（回到空态）
+      // 活动会话若已被移除则清空（回到空态）并清 agent / 终端视图
       if (state.activeSessionId && !state.sessionsById[state.activeSessionId]) {
         state.activeSessionId = '';
+        state.activeAgentId = null;
+        state.panelAgentId = null;
+        state.terminalLines = [];
+      }
+      // 已从列表消失的会话：清 terminal 缓冲，避免泄漏
+      if (state.terminalBySession) {
+        for (const tid of Object.keys(state.terminalBySession)) {
+          if (!state.sessionsById[tid]) {
+            delete state.terminalBySession[tid];
+          }
+        }
       }
     }),
 
@@ -230,6 +440,8 @@ export function createSessionActions<T extends SessionStoreSlice>(
       const hit = getSessionMessage(state, sessionId, messageId);
       if (!hit) return;
       const msg = hit.message;
+      // 与旧 text 全等：不碰 draft，避免流式重复帧触发 immer 通知
+      if (msg.text === text) return;
       const prev = msg.text || '';
       msg.text = text;
       if (!msg.blocks) msg.blocks = [];
@@ -253,6 +465,8 @@ export function createSessionActions<T extends SessionStoreSlice>(
     updateMessageThinking: (sessionId, messageId, thinking) => set((state) => {
       const hit = getSessionMessage(state, sessionId, messageId);
       if (!hit) return;
+      // 与旧 thinking 全等：不修改 draft
+      if (hit.message.thinking === thinking) return;
       // 支持累计全文或引擎推送的完整思考
       hit.message.thinking = thinking;
     }),
@@ -309,24 +523,35 @@ export function createSessionActions<T extends SessionStoreSlice>(
       const hit = getSessionMessage(state, sessionId, messageId);
       if (!hit) return;
       const msg = hit.message;
-      if (!msg.toolCalls) msg.toolCalls = [];
+      // 无 toolCalls 时直接返回，避免空数组占位写 draft
+      if (!msg.toolCalls) return;
       const tc = msg.toolCalls.find((t) => t.id === toolCallId);
       if (!tc) return;
+      // 终态后忽略回退为 running 的 status，只吸收其余字段
+      let effective: Partial<MessageToolCall> = updates;
       if (
         (tc.status === 'success' || tc.status === 'error') &&
         updates.status === 'running'
       ) {
         const { status: _s, ...rest } = updates;
-        Object.assign(tc, rest);
-        return;
+        effective = rest;
       }
-      Object.assign(tc, updates);
+      // 字段无实质变化：不 Object.assign
+      if (!toolCallPatchHasChanges(tc, effective)) return;
+      Object.assign(tc, effective);
       // 不对齐 id 时不猜「最近 running」，避免写错行
     }),
 
     setSessionMessageStatus: (sessionId, messageId, status, thinkingTime) => set((state) => {
       const hit = getSessionMessage(state, sessionId, messageId);
       if (!hit) return;
+      // status / thinkingTime 均无变化时不改 draft
+      if (
+        hit.message.status === status &&
+        (thinkingTime === undefined || hit.message.thinkingTime === thinkingTime)
+      ) {
+        return;
+      }
       hit.message.status = status;
       if (thinkingTime !== undefined) {
         hit.message.thinkingTime = thinkingTime;
@@ -350,8 +575,20 @@ export function createSessionActions<T extends SessionStoreSlice>(
       if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
     }),
 
+    /**
+     * 主对话列永不挂 agent。
+     * 非 null 时改写到 panelAgentId，避免历史路径同时点亮双表面。
+     * 打开侧栏请优先 openAgentInSidePanel。
+     */
     setActiveAgentId: (id) => set((state) => {
-      state.activeAgentId = id;
+      // 主列永不挂 agent：非 null 改写到 panel；null 仅清主列字段
+      // （侧栏焦点请用 setPanelAgentId / openAgentInSidePanel / clearAgentPanelFocus）
+      if (id) {
+        state.activeAgentId = null;
+        state.panelAgentId = id;
+      } else {
+        state.activeAgentId = null;
+      }
     }),
 
     setPanelAgentId: (id) => set((state) => {
@@ -406,17 +643,27 @@ export function createSessionActions<T extends SessionStoreSlice>(
     }),
 
     setActiveSessionId: (id) => {
+      const nextId = typeof id === 'string' ? id : '';
       set((state) => {
-        state.activeSessionId = id;
-        state.activeAgentId = null; // 切会话时回到主对话
-        // 切换会话时切换终端缓冲视图
-        if (id) {
-          state.terminalLines = state.terminalBySession[id] || [];
+        // 活动安全：非空 id 必须已在列表中，禁止指到幽灵 id
+        if (nextId && !getSessionById(state, nextId)) {
+          return;
+        }
+        // 切换只改焦点与终端视图；绝不 prune 空「新会话」
+        // （否则用户连建多个对话一切换就丢，体感像「掉对话」）
+        const same = state.activeSessionId === nextId;
+        state.activeSessionId = nextId;
+        if (!same) {
+          state.activeAgentId = null; // 主列永不挂 agent
+          state.panelAgentId = null; // 切会话清侧栏 agent 焦点，避免串会话
+          state.terminalLines = nextId
+            ? state.terminalBySession[nextId] || []
+            : [];
         }
       });
       // 正式版：切换会话时同步工作区 cwd（folder = projectId 或 对话）
-      if (!isDemoMode() && id) {
-        const sess = getSessionById(get(), id);
+      if (!isDemoMode() && nextId) {
+        const sess = getSessionById(get(), nextId);
         if (sess) {
           void import('../api/projectStore').then(({ activateWorkspaceForSessionFolder }) => {
             activateWorkspaceForSessionFolder(sess.folder);
@@ -427,23 +674,21 @@ export function createSessionActions<T extends SessionStoreSlice>(
             (!sess.messages || sess.messages.length === 0)
           ) {
             void import('../api/sessionEventHydrate').then(({ hydrateSessionMessagesFromDaemon }) => {
-              void hydrateSessionMessagesFromDaemon(id).then((res) => {
+              void hydrateSessionMessagesFromDaemon(nextId).then((res) => {
                 if (!res.ok) return;
                 set((state) => {
-                  const s = getSessionById(state, id);
+                  const s = getSessionById(state, nextId);
                   if (!s) return;
                   // 水合期间用户可能已发消息，勿覆盖非空
                   if (s.messages && s.messages.length > 0) {
                     s.hydratedFromEngine = true;
-                    const auto = maybeAutoTitleFromMessages(s.title, s.messages);
-                    if (auto) s.title = auto;
+                    maybeAutoTitleSession(state, s);
                     return;
                   }
                   if (res.messages.length > 0) {
                     s.messages = res.messages;
                     s.timestamp = '远程';
-                    const auto = maybeAutoTitleFromMessages(s.title, res.messages);
-                    if (auto) s.title = auto;
+                    maybeAutoTitleSession(state, s);
                   }
                   s.engineCursor = res.nextAfterSequence;
                   if (res.lastRunId) s.engineLastRunId = res.lastRunId;
@@ -459,36 +704,92 @@ export function createSessionActions<T extends SessionStoreSlice>(
     setPermissionMode: (mode) => {
       set((state) => {
         state.permissionMode = mode;
-        // 计划模式与侧栏「计划」进度状态对齐
-        state.planModeEnabled = mode === 'plan';
+        // 设置页 / Composer / plan ribbon 同一真相源
+        state.planModeEnabled = planModeEnabledFor(mode);
         // 切换权限模式时重置确认；「批准执行」会在 setPermissionMode 之后再 setPlanApproved(true)
         state.planApproved = false;
       });
-      try {
-        localStorage.setItem('crish_permission_mode', mode);
-      } catch {
-        /* ignore */
-      }
+      persistPermissionMode(mode);
     },
 
     renameSession: (sessionId, title) => set((state) => {
       const sess = getSessionById(state, sessionId);
-      if (sess) {
-        sess.title = title.slice(0, 48) || sess.title;
-      }
+      if (!sess) return;
+      // 中文 / emoji 按码点截断；控制符与 slash 噪声剥掉；空输入保留旧标题
+      const next = normalizeWritableSessionTitle(title);
+      if (!next) return;
+      if (sess.title === next) return;
+      sess.title = next;
     }),
 
     createSession: (opts) => {
-      const id =
-        (opts?.id && String(opts.id).trim()) || `sess-${Date.now()}`;
+      const explicitId =
+        opts?.id && typeof opts.id === 'string' ? opts.id.trim() : '';
+      // 默认激活；定时任务占位传 activate:false，避免抢走当前对话
+      const activate = opts?.activate !== false;
+      // 写入标题：sanitize + 码点截断；空 → 清晰「新会话」占位（非幽灵标签）
+      const requestedTitle = normalizeWritableSessionTitle(opts?.title);
+      const initialTitle = requestedTitle || EMPTY_SESSION_TITLE;
+
+      // 用户点「新建」(activate:true) 未指定 id：优先复用同 folder 空壳。
+      // activate:false 后台建壳绝不复用——否则会误吞用户空白活动会话 / 侧栏幽灵。
+      // 不 invent 远程壳：只复用本地已有 isEmptyShellSession 条目。
+      if (!explicitId && activate) {
+        const projectId = getActiveProjectId();
+        const defaultFolder = isDemoMode()
+          ? '常规会话'
+          : opts?.folder || projectId || GENERAL_FOLDER;
+        const activeId = get().activeSessionId;
+        const reuseId = findReusableEmptyShell(get().sessions, defaultFolder, {
+          preferId: activeId || null,
+        });
+        if (reuseId) {
+          // find→set 竞态：壳可能被 prune / 写消息 / 置顶 / 改标题 / 归档；
+          // 仅在 draft 内复检通过时才 reused=true，否则零写入并 mint。
+          let reused = false;
+          set((state) => {
+            const existing = getSessionById(state, reuseId);
+            if (!existing) return;
+            if (!isStillReusableEmptyShell(existing, defaultFolder)) return;
+            applyTitleIfDefault(existing, requestedTitle);
+            existing.timestamp = nowIsoTimestamp();
+            if (opts?.folder) existing.folder = opts.folder;
+            // 先记下旧 active：activate 后 keep 策略依赖 activating 标志
+            const prevActive = state.activeSessionId;
+            state.activeSessionId = reuseId;
+            state.activeAgentId = null;
+            state.panelAgentId = null;
+            state.terminalLines = state.terminalBySession[reuseId] || [];
+            // 只保留 reuseId，旧空壳一并剪掉，避免双幽灵
+            pruneEmptyShellsInPlace(
+              state,
+              shellPruneKeepIds(reuseId, prevActive, { activating: true }),
+            );
+            reused = true;
+          });
+          if (reused) {
+            return reuseId;
+          }
+        }
+      }
+
+      const id = explicitId || `sess-${Date.now()}`;
       set((state) => {
-        // 已存在则仅激活（定时 workflow 复用引擎 sessionId）
+        // 已存在：可选激活（定时 workflow 复用引擎 sessionId 时常 activate:false）
         const existing = getSessionById(state, id);
         if (existing) {
-          state.activeSessionId = id;
-          if (opts?.title && existing.title === '新会话') {
-            existing.title = opts.title;
+          const prevActive = state.activeSessionId;
+          if (activate) {
+            state.activeSessionId = id;
+            state.activeAgentId = null;
+            state.panelAgentId = null;
+            state.terminalLines = state.terminalBySession[id] || [];
           }
+          applyTitleIfDefault(existing, requestedTitle);
+          pruneEmptyShellsInPlace(
+            state,
+            shellPruneKeepIds(id, prevActive, { activating: activate }),
+          );
           return;
         }
         const projectId = getActiveProjectId();
@@ -497,55 +798,127 @@ export function createSessionActions<T extends SessionStoreSlice>(
           : opts?.folder || projectId || GENERAL_FOLDER;
         const sess: SessionState = {
           id,
-          title: opts?.title || '新会话',
+          title: initialTitle,
           folder: defaultFolder,
           isPinned: false,
           isArchived: false,
-          timestamp: '刚刚',
+          // 存 ISO，侧栏用相对时间计算；勿写死「刚刚」字面量
+          timestamp: nowIsoTimestamp(),
           messages: [],
         };
+        // mint 新会话：不 prune 既有空壳（否则连建多会话一切换就丢）
+        // 连点刷屏仅靠 reuse 路径剪 peer
         state.sessions.unshift(sess);
-        state.sessionsById[sess.id] = sess;
+        reindexSessionsById(state);
         if (!state.folderOrder.includes(sess.folder)) {
           state.folderOrder.unshift(sess.folder);
         }
-        state.activeSessionId = id;
+        if (activate) {
+          state.activeSessionId = id;
+          state.activeAgentId = null;
+          state.panelAgentId = null;
+          state.terminalLines = [];
+        }
       });
       return id;
     },
 
+    deleteSession: (sessionId) => {
+      const id = typeof sessionId === 'string' ? sessionId.trim() : '';
+      if (!id) return false;
+      let removed = false;
+      set((state) => {
+        // 守卫：不存在 / 仅陈旧索引 → deleteSessionFromIndexed 仍可清索引
+        const idx = getSessionIndex(state, id);
+        const wasActive = state.activeSessionId === id;
+        const fallback = wasActive
+          ? pickFallbackActiveSessionId(state, id, idx >= 0 ? idx : 0)
+          : '';
+        removed = deleteSessionFromIndexed(state, id);
+        if (!removed) return;
+        dropTerminalForSession(state, id);
+        if (wasActive) {
+          state.activeSessionId = fallback;
+          state.activeAgentId = null;
+          state.panelAgentId = null;
+          state.terminalLines = fallback
+            ? state.terminalBySession[fallback] || []
+            : [];
+        }
+        // 删后剪其它幽灵空壳；保留新活动（及非 activating 无需旧 active）
+        pruneEmptyShellsInPlace(
+          state,
+          shellPruneKeepIds(state.activeSessionId || null, null, {
+            activating: true,
+          }),
+        );
+      });
+      return removed;
+    },
+
     pinSession: (sessionId) => set((state) => {
+      if (!sessionId) return;
       const sess = getSessionById(state, sessionId);
       if (sess) sess.isPinned = true;
     }),
 
     unpinSession: (sessionId) => set((state) => {
+      if (!sessionId) return;
       const sess = getSessionById(state, sessionId);
       if (sess) sess.isPinned = false;
     }),
 
     archiveSession: (sessionId) => set((state) => {
+      if (!sessionId) return;
       const sess = getSessionById(state, sessionId);
-      if (sess) sess.isArchived = true;
+      if (!sess || sess.isArchived) return;
+      sess.isArchived = true;
+      // 活动安全：归档当前会话时切到邻近非归档，避免主列停在已归档
+      if (state.activeSessionId === sessionId) {
+        const idx = getSessionIndex(state, sessionId);
+        const fallback = pickFallbackActiveSessionId(
+          state,
+          sessionId,
+          idx >= 0 ? idx : 0,
+        );
+        state.activeSessionId = fallback;
+        state.activeAgentId = null;
+        state.panelAgentId = null;
+        state.terminalLines = fallback
+          ? state.terminalBySession[fallback] || []
+          : [];
+        pruneEmptyShellsInPlace(
+          state,
+          shellPruneKeepIds(fallback || null, null, { activating: true }),
+        );
+      }
     }),
 
     unarchiveSession: (sessionId) => set((state) => {
+      if (!sessionId) return;
       const sess = getSessionById(state, sessionId);
-      if (sess) sess.isArchived = false;
+      if (!sess || !sess.isArchived) return;
+      sess.isArchived = false;
     }),
 
     branchSession: (sessionId, newTitle) => set((state) => {
+      if (!sessionId) return;
       const original = getSessionById(state, sessionId);
       if (!original) return;
 
+      const title =
+        normalizeWritableSessionTitle(newTitle) ||
+        normalizeWritableSessionTitle(original.title) ||
+        EMPTY_SESSION_TITLE;
+
       const newSess: SessionState = {
         id: `sess-branch-${Date.now()}`,
-        title: newTitle,
+        title,
         folder: original.folder,
         isPinned: false,
         isArchived: false,
         branchParentId: sessionId,
-        timestamp: '刚刚',
+        timestamp: nowIsoTimestamp(),
         messages: original.messages ? JSON.parse(JSON.stringify(original.messages)) : [],
         pinnedMessageIds: original.pinnedMessageIds
           ? [...original.pinnedMessageIds]
@@ -553,9 +926,21 @@ export function createSessionActions<T extends SessionStoreSlice>(
       };
       // 分叉会话紧插在原会话之后
       const idx = getSessionIndex(state, sessionId);
-      state.sessions.splice(idx + 1, 0, newSess);
+      if (idx < 0) {
+        state.sessions.unshift(newSess);
+      } else {
+        state.sessions.splice(idx + 1, 0, newSess);
+      }
       state.sessionsById[newSess.id] = newSess;
       state.activeSessionId = newSess.id; // 自动聚焦新分叉
+      state.activeAgentId = null;
+      state.panelAgentId = null;
+      state.terminalLines = [];
+      // 与 setActive 同源：激活后剪掉其它幽灵空壳（含空父壳）
+      pruneEmptyShellsInPlace(
+        state,
+        shellPruneKeepIds(newSess.id, null, { activating: true }),
+      );
     }),
 
     moveSessionRealtime: (sessionId, targetSessionId, targetFolder, isPinned) => set((state) => {

@@ -1,0 +1,809 @@
+/**
+ * 消息行：user / assistant 行级组件，React.memo 避免流式时历史行无谓 reconcile。
+ * className 与 ChatMessageList 原逻辑保持一致。
+ *
+ * 契约：
+ * - 复制：成功静默（按钮 is-copied）；失败 toast「复制失败」
+ * - Pin：行内 toggle + data-msg-id 供列表 pin 跳转 / 闪高亮；role=article + 中文 aria
+ * - 角色文案：messageRoleLabelZh（你 / 助手）与固定条 chat-pinned-role 一致
+ * - 工具栈：仅经 toolStackProps handoff 托管 ChatToolStack，禁止行内二次实现工具 UI
+ */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as Lucide from 'lucide-react';
+import type { FileDiff, SessionMessage } from '../store/layoutStore';
+import {
+  ChatToolStack,
+  type ChatToolStackSharedProps,
+} from './ChatToolCallBlock';
+import {
+  assistantCopyText,
+  buildAssistantTimeline,
+  extractImageRefs,
+  type ToolRenderItem,
+} from '../api/toolPresentation';
+import {
+  buildFollowUpSuggestions,
+  shouldShowFollowUpSuggestions,
+  type FollowUpSuggestion,
+} from '../api/followUpSuggestions';
+import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { ChangeOverviewCard } from './ChangeOverviewCard';
+import type { PermissionMode } from '../api/permissionModes';
+import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
+
+// ─── 密度常量（长用户气泡截断） ─────────────────────────────────────────────
+
+/** 超过此字数视为长气泡，默认截断展示 */
+export const USER_BUBBLE_LONG_CHARS = 260;
+/** 折叠预览保留字数（其后加省略号） */
+export const USER_BUBBLE_PREVIEW_CHARS = 240;
+
+// ─── 中文角色 / Pin a11y 纯助手 ─────────────────────────────────────────────
+
+export type MessageRole = SessionMessage['sender'];
+
+/**
+ * 消息角色中文短标签（与 ChatMessageList 固定条 chat-pinned-role 文案一致）。
+ * user → 你；assistant → 助手。
+ */
+export function messageRoleLabelZh(role: MessageRole): string {
+  return role === 'user' ? '你' : '助手';
+}
+
+/**
+ * 行级 article aria-label：角色 · 固定 · 状态（中文、克制、可测）。
+ */
+export function messageRowAriaLabel(opts: {
+  role: MessageRole;
+  isPinned?: boolean;
+  isThinking?: boolean;
+  status?: SessionMessage['status'];
+}): string {
+  const parts: string[] = [messageRoleLabelZh(opts.role)];
+  if (opts.isPinned) parts.push('已固定');
+  if (opts.status === 'queued') parts.push('排队中');
+  else if (opts.isThinking || opts.status === 'processing') parts.push('生成中');
+  return parts.join(' · ');
+}
+
+/** Pin 按钮中文 title / aria-label（pressed 态由调用方挂 aria-pressed） */
+export function pinToggleLabels(isPinned: boolean): {
+  title: string;
+  ariaLabel: string;
+} {
+  return isPinned
+    ? { title: '取消固定', ariaLabel: '取消固定' }
+    : { title: '固定', ariaLabel: '固定消息' };
+}
+
+/** 长用户气泡展开控件中文 a11y */
+export function userBubbleExpandAria(isExpanded: boolean): string {
+  return isExpanded ? '收起全文' : '展开全文';
+}
+
+/** 思考折叠按钮中文 a11y（进行中不可切换） */
+export function thinkingFoldAria(opts: {
+  isLive: boolean;
+  isOpen: boolean;
+}): string {
+  if (opts.isLive) return '思考中';
+  return opts.isOpen ? '收起思考' : '展开思考';
+}
+
+// ─── 密度：时间 / 长气泡 / 计划探测 ─────────────────────────────────────────
+
+/** 行内时间：24h 两位；无时间戳 → 空串 */
+export function formatMsgTime(ts?: number): string {
+  if (!ts) return '';
+  const date = new Date(ts);
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/** @deprecated 使用 formatMsgTime；保留别名避免外部 import 断裂 */
+function formatTime(ts?: number) {
+  return formatMsgTime(ts);
+}
+
+/** 是否超过长气泡阈值 */
+export function isUserBubbleLong(text: string | undefined | null): boolean {
+  return (text || '').length > USER_BUBBLE_LONG_CHARS;
+}
+
+/**
+ * 用户气泡展示正文：长且未展开 → 截断 + …；否则全文。
+ * 空/undefined → ''。
+ */
+export function userBubbleDisplayText(
+  text: string | undefined | null,
+  isExpanded: boolean,
+): string {
+  const t = text || '';
+  if (isUserBubbleLong(t) && !isExpanded) {
+    return t.slice(0, USER_BUBBLE_PREVIEW_CHARS) + '…';
+  }
+  return t;
+}
+
+/** 助手回复是否像「计划」：含步骤/计划/编号列表/标题 */
+export function looksLikePlan(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  if (/步骤|计划/.test(t)) return true;
+  if (/^#{1,3}\s/m.test(t)) return true;
+  // 1. / 1、 / 2. 等有序列表（顿号后可无空格）
+  if (/(?:^|\n)\s*\d+[\.、]\s*\S/.test(t)) return true;
+  return false;
+}
+
+// ─── 工具栈 handoff（仅托管，无工具 UI 逻辑） ───────────────────────────────
+
+/**
+ * 是否应挂载工具时间线段：有可渲染 items 才 host，避免空壳 DOM。
+ * 行组件不解析 toolCalls / 不自建工具行——只 handoff 给 ChatToolStack。
+ */
+export function shouldHostToolStack(
+  items: readonly ToolRenderItem[] | undefined | null,
+): boolean {
+  return Array.isArray(items) && items.length > 0;
+}
+
+/**
+ * 组装 ChatToolStack 入参：msg 局部 items/msgId + List 下发的共享 props。
+ * 单一 handoff 出口，禁止在行内展开工具审批/diff/终端逻辑。
+ */
+export function buildToolStackHostProps(
+  items: ToolRenderItem[],
+  msgId: string,
+  shared: ChatToolStackSharedProps,
+): ChatToolStackSharedProps & { items: ToolRenderItem[]; msgId: string } {
+  return { items, msgId, ...shared };
+}
+
+/**
+ * 尽力复制：clipboard API → execCommand 回退。
+ * 返回 false 时调用方应 toast「复制失败」（禁止成功 toast）。
+ */
+export async function copyTextBestEffort(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    if (typeof document === 'undefined') return false;
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 行级工具栈共享 props 浅比较（仅数据字段；回调假定稳定） */
+export function toolStackSharedPropsEqual(
+  a: ChatToolStackSharedProps,
+  b: ChatToolStackSharedProps,
+): boolean {
+  return (
+    a.expandedTools === b.expandedTools &&
+    a.approvalBusy === b.approvalBusy &&
+    a.pendingApprovalMsgId === b.pendingApprovalMsgId &&
+    a.agents === b.agents &&
+    a.activeSessionId === b.activeSessionId
+  );
+}
+
+/** @deprecated 使用 ChatToolStackSharedProps；保留别名避免外部 import 断裂 */
+export type ChatToolStackProps = ChatToolStackSharedProps;
+
+// ─── User row ───────────────────────────────────────────────────────────────
+
+export type ChatUserMessageRowProps = {
+  msg: SessionMessage;
+  isPinned: boolean;
+  isSearchHit: boolean;
+  isExpanded: boolean;
+  onToggleExpand: (msgId: string) => void;
+  onTogglePin: (msgId: string) => void;
+  onWithdraw: (msgId: string, text: string) => void;
+  /** 仅错误级（复制失败）；成功静默 */
+  onShowToast?: (message: string) => void;
+};
+
+function userRowPropsEqual(prev: ChatUserMessageRowProps, next: ChatUserMessageRowProps): boolean {
+  return (
+    prev.msg.id === next.msg.id &&
+    prev.msg.status === next.msg.status &&
+    prev.msg.text === next.msg.text &&
+    prev.msg.timestamp === next.msg.timestamp &&
+    prev.isPinned === next.isPinned &&
+    prev.isSearchHit === next.isSearchHit &&
+    prev.isExpanded === next.isExpanded
+  );
+}
+
+const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
+  msg,
+  isPinned,
+  isSearchHit,
+  isExpanded,
+  onToggleExpand,
+  onTogglePin,
+  onWithdraw: _onWithdraw,
+  onShowToast,
+}) => {
+  void _onWithdraw;
+  const isLong = isUserBubbleLong(msg.text);
+  const displayText = userBubbleDisplayText(msg.text, isExpanded);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | null>(null);
+  const pinLabels = pinToggleLabels(isPinned);
+  const rowAria = messageRowAriaLabel({
+    role: 'user',
+    isPinned,
+    status: msg.status,
+  });
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  const handleCopy = useCallback(() => {
+    const text = msg.text || '';
+    if (!text) return;
+    void copyTextBestEffort(text).then((ok) => {
+      if (!ok) {
+        onShowToast?.('复制失败');
+        return;
+      }
+      setCopied(true);
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+    });
+  }, [msg.text, onShowToast]);
+
+  const toggleExpand = useCallback(() => {
+    if (isLong) onToggleExpand(msg.id);
+  }, [isLong, msg.id, onToggleExpand]);
+
+  const onBubbleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!isLong) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onToggleExpand(msg.id);
+      }
+    },
+    [isLong, msg.id, onToggleExpand],
+  );
+
+  return (
+    <div
+      className={`msg-row msg-row-user${isSearchHit ? ' msg-search-hit' : ''}${isPinned ? ' is-pinned' : ''}`}
+      data-msg-id={msg.id}
+      data-role="user"
+      data-pinned={isPinned ? 'true' : undefined}
+      role="article"
+      aria-label={rowAria}
+    >
+      <div className="msg-user-stack">
+        {isPinned ? (
+          <span className="msg-pin-badge" title="已固定" aria-hidden="true">
+            <Lucide.Pin size={11} strokeWidth={2.25} />
+            已固定
+          </span>
+        ) : null}
+        <div
+          className={`msg-user-bubble ${isExpanded ? 'expanded' : ''}`}
+          onClick={toggleExpand}
+          onKeyDown={onBubbleKeyDown}
+          style={{ cursor: isLong ? 'pointer' : 'default' }}
+          role={isLong ? 'button' : undefined}
+          tabIndex={isLong ? 0 : undefined}
+          aria-expanded={isLong ? isExpanded : undefined}
+          aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
+        >
+          <span className="msg-user-text">{displayText}</span>
+          {msg.status === 'queued' && (
+            <span className="msg-status-badge queued">排队中</span>
+          )}
+        </div>
+        <div className="msg-user-meta">
+          <span className="msg-time">{formatTime(msg.timestamp)}</span>
+          {/* 默认只留复制；已固定时显示取消固定。钉/撤回走右键或悬停 secondary */}
+          <button
+            type="button"
+            className={`msg-icon-btn${copied ? ' is-copied' : ''}`}
+            title={copied ? '已复制' : '复制'}
+            aria-label={copied ? '已复制' : '复制消息'}
+            onClick={handleCopy}
+          >
+            {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
+          </button>
+          {isPinned ? (
+            <button
+              type="button"
+              className="msg-icon-btn is-pinned-active"
+              title={pinLabels.title}
+              aria-label={pinLabels.ariaLabel}
+              aria-pressed
+              onClick={() => onTogglePin(msg.id)}
+            >
+              <Lucide.PinOff size={14} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const ChatUserMessageRow = React.memo(ChatUserMessageRowInner, userRowPropsEqual);
+
+// ─── Assistant row ──────────────────────────────────────────────────────────
+
+export type ChatAssistantMessageRowProps = {
+  msg: SessionMessage;
+  isFollowUp: boolean;
+  isPinned: boolean;
+  isSearchHit: boolean;
+  isThinkingMsg: boolean;
+  thinkingSeconds: number;
+  hideThinkingBlock: boolean;
+  inPlanMode: boolean;
+  planApproved: boolean;
+  isLastAssistant: boolean;
+  /** 工具栈共享 props：List 组装一次，行内仅 handoff 进 ChatToolStack */
+  toolStackProps: ChatToolStackSharedProps;
+  onTogglePin: (msgId: string) => void;
+  onShowToast: (message: string) => void;
+  onRegenerate: (assistantMsgId: string) => void;
+  onBranch: () => void;
+  onOpenDiff: (diff: FileDiff) => void;
+  onOpenDiffPanel?: () => void;
+  setPermissionMode: (mode: PermissionMode) => void;
+  setPlanApproved: (v: boolean) => void;
+  /**
+   * 后续引导：填入 composer（不发送）。
+   * 缺省则不挂芯片，避免无发送能力的宿主（如只读预览）误展示。
+   */
+  onFillFollowUp?: (prompt: string) => void;
+  /** 后续引导：直接发送 prompt（不经 composer 异步 state） */
+  onSendFollowUp?: (prompt: string) => void;
+  /** 本消息引导被用户关闭后 true */
+  followUpDismissed?: boolean;
+  onDismissFollowUp?: (msgId: string) => void;
+};
+
+function assistantRowPropsEqual(
+  prev: ChatAssistantMessageRowProps,
+  next: ChatAssistantMessageRowProps,
+): boolean {
+  if (prev.isThinkingMsg || next.isThinkingMsg) {
+    if (prev.thinkingSeconds !== next.thinkingSeconds) return false;
+  }
+  return (
+    prev.msg.id === next.msg.id &&
+    prev.msg.status === next.msg.status &&
+    prev.msg.text === next.msg.text &&
+    prev.msg.thinking === next.msg.thinking &&
+    prev.msg.toolCalls === next.msg.toolCalls &&
+    prev.msg.blocks === next.msg.blocks &&
+    prev.msg.thinkingTime === next.msg.thinkingTime &&
+    prev.msg.timestamp === next.msg.timestamp &&
+    prev.isPinned === next.isPinned &&
+    prev.isSearchHit === next.isSearchHit &&
+    prev.isFollowUp === next.isFollowUp &&
+    prev.isThinkingMsg === next.isThinkingMsg &&
+    prev.hideThinkingBlock === next.hideThinkingBlock &&
+    prev.inPlanMode === next.inPlanMode &&
+    prev.planApproved === next.planApproved &&
+    prev.isLastAssistant === next.isLastAssistant &&
+    prev.followUpDismissed === next.followUpDismissed &&
+    toolStackSharedPropsEqual(prev.toolStackProps, next.toolStackProps)
+  );
+}
+
+/** 聚焦主列 composer（与空态快捷 prompt 同源口径） */
+function focusChatComposer(): void {
+  const scope =
+    document.querySelector<HTMLElement>('.chat-body') ??
+    document.querySelector<HTMLElement>('.chat-doc-flow') ??
+    document.body;
+  const ta =
+    scope.querySelector<HTMLTextAreaElement>(
+      '.input-container textarea:not([disabled])',
+    ) ??
+    scope.querySelector<HTMLTextAreaElement>('textarea:not([disabled])');
+  ta?.focus();
+}
+
+const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
+  msg,
+  isFollowUp,
+  isPinned,
+  isSearchHit,
+  isThinkingMsg,
+  thinkingSeconds,
+  hideThinkingBlock,
+  inPlanMode,
+  planApproved,
+  isLastAssistant,
+  toolStackProps,
+  onTogglePin,
+  onShowToast,
+  onRegenerate,
+  onBranch: _onBranch,
+  onOpenDiff,
+  onOpenDiffPanel,
+  setPermissionMode,
+  setPlanApproved,
+  onFillFollowUp,
+  onSendFollowUp,
+  followUpDismissed = false,
+  onDismissFollowUp,
+}) => {
+  void _onBranch;
+  const thinkingRaw =
+    msg.thinking &&
+    msg.thinking.trim() &&
+    msg.thinking !== '正在处理…' &&
+    msg.thinking !== '正在思考中...'
+      ? msg.thinking.trim()
+      : '';
+  const thinkingText = thinkingRaw || (isThinkingMsg ? '…' : '');
+  const thinkingLineCount = thinkingText ? thinkingText.split(/\r?\n/).length : 0;
+  /** 设置「隐藏思考过程」时整段不展示（含进行中） */
+  const showThinking = !hideThinkingBlock && (isThinkingMsg || thinkingLineCount > 0);
+  /**
+   * 完成态默认折叠且不挂载 body，避免长思考撑爆 DOM；
+   * 进行中自动打开（仍受字符预算约束）。
+   */
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | null>(null);
+  const pinLabels = pinToggleLabels(isPinned);
+  const rowAria = messageRowAriaLabel({
+    role: 'assistant',
+    isPinned,
+    isThinking: isThinkingMsg,
+    status: msg.status,
+  });
+  const thinkingBodyId = `msg-thinking-${msg.id}`;
+
+  useEffect(() => {
+    if (isThinkingMsg) setThinkingOpen(true);
+    else setThinkingOpen(false);
+  }, [isThinkingMsg, msg.id]);
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  const thinkingBodyOpen = isThinkingMsg || thinkingOpen;
+  const thinkingBudget = budgetDomText(thinkingText, THINKING_DOM_CHAR_CAP);
+
+  const handleCopy = useCallback(() => {
+    const text = assistantCopyText(msg);
+    if (!text.trim()) {
+      onShowToast('没有可复制的正文');
+      return;
+    }
+    void copyTextBestEffort(text).then((ok) => {
+      if (!ok) {
+        onShowToast('复制失败');
+        return;
+      }
+      setCopied(true);
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+    });
+  }, [msg, onShowToast]);
+
+  return (
+    <div
+      className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}${isSearchHit ? ' msg-search-hit' : ''}${isPinned ? ' is-pinned' : ''}`}
+      data-msg-id={msg.id}
+      data-role="assistant"
+      data-pinned={isPinned ? 'true' : undefined}
+      data-followup={isFollowUp ? 'true' : undefined}
+      role="article"
+      aria-label={rowAria}
+    >
+      {isPinned ? (
+        <span className="msg-pin-badge" title="已固定" aria-hidden="true">
+          <Lucide.Pin size={11} strokeWidth={2.25} />
+          已固定
+        </span>
+      ) : null}
+      {/* 角色徽标已去掉（助手/你 不展示，靠气泡与排版区分） */}
+      {/* 思考：默认折叠；折叠时不挂 body，展开后仍受 DOM 字符预算 */}
+      {showThinking ? (
+        <div
+          className={`msg-thinking-fold ${isThinkingMsg ? 'is-live' : ''}${thinkingBodyOpen ? ' is-open' : ''}`}
+        >
+          <button
+            type="button"
+            className="msg-thinking-fold-sum"
+            aria-expanded={thinkingBodyOpen}
+            aria-controls={thinkingBodyOpen ? thinkingBodyId : undefined}
+            aria-label={thinkingFoldAria({
+              isLive: isThinkingMsg,
+              isOpen: thinkingBodyOpen,
+            })}
+            aria-disabled={isThinkingMsg || undefined}
+            onClick={() => {
+              if (isThinkingMsg) return;
+              setThinkingOpen((v) => !v);
+            }}
+          >
+            {isThinkingMsg ? (
+              <span
+                className="loading-spinner"
+                style={{ width: 8, height: 8, borderWidth: 1.5 }}
+                aria-hidden
+              />
+            ) : (
+              <Lucide.ChevronRight
+                size={14}
+                className={`msg-thinking-chevron${thinkingBodyOpen ? ' is-open' : ''}`}
+                aria-hidden
+              />
+            )}
+            <span className="msg-thinking-fold-label">
+              {isThinkingMsg ? '思考中' : '思考'}
+              {isThinkingMsg ? (
+                <span className="msg-thinking-sec"> · {thinkingSeconds}s</span>
+              ) : thinkingBudget.truncated && thinkingBodyOpen ? (
+                <span className="msg-thinking-sec"> · 已截断</span>
+              ) : null}
+            </span>
+          </button>
+          {thinkingBodyOpen ? (
+            <div className="msg-thinking-fold-body" id={thinkingBodyId}>
+              {thinkingBudget.text}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="msg-assistant-body">
+        {(() => {
+          try {
+            const timeline = buildAssistantTimeline(msg);
+            if (!timeline.length) {
+              const fallback = stripThoughtPlaceholders(msg.text || '');
+              if (!fallback.trim()) return null;
+              return (
+                <div className="msg-timeline-text">
+                  <div
+                    className={`msg-assistant-text md-rendered ${isThinkingMsg ? 'is-streaming' : ''}`}
+                    dangerouslySetInnerHTML={{
+                      __html: parseMarkdownToHtml(fallback),
+                    }}
+                  />
+                </div>
+              );
+            }
+            const textItems = timeline.filter((i) => i.kind === 'text');
+            const lastTextKey = textItems.length
+              ? textItems[textItems.length - 1]!.key
+              : null;
+            return timeline.map((item) => {
+              if (item.kind === 'text') {
+                // stripThoughtPlaceholders 同时去掉「本轮总结」类噪音标题
+                const bodyText = stripThoughtPlaceholders(item.content || '');
+                if (!bodyText.trim()) return null;
+                const imgs = extractImageRefs(bodyText);
+                const streaming = isThinkingMsg && item.key === lastTextKey;
+                return (
+                  <div key={item.key} className="msg-timeline-text">
+                    <div
+                      className={`msg-assistant-text md-rendered ${streaming ? 'is-streaming' : ''}`}
+                      dangerouslySetInnerHTML={{
+                        __html: parseMarkdownToHtml(bodyText),
+                      }}
+                    />
+                    {imgs.length > 0 && (
+                      <div className="msg-inline-images">
+                        {imgs.map((src) => (
+                          <img
+                            key={src}
+                            src={src}
+                            alt=""
+                            className="md-img"
+                            loading="lazy"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              // handoff only：空 items 不挂载；工具 UI 全权 ChatToolStack
+              if (!shouldHostToolStack(item.items)) return null;
+              const host = buildToolStackHostProps(
+                item.items!,
+                msg.id,
+                toolStackProps,
+              );
+              return (
+                <div key={item.key} className="msg-timeline-tools">
+                  <ChatToolStack {...host} />
+                </div>
+              );
+            });
+          } catch (err) {
+            console.error('[ChatMessageRow] timeline render', err);
+            const fallback = stripThoughtPlaceholders(msg.text || '');
+            return fallback ? (
+              <div className="msg-assistant-text md-rendered">{fallback}</div>
+            ) : null;
+          }
+        })()}
+      </div>
+
+      {/* 完成态：计划批准 → 操作栏 → 后续引导 → 改动总览（均在时间线外，不进 blocks） */}
+      {!isThinkingMsg && msg.status !== 'processing' && (
+        <>
+          {inPlanMode &&
+          !planApproved &&
+          isLastAssistant &&
+          looksLikePlan(assistantCopyText(msg) || msg.text || '') ? (
+            <div className="msg-plan-approve-row">
+              <button
+                type="button"
+                className="msg-plan-approve-chip"
+                onClick={() => {
+                  setPermissionMode('ask');
+                  setPlanApproved(true);
+                }}
+              >
+                批准此计划
+              </button>
+            </div>
+          ) : null}
+          <div className="msg-assistant-meta">
+            <span className="msg-time">{formatTime(msg.timestamp)}</span>
+            {/* 精简：复制 + 最后一条可重试；钉/分支不再常驻刷屏 */}
+            <button
+              type="button"
+              className={`msg-icon-btn${copied ? ' is-copied' : ''}`}
+              title={copied ? '已复制' : '复制正文'}
+              aria-label={copied ? '已复制' : '复制正文'}
+              onClick={handleCopy}
+            >
+              {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
+            </button>
+            {isLastAssistant ? (
+              <button
+                type="button"
+                className="msg-icon-btn"
+                title="重新生成"
+                aria-label="重新生成"
+                onClick={() => onRegenerate(msg.id)}
+              >
+                <Lucide.RefreshCw size={14} />
+              </button>
+            ) : null}
+            {isPinned ? (
+              <button
+                type="button"
+                className="msg-icon-btn is-pinned-active"
+                title={pinLabels.title}
+                aria-label={pinLabels.ariaLabel}
+                aria-pressed
+                onClick={() => onTogglePin(msg.id)}
+              >
+                <Lucide.PinOff size={14} />
+              </button>
+            ) : null}
+          </div>
+          {(() => {
+            // 引导芯片：仅 UI 派生，禁止写入 msg.blocks / text / streamTextOffset
+            if (!onFillFollowUp && !onSendFollowUp) return null;
+            if (
+              !shouldShowFollowUpSuggestions({
+                isLastAssistant,
+                isThinkingMsg,
+                status: msg.status,
+                toolCalls: msg.toolCalls,
+                dismissed: followUpDismissed,
+              })
+            ) {
+              return null;
+            }
+            const suggestions: FollowUpSuggestion[] = buildFollowUpSuggestions(msg);
+            if (!suggestions.length) return null;
+            return (
+              <div
+                className="msg-followup-row"
+                role="group"
+                aria-label="后续建议"
+                data-followup-for={msg.id}
+              >
+                <div className="msg-followup-chips" role="list">
+                  {suggestions.map((s) => (
+                    <div
+                      key={s.id}
+                      className="msg-followup-chip"
+                      role="listitem"
+                      data-followup-id={s.id}
+                    >
+                      <button
+                        type="button"
+                        className="msg-followup-chip-main"
+                        title={s.prompt}
+                        aria-label={`填入：${s.label}`}
+                        onClick={() => {
+                          onFillFollowUp?.(s.prompt);
+                          focusChatComposer();
+                        }}
+                      >
+                        <span className="msg-followup-chip-label">{s.label}</span>
+                      </button>
+                      {onSendFollowUp ? (
+                        <button
+                          type="button"
+                          className="msg-followup-chip-send"
+                          title="直接发送"
+                          aria-label={`直接发送：${s.label}`}
+                          onClick={() => onSendFollowUp(s.prompt)}
+                        >
+                          <Lucide.Send size={12} strokeWidth={2} aria-hidden />
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                {onDismissFollowUp ? (
+                  <button
+                    type="button"
+                    className="msg-followup-dismiss msg-icon-btn"
+                    title="关闭建议"
+                    aria-label="关闭后续建议"
+                    onClick={() => onDismissFollowUp(msg.id)}
+                  >
+                    <Lucide.X size={14} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })()}
+          <ChangeOverviewCard
+            message={msg}
+            onOpenDiff={onOpenDiff}
+            onOpenDiffPanel={onOpenDiffPanel}
+            onShowToast={onShowToast}
+          />
+        </>
+      )}
+    </div>
+  );
+};
+
+export const ChatAssistantMessageRow = React.memo(
+  ChatAssistantMessageRowInner,
+  assistantRowPropsEqual,
+);

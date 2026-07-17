@@ -1,57 +1,84 @@
 /**
- * 右侧默认总览：计划、改动文件（git + 对话 diff）、Agent、上下文摘要
+ * 右侧默认总览：只保留有用信息
+ * - 有目标/进行中工具时一行提示
+ * - 协作体：有则列表，点开右侧；空则不说教
+ * - 改动文件：Git/对话变更列表；错误只显示一次
+ * - 去掉「工作总览」标题重复、上下文空统计、神秘图标条
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import {
+  selectActiveSession,
+  selectActiveSessionId,
+  useSessionField,
+} from '../store/sessionStore';
+import {
   fetchGitDiff,
   fetchGitStatus,
   gitStatusBadgeClass,
   gitStatusLabel,
+  gitStatusUserMessage,
+  openGitDownloadPage,
   type GitStatusFile,
   type GitStatusResult,
 } from '../api/gitApi';
 import { getWorkspacePath } from '../api/projectStore';
-import {
-  markLayoutCustomizedThisSession,
-  saveLayoutForProject,
-} from '../api/workspaceLayoutStore';
+import { openAgentInSidePanel } from '../api/openAgentPanel';
 import { toolHumanLabel } from '../api/toolPresentation';
+import { pushDiffFile, setActiveDiffSource } from '../api/storeAccess';
+import {
+  computeChecklistProgress,
+  findCurrentLiveTool,
+  resolveSessionProgressItems,
+} from './TasksCard';
 
 type Props = {
   wsId: string;
   onOpenPanel: (id: string) => void;
+  /** @deprecated 总览错误改行内；保留 prop 兼容 CardPanel 传参，勿再调用 */
   onShowToast?: (msg: string) => void;
 };
+
+type SecKey = 'agents' | 'files';
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
-const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
-  const sessions = useLayoutStore((s) => s.sessions);
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+/** 协作体展示名：折叠空白为单行 */
+function agentOneLineLabel(description: string | undefined, id: string): string {
+  const raw = (description || id || '').replace(/\s+/g, ' ').trim();
+  return raw || id;
+}
+
+function agentStatusLabel(status: string): string {
+  if (status === 'running') return '运行中';
+  if (status === 'failed') return '失败';
+  if (status === 'stopped') return '已停止';
+  return '完成';
+}
+
+const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
+  const activeSessionId = useSessionField(selectActiveSessionId);
+  const session = useSessionField(selectActiveSession);
   const diffFiles = useLayoutStore((s) => s.diffFiles);
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
-  const permissionMode = useLayoutStore((s) => s.permissionMode);
-  const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
-  const planApproved = useLayoutStore((s) => s.planApproved);
-  const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
-  const workspacesLen = useLayoutStore((s) => s.workspaces.length);
 
-  const [openSec, setOpenSec] = useState({
-    plan: true,
+  const [openSec, setOpenSec] = useState<Record<SecKey, boolean>>({
     agents: true,
     files: true,
-    ctx: true,
   });
   const [git, setGit] = useState<GitStatusResult | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitErr, setGitErr] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
 
-  const session = sessions.find((s) => s.id === activeSessionId);
+  const actionErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastGitRefreshAtRef = useRef(0);
+  const gitRefreshSeqRef = useRef(0);
+
   const agents = session?.agents || [];
   const sortedAgents = useMemo(() => {
     return [...agents].sort((a, b) => {
@@ -67,8 +94,31 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
     return activeDiffSource ? [activeDiffSource] : [];
   }, [diffFiles, activeDiffSource]);
 
-  /** focus 刷新节流：距上次成功/尝试刷新不足 30s 则跳过；project-changed / 手动刷新仍立即 */
-  const lastGitRefreshAtRef = useRef(0);
+  const clearActionErrSoon = useCallback((ms = 4800) => {
+    if (actionErrTimerRef.current) {
+      clearTimeout(actionErrTimerRef.current);
+      actionErrTimerRef.current = null;
+    }
+    actionErrTimerRef.current = setTimeout(() => {
+      setActionErr(null);
+      actionErrTimerRef.current = null;
+    }, ms);
+  }, []);
+
+  const showActionErr = useCallback(
+    (msg: string) => {
+      setActionErr(msg);
+      clearActionErrSoon();
+    },
+    [clearActionErrSoon],
+  );
+
+  useEffect(
+    () => () => {
+      if (actionErrTimerRef.current) clearTimeout(actionErrTimerRef.current);
+    },
+    [],
+  );
 
   const refreshGit = useCallback(async (opts?: { force?: boolean }) => {
     const now = Date.now();
@@ -76,21 +126,27 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
       return;
     }
     lastGitRefreshAtRef.current = now;
+    const seq = ++gitRefreshSeqRef.current;
     setGitLoading(true);
     setGitErr(null);
     try {
       const res = await fetchGitStatus();
+      if (seq !== gitRefreshSeqRef.current) return;
       setGit(res);
-      if (!res.found && res.reason === 'daemon-offline') {
-        setGitErr('引擎未连接，无法读取 Git 状态');
-      } else if (!res.found && res.reason === 'error') {
-        setGitErr('Git 状态查询失败');
+      if (!res.found) {
+        const msg = gitStatusUserMessage(res);
+        setGitErr(msg.title);
+      } else {
+        setGitErr(null);
       }
     } catch {
-      setGitErr('Git 状态查询失败');
+      if (seq !== gitRefreshSeqRef.current) return;
+      setGitErr('Git 不可用');
       setGit(null);
     } finally {
-      setGitLoading(false);
+      // 无论是否被更新的请求抢占，本轮结束时若仍是最新 seq 则关 loading；
+      // 若被抢占，由更新一轮的 finally 负责，避免永久转圈。
+      if (seq === gitRefreshSeqRef.current) setGitLoading(false);
     }
   }, []);
 
@@ -100,7 +156,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
       void refreshGit({ force: true });
     };
     window.addEventListener('crish-project-changed', onProject);
-    // 窗口 focus 时节流刷新（30s 内不重复打 Git）
     const onFocus = () => {
       void refreshGit();
     };
@@ -111,39 +166,26 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
     };
   }, [refreshGit]);
 
-  const allSessionTools = useMemo(() => {
-    const main = session?.messages?.flatMap((m) => m.toolCalls || []) || [];
-    const agents =
-      session?.agents?.flatMap((a) => (a.messages || []).flatMap((m) => m.toolCalls || [])) || [];
-    return [...main, ...agents];
-  }, [session?.messages, session?.agents]);
-
-  const runningTools = allSessionTools.filter(
-    (t) => t.status === 'running' || t.status === 'pending_approval',
-  );
-
-  const completedToolsRecent = useMemo(() => {
-    const all = allSessionTools.filter((t) => t.status === 'success' || t.status === 'error');
-    return all.slice(-6).reverse();
-  }, [allSessionTools]);
-
-  const toggle = (k: keyof typeof openSec) =>
-    setOpenSec((s) => ({ ...s, [k]: !s[k] }));
+  const toggle = (k: SecKey) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
   const openGitFile = async (f: GitStatusFile) => {
+    if (openingPath) return;
     setOpeningPath(f.path);
+    setActionErr(null);
+    if (actionErrTimerRef.current) {
+      clearTimeout(actionErrTimerRef.current);
+      actionErrTimerRef.current = null;
+    }
     try {
       const diff = await fetchGitDiff({ path: f.path });
       if (diff.files.length > 0) {
         const first = diff.files[0];
-        // 保证路径与 status 一致
         const merged = { ...first, filePath: first.filePath || f.path };
-        useLayoutStore.getState().pushDiffFile(merged);
-        useLayoutStore.getState().setActiveDiffSource(merged);
+        pushDiffFile(merged);
+        setActiveDiffSource(merged);
         onOpenPanel('diff');
         return;
       }
-      // 无 diff 时仍打开变更面板并占位
       const placeholder = {
         filePath: f.path,
         additions: 0,
@@ -155,11 +197,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
           },
         ],
       };
-      useLayoutStore.getState().pushDiffFile(placeholder);
-      useLayoutStore.getState().setActiveDiffSource(placeholder);
+      pushDiffFile(placeholder);
+      setActiveDiffSource(placeholder);
       onOpenPanel('diff');
     } catch {
-      onShowToast?.('打开变更失败');
+      showActionErr('打开变更失败');
     } finally {
       setOpeningPath(null);
     }
@@ -167,412 +209,366 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel, onShowToast }) => {
 
   const gitFiles = git?.found ? git.files : [];
   const fileCount = Math.max(gitFiles.length, convoFiles.length);
-  const wsPath = getWorkspacePath();
+  const hasFileList = gitFiles.length > 0 || convoFiles.length > 0;
+  const runningAgentCount = sortedAgents.filter((a) => a.status === 'running').length;
+  const gitHelp = useMemo(
+    () => (git && !git.found ? gitStatusUserMessage(git) : null),
+    [git],
+  );
 
-  const handleSaveLayout = () => {
-    const path = getWorkspacePath();
-    if (!path) {
-      onShowToast?.('请先打开项目后再保存布局');
-      return;
-    }
-    const st = useLayoutStore.getState();
-    const ws = st.workspaces[st.activeWorkspaceIndex];
-    if (!ws) {
-      onShowToast?.('当前无工作区可保存');
-      return;
-    }
-    const ok = saveLayoutForProject(path, ws);
-    if (ok) markLayoutCustomizedThisSession(path);
-    onShowToast?.(ok ? '布局已保存到本项目' : '布局保存失败');
-  };
+  const progressItems = useMemo(
+    () => resolveSessionProgressItems(session),
+    [session?.messages, session?.goalMode?.tasks],
+  );
+  const progress = useMemo(
+    () => computeChecklistProgress(progressItems),
+    [progressItems],
+  );
+  const goalMode = session?.goalMode?.active ? session.goalMode : null;
+  const liveTool = useMemo(
+    () => findCurrentLiveTool(session),
+    [session?.messages, session?.agents],
+  );
+  const liveToolLabel = useMemo(
+    () => (liveTool ? toolHumanLabel(liveTool) : ''),
+    [liveTool],
+  );
+  const liveToolStatus =
+    liveTool?.status === 'pending_approval'
+      ? '待确认'
+      : liveTool?.status === 'running'
+        ? '进行中'
+        : '';
+
+  const wsPath = getWorkspacePath();
+  const branch = git?.found && git.branch ? git.branch : '';
 
   return (
-    <div className="overview-card">
-      <div className="overview-head">
-        <div>
-          <div className="overview-title">工作总览</div>
-          <div className="overview-sub">
-            {session?.title || '当前会话'} · 权限{' '}
-            {permissionMode === 'full'
-              ? '完全访问'
-              : permissionMode === 'plan'
-                ? '计划'
-                : permissionMode === 'deep'
-                  ? '深入分析'
-                  : '需确认'}
-            {git?.found && git.branch ? ` · ${git.branch}` : ''}
-          </div>
+    <div
+      className="overview-card overview-card--lean"
+      role="region"
+      aria-label="总览"
+      data-git-loading={gitLoading ? '1' : '0'}
+      data-file-count={fileCount}
+    >
+      {/* 仅有信息时一行：分支 / 目标 / 当前工具 — 无「工作总览」重复标题 */}
+      {branch || goalMode || progress.total > 0 || liveTool ? (
+        <div className="overview-meta-line" aria-label="会话状态">
+          {branch ? (
+            <span className="overview-meta-chip" title={branch}>
+              <Lucide.GitBranch size={12} strokeWidth={1.75} aria-hidden />
+              {branch}
+            </span>
+          ) : null}
+          {wsPath ? (
+            <span className="overview-meta-chip" title={wsPath}>
+              {basename(wsPath)}
+            </span>
+          ) : null}
         </div>
+      ) : null}
+
+      {goalMode || progress.total > 0 ? (
         <button
           type="button"
-          className="overview-chip"
-          title="将当前分栏/标签布局保存到本项目"
-          onClick={handleSaveLayout}
+          className="overview-live-row overview-live-row--goal"
+          title={goalMode?.goal || '打开任务'}
+          aria-label={
+            goalMode
+              ? `目标：${agentOneLineLabel(goalMode.goal, '目标')}`
+              : `清单 ${progress.done}/${progress.total}`
+          }
+          onClick={() => onOpenPanel('tasks')}
         >
-          <Lucide.LayoutPanelLeft size={13} strokeWidth={1.75} style={{ marginRight: 4 }} />
-          保存布局
+          <Lucide.Target
+            size={14}
+            strokeWidth={1.75}
+            className="overview-live-ico"
+            aria-hidden
+          />
+          <span className="overview-item-name">
+            {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
+          </span>
+          <em>
+            {progress.total > 0
+              ? `${progress.done}/${progress.total}`
+              : goalMode
+                ? `第 ${(goalMode.iteration ?? 0) + 1} 轮`
+                : ''}
+          </em>
         </button>
-      </div>
+      ) : null}
 
-      <section className="overview-sec">
-        <button type="button" className="overview-sec-h" onClick={() => toggle('plan')}>
-          <Lucide.ListTodo size={15} strokeWidth={1.75} />
-          <span>计划与进度</span>
-          {planModeEnabled || runningTools.length > 0 ? (
-            <span className="overview-pill">{planModeEnabled ? '计划模式' : '进行中'}</span>
+      {liveTool ? (
+        <div
+          className="overview-live-row"
+          aria-live="polite"
+          aria-label={`${liveToolLabel}${liveToolStatus ? `，${liveToolStatus}` : ''}`}
+        >
+          <span className="overview-dot live" aria-hidden="true" />
+          <span className="overview-item-name" title={liveToolLabel}>
+            {liveToolLabel}
+          </span>
+          <em>{liveToolStatus}</em>
+        </div>
+      ) : null}
+
+      {/* 协作体：有列表才显示分区；点行 = 右侧打开，不废话 */}
+      <section className="overview-sec" aria-labelledby="overview-sec-agents">
+        <button
+          type="button"
+          id="overview-sec-agents"
+          className="overview-sec-h"
+          aria-expanded={openSec.agents}
+          aria-controls="overview-sec-agents-b"
+          onClick={() => toggle('agents')}
+        >
+          <Lucide.Bot size={15} strokeWidth={1.75} aria-hidden />
+          <span>协作体</span>
+          {sortedAgents.length > 0 ? (
+            <span className="overview-pill">
+              {runningAgentCount > 0 ? `${runningAgentCount} 运行` : sortedAgents.length}
+            </span>
           ) : null}
           <Lucide.ChevronDown
             size={14}
-            className={`overview-chev ${openSec.plan ? 'open' : ''}`}
+            className={`overview-chev ${openSec.agents ? 'open' : ''}`}
+            aria-hidden
           />
         </button>
-        {openSec.plan ? (
-          <div className="overview-sec-b">
-            {(planModeEnabled || permissionMode === 'plan') ? (
-              <div className="overview-plan-banner">
-                <div className="overview-plan-banner-t">
-                  计划模式：AI 只规划不改文件。审阅后可批准执行。
-                </div>
-                <div className="overview-plan-actions">
-                  <button
-                    type="button"
-                    className="overview-chip"
-                    onClick={() => {
-                      onShowToast?.('继续计划：仍只规划不改文件');
-                    }}
-                  >
-                    继续计划
-                  </button>
-                  <button
-                    type="button"
-                    className={`overview-chip ${planApproved ? 'active' : ''}`}
-                    onClick={() => {
-                      useLayoutStore.getState().setPermissionMode('ask');
-                      setPlanApproved(true);
-                      onShowToast?.('已批准执行，已切回需确认模式');
-                    }}
-                  >
-                    批准执行
-                  </button>
-                </div>
-              </div>
+        {openSec.agents ? (
+          <div className="overview-sec-b" id="overview-sec-agents-b">
+            {sortedAgents.length > 0 ? (
+              <ul className="overview-list overview-list--agents" aria-label="协作体列表">
+                {sortedAgents.map((a) => {
+                  const name = agentOneLineLabel(a.description, a.id);
+                  const st = agentStatusLabel(a.status);
+                  return (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        className="overview-item-btn overview-item-btn--agent"
+                        title={name}
+                        aria-label={`${name}，${st}`}
+                        onClick={() => {
+                          openAgentInSidePanel(a.id, {
+                            sessionId: activeSessionId || undefined,
+                          });
+                        }}
+                      >
+                        <span
+                          className={`overview-dot ${a.status === 'running' ? 'live' : ''}`}
+                          aria-hidden="true"
+                        />
+                        <span className="overview-item-main">
+                          <span className="overview-item-name">{name}</span>
+                          <em>{st}</em>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="overview-empty overview-empty--quiet" role="status">
+                无
+              </p>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="overview-sec" aria-labelledby="overview-sec-files">
+        <div className="overview-sec-h-row">
+          <button
+            type="button"
+            id="overview-sec-files"
+            className="overview-sec-h"
+            aria-expanded={openSec.files}
+            aria-controls="overview-sec-files-b"
+            onClick={() => toggle('files')}
+          >
+            <Lucide.GitBranch size={15} strokeWidth={1.75} aria-hidden />
+            <span>改动</span>
+            {fileCount > 0 ? (
+              <span className="overview-pill">{fileCount}</span>
+            ) : null}
+            <Lucide.ChevronDown
+              size={14}
+              className={`overview-chev ${openSec.files ? 'open' : ''}`}
+              aria-hidden
+            />
+          </button>
+          <button
+            type="button"
+            className="overview-icon-btn"
+            title="刷新"
+            aria-label={gitLoading ? '正在刷新' : '刷新 Git'}
+            disabled={gitLoading}
+            onClick={() => {
+              setActionErr(null);
+              if (actionErrTimerRef.current) {
+                clearTimeout(actionErrTimerRef.current);
+                actionErrTimerRef.current = null;
+              }
+              void refreshGit({ force: true });
+            }}
+          >
+            <Lucide.RefreshCw
+              size={14}
+              strokeWidth={1.75}
+              className={gitLoading ? 'spin' : ''}
+              aria-hidden
+            />
+          </button>
+        </div>
+        {openSec.files ? (
+          <div
+            className="overview-sec-b"
+            id="overview-sec-files-b"
+            aria-busy={gitLoading || Boolean(openingPath)}
+          >
+            {git?.found && git.branch ? (
+              <p className="overview-empty overview-empty--quiet" role="status">
+                分支 {git.branch}
+                {git.clean ? ' · 干净' : ''}
+              </p>
             ) : null}
 
-            {(planModeEnabled || permissionMode === 'plan' || planApproved) ? (
-              <div className="overview-plan-status">
-                <div className="overview-plan-status-label">当前计划状态</div>
-                <div className="overview-plan-status-row">
-                  <span className={`overview-plan-status-dot ${planApproved ? 'is-yes' : ''}`} />
-                  <span>{planApproved ? '已批准' : '未批准'}</span>
-                  {planModeEnabled || permissionMode === 'plan' ? (
-                    <span className="overview-plan-status-meta">· 计划模式中</span>
-                  ) : planApproved ? (
-                    <span className="overview-plan-status-meta">· 可执行</span>
+            {/* 诊断：无 git / 非仓库 / 超时 — 可操作，不无限转圈 */}
+            {!gitLoading && gitHelp ? (
+              <div className="overview-git-help" role="status">
+                <div className="overview-inline-err" role="alert">
+                  {gitHelp.title}
+                </div>
+                {gitHelp.hint ? (
+                  <p className="overview-empty overview-empty--quiet">{gitHelp.hint}</p>
+                ) : null}
+                <div className="overview-git-actions">
+                  {gitHelp.action === 'download-git' ? (
+                    <button
+                      type="button"
+                      className="overview-link"
+                      onClick={() => void openGitDownloadPage()}
+                    >
+                      下载 Git
+                    </button>
+                  ) : null}
+                  {gitHelp.action === 'init-repo' ? (
+                    <button
+                      type="button"
+                      className="overview-link"
+                      title="打开终端，在工作区执行 git init"
+                      onClick={() => onOpenPanel('terminal')}
+                    >
+                      打开终端（git init）
+                    </button>
+                  ) : null}
+                  {gitHelp.action === 'retry' || gitHelp.action === 'download-git' || gitHelp.action === 'init-repo' ? (
+                    <button
+                      type="button"
+                      className="overview-link"
+                      onClick={() => void refreshGit({ force: true })}
+                    >
+                      重试
+                    </button>
                   ) : null}
                 </div>
               </div>
             ) : null}
 
-            {runningTools.length > 0 ? (
-              <ul className="overview-list">
-                {runningTools.slice(0, 6).map((t) => {
-                  const label = toolHumanLabel(t);
-                  return (
-                    <li key={t.id} title={label}>
-                      <span className="overview-dot live" />
-                      {t.status === 'pending_approval' ? '待确认' : '进行中'} · {label}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : completedToolsRecent.length > 0 ? (
-              <ul className="overview-list">
-                {completedToolsRecent.map((t) => {
-                  const label = toolHumanLabel(t);
-                  return (
-                    <li key={t.id} title={label}>
-                      <span className={`overview-dot ${t.status === 'error' ? '' : 'live'}`} />
-                      {t.status === 'error' ? '失败' : '完成'} · {label}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="overview-empty">
-                {planModeEnabled || permissionMode === 'plan'
-                  ? '计划模式下暂无工具步骤；可在对话中让助手拆解任务。'
-                  : '暂无进行中的步骤；工具调用会出现在这里。'}
-              </p>
-            )}
-            <button
-              type="button"
-              className="overview-link"
-              onClick={() => onOpenPanel('tasks')}
-            >
-              打开任务面板
-            </button>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="overview-sec">
-        <button type="button" className="overview-sec-h" onClick={() => toggle('agents')}>
-          <Lucide.Bot size={15} strokeWidth={1.75} />
-          <span>Agent</span>
-          {sortedAgents.some((a) => a.status === 'running') ? (
-            <span className="overview-pill">运行中</span>
-          ) : null}
-          <Lucide.ChevronDown
-            size={14}
-            className={`overview-chev ${openSec.agents ? 'open' : ''}`}
-          />
-        </button>
-        {openSec.agents ? (
-          <div className="overview-sec-b">
-            {sortedAgents.length === 0 ? (
-              <p className="overview-empty">暂无子 Agent</p>
-            ) : (
-              <ul className="overview-list">
-                {sortedAgents.slice(0, 8).map((a) => (
-                  <li key={a.id}>
-                    <button
-                      type="button"
-                      className="overview-item-btn"
-                      onClick={() => {
-                        useLayoutStore.getState().setPanelAgentId(a.id);
-                        useLayoutStore.getState().setActiveAgentId(a.id);
-                        onOpenPanel('agent');
-                        window.dispatchEvent(
-                          new CustomEvent('crish-open-agent-panel', {
-                            detail: { agentId: a.id },
-                          }),
-                        );
-                      }}
-                    >
-                      <span
-                        className={`overview-dot ${a.status === 'running' ? 'live' : ''}`}
-                      />
-                      <span className="overview-item-main">
-                        {a.description || a.id}
-                        <em>
-                          {a.status === 'running'
-                            ? '运行中'
-                            : a.status === 'failed'
-                              ? '失败'
-                              : a.status === 'stopped'
-                                ? '已停止'
-                                : '完成'}
-                        </em>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="overview-sec">
-        <button type="button" className="overview-sec-h" onClick={() => toggle('files')}>
-          <Lucide.GitBranch size={15} strokeWidth={1.75} />
-          <span>改动文件</span>
-          {fileCount > 0 ? <span className="overview-pill">{fileCount}</span> : null}
-          <Lucide.ChevronDown
-            size={14}
-            className={`overview-chev ${openSec.files ? 'open' : ''}`}
-          />
-        </button>
-        {openSec.files ? (
-          <div className="overview-sec-b">
-            <div className="overview-files-toolbar">
-              <span className="overview-files-meta">
-                {gitLoading
-                  ? '读取 Git…'
-                  : git?.found
-                    ? git.clean
-                      ? '工作区干净'
-                      : `${gitFiles.length} 个变更`
-                    : gitErr || (wsPath ? '非 Git 目录或不可用' : '未打开工作区')}
-              </span>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="刷新 Git 状态"
-                disabled={gitLoading}
-                onClick={() => void refreshGit({ force: true })}
-              >
-                <Lucide.RefreshCw size={14} strokeWidth={1.75} className={gitLoading ? 'spin' : ''} />
-              </button>
-            </div>
+            {actionErr ? (
+              <div className="overview-inline-err" role="alert">
+                {actionErr}
+              </div>
+            ) : null}
 
             {gitFiles.length > 0 ? (
-              <ul className="overview-list">
-                {gitFiles.slice(0, 16).map((f) => (
-                  <li key={f.path}>
-                    <button
-                      type="button"
-                      className="overview-item-btn"
-                      disabled={openingPath === f.path}
-                      onClick={() => void openGitFile(f)}
-                    >
-                      <span className={gitStatusBadgeClass(f.status)} title={gitStatusLabel(f.status)}>
-                        {String(f.status).slice(0, 1)}
-                      </span>
-                      <span className="overview-item-main mono">
-                        {basename(f.path)}
-                        <em>
-                          {gitStatusLabel(f.status)}
-                          {f.conflicted ? ' · 冲突' : ''}
-                          {f.staged && !f.untracked ? ' · 已暂存' : ''}
-                          {' · '}
-                          {f.path}
-                        </em>
-                      </span>
-                    </button>
-                  </li>
-                ))}
+              <ul className="overview-list" aria-label="Git 改动文件">
+                {gitFiles.map((f) => {
+                  const opening = openingPath === f.path;
+                  const stLabel = gitStatusLabel(f.status);
+                  return (
+                    <li key={f.path}>
+                      <button
+                        type="button"
+                        className="overview-item-btn"
+                        disabled={Boolean(openingPath)}
+                        aria-busy={opening}
+                        aria-label={
+                          opening
+                            ? `正在打开 ${basename(f.path)}`
+                            : `${basename(f.path)}，${stLabel}`
+                        }
+                        onClick={() => void openGitFile(f)}
+                      >
+                        <span
+                          className={gitStatusBadgeClass(f.status)}
+                          title={stLabel}
+                          aria-hidden="true"
+                        >
+                          {String(f.status).slice(0, 1)}
+                        </span>
+                        <span className="overview-item-main mono">
+                          <span className="overview-item-name" title={f.path}>
+                            {basename(f.path)}
+                          </span>
+                          <em>
+                            {opening
+                              ? '…'
+                              : `${stLabel}${f.conflicted ? ' · 冲突' : ''}`}
+                          </em>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : convoFiles.length > 0 ? (
-              <ul className="overview-list">
-                {convoFiles.slice(0, 12).map((f) => (
+              <ul className="overview-list" aria-label="对话改动文件">
+                {convoFiles.map((f) => (
                   <li key={f.filePath}>
                     <button
                       type="button"
                       className="overview-item-btn"
+                      aria-label={`打开 ${basename(f.filePath)}`}
                       onClick={() => {
-                        useLayoutStore.getState().setActiveDiffSource(f);
+                        setActiveDiffSource(f);
                         onOpenPanel('diff');
                       }}
                     >
-                      <Lucide.FileCode2 size={14} strokeWidth={1.75} />
+                      <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
                       <span className="overview-item-main mono">
-                        {basename(f.filePath)}
+                        <span className="overview-item-name" title={f.filePath}>
+                          {basename(f.filePath)}
+                        </span>
                         <em>
-                          +{f.additions} -{f.deletions} · {f.filePath}
+                          +{f.additions} −{f.deletions}
                         </em>
                       </span>
                     </button>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="overview-empty">
-                暂无改动。打开 Git 仓库工作区后，未提交变更会显示在这里；对话产生的 diff 也会列出。
+            ) : !gitHelp && !gitLoading ? (
+              <p className="overview-empty overview-empty--quiet" role="status">
+                {git?.found && git.clean ? '干净' : '无改动'}
               </p>
-            )}
-
-            {convoFiles.length > 0 && gitFiles.length > 0 ? (
-              <p className="overview-hint">
-                另有对话记录的 {convoFiles.length} 个 diff 文件
+            ) : gitLoading ? (
+              <p className="overview-empty overview-empty--quiet" role="status">
+                读取 Git…
               </p>
             ) : null}
 
-            <button type="button" className="overview-link" onClick={() => onOpenPanel('diff')}>
-              打开变更面板
-            </button>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="overview-sec">
-        <button type="button" className="overview-sec-h" onClick={() => toggle('ctx')}>
-          <Lucide.Layers size={15} strokeWidth={1.75} />
-          <span>上下文</span>
-          <Lucide.ChevronDown
-            size={14}
-            className={`overview-chev ${openSec.ctx ? 'open' : ''}`}
-          />
-        </button>
-        {openSec.ctx ? (
-          <div className="overview-sec-b">
-            <ul className="overview-list static">
-              <li>消息 {(session?.messages || []).length} 条</li>
-              <li>
-                工具调用{' '}
-                {(session?.messages || []).reduce(
-                  (n, m) => n + (m.toolCalls?.length || 0),
-                  0,
-                )}{' '}
-                次
-              </li>
-              <li>
-                工作区 {wsPath ? basename(wsPath) : workspacesLen ? '已打开' : '—'}
-              </li>
-              {git?.found ? (
-                <li>
-                  Git {git.clean ? '干净' : '有改动'}
-                  {typeof git.conflictedCount === 'number' && git.conflictedCount > 0
-                    ? ` · ${git.conflictedCount} 冲突`
-                    : ''}
-                </li>
-              ) : null}
-            </ul>
-            <div className="overview-quick" role="toolbar" aria-label="快捷入口">
+            {hasFileList ? (
               <button
                 type="button"
-                className="overview-icon-btn"
-                title="文件"
-                aria-label="文件"
-                onClick={() => onOpenPanel('files')}
+                className="overview-link"
+                onClick={() => onOpenPanel('diff')}
               >
-                <Lucide.FolderTree size={14} strokeWidth={1.75} />
+                查看变更
               </button>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="终端"
-                aria-label="终端"
-                onClick={() => onOpenPanel('terminal')}
-              >
-                <Lucide.Terminal size={14} strokeWidth={1.75} />
-              </button>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="运行状态"
-                aria-label="运行状态"
-                onClick={() => onOpenPanel('runtime')}
-              >
-                <Lucide.Gauge size={14} strokeWidth={1.75} />
-              </button>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="技能"
-                aria-label="技能"
-                onClick={() => {
-                  useLayoutStore.getState().openSettings('skills');
-                  onShowToast?.('已打开设置 · 技能');
-                }}
-              >
-                <Lucide.GraduationCap size={14} strokeWidth={1.75} />
-              </button>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="MCP"
-                aria-label="MCP"
-                onClick={() => {
-                  useLayoutStore.getState().openSettings('mcp');
-                  onShowToast?.('已打开设置 · 扩展服务');
-                }}
-              >
-                <Lucide.Server size={14} strokeWidth={1.75} />
-              </button>
-              <button
-                type="button"
-                className="overview-icon-btn"
-                title="规则"
-                aria-label="规则"
-                onClick={() => {
-                  useLayoutStore.getState().openSettings('rules');
-                  onShowToast?.('已打开设置 · 规则');
-                }}
-              >
-                <Lucide.FileText size={14} strokeWidth={1.75} />
-              </button>
-            </div>
+            ) : null}
           </div>
         ) : null}
       </section>

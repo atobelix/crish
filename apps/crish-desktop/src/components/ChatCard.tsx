@@ -1,6 +1,27 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff } from '../store/layoutStore';
+import {
+  getSessionById,
+  selectActiveSession,
+  selectActiveSessionId,
+  useSessionField,
+} from '../store/sessionStore';
+import {
+  addCommandPermission,
+  addMessage,
+  archiveSession,
+  branchSession,
+  createSession,
+  getSessionStoreState,
+  openSettings,
+  patchSession,
+  setActiveDiffSource as setActiveDiffSourceAccess,
+  setActiveSessionId,
+  setSessionMessageStatus,
+  updateMessageToolCall,
+} from '../api/storeAccess';
+import type { ShowToastFn } from '../hooks/useToastQueue';
 import * as Lucide from 'lucide-react';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { isDemoMode } from '../api/appMode';
@@ -8,13 +29,16 @@ import { fetchEngineStatus, type EngineStatus } from '../api/engineConfig';
 import {
   activateProfileModel,
   anyProfileHasKey,
-  flattenModelChoices,
   getActiveModelId,
   getActiveProfile,
   getActiveProfileId,
+  getProviderSetupStatus,
+  resolveDisplayModelId,
+  resolvePreferredModelSelection,
 } from '../api/providerProfiles';
 import { ModelPicker } from './ModelPicker';
 import { ChatMessageList } from './ChatMessageList';
+import { ChatEmptyState } from './ChatEmptyState';
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { toolHumanLabel } from '../api/toolPresentation';
@@ -24,21 +48,41 @@ import {
 } from '../api/skillsApi';
 import { clientApi } from '../api/clientApi';
 import { openFileInPanel } from '../api/workspaceFsApi';
-import { AgentCard } from './AgentCard';
 import { useChatStream, type ChatAttachment } from '../hooks/useChatStream';
 import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
 import { useThinkingTimer } from '../hooks/useThinkingTimer';
 import { ChatDemoChrome } from './ChatDemoChrome';
 import { onUiEvent } from '../api/uiEvents';
-import { downloadSessionMarkdown } from '../api/sessionExport';
+import { tryDownloadSessionMarkdown } from '../api/sessionExport';
 import { blobToImageAttachment, isImageFile } from '../api/imageProcessing';
 import { ChatComposer } from './ChatComposer';
+import { ChatStatusRibbons } from './ChatStatusRibbons';
+import { ChatMsgFilterBar } from './ChatMsgFilterBar';
+import { COMPOSER_SEED_EVENT, takeComposerSeed } from '../api/composerSeed';
+import {
+  approvalDockLabel,
+  collectPendingApprovals,
+  planApprovalUi,
+} from '../api/chatApprovalUi';
+import {
+  chatEmptyKindAriaLabel,
+  resolveChatEmptyKind,
+} from '../api/chatEmptyState';
+import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
+import { extractCommandForMatch } from '../api/commandPermissions';
+import { messageMatchesSearch } from '../api/sessionSearch';
+import {
+  EMPTY_SESSION_TITLE,
+  findReusableEmptyShell,
+  isEmptyShellSession,
+} from '../api/sessionTitle';
+import { isFirstRunOverlayOpen } from './FirstRunWizard';
 
 interface ChatCardProps {
   wsId: string;
   colIdx: number;
   groupIdx: number;
-  onShowToast: (message: string) => void;
+  onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
 }
 
@@ -49,12 +93,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   onShowToast,
   handleGlobalTabClick
 }) => {
-  const sessions = useLayoutStore((s) => s.sessions);
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
-  const activeAgentId = useLayoutStore((s) => s.activeAgentId);
-  const setActiveAgentId = useLayoutStore((s) => s.setActiveAgentId);
+  // 收紧订阅：只跟当前会话，避免 sessions 整表变更触发重渲染
+  const activeSessionId = useSessionField(selectActiveSessionId);
+  const activeSession = useSessionField(selectActiveSession);
   const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
-  const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const appSettings = useLayoutStore((s) => s.appSettings);
 
   const [engineModel, setEngineModel] = useState('');
@@ -63,22 +105,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const [pickerInlineError, setPickerInlineError] = useState('');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
-  /** chat = 对话流；scheduled = 主区定时任务 */
-  const [mainSurface, setMainSurface] = useState<'chat' | 'scheduled'>('chat');
+  /** chat = 对话流；scheduled = 主区定时任务（与 layoutStore 同步，供 CardPanel 藏面包屑） */
+  const mainSurface = useLayoutStore((s) => s.chatMainSurface || 'chat');
+  const setMainSurface = useLayoutStore((s) => s.setChatMainSurface);
   const [projectTick, setProjectTick] = useState(0);
   const [engineHint, setEngineHint] = useState<EngineStatus | null>(null);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
-  /** 输入区旁「更多」：导出 / 本会话搜索等次要动作 */
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  /** 本会话消息客户端过滤（搜索本会话） */
+  /** 本会话消息客户端过滤（搜索本会话；由 card-header ChatHeaderMore 触发） */
   const [localMsgFilter, setLocalMsgFilter] = useState('');
   const [showMsgFilter, setShowMsgFilter] = useState(false);
   const msgFilterInputRef = useRef<HTMLInputElement>(null);
-
-  const modelChoices = flattenModelChoices();
+  /** 远程水合超时后放行空态，避免失败路径永久空白 */
+  const [hydrateTimedOut, setHydrateTimedOut] = useState(false);
+  /** createSession 刚剪掉多余空壳时的短暂旁注 */
+  const [shellDidPrunePeers, setShellDidPrunePeers] = useState(false);
+  const shellPruneCueTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const offs = [
@@ -86,21 +129,71 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
       onUiEvent('open-project-picker', () => setShowProjectPicker(true)),
       onUiEvent('open-scheduled', () => setMainSurface('scheduled')),
       onUiEvent('open-chat', () => setMainSurface('chat')),
+      onUiEvent('toggle-msg-filter', () => {
+        setShowMsgFilter((v) => {
+          const next = !v;
+          if (!next) setLocalMsgFilter('');
+          return next;
+        });
+      }),
+      onUiEvent('focus-composer', () => {
+        setMainSurface('chat');
+        window.requestAnimationFrame(() => {
+          const el =
+            document.querySelector<HTMLTextAreaElement>(
+              'textarea[data-chat-composer], .chat-composer textarea, .composer-textarea',
+            ) || document.querySelector<HTMLTextAreaElement>('.chat-footer textarea');
+          el?.focus();
+        });
+      }),
     ];
     return () => offs.forEach((off) => off());
-  }, []);
+  }, [setMainSurface]);
+
+  // 仅当活动会话 id 变化时回到对话面（打开定时任务不会清 activeSessionId）
+  const prevActiveSessionRef = useRef(activeSessionId);
+  useEffect(() => {
+    if (prevActiveSessionRef.current !== activeSessionId) {
+      prevActiveSessionRef.current = activeSessionId;
+      setMainSurface('chat');
+    }
+  }, [activeSessionId, setMainSurface]);
+
+  const applyResolvedModelLabel = (engineHintModel?: string | null) => {
+    const resolved = resolvePreferredModelSelection({
+      engineModel: engineHintModel,
+    });
+    if (resolved) {
+      setEngineModel(resolved.model);
+      setActiveProfileId(resolved.profileId);
+      return;
+    }
+    // 无本机列表时：仅展示本机 active / settings 默认；不采用未知引擎演示 id（如 mimo）
+    const settingsDefault = (appSettings?.defaultModel || '').trim();
+    const localActive = (getActiveModelId() || '').trim();
+    const display =
+      resolveDisplayModelId(engineHintModel) || localActive || settingsDefault || '';
+    setEngineModel(display);
+    setActiveProfileId(getActiveProfileId());
+  };
 
   useEffect(() => {
     void fetchEngineStatus().then((s) => {
       setEngineHint(s);
-      const localModel = getActiveModelId();
-      if (s.model) setEngineModel(s.model);
-      else if (localModel) setEngineModel(localModel);
-      else if (appSettings?.defaultModel) setEngineModel(appSettings.defaultModel);
+      applyResolvedModelLabel(s.model);
     });
-    setActiveProfileId(getActiveProfileId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectTick]);
+  }, [projectTick, appSettings?.defaultModel]);
+
+  // 设置页/其它入口切换模型后，底栏与会话立即用新 model
+  useEffect(() => {
+    const off = onUiEvent('model-changed', (detail) => {
+      if (detail?.model) setEngineModel(detail.model);
+      if (detail?.profileId) setActiveProfileId(detail.profileId);
+      void fetchEngineStatus().then(setEngineHint);
+    });
+    return off;
+  }, []);
 
   const selectProfileModel = async (profileId: string, modelId: string) => {
     if (pickerBusy) return;
@@ -110,16 +203,27 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
       const res = await activateProfileModel(profileId, modelId);
       if (!res.ok) {
         setPickerInlineError(
-          res.error === 'not_connected' ? networkUserMessage() : '切换失败，请到设置检查密钥与地址',
+          res.error === 'not_connected'
+            ? networkUserMessage()
+            : res.error === 'empty_model'
+              ? '请选择有效模型'
+              : res.error === 'profile_not_found'
+                ? '供应商不存在，请到设置重新配置'
+                : '切换失败，请到设置检查密钥与地址',
         );
         return;
       }
+      // activate 已写 LS + 引擎 + settings.defaultModel，并 emit model-changed
       setEngineModel(modelId);
       setActiveProfileId(profileId);
       setShowModelDropdown(false);
-      // 刷新底部软提示（无本地密钥时会引导同步）
       setEngineHint(await fetchEngineStatus());
-      void res.warning;
+      // 警告仅内联（不 toast 成功；策略：错误/警告可见，成功看底栏模型名）
+      if (res.warning === 'model_mismatch') {
+        setPickerInlineError('引擎回报模型不一致，请到设置检查后重试');
+      } else if (res.warning === 'no_local_key') {
+        setPickerInlineError('未带本地密钥，请确认引擎侧已有密钥');
+      }
     } finally {
       setPickerBusy(false);
     }
@@ -135,25 +239,32 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     return modelId;
   };
 
-  const needsKeySetup =
-    !anyProfileHasKey() &&
-    !(engineHint?.ok && engineHint.hasApiKey === true);
+  /** 本地优先就绪态：与 FirstRunWizard / providerProfiles 共用 */
+  const setupStatus = getProviderSetupStatus({
+    engineOk: engineHint?.ok,
+    engineHasApiKey: engineHint?.hasApiKey,
+    engineModel: engineHint?.model ?? engineModel,
+  });
+  const needsKeySetup = setupStatus.needsKeySetup;
+  const needsModelSetup = setupStatus.needsModelSetup;
+  /** 有密钥即展示选择器（空 models 可手填）；无密钥时隐藏，改走 soft-hint */
+  const showModelPicker = setupStatus.showModelPicker;
 
-  /** 未配置好密钥/模型时，主界面不展示模型选择器 */
-  const showModelPicker =
-    !needsKeySetup &&
-    (modelChoices.some((c) => c.hasKey) ||
-      Boolean(engineHint?.ok && engineHint.hasApiKey && (engineModel || getActiveModelId())));
-
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
   /** /goal 目标模式进行中时展示停止 */
   const goalModeActive = Boolean(activeSession?.goalMode?.active);
 
-  // 切换会话时收起过滤，避免串会话
+  // 切换会话时收起过滤 / 审批忙 / 水合超时 / 剪枝旁注，避免串会话
   useEffect(() => {
     setLocalMsgFilter('');
     setShowMsgFilter(false);
+    setApprovalBusy(false);
+    setHydrateTimedOut(false);
+    setShellDidPrunePeers(false);
+    if (shellPruneCueTimerRef.current != null) {
+      window.clearTimeout(shellPruneCueTimerRef.current);
+      shellPruneCueTimerRef.current = null;
+    }
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -163,61 +274,70 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     }
   }, [showMsgFilter]);
 
-  /** 导出 Markdown：走 sessionExport（与侧栏/底栏导出一致） */
+  /** 导出 Markdown：sessionExport（ChatHeaderMore / 与侧栏一致）；成功静默、失败 toast */
   const handleExportMarkdown = useCallback(() => {
-    if (!activeSession) {
-      onShowToast('没有可导出的会话');
-      return;
+    const byId = getSessionStoreState().sessionsById;
+    const result = tryDownloadSessionMarkdown(activeSession, new Date(), {
+      sessionsById: byId,
+    });
+    if (result.ok === false) {
+      onShowToast(result.error || '导出失败');
     }
-    try {
-      downloadSessionMarkdown(activeSession);
-      onShowToast('已导出 Markdown');
-    } catch {
-      onShowToast('导出失败');
-    }
+    // 成功：浏览器下载即反馈，不 toast
   }, [activeSession, onShowToast]);
 
-  /** 本会话文本过滤（仅影响展示；钉栏 / 页眉工具条始终可见） */
-  const displayMessages = useMemo(() => {
-    const q = localMsgFilter.trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter((m) => {
-      const text = (m.text || '').toLowerCase();
-      const thinking = (m.thinking || '').toLowerCase();
-      if (text.includes(q) || thinking.includes(q)) return true;
-      // 工具名/参数也可命中
-      return (m.toolCalls || []).some((tc) => {
-        const name = (tc.name || '').toLowerCase();
-        const args = (tc.arguments || '').toLowerCase();
-        const out = (tc.output || '').toLowerCase();
-        return name.includes(q) || args.includes(q) || out.includes(q);
-      });
+  /** card-header ChatHeaderMore → export-session-md */
+  useEffect(() => {
+    return onUiEvent('export-session-md', () => {
+      handleExportMarkdown();
     });
+  }, [handleExportMarkdown]);
+
+  /** 本会话文本过滤（与侧栏/高亮共用 messageMatchesSearch；含 blocks） */
+  const displayMessages = useMemo(() => {
+    const q = localMsgFilter.trim();
+    if (!q) return messages;
+    return messages.filter((m) => messageMatchesSearch(m, q));
   }, [messages, localMsgFilter]);
 
-  // 当前会话待审批工具（主会话 + 协作 agent；时间线内联卡 + 底部 sticky 条）
-  let pendingApprovalMsgId = '';
-  let pendingApprovalToolId = '';
-  let pendingApprovalCount = 0;
-  let pendingApprovalSummary = '';
-  const scanPending = (msgs: typeof messages) => {
-    for (const m of msgs) {
-      if (!m.toolCalls) continue;
-      for (const tc of m.toolCalls) {
-        if (tc.status !== 'pending_approval') continue;
-        pendingApprovalCount += 1;
-        if (!pendingApprovalToolId) {
-          pendingApprovalMsgId = m.id;
-          pendingApprovalToolId = tc.id;
-          pendingApprovalSummary = toolHumanLabel(tc);
-        }
-      }
+  // 当前会话待审批：按 toolId 去重（防双写双算）；dock 策略见 planApprovalUi
+  const pendingApprovalScan = useMemo(() => {
+    const agentLists = (activeSession?.agents || []).map((ag) => ag.messages || []);
+    return collectPendingApprovals(messages, agentLists);
+  }, [messages, activeSession?.agents]);
+  const pendingApprovalMsgId = pendingApprovalScan.first?.msgId || '';
+  const pendingApprovalToolId = pendingApprovalScan.first?.toolId || '';
+  // 一次算出 mode/showDock/total，避免 dock 与内联各算各的漂移
+  const approvalUiPlan = useMemo(
+    () => planApprovalUi(pendingApprovalScan.counts),
+    [pendingApprovalScan.counts],
+  );
+  const pendingApprovalCount = approvalUiPlan.total;
+  // 摘要：优先 first.summary；否则从首条 toolCall 做人读标签
+  const pendingApprovalSummary = useMemo(() => {
+    const first = pendingApprovalScan.first;
+    if (!first) return '';
+    if (first.summary) {
+      // collect 存的是 name/explanation；有完整 toolCall 时再用人读标签覆盖
+      const fromMsg =
+        messages
+          .flatMap((m) => m.toolCalls || [])
+          .find((tc) => tc.id === first.toolId) ||
+        (activeSession?.agents || [])
+          .flatMap((ag) => ag.messages || [])
+          .flatMap((m) => m.toolCalls || [])
+          .find((tc) => tc.id === first.toolId);
+      if (fromMsg) return toolHumanLabel(fromMsg);
+      return first.summary;
     }
-  };
-  scanPending(messages);
-  for (const ag of activeSession?.agents || []) {
-    scanPending(ag.messages || []);
-  }
+    return '';
+  }, [pendingApprovalScan.first, messages, activeSession?.agents]);
+  // 单条主时间线 → 仅内联；多条/协作 → dock（plan 内再钳一次，禁止单条双 dock）
+  const approvalDockVisible = approvalUiPlan.showDock;
+  const pendingApprovalDockLabel = approvalDockLabel(
+    pendingApprovalScan.counts,
+    pendingApprovalSummary,
+  );
 
   // Composer extras — permission mode is global so chatApi can read it
   // 状态须在依赖它的 useEffect 之前声明，避免 TDZ 白屏
@@ -267,7 +387,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           next.push(await blobToImageAttachment(f, f.name || undefined));
         }
         addAttachments(next);
-        onShowToast('已粘贴图片');
       } catch {
         onShowToast('图片粘贴失败');
       }
@@ -289,26 +408,25 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     };
   }, [showModelDropdown]);
 
-  useEffect(() => {
-    if (!showMoreMenu) return;
-    const onDoc = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowMoreMenu(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [showMoreMenu]);
-
   // Keyboard and Input states
   const [chatInput, setChatInput] = useState('');
+
+  // 设置页「AI 创建技能/定时」写入的输入种子
+  useEffect(() => {
+    const apply = (text: string) => {
+      const t = text.trim();
+      if (!t) return;
+      setChatInput(t);
+    };
+    const seed = takeComposerSeed();
+    if (seed) apply(seed);
+    const onSeed = (e: Event) => {
+      const detail = (e as CustomEvent<{ text?: string }>).detail;
+      if (detail?.text) apply(detail.text);
+    };
+    window.addEventListener(COMPOSER_SEED_EVENT, onSeed);
+    return () => window.removeEventListener(COMPOSER_SEED_EVENT, onSeed);
+  }, []);
   const [isComposing, setIsComposing] = useState(false); // IME Composition State
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -328,16 +446,17 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   // Slash commands：固定 + 技能（enableSkillCommands）
   // 正式模式含已实现命令；纯演示命令仅 demo
+  // 描述宜短：斜杠菜单紧凑单行
   const BASE_SLASH = useMemo(
     () => [
-      { cmd: '/goal', desc: '长期目标模式：自动多轮推进直至完成' },
-      { cmd: '/learn', desc: '记住一条偏好/规则到全局设置' },
-      { cmd: '/grill-me', desc: '产品/技术对齐：只提问澄清，暂不实施' },
-      { cmd: '/teamwork-preview', desc: '打开多代理协作看板' },
-      { cmd: '/schedule', desc: '打开主区定时任务' },
-      { cmd: '/browser', desc: '打开右侧内置预览浏览器' },
+      { cmd: '/goal', desc: '多轮推进直至完成' },
+      { cmd: '/learn', desc: '记住一条规则' },
+      { cmd: '/grill-me', desc: '对齐提问，暂不实施' },
+      { cmd: '/schedule', desc: '定时任务' },
+      { cmd: '/teamwork', desc: '协作看板' },
+      { cmd: '/browser', desc: '预览浏览器' },
       ...(isDemoMode()
-        ? [{ cmd: '/simulate', desc: '启动庞大的1分钟自动化流水线模拟演示' }]
+        ? [{ cmd: '/simulate', desc: '演示流水线' }]
         : []),
     ],
     [],
@@ -431,180 +550,254 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     setAttachments,
     skillCommandsEnabled,
     needsKeySetup,
+    needsModelSetup,
     setPickerInlineError,
+    onOpenModelPicker: () => setShowModelDropdown(true),
   });
 
-  const openDiffInRightPanel = (diff: FileDiff) => {
-    setActiveDiffSource(diff);
-    handleGlobalTabClick('diff');
-    useLayoutStore.setState((state) => {
-      const targetWs = state.workspaces.find((w) => w.id === wsId);
-      if (targetWs) {
-        for (const col of targetWs.columns) {
-          for (const gp of col.groups) {
-            if (gp.cards.some((c) => c.id === 'diff')) {
-              gp.activeCardId = 'diff';
-              break;
-            }
-          }
-        }
-      }
+  useEffect(() => {
+    return onUiEvent('stop-generation', () => {
+      handleStopGeneration();
     });
-    onShowToast(`已在右侧打开完整改动：${diff.filePath}`);
+  }, [handleStopGeneration]);
+
+  const openDiffInRightPanel = (diff: FileDiff) => {
+    setActiveDiffSourceAccess(diff);
+    handleGlobalTabClick('diff');
+    // handleGlobalTabClick / focusOrOpenPanel 会确保 diff 面板 active
+    // 打开侧栏是可预期操作，不弹 toast
   };
 
-  /** 在右侧文件管理器中打开路径（按需预览，不刷屏；相对路径由 openFileInPanel 接到工作区根） */
+  /** 在右侧文件管理器中打开路径（按需预览；不 toast 刷屏） */
   const openPathInFilesPanel = (filePath: string) => {
     openSidePanel('files');
     openFileInPanel(filePath);
-    onShowToast(`已打开文件：${filePath.replace(/^.*[\\/]/, '')}`);
   };
 
   const handleApprovalAllow = (toolId: string, msgId: string, remember = false) => {
+    // 无活动会话 / 忙时不写，避免幽灵审批落盘到空 id
+    if (!activeSessionId || approvalBusy) return;
+    const tid = String(toolId || '').trim();
+    const mid = String(msgId || '').trim();
+    if (!tid || !mid) return;
     // 乐观：立刻从 pending 摘掉，避免幽灵条卡住后续审批
     setApprovalBusy(true);
-    const st = useLayoutStore.getState();
     if (remember) {
-      const tc = st.sessions
-        .find((s) => s.id === activeSessionId)
-        ?.messages.find((m) => m.id === msgId)
-        ?.toolCalls?.find((t) => t.id === toolId);
-      const raw = (tc?.arguments || tc?.name || '').trim();
-      // 取命令首个 token 段作为可记忆前缀（至多前 3 段）
-      const line = raw.replace(/\r?\n/g, ' ').trim();
-      const parts = line.split(/\s+/).filter(Boolean);
-      const prefix = parts.slice(0, Math.min(3, parts.length)).join(' ');
-      if (prefix && !prefix.startsWith('{')) {
-        st.addCommandPermission(prefix);
-        onShowToast(`已加入白名单：${prefix}`);
+      const tc = getSessionById(activeSessionId)
+        ?.messages.find((m) => m.id === mid)
+        ?.toolCalls?.find((t) => t.id === tid);
+      // JSON args 需 dig command，不能把整段 {…} 写进白名单
+      const prefix = rememberPrefixFromToolArgs(
+        tc?.name || '',
+        tc?.arguments || '',
+        extractCommandForMatch,
+      );
+      if (prefix) {
+        addCommandPermission(prefix);
+        // 白名单写入后卡片即消失，不 toast 成功
       }
     }
-    st.updateMessageToolCall(activeSessionId, msgId, toolId, {
+    updateMessageToolCall(activeSessionId, mid, tid, {
       status: 'running',
       output: '执行中…',
     });
     // 同步清掉同 id 的其它消息里残留 pending（防御）
-    for (const m of st.sessions.find((s) => s.id === activeSessionId)?.messages || []) {
-      const tc = m.toolCalls?.find((t) => t.id === toolId && t.status === 'pending_approval');
-      if (tc && m.id !== msgId) {
-        st.updateMessageToolCall(activeSessionId, m.id, toolId, {
+    for (const m of getSessionById(activeSessionId)?.messages || []) {
+      const tc = m.toolCalls?.find((t) => t.id === tid && t.status === 'pending_approval');
+      if (tc && m.id !== mid) {
+        updateMessageToolCall(activeSessionId, m.id, tid, {
           status: 'running',
           output: '执行中…',
         });
       }
     }
-    void daemonApproveTool(toolId).finally(() => {
+    void daemonApproveTool(tid).finally(() => {
       window.setTimeout(() => setApprovalBusy(false), 200);
     });
   };
 
   const handleApprovalDeny = (toolId: string, msgId: string) => {
+    if (!activeSessionId || approvalBusy) return;
+    const tid = String(toolId || '').trim();
+    const mid = String(msgId || '').trim();
+    if (!tid || !mid) return;
     setApprovalBusy(true);
-    useLayoutStore.getState().updateMessageToolCall(activeSessionId, msgId, toolId, {
+    updateMessageToolCall(activeSessionId, mid, tid, {
       status: 'error',
       output: '已拒绝',
     });
-    void daemonDenyTool(toolId).finally(() => {
+    void daemonDenyTool(tid).finally(() => {
       window.setTimeout(() => setApprovalBusy(false), 200);
     });
   };
 
-  const activeAgent =
-    activeAgentId &&
-    sessions
-      .find((s) => s.id === activeSessionId)
-      ?.agents?.find((a) => a.id === activeAgentId);
+  // 子 agent 只在侧栏打开，主对话列永不被 AgentCard 覆盖；主列始终渲染 chat-body（永不 blank）
+  const isFiltering = Boolean(localMsgFilter.trim());
+  /**
+   * FirstRun 盖层挂载时不与空态/ soft-hint 抢密钥引导。
+   * 用 overlay 生命周期而非 shouldShow gate（密钥步落盘后 gate 会 false，盖层仍可能打开）。
+   */
+  const firstRunOpen = !isDemoMode() && isFirstRunOverlayOpen();
+  /** engineHint 未回 = null；已回用 ok，驱动空态草稿口径 / data-engine-ok */
+  const engineOk: boolean | null = engineHint == null ? null : engineHint.ok;
+
+  /**
+   * 远程/引擎会话消息水合中：抑制幽灵「开始对话」欢迎面。
+   * 本地 mint（sess- / sess-branch-）空壳立即展示；超时后放行，防 hydrate 失败永久空白。
+   */
+  const messagesLoadingCandidate = useMemo(() => {
+    if (isDemoMode()) return false;
+    if (!activeSessionId || !activeSession) return false;
+    if (messages.length > 0) return false;
+    if (activeSession.hydratedFromEngine === true) return false;
+    const isLocalMintId = /^sess-(branch-)?\d+$/i.test(activeSessionId);
+    if (
+      isLocalMintId &&
+      typeof activeSession.engineCursor !== 'number' &&
+      !activeSession.engineLastRunId
+    ) {
+      return false;
+    }
+    return true;
+  }, [activeSessionId, activeSession, messages.length]);
+
+  useEffect(() => {
+    if (!messagesLoadingCandidate) {
+      setHydrateTimedOut(false);
+      return;
+    }
+    setHydrateTimedOut(false);
+    const t = window.setTimeout(() => setHydrateTimedOut(true), 3000);
+    return () => window.clearTimeout(t);
+  }, [activeSessionId, messagesLoadingCandidate]);
+
+  const messagesLoading = messagesLoadingCandidate && !hydrateTimedOut;
+
+  /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」） */
+  const shellActiveIsEmpty = Boolean(
+    activeSession && isEmptyShellSession(activeSession),
+  );
+  /**
+   * 无活动会话时：若已有可复用空壳，新建将复用而非再堆幽灵。
+   * 有活动会话时由 shellActiveIsEmpty 表达，不叠 willReuse。
+   */
+  const shellWillReuse = useMemo(() => {
+    if (activeSessionId && activeSession) return false;
+    const sessions = getSessionStoreState().sessions;
+    return Boolean(findReusableEmptyShell(sessions));
+  }, [activeSessionId, activeSession, projectTick]);
+
+  const emptyKind = resolveChatEmptyKind({
+    hasActiveSession: Boolean(activeSessionId && activeSession),
+    messageCount: messages.length,
+    displayCount: displayMessages.length,
+    filterQuery: localMsgFilter,
+    mainSurface,
+    messagesLoading,
+  });
+  const onEmptySurface = emptyKind != null;
+
+  /** 主列 region 中文 aria：空态三态 / 定时 / 对话流 */
+  const chatRegionAria =
+    mainSurface === 'scheduled'
+      ? '定时任务'
+      : emptyKind
+        ? chatEmptyKindAriaLabel(emptyKind)
+        : messagesLoading
+          ? '正在加载会话消息'
+          : '对话主区';
+
+  const handleCreateSessionFromEmpty = useCallback(() => {
+    const before = getSessionStoreState().sessions;
+    const ghostBefore = before.filter((s) => isEmptyShellSession(s)).length;
+    createSession({ title: EMPTY_SESSION_TITLE });
+    const after = getSessionStoreState().sessions;
+    const ghostAfter = after.filter((s) => isEmptyShellSession(s)).length;
+    // 剪掉了多余空白壳：短暂展示「已清理多余空白会话」旁注（中文 cue）
+    if (ghostBefore > 1 && ghostAfter < ghostBefore) {
+      setShellDidPrunePeers(true);
+      if (shellPruneCueTimerRef.current != null) {
+        window.clearTimeout(shellPruneCueTimerRef.current);
+      }
+      shellPruneCueTimerRef.current = window.setTimeout(() => {
+        setShellDidPrunePeers(false);
+        shellPruneCueTimerRef.current = null;
+      }, 4000);
+    }
+  }, []);
 
   return (
-    <div className="chat-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-      {activeAgent ? (
-        <div className="agent-inline-shell" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {/* 全屏主区：顶栏仅 AgentCard 自带（状态 + 关闭），不再叠一层返回条 */}
-          <AgentCard
-            agentId={activeAgent.id}
-            embedded
-            onClose={() => setActiveAgentId(null)}
-          />
-        </div>
-      ) : null}
-
-      {/* 本会话消息过滤条：由「更多」菜单打开，钉在列表上方 */}
-      {!activeAgent && mainSurface === 'chat' && showMsgFilter ? (
-        <div className="chat-msg-filter-bar" role="search">
-          <Lucide.Search size={14} className="chat-msg-filter-icon" aria-hidden />
-          <input
-            ref={msgFilterInputRef}
-            type="search"
-            className="chat-msg-filter-input"
-            value={localMsgFilter}
-            placeholder="搜索本会话消息…"
-            aria-label="搜索本会话"
-            onChange={(e) => setLocalMsgFilter(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                setLocalMsgFilter('');
-                setShowMsgFilter(false);
-              }
-            }}
-          />
-          {localMsgFilter.trim() ? (
-            <span className="chat-msg-filter-count">
-              {displayMessages.length}/{messages.length}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className="chat-msg-filter-clear"
-            title="关闭搜索"
-            aria-label="关闭搜索"
-            onClick={() => {
-              setLocalMsgFilter('');
-              setShowMsgFilter(false);
-            }}
-          >
-            <Lucide.X size={14} />
-          </button>
-        </div>
+    <div
+      className="chat-body"
+      role="region"
+      aria-label={chatRegionAria}
+      aria-busy={messagesLoading || undefined}
+      data-main-surface={mainSurface}
+      data-empty-kind={emptyKind ?? undefined}
+      data-messages-loading={messagesLoading ? 'true' : undefined}
+      data-engine-ok={
+        engineOk === false ? 'false' : engineOk === true ? 'true' : 'unknown'
+      }
+      data-approval-mode={approvalUiPlan.mode}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}
+    >
+      {/* 本会话消息过滤条：chat 主面；定时主面不展示 */}
+      {mainSurface === 'chat' && showMsgFilter ? (
+        <ChatMsgFilterBar
+          localMsgFilter={localMsgFilter}
+          setLocalMsgFilter={setLocalMsgFilter}
+          setShowMsgFilter={setShowMsgFilter}
+          displayCount={displayMessages.length}
+          totalCount={messages.length}
+          inputRef={msgFilterInputRef}
+        />
       ) : null}
 
       <div
         className="chat-doc-flow"
         ref={chatFlowRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '12px 16px 4px',
-          display: activeAgent ? 'none' : undefined,
-        }}
+        aria-busy={messagesLoading || undefined}
       >
         {mainSurface === 'scheduled' ? (
           <ScheduledTasksPanel
             onShowToast={onShowToast}
             onBackToChat={() => setMainSurface('chat')}
           />
-        ) : localMsgFilter.trim() && displayMessages.length === 0 && messages.length > 0 ? (
-          <div className="chat-msg-filter-empty" role="status">
-            <Lucide.SearchX size={22} strokeWidth={1.5} />
-            <p>本会话没有匹配「{localMsgFilter.trim()}」的消息</p>
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={() => setLocalMsgFilter('')}
-            >
-              清除过滤
-            </button>
-          </div>
+        ) : emptyKind != null ? (
+          <ChatEmptyState
+            kind={emptyKind}
+            filterQuery={localMsgFilter}
+            needsKeySetup={needsKeySetup}
+            needsModelSetup={needsModelSetup}
+            firstRunOpen={firstRunOpen}
+            engineOk={engineOk}
+            messagesLoading={messagesLoading}
+            shellWillReuse={shellWillReuse}
+            shellDidPrunePeers={shellDidPrunePeers}
+            shellActiveIsEmpty={shellActiveIsEmpty}
+            showProjectPicker={showProjectPicker}
+            onShowProjectPicker={setShowProjectPicker}
+            onProjectChanged={() => setProjectTick((n) => n + 1)}
+            onSetChatInput={setChatInput}
+            onCreateSession={handleCreateSessionFromEmpty}
+            onClearFilter={() => setLocalMsgFilter('')}
+          />
         ) : (
           <ChatMessageList
             messages={displayMessages}
             agents={activeSession?.agents || []}
             activeSessionId={activeSessionId || ''}
             thinkingSeconds={thinkingSeconds}
+            /* 过滤中展示全部命中，避免窗口裁掉早期匹配 */
+            showAllMessages={isFiltering}
             showProjectPicker={showProjectPicker}
             onShowProjectPicker={setShowProjectPicker}
             onProjectChanged={() => setProjectTick((n) => n + 1)}
             onSetChatInput={setChatInput}
+            onSendFollowUp={(prompt) => {
+              // 直发：走 textOverride，不依赖 composer 异步 setState
+              void handleSendChat(false, prompt);
+            }}
             onWithdraw={(msgId, text) => {
               // 撤回前停掉进行中的流，避免幽灵 run / 审批挂起
               handleStopGeneration();
@@ -615,13 +808,11 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
               // 重生成前先停旧流，再从助手消息截断
               handleStopGeneration();
               withdrawMessage(wsId, activeSessionId, assistantMsgId);
-              const msgs =
-                useLayoutStore.getState().sessions.find((s) => s.id === activeSessionId)
-                  ?.messages || [];
+              const msgs = getSessionById(activeSessionId)?.messages || [];
               let userMsgId = [...msgs].reverse().find((m) => m.sender === 'user')?.id;
               if (!userMsgId) {
                 userMsgId = `user-msg-${Date.now()}`;
-                useLayoutStore.getState().addMessage(wsId, activeSessionId, {
+                addMessage(wsId, activeSessionId, {
                   id: userMsgId,
                   sender: 'user',
                   text: userText,
@@ -629,17 +820,24 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                   status: 'processing',
                 });
               } else {
-                useLayoutStore
-                  .getState()
-                  .setSessionMessageStatus(activeSessionId, userMsgId, 'processing');
+                setSessionMessageStatus(activeSessionId, userMsgId, 'processing');
               }
               runStreamingAssistant(userText, userMsgId);
-              onShowToast('正在重新生成…');
             }}
             onBranch={() => {
-              const newTitle = `${activeSession?.title || '会话'} - 分支`;
-              useLayoutStore.getState().branchSession(activeSessionId, newTitle);
-              onShowToast(`已创建分支：${newTitle}`);
+              // 分叉可撤销：toast + Undo；列表聚焦新会话
+              if (!activeSessionId) return;
+              const oldId = activeSessionId;
+              const base = activeSession?.title || '会话';
+              const newTitle = `${base} - 分支`;
+              branchSession(activeSessionId, newTitle);
+              const newBranchId = getSessionStoreState().activeSessionId;
+              onShowToast(`已分叉: ${base}`, () => {
+                if (newBranchId && newBranchId !== oldId) {
+                  archiveSession(newBranchId);
+                }
+                setActiveSessionId(oldId);
+              });
             }}
             onShowToast={onShowToast}
             approvalBusy={approvalBusy}
@@ -654,183 +852,59 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         )}
       </div>
 
-      <div className="chat-footer" style={{ display: mainSurface === 'scheduled' ? 'none' : undefined }}>
-        {engineHint && engineHint.ok === false && (
-          <div className="chat-soft-hint">
-            <span>服务尚未就绪，请稍候或检查网络</span>
-            <button type="button" onClick={() => useLayoutStore.getState().openSettings('models')}>
-              模型设置
-            </button>
-          </div>
-        )}
-        {engineHint?.ok !== false && needsKeySetup && (
-          <div className="chat-soft-hint">
-            <span>首次使用请先配置服务商密钥与模型</span>
-            <button type="button" onClick={() => useLayoutStore.getState().openSettings('models')}>
-              去配置
-            </button>
-          </div>
-        )}
-        {engineHint?.ok && engineHint.hasApiKey === false && anyProfileHasKey() && (
-          <div className="chat-soft-hint">
-            <span>本地已有密钥，点击下方模型名称同步到引擎</span>
-            <button
-              type="button"
-              onClick={() => {
-                setShowModelDropdown(true);
-              }}
-            >
-              选择模型
-            </button>
-          </div>
-        )}
-        {inPlanMode && (
-          <div className="plan-mode-ribbon plan-mode-ribbon--slim" role="status">
-            <Lucide.ListChecks size={14} strokeWidth={1.75} aria-hidden />
-            <span className="plan-mode-ribbon-text" title="计划模式：只规划不改文件">
-              计划模式{planApproved ? ' · 已批准' : ' · 只规划'}
-            </span>
-            <button
-              type="button"
-              className="plan-mode-ribbon-icon-btn"
-              title="批准执行"
-              onClick={() => {
-                setPermissionMode('ask');
-                setPlanApproved(true);
-                onShowToast('已批准执行，已切回需确认模式');
-              }}
-            >
-              <Lucide.Check size={14} strokeWidth={2} />
-            </button>
-          </div>
-        )}
-        {goalModeActive && activeSession?.goalMode ? (
-          <div className="plan-mode-ribbon goal-mode-ribbon plan-mode-ribbon--slim" role="status">
-            <Lucide.Target size={14} strokeWidth={1.75} aria-hidden />
-            <span
-              className="plan-mode-ribbon-text"
-              title={activeSession.goalMode.goal || '目标模式'}
-            >
-              目标 · 第 {(activeSession.goalMode.iteration ?? 0) + 1} 轮
-              {activeSession.goalMode.goal
-                ? ` · ${
-                    activeSession.goalMode.goal.length > 36
-                      ? `${activeSession.goalMode.goal.slice(0, 36)}…`
-                      : activeSession.goalMode.goal
-                  }`
-                : ''}
-            </span>
-            <button
-              type="button"
-              className="plan-mode-ribbon-icon-btn is-danger"
-              title="停止目标"
-              aria-label="停止目标"
-              onClick={() => {
-                handleStopGeneration();
-                if (activeSessionId) {
-                  useLayoutStore.getState().patchSession(activeSessionId, {
-                    goalMode: null,
-                  });
-                }
-                onShowToast('已停止目标');
-              }}
-            >
-              <Lucide.Square size={12} fill="currentColor" />
-            </button>
-          </div>
-        ) : null}
-        {/* 回到最新：浮在对话区右下角，仅图标 */}
-        {showScrollToBottom && (
-          <button
-            type="button"
-            className="chat-scroll-fab"
-            title="回到最新"
-            onClick={scrollToBottom}
-          >
-            <Lucide.ChevronDown size={16} strokeWidth={2} />
-          </button>
-        )}
+      {/* scheduled 主面隐藏 footer；子 agent 只在侧栏，主列 composer 始终存在 */}
+      <div
+        className="chat-footer"
+        style={{
+          display: mainSurface === 'scheduled' ? 'none' : undefined,
+        }}
+      >
+        <ChatStatusRibbons
+          engineHint={engineHint}
+          needsKeySetup={needsKeySetup}
+          needsModelSetup={needsModelSetup}
+          onEmptySurface={onEmptySurface}
+          localHasKey={anyProfileHasKey()}
+          onOpenModelSettings={() => openSettings('models')}
+          onOpenModelDropdown={() => setShowModelDropdown(true)}
+          inPlanMode={inPlanMode}
+          planApproved={planApproved}
+          onApprovePlan={() => {
+            setPermissionMode('ask');
+            setPlanApproved(true);
+          }}
+          goalModeActive={goalModeActive && Boolean(activeSession?.goalMode)}
+          goalText={activeSession?.goalMode?.goal || ''}
+          goalIteration={activeSession?.goalMode?.iteration ?? 0}
+          goalTasksDone={
+            (activeSession?.goalMode?.tasks || []).filter((t) => t.done).length
+          }
+          goalTasksTotal={(activeSession?.goalMode?.tasks || []).length}
+          onStopGoal={() => {
+            handleStopGeneration();
+            if (activeSessionId) {
+              patchSession(activeSessionId, { goalMode: null });
+            }
+          }}
+          showScrollToBottom={showScrollToBottom}
+          onScrollToBottom={scrollToBottom}
+          runNotice={runNotice}
+          onDismissRunNotice={() => setRunNotice(null)}
+          pendingApprovalCount={pendingApprovalCount}
+          showApprovalDock={approvalDockVisible}
+          pendingApprovalSummary={pendingApprovalDockLabel}
+          pendingApprovalToolId={pendingApprovalToolId}
+          pendingApprovalMsgId={pendingApprovalMsgId}
+          activeSessionId={activeSessionId}
+          onShowToast={onShowToast}
+          between={
+            isDemoMode() ? (
+              <ChatDemoChrome handleGlobalTabClick={handleGlobalTabClick} />
+            ) : null
+          }
+        />
 
-        {/* Demo-only context chips + Goal playground；正式模式不挂载 */}
-        {isDemoMode() ? (
-          <ChatDemoChrome
-            onShowToast={onShowToast}
-            handleGlobalTabClick={handleGlobalTabClick}
-          />
-        ) : null}
-
-        {/* 系统提示：错误/空回复 — 明确非 AI 输出 */}
-        {!activeAgent && runNotice ? (
-          <div className="run-notice" role="status">
-            <div className="run-notice-main">
-              <span className="run-notice-kicker">系统提示</span>
-              <span className="run-notice-text">{runNotice.text}</span>
-            </div>
-            <button
-              type="button"
-              className="run-notice-dismiss"
-              aria-label="关闭提示"
-              onClick={() => setRunNotice(null)}
-            >
-              <Lucide.X size={14} />
-            </button>
-          </div>
-        ) : null}
-
-        {/* 审批 sticky 条：固定在输入区上方；点击滚到首个待审批工具 */}
-        {!activeAgent && pendingApprovalCount > 0 ? (
-          <button
-            type="button"
-            className="approval-dock approval-dock--slim"
-            title={pendingApprovalSummary || '有操作等待你确认'}
-            onClick={() => {
-              const byTool = pendingApprovalToolId
-                ? document.querySelector(
-                    `.approval-card[data-tool-id="${CSS.escape(pendingApprovalToolId)}"], [data-tool-id="${CSS.escape(pendingApprovalToolId)}"]`,
-                  )
-                : null;
-              const byMsg = pendingApprovalMsgId
-                ? document.querySelector(`.approval-card[data-msg="${CSS.escape(pendingApprovalMsgId)}"]`)
-                : null;
-              const el = byTool || byMsg || document.querySelector('.approval-card');
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (el instanceof HTMLElement) {
-                  try {
-                    el.focus({ preventScroll: true });
-                  } catch {
-                    /* ignore */
-                  }
-                }
-                return;
-              }
-              const sess = useLayoutStore
-                .getState()
-                .sessions.find((s) => s.id === activeSessionId);
-              const pendingAgent = (sess?.agents || []).find((ag) =>
-                (ag.messages || []).some((m) =>
-                  (m.toolCalls || []).some((tc) => tc.status === 'pending_approval'),
-                ),
-              );
-              if (pendingAgent) {
-                useLayoutStore.getState().setActiveAgentId(pendingAgent.id);
-                onShowToast('已打开待确认的协作任务');
-                return;
-              }
-              onShowToast('请在对话中确认权限');
-            }}
-          >
-            <span className="approval-dock-dot" aria-hidden />
-            <span className="approval-dock-label">
-              {pendingApprovalCount} 待审批
-              {pendingApprovalSummary ? ` · ${pendingApprovalSummary}` : ''}
-            </span>
-            <Lucide.ChevronRight size={14} className="approval-dock-go-icon" aria-hidden />
-          </button>
-        ) : null}
-
-        {!activeAgent ? (
-          <ChatComposer
+        <ChatComposer
             chatInput={chatInput}
             setChatInput={setChatInput}
             isComposing={isComposing}
@@ -880,42 +954,53 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             }}
             showPlusMenu={showPlusMenu}
             setShowPlusMenu={setShowPlusMenu}
-            showMoreMenu={showMoreMenu}
-            setShowMoreMenu={setShowMoreMenu}
-            showMsgFilter={showMsgFilter}
-            setShowMsgFilter={setShowMsgFilter}
-            setLocalMsgFilter={setLocalMsgFilter}
-            moreMenuRef={moreMenuRef}
             permissionMode={permissionMode}
             onPermissionChange={(m) => {
               setPermissionMode(m);
             }}
-            onExportMarkdown={handleExportMarkdown}
-            canExport={Boolean(activeSession)}
             onOpenSchedule={() => {
               setMainSurface('scheduled');
-              onShowToast('已打开定时任务');
             }}
-            onShowToast={onShowToast}
             onCloseSiblingMenus={() => setShowModelDropdown(false)}
             rightActions={
               showModelPicker ? (
                 <div
                   ref={modelSelectorRef}
-                  className="model-badge"
+                  className={`model-badge${showModelDropdown ? ' is-open' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-haspopup="menu"
+                  aria-expanded={showModelDropdown}
+                  aria-label={
+                    getActiveProfile()
+                      ? `当前模型 ${resolveDisplayModelId(engineModel) || engineModel || '未选'}`
+                      : '选择服务商与模型'
+                  }
                   title={
                     getActiveProfile()
-                      ? `${getActiveProfile()!.name} · ${engineModel || getActiveModelId() || '未选模型'}`
+                      ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
                       : '选择服务商与模型'
                   }
                   onClick={() => {
                     setShowModelDropdown((prev) => !prev);
                     setShowPlusMenu(false);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowModelDropdown((prev) => !prev);
+                      setShowPlusMenu(false);
+                    } else if (e.key === 'Escape' && showModelDropdown) {
+                      e.preventDefault();
+                      setShowModelDropdown(false);
+                    }
+                  }}
                 >
                   <span className="model-text">
                     {getModelDisplayName(
-                      engineModel || getActiveModelId() || '选择模型',
+                      resolveDisplayModelId(engineModel) ||
+                        engineModel ||
+                        (needsModelSetup ? '填写模型' : '选择模型'),
                     )}
                   </span>
                   <Lucide.ChevronDown size={14} style={{ opacity: 0.55 }} />
@@ -930,16 +1015,16 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                     }}
                     onOpenSettings={() => {
                       setShowModelDropdown(false);
-                      useLayoutStore.getState().openSettings('models');
+                      openSettings('models');
                     }}
-                    onToast={onShowToast}
                   />
                 </div>
               ) : null
             }
           />
-        ) : null}
       </div>
     </div>
   );
 });
+
+ChatCard.displayName = 'ChatCard';

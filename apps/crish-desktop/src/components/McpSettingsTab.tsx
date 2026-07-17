@@ -1,9 +1,10 @@
 /**
- * 设置 · 扩展服务（MCP）：列表 / 状态 / 启停 / 工具展开
- * 正式：仅引擎 list；启停仅在 probe 允许时展示
- * 演示：localStorage mock，不污染正式
+ * 设置 · 扩展服务（MCP）：单行密度列表 / 状态 / 启停 / 工具展开
+ * 正式：仅引擎 list；启停仅在 probe 允许时可用
+ * 演示：localStorage mock
+ * 行内状态即反馈；仅错误 toast，成功静默（禁启停教育 toast / 成功 spam）
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
   listMcpServers,
@@ -17,6 +18,7 @@ import {
 } from '../api/mcpApi';
 import { isDemoMode } from '../api/appMode';
 import { clientApi, type McpServer } from '../api/clientApi';
+import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -27,7 +29,15 @@ type Props = {
 type SortMode = 'name' | 'state';
 
 const START_STOP_HINT =
-  '当前引擎不支持从界面启停；MCP 通常随任务运行时连接';
+  '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接';
+
+/** 正式空列表诚实说明（未配置 / 无实例） */
+const EMPTY_LIVE_HINT_UNCONFIGURED =
+  '引擎侧暂未配置扩展服务；任务运行时若连接 MCP 会显示在此';
+const EMPTY_LIVE_HINT_CONFIGURED =
+  '已配置但当前无实例；扩展服务通常随任务运行时连接';
+const EMPTY_DEMO_HINT = '演示模式可本地添加 mock 服务，不会写入引擎';
+const EMPTY_FILTER_HINT = '调整关键词或清除筛选';
 
 /** 状态排序权重：运行中优先，错误次之，空闲靠后 */
 const STATE_SORT_RANK: Record<string, number> = {
@@ -36,6 +46,31 @@ const STATE_SORT_RANK: Record<string, number> = {
   err: 2,
   idle: 3,
 };
+
+/** 传输类型短标签（主文案可保留协议名，title 用中文） */
+function transportLabel(raw?: string): string {
+  if (!raw) return '';
+  const t = raw.toLowerCase();
+  if (t === 'stdio') return 'stdio';
+  if (t === 'sse') return 'sse';
+  if (t === 'http' || t === 'streamable-http') return raw;
+  return raw;
+}
+
+function transportTitle(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const t = raw.toLowerCase();
+  if (t === 'stdio') return '标准输入输出（stdio）';
+  if (t === 'sse') return '服务端推送（SSE）';
+  if (t === 'http') return 'HTTP';
+  if (t === 'streamable-http') return '可流式 HTTP';
+  return raw;
+}
+
+function errText(e: unknown): string {
+  if (e instanceof Error) return e.message || String(e);
+  return String(e ?? '');
+}
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -64,6 +99,10 @@ async function copyText(text: string): Promise<boolean> {
 
 export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityChange }) => {
   const demo = isDemoMode();
+  const listLabelId = useId();
+  const statusBarId = useId();
+  const toolsPanelPrefix = useId();
+
   const [loading, setLoading] = useState(true);
   const [servers, setServers] = useState<McpServerInfo[]>([]);
   const [status, setStatus] = useState<McpStatusSnapshot | undefined>();
@@ -97,13 +136,14 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       setCanStartStop(probe.canStartStop);
       setControlHint(probe.message);
       if (!r.ok && r.error) {
+        // 连接/列表失败：行内展示，不 toast 刷屏
         setError(r.error);
       } else if (!probe.canList && probe.message) {
         setError(probe.message);
       }
       onAvailabilityChange?.(r.configured || r.servers.length > 0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errText(e) || '读取扩展服务失败');
       setCanStartStop(false);
       onAvailabilityChange?.(false);
     } finally {
@@ -124,10 +164,14 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         return next;
       });
       onAvailabilityChange?.(list.length > 0);
+    } catch (e) {
+      // 演示加载失败：仅错误 toast
+      onShowToast?.(`加载失败：${errText(e) || '未知错误'}`);
+      onAvailabilityChange?.(false);
     } finally {
       setLoading(false);
     }
-  }, [onAvailabilityChange]);
+  }, [onAvailabilityChange, onShowToast]);
 
   useEffect(() => {
     if (demo) void refreshDemo();
@@ -135,9 +179,10 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   }, [demo, refreshDemo, refreshLive]);
 
   const handleCopy = useCallback(
-    async (text: string, label?: string) => {
+    async (text: string) => {
       const ok = await copyText(text);
-      onShowToast?.(ok ? `已复制 ${label || text}` : '复制失败');
+      // 成功静默；仅失败 toast
+      if (!ok) onShowToast?.('复制失败');
     },
     [onShowToast],
   );
@@ -150,7 +195,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         (s) =>
           s.name.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q) ||
-          s.tools.some((t) => t.toLowerCase().includes(q)),
+          s.tools.some((t) => t.toLowerCase().includes(q)) ||
+          (s.transport || '').toLowerCase().includes(q) ||
+          (s.lastError || '').toLowerCase().includes(q),
       );
     }
     const sorted = [...list];
@@ -176,7 +223,8 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           s.name.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q) ||
           (s.command || '').toLowerCase().includes(q) ||
-          (s.url || '').toLowerCase().includes(q),
+          (s.url || '').toLowerCase().includes(q) ||
+          (s.type || '').toLowerCase().includes(q),
       );
     }
     const sorted = [...list];
@@ -193,70 +241,58 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     return sorted;
   }, [demoServers, filter, sortMode, demoEnabled]);
 
-  const expandableIds = useMemo(() => filtered.map((s) => s.id), [filtered]);
-  const allExpanded =
-    expandableIds.length > 0 && expandableIds.every((id) => !!expanded[id]);
+  const setSort = useCallback((mode: SortMode) => {
+    setSortMode((prev) => (prev === mode ? prev : mode));
+  }, []);
 
-  const expandAll = () => {
-    setExpanded((prev) => {
-      const next = { ...prev };
-      for (const id of expandableIds) next[id] = true;
-      return next;
-    });
-  };
-
-  const collapseAll = () => {
-    setExpanded((prev) => {
-      const next = { ...prev };
-      for (const id of expandableIds) next[id] = false;
-      return next;
-    });
-  };
+  const clearFilter = useCallback(() => setFilter(''), []);
 
   const handleStart = async (id: string) => {
-    if (!canStartStop) {
-      onShowToast?.(controlHint || START_STOP_HINT);
-      return;
-    }
+    // 启停不可用：状态条 + 禁用按钮 title 即反馈，禁教育性 toast
+    if (!canStartStop) return;
     setBusyId(id);
     try {
       const r = await startMcpServer(id);
       if (!r.ok) {
-        onShowToast?.(r.error || '启动失败');
         if (r.errorCode === 'unsupported') {
           setCanStartStop(false);
           setControlHint(r.error || START_STOP_HINT);
+          // 能力不可用：状态条切「启停不可用」，不 toast 说明书
+        } else {
+          // 连接/启动失败：仅错误 toast
+          onShowToast?.(r.error ? `启动失败：${r.error}` : '启动失败');
         }
-        // 失败时仍刷新列表，但不假成功
         await refreshLive();
         return;
       }
-      onShowToast?.(`已请求启动 ${id}`);
+      // 成功：列表状态即反馈，静默
       await refreshLive();
+    } catch (e) {
+      onShowToast?.(`启动失败：${errText(e) || '未知错误'}`);
     } finally {
       setBusyId(null);
     }
   };
 
   const handleStop = async (id: string) => {
-    if (!canStartStop) {
-      onShowToast?.(controlHint || START_STOP_HINT);
-      return;
-    }
+    // 启停不可用：状态条 + 禁用按钮 title 即反馈，禁教育性 toast
+    if (!canStartStop) return;
     setBusyId(id);
     try {
       const r = await stopMcpServer(id);
       if (!r.ok) {
-        onShowToast?.(r.error || '停止失败');
         if (r.errorCode === 'unsupported') {
           setCanStartStop(false);
           setControlHint(r.error || START_STOP_HINT);
+        } else {
+          onShowToast?.(r.error ? `停止失败：${r.error}` : '停止失败');
         }
         await refreshLive();
         return;
       }
-      onShowToast?.(`已请求停止 ${id}`);
       await refreshLive();
+    } catch (e) {
+      onShowToast?.(`停止失败：${errText(e) || '未知错误'}`);
     } finally {
       setBusyId(null);
     }
@@ -264,261 +300,404 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
 
   const handleAddDemo = async () => {
     if (!newName.trim()) return;
-    const server: McpServer = {
-      id: `mcp-${Date.now()}`,
-      name: newName.trim(),
-      type: newType,
-      command: newType === 'stdio' ? newCmd.trim() : undefined,
-      args:
-        newType === 'stdio'
-          ? newArgs
-              .split(',')
-              .map((a) => a.trim())
-              .filter(Boolean)
-          : undefined,
-      url: newType === 'sse' ? newUrl.trim() : undefined,
-      status: 'disconnected',
-      tools: [],
-    };
-    const list = await clientApi.saveMcpServer(server);
-    setDemoServers(list);
-    setShowAdd(false);
-    setNewName('');
-    setNewCmd('');
-    setNewArgs('');
-    setNewUrl('');
-    onShowToast?.(`已注册 ${server.name}`);
+    try {
+      const server: McpServer = {
+        id: `mcp-${Date.now()}`,
+        name: newName.trim(),
+        type: newType,
+        command: newType === 'stdio' ? newCmd.trim() : undefined,
+        args:
+          newType === 'stdio'
+            ? newArgs
+                .split(',')
+                .map((a) => a.trim())
+                .filter(Boolean)
+            : undefined,
+        url: newType === 'sse' ? newUrl.trim() : undefined,
+        status: 'disconnected',
+        tools: [],
+      };
+      const list = await clientApi.saveMcpServer(server);
+      setDemoServers(list);
+      setDemoEnabled((p) => ({ ...p, [server.id]: true }));
+      onAvailabilityChange?.(list.length > 0);
+      setShowAdd(false);
+      setNewName('');
+      setNewCmd('');
+      setNewArgs('');
+      setNewUrl('');
+      // 成功静默
+    } catch (e) {
+      onShowToast?.(`保存失败：${errText(e) || '未知错误'}`);
+    }
   };
 
-  const handleDeleteDemo = async (id: string, name: string) => {
-    const list = await clientApi.deleteMcpServer(id);
-    setDemoServers(list);
-    onShowToast?.(`已移除 ${name}`);
+  const handleDeleteDemo = async (id: string) => {
+    try {
+      const list = await clientApi.deleteMcpServer(id);
+      setDemoServers(list);
+      setDemoEnabled((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+      onAvailabilityChange?.(list.length > 0);
+      // 成功静默
+    } catch (e) {
+      onShowToast?.(`删除失败：${errText(e) || '未知错误'}`);
+    }
   };
+
+  const refresh = demo ? refreshDemo : refreshLive;
+  const stopHint = controlHint || START_STOP_HINT;
+  const filterActive = filter.trim().length > 0;
+  const demoEnabledCount = demoServers.filter((s) => demoEnabled[s.id] !== false).length;
+
+  const liveEmptyHint = status?.configured
+    ? EMPTY_LIVE_HINT_CONFIGURED
+    : EMPTY_LIVE_HINT_UNCONFIGURED;
 
   const toolbar = (
-    <div className="settings-list-stack-actions" style={{ marginLeft: 'auto', alignItems: 'center' }}>
-      <div className="ui-segment ui-segment--inline settings-segment-pill" role="group" aria-label="排序">
+    <div className="mcp-toolbar" role="toolbar" aria-label="扩展服务工具栏">
+      <button
+        type="button"
+        className="ui-btn ui-btn-ghost ui-btn-sm"
+        onClick={() => void refresh()}
+        disabled={loading}
+        title={loading ? '刷新中…' : '刷新列表'}
+        aria-label={loading ? '刷新中' : '刷新列表'}
+        aria-busy={loading || undefined}
+      >
+        <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />
+      </button>
+      <div className="ui-segment ui-segment--inline settings-segment-pill" role="group" aria-label="排序方式">
         <button
           type="button"
           className={`ui-segment-item ${sortMode === 'name' ? 'active' : ''}`}
-          onClick={() => setSortMode('name')}
+          onClick={() => setSort('name')}
+          aria-pressed={sortMode === 'name'}
+          title="按名称排序"
         >
           名称
         </button>
         <button
           type="button"
           className={`ui-segment-item ${sortMode === 'state' ? 'active' : ''}`}
-          onClick={() => setSortMode('state')}
+          onClick={() => setSort('state')}
+          aria-pressed={sortMode === 'state'}
+          title={demo ? '按启用状态排序' : '按运行状态排序'}
         >
           状态
         </button>
       </div>
       <input
-        className="settings-field-input mcp-search"
-        placeholder="搜索服务或工具…"
+        className="settings-field-input settings-field-input--sm mcp-search"
+        placeholder="搜索名称、标识…"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && filter) {
+            e.preventDefault();
+            clearFilter();
+          }
+        }}
         aria-label="搜索扩展服务"
+        title="搜索名称、标识或工具；Esc 清除"
       />
+      {demo ? (
+        <button
+          type="button"
+          className="ui-btn ui-btn-secondary ui-btn-sm"
+          onClick={() => setShowAdd((v) => !v)}
+          title={showAdd ? '收起添加表单' : '添加演示服务'}
+          aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
+          aria-expanded={showAdd}
+        >
+          <Lucide.Plus size={14} aria-hidden />
+          {showAdd ? '收起' : '添加'}
+        </button>
+      ) : null}
     </div>
   );
+
+  const renderTools = (srv: McpServerInfo, panelId: string) => {
+    const toolN = srv.toolCount ?? srv.tools.length;
+    return (
+      <div className="mcp-tools" id={panelId} role="region" aria-label={`${srv.name} 的工具`}>
+        {srv.tools.length === 0 ? (
+          <div className="mcp-tools-empty" role="status">
+            {toolN > 0 ? `工具 ${toolN}（未返回名称）` : '暂无工具'}
+          </div>
+        ) : (
+          <ul>
+            {srv.tools.map((t) => (
+              <li key={t}>
+                <Lucide.Wrench size={12} aria-hidden />
+                <button
+                  type="button"
+                  className="mcp-inline-copy"
+                  title="复制工具名"
+                  aria-label={`复制工具名 ${t}`}
+                  onClick={() => void handleCopy(t)}
+                >
+                  <code>{t}</code>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mcp-card-id">
+          标识{' '}
+          <button
+            type="button"
+            className="mcp-inline-copy"
+            title="复制标识"
+            aria-label={`复制标识 ${srv.id}`}
+            onClick={() => void handleCopy(srv.id)}
+          >
+            <code>{srv.id}</code>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFilterEmpty = (hasAny: boolean) => {
+    if (loading) {
+      return (
+        <div className="mcp-empty-line" role="status" aria-live="polite" aria-busy="true">
+          <span>加载中…</span>
+        </div>
+      );
+    }
+    if (!hasAny) return null;
+    if (!filterActive) return null;
+    return (
+      <div className="mcp-empty-line" role="status" aria-live="polite" title={EMPTY_FILTER_HINT}>
+        <span>无匹配</span>
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={clearFilter}
+          title={EMPTY_FILTER_HINT}
+          aria-label="清除筛选"
+        >
+          清除筛选
+        </button>
+      </div>
+    );
+  };
 
   /* ───────── 演示模式 ───────── */
   if (demo) {
     return (
       <div className="settings-pane settings-pane--modern mcp-tab">
         <header className="settings-page-head">
-          <h2 className="settings-page-title">扩展服务</h2>
-          <p className="settings-page-desc">演示模式：本地登记 MCP 服务（不连接引擎）。</p>
+          <div className="mcp-head-row">
+            <h2 className="settings-page-title" id={listLabelId}>
+              扩展服务
+            </h2>
+            <div
+              className="mcp-status-bar"
+              id={statusBarId}
+              role="status"
+              aria-live="polite"
+              aria-label="状态"
+            >
+              <span className="mcp-status-pill" title="本地演示数据，不写入引擎">
+                演示
+              </span>
+              <span className="mcp-status-pill" title={`共 ${demoServers.length} 个服务`}>
+                服务 {demoServers.length}
+              </span>
+              <span
+                className={`mcp-status-pill ${demoEnabledCount > 0 ? 'is-on' : ''}`}
+                title={`已启用 ${demoEnabledCount}`}
+              >
+                启用 {demoEnabledCount}
+              </span>
+              {filterActive ? (
+                <span className="mcp-status-pill" title="当前筛选结果数">
+                  显示 {filteredDemo.length}
+                </span>
+              ) : null}
+              {loading ? (
+                <span className="mcp-status-pill" aria-busy="true">
+                  刷新中…
+                </span>
+              ) : null}
+            </div>
+          </div>
         </header>
 
-        <section className="settings-group" aria-label="概览">
-          <div className="settings-group-label">概览</div>
-          <div className="mcp-status-bar" style={{ paddingBottom: 4 }}>
-            <span className="mcp-status-meta">服务 {demoServers.length}</span>
-            <span className="mcp-status-meta">
-              启用 {demoServers.filter((s) => demoEnabled[s.id] !== false).length}
-            </span>
-            {toolbar}
-          </div>
-        </section>
-
-        <section className="settings-group" aria-label="操作">
-          <div className="settings-list-stack-actions">
-            <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => void refreshDemo()}>
-              <Lucide.RefreshCw size={14} />
-              刷新
-            </button>
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={() => setShowAdd((v) => !v)}
-            >
-              <Lucide.Plus size={14} />
-              {showAdd ? '收起表单' : '添加服务'}
-            </button>
-          </div>
-        </section>
+        {toolbar}
 
         {showAdd ? (
-          <section className="settings-group" aria-label="注册服务">
-            <div className="settings-feature">
-              <div className="settings-feature-title">注册 MCP 服务</div>
-              <p className="settings-feature-body">
-                仅写入本机演示数据，不会同步到引擎。stdio 填写命令与参数；sse 填写 URL。
-              </p>
-              <div className="mcp-add-grid">
-                <label>
-                  名称
+          <div className="mcp-add-box" role="form" aria-label="注册演示服务">
+            <div className="mcp-add-row">
+              <input
+                className="settings-field-input settings-field-input--sm"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="名称"
+                aria-label="名称"
+                aria-required
+                autoFocus
+              />
+              <SettingsSelect
+                className="mcp-add-type-select"
+                value={newType}
+                options={[
+                  { value: 'stdio', label: 'stdio', hint: transportTitle('stdio') },
+                  { value: 'sse', label: 'sse', hint: transportTitle('sse') },
+                ]}
+                onChange={(v) => setNewType(v as 'stdio' | 'sse')}
+              />
+              {newType === 'stdio' ? (
+                <>
                   <input
-                    className="settings-field-input"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="例如 github-mcp"
+                    className="settings-field-input settings-field-input--sm"
+                    value={newCmd}
+                    onChange={(e) => setNewCmd(e.target.value)}
+                    placeholder="命令"
+                    aria-label="启动命令"
+                    title="stdio 启动命令"
                   />
-                </label>
-                <label>
-                  类型
-                  <select
-                    className="settings-field-input"
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value as 'stdio' | 'sse')}
-                  >
-                    <option value="stdio">stdio</option>
-                    <option value="sse">sse</option>
-                  </select>
-                </label>
-                {newType === 'stdio' ? (
-                  <>
-                    <label>
-                      命令
-                      <input
-                        className="settings-field-input"
-                        value={newCmd}
-                        onChange={(e) => setNewCmd(e.target.value)}
-                        placeholder="npx"
-                      />
-                    </label>
-                    <label>
-                      参数（逗号分隔）
-                      <input
-                        className="settings-field-input"
-                        value={newArgs}
-                        onChange={(e) => setNewArgs(e.target.value)}
-                        placeholder="-y, @modelcontextprotocol/server-github"
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <label className="mcp-add-full">
-                    URL
-                    <input
-                      className="settings-field-input"
-                      value={newUrl}
-                      onChange={(e) => setNewUrl(e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </label>
-                )}
-              </div>
-              <div className="settings-feature-actions">
-                <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setShowAdd(false)}>
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  disabled={!newName.trim()}
-                  onClick={() => void handleAddDemo()}
-                >
-                  保存
-                </button>
-              </div>
+                  <input
+                    className="settings-field-input settings-field-input--sm"
+                    value={newArgs}
+                    onChange={(e) => setNewArgs(e.target.value)}
+                    placeholder="参数（逗号分隔）"
+                    aria-label="参数，逗号分隔"
+                    title="参数（逗号分隔）"
+                  />
+                </>
+              ) : (
+                <input
+                  className="settings-field-input settings-field-input--sm mcp-add-url"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="端点 URL"
+                  aria-label="端点 URL"
+                  title="SSE 端点地址"
+                />
+              )}
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => setShowAdd(false)}
+                aria-label="取消添加"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={!newName.trim()}
+                onClick={() => void handleAddDemo()}
+                aria-label="保存演示服务"
+                title={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}
+              >
+                保存
+              </button>
             </div>
-          </section>
+          </div>
         ) : null}
 
-        <section className="settings-group" aria-label="服务列表">
-          <div className="settings-group-label">服务</div>
-          <div className="settings-list">
-            {filteredDemo.map((srv) => {
-              const on = demoEnabled[srv.id] !== false;
-              return (
-                <div key={srv.id} className="settings-list-row">
-                  <div className="settings-list-copy">
-                    <div className="settings-list-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`mcp-dot kind-${on ? 'ok' : 'idle'}`} style={{ marginTop: 0 }} />
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{ padding: 0, height: 'auto', font: 'inherit', color: 'inherit' }}
-                        title="点击复制服务 id"
-                        onClick={() => void handleCopy(srv.id, srv.name)}
-                      >
-                        {srv.name}
-                      </button>
-                    </div>
-                    <div className="settings-list-sub">
-                      {srv.type}
-                      {srv.command ? ` · ${srv.command}` : ''}
-                      {srv.url ? ` · ${srv.url}` : ''}
-                      {' · '}
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{
-                          padding: 0,
-                          height: 'auto',
-                          font: 'inherit',
-                          color: 'inherit',
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                        title="点击复制 id"
-                        onClick={() => void handleCopy(srv.id, 'id')}
-                      >
-                        {srv.id}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="settings-list-control">
-                    <span className={`mcp-state kind-${on ? 'ok' : 'idle'}`}>{on ? '启用' : '禁用'}</span>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      onClick={() => setDemoEnabled((p) => ({ ...p, [srv.id]: !on }))}
-                    >
-                      {on ? '禁用' : '启用'}
-                    </button>
+        <div
+          className="mcp-list"
+          role="list"
+          aria-labelledby={listLabelId}
+          aria-label="服务列表"
+          aria-busy={loading || undefined}
+        >
+          {filteredDemo.map((srv) => {
+            const on = demoEnabled[srv.id] !== false;
+            const typeTitle = transportTitle(srv.type);
+            return (
+              <div key={srv.id} className="mcp-row" role="listitem">
+                <div className="mcp-row-main">
+                  <span
+                    className={`mcp-dot kind-${on ? 'ok' : 'idle'}`}
+                    aria-hidden
+                    title={on ? '已启用' : '已禁用'}
+                  />
+                  <button
+                    type="button"
+                    className="mcp-row-name mcp-inline-copy"
+                    title={`复制标识 ${srv.id}`}
+                    aria-label={`复制标识 ${srv.name}`}
+                    onClick={() => void handleCopy(srv.id)}
+                  >
+                    {srv.name}
+                  </button>
+                  <span className={`mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
+                    {on ? '启用' : '禁用'}
+                  </span>
+                  <span className="mcp-row-meta" title={typeTitle}>
+                    {transportLabel(srv.type)}
+                    {srv.command ? ` · ${srv.command}` : ''}
+                    {srv.url ? ` · ${srv.url}` : ''}
+                  </span>
+                  <div className="mcp-row-actions">
+                    <input
+                      type="checkbox"
+                      className="settings-switch"
+                      checked={on}
+                      title={on ? '禁用' : '启用'}
+                      aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
+                      onChange={() => setDemoEnabled((p) => ({ ...p, [srv.id]: !on }))}
+                    />
                     <button
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
                       title="删除"
-                      onClick={() => void handleDeleteDemo(srv.id, srv.name)}
+                      aria-label={`删除 ${srv.name}`}
+                      onClick={() => void handleDeleteDemo(srv.id)}
                     >
-                      <Lucide.Trash2 size={14} />
+                      <Lucide.Trash2 size={14} aria-hidden />
                     </button>
                   </div>
                 </div>
-              );
-            })}
-            {!loading && demoServers.length === 0 ? (
-              <div className="settings-list-row">
-                <div className="settings-list-copy">
-                  <div className="settings-list-title">还没有扩展服务</div>
-                  <div className="settings-list-sub">点击「添加服务」登记一个本地演示 MCP。</div>
-                </div>
               </div>
-            ) : null}
-            {!loading && demoServers.length > 0 && filteredDemo.length === 0 ? (
-              <div className="settings-list-row">
-                <div className="settings-list-copy">
-                  <div className="settings-list-sub">没有匹配的服务</div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </section>
+            );
+          })}
+
+          {!loading && demoServers.length === 0 ? (
+            <div
+              className="mcp-empty-line"
+              role="status"
+              aria-live="polite"
+              title={EMPTY_DEMO_HINT}
+            >
+              <span>暂无服务</span>
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => setShowAdd(true)}
+                aria-label="添加演示服务"
+                title={EMPTY_DEMO_HINT}
+              >
+                <Lucide.Plus size={14} aria-hidden />
+                添加
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => void refreshDemo()}
+                disabled={loading}
+                aria-label="刷新列表"
+              >
+                <Lucide.RefreshCw size={14} aria-hidden />
+                刷新
+              </button>
+            </div>
+          ) : null}
+          {!loading && demoServers.length > 0 && filteredDemo.length === 0
+            ? renderFilterEmpty(true)
+            : null}
+          {loading && demoServers.length === 0 ? renderFilterEmpty(true) : null}
+        </div>
       </div>
     );
   }
@@ -527,262 +706,213 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   return (
     <div className="settings-pane settings-pane--modern mcp-tab">
       <header className="settings-page-head">
-        <h2 className="settings-page-title">扩展服务</h2>
-        <p className="settings-page-desc">
-          展示引擎侧已配置的 MCP 状态与工具。服务配置由引擎管理，本页不会写入引擎 MCP 配置。
-        </p>
+        <div className="mcp-head-row">
+          <h2 className="settings-page-title" id={listLabelId}>
+            扩展服务
+          </h2>
+          <div
+            className="mcp-status-bar"
+            id={statusBarId}
+            role="status"
+            aria-live="polite"
+            aria-label="状态"
+          >
+            <span
+              className={`mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
+              title={
+                status?.configured
+                  ? '引擎已配置扩展服务'
+                  : '引擎侧未配置扩展服务'
+              }
+            >
+              {status?.configured ? '已配置' : '未配置'}
+            </span>
+            {status?.readiness ? (
+              <span
+                className={`mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
+                title={`就绪：${mcpStateLabel(status.readiness)}`}
+              >
+                {mcpStateLabel(status.readiness)}
+              </span>
+            ) : null}
+            <span className="mcp-status-pill" title={`共 ${servers.length} 个服务`}>
+              服务 {servers.length}
+            </span>
+            <span
+              className={`mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
+              title={canStartStop ? '可从界面启动/停止' : stopHint}
+            >
+              {canStartStop ? '启停可用' : '启停不可用'}
+            </span>
+            {filterActive ? (
+              <span className="mcp-status-pill" title="当前筛选结果数">
+                显示 {filtered.length}
+              </span>
+            ) : null}
+            {loading ? (
+              <span className="mcp-status-pill" aria-busy="true">
+                刷新中…
+              </span>
+            ) : null}
+          </div>
+        </div>
       </header>
 
-      <section className="settings-group" aria-label="状态">
-        <div className="settings-group-label">状态</div>
-        <div className="mcp-status-bar" style={{ flexWrap: 'wrap', gap: 12, paddingBottom: 4 }}>
-          <span className="mcp-status-meta">
-            {status?.configured ? '已配置' : '未配置'}
-          </span>
-          {status?.readiness ? (
-            <span className="mcp-status-meta">就绪 {mcpStateLabel(status.readiness)}</span>
-          ) : null}
-          <span className="mcp-status-meta">服务 {servers.length}</span>
-          {!canStartStop ? (
-            <span className="mcp-status-meta" title={controlHint || START_STOP_HINT}>
-              启停不可用
-            </span>
-          ) : (
-            <span className="mcp-status-meta">启停可用</span>
-          )}
-          {toolbar}
-        </div>
-      </section>
-
-      <section className="settings-group" aria-label="操作">
-        <div className="settings-list-stack-actions">
-          <button
-            type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            onClick={() => void refreshLive()}
-            disabled={loading}
-          >
-            <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} />
-            {loading ? '加载中…' : '刷新'}
-          </button>
-          {filtered.length > 0 ? (
-            <button
-              type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
-              onClick={() => (allExpanded ? collapseAll() : expandAll())}
-            >
-              {allExpanded ? (
-                <>
-                  <Lucide.ChevronsUp size={14} />
-                  全部收起
-                </>
-              ) : (
-                <>
-                  <Lucide.ChevronsDown size={14} />
-                  全部展开
-                </>
-              )}
-            </button>
-          ) : null}
-        </div>
-      </section>
+      {toolbar}
 
       {error ? (
-        <div className="settings-list-sub" style={{ color: 'var(--accent-orange, #f59e0b)' }} role="alert">
+        <div className="mcp-error-line" role="alert" title={error}>
           {error}
         </div>
       ) : null}
 
-      {!canStartStop && controlHint && servers.length > 0 ? (
-        <div className="settings-list-sub">{controlHint || START_STOP_HINT}</div>
-      ) : null}
+      <div
+        className="mcp-list"
+        role="list"
+        aria-labelledby={listLabelId}
+        aria-label="服务列表"
+        aria-busy={loading || undefined}
+      >
+        {filtered.map((srv) => {
+          const kind = mcpStateKind(srv.state);
+          const isOpen = !!expanded[srv.id];
+          const running =
+            kind === 'ok' ||
+            srv.state === 'starting' ||
+            srv.state === 'ready' ||
+            srv.state === 'running';
+          const toolN = srv.toolCount ?? srv.tools.length;
+          const panelId = `${toolsPanelPrefix}-${srv.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+          const busy = busyId === srv.id;
+          const tp = transportLabel(srv.transport);
+          const tpTitle = transportTitle(srv.transport);
 
-      <section className="settings-group" aria-label="服务列表">
-        <div className="settings-group-label">服务</div>
-        <div className="settings-list">
-          {filtered.map((srv) => {
-            const kind = mcpStateKind(srv.state);
-            const isOpen = !!expanded[srv.id];
-            const running =
-              kind === 'ok' ||
-              srv.state === 'starting' ||
-              srv.state === 'ready' ||
-              srv.state === 'running';
-            const toolN = srv.toolCount ?? srv.tools.length;
-
-            return (
-              <div key={srv.id} className="settings-list-row settings-list-row--stack">
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-                  <div className="settings-list-copy">
-                    <div className="settings-list-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`mcp-dot kind-${kind}`} style={{ marginTop: 0 }} />
+          return (
+            <div key={srv.id} className="mcp-row" role="listitem">
+              <div className="mcp-row-main">
+                <span
+                  className={`mcp-dot kind-${kind}`}
+                  aria-hidden
+                  title={mcpStateLabel(srv.state)}
+                />
+                <button
+                  type="button"
+                  className="mcp-row-name mcp-inline-copy"
+                  title={`复制标识 ${srv.id}`}
+                  aria-label={`复制标识 ${srv.name}`}
+                  onClick={() => void handleCopy(srv.id)}
+                >
+                  {srv.name}
+                </button>
+                <span className={`mcp-state-badge kind-${kind}`} title={mcpStateLabel(srv.state)}>
+                  {mcpStateLabel(srv.state)}
+                </span>
+                <span className="mcp-row-meta" title={tpTitle}>
+                  {tp ? `${tp} · ` : ''}
+                  工具 {toolN}
+                  {srv.lastError ? (
+                    <span className="mcp-row-err" title={srv.lastError}>
+                      {' '}
+                      · 错误
+                    </span>
+                  ) : null}
+                </span>
+                <div className="mcp-row-actions">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    title={isOpen ? '收起工具' : `展开工具（${toolN}）`}
+                    aria-label={isOpen ? `收起 ${srv.name} 的工具` : `展开 ${srv.name} 的工具 ${toolN}`}
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    onClick={() => setExpanded((p) => ({ ...p, [srv.id]: !isOpen }))}
+                  >
+                    {isOpen ? (
+                      <Lucide.ChevronUp size={14} aria-hidden />
+                    ) : (
+                      <Lucide.ChevronDown size={14} aria-hidden />
+                    )}
+                  </button>
+                  {canStartStop ? (
+                    running ? (
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{ padding: 0, height: 'auto', font: 'inherit', color: 'inherit' }}
-                        title="点击复制服务 id"
-                        onClick={() => void handleCopy(srv.id, srv.name)}
+                        disabled={busy}
+                        title={busy ? '停止中…' : '停止'}
+                        aria-label={`停止 ${srv.name}`}
+                        aria-busy={busy || undefined}
+                        onClick={() => void handleStop(srv.id)}
                       >
-                        {srv.name}
+                        <Lucide.Square size={14} aria-hidden />
                       </button>
-                    </div>
-                    <div className="settings-list-sub" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <span className={`mcp-state kind-${kind}`}>{mcpStateLabel(srv.state)}</span>
-                      {srv.transport ? <span>· {srv.transport}</span> : null}
-                      <span>· 工具 {toolN}</span>
-                      {srv.startedAt ? <span title={srv.startedAt}>· 已启动</span> : null}
-                    </div>
-                    {srv.lastError ? (
-                      <div className="mcp-card-error" title={srv.lastError}>
-                        {srv.lastError}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="settings-list-control" style={{ flexShrink: 0 }}>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-secondary ui-btn-sm"
+                        disabled={busy}
+                        title={busy ? '启动中…' : '启动'}
+                        aria-label={`启动 ${srv.name}`}
+                        aria-busy={busy || undefined}
+                        onClick={() => void handleStart(srv.id)}
+                      >
+                        <Lucide.Play size={14} aria-hidden />
+                      </button>
+                    )
+                  ) : (
                     <button
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title={isOpen ? '收起工具' : '展开工具'}
-                      onClick={() => setExpanded((p) => ({ ...p, [srv.id]: !isOpen }))}
+                      disabled
+                      title={stopHint}
+                      aria-label={running ? '停止不可用' : '启动不可用'}
                     >
-                      {isOpen ? <Lucide.ChevronUp size={14} /> : <Lucide.ChevronDown size={14} />}
-                      工具
-                    </button>
-                    {canStartStop ? (
-                      running ? (
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          disabled={busyId === srv.id}
-                          title="请求引擎停止该 MCP 服务"
-                          onClick={() => void handleStop(srv.id)}
-                        >
-                          <Lucide.Square size={14} />
-                          停止
-                        </button>
+                      {running ? (
+                        <Lucide.Square size={14} aria-hidden />
                       ) : (
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-secondary ui-btn-sm"
-                          disabled={busyId === srv.id}
-                          title="请求引擎启动该 MCP 服务"
-                          onClick={() => void handleStart(srv.id)}
-                        >
-                          <Lucide.Play size={14} />
-                          启动
-                        </button>
-                      )
-                    ) : (
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        disabled
-                        title={controlHint || START_STOP_HINT}
-                      >
-                        {running ? (
-                          <>
-                            <Lucide.Square size={14} />
-                            停止
-                          </>
-                        ) : (
-                          <>
-                            <Lucide.Play size={14} />
-                            启动
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                        <Lucide.Play size={14} aria-hidden />
+                      )}
+                    </button>
+                  )}
                 </div>
-
-                {isOpen ? (
-                  <div className="mcp-tools" style={{ marginTop: 0, paddingTop: 4, borderTop: 'none' }}>
-                    {srv.tools.length === 0 ? (
-                      <div className="mcp-tools-empty">
-                        {toolN > 0
-                          ? `引擎报告 ${toolN} 个工具，但未返回名称列表`
-                          : '暂无工具名称（服务未启动或未上报）'}
-                      </div>
-                    ) : (
-                      <ul>
-                        {srv.tools.map((t) => (
-                          <li key={t}>
-                            <Lucide.Wrench size={12} aria-hidden />
-                            <button
-                              type="button"
-                              className="ui-btn ui-btn-ghost ui-btn-sm"
-                              style={{
-                                padding: 0,
-                                height: 'auto',
-                                font: 'inherit',
-                                color: 'inherit',
-                              }}
-                              title="点击复制工具名"
-                              onClick={() => void handleCopy(t)}
-                            >
-                              <code>{t}</code>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="mcp-card-id">
-                      id:{' '}
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{
-                          padding: 0,
-                          height: 'auto',
-                          font: 'inherit',
-                          color: 'inherit',
-                        }}
-                        title="点击复制 id"
-                        onClick={() => void handleCopy(srv.id, 'id')}
-                      >
-                        <code>{srv.id}</code>
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
               </div>
-            );
-          })}
-
-          {!loading && filtered.length === 0 ? (
-            <div className="settings-list-row settings-list-row--stack">
-              <div className="settings-list-copy">
-                {servers.length === 0 ? (
-                  <>
-                    <div className="settings-list-title">引擎尚未提供 MCP 服务</div>
-                    <div className="settings-list-sub" style={{ maxWidth: '36em' }}>
-                      MCP 由引擎侧配置（如启动 daemon 时的 mcpServers），本页不会写入引擎配置。
-                      默认引擎通常未注入 MCP，因此列表为空是正常现象。
-                    </div>
-                    <div className="settings-list-sub" style={{ maxWidth: '36em' }}>
-                      在引擎配置 MCP 并完成任务运行时连接后，此处才会列出服务与工具状态。
-                      {!canStartStop ? <> {controlHint || START_STOP_HINT}</> : null}
-                    </div>
-                    <div className="settings-feature-actions">
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        onClick={() => void refreshLive()}
-                        disabled={loading}
-                      >
-                        <Lucide.RefreshCw size={14} />
-                        重新检测
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="settings-list-sub">没有匹配的服务</div>
-                )}
-              </div>
+              {isOpen ? renderTools(srv, panelId) : null}
             </div>
-          ) : null}
-        </div>
-      </section>
+          );
+        })}
+
+        {!loading && servers.length === 0 ? (
+          <div
+            className="mcp-empty-line"
+            role="status"
+            aria-live="polite"
+            title={liveEmptyHint}
+          >
+            <span title={liveEmptyHint}>
+              {status?.configured ? '暂无服务实例' : '暂无扩展服务'}
+            </span>
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={() => void refreshLive()}
+              disabled={loading}
+              aria-label="刷新列表"
+              title="重新向引擎查询列表"
+            >
+              <Lucide.RefreshCw size={14} aria-hidden />
+              刷新
+            </button>
+          </div>
+        ) : null}
+        {!loading && servers.length > 0 && filtered.length === 0
+          ? renderFilterEmpty(true)
+          : null}
+        {loading && servers.length === 0 ? (
+          <div className="mcp-empty-line" role="status" aria-live="polite" aria-busy="true">
+            <span>加载中…</span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

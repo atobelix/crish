@@ -18,7 +18,7 @@
     "dev:workbench": "npm --workspace @crish/agent-workbench run tauri -- dev",
     "dev:cli": "npm --workspace @crish/agent-workbench run cli",
     "build:desktop": "npm --workspace @crish/crish-desktop run build",
-    "build:workbench": "npm --workspace @crish/crish-desktop run build",
+    "build:workbench": "npm run check:workbench && npm --workspace @crish/agent-workbench run build",
     "build:shared-types": "npm --workspace @crish/shared-types run build",
     "build:runtime": "npm --workspace @crish/agent-runtime run build",
     "build:orchestrator": "npm --workspace @crish/agent-orchestrator run build",
@@ -28,7 +28,6 @@
     "build:product": "npm run build:daemon && npm run build:desktop && npm run build:daemon-binary",
     "cli": "npm run dev:cli",
     "daemon": "tsx --conditions development packages/agent-daemon/src/index.ts",
-    "daemon:port": "tsx --conditions development packages/agent-daemon/src/index.ts",
     "daemon:dist": "node packages/agent-daemon/dist/index.js",
     "bench:daemon": "node packages/agent-daemon/scripts/benchmark-daemon-startup.mjs",
     "check:core": "npm run check:runtime && npm run check:orchestrator && npm run check:daemon && npm run check:workbench && npm run check:desktop",
@@ -37,10 +36,11 @@
     "check:daemon": "tsc -p packages/agent-daemon/tsconfig.json --noEmit",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck",
+    "check:store-types": "node scripts/check-no-as-any-store.mjs",
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
     "test:desktop-helpers": "vitest run apps/crish-desktop/src/api apps/crish-desktop/src/store",
     "test": "vitest run",
-    "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\" || true"
+    "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\""
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

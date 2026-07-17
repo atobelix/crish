@@ -30,7 +30,12 @@ type EventCb = (msg: Record<string, unknown>) => void;
 const DEFAULT_TIMEOUT = 30_000;
 /** 长任务期间更勤保活，避免中途掉线 */
 const HEARTBEAT_MS = 8_000;
-const HEARTBEAT_MISS_TOLERANCE = 6;
+/**
+ * 心跳容错：3 次 = 24s 半死窗口（旧值 6 = 48s 太长）。
+ * 真实断连后用户需等近一分钟才重连，体验不可接受。
+ * 3 次足以容忍单次网络抖动 / 心跳请求被长任务短暂阻塞。
+ */
+const HEARTBEAT_MISS_TOLERANCE = 3;
 const RECONNECT_BASE_MS = 350;
 const RECONNECT_MAX_MS = 5_000;
 /** In product shell, restart sidecar more aggressively. */
@@ -72,7 +77,8 @@ async function resolveWsUrl(): Promise<string> {
     return 'ws://127.0.0.1:8765';
   }
 
-  const fromEnv = (import.meta as any).env?.VITE_DAEMON_WS_URL as string | undefined;
+  const env = import.meta.env as { VITE_DAEMON_WS_URL?: string; VITE_DAEMON_PORT?: string };
+  const fromEnv = env.VITE_DAEMON_WS_URL;
   if (fromEnv) return fromEnv;
 
   try {
@@ -85,7 +91,7 @@ async function resolveWsUrl(): Promise<string> {
   const shell = await fetchShellEndpoint();
   if (shell.url) return shell.url;
 
-  const port = (import.meta as any).env?.VITE_DAEMON_PORT || '8765';
+  const port = env.VITE_DAEMON_PORT || '8765';
   return `ws://127.0.0.1:${port}`;
 }
 
@@ -121,6 +127,11 @@ export class DesktopDaemonClient {
 
   hasEverConnected() {
     return this.everConnected;
+  }
+
+  /** 产品策略：已启动 keep-alive 则对 UI 视为「引擎在场」（可重连，不恐吓离线） */
+  isKeepAliveStarted() {
+    return this.keepAliveStarted;
   }
 
   isConnected() {
@@ -262,9 +273,28 @@ export class DesktopDaemonClient {
   private async attemptConnect(): Promise<void> {
     this.setState(this.reconnectAttempt === 0 ? 'connecting' : 'reconnecting');
 
+    // 冷启动 race 修复：
+    // - 首次连接（attempt=0）：先检查 sidecar endpoint 是否已就绪。
+    //   已就绪 → 跳过 restart，直接 openSocket（避免与 Tauri 冷启动 race）。
+    //   未就绪 → 调用 tryRestartSidecar 启动它（否则永远连不上）。
+    // - 重连（attempt>0）：按取模命中 restart（保持原逻辑）。
+    // 旧实现无条件在 attempt=0 时 restart，会与 Tauri 端正在启动的 sidecar race；
+    // 但完全跳过首次 restart 会导致 sidecar 未运行时永远连不上。
     const every = this.sidecarRestartEvery();
-    if (this.reconnectAttempt === 0 || this.reconnectAttempt % every === 0) {
-      await this.tryRestartSidecar();
+    const needRestart =
+      this.reconnectAttempt === 0 || this.reconnectAttempt % every === 0;
+    if (needRestart) {
+      if (this.reconnectAttempt === 0) {
+        // 首次连接：先探测 sidecar 是否已就绪
+        const shell = await fetchShellEndpoint();
+        if (shell.available && shell.url) {
+          this.url = shell.url;
+        } else {
+          await this.tryRestartSidecar();
+        }
+      } else {
+        await this.tryRestartSidecar();
+      }
     }
 
     this.url = await resolveWsUrl();
@@ -283,18 +313,17 @@ export class DesktopDaemonClient {
       if (!ep) return;
     }
     const res = await tryInvokeTauri('workbench_restart_daemon');
-    if (res) {
-      // Wait for ready line / port publish
-      await new Promise((r) => setTimeout(r, 450));
-      // Poll endpoint a few times
-      for (let i = 0; i < 8; i++) {
-        const shell = await fetchShellEndpoint();
-        if (shell.available && shell.url) {
-          this.url = shell.url;
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 200));
+    if (!res) return;
+    // 非阻塞等待 ready：旧实现 await 450ms + 8×200ms 轮询，总阻塞 ~2s。
+    // 改为最多轮询 4 次 × 200ms = 800ms，且不阻塞 attemptConnect 的 openSocket——
+    // restart 信号已发出，sidecar 会自行启动；openSocket 失败会走 scheduleReconnect。
+    for (let i = 0; i < 4; i++) {
+      const shell = await fetchShellEndpoint();
+      if (shell.available && shell.url) {
+        this.url = shell.url;
+        return;
       }
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 

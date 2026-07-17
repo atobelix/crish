@@ -2,10 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import type { CronJob } from '../api/clientApi';
 import { useLayoutStore } from '../store/layoutStore';
-import { isDemoMode } from '../api/appMode';
+import { clearAgentPanelFocus } from '../api/openAgentPanel';
+import {
+  setActiveSessionId,
+  setScheduledTasks,
+} from '../api/storeAccess';
 import { getDesktopDaemonClient } from '../api/daemonClient';
 import { estimateCostUsd } from '../api/pricingStore';
-import { getActiveModelId } from '../api/providerProfiles';
+import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles';
 import {
   fetchEngineLiveStatus,
   type ActiveRunInfo,
@@ -13,16 +17,101 @@ import {
 } from '../api/engineStatus';
 import { listWorkflows, scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
 import {
+  BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+  backgroundTaskStateLabel,
   getBackgroundTaskOutput,
   listBackgroundTasks,
   openBackgroundTaskInTerminal,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
+import { emitUiEvent } from '../api/uiEvents';
 
 interface RuntimePanelProps {
   wsId: string;
   onShowToast: (msg: string) => void;
+}
+
+// ── 纯展示辅助（中文 / 空态 / a11y；无副作用） ─────────────────────────
+
+/** 引擎连接短标签（状态点旁） */
+export function formatEngineStatusShort(online: boolean): string {
+  return online ? '就绪' : '未就绪';
+}
+
+/** 引擎连接完整 aria / title */
+export function formatEngineStatusFull(online: boolean): string {
+  return online ? '引擎就绪' : '引擎未就绪';
+}
+
+/** 引擎 title 补充说明 */
+export function formatEngineStatusTitle(online: boolean): string {
+  return online
+    ? '引擎已连接，可接收任务'
+    : '引擎未连接；活动任务与计划可能不完整';
+}
+
+/** 活动任务空态：离线与空列表分流 */
+export function emptyLiveTasksHint(online: boolean): string {
+  return online ? '暂无进行中的任务' : '未连接';
+}
+
+/** 后台任务空态 */
+export function emptyBgTasksHint(online: boolean): string {
+  return online ? '暂无后台任务' : '未连接';
+}
+
+/** 计划任务空态 */
+export function emptyPlansHint(online: boolean): string {
+  return online ? '暂无计划' : '未连接';
+}
+
+/** 区段计数（0 不显示，避免空数字噪音） */
+export function formatSectionCount(n: number): string | null {
+  const c = Math.max(0, n | 0);
+  return c > 0 ? String(c) : null;
+}
+
+/** 已运行时长中文 */
+export function formatElapsed(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  if (s < 60) return `${s} 秒`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m < 60) return `${m} 分 ${r} 秒`;
+  const h = Math.floor(m / 60);
+  return `${h} 时 ${m % 60} 分`;
+}
+
+/** 活动行 aria-label */
+export function liveTaskAriaLabel(opts: {
+  taskName: string;
+  elapsedSeconds: number;
+  hasSession: boolean;
+}): string {
+  const name = (opts.taskName || '引擎任务').trim() || '引擎任务';
+  const elapsed = formatElapsed(opts.elapsedSeconds);
+  const open = opts.hasSession ? '，点击打开对应会话' : '';
+  return `${name}，已运行 ${elapsed}${open}`;
+}
+
+/** 后台行 meta：中文状态 + 可选命令摘要 */
+export function formatBgTaskMeta(opts: {
+  state: unknown;
+  command?: string;
+  opening?: boolean;
+}): string {
+  if (opts.opening) return '打开中…';
+  const label = backgroundTaskStateLabel(opts.state);
+  const cmd = (opts.command || '').trim();
+  if (!cmd) return label;
+  return `${label} · ${cmd.slice(0, 40)}`;
+}
+
+/** 用量环 aria */
+export function formatUsageRingAria(tokenPercent: number): string {
+  const p = Math.max(0, Math.min(100, tokenPercent | 0));
+  return `上下文占用约 ${p}%`;
 }
 
 /**
@@ -30,12 +119,12 @@ interface RuntimePanelProps {
  * - 引擎连接 + activeRuns / pendingApprovals（get-status）
  * - 用量：本地累计；H3 可按 runId 接 snapshot
  * - 计划：workflow 列表（H3 再补 CRUD）
+ * - 成功操作静默（列表/面板切换即反馈）；仅失败 toast
  */
 export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowToast }) => {
   const cronJobs = useLayoutStore((state) => state.scheduledTasks);
   const tokenUsage = useLayoutStore((state) => state.tokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
-  const demo = isDemoMode();
 
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
@@ -45,6 +134,8 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
+  /** 审批按钮防连点；成功静默，仅失败 toast */
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -91,15 +182,17 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         // 正式：仅引擎 workflow；不再混入 localStorage 假 cron
         const wfs = await listWorkflows();
         setWorkflows(wfs);
-        useLayoutStore.getState().setScheduledTasks([]);
+        setScheduledTasks([]);
+        // 成功/空列表静默（打开面板不 toast）
       } catch {
-        if (demo) onShowToast('读取状态失败');
+        // 仅错误 toast
+        onShowToast('读取运行状态失败');
       } finally {
         setLoading(false);
       }
     };
     void loadData();
-  }, [onShowToast, demo]);
+  }, [onShowToast]);
 
   type LiveTask = {
     id: string;
@@ -124,7 +217,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         }
       }
     }
-    // 合并引擎 activeRuns
+    // 合并引擎 activeRuns（不用英文 status 作标题）
     for (const r of activeRuns) {
       if (fromMessages.some((t) => t.id === r.runId)) continue;
       const started =
@@ -136,9 +229,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       const matched = sessions.find(
         (s) => s.engineLastRunId === r.runId || s.id === r.sessionId,
       );
+      const rawName = (matched?.title || r.prompt || '').trim();
       fromMessages.push({
         id: r.runId,
-        taskName: (matched?.title || r.prompt || r.status || '引擎任务').slice(0, 48),
+        taskName: (rawName || '引擎任务').slice(0, 48),
         elapsedSeconds: Math.max(0, Math.round((now - started) / 1000)),
         sessionId: matched?.id || r.sessionId,
         kind: 'run',
@@ -147,21 +241,25 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     return fromMessages;
   }, [sessions, activeRuns, now]);
 
-  const focusSession = (sessionId: string, toastMsg: string) => {
-    const store = useLayoutStore.getState();
-    store.setActiveSessionId(sessionId);
-    store.setActiveAgentId(null);
+  const planCount = workflows.length + cronJobs.length;
+  const liveCountLabel = formatSectionCount(liveTasks.length);
+  const bgCountLabel = formatSectionCount(bgTasks.length);
+  const planCountLabel = formatSectionCount(planCount);
+  const approvalCountLabel = formatSectionCount(pendingApprovals.length);
+
+  const focusSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    clearAgentPanelFocus();
     try {
       window.dispatchEvent(new CustomEvent('crish-focus-chat', { detail: { sessionId } }));
     } catch {
       /* ignore */
     }
-    onShowToast(toastMsg);
   };
 
   const handleLiveTaskClick = (wk: LiveTask) => {
     if (!wk.sessionId) return;
-    focusSession(wk.sessionId, '已切换到会话');
+    focusSession(wk.sessionId);
   };
 
   const handleApprovalClick = (a: PendingApprovalInfo) => {
@@ -189,9 +287,9 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       );
     }
     if (found) {
-      focusSession(found.id, '已打开待确认会话');
+      focusSession(found.id);
     } else {
-      onShowToast('请在当前对话中确认');
+      onShowToast('未找到待确认会话');
     }
   };
 
@@ -230,11 +328,21 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       onShowToast('缺少工具 id，无法批准');
       return;
     }
+    if (approvalBusyId) return;
+    setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…');
-    void daemonApproveTool(id).then(() => {
-      onShowToast('已允许');
-      setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-    });
+    // 成功静默（列表移除即反馈）；仅发送失败 toast
+    void daemonApproveTool(id)
+      .then(() => {
+        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+      })
+      .catch(() => {
+        markLocalTool(id, 'error', '批准失败');
+        onShowToast('批准失败，请重试');
+      })
+      .finally(() => {
+        setApprovalBusyId(null);
+      });
   };
 
   const handleApprovalDeny = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -244,14 +352,44 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       onShowToast('缺少工具 id，无法拒绝');
       return;
     }
+    if (approvalBusyId) return;
+    setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝');
-    void daemonDenyTool(id).then(() => {
-      onShowToast('已拒绝');
-      setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-    });
+    void daemonDenyTool(id)
+      .then(() => {
+        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+      })
+      .catch(() => {
+        onShowToast('拒绝失败，请重试');
+      })
+      .finally(() => {
+        setApprovalBusyId(null);
+      });
   };
 
-  const modelId = getActiveModelId() || 'unknown';
+  const openBgTask = async (t: BackgroundTaskInfo) => {
+    if (bgOpeningId) return;
+    setBgOpeningId(t.id);
+    try {
+      const out = await getBackgroundTaskOutput(t.id);
+      // 打开终端是可预期操作：不 toast；面板切换即反馈
+      openBackgroundTaskInTerminal(
+        t.label,
+        out || t.summary || t.command || BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+      );
+    } catch {
+      // 仅错误提示；仍尽量打开终端展示回退内容
+      openBackgroundTaskInTerminal(
+        t.label,
+        t.summary || t.command || '读取失败',
+      );
+      onShowToast('读取后台任务输出失败');
+    } finally {
+      setBgOpeningId(null);
+    }
+  };
+
+  const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
   const estimated =
     tokenUsage.cost > 0
       ? tokenUsage.cost
@@ -259,11 +397,14 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
 
   if (loading) {
     return (
-      <div className="rt-panel" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="loading-spinner rt-spinner" />
-        <span className="rt-empty" style={{ paddingTop: 8 }}>
-          加载中…
-        </span>
+      <div
+        className="rt-panel is-loading"
+        role="status"
+        aria-busy="true"
+        aria-label="加载运行状态"
+      >
+        <div className="loading-spinner rt-spinner" aria-hidden />
+        <span className="rt-empty rt-empty--tight">加载中…</span>
       </div>
     );
   }
@@ -272,47 +413,41 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     100,
     Math.max(0, Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)),
   );
-  const dashOffset = 150 - (150 * tokenPercent) / 100;
+  const engineFull = formatEngineStatusFull(engineOnline);
+  const engineShort = formatEngineStatusShort(engineOnline);
+  const engineTitle = formatEngineStatusTitle(engineOnline);
 
   return (
-    <div className="rt-panel">
-      <section className="rt-section">
+    <div className="rt-panel" role="region" aria-label="运行状态">
+      {/* 引擎状态已在 float header 展示；面板内仅一行精简状态 */}
+      <section className="rt-section rt-section--engine" aria-labelledby="rt-sec-engine">
         <div className="rt-section-head">
-          <h4 className="rt-section-title">引擎</h4>
-          <span className={`rt-dot ${engineOnline ? 'on' : 'off'}`} title={engineOnline ? '已连接' : '未连接'} />
-          <span className="rt-row-meta" style={{ marginLeft: 4 }}>
-            {engineOnline ? '已连接' : '连接中…'}
-          </span>
+          <h4 id="rt-sec-engine" className="rt-section-title">
+            引擎
+          </h4>
+          <div
+            className="rt-engine-status"
+            role="status"
+            aria-live="polite"
+            aria-label={engineFull}
+            title={engineTitle}
+          >
+            <span className={`rt-dot ${engineOnline ? 'on' : 'off'}`} aria-hidden />
+            <span className="rt-row-meta rt-engine-meta">{engineShort}</span>
+          </div>
         </div>
       </section>
 
-      <section className="rt-section">
-        <h4 className="rt-section-title">本次用量</h4>
-        <div className="rt-usage">
-          <div className="rt-ring">
-            <svg viewBox="0 0 56 56" aria-hidden>
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                stroke="var(--bg-tertiary)"
-                strokeWidth="4.5"
-                fill="transparent"
-              />
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                stroke="var(--accent-color)"
-                strokeWidth="4.5"
-                fill="transparent"
-                strokeDasharray="150"
-                strokeDashoffset={dashOffset}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="rt-ring-value">{tokenPercent}%</div>
-          </div>
+      <section className="rt-section rt-section--usage" aria-labelledby="rt-sec-usage">
+        <div className="rt-section-head">
+          <h4 id="rt-sec-usage" className="rt-section-title">
+            用量
+          </h4>
+          <span className="rt-row-meta" aria-label={formatUsageRingAria(tokenPercent)}>
+            {tokenPercent}%
+          </span>
+        </div>
+        <div className="rt-usage rt-usage--compact">
           <div className="rt-usage-stats">
             <div className="rt-stat-row">
               <span className="rt-stat-label">输入</span>
@@ -323,214 +458,294 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               <span className="rt-stat-value">{tokenUsage.output.toLocaleString()}</span>
             </div>
             <div className="rt-stat-row is-total">
-              <span className="rt-stat-label">费用估算</span>
+              <span className="rt-stat-label">费用</span>
               <span className="rt-stat-value">${estimated.toFixed(4)}</span>
             </div>
           </div>
         </div>
-        {!demo && tokenUsage.input === 0 && tokenUsage.output === 0 && (
-          <div className="rt-empty" style={{ paddingTop: 4 }}>
-            完成对话后累计；有引擎样本时用 snapshot usage，否则字数估算
-          </div>
-        )}
       </section>
 
-      <section className="rt-section">
-        <h4 className="rt-section-title">活动任务</h4>
+      <section className="rt-section" aria-labelledby="rt-sec-live">
+        <div className="rt-section-head">
+          <h4 id="rt-sec-live" className="rt-section-title">
+            活动任务
+          </h4>
+          {liveCountLabel ? (
+            <span className="rt-row-meta" aria-live="polite" aria-label={`${liveCountLabel} 个进行中`}>
+              {liveCountLabel}
+            </span>
+          ) : null}
+        </div>
         {liveTasks.length === 0 ? (
-          <div className="rt-empty">当前没有进行中的任务</div>
+          <div className="rt-empty" role="status">
+            {emptyLiveTasksHint(engineOnline)}
+          </div>
         ) : (
-          <div className="rt-list">
-            {liveTasks.map((wk) => (
-              <div
-                key={wk.id}
-                className={`rt-row is-live${wk.sessionId ? ' is-clickable' : ''}`}
-                role={wk.sessionId ? 'button' : undefined}
-                tabIndex={wk.sessionId ? 0 : undefined}
-                title={wk.sessionId ? '打开对应会话' : undefined}
-                onClick={() => {
-                  if (wk.sessionId) handleLiveTaskClick(wk);
-                }}
-                onKeyDown={(e) => {
-                  if (!wk.sessionId) return;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleLiveTaskClick(wk);
-                  }
-                }}
-              >
-                <div className="rt-row-main">
-                  <div className="loading-spinner rt-spinner" />
-                  <div className="rt-row-text">
-                    <span className="rt-row-title">{wk.taskName}</span>
-                    <span className="rt-row-meta">已运行 {wk.elapsedSeconds} 秒</span>
+          <div
+            className={`rt-list${liveTasks.length > 4 ? ' rt-list--scroll' : ''}`}
+            role="list"
+            aria-label="进行中的任务"
+          >
+            {liveTasks.map((wk) => {
+              const elapsedText = formatElapsed(wk.elapsedSeconds);
+              const clickable = Boolean(wk.sessionId);
+              return (
+                <div
+                  key={wk.id}
+                  className={`rt-row is-live${clickable ? ' is-clickable' : ''}`}
+                  role={clickable ? 'button' : 'listitem'}
+                  tabIndex={clickable ? 0 : undefined}
+                  title={clickable ? '打开对应会话' : undefined}
+                  aria-label={liveTaskAriaLabel({
+                    taskName: wk.taskName,
+                    elapsedSeconds: wk.elapsedSeconds,
+                    hasSession: clickable,
+                  })}
+                  onClick={() => {
+                    if (wk.sessionId) handleLiveTaskClick(wk);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!wk.sessionId) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleLiveTaskClick(wk);
+                    }
+                  }}
+                >
+                  <div className="rt-row-main">
+                    <div className="loading-spinner rt-spinner" aria-hidden />
+                    <div className="rt-row-text">
+                      <span className="rt-row-title">{wk.taskName}</span>
+                      <span className="rt-row-meta">已运行 {elapsedText}</span>
+                    </div>
                   </div>
+                  {clickable ? (
+                    <Lucide.ChevronRight size={16} className="rt-row-chevron" aria-hidden />
+                  ) : null}
                 </div>
-                {wk.sessionId ? <Lucide.ChevronRight size={16} className="rt-row-chevron" /> : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
-      <section className="rt-section">
-        <h4 className="rt-section-title">后台常驻</h4>
+      <section className="rt-section" aria-labelledby="rt-sec-bg">
+        <div className="rt-section-head">
+          <h4 id="rt-sec-bg" className="rt-section-title">
+            后台常驻
+          </h4>
+          {bgCountLabel ? (
+            <span className="rt-row-meta" aria-live="polite" aria-label={`${bgCountLabel} 个后台任务`}>
+              {bgCountLabel}
+            </span>
+          ) : null}
+        </div>
         {bgTasks.length === 0 ? (
-          <div className="rt-empty">无后台任务 · 长驻进程会列在此处</div>
+          <div className="rt-empty" role="status">
+            {emptyBgTasksHint(engineOnline)}
+          </div>
         ) : (
-          <div className="rt-list">
-            {bgTasks.map((t) => (
-              <div
-                key={t.id}
-                className={`rt-row is-clickable${bgOpeningId === t.id ? ' is-opening' : ''}`}
-                role="button"
-                tabIndex={0}
-                title="在终端中查看输出"
-                onClick={() => {
-                  if (bgOpeningId) return;
-                  void (async () => {
-                    setBgOpeningId(t.id);
-                    try {
-                      const out = await getBackgroundTaskOutput(t.id);
-                      openBackgroundTaskInTerminal(
-                        t.label,
-                        out || t.summary || t.command || '（无输出）',
-                      );
-                      onShowToast('已在终端面板打开详情');
-                    } catch {
-                      openBackgroundTaskInTerminal(
-                        t.label,
-                        t.summary || t.command || '读取失败',
-                      );
-                      onShowToast('已在终端面板打开详情');
-                    } finally {
-                      setBgOpeningId(null);
+          <div
+            className={`rt-list${bgTasks.length > 4 ? ' rt-list--scroll' : ''}`}
+            role="list"
+            aria-label="后台常驻任务"
+          >
+            {bgTasks.map((t) => {
+              const opening = bgOpeningId === t.id;
+              const stateZh = backgroundTaskStateLabel(t.state);
+              const meta = formatBgTaskMeta({
+                state: t.state,
+                command: t.command,
+                opening,
+              });
+              return (
+                <div
+                  key={t.id}
+                  className={`rt-row is-clickable${opening ? ' is-opening' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  title="在终端中查看输出"
+                  aria-label={`${t.label}，${stateZh}，在终端中查看输出`}
+                  aria-busy={opening || undefined}
+                  onClick={() => {
+                    void openBgTask(t);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      void openBgTask(t);
                     }
-                  })();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    (e.currentTarget as HTMLElement).click();
-                  }
-                }}
-              >
-                <div className="rt-row-main">
-                  <Lucide.Terminal size={16} className="rt-row-ico" />
-                  <div className="rt-row-text">
-                    <span className="rt-row-title">{t.label}</span>
-                    <span className="rt-row-meta">
-                      {bgOpeningId === t.id
-                        ? '打开中…'
-                        : `${t.state}${t.command ? ` · ${t.command.slice(0, 40)}` : ''}`}
-                    </span>
+                  }}
+                >
+                  <div className="rt-row-main">
+                    <Lucide.Terminal size={16} className="rt-row-ico" aria-hidden />
+                    <div className="rt-row-text">
+                      <span className="rt-row-title">{t.label}</span>
+                      <span className="rt-row-meta">{meta}</span>
+                    </div>
                   </div>
+                  <Lucide.ChevronRight size={16} className="rt-row-chevron" aria-hidden />
                 </div>
-                <Lucide.ChevronRight size={16} className="rt-row-chevron" />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
       {pendingApprovals.length > 0 && (
-        <section className="rt-section">
-          <h4 className="rt-section-title">待确认</h4>
-          <div className="rt-list">
-            {pendingApprovals.map((a, i) => (
-              <div
-                key={a.toolCallId || i}
-                className="rt-row is-clickable"
-                role="button"
-                tabIndex={0}
-                title="打开待确认会话"
-                onClick={() => handleApprovalClick(a)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleApprovalClick(a);
-                  }
-                }}
+        <section className="rt-section" aria-labelledby="rt-sec-approve">
+          <div className="rt-section-head">
+            <h4 id="rt-sec-approve" className="rt-section-title">
+              待确认
+            </h4>
+            {approvalCountLabel ? (
+              <span
+                className="rt-row-meta"
+                aria-live="polite"
+                aria-label={`${approvalCountLabel} 项待确认`}
               >
-                <div className="rt-row-main">
-                  <span className="rt-dot warn" aria-hidden />
-                  <div className="rt-row-text">
-                    <span className="rt-row-title">{a.toolName || '工具'}</span>
-                    <span className="rt-row-meta">{a.summary || a.toolCallId || '等待批准'}</span>
+                {approvalCountLabel}
+              </span>
+            ) : null}
+          </div>
+          <div className="rt-list" role="list" aria-label="待确认工具">
+            {pendingApprovals.map((a, i) => {
+              const toolLabel = a.toolName || '工具';
+              const busy = approvalBusyId === (a.toolCallId || '');
+              return (
+                <div
+                  key={a.toolCallId || i}
+                  className="rt-row is-clickable"
+                  role="button"
+                  tabIndex={0}
+                  title="打开待确认会话"
+                  aria-label={`${toolLabel}，等待批准，打开对应会话`}
+                  onClick={() => handleApprovalClick(a)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleApprovalClick(a);
+                    }
+                  }}
+                >
+                  <div className="rt-row-main">
+                    <span className="rt-dot warn" aria-hidden />
+                    <div className="rt-row-text">
+                      <span className="rt-row-title">{toolLabel}</span>
+                      <span className="rt-row-meta">
+                        {a.summary || a.toolCallId || '等待批准'}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className="rt-row-actions"
+                    role="group"
+                    aria-label={`${toolLabel} 审批`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-primary ui-btn-sm"
+                      title="允许"
+                      aria-label={`允许 ${toolLabel}`}
+                      aria-busy={busy || undefined}
+                      disabled={Boolean(approvalBusyId)}
+                      onClick={(e) => handleApprovalAllow(a, e)}
+                    >
+                      {busy ? '…' : '允许'}
+                    </button>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      title="拒绝"
+                      aria-label={`拒绝 ${toolLabel}`}
+                      disabled={Boolean(approvalBusyId)}
+                      onClick={(e) => handleApprovalDeny(a, e)}
+                    >
+                      拒绝
+                    </button>
                   </div>
                 </div>
-                <div className="rt-row-actions" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-primary ui-btn-sm"
-                    title="允许"
-                    onClick={(e) => handleApprovalAllow(a, e)}
-                  >
-                    允许
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="拒绝"
-                    onClick={(e) => handleApprovalDeny(a, e)}
-                  >
-                    拒绝
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
 
-      <section className="rt-section">
+      <section className="rt-section" aria-labelledby="rt-sec-plan">
         <div className="rt-section-head">
-          <h4 className="rt-section-title">计划任务</h4>
+          <h4 id="rt-sec-plan" className="rt-section-title">
+            计划任务
+          </h4>
+          {planCountLabel ? (
+            <span className="rt-row-meta" aria-live="polite" aria-label={`${planCountLabel} 个计划`}>
+              {planCountLabel}
+            </span>
+          ) : null}
           <button
             type="button"
             className="ui-btn ui-btn-ghost ui-btn-sm"
+            aria-label="管理计划"
             onClick={() => {
-              try {
-                window.dispatchEvent(new CustomEvent('crish-open-scheduled'));
-              } catch {
-                useLayoutStore.getState().openSettings('schedule');
-              }
+              emitUiEvent('open-scheduled');
             }}
           >
-            主区管理
+            管理
           </button>
         </div>
-        {workflows.length === 0 && cronJobs.length === 0 ? (
-          <div className="rt-empty">暂无计划任务 · 引擎 workflow 就绪后会出现在此</div>
+        {planCount === 0 ? (
+          <div className="rt-empty" role="status">
+            {emptyPlansHint(engineOnline)}
+          </div>
         ) : (
-          <div className="rt-list" style={{ gap: 8 }}>
-            {workflows.map((w) => (
-              <div key={w.id} className="rt-cron-card">
-                <div className="rt-cron-top">
-                  <div className="rt-cron-left">
-                    <span className={`rt-dot ${w.enabled !== false ? 'on' : 'off'}`} />
-                    <span className="rt-cron-expr">{scheduleLabel(w.schedule)}</span>
+          <div className="rt-list rt-list--scroll" role="list" aria-label="计划任务列表">
+            {workflows.map((w) => {
+              const enabled = w.enabled !== false;
+              return (
+                <div
+                  key={w.id}
+                  className="rt-cron-card"
+                  role="listitem"
+                  aria-label={`${w.name}，${enabled ? '已启用' : '已停用'}，${scheduleLabel(w.schedule)}`}
+                >
+                  <div className="rt-cron-top">
+                    <div className="rt-cron-left">
+                      <span
+                        className={`rt-dot ${enabled ? 'on' : 'off'}`}
+                        aria-hidden
+                      />
+                      <span className="rt-cron-expr">{scheduleLabel(w.schedule)}</span>
+                    </div>
                   </div>
+                  <div className="rt-cron-prompt">{w.name}</div>
+                  {w.prompt && (
+                    <div className="rt-cron-next">{(w.prompt as string).slice(0, 80)}</div>
+                  )}
                 </div>
-                <div className="rt-cron-prompt">{w.name}</div>
-                {w.prompt && (
-                  <div className="rt-cron-next" style={{ opacity: 0.8 }}>
-                    {(w.prompt as string).slice(0, 80)}
+              );
+            })}
+            {cronJobs.map((job: CronJob) => {
+              const active = job.status === 'active';
+              return (
+                <div
+                  key={job.id}
+                  className="rt-cron-card"
+                  role="listitem"
+                  aria-label={`${job.prompt || '计划'}，${active ? '进行中' : '已停用'}，${job.cronExpression}`}
+                >
+                  <div className="rt-cron-top">
+                    <div className="rt-cron-left">
+                      <span
+                        className={`rt-dot ${active ? 'on' : 'off'}`}
+                        aria-hidden
+                      />
+                      <span className="rt-cron-expr">{job.cronExpression}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-            {cronJobs.map((job: CronJob) => (
-              <div key={job.id} className="rt-cron-card">
-                <div className="rt-cron-top">
-                  <div className="rt-cron-left">
-                    <span className={`rt-dot ${job.status === 'active' ? 'on' : 'off'}`} />
-                    <span className="rt-cron-expr">{job.cronExpression}</span>
-                  </div>
+                  <div className="rt-cron-prompt">{job.prompt}</div>
                 </div>
-                <div className="rt-cron-prompt">{job.prompt}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

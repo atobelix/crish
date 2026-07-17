@@ -20,6 +20,21 @@ export type GitStatusFile = {
   originalPath?: string;
 };
 
+/**
+ * 稳定 reason 码（UI 分支用）：
+ * - not-installed：本机无 git / 找不到可执行文件
+ * - not-a-repo：有 git 但目录不是仓库
+ * - timeout / daemon-offline / error / unavailable
+ */
+export type GitStatusReason =
+  | 'not-installed'
+  | 'not-a-repo'
+  | 'timeout'
+  | 'daemon-offline'
+  | 'error'
+  | 'unavailable'
+  | string;
+
 export type GitStatusResult = {
   found: boolean;
   cwd?: string;
@@ -30,8 +45,97 @@ export type GitStatusResult = {
   unstagedCount?: number;
   untrackedCount?: number;
   conflictedCount?: number;
-  reason?: string;
+  reason?: GitStatusReason;
+  /** 原始 reason 文案（stderr 等），便于诊断 */
+  detail?: string;
 };
+
+/** 把引擎/系统原文归一成稳定 reason */
+export function classifyGitReason(raw?: string | null): GitStatusReason {
+  const s = (raw || '').trim();
+  if (!s) return 'unavailable';
+  const lower = s.toLowerCase();
+  if (s === 'timeout' || lower.includes('timeout')) return 'timeout';
+  if (s === 'daemon-offline' || lower.includes('daemon')) return 'daemon-offline';
+  if (
+    lower.includes('not a git repository') ||
+    lower.includes('not inside a git work tree') ||
+    lower.includes('not inside a git') ||
+    s === 'not-a-repo'
+  ) {
+    return 'not-a-repo';
+  }
+  if (
+    lower.includes('not recognized') ||
+    lower.includes('not found') ||
+    lower.includes('enoent') ||
+    lower.includes('no such file') ||
+    lower.includes('cannot find') ||
+    lower.includes('is not installed') ||
+    lower.includes('command not found') ||
+    s === 'not-installed'
+  ) {
+    return 'not-installed';
+  }
+  if (s === 'error' || s === 'unavailable') return s;
+  return s;
+}
+
+/** 中文说明 + 建议动作（下载 / 初始化） */
+export function gitStatusUserMessage(result: Pick<GitStatusResult, 'found' | 'reason' | 'detail' | 'branch'>): {
+  title: string;
+  hint?: string;
+  action?: 'download-git' | 'init-repo' | 'retry';
+} {
+  if (result.found) {
+    return {
+      title: result.branch ? `分支 ${result.branch}` : 'Git 可用',
+    };
+  }
+  const code = classifyGitReason(result.reason || result.detail);
+  switch (code) {
+    case 'not-installed':
+      return {
+        title: '未检测到 Git',
+        hint: '请安装 Git for Windows 后重启应用',
+        action: 'download-git',
+      };
+    case 'not-a-repo':
+      return {
+        title: '当前目录不是 Git 仓库',
+        hint: '可在工作区根目录执行 git init',
+        action: 'init-repo',
+      };
+    case 'timeout':
+      return {
+        title: 'Git 读取超时',
+        hint: '仓库过大或引擎忙碌，可稍后重试',
+        action: 'retry',
+      };
+    case 'daemon-offline':
+      return {
+        title: '引擎未连接',
+        hint: '等待引擎就绪后自动可查；也可点刷新',
+        action: 'retry',
+      };
+    default:
+      return {
+        title: 'Git 暂不可用',
+        hint: result.detail || result.reason || '请检查 Git 是否可用',
+        action: 'retry',
+      };
+  }
+}
+
+export const GIT_DOWNLOAD_URL = 'https://git-scm.com/download/win';
+
+/**
+ * 打开系统浏览器下载 Git。
+ * 不用 @tauri-apps/plugin-shell：包可能未装，Vite 会静态解析 import 直接报错。
+ */
+export async function openGitDownloadPage(): Promise<void> {
+  window.open(GIT_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+}
 
 function asStatusFile(raw: unknown): GitStatusFile | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -58,6 +162,8 @@ function normalizeStatus(raw: Record<string, unknown> | null | undefined): GitSt
   const files = filesRaw
     .map(asStatusFile)
     .filter((f): f is GitStatusFile => Boolean(f));
+  const rawReason = typeof raw.reason === 'string' ? raw.reason : undefined;
+  const reason = found ? rawReason : classifyGitReason(rawReason);
   return {
     found,
     cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
@@ -88,44 +194,299 @@ function normalizeStatus(raw: Record<string, unknown> | null | undefined): GitSt
         : typeof raw.conflicted === 'number'
           ? raw.conflicted
           : undefined,
-    reason: typeof raw.reason === 'string' ? raw.reason : undefined,
+    reason,
+    detail: rawReason && reason !== rawReason ? rawReason : undefined,
   };
+}
+
+/** 防止 workbench/daemon 挂死导致 UI 永久「加载中」 */
+export const GIT_STATUS_TIMEOUT_MS = 12_000;
+export const GIT_DIFF_TIMEOUT_MS = 14_000;
+/** 本机 shell git 超时（优先快路径；大仓可稍长，仍短于总超时） */
+export const GIT_LOCAL_TIMEOUT_MS = 8_000;
+
+/** 导出供单测；生产路径 fetchGitStatus/Diff 均经此包裹 */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  onTimeout: () => T,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const finish = (v: T) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      resolve(v);
+    };
+    timer = setTimeout(() => finish(onTimeout()), ms);
+    promise.then(
+      (v) => finish(v),
+      () => finish(onTimeout()),
+    );
+  });
+}
+
+/**
+ * 解析 `git status --porcelain=v1 -b` 输出。
+ * 导出供单测；不发明路径。
+ */
+export function parseGitPorcelainStatus(
+  stdout: string,
+  cwd?: string,
+): GitStatusResult {
+  const lines = String(stdout || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/\r$/, ''))
+    .filter((l) => l.length > 0);
+
+  let branch: string | undefined;
+  const files: GitStatusFile[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      // ## main...origin/main [ahead 1]
+      const rest = line.slice(3).trim();
+      const head = rest.split('...')[0] || rest;
+      const name = head.split(/\s+/)[0] || head;
+      if (name && name !== 'HEAD') branch = name;
+      else if (rest.includes('No commits')) branch = '（无提交）';
+      else if (name) branch = name;
+      continue;
+    }
+    // XY path  or  XY origin -> path
+    if (line.length < 4) continue;
+    const x = line[0] || ' ';
+    const y = line[1] || ' ';
+    let pathPart = line.slice(3);
+    if (pathPart.includes(' -> ')) {
+      pathPart = pathPart.split(' -> ').pop() || pathPart;
+    }
+    // 引号路径
+    pathPart = pathPart.replace(/^"|"$/g, '').trim();
+    if (!pathPart) continue;
+
+    let status: GitFileStatusCode = '?';
+    const staged = x !== ' ' && x !== '?';
+    const unstaged = y !== ' ' && y !== '?';
+    const untracked = x === '?' || y === '?';
+    const conflicted = x === 'U' || y === 'U' || (x === 'A' && y === 'A') || (x === 'D' && y === 'D');
+
+    if (conflicted) status = 'U';
+    else if (untracked) status = '?';
+    else if (x === 'A' || y === 'A') status = 'A';
+    else if (x === 'D' || y === 'D') status = 'D';
+    else if (x === 'R' || y === 'R') status = 'R';
+    else if (x === 'C' || y === 'C') status = 'C';
+    else if (x === 'M' || y === 'M') status = 'M';
+    else status = (x !== ' ' ? x : y) || 'M';
+
+    files.push({
+      path: pathPart,
+      status,
+      staged,
+      unstaged: unstaged || untracked,
+      untracked,
+      conflicted,
+    });
+  }
+
+  return {
+    found: true,
+    cwd,
+    branch,
+    clean: files.length === 0,
+    files,
+    stagedCount: files.filter((f) => f.staged).length,
+    unstagedCount: files.filter((f) => f.unstaged && !f.untracked).length,
+    untrackedCount: files.filter((f) => f.untracked).length,
+    conflictedCount: files.filter((f) => f.conflicted).length,
+  };
+}
+
+/** 本机 git 命令（经 workbench_run_shell，不经 daemon 审批） */
+async function runLocalGit(
+  cwd: string,
+  gitArgs: string,
+  timeoutMs = GIT_LOCAL_TIMEOUT_MS,
+): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
+  try {
+    const { runTerminalShell } = await import('./terminalShellApi');
+    // Windows PowerShell / bash 均支持 git -C
+    const cmd = `git -C "${cwd.replace(/"/g, '\\"')}" ${gitArgs}`;
+    const res = await runTerminalShell({ command: cmd, cwd, timeoutMs });
+    if (res.status !== 'ok') return null;
+    return {
+      ok: res.data.ok,
+      stdout: res.data.stdout || '',
+      stderr: res.data.stderr || '',
+      timedOut: res.data.timedOut,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 本机 git status 快路径（优先于 daemon）。
+ * 失败返回 null 以便回落引擎。
+ */
+export async function fetchGitStatusLocal(cwd: string): Promise<GitStatusResult | null> {
+  const r = await runLocalGit(cwd, 'status --porcelain=v1 -b --untracked-files=normal', GIT_LOCAL_TIMEOUT_MS);
+  if (!r) return null;
+  if (r.timedOut) {
+    return { found: false, files: [], reason: 'timeout', detail: '本机 git status 超时' };
+  }
+  const err = `${r.stderr || ''}\n${r.stdout || ''}`;
+  if (!r.ok && /not a git repository/i.test(err)) {
+    return { found: false, files: [], reason: 'not-a-repo', detail: r.stderr || undefined };
+  }
+  if (!r.ok && /not recognized|not found|enoent|no such file|is not installed|command not found/i.test(err)) {
+    return { found: false, files: [], reason: 'not-installed', detail: r.stderr || undefined };
+  }
+  if (!r.ok && !r.stdout.trim()) {
+    return {
+      found: false,
+      files: [],
+      reason: classifyGitReason(r.stderr || 'error'),
+      detail: r.stderr || undefined,
+    };
+  }
+  return parseGitPorcelainStatus(r.stdout, cwd);
+}
+
+async function fetchGitDiffLocal(params: {
+  cwd: string;
+  path?: string;
+  staged?: boolean;
+}): Promise<{ found: boolean; files: FileDiff[]; unified?: string } | null> {
+  const { cwd, path, staged } = params;
+  const parts = ['diff', '--no-color', '--no-ext-diff'];
+  if (staged) parts.push('--cached');
+  if (path) {
+    parts.push('--', `"${path.replace(/"/g, '\\"')}"`);
+  }
+  const r = await runLocalGit(cwd, parts.join(' '), GIT_LOCAL_TIMEOUT_MS);
+  if (!r || r.timedOut) return null;
+  if (!r.ok && /not a git repository/i.test(r.stderr || '')) {
+    return { found: false, files: [] };
+  }
+  const unified = r.stdout || '';
+  let files = unified.trim() ? parseUnifiedDiffs(unified) : [];
+  if (files.length === 0 && path) {
+    files = [
+      {
+        filePath: path,
+        additions: 0,
+        deletions: 0,
+        changes: [{ type: 'normal', content: '（暂无行级 diff，文件已变更）' }],
+      },
+    ];
+  }
+  return { found: true, files, unified: unified || undefined };
+}
+
+/** 短缓存：同一 cwd 在 TTL 内复用成功结果，减轻总览/变更面板连点导致的超时 */
+const GIT_STATUS_CACHE_TTL_MS = 2_500;
+const gitStatusCache = new Map<string, { at: number; result: GitStatusResult }>();
+
+function rememberGitStatus(cwd: string, result: GitStatusResult): GitStatusResult {
+  if (result.found || result.reason === 'not-a-repo' || result.reason === 'not-installed') {
+    gitStatusCache.set(cwd, { at: Date.now(), result });
+  }
+  return result;
 }
 
 /**
  * 查询工作区 git status。cwd 默认取当前项目工作区。
+ * 优先本机 git（快）；再回落 daemon/tauri。超时 / 失败一律 found:false。
  */
 export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
   const resolved = (cwd || getWorkspacePath() || '').trim() || undefined;
-
-  const viaTauri = await invokeCmd<Record<string, unknown>>('workbench_git_status', {
-    cwd: resolved,
-  });
-  if (viaTauri) {
-    return normalizeStatus(viaTauri);
+  if (!resolved) {
+    return {
+      found: false,
+      files: [],
+      reason: 'not-a-repo',
+      detail: '未打开工作区',
+    };
   }
 
+  const cached = gitStatusCache.get(resolved);
+  if (cached && Date.now() - cached.at < GIT_STATUS_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
+  // 1) 本机 git 快路径（避免 daemon 队列导致「一直超时」）
   try {
-    const client = getDesktopDaemonClient();
-    if (!client.isConnected()) {
-      await client.waitUntilConnected(4_000);
+    const local = await fetchGitStatusLocal(resolved);
+    if (local) {
+      if (local.found || local.reason === 'not-a-repo' || local.reason === 'not-installed') {
+        return rememberGitStatus(resolved, local);
+      }
+      // timeout / 其它：继续尝试引擎；若本机已给出明确失败则直接返回
+      if (local.reason !== 'timeout') return rememberGitStatus(resolved, local);
     }
-    if (!client.isConnected()) {
-      return { found: false, files: [], reason: 'daemon-offline' };
-    }
-    const res = (await client.request(
-      { type: 'git-status', ...(resolved ? { cwd: resolved } : {}) },
-      'git-status-response',
-      12_000,
-    )) as Record<string, unknown>;
-    return normalizeStatus(res);
   } catch {
-    return { found: false, files: [], reason: 'error' };
+    /* fall through */
   }
+
+  const timeoutResult = (): GitStatusResult => ({
+    found: false,
+    files: [],
+    reason: 'timeout',
+    detail: '查询超时',
+  });
+
+  // 总超时略大于本机超时，避免本机刚结束就被外层判超时
+  return withTimeout(
+    (async () => {
+      const viaTauri = await invokeCmd<Record<string, unknown>>('workbench_git_status', {
+        cwd: resolved,
+      });
+      if (viaTauri) {
+        return rememberGitStatus(resolved, normalizeStatus(viaTauri));
+      }
+
+      try {
+        const client = getDesktopDaemonClient();
+        if (!client.isConnected()) {
+          await client.waitUntilConnected(1_500);
+        }
+        if (!client.isConnected()) {
+          // 引擎离线时再试一次本机（短超时，避免二次长等）
+          const local2 = await fetchGitStatusLocal(resolved);
+          if (local2) return rememberGitStatus(resolved, local2);
+          return { found: false, files: [], reason: 'daemon-offline' };
+        }
+        const res = (await client.request(
+          { type: 'git-status', cwd: resolved },
+          'git-status-response',
+          5_000,
+        )) as Record<string, unknown>;
+        return rememberGitStatus(resolved, normalizeStatus(res));
+      } catch (err) {
+        const local3 = await fetchGitStatusLocal(resolved);
+        if (local3) return rememberGitStatus(resolved, local3);
+        const msg = err instanceof Error ? err.message : String(err || '');
+        return {
+          found: false,
+          files: [],
+          reason: classifyGitReason(msg || 'error'),
+          detail: msg || undefined,
+        };
+      }
+    })(),
+    GIT_STATUS_TIMEOUT_MS,
+    timeoutResult,
+  );
 }
 
 /**
  * 拉取单文件或工作区 unified diff，并解析为 FileDiff 列表。
+ * 优先本机 git；超时返回 found:false，避免变更面板永久加载。
  */
 export async function fetchGitDiff(params?: {
   cwd?: string;
@@ -136,43 +497,67 @@ export async function fetchGitDiff(params?: {
   const path = params?.path?.trim() || undefined;
   const staged = params?.staged;
 
-  let raw: Record<string, unknown> | null = await invokeCmd('workbench_git_diff', {
-    cwd,
-    path,
-    staged,
-  });
+  const empty = { found: false as const, files: [] as FileDiff[] };
 
-  if (!raw) {
+  if (cwd) {
     try {
-      const client = getDesktopDaemonClient();
-      if (!client.isConnected()) {
-        await client.waitUntilConnected(4_000);
-      }
-      if (client.isConnected()) {
-        raw = (await client.request(
-          {
-            type: 'git-diff',
-            ...(cwd ? { cwd } : {}),
-            ...(path ? { path } : {}),
-            ...(staged !== undefined ? { staged } : {}),
-          },
-          'git-diff-response',
-          15_000,
-        )) as Record<string, unknown>;
+      const local = await fetchGitDiffLocal({ cwd, path, staged });
+      if (local && (local.files.length > 0 || local.unified != null)) {
+        return local;
       }
     } catch {
-      raw = null;
+      /* fall through */
     }
   }
 
+  const raw = await withTimeout(
+    (async (): Promise<Record<string, unknown> | null> => {
+      let r: Record<string, unknown> | null = await invokeCmd('workbench_git_diff', {
+        cwd,
+        path,
+        staged,
+      });
+
+      if (!r) {
+        try {
+          const client = getDesktopDaemonClient();
+          if (!client.isConnected()) {
+            await client.waitUntilConnected(2_500);
+          }
+          if (client.isConnected()) {
+            r = (await client.request(
+              {
+                type: 'git-diff',
+                ...(cwd ? { cwd } : {}),
+                ...(path ? { path } : {}),
+                ...(staged !== undefined ? { staged } : {}),
+              },
+              'git-diff-response',
+              8_000,
+            )) as Record<string, unknown>;
+          }
+        } catch {
+          r = null;
+        }
+      }
+      return r;
+    })(),
+    GIT_DIFF_TIMEOUT_MS,
+    () => null,
+  );
+
   if (!raw) {
-    return { found: false, files: [] };
+    // 引擎失败时再试本机
+    if (cwd) {
+      const local = await fetchGitDiffLocal({ cwd, path, staged });
+      if (local) return local;
+    }
+    return empty;
   }
 
   const unified = typeof raw.unified === 'string' ? raw.unified : undefined;
   let files = unified ? parseUnifiedDiffs(unified) : [];
 
-  // 无解析结果时，至少给出路径占位，便于打开变更面板
   if (files.length === 0 && path) {
     files = [
       {

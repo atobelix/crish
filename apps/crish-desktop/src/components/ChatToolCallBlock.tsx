@@ -1,36 +1,66 @@
 /**
- * 工具行 / 工具组渲染：从 ChatCard 剪切粘贴，保持 className 与交互不变。
+ * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
+ * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
  */
-import React from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
 import { ApprovalAskCard } from './ApprovalAskCard';
-import { InlineAgentPanel } from './InlineAgentPanel';
 import { isEditToolName, isShellToolName } from '../api/toolFeedback';
 import {
   extractImageRefs,
   extractToolCommand,
+  formatToolDiffStat,
   fullToolOutput,
+  isToolRowDefaultOpen,
+  normalizeToolDiffStat,
+  resolveToolRowOpen,
   toolCommandPreview,
-  toolHasDisplayableResult,
+  toolDiffLineStats,
+  toolHasExpandableBody,
   toolHumanLabel,
   toolPathDisplayName,
+  toolRowTone,
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import { extractFilePathFromToolArgs } from '../api/workspaceFsApi';
+import { TOOL_OUTPUT_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
+
+const InlineAgentPanel = lazy(() =>
+  import('./InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel })),
+);
+
+/** 工具行状态中文标签（aria / 行尾 / data 共用，避免英文 status 直出） */
+function toolStatusZh(status: MessageToolCall['status'] | undefined): string {
+  switch (status) {
+    case 'running':
+      return '运行中';
+    case 'success':
+      return '完成';
+    case 'error':
+      return '失败';
+    case 'pending_approval':
+      return '待确认';
+    default:
+      return '待命';
+  }
+}
+
+/** 空输出占位（与 Runtime/后台任务文案一致） */
+const TOOL_EMPTY_OUTPUT_ZH = '（无输出）';
+
+/** 展开区 id，供 aria-controls 关联 */
+function toolResultBodyId(toolId: string): string {
+  return `tool-result-${toolId}`;
+}
 
 export interface ChatToolStackProps {
   items: ToolRenderItem[];
   msgId?: string;
-  /** 本轮折叠态 key（通常 msgId）；缺省则不启用轮次折叠 */
-  roundKey?: string;
   agents: SessionAgent[];
   activeSessionId: string;
   expandedTools: Record<string, boolean>;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
-  /** 本轮工具组展开态（true=展开全部）；按 session 在 ChatMessageList 持久化 */
-  expandedRounds?: Record<string, boolean>;
-  onToggleRound?: (roundKey: string, currentlyOpen: boolean) => void;
   approvalBusy: boolean;
   pendingApprovalMsgId: string;
   onOpenDiff: (diff: FileDiff) => void;
@@ -38,75 +68,13 @@ export interface ChatToolStackProps {
   onOpenTerminal: () => void;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
-  onShowToast: (message: string) => void;
 }
 
-/** 展平 single / group 得到本轮全部工具调用 */
-function flattenToolItems(items: ToolRenderItem[]): MessageToolCall[] {
-  const out: MessageToolCall[] = [];
-  for (const item of items) {
-    if (item.kind === 'single') out.push(item.tc);
-    else out.push(...item.tools);
-  }
-  return out;
-}
-
-/** 折叠时仅保留 running / pending_approval，避免藏审批与进行中 */
-function filterLiveToolItems(items: ToolRenderItem[]): ToolRenderItem[] {
-  const out: ToolRenderItem[] = [];
-  for (const item of items) {
-    if (item.kind === 'single') {
-      if (item.tc.status === 'running' || item.tc.status === 'pending_approval') {
-        out.push(item);
-      }
-      continue;
-    }
-    const live = item.tools.filter(
-      (t) => t.status === 'running' || t.status === 'pending_approval',
-    );
-    if (live.length === 0) continue;
-    if (live.length === 1) out.push({ kind: 'single', tc: live[0] });
-    else out.push({ ...item, tools: live });
-  }
-  return out;
-}
-
-function buildRoundSummary(tools: MessageToolCall[]): string {
-  const n = tools.length;
-  let done = 0;
-  let fail = 0;
-  let pending = 0;
-  let running = 0;
-  for (const t of tools) {
-    if (t.status === 'success') done += 1;
-    else if (t.status === 'error') fail += 1;
-    else if (t.status === 'pending_approval') pending += 1;
-    else if (t.status === 'running') running += 1;
-  }
-  const parts = [`本轮 ${n} 个工具`, `完成 ${done}`, `失败 ${fail}`, `待批 ${pending}`];
-  if (running > 0) parts.push(`进行中 ${running}`);
-  return parts.join(' · ');
-}
-
-/** 默认折叠长输出，避免主对话刷屏；错误可默认展开；长结果永不默认撑开 */
-function shouldDefaultOpenTool(tc: {
-  status?: string;
-  output?: string;
-  diffs?: FileDiff[];
-}) {
-  if (tc.status === 'running') return false;
-  if (tc.status === 'pending_approval') return false;
-  if (tc.status === 'error') {
-    const o = (tc.output || '').trim();
-    return o.length > 0 && o.length < 200;
-  }
-  if (tc.diffs && tc.diffs.length > 0) return false; // diff 摘要行即可，完整看右侧
-  const raw = (tc.output || '').trim();
-  if (!raw || /^(执行中|运行中)…?$/.test(raw)) return false;
-  const lines = raw.split('\n').filter((l) => l.trim());
-  // 更克制：只有极短结果才默认展开
-  return lines.length <= 3 && raw.length <= 240;
-}
+/**
+ * 行级共享 props（不含 items/msgId）：由 ChatMessageList 一次组装，
+ * 经 ChatAssistantMessageRow 展开进 ChatToolStack，避免双份类型定义漂移。
+ */
+export type ChatToolStackSharedProps = Omit<ChatToolStackProps, 'items' | 'msgId'>;
 
 function findAgentForTool(
   tc: { id?: string; name?: string; explanation?: string },
@@ -160,43 +128,88 @@ function renderGitDiff(diff: FileDiff, onOpenDiff: (diff: FileDiff) => void) {
   );
 }
 
-function renderToolResultBody(
+/**
+ * 展开体：默认折叠时整段不挂载；展开后仍做字符预算，
+ * 超长需二次「显示全部」，避免单工具输出撑爆 DOM。
+ * 空正文 →「（无输出）」中文占位（不复用「完成/失败」伪输出）。
+ */
+function ToolResultBody({
+  tc,
+  bodyId,
+  onOpenDiff,
+  onOpenTerminal,
+}: {
   tc: {
+    id?: string;
     output?: string;
     diffs?: FileDiff[];
     name?: string;
     status?: string;
     arguments?: string;
-  },
-  onOpenDiff: (diff: FileDiff) => void,
-  onOpenTerminal: () => void,
-) {
+  };
+  bodyId: string;
+  onOpenDiff: (diff: FileDiff) => void;
+  onOpenTerminal: () => void;
+}) {
+  const [showFullOutput, setShowFullOutput] = useState(false);
   const images = extractImageRefs(tc.output || '');
   const raw = tc.output || '';
-  const out = fullToolOutput(raw);
+  const full = fullToolOutput(raw);
+  const budget = showFullOutput
+    ? { text: full, truncated: false, originalLength: full.length }
+    : budgetDomText(full, TOOL_OUTPUT_DOM_CHAR_CAP);
+  const out = budget.text;
   const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
   const shellTool = isShellToolName(tc.name || '');
   const longShell = shellTool && (raw.length > 2000 || raw.split('\n').length > 80);
-  if (!out && images.length === 0 && !hasDiffs) {
-    if (tc.status === 'success') {
-      return (
-        <div className="tool-result-body">
-          <pre className="tool-result-pre">完成</pre>
-        </div>
-      );
-    }
-    if (tc.status === 'error') {
-      return (
-        <div className="tool-result-body">
-          <pre className="tool-result-pre">失败</pre>
-        </div>
-      );
-    }
-    return null;
-  }
+  const statusZh = toolStatusZh(tc.status as MessageToolCall['status'] | undefined);
+  const emptyBody = !full && images.length === 0 && !hasDiffs;
+  // 展开体顶部：只展示命令本身（清洗后），不混系统元数据
+  const cmdLine = shellTool
+    ? toolCommandPreview(
+        {
+          id: tc.id || 'x',
+          name: tc.name || 'shell',
+          arguments: tc.arguments || '',
+          status: (tc.status as MessageToolCall['status']) || 'success',
+        },
+        200,
+      )
+    : '';
+
   return (
-    <div className="tool-result-body">
-      {out ? <pre className="tool-result-pre">{out}</pre> : null}
+    <div
+      id={bodyId}
+      className="tool-result-body"
+      role="region"
+      aria-label={`${statusZh}的工具输出`}
+      data-empty={emptyBody ? 'true' : undefined}
+    >
+      {cmdLine ? (
+        <pre className="tool-result-pre tool-result-pre--cmd" aria-label="命令">
+          {cmdLine}
+        </pre>
+      ) : null}
+      {emptyBody ? (
+        <pre className="tool-result-pre" aria-label="无输出">
+          {TOOL_EMPTY_OUTPUT_ZH}
+        </pre>
+      ) : null}
+      {!emptyBody && out ? <pre className="tool-result-pre">{out}</pre> : null}
+      {budget.truncated ? (
+        <div className="tool-result-long-hint">
+          <button
+            type="button"
+            className="tool-result-hint-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowFullOutput(true);
+            }}
+          >
+            显示全部输出（{budget.originalLength.toLocaleString()} 字符）
+          </button>
+        </div>
+      ) : null}
       {longShell ? (
         <div className="tool-result-long-hint">
           <button
@@ -213,8 +226,14 @@ function renderToolResultBody(
       ) : null}
       {images.length > 0 && (
         <div className="tool-result-images">
-          {images.map((src) => (
-            <img key={src} src={src} alt="" className="tool-result-img" loading="lazy" />
+          {images.map((src, i) => (
+            <img
+              key={src}
+              src={src}
+              alt={`工具输出图片 ${i + 1}`}
+              className="tool-result-img"
+              loading="lazy"
+            />
           ))}
         </div>
       )}
@@ -225,9 +244,9 @@ function renderToolResultBody(
 
 /**
  * 工具行分层：
- * - 摘要（灰）：人读意图
- * - 命令（等宽更浅）：真实命令/路径
- * - 展开体：仅清洗后的结果输出
+ * - 摘要（灰）：人读意图 · 单行
+ * - 命令（等宽更浅）：同排截断
+ * - 展开体：仅该工具结果；透明底 + 边缘淡化
  * - 待确认：行内可批，不依赖底部 sticky
  */
 function CompactToolRow({
@@ -253,59 +272,76 @@ function CompactToolRow({
     onOpenTerminal,
     onApprovalAllow,
     onApprovalDeny,
-    onShowToast,
   } = props;
 
   // 审批优先：勿被 linked agent 分支吞掉 pending_approval
+  // 外层 tool-row--approval 与工具行同宽对齐
   if (tc.status === 'pending_approval') {
     const summary = toolHumanLabel(tc);
     const techFull = extractToolCommand(tc.arguments || '');
     const tech = techFull && techFull !== summary ? techFull : toolCommandPreview(tc, 72);
     const mid = msgId || pendingApprovalMsgId;
     return (
-      <ApprovalAskCard
+      <div
         key={rowKey}
-        msgId={mid}
-        toolId={tc.id}
-        summary={summary}
-        cmd={tech && tech !== summary ? tech : techFull || undefined}
-        busy={approvalBusy}
-        onAllow={(note) => {
-          if (note.trim()) {
-            onShowToast(`备注：${note.trim().slice(0, 80)}`);
-          }
-          onApprovalAllow(tc.id, mid, false);
-        }}
-        onAllowRemember={(note) => {
-          if (note.trim()) onShowToast(`备注：${note.trim().slice(0, 80)}`);
-          onApprovalAllow(tc.id, mid, true);
-        }}
-        onDeny={() => onApprovalDeny(tc.id, mid)}
-      />
+        className="tool-row tool-row--approval is-pending"
+        data-tool-id={tc.id}
+      >
+        <ApprovalAskCard
+          msgId={mid}
+          toolId={tc.id}
+          summary={summary}
+          cmd={tech && tech !== summary ? tech : techFull || undefined}
+          busy={approvalBusy}
+          riskMeta={tc.approvalMeta}
+          onAllow={() => {
+            onApprovalAllow(tc.id, mid, false);
+          }}
+          onAllowRemember={() => {
+            onApprovalAllow(tc.id, mid, true);
+          }}
+          onDeny={() => onApprovalDeny(tc.id, mid)}
+        />
+      </div>
     );
   }
   const linkedAgent = findAgentForTool(tc, agents);
   if (linkedAgent && activeSessionId) {
     return (
-      <InlineAgentPanel
+      <Suspense
         key={String(rowKey)}
-        agent={linkedAgent}
-        parentSessionId={activeSessionId}
-        defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
-      />
+        fallback={
+          <div className="tool-row is-running">
+            <div className="tool-row-head tool-row-head--static">
+              <span className="tool-row-ico-slot" aria-hidden>
+                <span className="tool-row-live">
+                  <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+                </span>
+              </span>
+              <span className="tool-row-summary">协作子任务…</span>
+            </div>
+          </div>
+        }
+      >
+        <InlineAgentPanel
+          agent={linkedAgent}
+          parentSessionId={activeSessionId}
+          defaultOpen={tc.status === 'running' || linkedAgent.status === 'running'}
+        />
+      </Suspense>
     );
   }
-  const body = renderToolResultBody(tc, onOpenDiff, onOpenTerminal);
-  const hasResult = toolHasDisplayableResult(tc);
-  const defaultOpen = shouldDefaultOpenTool(tc);
-  const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, tc.id)
-    ? expandedTools[tc.id]
-    : defaultOpen;
+  const expandable = toolHasExpandableBody(tc);
+  // 默认折叠契约：resolveToolRowOpen（用户显式态优先，否则 isToolRowDefaultOpen≡false）
+  const defaultOpen = isToolRowDefaultOpen(tc);
+  const isOpen = resolveToolRowOpen(expandedTools, tc.id, tc);
   const human = toolHumanLabel(tc);
-  const techFull = extractToolCommand(tc.arguments || '');
-  const cmd = toolCommandPreview(tc, 72);
   const running = tc.status === 'running';
-  const canToggle = Boolean(body) || hasResult;
+  const tone = toolRowTone(tc.status);
+  const statusZh = toolStatusZh(tc.status);
+  // 仅有实质结果时可展开；终态无正文只靠 tone/中文状态（与 isOpen 解耦）
+  const canToggle = expandable;
+  const bodyId = toolResultBodyId(tc.id);
   const filePath = extractFilePathFromToolArgs(tc.arguments || '');
   const n = (tc.name || '').toLowerCase();
   const pathClickable =
@@ -316,6 +352,20 @@ function CompactToolRow({
       n.includes('edit') ||
       n.includes('glob'));
   const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
+  // ± 仅进 aria，不在摘要行展示
+  const diffStatsRaw = toolDiffLineStats(tc);
+  const diffStats = diffStatsRaw ? normalizeToolDiffStat(diffStatsRaw) : null;
+  const diffStatLabel = diffStats ? formatToolDiffStat(diffStats) : '';
+  /** 读屏：意图 · 状态 · ± · 展开态 */
+  const rowAriaLabel = [
+    human,
+    statusZh,
+    diffStatLabel || null,
+    canToggle ? (isOpen ? '已展开' : '已折叠') : null,
+    canToggle ? (isOpen ? '按 Enter 或空格折叠' : '按 Enter 或空格展开') : null,
+  ]
+    .filter(Boolean)
+    .join('，');
   const pathActions =
     pathClickable && filePath ? (
       <span className="tool-path-actions" onClick={(e) => e.stopPropagation()}>
@@ -332,10 +382,7 @@ function CompactToolRow({
           className="tool-path-action"
           title="复制路径"
           onClick={() => {
-            void navigator.clipboard.writeText(filePath).then(
-              () => onShowToast('路径已复制'),
-              () => onShowToast(filePath),
-            );
+            void navigator.clipboard.writeText(filePath);
           }}
         >
           <Lucide.Copy size={14} />
@@ -389,77 +436,133 @@ function CompactToolRow({
       </span>
     );
   };
+
+  /**
+   * 工具图标：统一圆润线稿（round cap/join + 同尺寸线宽），
+   * 不用圆描边框；选型偏软、少棱角。
+   */
   const toolIcon = (() => {
     const name = (tc.name || '').toLowerCase();
     const cls = 'tool-row-type-ico';
-    const sz = 15;
+    const sz = 14;
+    const sw = 1.6;
+    let inner: React.ReactNode;
     if (running) {
-      return (
+      inner = (
         <span className="tool-row-live" aria-hidden>
-          <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+          <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
         </span>
       );
+    } else if (
+      isShellToolName(name) ||
+      name.includes('bash') ||
+      name.includes('shell') ||
+      name.includes('exec')
+    ) {
+      // 终端图标（勿用 Lucide.Command=⌘，Windows 上像奇怪光标符号）
+      inner = <Lucide.Terminal className={cls} size={sz} strokeWidth={sw} />;
+    } else if (name.includes('grep') || name.includes('search') || name.includes('find')) {
+      inner = <Lucide.Search className={cls} size={sz} strokeWidth={sw} />;
+    } else if (name.includes('read') || name.includes('cat') || name.includes('view')) {
+      // File 比 FileText 更简、外轮廓更圆
+      inner = <Lucide.File className={cls} size={sz} strokeWidth={sw} />;
+    } else if (
+      isEditToolName(name) ||
+      name.includes('write') ||
+      name.includes('edit') ||
+      name.includes('patch')
+    ) {
+      inner = <Lucide.PenLine className={cls} size={sz} strokeWidth={sw} />;
+    } else if (name.includes('list') || name.includes('glob') || name.includes('dir')) {
+      inner = <Lucide.FolderOpen className={cls} size={sz} strokeWidth={sw} />;
+    } else if (name.includes('web') || name.includes('fetch') || name.includes('http')) {
+      inner = <Lucide.Globe className={cls} size={sz} strokeWidth={sw} />;
+    } else if (name.includes('git')) {
+      inner = <Lucide.GitBranch className={cls} size={sz} strokeWidth={sw} />;
+    } else {
+      inner = <Lucide.CircleDot className={cls} size={sz} strokeWidth={sw} />;
     }
-    if (isShellToolName(name) || name.includes('bash') || name.includes('shell') || name.includes('exec')) {
-      return <Lucide.Terminal className={`${cls} ico-shell`} size={sz} strokeWidth={1.75} />;
-    }
-    if (name.includes('grep') || name.includes('search') || name.includes('find')) {
-      return <Lucide.Search className={`${cls} ico-search`} size={sz} strokeWidth={1.75} />;
-    }
-    if (name.includes('read') || name.includes('cat') || name.includes('view')) {
-      return <Lucide.FileText className={`${cls} ico-read`} size={sz} strokeWidth={1.75} />;
-    }
-    if (isEditToolName(name) || name.includes('write') || name.includes('edit') || name.includes('patch')) {
-      return <Lucide.Pencil className={`${cls} ico-edit`} size={sz} strokeWidth={1.75} />;
-    }
-    if (name.includes('list') || name.includes('glob') || name.includes('dir')) {
-      return <Lucide.FolderTree className={`${cls} ico-list`} size={sz} strokeWidth={1.75} />;
-    }
-    if (name.includes('web') || name.includes('fetch') || name.includes('http')) {
-      return <Lucide.Globe className={`${cls} ico-web`} size={sz} strokeWidth={1.75} />;
-    }
-    return <Lucide.CircleDot className={`${cls} ico-default`} size={sz} strokeWidth={1.75} />;
+    return (
+      <span className="tool-row-ico-slot" aria-hidden>
+        {inner}
+      </span>
+    );
   })();
 
   return (
     <div
-      className={`tool-row ${isOpen ? 'is-open' : ''} ${tc.status === 'error' ? 'is-error' : ''}`}
+      className={`tool-row is-${tone}${isOpen ? ' is-open' : ' is-collapsed'}`}
       key={rowKey}
+      data-tool-id={tc.id}
+      data-tool-label={human}
+      data-tool-status={statusZh}
+      data-default-collapsed={defaultOpen ? 'false' : 'true'}
+      data-diff-stat={diffStatLabel || undefined}
+      aria-busy={running || undefined}
     >
       {/* 用 div 而非 button，避免路径操作按钮嵌套 button 报错 */}
       <div
-        className="tool-row-head"
+        className={`tool-row-head${canToggle ? '' : ' tool-row-head--static'}`}
         role={canToggle ? 'button' : undefined}
         tabIndex={canToggle ? 0 : undefined}
+        aria-expanded={canToggle ? isOpen : undefined}
+        aria-controls={canToggle ? bodyId : undefined}
+        aria-label={rowAriaLabel}
+        style={canToggle ? undefined : { cursor: 'default' }}
         onClick={() => canToggle && onToggleTool(tc.id, isOpen)}
         onKeyDown={(e) => {
           if (!canToggle) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             onToggleTool(tc.id, isOpen);
+            return;
+          }
+          // Escape：已展开时折叠，焦点留在行头
+          if (e.key === 'Escape' && isOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleTool(tc.id, true);
           }
         }}
       >
         <span className="tool-row-head-main">
           {toolIcon}
           <span className="tool-row-text">
+            {/* 摘要行只保留人话意图；命令/±/状态放到展开体或 aria，避免一行堆太多标识 */}
             {renderSummary()}
-            {cmd ? (
-              <code className="tool-row-cmd" title={techFull || cmd}>
-                {cmd}
-              </code>
-            ) : null}
           </span>
         </span>
         <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
           {canToggle ? (
-            <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
+            <Lucide.ChevronRight
+              size={12}
+              className={`tool-row-chevron ${isOpen ? 'rot' : ''}`}
+              aria-hidden
+            />
           ) : null}
         </span>
       </div>
-      {isOpen && body}
+      {/* 默认折叠：未展开时整段结果不挂载，防流式高度抖动 */}
+      {isOpen && canToggle ? (
+        <ToolResultBody
+          tc={tc}
+          bodyId={bodyId}
+          onOpenDiff={onOpenDiff}
+          onOpenTerminal={onOpenTerminal}
+        />
+      ) : null}
     </div>
   );
+}
+
+/** 组也展平为独立行，避免「N 步」汇总头 */
+function flattenRenderTools(items: ToolRenderItem[]): MessageToolCall[] {
+  const out: MessageToolCall[] = [];
+  for (const item of items) {
+    if (item.kind === 'single') out.push(item.tc);
+    else out.push(...item.tools);
+  }
+  return out;
 }
 
 function renderToolStackItems(
@@ -467,123 +570,13 @@ function renderToolStackItems(
   msgId: string | undefined,
   props: ChatToolStackProps,
 ) {
-  const { expandedTools, onToggleTool } = props;
-  return items.map((item) => {
-    if (item.kind === 'single') {
-      return (
-        <CompactToolRow
-          key={item.tc.id}
-          tc={item.tc}
-          rowKey={item.tc.id}
-          msgId={msgId}
-          props={props}
-        />
-      );
-    }
-    const gid = item.id;
-    const running = item.tools.some((t) => t.status === 'running');
-    const anyError = item.tools.some((t) => t.status === 'error');
-    const groupDefaultOpen = running || anyError;
-    const isOpen = Object.prototype.hasOwnProperty.call(expandedTools, gid)
-      ? expandedTools[gid]
-      : groupDefaultOpen;
-    return (
-      <div
-        className={`tool-row tool-row-group ${isOpen ? 'is-open' : ''} ${anyError ? 'is-error' : ''}`}
-        key={gid}
-      >
-        <div
-          className="tool-row-head"
-          role="button"
-          tabIndex={0}
-          onClick={() => onToggleTool(gid, isOpen)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onToggleTool(gid, isOpen);
-            }
-          }}
-        >
-          <span className="tool-row-head-main">
-            {running ? (
-              <span className="tool-row-live" aria-hidden>
-                <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-              </span>
-            ) : null}
-            <span className="tool-row-summary">{item.label}</span>
-          </span>
-          <span className="tool-row-chevron-slot is-toggle">
-            <Lucide.ChevronRight size={14} className={`tool-row-chevron ${isOpen ? 'rot' : ''}`} />
-          </span>
-        </div>
-        {isOpen && (
-          <div className="tool-group-body">
-            {item.tools.map((tc) => (
-              <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  });
+  const tools = flattenRenderTools(items);
+  return tools.map((tc) => (
+    <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />
+  ));
 }
 
 export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {
-  const { items, msgId, roundKey, expandedRounds, onToggleRound } = props;
-  const allTools = flattenToolItems(items);
-  const n = allTools.length;
-  /** ≥2 才显示本轮汇总行；单工具保持原样避免噪音 */
-  const useRoundGroup = Boolean(roundKey && onToggleRound && n >= 2);
-
-  if (!useRoundGroup || !roundKey) {
-    return <div className="tool-stack">{renderToolStackItems(items, msgId, props)}</div>;
-  }
-
-  const defaultExpanded = n < 4;
-  const isRoundOpen = Object.prototype.hasOwnProperty.call(expandedRounds || {}, roundKey)
-    ? Boolean(expandedRounds![roundKey])
-    : defaultExpanded;
-  const visibleItems = isRoundOpen ? items : filterLiveToolItems(items);
-  const summary = buildRoundSummary(allTools);
-  const hasLive = allTools.some(
-    (t) => t.status === 'running' || t.status === 'pending_approval',
-  );
-
-  return (
-    <div className={`tool-round-group ${isRoundOpen ? 'is-open' : 'is-collapsed'}`}>
-      <div
-        className="tool-round-group-head"
-        role="button"
-        tabIndex={0}
-        aria-expanded={isRoundOpen}
-        onClick={() => onToggleRound?.(roundKey, isRoundOpen)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onToggleRound?.(roundKey, isRoundOpen);
-          }
-        }}
-      >
-        <span className="tool-round-group-label" title={summary}>
-          {hasLive && !isRoundOpen ? (
-            <span className="tool-row-live" aria-hidden>
-              <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
-            </span>
-          ) : null}
-          {summary}
-        </span>
-        <span className="tool-row-chevron-slot is-toggle">
-          <Lucide.ChevronRight
-            size={14}
-            className={`tool-row-chevron ${isRoundOpen ? 'rot' : ''}`}
-          />
-        </span>
-      </div>
-      {visibleItems.length > 0 ? (
-        <div className="tool-stack tool-round-group-body">
-          {renderToolStackItems(visibleItems, msgId, props)}
-        </div>
-      ) : null}
-    </div>
-  );
+  const { items, msgId } = props;
+  return <div className="tool-stack">{renderToolStackItems(items, msgId, props)}</div>;
 };

@@ -12,7 +12,13 @@ import {
   sessionDomainChanged,
   type SessionDomainSlice,
 } from '../api/sessionPersistGate';
-import { normalizePermissionMode, type PermissionMode } from '../api/permissionModes';
+import {
+  loadStoredPermissionMode,
+  permissionModeAfterPlanToggle,
+  persistPermissionMode,
+  planModeEnabledFor,
+  type PermissionMode,
+} from '../api/permissionModes';
 import {
   addCommandPermission as persistAddCommandPermission,
   loadCommandPermissions,
@@ -24,11 +30,25 @@ import type {
   DropPreviewState,
   FileDiff,
   WorkspaceState,
+  CardState,
+  ColumnState,
+  CardGroupState,
+  SettingsTabType,
 } from './types';
 import {
+  appendTerminalLine,
+  collapseToolColumnToTabs,
   createDefaultWorkspace,
+  resolveWorkspacePanelKey,
   seedSessions,
+  upsertDiffFile,
 } from './layoutHelpers';
+import {
+  DEFAULT_SHELL_CHROME,
+  parseShellChromeMode,
+  SHELL_CHROME_STORAGE_KEY,
+  type ShellChromeMode,
+} from '../api/shellChrome';
 import { createSessionActions, type SessionActions } from './sessionActions';
 import {
   createWorkspaceActions,
@@ -37,7 +57,96 @@ import {
 } from './workspaceActions';
 import { buildSessionsById } from './sessionIndex';
 
+// ── Type fidelity: named state shapes (no inline litter / drift) ─────────────
+
+/** UI 密度三档 — 与 tokens `[data-ui-size]` / 设置外观一致 */
+export type UiSize = 'small' | 'medium' | 'large';
+
+export const UI_SIZE_IDS = ['small', 'medium', 'large'] as const satisfies readonly UiSize[];
+
+export const DEFAULT_UI_SIZE: UiSize = 'medium';
+
+export type {
+  ShellChromeMode,
+} from '../api/shellChrome';
+export {
+  DEFAULT_SHELL_CHROME,
+  SHELL_CHROME_IDS,
+  SHELL_CHROME_STORAGE_KEY,
+  parseShellChromeMode,
+} from '../api/shellChrome';
+
+/** 设置侧栏合法 tab（与 SettingsTabType 同步；openSettings 白名单） */
+export const SETTINGS_TAB_IDS = [
+  'profile',
+  'appearance',
+  'personalize',
+  'models',
+  'usage',
+  'schedule',
+  'rules',
+  'shortcuts',
+  'skills',
+  'mcp',
+  'plugins',
+  'security',
+] as const satisfies readonly SettingsTabType[];
+
+export const DEFAULT_SETTINGS_TAB: SettingsTabType = 'profile';
+
+const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TAB_IDS);
+
+/** 遥测 / 用量条 token 计数 */
+export type TokenUsageState = {
+  input: number;
+  inputMax: number;
+  output: number;
+  outputMax: number;
+  cost: number;
+};
+
+/** 产品态安全默认（全 0；上限与历史 demo 一致） */
+export const DEFAULT_TOKEN_USAGE: TokenUsageState = {
+  input: 0,
+  inputMax: 160000,
+  output: 0,
+  outputMax: 40000,
+  cost: 0,
+};
+
+/** demo 展示用假数据（仅 isDemoMode） */
+export const DEMO_TOKEN_USAGE: TokenUsageState = {
+  input: 115482,
+  inputMax: 160000,
+  output: 24930,
+  outputMax: 40000,
+  cost: 0.345,
+};
+
+/** 后台 worker / cron 触发条目 */
+export type ActiveWorkerState = {
+  id: string;
+  taskName: string;
+  elapsedSeconds: number;
+};
+
+/** 首个工作区稳定 id（empty seed / close 重种共用） */
+export const DEFAULT_WORKSPACE_ID = 'ws-0';
+
+/** localStorage keys（集中，避免字面量漂移） */
+export const UI_SIZE_STORAGE_KEY = 'crish_ui_size';
+export const TAB_MODE_STORAGE_KEY = 'crish_tab_mode';
+
+/** syncTelemetryData 入参（去掉 data: any） */
+export type TelemetrySyncPayload = {
+  tokenUsage?: Partial<TokenUsageState> | TokenUsageState;
+  activeWorkers?: ActiveWorkerState[];
+  mcpServers?: McpServer[];
+  cronJobs?: CronJob[];
+};
+
 // 保持旧 import 路径可用：`from '../store/layoutStore'`
+// 会话域请优先 `from '../store/sessionStore'`（useSessionStore 为同 store 门面，见 sessionStore.ts）
 export type {
   CardState,
   CardGroupState,
@@ -52,14 +161,253 @@ export type {
   SessionGoalTask,
   SessionState,
   DropPreviewState,
+  SettingsTabType,
 } from './types';
 
+// ── Safe defaults / parsers ─────────────────────────────────────────────────
+
+/** 有限数字；NaN/Infinity/非数字 → fallback */
+export function finiteNumber(n: unknown, fallback: number): number {
+  return typeof n === 'number' && Number.isFinite(n) ? n : fallback;
+}
+
+/** 未知值 → 合法 UiSize；损坏存储 / 越界一律 medium */
+export function parseUiSize(raw: unknown): UiSize {
+  if (raw === 'small' || raw === 'medium' || raw === 'large') return raw;
+  return DEFAULT_UI_SIZE;
+}
+
+function readStoredShellChromeMode(): ShellChromeMode {
+  try {
+    return parseShellChromeMode(localStorage.getItem(SHELL_CHROME_STORAGE_KEY));
+  } catch {
+    return DEFAULT_SHELL_CHROME;
+  }
+}
+
+export function isSettingsTabType(v: unknown): v is SettingsTabType {
+  return typeof v === 'string' && SETTINGS_TAB_SET.has(v);
+}
+
+/** 未知 tab → fallback（默认 profile）；不静默落到非法 id */
+export function parseSettingsTab(
+  raw: unknown,
+  fallback: SettingsTabType = DEFAULT_SETTINGS_TAB,
+): SettingsTabType {
+  return isSettingsTabType(raw) ? raw : fallback;
+}
+
+/** 清洗 token 用量：非负、有限；缺失字段回落 base */
+export function sanitizeTokenUsage(
+  raw: Partial<TokenUsageState> | TokenUsageState | null | undefined,
+  base: TokenUsageState = DEFAULT_TOKEN_USAGE,
+): TokenUsageState {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      input: base.input,
+      inputMax: base.inputMax,
+      output: base.output,
+      outputMax: base.outputMax,
+      cost: base.cost,
+    };
+  }
+  return {
+    input: Math.max(0, finiteNumber(raw.input, base.input)),
+    inputMax: Math.max(1, finiteNumber(raw.inputMax, base.inputMax)),
+    output: Math.max(0, finiteNumber(raw.output, base.output)),
+    outputMax: Math.max(1, finiteNumber(raw.outputMax, base.outputMax)),
+    cost: Math.max(0, finiteNumber(raw.cost, base.cost)),
+  };
+}
+
+function isWorkerLike(
+  w: unknown,
+): w is { id: string; taskName?: unknown; elapsedSeconds?: unknown } {
+  if (w == null || typeof w !== 'object') return false;
+  if (!('id' in w)) return false;
+  const id = (w as { id: unknown }).id;
+  return typeof id === 'string' && id.length > 0;
+}
+
+/** 过滤无 id worker；elapsed 非负有限 */
+export function sanitizeActiveWorkers(list: unknown): ActiveWorkerState[] {
+  if (!Array.isArray(list)) return [];
+  const out: ActiveWorkerState[] = [];
+  for (const w of list) {
+    if (!isWorkerLike(w)) continue;
+    out.push({
+      id: w.id,
+      taskName: typeof w.taskName === 'string' ? w.taskName : '',
+      elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0)),
+    });
+  }
+  return out;
+}
+
+function readStoredUiSize(): UiSize {
+  try {
+    return parseUiSize(localStorage.getItem(UI_SIZE_STORAGE_KEY));
+  } catch {
+    return DEFAULT_UI_SIZE;
+  }
+}
+
+/**
+ * 合并标签默认开：
+ * - 无键 / 非法 → true（产品默认右侧工具并入同列标签）
+ * - 仅显式 '0' / 'false' → false
+ */
+function readStoredTabModeEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(TAB_MODE_STORAGE_KEY);
+    if (raw == null || raw === '') return true;
+    if (raw === '0' || raw === 'false') return false;
+    if (raw === '1' || raw === 'true') return true;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+// ── Empty workspace seed + no ghost panels ──────────────────────────────────
+
+/**
+ * 去掉浮层/别名幽灵卡（settings、runtime 不进列；browser→preview；plan→tasks）。
+ * 空 group / 空工具列剪掉；始终保证至少一列 chat，否则回落 createDefaultWorkspace。
+ */
+export function stripGhostPanelsFromWorkspace(ws: WorkspaceState): WorkspaceState {
+  const nextColumns: ColumnState[] = [];
+
+  for (const col of ws.columns) {
+    const nextGroups: CardGroupState[] = [];
+    for (const g of col.groups) {
+      const seen = new Set<string>();
+      const cards: CardState[] = [];
+      for (const c of g.cards) {
+        const key = resolveWorkspacePanelKey(c.id);
+        if (!key) continue; // settings / runtime / 空串 → ghost，丢弃
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cards.push(key === c.id ? c : { id: key, title: c.title });
+      }
+      if (cards.length === 0) continue;
+      let active = resolveWorkspacePanelKey(g.activeCardId) ?? cards[0]!.id;
+      if (!cards.some((c) => c.id === active)) {
+        active = cards[0]!.id;
+      }
+      nextGroups.push({
+        id: g.id,
+        activeCardId: active,
+        cards,
+        heightRatio: g.heightRatio > 0 ? g.heightRatio : 1,
+      });
+    }
+
+    const isChat = col.id.includes('chat');
+    if (nextGroups.length === 0 && !isChat) continue;
+    // chat 列若被掏空则补回对话卡（防 ghost 空 chat 壳）
+    if (nextGroups.length === 0 && isChat) {
+      nextGroups.push({
+        id: `group-chat-${ws.id}`,
+        activeCardId: 'chat',
+        cards: [{ id: 'chat', title: '对话' }],
+        heightRatio: 1,
+      });
+    }
+    nextColumns.push({
+      id: col.id,
+      widthRatio: col.widthRatio > 0 ? col.widthRatio : 1,
+      groups: nextGroups,
+    });
+  }
+
+  if (nextColumns.length === 0) {
+    return createDefaultWorkspace(ws.id || DEFAULT_WORKSPACE_ID);
+  }
+  // 保证至少一列含 chat 卡
+  const hasChatCard = nextColumns.some((col) =>
+    col.groups.some((g) => g.cards.some((c) => c.id === 'chat')),
+  );
+  if (!hasChatCard) {
+    return createDefaultWorkspace(ws.id || DEFAULT_WORKSPACE_ID);
+  }
+  return { id: ws.id || DEFAULT_WORKSPACE_ID, columns: nextColumns };
+}
+
+/** 非空工作区种子：默认 id + 去 ghost 面板 */
+export function seedInitialWorkspaces(
+  id: string = DEFAULT_WORKSPACE_ID,
+): WorkspaceState[] {
+  return [stripGhostPanelsFromWorkspace(createDefaultWorkspace(id))];
+}
+
+/** 空数组 / null → 重种；否则逐区 strip ghost 后若仍空则重种 */
+export function ensureNonEmptyWorkspaces(
+  workspaces: WorkspaceState[] | null | undefined,
+  id: string = DEFAULT_WORKSPACE_ID,
+): WorkspaceState[] {
+  if (!workspaces || workspaces.length === 0) {
+    return seedInitialWorkspaces(id);
+  }
+  const cleaned = workspaces.map((ws) => stripGhostPanelsFromWorkspace(ws));
+  return cleaned.length > 0 ? cleaned : seedInitialWorkspaces(id);
+}
+
+/** activeWorkspaceIndex 夹到 [0, len-1]；空切片视为 0 */
+export function clampActiveWorkspaceIndex(
+  workspaces: readonly WorkspaceState[],
+  index: number,
+): number {
+  if (workspaces.length === 0) return 0;
+  const i = finiteNumber(index, 0);
+  return Math.min(Math.max(0, Math.trunc(i)), workspaces.length - 1);
+}
+
+/**
+ * 会话种子后处理：sessionsById 对齐、active 仅在存在时保留、
+ * 空列表无 ghost active；folderOrder 去空串。
+ */
+export function sanitizeSessionSeed(seed: {
+  sessions: SessionState[];
+  activeSessionId: string;
+  folderOrder: string[];
+}): {
+  sessions: SessionState[];
+  sessionsById: Record<string, SessionState>;
+  activeSessionId: string;
+  folderOrder: string[];
+} {
+  const sessions = Array.isArray(seed.sessions) ? seed.sessions : [];
+  const sessionsById = buildSessionsById(sessions);
+  let activeSessionId =
+    typeof seed.activeSessionId === 'string' ? seed.activeSessionId : '';
+  if (!activeSessionId || !sessionsById[activeSessionId]) {
+    activeSessionId = '';
+  }
+  if (sessions.length === 0) {
+    activeSessionId = '';
+  }
+  const folderOrder = Array.isArray(seed.folderOrder)
+    ? seed.folderOrder.filter((f) => typeof f === 'string' && f.length > 0)
+    : [];
+  return { sessions, sessionsById, activeSessionId, folderOrder };
+}
+
+// ── LayoutStore interface ───────────────────────────────────────────────────
+
 /** 工作区 + UI + 遥测 + 会话域 + 工作区域（actions 见 SessionActions / WorkspaceActions） */
-interface LayoutStore extends SessionActions, WorkspaceActions {
+export interface LayoutStore extends SessionActions, WorkspaceActions {
   workspaces: WorkspaceState[];
   activeWorkspaceIndex: number;
   tabModeEnabled: boolean;
-  uiSize: 'small' | 'medium' | 'large';
+  uiSize: UiSize;
+  /** 壳层形态：classic 扁平 / inset 嵌套圆角内容卡 */
+  shellChromeMode: ShellChromeMode;
+  /**
+   * 主对话列表面：chat | scheduled。
+   * scheduled 时隐藏会话面包屑，避免「对话标题 + 定时任务」叠两套壳。
+   */
+  chatMainSurface: 'chat' | 'scheduled';
   sidebarCollapsed: boolean;
   sessions: SessionState[];
   /** 会话 id → 引用，热路径 O(1)；与 sessions 同步 */
@@ -73,16 +421,18 @@ interface LayoutStore extends SessionActions, WorkspaceActions {
   draggedTab: DraggedTabState | null;
   dropPreview: DropPreviewState | null;
   showSettingsOverlay: boolean;
-  settingsActiveTab: string;
+  settingsActiveTab: SettingsTabType;
   permissionMode: PermissionMode;
 
   // UI Settings
-  setUiSize: (size: 'small' | 'medium' | 'large') => void;
+  setUiSize: (size: UiSize) => void;
+  setShellChromeMode: (mode: ShellChromeMode) => void;
+  setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setTabModeEnabled: (enabled: boolean) => void;
   setShowSettingsOverlay: (show: boolean) => void;
-  setSettingsActiveTab: (tab: string) => void;
-  openSettings: (tab?: string) => void;
+  setSettingsActiveTab: (tab: SettingsTabType) => void;
+  openSettings: (tab?: SettingsTabType) => void;
 
   // Diff
   activeDiffSource: FileDiff | null;
@@ -108,15 +458,15 @@ interface LayoutStore extends SessionActions, WorkspaceActions {
   appSettings: Settings | null;
   scheduledTasks: CronJob[];
   mcpServers: McpServer[];
-  activeWorkers: { id: string; taskName: string; elapsedSeconds: number }[];
-  tokenUsage: { input: number; inputMax: number; output: number; outputMax: number; cost: number };
+  activeWorkers: ActiveWorkerState[];
+  tokenUsage: TokenUsageState;
   killedWorkerIds: string[];
   providers: ProviderInfo[];
   setProviders: (providers: ProviderInfo[]) => void;
   setAppSettings: (settings: Settings | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
   setMcpServers: (servers: McpServer[]) => void;
-  syncTelemetryData: (data: any) => void;
+  syncTelemetryData: (data: TelemetrySyncPayload) => void;
 
   /** 兼容：当前活动会话的终端行 */
   terminalLines: string[];
@@ -124,40 +474,58 @@ interface LayoutStore extends SessionActions, WorkspaceActions {
   terminalBySession: Record<string, string[]>;
   addTerminalLine: (line: string, sessionId?: string) => void;
   clearTerminalLines: (sessionId?: string) => void;
-  manuallyTriggeredWorkers: { id: string; taskName: string; elapsedSeconds: number }[];
+  manuallyTriggeredWorkers: ActiveWorkerState[];
   triggerCronJobNow: (prompt: string) => void;
   killWorker: (id: string, taskName: string) => void;
 }
 
-const _seed = seedSessions();
+// ── Initial state (safe defaults + seed) ────────────────────────────────────
+
+const _sessionSeed = sanitizeSessionSeed(seedSessions());
+/** 权限模式只读一次：permissionMode 与 planModeEnabled 同源，避免双次 localStorage 分叉 */
+const _initialPermissionMode = loadStoredPermissionMode();
+const _initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
+const _initialUiSize = readStoredUiSize();
+const _initialTabMode = readStoredTabModeEnabled();
+const _initialShellChrome = readStoredShellChromeMode();
+const _initialTokenUsage = isDemoMode()
+  ? { ...DEMO_TOKEN_USAGE }
+  : { ...DEFAULT_TOKEN_USAGE };
+const _initialTerminalLines: string[] = isDemoMode()
+  ? [
+      'orange@Windows-PC MINGW64 /c/Software/conex',
+      '$ npm run dev',
+      '> zennav-server@1.0.0 dev',
+      '> node server.js',
+      '',
+      '[ready] Server started on http://localhost:3000',
+      '[ready] Database connection established.',
+    ]
+  : [];
 
 export const useLayoutStore = create<LayoutStore>()(
   immer((set, get) => ({
-    workspaces: [createDefaultWorkspace('ws-0')],
-    activeWorkspaceIndex: 0,
-    tabModeEnabled: false,
-    uiSize: 'medium',
+    workspaces: _initialWorkspaces,
+    activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
+    tabModeEnabled: _initialTabMode,
+    uiSize: _initialUiSize,
+    shellChromeMode: _initialShellChrome,
+    chatMainSurface: 'chat',
     sidebarCollapsed: false,
-    sessions: _seed.sessions,
-    sessionsById: buildSessionsById(_seed.sessions),
-    folderOrder: _seed.folderOrder,
-    activeSessionId: _seed.activeSessionId,
+    sessions: _sessionSeed.sessions,
+    sessionsById: _sessionSeed.sessionsById,
+    folderOrder: _sessionSeed.folderOrder,
+    activeSessionId: _sessionSeed.activeSessionId,
+    // 无活动会话时绝不挂 ghost agent 焦点
     activeAgentId: null,
     panelAgentId: null,
     draggedTab: null,
     dropPreview: null,
 
     showSettingsOverlay: false,
-    settingsActiveTab: 'profile',
-    permissionMode: (() => {
-      try {
-        const v = localStorage.getItem('crish_permission_mode');
-        return normalizePermissionMode(v);
-      } catch {
-        /* ignore */
-      }
-      return 'ask' as PermissionMode;
-    })(),
+    settingsActiveTab: DEFAULT_SETTINGS_TAB,
+    // 与设置页 / Composer 共用；hydrate 时 planModeEnabled 必须与之一致
+    permissionMode: _initialPermissionMode,
 
     activeDiffSource: null,
     diffFiles: [],
@@ -165,22 +533,16 @@ export const useLayoutStore = create<LayoutStore>()(
       state.activeDiffSource = diff;
       if (diff) {
         // 同步进列表（去重 path）
-        const i = state.diffFiles.findIndex((f) => f.filePath === diff.filePath);
-        if (i >= 0) state.diffFiles[i] = diff;
-        else state.diffFiles.unshift(diff);
-        if (state.diffFiles.length > 40) state.diffFiles.length = 40;
+        upsertDiffFile(state.diffFiles, diff);
       }
     }),
     setDiffFiles: (files) => set((state) => {
-      state.diffFiles = files;
-      state.activeDiffSource = files[0] || null;
+      state.diffFiles = Array.isArray(files) ? files : [];
+      state.activeDiffSource = state.diffFiles[0] || null;
     }),
     pushDiffFile: (diff) => set((state) => {
-      const i = state.diffFiles.findIndex((f) => f.filePath === diff.filePath);
-      if (i >= 0) state.diffFiles[i] = diff;
-      else state.diffFiles.unshift(diff);
+      upsertDiffFile(state.diffFiles, diff);
       state.activeDiffSource = diff;
-      if (state.diffFiles.length > 40) state.diffFiles.length = 40;
     }),
     removeDiffFile: (filePath) => set((state) => {
       const path = filePath || '';
@@ -189,10 +551,21 @@ export const useLayoutStore = create<LayoutStore>()(
         state.activeDiffSource = state.diffFiles[0] || null;
       }
     }),
-    planModeEnabled: false,
-    setPlanModeEnabled: (enabled) => set((state) => {
-      state.planModeEnabled = enabled;
-    }),
+    // 刷新后若 permissionMode=plan，ribbon 与引擎需同步点亮（与 permissionMode 同源）
+    planModeEnabled: planModeEnabledFor(_initialPermissionMode),
+    setPlanModeEnabled: (enabled) => {
+      let nextMode: PermissionMode = 'ask';
+      set((state) => {
+        // 双向对齐：侧栏/ribbon 开关不得与 permissionMode 分叉
+        nextMode = permissionModeAfterPlanToggle(state.permissionMode, enabled);
+        state.permissionMode = nextMode;
+        state.planModeEnabled = planModeEnabledFor(nextMode);
+        // 与 setPermissionMode 一致：切换时重置「批准执行」
+        state.planApproved = false;
+      });
+      // 与 setPermissionMode 同一持久化入口，保证设置页 ↔ daemon 读同一 key
+      persistPermissionMode(nextMode);
+    },
     planApproved: false,
     setPlanApproved: (approved) => set((state) => {
       state.planApproved = approved;
@@ -208,83 +581,69 @@ export const useLayoutStore = create<LayoutStore>()(
       }),
     setCommandPermissions: (list: string[]) =>
       set((state) => {
-        state.commandPermissions = list;
-        saveCommandPermissions(list);
+        const next = Array.isArray(list)
+          ? list.filter((c) => typeof c === 'string')
+          : [];
+        state.commandPermissions = next;
+        saveCommandPermissions(next);
       }),
     appSettings: null,
     providers: [],
     scheduledTasks: [],
     mcpServers: [],
     activeWorkers: [],
-    tokenUsage: isDemoMode()
-      ? { input: 115482, inputMax: 160000, output: 24930, outputMax: 40000, cost: 0.345 }
-      : { input: 0, inputMax: 160000, output: 0, outputMax: 40000, cost: 0 },
+    tokenUsage: _initialTokenUsage,
     killedWorkerIds: [],
 
-    terminalLines: isDemoMode()
-      ? [
-          'orange@Windows-PC MINGW64 /c/Software/conex',
-          '$ npm run dev',
-          '> zennav-server@1.0.0 dev',
-          '> node server.js',
-          '',
-          '[ready] Server started on http://localhost:3000',
-          '[ready] Database connection established.',
-        ]
-      : [],
+    terminalLines: _initialTerminalLines,
     terminalBySession: {},
     manuallyTriggeredWorkers: [],
 
     setProviders: (providers) => set((state) => {
-      state.providers = providers;
+      state.providers = Array.isArray(providers) ? providers : [];
     }),
     setAppSettings: (settings) => set((state) => {
       state.appSettings = settings;
     }),
     setScheduledTasks: (tasks) => set((state) => {
-      state.scheduledTasks = tasks;
+      state.scheduledTasks = Array.isArray(tasks) ? tasks : [];
     }),
     setMcpServers: (servers) => set((state) => {
-      state.mcpServers = servers;
+      state.mcpServers = Array.isArray(servers) ? servers : [];
     }),
-    syncTelemetryData: (data: any) => set((state) => {
+    syncTelemetryData: (data: TelemetrySyncPayload) => set((state) => {
       if (data.tokenUsage) {
-        state.tokenUsage = data.tokenUsage;
+        state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
       }
 
       // Increment elapsedSeconds for manual workers by 2 seconds on every sync
-      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map(w => ({
-        ...w,
-        elapsedSeconds: w.elapsedSeconds + 2
+      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w) => ({
+        id: w.id,
+        taskName: w.taskName,
+        elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
       }));
 
       if (data.activeWorkers) {
-        state.activeWorkers = [
-          ...data.activeWorkers.filter((w: any) => !state.killedWorkerIds.includes(w.id)),
-          ...state.manuallyTriggeredWorkers
-        ];
+        const live = sanitizeActiveWorkers(data.activeWorkers).filter(
+          (w) => !state.killedWorkerIds.includes(w.id),
+        );
+        state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
       }
       if (data.mcpServers) {
-        state.mcpServers = data.mcpServers;
+        state.mcpServers = Array.isArray(data.mcpServers) ? data.mcpServers : state.mcpServers;
       }
       if (data.cronJobs) {
-        state.scheduledTasks = data.cronJobs;
+        state.scheduledTasks = Array.isArray(data.cronJobs) ? data.cronJobs : state.scheduledTasks;
       }
     }),
     addTerminalLine: (line: string, sessionId?: string) => set((state) => {
+      const text = typeof line === 'string' ? line : String(line ?? '');
       const sid = sessionId || state.activeSessionId || '_global';
       if (!state.terminalBySession[sid]) state.terminalBySession[sid] = [];
-      state.terminalBySession[sid].push(line);
+      appendTerminalLine(state.terminalBySession[sid], text);
       // 仅当前会话同步到兼容字段
       if (!sessionId || sessionId === state.activeSessionId || !state.activeSessionId) {
         state.terminalLines = state.terminalBySession[sid];
-      }
-      // 限长，避免撑爆 localStorage 视图
-      if (state.terminalBySession[sid].length > 800) {
-        state.terminalBySession[sid] = state.terminalBySession[sid].slice(-600);
-        if (sid === state.activeSessionId || !state.activeSessionId) {
-          state.terminalLines = state.terminalBySession[sid];
-        }
       }
     }),
     clearTerminalLines: (sessionId?: string) => set((state) => {
@@ -295,23 +654,26 @@ export const useLayoutStore = create<LayoutStore>()(
       }
     }),
     triggerCronJobNow: (prompt: string) => set((state) => {
-      const newWorker = {
+      const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
+      const newWorker: ActiveWorkerState = {
         id: `worker-manual-${Date.now()}`,
-        taskName: `Cron: ${prompt}`,
-        elapsedSeconds: 0
+        taskName: `Cron: ${label}`,
+        elapsedSeconds: 0,
       };
       state.manuallyTriggeredWorkers.push(newWorker);
       state.activeWorkers.push(newWorker);
     }),
     killWorker: (id: string, _taskName: string) => set((state) => {
-      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter(w => w.id !== id);
-      state.activeWorkers = state.activeWorkers.filter(w => w.id !== id);
+      if (!id) return;
+      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
+      state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
       if (!state.killedWorkerIds.includes(id)) {
         state.killedWorkerIds.push(id);
       }
       // Deduct token usage as a simulated result of termination
-      state.tokenUsage.input = Math.max(0, state.tokenUsage.input - 1500);
-      state.tokenUsage.cost = Math.max(0, parseFloat((state.tokenUsage.cost - 0.0045).toFixed(4)));
+      state.tokenUsage.input = Math.max(0, finiteNumber(state.tokenUsage.input, 0) - 1500);
+      const nextCost = finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
+      state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
     }),
 
     // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
@@ -320,13 +682,65 @@ export const useLayoutStore = create<LayoutStore>()(
     // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
     ...createWorkspaceActions(set, get),
 
-    setUiSize: (size) => set((state) => { state.uiSize = size; }),
-    setSidebarCollapsed: (collapsed) => set((state) => { state.sidebarCollapsed = collapsed; }),
-    setTabModeEnabled: (enabled) => set((state) => { state.tabModeEnabled = enabled; }),
-    setShowSettingsOverlay: (show) => set((state) => { state.showSettingsOverlay = show; }),
-    setSettingsActiveTab: (tab) => set((state) => { state.settingsActiveTab = tab; }),
+    setUiSize: (size) => {
+      const next = parseUiSize(size);
+      set((state) => {
+        state.uiSize = next;
+      });
+      try {
+        localStorage.setItem(UI_SIZE_STORAGE_KEY, next);
+      } catch {
+        /* ignore */
+      }
+    },
+    setShellChromeMode: (mode) => {
+      const next = parseShellChromeMode(mode);
+      set((state) => {
+        state.shellChromeMode = next;
+      });
+      try {
+        localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next);
+      } catch {
+        /* ignore */
+      }
+    },
+    setChatMainSurface: (surface) =>
+      set((state) => {
+        state.chatMainSurface = surface === 'scheduled' ? 'scheduled' : 'chat';
+      }),
+    setSidebarCollapsed: (collapsed) => set((state) => {
+      state.sidebarCollapsed = !!collapsed;
+    }),
+    setTabModeEnabled: (enabled) => {
+      const on = !!enabled;
+      set((state) => {
+        state.tabModeEnabled = on;
+        // 打开合并标签时：把已有右侧堆叠 group 折成同一标签栏（功能做实）
+        if (on) {
+          for (const ws of state.workspaces) {
+            collapseToolColumnToTabs(ws);
+          }
+        }
+      });
+      try {
+        localStorage.setItem(TAB_MODE_STORAGE_KEY, on ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+    },
+    setShowSettingsOverlay: (show) => set((state) => {
+      state.showSettingsOverlay = !!show;
+    }),
+    setSettingsActiveTab: (tab) => set((state) => {
+      // 非法 tab 不写入，避免设置页空白 ghost
+      if (isSettingsTabType(tab)) {
+        state.settingsActiveTab = tab;
+      }
+    }),
     openSettings: (tab) => set((state) => {
-      if (tab) state.settingsActiveTab = tab;
+      if (tab !== undefined) {
+        state.settingsActiveTab = parseSettingsTab(tab, state.settingsActiveTab);
+      }
       state.showSettingsOverlay = true;
     }),
   }))
@@ -381,23 +795,44 @@ export function initLayoutStorePersistence(): () => void {
       const cur = useLayoutStore.getState();
       // 用户已新建会话则不覆盖
       if (cur.sessions.length > 0) return;
+
+      let applied = false;
       useLayoutStore.setState((state) => {
         // 二次检查：recipe 内仍空才写入
         if (state.sessions.length > 0) return;
-        state.sessions = restored.sessions;
-        state.sessionsById = buildSessionsById(restored.sessions);
-        state.activeSessionId = restored.activeSessionId;
-        state.folderOrder = restored.folderOrder;
+
+        const sanitized = sanitizeSessionSeed({
+          sessions: restored.sessions,
+          activeSessionId: restored.activeSessionId,
+          folderOrder: restored.folderOrder,
+        });
+        state.sessions = sanitized.sessions;
+        state.sessionsById = sanitized.sessionsById;
+        state.activeSessionId = sanitized.activeSessionId;
+        state.folderOrder = sanitized.folderOrder.length
+          ? sanitized.folderOrder
+          : state.folderOrder;
+        // 回灌后清 ghost agent 焦点（会话集合已变）
+        state.activeAgentId = null;
+        state.panelAgentId = null;
+        // empty workspace seed：若被外部掏空则重种
+        state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
+        state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
+          state.workspaces,
+          state.activeWorkspaceIndex,
+        );
+        applied = true;
       });
+
+      // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
+      if (!applied) return;
       try {
-        if (useLayoutStore.getState().sessions === restored.sessions
-          || useLayoutStore.getState().activeSessionId === restored.activeSessionId) {
-          persistAllSessions(
-            restored.sessions,
-            restored.activeSessionId,
-            restored.folderOrder,
-          );
-        }
+        const after = useLayoutStore.getState();
+        persistAllSessions(
+          after.sessions,
+          after.activeSessionId,
+          after.folderOrder,
+        );
       } catch {
         /* ignore */
       }

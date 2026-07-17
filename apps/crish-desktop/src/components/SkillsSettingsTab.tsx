@@ -1,8 +1,12 @@
 /**
- * 设置 · 技能：SKILL.md 发现 / 列表 / 预览 / 启用 / 创建 / 斜杠命令
- * Design system v2：settings-page-* / settings-group / settings-feature / segment-pill
+ * 设置 · 技能：单行密度（发现 / 列表 / 预览 / 启用 / 创建）
+ *
+ * Toast 策略（与 useToastQueue 产品禁令一致）：
+ * - 成功：列表状态 / 预览选中 / 表单收起即反馈，绝不 toast
+ * - 扫描、启用、同步、创建、导入、复制、打开路径失败：toast
+ * - 引擎未同步：formatEngineDegradeToast（先说问题）
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
   addExtraSkillDir,
@@ -15,15 +19,24 @@ import {
   revealSkillPath,
   setSkillActivation,
   skillsFsAvailable,
-  skillsToSlashCommands,
   syncSkillsToDaemon,
   type DesktopSkill,
   type SkillActivation,
 } from '../api/skillsApi';
 import { skillStableId } from '../api/skillId';
-import { getWorkspacePath } from '../api/projectStore';
+import {
+  getWorkspacePath,
+  listSettingsScopeProjects,
+  projectFolderLabel,
+} from '../api/projectStore';
 import { parseMarkdownToHtml } from '../api/markdownRender';
 import { clientApi } from '../api/clientApi';
+import { setComposerSeed } from '../api/composerSeed';
+import { emitUiEvent } from '../api/uiEvents';
+import { formatEngineDegradeToast } from '../hooks/useToastQueue';
+import { useLayoutStore } from '../store/layoutStore';
+import { closeSettings } from '../store/settingsUiStore';
+import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -35,14 +48,30 @@ const ACTIVATION_OPTIONS: { id: SkillActivation; label: string }[] = [
   { id: 'disabled', label: '禁用' },
 ];
 
-const SCOPE_LABEL: Record<string, string> = {
-  project: '项目',
-  workspace: '工作区',
-  global: '全局',
+const ACTIVATION_LABEL: Record<SkillActivation, string> = {
+  enabled: '启用',
+  recommended: '推荐',
+  disabled: '禁用',
 };
 
-type ScopeFilter = 'all' | 'project' | 'global';
-type ActFilter = 'all' | SkillActivation;
+/** 列表分组标签：全局固定；项目用具体文件夹名 */
+function scopeGroupLabel(scope: string, projectName: string): string {
+  if (scope === 'global') return '全局';
+  if (scope === 'workspace') return projectName || '工作区';
+  if (scope === 'project') return projectName || '当前项目';
+  return scope;
+}
+
+/** 真·空列表：安装路径提示（密度单行 + title 全文） */
+const EMPTY_INSTALL_HINT =
+  '可放在项目 .conex/skills/、~/.codex/skills/、~/.claude/skills/，或下方添加额外目录';
+/** 筛选后无结果 */
+const EMPTY_FILTER_HINT = '当前筛选无匹配技能，可清除筛选或调整条件';
+
+/** 作用域：all | global | 具体项目绝对路径 */
+type ScopeFilter = string;
+const SCOPE_ALL = 'all';
+const SCOPE_GLOBAL = 'global';
 
 /** 与 skillsApi.normalizeSlashName 对齐（未导出） */
 function skillSlashCmd(name: string): string {
@@ -54,16 +83,19 @@ function skillSlashCmd(name: string): string {
   return `/skill:${slug || name.trim()}`;
 }
 
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [skills, setSkills] = useState<DesktopSkill[]>([]);
-  const [roots, setRoots] = useState<
-    { path: string; scope: string; ok: boolean; count: number; error?: string }[]
-  >([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
-  const [actFilter, setActFilter] = useState<ActFilter>('all');
+  /** all=当前工作区+全局；global=仅全局；其它=具体项目路径 */
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>(SCOPE_ALL);
+  const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
   const [extraDir, setExtraDir] = useState('');
   const [extraDirs, setExtraDirs] = useState<string[]>(() => {
     try {
@@ -76,17 +108,33 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [enableCommands, setEnableCommands] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  /** none | paths（双入口）| manual 手填（少用） */
+  const [createMode, setCreateMode] = useState<'none' | 'paths' | 'manual'>('none');
   const [createName, setCreateName] = useState('');
   const [createDesc, setCreateDesc] = useState('');
   const [createBusy, setCreateBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
-  /** 批量操作二次确认（无 browser alert，靠 toast） */
+  const [discoverBusy, setDiscoverBusy] = useState(false);
+  /** 批量操作二次确认（无 browser alert；按钮 is-active 提示再点一次） */
   const [batchConfirm, setBatchConfirm] = useState<'enabled' | 'disabled' | null>(null);
   /** 自发现：尚未确认导入的技能（需用户同意） */
   const [discoverCandidates, setDiscoverCandidates] = useState<DesktopSkill[] | null>(null);
   const [discoverPick, setDiscoverPick] = useState<Record<string, boolean>>({});
+  /** 低频操作（发现/刷新/全启/全禁）收进 ⋯ 菜单 */
+  const [moreOpen, setMoreOpen] = useState(false);
+  /** 额外目录默认折叠，避免空壳占满侧栏 */
+  const [extraOpen, setExtraOpen] = useState(false);
+
+  const titleId = useId();
+  const listLabelId = useId();
+  const createBoxId = useId();
+  const createNameId = useId();
+  const createDescId = useId();
+  const extraDirId = useId();
+  const discoverTitleId = useId();
+  const searchId = useId();
+  const moreMenuId = useId();
 
   const selected = useMemo(
     () => skills.find((s) => s.id === selectedId) || null,
@@ -104,51 +152,69 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
   const saveKnownIds = (ids: Set<string>) => {
-    localStorage.setItem(knownIdsKey, JSON.stringify([...ids]));
+    try {
+      localStorage.setItem(knownIdsKey, JSON.stringify([...ids]));
+    } catch {
+      /* quota / private mode */
+    }
   };
 
-  const refresh = useCallback(async (opts?: { promptNew?: boolean }) => {
-    setLoading(true);
-    try {
-      setFsOk(await skillsFsAvailable());
-      const res = await discoverSkills({ workspacePath: getWorkspacePath() });
-      setSkills(res.skills);
-      setRoots(res.roots);
-      setExtraDirs(getExtraSkillDirs());
-      invalidateSkillSlashCache();
-      setSelectedId((prev) => {
-        if (prev && res.skills.some((s) => s.id === prev)) return prev;
-        return res.skills[0]?.id ?? null;
-      });
-      // 自发现：仅当明确请求时弹出，需用户同意才批量启用
-      if (opts?.promptNew) {
-        const known = loadKnownIds();
-        const fresh = res.skills.filter((s) => !known.has(s.id));
-        if (fresh.length > 0) {
-          setDiscoverCandidates(fresh);
-          const pick: Record<string, boolean> = {};
-          for (const s of fresh) pick[s.id] = true;
-          setDiscoverPick(pick);
-        } else {
-          onShowToast?.('未发现新技能（已扫描的路径均已登记）');
-        }
-      }
-      // 登记当前全部 id（不含强制启用）
-      const all = loadKnownIds();
-      for (const s of res.skills) all.add(s.id);
-      saveKnownIds(all);
-      try {
-        const settings = await clientApi.getSettings();
-        setEnableCommands(settings?.enableSkillCommands !== false);
-      } catch {
-        /* ignore */
-      }
-    } catch (e) {
-      onShowToast?.(`扫描技能失败：${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setLoading(false);
+  /** 按作用域决定扫描哪个工作区：具体项目路径 or 当前 cwd */
+  const resolveDiscoverWorkspace = useCallback((scope: ScopeFilter): string => {
+    if (scope === SCOPE_ALL || scope === SCOPE_GLOBAL) {
+      return getWorkspacePath() || '';
     }
-  }, [onShowToast]);
+    return scope;
+  }, []);
+
+  const refresh = useCallback(
+    async (opts?: { promptNew?: boolean; scope?: ScopeFilter }) => {
+      const scope = opts?.scope ?? scopeFilter;
+      setLoading(true);
+      try {
+        setFsOk(await skillsFsAvailable());
+        const ws = resolveDiscoverWorkspace(scope);
+        const res = await discoverSkills({ workspacePath: ws });
+        setSkills(res.skills);
+        setExtraDirs(getExtraSkillDirs());
+        invalidateSkillSlashCache();
+        setLoadError(null);
+        setSelectedId((prev) => {
+          if (prev && res.skills.some((s) => s.id === prev)) return prev;
+          return res.skills[0]?.id ?? null;
+        });
+        // 自发现：仅当明确请求时弹出，需用户同意才批量启用
+        if (opts?.promptNew) {
+          const known = loadKnownIds();
+          const fresh = res.skills.filter((s) => !known.has(s.id));
+          if (fresh.length > 0) {
+            setDiscoverCandidates(fresh);
+            const pick: Record<string, boolean> = {};
+            for (const s of fresh) pick[s.id] = true;
+            setDiscoverPick(pick);
+          }
+          // 无新项：列表不变即反馈，不 toast
+        }
+        // 登记当前全部 id（不含强制启用）
+        const all = loadKnownIds();
+        for (const s of res.skills) all.add(s.id);
+        saveKnownIds(all);
+        try {
+          const settings = await clientApi.getSettings();
+          setEnableCommands(settings?.enableSkillCommands !== false);
+        } catch {
+          /* ignore */
+        }
+      } catch (e) {
+        const msg = `扫描技能失败：${errText(e)}`;
+        setLoadError(msg);
+        onShowToast?.(msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onShowToast, resolveDiscoverWorkspace, scopeFilter],
+  );
 
   const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
     if (!discoverCandidates) {
@@ -157,21 +223,40 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     }
     if (mode === 'skip') {
       setDiscoverCandidates(null);
-      onShowToast?.('已跳过导入；技能仍可在列表中单独启用');
+      // 跳过成功：面板关闭即反馈
       return;
     }
     const targets =
       mode === 'all'
         ? discoverCandidates
         : discoverCandidates.filter((s) => discoverPick[s.id]);
-    let n = 0;
-    for (const s of targets) {
-      await setSkillActivation(s, 'enabled');
-      n += 1;
+    if (targets.length === 0) {
+      setDiscoverCandidates(null);
+      return;
     }
-    setDiscoverCandidates(null);
-    await refresh();
-    onShowToast?.(n > 0 ? `已启用 ${n} 个新技能` : '未选择任何技能');
+    setDiscoverBusy(true);
+    let fail = 0;
+    try {
+      for (const s of targets) {
+        try {
+          await setSkillActivation(s, 'enabled');
+        } catch {
+          fail += 1;
+        }
+      }
+      setDiscoverCandidates(null);
+      await refresh();
+      if (fail > 0) {
+        onShowToast?.(
+          fail === targets.length
+            ? `导入失败：全部 ${fail} 个未能启用`
+            : `导入部分失败：${fail}/${targets.length}`,
+        );
+      }
+      // 成功：列表启用态即反馈
+    } finally {
+      setDiscoverBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -185,21 +270,47 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     return () => window.clearTimeout(t);
   }, [batchConfirm]);
 
-  const stats = useMemo(() => {
-    const enabled = skills.filter((s) => s.activation === 'enabled').length;
-    const recommended = skills.filter((s) => s.activation === 'recommended').length;
-    const disabled = skills.filter((s) => s.activation === 'disabled').length;
-    return { total: skills.length, enabled, recommended, disabled };
-  }, [skills]);
+  /** 当前作用域对应的文件夹展示名 */
+  const activeScopeProjectName = useMemo(() => {
+    if (scopeFilter === SCOPE_ALL || scopeFilter === SCOPE_GLOBAL) {
+      const cwd = getWorkspacePath();
+      return cwd ? projectFolderLabel(cwd) : '';
+    }
+    const hit = scopeProjects.find(
+      (p) =>
+        p.path.replace(/\\/g, '/').toLowerCase() ===
+        scopeFilter.replace(/\\/g, '/').toLowerCase(),
+    );
+    return hit?.name || projectFolderLabel(scopeFilter);
+  }, [scopeFilter, scopeProjects]);
 
-  const slashPreview = useMemo(() => skillsToSlashCommands(skills).slice(0, 6), [skills]);
+  const scopeSelectOptions = useMemo(() => {
+    const opts: { value: string; label: string; hint?: string }[] = [
+      { value: SCOPE_ALL, label: '全部', hint: '当前工作区 + 全局' },
+      { value: SCOPE_GLOBAL, label: '全局', hint: '用户目录技能' },
+    ];
+    for (const p of scopeProjects) {
+      opts.push({
+        value: p.path,
+        label: p.name || projectFolderLabel(p.path),
+        hint: p.path,
+      });
+    }
+    return opts;
+  }, [scopeProjects]);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return skills.filter((s) => {
-      if (scopeFilter === 'project' && s.scope !== 'project' && s.scope !== 'workspace') return false;
-      if (scopeFilter === 'global' && s.scope !== 'global') return false;
-      if (actFilter !== 'all' && s.activation !== actFilter) return false;
+      if (scopeFilter === SCOPE_GLOBAL && s.scope !== 'global') return false;
+      // 具体项目：扫描已切到该路径，只保留项目/工作区技能
+      if (
+        scopeFilter !== SCOPE_ALL &&
+        scopeFilter !== SCOPE_GLOBAL &&
+        s.scope === 'global'
+      ) {
+        return false;
+      }
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
@@ -208,10 +319,14 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         s.filePath.toLowerCase().includes(q)
       );
     });
-  }, [skills, filter, scopeFilter, actFilter]);
+  }, [skills, filter, scopeFilter]);
 
   const grouped = useMemo(() => {
-    const order: Array<'project' | 'workspace' | 'global'> = ['project', 'workspace', 'global'];
+    const order: Array<'project' | 'workspace' | 'global'> = [
+      'project',
+      'workspace',
+      'global',
+    ];
     const map = new Map<string, DesktopSkill[]>();
     for (const s of filtered) {
       const list = map.get(s.scope) || [];
@@ -223,27 +338,41 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       .map((k) => ({ scope: k, items: map.get(k)! }));
   }, [filtered]);
 
+  const clearFilters = () => {
+    setFilter('');
+    setScopeFilter(SCOPE_ALL);
+    void refresh({ scope: SCOPE_ALL });
+  };
+
+  // 项目列表与作用域切换时刷新
+  useEffect(() => {
+    const sync = () => setScopeProjects(listSettingsScopeProjects());
+    sync();
+    window.addEventListener('crish-project-changed', sync);
+    return () => window.removeEventListener('crish-project-changed', sync);
+  }, []);
+
+  const handleScopeFilterChange = (value: string) => {
+    setScopeFilter(value);
+    void refresh({ scope: value });
+  };
+
   const setActivation = async (skill: DesktopSkill, activation: SkillActivation) => {
+    if (skill.activation === activation) return;
     setBusyId(skill.id);
     try {
       const r = await setSkillActivation(skill, activation);
-      setSkills((list) => list.map((s) => (s.id === skill.id ? { ...s, activation } : s)));
+      setSkills((list) =>
+        list.map((s) => (s.id === skill.id ? { ...s, activation } : s)),
+      );
       invalidateSkillSlashCache();
-      const base =
-        activation === 'enabled'
-          ? `已启用 ${skill.name}`
-          : activation === 'disabled'
-            ? `已禁用 ${skill.name}`
-            : `已设为推荐 ${skill.name}`;
       if (!r.daemonSynced) {
-        onShowToast?.(
-          `${base}（仅本机，引擎未同步${r.error ? `：${r.error}` : ''}）`,
-        );
-      } else {
-        onShowToast?.(base);
+        // 降级：先说问题；与规则页同源 formatEngineDegradeToast
+        onShowToast?.(formatEngineDegradeToast(r.error));
       }
+      // 成功：列表状态切换即反馈
     } catch (e) {
-      onShowToast?.(`更新失败：${e instanceof Error ? e.message : String(e)}`);
+      onShowToast?.(`更新失败：${errText(e)}`);
     } finally {
       setBusyId(null);
     }
@@ -252,80 +381,100 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const runBatchActivation = async (activation: 'enabled' | 'disabled') => {
     const targets = filtered.filter((s) => s.activation !== activation);
     if (targets.length === 0) {
-      onShowToast?.(
-        activation === 'enabled' ? '当前筛选结果均已启用' : '当前筛选结果均已禁用',
-      );
       setBatchConfirm(null);
       return;
     }
-    // 二次确认：首次点击仅 toast，再次点击才执行（无 browser alert）
+    // 二次确认：首次仅标记 batchConfirm（按钮文案可反映），再次才执行
     if (batchConfirm !== activation) {
       setBatchConfirm(activation);
-      onShowToast?.(
-        activation === 'enabled'
-          ? `将启用当前筛选的 ${targets.length} 个技能，请再次点击「全部启用」确认`
-          : `将禁用当前筛选的 ${targets.length} 个技能，请再次点击「全部禁用」确认`,
-      );
       return;
     }
     setBatchConfirm(null);
     setBatchBusy(true);
-    let ok = 0;
     let fail = 0;
-    const label = activation === 'enabled' ? '启用' : '禁用';
+    const label = ACTIVATION_LABEL[activation];
     try {
-      onShowToast?.(`正在${label} 0/${targets.length}…`);
       for (let i = 0; i < targets.length; i++) {
         const s = targets[i]!;
         try {
           await setSkillActivation(s, activation);
-          ok += 1;
           setSkills((list) =>
             list.map((x) => (x.id === s.id ? { ...x, activation } : x)),
           );
         } catch {
           fail += 1;
         }
-        if ((i + 1) % 2 === 0 || i === targets.length - 1) {
-          onShowToast?.(`正在${label} ${i + 1}/${targets.length}…`);
-        }
       }
       invalidateSkillSlashCache();
-      onShowToast?.(
-        fail === 0
-          ? `已${label} ${ok} 个技能`
-          : `${label}完成：成功 ${ok}，失败 ${fail}`,
-      );
+      if (fail > 0) {
+        onShowToast?.(
+          fail === targets.length
+            ? `${label}失败：全部 ${fail} 个`
+            : `${label}部分失败：${fail}/${targets.length}`,
+        );
+      }
+      // 成功：列表点态即反馈
     } finally {
       setBatchBusy(false);
     }
   };
 
   const handleSyncAll = async () => {
+    if (skills.length === 0) return;
     setSyncBusy(true);
     try {
       const r = await syncSkillsToDaemon(skills);
-      onShowToast?.(
-        r.fail === 0
-          ? `已同步 ${r.ok} 个技能到引擎`
-          : `同步完成：成功 ${r.ok}，失败 ${r.fail}`,
-      );
+      if (r.fail > 0) {
+        onShowToast?.(
+          r.ok === 0
+            ? `同步失败：全部 ${r.fail} 个`
+            : `同步部分失败：${r.fail}/${r.ok + r.fail}`,
+        );
+      }
+      // 全成功：静默
+    } catch (e) {
+      onShowToast?.(`同步失败：${errText(e)}`);
     } finally {
       setSyncBusy(false);
     }
   };
 
-  const handlePickExtra = async () => {
-    const dir = await pickSkillDirectory();
+  const commitExtraDir = (raw: string) => {
+    const dir = raw.trim();
     if (!dir) return;
-    addExtraSkillDir(dir);
-    setExtraDirs(getExtraSkillDirs());
-    void refresh();
-    onShowToast?.(`已添加目录`);
+    try {
+      addExtraSkillDir(dir);
+      setExtraDir('');
+      setExtraDirs(getExtraSkillDirs());
+      void refresh();
+      // 成功：目录出现在列表即反馈
+    } catch (e) {
+      onShowToast?.(`添加目录失败：${errText(e)}`);
+    }
+  };
+
+  const handlePickExtra = async () => {
+    try {
+      const dir = await pickSkillDirectory();
+      if (!dir) return;
+      commitExtraDir(dir);
+    } catch (e) {
+      onShowToast?.(`选择目录失败：${errText(e)}`);
+    }
+  };
+
+  const handleRemoveExtra = (d: string) => {
+    try {
+      removeExtraSkillDir(d);
+      setExtraDirs(getExtraSkillDirs());
+      void refresh();
+    } catch (e) {
+      onShowToast?.(`移除目录失败：${errText(e)}`);
+    }
   };
 
   const handleCreate = async () => {
-    if (!createName.trim()) return;
+    if (!createName.trim() || createBusy) return;
     setCreateBusy(true);
     try {
       const r = await createProjectSkill({
@@ -334,7 +483,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         workspacePath: getWorkspacePath(),
       });
       if (r.ok === false) {
-        onShowToast?.(r.error);
+        onShowToast?.(r.error || '创建技能失败');
         return;
       }
       // createProjectSkill writes frontmatter name as normalizeSlashName(opts.name)
@@ -344,22 +493,52 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         .replace(/[^a-z0-9._-]+/g, '-')
         .replace(/^-+|-+$/g, '');
       const selectId = skillStableId(slug || createName.trim(), r.skillPath);
-      onShowToast?.(`已创建 ${r.skillPath}`);
-      setCreateOpen(false);
+      setCreateMode('none');
       setCreateName('');
       setCreateDesc('');
       await refresh();
       setSelectedId(selectId);
+      // 成功：表单收起 + 列表选中即反馈
+    } catch (e) {
+      onShowToast?.(`创建技能失败：${errText(e)}`);
     } finally {
       setCreateBusy(false);
     }
+  };
+
+  /** 浏览本机技能目录并加入额外目录（导入） */
+  const handleImportBrowse = async () => {
+    try {
+      const dir = await pickSkillDirectory();
+      if (!dir) return;
+      commitExtraDir(dir);
+      setCreateMode('none');
+      setExtraOpen(true);
+      await refresh();
+    } catch (e) {
+      onShowToast?.(`导入失败：${errText(e)}`);
+    }
+  };
+
+  /** 关闭设置，在对话里用 AI 写 SKILL.md */
+  const handleAiCreateSkill = () => {
+    setComposerSeed(
+      [
+        '请帮我创建一个 Crish 技能（正式 SKILL.md）。',
+        '需要：用途说明、适用场景、主要步骤，以及可直接保存的完整 SKILL.md 内容（含 frontmatter）。',
+        '我打算用它来：',
+      ].join('\n'),
+    );
+    setCreateMode('none');
+    closeSettings();
+    emitUiEvent('open-chat');
   };
 
   const copySlashCommand = async (name: string) => {
     const cmd = skillSlashCmd(name);
     try {
       await navigator.clipboard.writeText(cmd);
-      onShowToast?.(`已复制 ${cmd}`);
+      // 成功静默
     } catch {
       onShowToast?.('复制失败');
     }
@@ -373,316 +552,510 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   }, [selected, showRaw]);
 
   const selectedSlash = selected ? skillSlashCmd(selected.name) : '';
+  const anyBusy = loading || syncBusy || batchBusy || createBusy || discoverBusy;
+  const batchEnableCount = filtered.filter((s) => s.activation !== 'enabled').length;
+  const batchDisableCount = filtered.filter((s) => s.activation !== 'disabled').length;
+
+  const renderListEmpty = () => {
+    if (loading && skills.length === 0) {
+      return (
+        <div
+          className="skills-empty-inline"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          加载中…
+        </div>
+      );
+    }
+    if (loading || filtered.length > 0) return null;
+
+    if (skills.length === 0) {
+      return (
+        <div
+          className="skills-empty-inline skills-empty-inline--cta"
+          role="status"
+          aria-live="polite"
+          title={EMPTY_INSTALL_HINT}
+        >
+          <div>暂无技能</div>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={() => setCreateMode('paths')}
+            title="导入本机技能或用 AI 创建"
+            aria-label="新建技能"
+          >
+            <Lucide.Plus size={14} aria-hidden />
+            新建技能
+          </button>
+        </div>
+      );
+    }
+
+    // 有技能但被筛选清空
+    return (
+      <div
+        className="skills-empty-inline"
+        role="status"
+        aria-live="polite"
+        title={EMPTY_FILTER_HINT}
+      >
+        <div>无匹配 · 共 {skills.length} 个技能</div>
+        <div className="skills-discover-actions" style={{ justifyContent: 'flex-start' }}>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            onClick={clearFilters}
+            title={EMPTY_FILTER_HINT}
+            aria-label="清除筛选"
+          >
+            清除筛选
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="skills-tab">
+    <div
+      className="skills-tab"
+      aria-busy={anyBusy || undefined}
+      aria-labelledby={titleId}
+    >
       <header className="settings-page-head">
-        <h2 className="settings-page-title">技能</h2>
-        <p className="settings-page-desc">
-          扫描项目与全局 SKILL.md；预览正文、设置启用，并可注册为 /skill:name
-        </p>
+        <div className="skills-head-row">
+          <h2 className="settings-page-title" id={titleId}>
+            技能
+          </h2>
+          {/* 主焦点：列表启停；顶栏只留一个主操作 + ⋯ */}
+          <div className="skills-tab-actions" role="toolbar" aria-label="技能操作">
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() =>
+                setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
+              }
+              title="导入本机技能或用 AI 创建"
+              aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
+              aria-expanded={createMode !== 'none'}
+              aria-controls={createBoxId}
+            >
+              <Lucide.Plus size={14} aria-hidden />
+              {createMode !== 'none' ? '收起' : '新建'}
+            </button>
+            <div className="skills-more-wrap">
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-expanded={moreOpen}
+                aria-controls={moreMenuId}
+                aria-haspopup="menu"
+                title="更多操作"
+                aria-label="更多操作"
+              >
+                <Lucide.MoreHorizontal size={16} aria-hidden />
+              </button>
+              {moreOpen ? (
+                <div
+                  id={moreMenuId}
+                  className="skills-more-menu"
+                  role="menu"
+                  aria-label="更多技能操作"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="skills-more-item"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void handleSyncAll();
+                    }}
+                    disabled={syncBusy || skills.length === 0}
+                  >
+                    {syncBusy ? '同步中…' : '同步到引擎'}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="skills-more-item"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void refresh({ promptNew: true });
+                    }}
+                    disabled={loading || discoverBusy}
+                  >
+                    发现新技能
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="skills-more-item"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void refresh();
+                    }}
+                    disabled={loading}
+                  >
+                    刷新列表
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="skills-more-item"
+                    onClick={() => {
+                      const next = !enableCommands;
+                      const prev = enableCommands;
+                      setEnableCommands(next);
+                      setMoreOpen(false);
+                      void clientApi
+                        .saveSettingsEx(getWorkspacePath() || '', 'global', {
+                          enableSkillCommands: next,
+                        })
+                        .then((merged) => {
+                          useLayoutStore.getState().setAppSettings(merged);
+                        })
+                        .catch((err) => {
+                          setEnableCommands(prev);
+                          onShowToast?.(`快捷命令保存失败：${errText(err)}`);
+                        })
+                        .finally(() => {
+                          window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+                        });
+                    }}
+                  >
+                    {enableCommands ? '关闭快捷命令' : '开启快捷命令'}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`skills-more-item ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
+                    onClick={() => void runBatchActivation('enabled')}
+                    disabled={batchBusy || filtered.length === 0}
+                  >
+                    {batchConfirm === 'enabled'
+                      ? `再点确认全启（${batchEnableCount}）`
+                      : '全部启用'}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`skills-more-item ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
+                    onClick={() => void runBatchActivation('disabled')}
+                    disabled={batchBusy || filtered.length === 0}
+                  >
+                    {batchConfirm === 'disabled'
+                      ? `再点确认全禁（${batchDisableCount}）`
+                      : '全部禁用'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       </header>
 
-      <div className="settings-feature-actions skills-tab-actions">
-        <button
-          type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
-          onClick={() => void handleSyncAll()}
-          disabled={syncBusy || skills.length === 0}
-          title="将启用/推荐技能同步到引擎上下文"
-        >
-          <Lucide.CloudUpload size={14} />
-          {syncBusy ? '同步中…' : '同步引擎'}
-        </button>
-        <button
-          type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
-          onClick={() => setCreateOpen((v) => !v)}
-          title="在项目 .conex/skills 创建模板"
-        >
-          <Lucide.Plus size={14} />
-          新建
-        </button>
-        <button
-          type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
-          onClick={() => void refresh({ promptNew: true })}
-          disabled={loading}
-          title="扫描路径并提示导入新发现的技能（需你确认）"
-        >
-          <Lucide.Search size={14} />
-          发现新技能
-        </button>
-        <button
-          type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
-          onClick={() => void refresh()}
-          disabled={loading}
-        >
-          <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} />
-          {loading ? '扫描中…' : '刷新'}
-        </button>
-        <button
-          type="button"
-          className={`ui-btn ui-btn-ghost ui-btn-sm ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
-          onClick={() => void runBatchActivation('enabled')}
-          disabled={batchBusy || filtered.length === 0}
-          title="将当前筛选列表中的技能全部启用（需再次点击确认）"
-        >
-          <Lucide.CheckCheck size={14} />
-          {batchBusy && batchConfirm === null ? '处理中…' : '全部启用'}
-        </button>
-        <button
-          type="button"
-          className={`ui-btn ui-btn-ghost ui-btn-sm ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
-          onClick={() => void runBatchActivation('disabled')}
-          disabled={batchBusy || filtered.length === 0}
-          title="将当前筛选列表中的技能全部禁用（需再次点击确认）"
-        >
-          <Lucide.Ban size={14} />
-          全部禁用
-        </button>
-      </div>
+      {loadError ? (
+        <div className="skills-fs-warn" role="alert">
+          <span title={loadError}>{loadError}</span>{' '}
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="重试扫描技能"
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
 
       {discoverCandidates && discoverCandidates.length > 0 ? (
-        <section className="settings-feature" role="dialog" aria-label="导入新技能">
-          <div className="settings-feature-title">
-            发现 {discoverCandidates.length} 个新技能
+        <section
+          className="skills-discover-panel"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby={discoverTitleId}
+          aria-busy={discoverBusy || undefined}
+        >
+          <div className="skills-discover-title" id={discoverTitleId}>
+            发现新技能 {discoverCandidates.length}
           </div>
-          <p className="settings-feature-body">
-            自发现不会自动启用。请选择要导入的技能（启用后可被模型 / 斜杠命令使用）。
-          </p>
-          <div className="skills-discover-list">
-            {discoverCandidates.map((s) => (
-              <label key={s.id} className="skills-discover-item">
-                <input
-                  type="checkbox"
-                  checked={discoverPick[s.id] !== false}
-                  onChange={(e) =>
-                    setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
-                  }
-                />
-                <span>
+          <div className="skills-discover-list" role="group" aria-label="待导入技能">
+            {discoverCandidates.map((s) => {
+              const checked = discoverPick[s.id] !== false;
+              return (
+                <label
+                  key={s.id}
+                  className="skills-discover-item"
+                  title={s.description || s.name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={discoverBusy}
+                    onChange={(e) =>
+                      setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
+                    }
+                    aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
+                  />
                   <span className="skills-discover-name">{s.name}</span>
-                  <span className="skills-discover-desc">{s.description}</span>
-                </span>
-              </label>
-            ))}
+                </label>
+              );
+            })}
           </div>
-          <div className="settings-feature-actions">
+          <div className="skills-discover-actions">
             <button
               type="button"
               className="ui-btn ui-btn-ghost ui-btn-sm"
+              disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('skip')}
+              aria-label="跳过导入"
             >
-              暂不导入
+              跳过
             </button>
             <button
               type="button"
               className="ui-btn ui-btn-ghost ui-btn-sm"
+              disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('all')}
+              aria-label={`全部启用 ${discoverCandidates.length} 个新技能`}
             >
-              全部启用
+              全启
             </button>
             <button
               type="button"
               className="ui-btn ui-btn-secondary ui-btn-sm"
+              disabled={discoverBusy}
+              aria-busy={discoverBusy || undefined}
               onClick={() => void applyDiscoverImport('selected')}
+              aria-label="启用所选新技能"
             >
-              启用所选
+              {discoverBusy ? '…' : '启用所选'}
             </button>
           </div>
         </section>
       ) : null}
 
-      {createOpen ? (
-        <section className="settings-feature" aria-label="新建项目技能">
-          <div className="settings-feature-title">新建项目技能</div>
-          <p className="settings-feature-body">
-            写入当前工作区 <code className="settings-kbd">.conex/skills/&lt;name&gt;/SKILL.md</code>
-          </p>
+      {createMode === 'paths' ? (
+        <section
+          className="skills-create-box"
+          id={createBoxId}
+          aria-label="新建技能"
+        >
+          <div className="settings-create-paths">
+            <button
+              type="button"
+              className="settings-create-path"
+              onClick={() => void handleImportBrowse()}
+            >
+              <span className="settings-create-path-title">浏览导入</span>
+              <span className="settings-create-path-desc">
+                选择本机已有技能目录（如 .codex/skills），导入后直接出现在列表
+              </span>
+            </button>
+            <button
+              type="button"
+              className="settings-create-path"
+              onClick={handleAiCreateSkill}
+            >
+              <span className="settings-create-path-title">AI 创建</span>
+              <span className="settings-create-path-desc">
+                打开对话，由 AI 写完整 SKILL.md（推荐，无需手写）
+              </span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            onClick={() => setCreateMode('manual')}
+          >
+            高级：手填空白技能…
+          </button>
+        </section>
+      ) : null}
+
+      {createMode === 'manual' ? (
+        <section
+          className="skills-create-box"
+          id={createBoxId}
+          aria-label="手填项目技能"
+        >
           <div className="skills-create-row">
             <input
-              className="settings-field-input"
-              placeholder="名称，如 code-review"
+              id={createNameId}
+              className="settings-field-input settings-field-input--sm"
+              placeholder="名称"
               value={createName}
               onChange={(e) => setCreateName(e.target.value)}
+              title="写入 .conex/skills/<name>/SKILL.md"
+              aria-label="技能名称"
+              disabled={createBusy}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && createName.trim()) {
+                  e.preventDefault();
+                  void handleCreate();
+                }
+              }}
             />
             <input
-              className="settings-field-input"
-              placeholder="简短描述（可选）"
+              id={createDescId}
+              className="settings-field-input settings-field-input--sm"
+              placeholder="描述（可选）"
               value={createDesc}
               onChange={(e) => setCreateDesc(e.target.value)}
+              aria-label="技能描述（可选）"
+              disabled={createBusy}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && createName.trim()) {
+                  e.preventDefault();
+                  void handleCreate();
+                }
+              }}
             />
             <button
               type="button"
               className="ui-btn ui-btn-secondary ui-btn-sm"
               disabled={!createName.trim() || createBusy}
+              aria-busy={createBusy || undefined}
               onClick={() => void handleCreate()}
+              aria-label={createBusy ? '创建中' : '创建技能'}
             >
-              {createBusy ? '创建中…' : '创建'}
+              {createBusy ? '…' : '创建'}
+            </button>
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={() => setCreateMode('paths')}
+            >
+              返回
             </button>
           </div>
         </section>
       ) : null}
 
-      <p className="settings-page-desc" style={{ marginTop: 0, maxWidth: 'none' }}>
-        共 <strong>{stats.total}</strong>
-        <span className="skills-stat-sep"> · </span>
-        启用 {stats.enabled}
-        <span className="skills-stat-sep"> · </span>
-        推荐 {stats.recommended}
-        <span className="skills-stat-sep"> · </span>
-        禁用 {stats.disabled}
-      </p>
-
-      <section className="settings-group" aria-label="筛选与命令">
-        <div className="skills-toolbar" style={{ border: 'none', padding: 0, margin: 0 }}>
-          <label className="skills-enable-cmd">
-            <input
-              type="checkbox"
-              className="settings-switch"
-              checked={enableCommands}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setEnableCommands(v);
-                void clientApi
-                  .saveSettingsEx(getWorkspacePath() || '', 'global', {
-                    enableSkillCommands: v,
-                  })
-                  .finally(() => {
-                    // 通知 ChatCard 重载斜杠技能命令（非会话切换）
-                    window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-                  });
-              }}
-            />
-            <span>
-              <span className="skills-enable-title">注册为快捷命令</span>
-              <span className="skills-enable-desc">输入框可用 /skill:name</span>
-            </span>
-          </label>
-          <div className="skills-filters">
-            <div className="ui-segment ui-segment--inline settings-segment-pill">
-              {(
-                [
-                  { id: 'all' as const, label: '全部' },
-                  { id: 'project' as const, label: '项目' },
-                  { id: 'global' as const, label: '全局' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ui-segment-item ${scopeFilter === opt.id ? 'active' : ''}`}
-                  onClick={() => setScopeFilter(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="ui-segment ui-segment--inline settings-segment-pill">
-              {(
-                [
-                  { id: 'all' as const, label: '状态' },
-                  { id: 'enabled' as const, label: '启用' },
-                  { id: 'recommended' as const, label: '推荐' },
-                  { id: 'disabled' as const, label: '禁用' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ui-segment-item ${actFilter === opt.id ? 'active' : ''}`}
-                  onClick={() => setActFilter(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <input
-              className="settings-field-input skills-search"
-              placeholder="搜索技能…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
-        </div>
-      </section>
+      {/* 单行筛选：作用域（全局+具体项目名）+ 搜索；状态筛选已撤，启停在列表本体 */}
+      <div className="skills-toolbar skills-toolbar--focus" role="group" aria-label="筛选">
+        <SettingsSelect
+          className="skills-scope-select"
+          value={scopeFilter}
+          options={scopeSelectOptions}
+          onChange={handleScopeFilterChange}
+          disabled={loading}
+          placeholder="作用域…"
+        />
+        <input
+          id={searchId}
+          className="settings-field-input settings-field-input--sm skills-search"
+          placeholder="搜索技能…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          aria-label="搜索技能"
+        />
+      </div>
 
       {!fsOk ? (
-        <p className="settings-feature-body">
-          当前环境无法读取本机技能目录（需桌面壳）。请在 Tauri 工作台中打开以扫描全局与项目技能。
-        </p>
-      ) : null}
-
-      {enableCommands && slashPreview.length > 0 ? (
-        <div className="skills-slash-preview" style={{ border: 'none', background: 'transparent' }}>
-          <span className="skills-slash-label">快捷命令示例</span>
-          {slashPreview.map((c) => (
-            <code key={c.cmd} className="skills-slash-chip" title={c.desc}>
-              {c.cmd}
-            </code>
-          ))}
-          {skillsToSlashCommands(skills).length > slashPreview.length ? (
-            <span className="skills-slash-more">
-              +{skillsToSlashCommands(skills).length - slashPreview.length}
-            </span>
-          ) : null}
+        <div
+          className="skills-fs-warn"
+          role="status"
+          title="需桌面壳以扫描本机技能目录"
+        >
+          当前环境无法读取本机技能目录
         </div>
       ) : null}
 
       <div className="skills-split">
-        <aside className="skills-rail">
-          <div className="skills-rail-list">
-            {loading && filtered.length === 0 ? (
-              <div className="skills-empty-inline">正在扫描…</div>
-            ) : null}
-            {!loading && filtered.length === 0 ? (
-              <div className="skills-empty-inline">
-                未发现 SKILL.md
-                <div className="skills-empty-hint">
-                  可放在项目 <code>.conex/skills/</code> 或用户{' '}
-                  <code>~/.codex/skills/</code>、<code>~/.claude/skills/</code>
-                </div>
-              </div>
-            ) : null}
-            {grouped.map((g) => (
-              <div key={g.scope} className="skills-rail-group">
+        <aside className="skills-rail" aria-labelledby={listLabelId}>
+          <div
+            id={listLabelId}
+            className="sr-only"
+            style={{
+              position: 'absolute',
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: -1,
+              overflow: 'hidden',
+              clip: 'rect(0,0,0,0)',
+              whiteSpace: 'nowrap',
+              border: 0,
+            }}
+          >
+            技能列表
+          </div>
+          <div
+            className="skills-rail-list"
+            role="listbox"
+            aria-label="技能列表"
+            aria-busy={loading || undefined}
+            aria-activedescendant={selectedId ? `skill-opt-${selectedId}` : undefined}
+          >
+            {renderListEmpty()}
+            {grouped.map((g) => {
+              const groupLabel = scopeGroupLabel(g.scope, activeScopeProjectName);
+              return (
+              <div key={g.scope} className="skills-rail-group" role="group" aria-label={groupLabel}>
                 <div className="skills-rail-group-label">
-                  {SCOPE_LABEL[g.scope] || g.scope}
-                  <span>{g.items.length}</span>
+                  {groupLabel}
+                  <span aria-label={`${g.items.length} 个`}>{g.items.length}</span>
                 </div>
-                {g.items.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={`skills-rail-item ${selectedId === s.id ? 'is-active' : ''} act-${s.activation}`}
-                    onClick={() => setSelectedId(s.id)}
-                  >
-                    <span className="skills-rail-icon">
-                      {s.system ? <Lucide.Package size={16} /> : <Lucide.Sparkles size={16} />}
-                    </span>
-                    <span className="skills-rail-text">
+                {g.items.map((s) => {
+                  const actLabel = ACTIVATION_LABEL[s.activation] || s.activation;
+                  const isSel = selectedId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      id={`skill-opt-${s.id}`}
+                      type="button"
+                      role="option"
+                      aria-selected={isSel}
+                      className={`skills-rail-item skills-rail-item--dense ${isSel ? 'is-active' : ''} act-${s.activation}`}
+                      onClick={() => setSelectedId(s.id)}
+                      title={s.description || s.name}
+                      aria-label={`${s.name}，${groupLabel}，${actLabel}${s.system ? '，系统' : ''}`}
+                    >
+                      <span className="skills-rail-icon" aria-hidden>
+                        {s.system ? (
+                          <Lucide.Package size={12} />
+                        ) : (
+                          <Lucide.Sparkles size={12} />
+                        )}
+                      </span>
                       <span className="skills-rail-name">
                         {s.name}
-                        {s.system ? <em className="skills-sys-badge">系统</em> : null}
+                        {s.system ? (
+                          <em className="skills-sys-badge">系统</em>
+                        ) : null}
                       </span>
-                      <span className="skills-rail-desc">{s.description}</span>
-                    </span>
-                    <span className={`skills-act-dot act-${s.activation}`} title={s.activation} />
-                  </button>
-                ))}
+                      <span
+                        className={`skills-act-dot act-${s.activation}`}
+                        title={actLabel}
+                        aria-hidden
+                      />
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+              );
+            })}
           </div>
 
-          <section className="settings-group" aria-label="额外目录" style={{ padding: '12px 0 0' }}>
-            <div className="settings-group-label">额外目录</div>
-            <div className="settings-list">
+          <details
+            className="skills-extra-details"
+            open={extraOpen || extraDirs.length > 0}
+            onToggle={(e) => setExtraOpen((e.target as HTMLDetailsElement).open)}
+          >
+            <summary className="skills-extra-summary">
+              高级 · 额外目录
+              {extraDirs.length > 0 ? `（${extraDirs.length}）` : ''}
+            </summary>
+            <div className="settings-list" role="list" aria-label="已添加的额外技能目录">
               {extraDirs.map((d) => (
-                <div key={d} className="settings-list-row">
+                <div key={d} className="settings-list-row" role="listitem">
                   <div className="settings-list-copy">
-                    <div className="settings-list-sub settings-list-sub--mono" title={d}>
+                    <div className="settings-list-title settings-path-ellipsis" title={d}>
                       {d}
                     </div>
                   </div>
@@ -690,87 +1063,89 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     <button
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="移除"
-                      aria-label={`移除 ${d}`}
-                      onClick={() => {
-                        removeExtraSkillDir(d);
-                        setExtraDirs(getExtraSkillDirs());
-                        void refresh();
-                      }}
+                      title="移除此目录"
+                      aria-label={`移除目录 ${d}`}
+                      onClick={() => handleRemoveExtra(d)}
                     >
-                      <Lucide.X size={14} />
+                      <Lucide.X size={14} aria-hidden />
                     </button>
                   </div>
                 </div>
               ))}
-              <div className="settings-list-row settings-list-row--stack">
-                <div className="settings-list-stack-actions">
+              <div className="settings-list-row">
+                <div className="skills-extra-add-row">
                   <input
-                    className="settings-field-input"
-                    placeholder="技能目录绝对路径"
+                    id={extraDirId}
+                    className="settings-field-input settings-field-input--sm"
+                    placeholder="绝对路径"
                     value={extraDir}
                     onChange={(e) => setExtraDir(e.target.value)}
+                    title="技能目录绝对路径 · 回车添加"
+                    aria-label="额外技能目录绝对路径"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && extraDir.trim()) {
-                        addExtraSkillDir(extraDir.trim());
-                        setExtraDir('');
-                        setExtraDirs(getExtraSkillDirs());
-                        void refresh();
+                        e.preventDefault();
+                        commitExtraDir(extraDir);
                       }
                     }}
-                    style={{ flex: 1, minWidth: 120 }}
                   />
                   <button
                     type="button"
                     className="ui-btn ui-btn-ghost ui-btn-sm"
                     title="浏览文件夹"
+                    aria-label="浏览文件夹"
                     onClick={() => void handlePickExtra()}
                   >
-                    <Lucide.FolderOpen size={14} />
+                    <Lucide.FolderOpen size={14} aria-hidden />
                   </button>
                   <button
                     type="button"
                     className="ui-btn ui-btn-secondary ui-btn-sm"
                     disabled={!extraDir.trim()}
-                    onClick={() => {
-                      addExtraSkillDir(extraDir.trim());
-                      setExtraDir('');
-                      setExtraDirs(getExtraSkillDirs());
-                      void refresh();
-                    }}
+                    aria-label="添加额外目录"
+                    onClick={() => commitExtraDir(extraDir)}
                   >
                     添加
                   </button>
                 </div>
               </div>
             </div>
-          </section>
+          </details>
         </aside>
 
-        <section className="skills-detail">
+        <section className="skills-detail" aria-label="技能预览">
           {!selected ? (
-            <div className="skills-detail-empty">选择左侧技能以预览 SKILL.md</div>
+            <div className="skills-detail-empty" role="status">
+              {skills.length === 0 ? '新建技能后在此预览' : '选择左侧技能'}
+            </div>
           ) : (
             <>
               <div className="skills-detail-top">
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="skills-detail-name">{selected.name}</div>
-                  <div className="skills-detail-meta">
-                    <span className="skills-scope">{SCOPE_LABEL[selected.scope] || selected.scope}</span>
-                    {selected.system ? <span className="skills-tag">系统</span> : null}
-                    {selected.disableModelInvocation ? (
-                      <span className="skills-tag">禁止模型自动调用</span>
-                    ) : null}
-                    {selected.tags.map((t) => (
-                      <span key={t} className="skills-tag">
-                        {t}
+                <div className="skills-detail-main">
+                  <div className="skills-detail-name-row">
+                    <div className="skills-detail-name" title={selected.name}>
+                      {selected.name}
+                    </div>
+                    <div className="skills-detail-meta">
+                      <span className="skills-scope">
+                        {scopeGroupLabel(selected.scope, activeScopeProjectName)}
                       </span>
-                    ))}
+                      {selected.system ? (
+                        <span className="skills-tag">系统</span>
+                      ) : null}
+                      {selected.disableModelInvocation ? (
+                        <span className="skills-tag" title="禁止模型自动调用">
+                          禁自动
+                        </span>
+                      ) : null}
+                      {selected.tags.slice(0, 2).map((t) => (
+                        <span key={t} className="skills-tag">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div
-                    className="settings-list-stack-actions"
-                    style={{ marginTop: 8, alignItems: 'center' }}
-                  >
+                  <div className="skills-detail-cmd-row">
                     <code className="settings-kbd" title={selectedSlash}>
                       {selectedSlash}
                     </code>
@@ -778,40 +1153,35 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
                       title="复制斜杠命令"
+                      aria-label={`复制命令 ${selectedSlash}`}
                       onClick={() => void copySlashCommand(selected.name)}
                     >
-                      <Lucide.Copy size={14} />
-                      复制命令
+                      <Lucide.Copy size={14} aria-hidden />
                     </button>
-                  </div>
-                  <div
-                    className="settings-list-stack-actions"
-                    style={{ marginTop: 8, alignItems: 'flex-start' }}
-                  >
-                    <div
-                      className="settings-list-sub settings-list-sub--mono"
-                      style={{ flex: 1, minWidth: 0 }}
-                      title={selected.filePath}
-                    >
+                    <span className="skills-path-inline" title={selected.filePath}>
                       {selected.filePath}
-                    </div>
+                    </span>
                     <button
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="在资源管理器中打开"
+                      title="在文件管理器中打开位置"
+                      aria-label="打开技能文件位置"
                       onClick={() => {
                         void revealSkillPath(selected.filePath).then((ok) => {
                           if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
                         });
                       }}
                     >
-                      <Lucide.ExternalLink size={14} />
-                      打开位置
+                      <Lucide.ExternalLink size={14} aria-hidden />
                     </button>
                   </div>
                 </div>
                 <div className="skills-detail-controls">
-                  <div className="skills-activation">
+                  <div
+                    className="skills-activation"
+                    role="group"
+                    aria-label={`${selected.name} 启用状态`}
+                  >
                     <div className="ui-segment ui-segment--inline settings-segment-pill">
                       {ACTIVATION_OPTIONS.map((opt) => (
                         <button
@@ -819,6 +1189,9 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                           type="button"
                           className={`ui-segment-item ${selected.activation === opt.id ? 'active' : ''}`}
                           disabled={busyId === selected.id || batchBusy}
+                          aria-pressed={selected.activation === opt.id}
+                          aria-label={`设为${opt.label}`}
+                          aria-busy={busyId === selected.id || undefined}
                           onClick={() => void setActivation(selected, opt.id)}
                         >
                           {opt.label}
@@ -830,18 +1203,23 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     type="button"
                     className={`ui-btn ui-btn-ghost ui-btn-sm ${showRaw ? 'is-active' : ''}`}
                     onClick={() => setShowRaw((v) => !v)}
+                    aria-pressed={showRaw}
+                    aria-label={showRaw ? '切换为预览' : '切换为原文'}
                   >
-                    {showRaw ? '渲染预览' : '原文'}
+                    {showRaw ? '预览' : '原文'}
                   </button>
                 </div>
               </div>
 
               {showRaw ? (
-                <pre className="skills-raw">{selected.raw}</pre>
+                <pre className="skills-raw" tabIndex={0} aria-label="技能原文">
+                  {selected.raw}
+                </pre>
               ) : (
                 <div
                   className="skills-preview md-rendered msg-assistant-text"
                   dangerouslySetInnerHTML={{ __html: previewHtml }}
+                  aria-label="技能预览"
                 />
               )}
             </>
@@ -849,25 +1227,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         </section>
       </div>
 
-      {roots.length > 0 ? (
-        <details className="skills-roots">
-          <summary>
-            扫描路径（{roots.filter((r) => r.ok && r.count > 0).length}/{roots.length} 有结果，共{' '}
-            {roots.reduce((n, r) => n + (r.count || 0), 0)} 个文件命中）
-          </summary>
-          <ul>
-            {roots.map((r) => (
-              <li key={r.path} className={r.ok ? (r.count > 0 ? 'ok' : 'empty') : 'fail'}>
-                <code>{r.path}</code>
-                <span>
-                  {SCOPE_LABEL[r.scope] || r.scope}
-                  {r.ok ? ` · ${r.count} 个` : ` · ${r.error || '不可读'}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
     </div>
   );
 };

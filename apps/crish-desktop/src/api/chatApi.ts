@@ -10,6 +10,7 @@ import {
   shouldUseMockStream,
   streamMockAssistantResponse,
 } from './chatApi.demo';
+import type { FileDiff, MessageToolApprovalMeta } from '../store/types';
 
 // Demo mock session DB helpers — stable public names re-exported from demo module
 export {
@@ -49,15 +50,22 @@ export type StreamRequestOptions = {
 export interface StreamCallbacks {
   onThought: (thought: string) => void;
   onToolStart: (toolId: string, name: string, args: string, explanation: string) => void;
-  onToolSuccess: (toolId: string, output: string, diffs?: any[]) => void;
+  onToolSuccess: (toolId: string, output: string, diffs?: FileDiff[]) => void;
   onToolError: (toolId: string, error: string) => void;
   onChunk: (chunk: string) => void;
   onComplete: () => void;
   /**
    * 运行级错误（网络/配置/中断等）。禁止写入助手正文，由 UI toast 展示。
    */
-  onRunError?: (message: string, kind?: string) => void;
-  onToolPendingApproval?: (toolId: string, name: string, args: string, explanation: string) => void;
+  /** kind=分类；detail=诊断第二行（控制台/横幅） */
+  onRunError?: (message: string, kind?: string, detail?: string) => void;
+  onToolPendingApproval?: (
+    toolId: string,
+    name: string,
+    args: string,
+    explanation: string,
+    approvalMeta?: MessageToolApprovalMeta,
+  ) => void;
   onTerminalLine?: (line: string) => void;
   /** H3：暴露 runId 以便拉取 snapshot usage */
   onRunMeta?: (meta: { runId: string }) => void;

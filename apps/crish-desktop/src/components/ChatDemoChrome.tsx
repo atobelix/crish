@@ -3,7 +3,6 @@ import * as Lucide from 'lucide-react';
 import { isDemoMode } from '../api/appMode';
 
 interface ChatDemoChromeProps {
-  onShowToast: (message: string) => void;
   handleGlobalTabClick: (cardId: string) => void;
 }
 
@@ -12,11 +11,11 @@ interface ChatDemoChromeProps {
  * Formal product mode never mounts this (caller gates with isDemoMode()).
  */
 export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
-  onShowToast,
   handleGlobalTabClick,
 }) => {
   const [prVisible] = useState(true);
-  const [activePill, setActivePill] = useState<string | null>('goal');
+  /* 默认收起目标抽屉，避免演示态 footer 被 140px 卡片顶掉消息区 */
+  const [activePill, setActivePill] = useState<string | null>(null);
   const [goalPaused, setGoalPaused] = useState(false);
   const [goalEditMode, setGoalEditMode] = useState(false);
   const [goalText, setGoalText] = useState(
@@ -71,7 +70,7 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
         <div className="context-details-drawer">
           <div
             className="drawer-expand-content goal-drawer-content"
-            style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px' }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
@@ -83,9 +82,7 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                   type="button"
                   className="ui-btn ui-btn-secondary ui-btn-sm"
                   onClick={() => {
-                    const next = !goalPaused;
-                    setGoalPaused(next);
-                    onShowToast(next ? '目标已暂停' : '目标已继续');
+                    setGoalPaused((p) => !p);
                   }}
                 >
                   {goalPaused ? <Lucide.Play size={14} /> : <Lucide.Pause size={14} />}
@@ -98,7 +95,6 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                   onClick={() => {
                     setGoalActive(false);
                     setActivePill(null);
-                    onShowToast('目标已停止');
                   }}
                 >
                   <Lucide.Square size={14} />
@@ -132,7 +128,6 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                     className="ui-btn ui-btn-primary ui-btn-sm"
                     onClick={() => {
                       setGoalEditMode(false);
-                      onShowToast('目标已更新');
                     }}
                   >
                     保存

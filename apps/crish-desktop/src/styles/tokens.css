@@ -3,24 +3,44 @@
 :root,
 html[data-theme="default"],
 html[data-theme="light"] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f7f7f7;
-  --bg-tertiary: #f0f0f0;
-  --bg-hover: #f5f5f5;
+  /*
+   * 浅色两档底：≈2% 灰（主面）/ ≈4.5% 灰（侧栏·次面）
+   * 文字三档：正黑 / ≈90% 黑 / ≈50% 灰（次要）
+   * 有底色包裹的正文必须用 --text-primary（正黑）保对比
+   */
+  --bg-primary: #fafafa;
+  --bg-secondary: #f3f3f3;
+  --bg-tertiary: #f3f3f3;
+  --bg-hover: #efefef;
   --bg-active: #ebebeb;
-  --bg-card: #ffffff;
-  --bg-elevated: #ffffff;
-  --text-primary: #141414;
-  --text-secondary: #4a4a4a;
-  --text-tertiary: #737373;
-  /* 浅色描边：浅灰，不用黑线 */
-  --border-color: #e5e5e5;
-  --border-subtle: #efefef;
+  --bg-card: #fafafa;
+  --bg-elevated: #fafafa;
+  --text-primary: #000000;
+  --text-secondary: #1a1a1a;
+  --text-tertiary: #808080;
+  /*
+   * 描边契约（ChatGPT / Kimi 抽象法则）：
+   * - 控件默认无描边，用浅底区分
+   * - 需要分隔时用极浅 hairline，禁止近黑实线
+   */
+  --border-color: #ececec;
+  --border-subtle: #f0f0f0;
+  --hairline-width: 1px;
+  --hairline: var(--border-subtle);
+  --hairline-strong: #ebebeb;
+  /* 软 pill / 次按钮共用 */
+  --control-soft-bg: color-mix(in srgb, var(--text-primary) 4.5%, var(--bg-primary));
+  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 7.5%, var(--bg-primary));
+  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary));
+  /* focus：几乎不可见，仅 1px 极淡描边变化 */
+  --focus-ring-color: transparent;
+  --focus-ring: none;
+  --focus-ring-strong: none;
 
-  --accent-color: #222222;
-  --accent-light: #f5f5f5;
+  --accent-color: #000000;
+  --accent-light: #f3f3f3;
   --accent-hover: #000000;
-  --accent-soft: #ebebeb;
+  --accent-soft: #efefef;
 
   --accent-orange: #f59e0b;
   --accent-orange-light: #fffbeb;
@@ -37,11 +57,11 @@ html[data-theme="light"] {
   --accent-violet: #666666;
   --accent-violet-light: #f5f5f5;
 
-  /* 白天跟随应用浅色，避免终端永远是黑底 */
+  /* 白天跟随应用浅色，避免终端永远是黑底；描边走 hairline 契约 */
   --terminal-bg: var(--bg-primary);
   --terminal-fg: var(--text-primary);
   --terminal-muted: var(--text-tertiary);
-  --terminal-border: var(--border-subtle);
+  --terminal-border: var(--hairline);
   --terminal-cmd: var(--text-secondary);
   --terminal-bar-fill: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
 
@@ -81,25 +101,103 @@ html[data-theme="light"] {
   --font-size-lg: 15px;
   --font-size-xl: 17px;
 
-  /* 壳层略抬对比：标签/导航可用 medium，避免「灰而浮」 */
-  --font-weight-normal: 400;
+  /*
+   * 字重阶梯（统一，禁止散落 400/600 字面量）：
+   * - code 400：等宽代码/diff/终端（500 在 mono 上会显「加粗」）
+   * - normal/medium 500：界面正文与标签
+   * - semibold/content 600：标题与强调
+   */
+  --font-weight-code: 400;
+  --font-weight-normal: 500;
   --font-weight-medium: 500;
-  --font-weight-semibold: 500;
+  --font-weight-semibold: 600;
   --font-weight-content: 600;
 
-  /* 图标与控件热区 */
+  /* 图标与控件热区
+   * xs = 角标/chip；sm = 工具条次级；默认 = 主按钮/输入；lg = 强调 CTA */
   --icon-size: 16px;
   --icon-size-sm: 14px;
   --icon-size-lg: 18px;
   --control-height: 32px;
   --control-height-sm: 28px;
+  --control-height-xs: 24px;
+  --control-height-lg: 36px;
   --control-pad-x: 10px;
+  --control-pad-x-sm: 8px;
+  --control-pad-y: 6px;
+
+  /*
+   * 密度间距阶梯（4 的半级）：列表 gap、内边距、图标旁文字间距共用
+   * ui-size gear 会整体缩放，组件勿再写 5/7/9 等零散 px
+   */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+
+  /*
+   * 行高：中文 UI 略抬 body，避免汉字行贴；控件/标签用 tight|ui
+   * shell body 可迁到 --line-height-body；markdown 用 relaxed
+   */
+  --line-height-tight: 1.25;
+  --line-height-ui: 1.35;
+  --line-height-body: 1.55;
+  --line-height-relaxed: 1.65;
+
+  /*
+   * 面板壳层密度：card-header / files-bar / 右侧工具表面共用
+   * 改此处即可统一顶栏高度与内边距，避免 shell/panels 各写一套 magic number
+   */
+  --card-header-min-height: 36px;
+  --card-header-pad-y: 4px;
+  --card-header-pad-x: 8px;
+  /* card-header 左/右区间距；窄栏时避免 tabs 与动作钮贴死 */
+  --card-header-gap: 6px;
+  --panel-pad-x: 12px;
+  --panel-pad-y: 10px;
+  --panel-gap: 8px;
+  --panel-sec-gap: 10px;
+  --tab-gap: 6px;
+  --tab-pad-x: 16px;
+  --tab-tool-pad-left: 12px;
+  --tab-tool-pad-right: 16px;
+  /* 列表行高：侧栏会话 / settings-list / agent 卡；对齐 control-height 密度 */
+  --row-height: var(--control-height);
+  --row-height-sm: var(--control-height-sm);
+  /* 变更面板：侧栏文件列表宽；@container 窄档可改用 md */
+  --diff-sidebar-width: 148px;
+  --diff-sidebar-width-md: 120px;
+  --diff-file-chip-min: 96px;
+  --diff-file-chip-min-xs: 80px;
+  /* 横向 tabs / 文件 chips 滚动条厚度 */
+  --panel-h-scrollbar-size: 3px;
+
+  /*
+   * 主对话居中列：消息 / 空态 / footer 子项 / 审批条共用
+   * 宽屏可在 media 里抬到 --chat-col-max-wide
+   */
+  --chat-col-max: 680px;
+  --chat-col-max-wide: 720px;
+  /* footer 顶缘淡入：与 .chat-footer / .agent-card-composer 同渐变 */
+  --chat-footer-fade: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-primary) 55%, transparent) 42%,
+    color-mix(in srgb, var(--bg-primary) 92%, transparent) 78%,
+    var(--bg-primary) 100%
+  );
 
   color-scheme: light;
 }
 
 /* 深色：炭灰而非死黑；secondary 不低于 primary，避免侧栏「黑洞」
- * 仅 CSS 变量赋值，组件覆盖见 theme-dark.css */
+ * 仅 CSS 变量赋值，组件覆盖见 theme-dark.css
+ * hairline 契约（与 light 同语义，供 chat / shell / settings 共用）：
+ *   --hairline       = 结构分隔（card-header 底、settings-list 行、filter-bar）
+ *   --hairline-strong = 可交互描边（输入壳、浮层菜单、用户气泡）
+ * 禁止组件再写独立 color-mix 百分比描边 */
 html[data-theme="dark"] {
   --bg-primary: #1e1e1e;
   --bg-secondary: #262626;
@@ -111,9 +209,18 @@ html[data-theme="dark"] {
   --text-primary: #f2f2f2;
   --text-secondary: #c4c4c4;
   --text-tertiary: #9a9a9a;
-  /* 描边用中灰，禁止近黑/纯黑描边 */
-  --border-color: #4a4a4a;
-  --border-subtle: #3a3a3a;
+  /* 描边用中灰，禁止近黑/纯黑描边；subtle 略抬以保证 #1e1e1e 上 hairline 可辨 */
+  --border-color: #3f3f3f;
+  --border-subtle: #363636;
+  --hairline-width: 1px;
+  --hairline: var(--border-subtle);
+  --hairline-strong: #3a3a3a;
+  --control-soft-bg: color-mix(in srgb, var(--text-primary) 8%, var(--bg-primary));
+  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
+  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 16%, var(--bg-primary));
+  --focus-ring-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --focus-ring: 0 0 0 2px var(--focus-ring-color);
+  --focus-ring-strong: 0 0 0 2px color-mix(in srgb, var(--text-primary) 22%, transparent);
   --accent-color: #ececec;
   --accent-light: #333333;
   --accent-hover: #ffffff;
@@ -139,9 +246,10 @@ html[data-theme="dark"] {
   --terminal-bg: #1a1a1a;
   --terminal-fg: #d4d4d4;
   --terminal-muted: #7a7a7a;
-  --terminal-border: rgba(255, 255, 255, 0.08);
+  /* 终端描边对齐 hairline 契约，勿再写独立 rgba 百分比 */
+  --terminal-border: var(--hairline);
   --terminal-cmd: #b0b0b0;
-  --terminal-bar-fill: rgba(255, 255, 255, 0.04);
+  --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
   color-scheme: dark;
 }
 
@@ -156,7 +264,7 @@ html[data-theme="dark"] {
   --item-font-size: 13px;
   --header-height: 40px;
 
-  /* 紧凑档：底 13，元信息不低于 11 */
+  /* 紧凑档：底 13，元信息不低于 11；中文仍保持 body 行高不压扁 */
   --font-size-xxs: 11px;
   --font-size-xs: 12px;
   --font-size-sm: 13px;
@@ -166,9 +274,46 @@ html[data-theme="dark"] {
   --font-size-xl: 16px;
 
   --icon-size: 15px;
-  --icon-size-sm: 14px;
+  --icon-size-sm: 13px;
+  --icon-size-lg: 17px;
   --control-height: 30px;
   --control-height-sm: 26px;
+  --control-height-xs: 22px;
+  --control-height-lg: 34px;
+  --control-pad-x: 8px;
+  --control-pad-x-sm: 6px;
+  --control-pad-y: 5px;
+
+  --space-1: 3px;
+  --space-2: 5px;
+  --space-3: 6px;
+  --space-4: 10px;
+  --space-5: 14px;
+  --space-6: 18px;
+
+  --line-height-tight: 1.22;
+  --line-height-ui: 1.32;
+  --line-height-body: 1.5;
+  --line-height-relaxed: 1.6;
+
+  --card-header-min-height: 32px;
+  --card-header-pad-y: 3px;
+  --card-header-pad-x: 6px;
+  --card-header-gap: 4px;
+  --panel-pad-x: 10px;
+  --panel-pad-y: 8px;
+  --panel-gap: 6px;
+  --panel-sec-gap: 8px;
+  --tab-gap: 2px;
+  --tab-pad-x: 6px;
+  --tab-tool-pad-left: 5px;
+  --tab-tool-pad-right: 6px;
+  --row-height: var(--control-height);
+  --row-height-sm: var(--control-height-sm);
+  --diff-sidebar-width: 132px;
+  --diff-sidebar-width-md: 108px;
+  --diff-file-chip-min: 88px;
+  --diff-file-chip-min-xs: 72px;
 }
 
 [data-ui-size="medium"] {
@@ -190,8 +335,45 @@ html[data-theme="dark"] {
 
   --icon-size: 16px;
   --icon-size-sm: 14px;
+  --icon-size-lg: 18px;
   --control-height: 32px;
   --control-height-sm: 28px;
+  --control-height-xs: 24px;
+  --control-height-lg: 36px;
+  --control-pad-x: 10px;
+  --control-pad-x-sm: 8px;
+  --control-pad-y: 6px;
+
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+
+  --line-height-tight: 1.25;
+  --line-height-ui: 1.35;
+  --line-height-body: 1.55;
+  --line-height-relaxed: 1.65;
+
+  --card-header-min-height: 36px;
+  --card-header-pad-y: 4px;
+  --card-header-pad-x: 8px;
+  --card-header-gap: 6px;
+  --panel-pad-x: 12px;
+  --panel-pad-y: 10px;
+  --panel-gap: 8px;
+  --panel-sec-gap: 10px;
+  --tab-gap: 3px;
+  --tab-pad-x: 8px;
+  --tab-tool-pad-left: 6px;
+  --tab-tool-pad-right: 8px;
+  --row-height: var(--control-height);
+  --row-height-sm: var(--control-height-sm);
+  --diff-sidebar-width: 148px;
+  --diff-sidebar-width-md: 120px;
+  --diff-file-chip-min: 96px;
+  --diff-file-chip-min-xs: 80px;
 }
 
 [data-ui-size="large"] {
@@ -203,6 +385,7 @@ html[data-theme="dark"] {
   --item-font-size: var(--font-size-lg);
   --header-height: 48px;
 
+  /* 大档：中文可读性优先，body 行高再抬半档 */
   --font-size-xxs: 12px;
   --font-size-xs: 13px;
   --font-size-sm: 14px;
@@ -213,6 +396,43 @@ html[data-theme="dark"] {
 
   --icon-size: 17px;
   --icon-size-sm: 15px;
+  --icon-size-lg: 20px;
   --control-height: 34px;
   --control-height-sm: 30px;
+  --control-height-xs: 26px;
+  --control-height-lg: 40px;
+  --control-pad-x: 12px;
+  --control-pad-x-sm: 10px;
+  --control-pad-y: 7px;
+
+  --space-1: 4px;
+  --space-2: 7px;
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-5: 18px;
+  --space-6: 24px;
+
+  --line-height-tight: 1.28;
+  --line-height-ui: 1.4;
+  --line-height-body: 1.6;
+  --line-height-relaxed: 1.7;
+
+  --card-header-min-height: 40px;
+  --card-header-pad-y: 5px;
+  --card-header-pad-x: 10px;
+  --card-header-gap: 8px;
+  --panel-pad-x: 14px;
+  --panel-pad-y: 12px;
+  --panel-gap: 10px;
+  --panel-sec-gap: 12px;
+  --tab-gap: 4px;
+  --tab-pad-x: 10px;
+  --tab-tool-pad-left: 8px;
+  --tab-tool-pad-right: 10px;
+  --row-height: var(--control-height);
+  --row-height-sm: var(--control-height-sm);
+  --diff-sidebar-width: 160px;
+  --diff-sidebar-width-md: 128px;
+  --diff-file-chip-min: 104px;
+  --diff-file-chip-min-xs: 88px;
 }
