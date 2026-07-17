@@ -71,6 +71,31 @@ export function fsyncDirectoryPath(path: string, mode: "strict" | "best-effort" 
 }
 
 /**
+ * 对目录路径执行异步 fsync（目录 fd）
+ *
+ * @param path 目录路径
+ * @param mode 持久化策略：
+ *   - "strict"（默认）：遇到不支持目录 fsync 的文件系统时抛出异常
+ *   - "best-effort"：遇到已知的不支持情况（tmpfs、overlayfs 等）静默跳过
+ */
+export async function fsyncDirectoryPathAsync(path: string, mode: "strict" | "best-effort" = "strict"): Promise<void> {
+  let handle;
+  try {
+    handle = await openAsync(path, "r");
+    await handle.sync();
+  } catch (error) {
+    if (mode === "best-effort" && isExpectedDirectoryFsyncFailure(error)) {
+      return;
+    }
+    throw error;
+  } finally {
+    if (handle !== undefined) {
+      await handle.close();
+    }
+  }
+}
+
+/**
  * 判断目录 fsync 失败是否为预期行为
  *
  * 某些文件系统（tmpfs、overlayfs 等）不支持目录 fsync，
@@ -84,3 +109,4 @@ export function isExpectedDirectoryFsyncFailure(error: unknown): boolean {
   // EINVAL: 某些网络文件系统
   return code === "EPERM" || code === "EROFS" || code === "EINVAL";
 }
+

@@ -5,7 +5,13 @@
  */
 
 export { isRecord, isPromiseLike, nonEmptyString, isNodeError } from "./guards";
-export { clone, compactJsonObject, isJsonObject, isJsonValue, stripNonSerializable } from "./object";
+export { clone, deepFreeze, compactJsonObject, isJsonObject, isJsonValue, stripNonSerializable } from "./object";
 export { errorMessage } from "./error";
-export { fsyncPath, fsyncPathAsync, fsyncDirectoryPath, isExpectedDirectoryFsyncFailure } from "./fsync";
+export { fsyncPath, fsyncPathAsync, fsyncDirectoryPath, fsyncDirectoryPathAsync, isExpectedDirectoryFsyncFailure } from "./fsync";
 export { combineAbortSignals } from "./abort-utils";
+export { RingBuffer } from "./ring-buffer";
+export { BoundedMap, LruMap } from "./bounded-map";
+export { AsyncMutex, AsyncSemaphore } from "./async-mutex";
+export { JsonlAppendBatcher } from "./jsonl-append-batcher";
+export type { JsonlAppendBatcherOptions } from "./jsonl-append-batcher";
+export { deepEqual, shallowEqual } from "./deep-equal";

@@ -22,6 +22,31 @@ export function clone<T>(value: T): T {
 }
 
 /**
+ * 递归冻结对象：返回同一个引用，但其自身及所有嵌套对象/数组都被 Object.freeze。
+ *
+ * 用于不可变 store 模式：写方法在 `this.state = nextState` 前调用 deepFreeze，
+ * 读方法直接返回 frozen 引用（O(1)），调用方无法 mutate（Object.freeze 保证），
+ * 消除 N×(全 state clone) 的防御性深拷贝开销。
+ *
+ * - 原始类型与 null 直接返回
+ * - 已 frozen 的对象直接返回（幂等，避免重复遍历）
+ * - 数组先冻结每个元素再冻结数组本身
+ * - 普通对象先冻结每个属性值再冻结对象本身
+ */
+export function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (Object.isFrozen(value)) return value;
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreeze(item);
+  } else {
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
+
+/**
  * 递归剥离对象中的非 JSON 安全属性（函数、Symbol、undefined 等），
  * 返回一个纯数据对象，可安全通过 structuredClone / postMessage / WebSocket 传输。
  *
