@@ -3796,6 +3796,7 @@
 
 
 /* 右侧总览：极简，无重复标题、无空上下文、无神秘图标条 */
+/* [Migrated to OverviewCard.module.css]
 .overview-card {
   flex: 1;
   height: 100%;
@@ -3856,9 +3857,8 @@
   margin: 0;
 }
 .overview-head {
-  display: none; /* 标签已写「总览」，体内不再重复标题 */
+  display: none; 
 }
-/* 总览分区：少线；用间距分块而非层层 hairline */
 .overview-sec {
   flex-shrink: 0;
   min-height: 0;
@@ -3918,7 +3918,6 @@
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
-/* 侧栏入口：弱文案，不做成按钮块 */
 .overview-agent-entry {
   flex-shrink: 0;
   border: none;
@@ -3964,7 +3963,6 @@
   border-radius: 5px;
   background: color-mix(in srgb, var(--accent-red) 8%, transparent);
 }
-/* 展开区：工具栏/链接固定，长列表（如 90+ 文件）在 list 内滚动 */
 .overview-sec-b {
   min-height: 0;
   padding: 0 2px 8px 20px;
@@ -4020,7 +4018,6 @@
   opacity: 0.55;
   cursor: default;
 }
-/* 单行：名称 + 状态（横排，名称省略） */
 .overview-item-main {
   flex: 1;
   min-width: 0;
@@ -4040,7 +4037,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 行尾状态文案默认弱化；文件列表可再藏（见 --agents 外） */
 .overview-item-main em {
   font-style: normal;
   font-size: var(--font-size-xs);
@@ -4051,14 +4047,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 改动文件：不显示「修改/删除」等急于表达的状态字，角标已够 */
 .overview-list:not(.overview-list--agents) .overview-item-main em {
   display: none;
 }
 .overview-item-btn--agent .overview-item-main em {
   max-width: 4.5em;
 }
-/* Agent 列表：强制单行高度，描述不换行撑块 */
 .overview-list--agents .overview-item-btn--agent {
   min-height: 28px;
   max-height: 28px;
@@ -4066,7 +4060,6 @@
 .overview-list--agents .overview-item-name {
   white-space: nowrap;
 }
-/* 目标进度 / 当前工具：单行，无分区壳；高度对齐 control-sm */
 .overview-live-row {
   display: flex;
   align-items: center;
@@ -4223,7 +4216,6 @@ button.overview-live-row:hover {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-/* chip 仍被任务面板等复用 */
 .overview-chip {
   border: 1px solid var(--border-subtle);
   background: transparent;
