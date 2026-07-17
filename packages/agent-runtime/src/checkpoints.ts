@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
 import {
@@ -120,7 +120,7 @@ export async function createWorkspaceCheckpoint(request: CreateWorkspaceCheckpoi
   };
 
   await mkdir(dirname(manifestPath), { recursive: true });
-  await writeFile(manifestPath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
+  await atomicWriteFile(manifestPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
   return checkpoint;
 }
 
@@ -153,7 +153,7 @@ export async function restoreWorkspaceCheckpoint(request: RestoreWorkspaceCheckp
     assertInside(archiveRoot, snapshotPath, "checkpoint file");
     const bytes = await readFile(snapshotPath);
     await mkdir(dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, bytes);
+    await atomicWriteFile(targetPath, bytes);
     restored.push(file.path);
   }
 
@@ -245,4 +245,14 @@ function normalizeForCompare(path: string): string {
 
 function safeSegment(input: string): string {
   return input.replace(/[^a-z0-9_.-]/gi, "_");
+}
+
+/**
+ * 原子覆写：先写 tmp 文件再 rename，避免 mid-write 崩溃留下截断内容。
+ * tmp 文件名含 pid + 时间戳 + UUID，避免并发碰撞；与目标同目录保证 rename 原子。
+ */
+async function atomicWriteFile(targetPath: string, data: string | Buffer): Promise<void> {
+  const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  await writeFile(tmpPath, data);
+  await rename(tmpPath, targetPath);
 }

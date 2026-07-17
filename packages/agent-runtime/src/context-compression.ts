@@ -419,12 +419,14 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEst
   }
 
   if (!usageInfo) {
-    const tokens = messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
+    let tokens = 0;
+    for (let i = 0; i < messages.length; i++) tokens += estimateMessageTokens(messages[i]!);
     return { tokens, usageTokens: 0, trailingTokens: tokens, lastUsageMessageIndex: null };
   }
 
   const usageTokens = usageInfo.usage.totalTokens ?? 0;
-  const trailingTokens = messages.slice(usageInfo.index + 1).reduce((sum, message) => sum + estimateMessageTokens(message), 0);
+  let trailingTokens = 0;
+  for (let i = usageInfo.index + 1; i < messages.length; i++) trailingTokens += estimateMessageTokens(messages[i]!);
   return {
     tokens: usageTokens + trailingTokens,
     usageTokens,
@@ -442,15 +444,24 @@ function findLatestCompressionSummary(messages: AgentMessage[]): { index: number
   return { index: -1 };
 }
 
-function messageCreatedAtMs(message: AgentMessage): number {
-  const value = Date.parse(message.createdAt);
-  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-}
+// 使用 WeakMap 垃圾回收亲和机制，针对不可变的消息与内容 Block 进行 Token / 字符数缓存
+const messageTokenCache = new WeakMap<AgentMessage, number>();
+const blockCharCache = new WeakMap<object, number>();
 
 /** 单条消息的启发式 token 估算（约 chars/4，非模型真实 tokenizer）。 */
 export function estimateMessageTokens(message: AgentMessage): number {
+  if (messageTokenCache.has(message)) {
+    return messageTokenCache.get(message)!;
+  }
   const chars = message.blocks.reduce((sum, block) => sum + estimateBlockChars(block), 0);
-  return Math.ceil(chars / 4);
+  const tokens = Math.ceil(chars / 4);
+  messageTokenCache.set(message, tokens);
+  return tokens;
+}
+
+function messageCreatedAtMs(message: AgentMessage): number {
+  const value = Date.parse(message.createdAt);
+  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
 export function serializeMessagesForSummary(messages: AgentMessage[], options: SerializeContextOptions = {}): string {
@@ -463,11 +474,14 @@ export function serializeMessagesForSummary(messages: AgentMessage[], options: S
     }
 
     if (message.role === "assistant") {
-      const text = textFromBlocks(message.blocks);
-      const thought = options.includeThought ? thoughtFromBlocks(message.blocks) : "";
-      const toolCalls = message.blocks
-        .filter((block): block is ToolCallBlock => block.type === "tool-call")
-        .map((block) => `${block.toolName}(${JSON.stringify(block.input)})`);
+      let text = "";
+      let thought = "";
+      const toolCalls: string[] = [];
+      for (const block of message.blocks) {
+        if (block.type === "text") text += block.text;
+        else if (block.type === "thought") { if (options.includeThought) thought += block.text; }
+        else if (block.type === "tool-call") toolCalls.push(`${block.toolName}(${JSON.stringify(block.input)})`);
+      }
       if (thought.trim()) parts.push(`[Assistant thought]: ${thought}`);
       if (text.trim()) parts.push(`[Assistant]: ${text}`);
       if (toolCalls.length > 0) parts.push(`[Assistant tool calls]: ${toolCalls.join("; ")}`);
@@ -515,9 +529,12 @@ export function extractRecentTerminalCommandFacts(messages: AgentMessage[], limi
 
   const successful: string[] = [];
   const failed: string[] = [];
-  for (const message of [...messages].reverse()) {
+  for (let mi = messages.length - 1; mi >= 0; mi--) {
+    const message = messages[mi]!;
     if (message.role !== "tool") continue;
-    for (const block of [...message.blocks].reverse()) {
+    const blocks = message.blocks;
+    for (let bi = blocks.length - 1; bi >= 0; bi--) {
+      const block = blocks[bi]!;
       if (block.type !== "tool-result") continue;
       const call = calls.get(block.toolCallId);
       if (!call || !isTerminalToolName(block.toolName)) continue;
@@ -585,9 +602,19 @@ function includeLatestUserMessage(messages: AgentMessage[], firstKeptIndex: numb
 }
 
 function estimateBlockChars(block: AgentMessageBlock): number {
-  if (block.type === "text" || block.type === "thought") return block.text.length;
-  if (block.type === "tool-call") return block.toolName.length + JSON.stringify(block.input).length;
-  return block.toolName.length + stringifyToolOutput(block.output).length;
+  if (blockCharCache.has(block)) {
+    return blockCharCache.get(block)!;
+  }
+  let size = 0;
+  if (block.type === "text" || block.type === "thought") {
+    size = block.text.length;
+  } else if (block.type === "tool-call") {
+    size = block.toolName.length + JSON.stringify(block.input).length;
+  } else {
+    size = block.toolName.length + stringifyToolOutput(block.output).length;
+  }
+  blockCharCache.set(block, size);
+  return size;
 }
 
 function textFromBlocks(blocks: AgentMessageBlock[]): string {
@@ -643,10 +670,8 @@ function exitCodeFromToolResult(block: ToolResultBlock): number | undefined {
 }
 
 function formatCommandFact(command: string, cwd: string | undefined, exitCode: number | undefined, output: string): string {
-  const firstLine = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
+  const newlineIdx = output.search(/\r?\n/);
+  const firstLine = (newlineIdx === -1 ? output : output.slice(0, newlineIdx)).trim();
   return [`$ ${command}`, cwd ? `cwd=${cwd}` : undefined, exitCode !== undefined ? `exit=${exitCode}` : undefined, firstLine ? `result=${firstLine}` : undefined]
     .filter(Boolean)
     .join(" | ");

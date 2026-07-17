@@ -73,8 +73,9 @@ export class BoundedProcessOutput {
   private readonly headLimit: number;
   private readonly tailLimit: number;
   private head = Buffer.alloc(0);
-  private tail = Buffer.alloc(0);
-  private full = Buffer.alloc(0);
+  private tailChunks: Buffer[] = [];
+  private tailLength = 0;
+  private fullChunks: Buffer[] = [];
   totalBytes = 0;
   truncated = false;
 
@@ -86,24 +87,36 @@ export class BoundedProcessOutput {
   append(chunk: Buffer): void {
     this.totalBytes += chunk.byteLength;
     if (!this.truncated) {
-      const next = Buffer.concat([this.full, chunk]);
-      if (next.byteLength <= this.maxBytes) {
-        this.full = next;
+      if (this.totalBytes <= this.maxBytes) {
+        this.fullChunks.push(chunk);
         return;
       }
       this.truncated = true;
+      const next = Buffer.concat([...this.fullChunks, chunk]);
       this.head = next.subarray(0, this.headLimit);
-      this.tail = next.subarray(-this.tailLimit);
-      this.full = Buffer.alloc(0);
+      const initialTail = next.subarray(-this.tailLimit);
+      this.tailChunks = [initialTail];
+      this.tailLength = initialTail.byteLength;
+      this.fullChunks = [];
       return;
     }
-    this.tail = Buffer.concat([this.tail, chunk]).subarray(-this.tailLimit);
+    this.tailChunks.push(chunk);
+    this.tailLength += chunk.byteLength;
+    // 定期收缩 tail 缓冲，避免 tailChunks 数组无限增长
+    if (this.tailLength > this.tailLimit * 2) {
+      const consolidated = Buffer.concat(this.tailChunks).subarray(-this.tailLimit);
+      this.tailChunks = [consolidated];
+      this.tailLength = consolidated.byteLength;
+    }
   }
 
   toText(): string {
-    if (!this.truncated) return this.full.toString("utf8");
-    const omitted = Math.max(0, this.totalBytes - this.head.byteLength - this.tail.byteLength);
-    return `${this.head.toString("utf8")}\n\n[output omitted: ${omitted} bytes]\n\n${this.tail.toString("utf8")}`;
+    if (!this.truncated) {
+      return Buffer.concat(this.fullChunks).toString("utf8");
+    }
+    const tail = Buffer.concat(this.tailChunks).subarray(-this.tailLimit);
+    const omitted = Math.max(0, this.totalBytes - this.head.byteLength - tail.byteLength);
+    return `${this.head.toString("utf8")}\n\n[output omitted: ${omitted} bytes]\n\n${tail.toString("utf8")}`;
   }
 }
 

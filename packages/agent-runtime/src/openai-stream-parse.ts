@@ -40,14 +40,50 @@ export async function* readSseJson(
   let emittedFirstByte = false;
   let completed = false;
 
+  // 1. 单次绑定 Abort 监听器，取消 reader 即会使 pending read() Promise reject
+  const abortHandler = () => {
+    const error = createSseAbortError(signal);
+    reader.cancel(error).catch(() => undefined);
+  };
+  if (signal) {
+    if (signal.aborted) {
+      reader.releaseLock();
+      throw createSseAbortError(signal);
+    }
+    signal.addEventListener("abort", abortHandler, { once: true });
+  }
+
+  // 2. 超时控制单例化
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const resetTimeout = (ms: number | undefined, label: string) => {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+    const effective = normalizeStreamTimeoutMs(ms);
+    if (effective === undefined) return;
+    timeoutId = setTimeout(() => {
+      const err = new Error(`${label} timed out after ${effective}ms`);
+      reader.cancel(err).catch(() => undefined);
+    }, effective);
+  };
+
   try {
     while (true) {
-      const { done, value } = await readStreamChunk(
-        reader,
+      // 动态更新超时检测
+      resetTimeout(
         emittedFirstByte ? diagnostics?.streamIdleTimeoutMs : diagnostics?.firstByteTimeoutMs,
-        emittedFirstByte ? "stream idle" : "streaming first byte",
-        signal
+        emittedFirstByte ? "stream idle" : "streaming first byte"
       );
+
+      const { done, value } = await reader.read();
+
+      // 读取成功，立即取消当前超时定时器
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+
       if (done) {
         completed = true;
         break;
@@ -91,6 +127,12 @@ export async function* readSseJson(
       }
     }
   } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+    if (signal) {
+      signal.removeEventListener("abort", abortHandler);
+    }
     if (!completed) {
       await reader.cancel(createSseAbortError(signal)).catch(() => undefined);
     }
@@ -140,7 +182,7 @@ export function normalizeStreamTimeoutMs(timeoutMs: number | undefined): number 
   return Math.floor(timeoutMs);
 }
 
-/** 带 first-byte / idle 超时与 abort 的 read */
+/** 带 first-byte / idle 超时与 abort 的 read (仅用作备用) */
 export function readStreamChunk(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   timeoutMs: number | undefined,

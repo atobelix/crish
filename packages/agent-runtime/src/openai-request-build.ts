@@ -229,12 +229,82 @@ export function userMessageContent(message: AgentMessage): string | ChatContentP
   return out.length > 0 ? out : textContent(message);
 }
 
+/**
+ * 消息转换缓存
+ *
+ * 同一 provider.stream() 调用内 messages 数组引用稳定不变，而重试 / wireMode 切换 /
+ * endpoint 切换会反复触发 toChatMessages / toResponsesInput 转换。缓存以 messages 引用
+ * 为外层 WeakMap key（不阻止 GC），以 (systemPrompt, reasoningContentMode, wireMode)
+ * 组合字符串为内层 Map key，命中后直接返回已转换结果，消除重复 O(n) 转换工作。
+ *
+ * 跨 stream() 调用时 conversation-engine.buildProviderRequest 通过 `[...this.messages]`
+ * 产生新数组引用，缓存自然不命中，避免跨 run 复用 stale 转换结果。
+ *
+ * 调用方仅对返回值做只读访问（最终 JSON.stringify），不 mutate；故共享引用安全。
+ */
+const chatMessagesCache = new WeakMap<AgentMessage[], Map<string, ChatMessage[]>>();
+const responsesInputCache = new WeakMap<AgentMessage[], Map<string, JsonObject[]>>();
+
+function chatMessagesCacheKey(
+  systemPrompt: string | undefined,
+  reasoningContentMode: OpenAICompatibleReasoningContentMode,
+  wireMode: SystemPromptWireMode
+): string {
+  // \u0000 作分隔符避免合法内容里出现分隔字符造成碰撞
+  return `${wireMode}\u0000${reasoningContentMode}\u0000${systemPrompt ?? ""}`;
+}
+
+function responsesInputCacheKey(
+  systemPrompt: string | undefined,
+  wireMode: SystemPromptWireMode
+): string {
+  return `${wireMode}\u0000${systemPrompt ?? ""}`;
+}
+
+/**
+ * 以 messages 数组引用 + 字符串 key 二级查找缓存；未命中时调用 compute 计算并写入。
+ * 不阻止 messages 数组 GC（WeakMap）；命中分支不触发 compute，避免重复 O(n) 转换。
+ */
+function cachedTransform<V>(
+  cache: WeakMap<AgentMessage[], Map<string, V>>,
+  messages: AgentMessage[],
+  key: string,
+  compute: () => V
+): V {
+  const inner = cache.get(messages);
+  if (inner) {
+    const hit = inner.get(key);
+    if (hit !== undefined) return hit;
+  }
+  const value = compute();
+  if (inner) {
+    inner.set(key, value);
+  } else {
+    const fresh = new Map<string, V>();
+    fresh.set(key, value);
+    cache.set(messages, fresh);
+  }
+  return value;
+}
+
 /** Agent messages → chat/completions messages */
 export function toChatMessages(
   systemPrompt: string | undefined,
   messages: AgentMessage[],
   reasoningContentMode: OpenAICompatibleReasoningContentMode,
   wireMode: SystemPromptWireMode = "native-system-role"
+): ChatMessage[] {
+  const key = chatMessagesCacheKey(systemPrompt, reasoningContentMode, wireMode);
+  return cachedTransform(chatMessagesCache, messages, key, () =>
+    buildChatMessages(systemPrompt, messages, reasoningContentMode, wireMode)
+  );
+}
+
+function buildChatMessages(
+  systemPrompt: string | undefined,
+  messages: AgentMessage[],
+  reasoningContentMode: OpenAICompatibleReasoningContentMode,
+  wireMode: SystemPromptWireMode
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   if (systemPrompt?.trim()) {
@@ -315,6 +385,17 @@ export function toResponsesInput(
   systemPrompt: string | undefined,
   messages: AgentMessage[],
   wireMode: SystemPromptWireMode = "native-system-role"
+): JsonObject[] {
+  const key = responsesInputCacheKey(systemPrompt, wireMode);
+  return cachedTransform(responsesInputCache, messages, key, () =>
+    buildResponsesInput(systemPrompt, messages, wireMode)
+  );
+}
+
+function buildResponsesInput(
+  systemPrompt: string | undefined,
+  messages: AgentMessage[],
+  wireMode: SystemPromptWireMode
 ): JsonObject[] {
   const result: JsonObject[] = [];
   if (systemPrompt?.trim()) {

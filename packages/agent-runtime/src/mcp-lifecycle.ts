@@ -276,7 +276,12 @@ export class McpServerController {
     if (timeoutMs === undefined) {
       await operation;
     } else {
-      await Promise.race([operation, delay(Math.max(1, timeoutMs))]);
+      // 用本地 AbortController 取消 delay 定时器：当 operation 先完成时
+      // （正常路径 / teardown abort），delay 的 setTimeout 立即被清理，
+      // 不再空等剩余 timeoutMs 拖住 Node 事件循环。
+      const cancelDelay = new AbortController();
+      operation.finally(() => cancelDelay.abort());
+      await Promise.race([operation, delay(Math.max(1, timeoutMs), cancelDelay.signal)]);
     }
     return this.state === "ready";
   }
@@ -732,9 +737,18 @@ export class McpLifecycleManager implements ToolSource {
   private async startWithGate(): Promise<McpLifecycleStartResult> {
     const startupTasks = [...this.controllers.values()].map((controller) => controller.start());
     let timedOut = false;
+
+    // 用本地 AbortController 取消 gate 定时器：当所有 startup tasks 先完成时
+    // （正常路径），delay 的 setTimeout 立即被清理，不再空等剩余 gateTimeoutMs。
+    // teardown 时各 controller 的 abortController 会 abort，startup tasks 随即 resolve，
+    // 同样触发 allStarted.finally → cancelDelay.abort()，保证 delay 不会拖住事件循环。
+    const cancelDelay = new AbortController();
+    const allStarted = Promise.all(startupTasks);
+    allStarted.finally(() => cancelDelay.abort());
+
     await Promise.race([
-      Promise.all(startupTasks),
-      delay(this.gateTimeoutMs).then(() => {
+      allStarted,
+      delay(this.gateTimeoutMs, cancelDelay.signal).then(() => {
         timedOut = startupTasks.length > 0 && this.pendingServers().length > 0;
       })
     ]);
@@ -913,9 +927,22 @@ function normalizeDiagnosticLimit(limit: number | undefined): number {
   return Math.max(1, Math.floor(limit));
 }
 
-function delay(ms: number): Promise<void> {
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, Math.max(0, ms));
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      cleanup();
+      resolve();
+    };
+    const cleanup = (): void => {
+      signal?.removeEventListener("abort", onAbort);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 

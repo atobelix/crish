@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PromptAssemblyMetadata } from "./prompt-assembly";
 import type { AgentEvent, AgentMessage, JsonObject, ProviderDiagnostic, ToolBatchResult, ToolOutput } from "@crish/shared-types";
+import { BoundedMap, RingBuffer } from "@crish/shared-utils";
 import type { ProviderUsage } from "./types";
 
 export interface RuntimeMetricsDimensions {
@@ -230,7 +231,7 @@ interface MutableDurationHistogram {
   count: number;
   min?: number;
   max?: number;
-  buckets: Map<number, number>;
+  buckets: BoundedMap<number, number>;
 }
 
 interface MutableStreamingMetrics {
@@ -244,7 +245,7 @@ interface MutableStreamingMetrics {
   terminalEventCount: number;
   interruptedCount: number;
   errorCount: number;
-  terminalReasons: Map<string, number>;
+  terminalReasons: BoundedMap<string, number>;
   cancelRequestedCount?: number;
   cancelObserved?: boolean;
   cancelLatencyMs?: number;
@@ -254,6 +255,14 @@ const MAX_TRACE_SPANS = 64;
 const MAX_TRACE_ERRORS = 32;
 const MAX_ERROR_MESSAGE_LENGTH = 512;
 const MAX_ERROR_STACK_LENGTH = 2048;
+/** 工具名指标上限：工具名数量有限但需防御动态生成场景。 */
+const MAX_TOOL_NAME_METRICS = 64;
+/** 维度组合上限：维度键由 provider/model/cacheStrategy 等组合而成，需防爆炸。 */
+const MAX_DIMENSION_METRICS = 64;
+/** 流式终止原因上限：枚举型，少量即可。 */
+const MAX_TERMINAL_REASONS = 32;
+/** 直方图 bucket 上限：durationMs 取整后作为 key，需防任意毫秒值导致爆炸。 */
+const MAX_HISTOGRAM_BUCKETS = 256;
 
 export class RuntimeMetricsCollector {
   private sessionId: string | undefined;
@@ -262,7 +271,7 @@ export class RuntimeMetricsCollector {
   private eventCount = 0;
   private turnCount = 0;
   private readonly toolMetrics = createMutableToolMetrics();
-  private readonly toolMetricsByName = new Map<string, MutableToolMetrics>();
+  private readonly toolMetricsByName = new BoundedMap<string, MutableToolMetrics>(MAX_TOOL_NAME_METRICS);
   private readonly providerUsage = emptyProviderUsageMetrics();
   private readonly providerLatencyHistogram = createMutableDurationHistogram();
   private readonly streaming: MutableStreamingMetrics = {
@@ -272,13 +281,14 @@ export class RuntimeMetricsCollector {
     terminalEventCount: 0,
     interruptedCount: 0,
     errorCount: 0,
-    terminalReasons: new Map(),
+    terminalReasons: new BoundedMap<string, number>(MAX_TERMINAL_REASONS),
     providerDiagnosticCount: 0
   };
-  private readonly dimensions = new Map<string, MutableDimensionMetrics>();
+  private readonly dimensions = new BoundedMap<string, MutableDimensionMetrics>(MAX_DIMENSION_METRICS);
   private latestDimensions: RuntimeMetricsDimensions | undefined;
-  private readonly spans = new Map<string, RuntimeSpanSummary>();
-  private readonly spanOrder: string[] = [];
+  private readonly spans = new BoundedMap<string, RuntimeSpanSummary>(MAX_TRACE_SPANS + 1);
+  // 容量 MAX_TRACE_SPANS+1：保证 push 总能成功，再由 pruneSpans 用 O(1) shift 收敛到上限。
+  private readonly spanOrder = new RingBuffer<string>(MAX_TRACE_SPANS + 1);
   private readonly errors: RuntimeErrorSummary[] = [];
   private activeMessageSpanId: string | undefined;
   private readonly failures: RuntimeFailureMetricsSnapshot = {
@@ -753,7 +763,7 @@ export class RuntimeMetricsCollector {
   }
 
   private traceSummary(): RuntimeTraceSummary {
-    const spans = this.spanOrder.map((spanId) => this.spans.get(spanId)).filter((span): span is RuntimeSpanSummary => Boolean(span));
+    const spans = this.spanOrder.toArray().map((spanId) => this.spans.get(spanId)).filter((span): span is RuntimeSpanSummary => Boolean(span));
     return compactObject({
       traceId: this.sessionId,
       sessionId: this.sessionId,
@@ -767,7 +777,7 @@ export class RuntimeMetricsCollector {
   }
 
   private pruneSpans(): void {
-    while (this.spanOrder.length > MAX_TRACE_SPANS) {
+    while (this.spanOrder.size > MAX_TRACE_SPANS) {
       const oldest = this.spanOrder.shift();
       if (oldest) this.spans.delete(oldest);
     }
@@ -806,7 +816,7 @@ function createMutableToolMetrics(): MutableToolMetrics {
 function createMutableDurationHistogram(): MutableDurationHistogram {
   return {
     count: 0,
-    buckets: new Map()
+    buckets: new BoundedMap<number, number>(MAX_HISTOGRAM_BUCKETS)
   };
 }
 
@@ -890,7 +900,7 @@ function cloneProviderUsage(usage: RuntimeProviderUsageMetrics): RuntimeProvider
 
 function snapshotToolMetrics(
   metrics: MutableToolMetrics,
-  byName: Map<string, MutableToolMetrics>
+  byName: BoundedMap<string, MutableToolMetrics>
 ): RuntimeToolMetricsSnapshot {
   return {
     callCount: metrics.callCount,
@@ -1045,11 +1055,19 @@ function isInterruptedText(value: string | undefined): boolean {
   return value !== undefined && /aborted|abort|cancelled|canceled|interrupt|timeout|timed out|invalid-stream/i.test(value);
 }
 
-function incrementMap(map: Map<string, number>, key: string): void {
+/** 计数 Map 的结构化接口，兼容 Map 和 BoundedMap。 */
+interface CounterMap {
+  size: number;
+  get(key: string): number | undefined;
+  set(key: string, value: number): unknown;
+  entries(): Iterable<[string, number]>;
+}
+
+function incrementMap(map: CounterMap, key: string): void {
   map.set(key, (map.get(key) ?? 0) + 1);
 }
 
-function mapToRecord(map: Map<string, number>): Record<string, number> | undefined {
+function mapToRecord(map: CounterMap): Record<string, number> | undefined {
   if (map.size === 0) return undefined;
   return Object.fromEntries([...map.entries()].sort(([left], [right]) => left.localeCompare(right)));
 }

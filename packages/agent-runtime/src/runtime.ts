@@ -2,6 +2,7 @@ import {
   type AgentEvent,
   type AgentMessage,
 } from "@crish/shared-types";
+import { RingBuffer } from "@crish/shared-utils";
 import {
   type AgentRuntimeOptions,
   type AgentTool,
@@ -19,6 +20,9 @@ import { ToolRegistry } from "./tools/tool-definition";
 
 export { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS };
 
+/** 待处理 steer 输入缓冲区容量上限；超容量覆盖最旧以提供背压保护。 */
+const STEER_INPUT_CAPACITY = 1000;
+
 /** Default product policy: TrustZone "ask" (project-mode semantics). No default-allow bypass. */
 function createDefaultPermissionPolicy(): RuntimePermissionPolicy {
   return createTrustZonePermissionPolicy("ask");
@@ -32,8 +36,8 @@ export class AgentRuntime {
   private readonly contextManager: ContextManager;
   private readonly tokenTracker: TokenTracker;
 
-  /** 待处理的用户 steer 输入缓冲区（run() 调用前暂存） */
-  private readonly pendingSteerInputs: AgentMessage[] = [];
+  /** 待处理的用户 steer 输入缓冲区（run() 调用前暂存）。RingBuffer 提供 O(1) shift 与背压保护。 */
+  private readonly pendingSteerInputs = new RingBuffer<AgentMessage>(STEER_INPUT_CAPACITY);
   /** 当前活跃的输入队列（run() 创建后设置，用于外部 steer 转发） */
   private activeInputQueue: AgentInputQueue | null = null;
 
@@ -74,7 +78,7 @@ export class AgentRuntime {
     if (this.activeInputQueue) {
       this.activeInputQueue.enqueue(message);
     } else {
-      this.pendingSteerInputs.push(message);
+      this.pendingSteerInputs.pushOverwritingOldest(message);
     }
   }
 
@@ -83,7 +87,7 @@ export class AgentRuntime {
    */
   hasPendingSteerInput(): boolean {
     if (this.activeInputQueue) return this.activeInputQueue.hasPending();
-    return this.pendingSteerInputs.length > 0;
+    return this.pendingSteerInputs.size > 0;
   }
 
   /**
@@ -91,7 +95,7 @@ export class AgentRuntime {
    */
   peekSteerInput(): AgentMessage | null {
     if (this.activeInputQueue) return this.activeInputQueue.peek();
-    return this.pendingSteerInputs.length > 0 ? this.pendingSteerInputs[0]! : null;
+    return this.pendingSteerInputs.peekFirst() ?? null;
   }
 
   /**
@@ -140,10 +144,10 @@ export class AgentRuntime {
     this.activeInputQueue = inputQueue;
 
     // 将缓冲区中的 steer 输入转移到统一队列
-    for (const msg of this.pendingSteerInputs) {
+    this.pendingSteerInputs.forEach((msg) => {
       inputQueue.enqueue(msg);
-    }
-    this.pendingSteerInputs.length = 0;
+    });
+    this.pendingSteerInputs.clear();
 
     const loop = new AgentSessionLoop(
       this.options,

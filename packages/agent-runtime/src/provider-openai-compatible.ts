@@ -1,16 +1,22 @@
 import { Buffer } from "node:buffer";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { errorMessage } from "@crish/shared-utils";
+import { deepEqual, errorMessage } from "@crish/shared-utils";
 import type {
   JsonObject,
   JsonValue,
   ProviderDiagnostic,
   ProviderErrorKind
 } from "@crish/shared-types";
+import {
+  createProviderCacheHintPlan,
+  type OpenAICompatibleCacheHints,
+  type ProviderCacheHintPlan
+} from "./provider-cache-hints";
 import type {
   AgentProvider,
   AgentProviderRequest,
@@ -152,6 +158,18 @@ export interface OpenAICompatibleModel {
   ownedBy?: string;
 }
 
+/**
+ * 请求构建上下文：把 request / endpoint / wireMode / cacheHintPlan / attempt
+ * 集中流入 buildRequestBody，避免散落参数与接线断裂。
+ */
+interface RequestBuildContext {
+  request: AgentProviderRequest;
+  endpoint: ResolvedOpenAICompatibleEndpoint;
+  wireMode: SystemPromptWireMode;
+  cacheHintPlan?: ProviderCacheHintPlan;
+  attempt: number;
+}
+
 interface PendingToolCall {
   id: string;
   name: string;
@@ -214,30 +232,518 @@ interface RustReqwestResponseHeader {
   statusText?: string;
   headers?: Array<[string, string]>;
   error?: string;
+  /**
+   * daemon 模式下响应 body 的字节数（header JSON 行之后紧跟的 body 长度）。
+   * 单次 spawn 模式（旧协议）下不存在此字段，body 流式跟随至 stdout EOF。
+   * 旧 daemon 协议使用此字段；新 daemon 协议使用 chunked 分帧，不再发送此字段。
+   */
+  bodyLength?: number;
+  /**
+   * 新 daemon 协议标记：header 行之后跟随分块帧流（<len>\n<bytes> 帧序列，0\n 结束，-1\n<msg>\n 错误）。
+   * 客户端据此进入流式解析模式，逐帧推入 ReadableStream，避免全量缓冲。
+   */
+  chunked?: boolean;
 }
+
+// undici keep-alive Agent 类型定义：仅描述我们用到的子集，避免直接依赖 @types/undici
+interface UndiciAgentOptions {
+  keepAliveTimeout?: number;
+  keepAliveMaxTimeout?: number;
+  connections?: number;
+}
+
+interface UndiciModule {
+  Agent: new (options: UndiciAgentOptions) => unknown;
+  fetch: typeof fetch;
+}
+
+// 默认 fetch 实现：优先使用 undici Agent（带 keep-alive 连接池），不可用时降级到 globalThis.fetch
+// 单例缓存：整个进程内只创建一次 Agent，所有 provider 实例共享同一个连接池
+//
+// 测试兼容性：返回的函数在每次调用时检查 globalThis.fetch 是否被替换（如 vi.stubGlobal）。
+// 若被替换则走 mock，否则走 undici fetch + Agent。这样既保留生产环境的连接池复用，
+// 又让测试的 fetch mock 能正常注入。
+let cachedDefaultFetch: typeof fetch | undefined;
+let defaultFetchInitialized = false;
+// 在模块加载时立即记录原生 globalThis.fetch 引用，避免测试 vi.stubGlobal 后记录到 mock 值
+const originalGlobalFetch: typeof fetch | undefined = globalThis.fetch;
+
+function defaultKeepAliveFetch(): typeof fetch | undefined {
+  if (defaultFetchInitialized) return cachedDefaultFetch;
+  defaultFetchInitialized = true;
+
+  // 尝试加载 undici 并创建 Agent（带 keep-alive 连接池）
+  let undiciAgent: unknown | undefined;
+  let undiciFetch: typeof fetch | undefined;
+  try {
+    const require = createRequire(import.meta.url);
+    const undici = require("undici") as UndiciModule;
+    undiciAgent = new undici.Agent({
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000
+    });
+    undiciFetch = undici.fetch;
+  } catch {
+    // undici npm 包不可用（旧 Node 或未安装）：降级到 globalThis.fetch
+  }
+
+  // 返回一个每次调用时检查 globalThis.fetch 是否被替换的函数。
+  // 测试场景（vi.stubGlobal）：走 mock 保证隔离；生产场景：走 undici fetch + Agent。
+  cachedDefaultFetch = (((input: RequestInfo | URL, init?: RequestInit) => {
+    const globalFetch = globalThis.fetch;
+    if (globalFetch !== originalGlobalFetch) {
+      return globalFetch(input, init);
+    }
+    if (undiciFetch && undiciAgent) {
+      return undiciFetch(input, { ...init, dispatcher: undiciAgent } as RequestInit);
+    }
+    return globalFetch(input, init);
+  }) as unknown) as typeof fetch;
+
+  return cachedDefaultFetch;
+}
+
+// === Rust reqwest daemon 客户端 ===
+// 长驻 daemon 进程管理：跨请求复用 reqwest::Client 连接池，避免每次请求重新 spawn 进程。
+// 通信协议（行分隔）：
+//   请求 (stdin) : 单行 JSON + \n
+//   响应 (stdout): header 单行 JSON + \n + bodyLength 字节 body
+// 进程级单例（按 command+args+cwd 键），在 process exit 时统一 kill。
+// 请求串行化：同一 daemon 一次只处理一个请求，避免 stdout 多路响应交错。
+
+interface RustReqwestDaemon {
+  child: ChildProcess;
+  /** 串行化请求：同一 daemon 一次只处理一个请求 */
+  busy: boolean;
+  /** 等待独占权的请求队列 */
+  queue: Array<() => void>;
+  /** 当前请求的 stdout 读取回调；daemon 的 data 事件统一转发到此 */
+  reader: ((chunk: Buffer) => void) | null;
+  stderrBuffer: Buffer;
+  /** 进程已退出时的错误信息（供后续请求 fail-fast，不再尝试 spawn 新 daemon） */
+  deadError: string | null;
+}
+
+const rustReqwestDaemons = new Map<string, RustReqwestDaemon>();
+
+function daemonKey(options: RustReqwestProcessOptions): string {
+  return JSON.stringify([options.command, options.args, options.cwd ?? null]);
+}
+
+/**
+ * 检测命令是否支持长驻 daemon 模式。
+ * --stdio 标志表示命令会运行 stdin/stdout 行协议主循环（而非单次请求后退出）。
+ * 测试用的一次性脚本（如 process.execPath -e）不含此标志，走单次 spawn 回退。
+ */
+function isDaemonCapable(options: RustReqwestProcessOptions): boolean {
+  return options.args.includes("--stdio");
+}
+
+function spawnRustReqwestDaemon(options: RustReqwestProcessOptions): RustReqwestDaemon {
+  const child = spawn(options.command, options.args, {
+    cwd: options.cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true
+  });
+  const daemon: RustReqwestDaemon = {
+    child,
+    busy: false,
+    queue: [],
+    reader: null,
+    stderrBuffer: Buffer.alloc(0),
+    deadError: null
+  };
+  child.stderr.on("data", (chunk: Buffer) => {
+    daemon.stderrBuffer = Buffer.concat([daemon.stderrBuffer, chunk]).subarray(0, 16_000);
+  });
+  // stdout：单个 data 监听器，转发到当前请求的 reader（串行化保证只有一个活跃 reader）
+  child.stdout.on("data", (chunk: Buffer) => {
+    const reader = daemon.reader;
+    if (reader) reader(chunk);
+  });
+  child.on("error", (cause) => {
+    daemon.deadError = daemon.deadError ?? (cause instanceof Error ? cause.message : String(cause));
+    const reader = daemon.reader;
+    if (reader) reader(Buffer.alloc(0));
+  });
+  child.on("exit", (code, processSignal) => {
+    daemon.deadError = daemon.deadError ?? `Rust reqwest daemon exited with ${processSignal ?? `code ${code ?? "unknown"}`}`;
+    const reader = daemon.reader;
+    if (reader) reader(Buffer.alloc(0));
+    rustReqwestDaemons.delete(daemonKey(options));
+  });
+  return daemon;
+}
+
+function getOrCreateRustReqwestDaemon(options: RustReqwestProcessOptions): RustReqwestDaemon {
+  const key = daemonKey(options);
+  const existing = rustReqwestDaemons.get(key);
+  if (existing && !existing.child.killed && !existing.deadError) {
+    return existing;
+  }
+  // 上一次 daemon 已死或不存在：清理后重新 spawn
+  rustReqwestDaemons.delete(key);
+  const daemon = spawnRustReqwestDaemon(options);
+  rustReqwestDaemons.set(key, daemon);
+  return daemon;
+}
+
+/** 获取 daemon 独占访问权（串行化请求，避免 stdout 响应交错） */
+function acquireRustReqwestDaemon(daemon: RustReqwestDaemon): Promise<void> {
+  if (!daemon.busy) {
+    daemon.busy = true;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    daemon.queue.push(() => {
+      daemon.busy = true;
+      resolve();
+    });
+  });
+}
+
+function releaseRustReqwestDaemon(daemon: RustReqwestDaemon): void {
+  daemon.busy = false;
+  const next = daemon.queue.shift();
+  if (next) next();
+}
+
+async function fetchWithRustReqwestDaemon(
+  daemon: RustReqwestDaemon,
+  url: string,
+  request: ProviderHttpRequest,
+  signal: AbortSignal
+): Promise<Response> {
+  if (daemon.deadError) throw new Error(daemon.deadError);
+  await acquireRustReqwestDaemon(daemon);
+  // acquire 后再检查一次：可能在排队期间 daemon 已退出
+  if (daemon.deadError) {
+    releaseRustReqwestDaemon(daemon);
+    throw new Error(daemon.deadError);
+  }
+  try {
+    return await sendRustReqwestDaemonRequest(daemon, url, request, signal);
+  } finally {
+    releaseRustReqwestDaemon(daemon);
+  }
+}
+
+function sendRustReqwestDaemonRequest(
+  daemon: RustReqwestDaemon,
+  url: string,
+  request: ProviderHttpRequest,
+  signal: AbortSignal
+): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    if (daemon.deadError) {
+      reject(new Error(daemon.deadError));
+      return;
+    }
+
+    const payload: RustReqwestRequest = {
+      method: request.method,
+      url,
+      headers: Object.entries(request.headers),
+      body: request.body,
+      timeoutMs: request.timeoutMs,
+      streamBody: true
+    };
+
+    let buffer = Buffer.alloc(0);
+    let headerParsed = false;
+    let header: RustReqwestResponseHeader | null = null;
+    let responseResolved = false;
+    // chunked 流式状态
+    let streamDone = false;
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let bodyClosed = false;
+    let stdoutPaused = false;
+    // 分块帧解析状态机：length → body → length（循环）；length==0 结束；length==-1 错误
+    let parseState: "length" | "body" | "error" = "length";
+    let expectedBodyBytes = 0;
+    // 旧 bodyLength 协议回退状态
+    let remaining = 0;
+
+    // 中止/取消时 kill daemon：避免 daemon 写入阻塞在已满管道上导致后续请求死锁
+    const killDaemon = (): void => {
+      if (!daemon.child.killed) {
+        try {
+          daemon.child.kill();
+        } catch {
+          // 忽略 kill 错误（进程可能已退出）
+        }
+      }
+    };
+    const cleanup = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      daemon.reader = null;
+    };
+    const pauseStdout = (): void => {
+      if (!stdoutPaused && daemon.child.stdout) {
+        daemon.child.stdout.pause();
+        stdoutPaused = true;
+      }
+    };
+    const resumeStdout = (): void => {
+      if (stdoutPaused && daemon.child.stdout && !bodyClosed) {
+        daemon.child.stdout.resume();
+        stdoutPaused = false;
+      }
+    };
+    const enqueueBodyChunk = (chunk: Buffer | Uint8Array): void => {
+      if (!bodyController || bodyClosed || chunk.byteLength === 0) return;
+      bodyController.enqueue(new Uint8Array(chunk));
+      if ((bodyController.desiredSize ?? 1) <= 0) {
+        pauseStdout();
+      }
+    };
+    const closeBody = (): void => {
+      if (bodyController && !bodyClosed) {
+        bodyClosed = true;
+        bodyController.close();
+      }
+    };
+    const errorBody = (error: Error): void => {
+      if (bodyController && !bodyClosed) {
+        bodyClosed = true;
+        bodyController.error(error);
+      }
+    };
+    const failStream = (error: Error): void => {
+      if (streamDone) return;
+      streamDone = true;
+      errorBody(error);
+      cleanup();
+    };
+    const onAbort = (): void => {
+      const error = new Error("aborted");
+      if (!responseResolved) {
+        responseResolved = true;
+        streamDone = true;
+        cleanup();
+        killDaemon();
+        reject(error);
+      } else if (!streamDone) {
+        failStream(error);
+        killDaemon();
+      }
+    };
+
+    // chunked 分块帧解析：从 buffer 中提取帧并推入 ReadableStream
+    // 遇到 backpressure（stdoutPaused）时暂停，待 pull 回调恢复后继续
+    const parseChunkFrames = (): void => {
+      while (!streamDone) {
+        if (parseState === "length") {
+          const sep = buffer.indexOf(0x0a);
+          if (sep === -1) return;
+          const lenStr = buffer.subarray(0, sep).toString("utf8").trim();
+          buffer = buffer.subarray(sep + 1);
+          const len = Number.parseInt(lenStr, 10);
+          if (len === 0) {
+            // 结束帧：正常关闭流
+            streamDone = true;
+            closeBody();
+            cleanup();
+            return;
+          } else if (len === -1) {
+            // 错误帧：下一行为错误信息
+            parseState = "error";
+          } else if (Number.isNaN(len) || len < 0) {
+            streamDone = true;
+            failStream(new Error(`Invalid chunk length from daemon: ${lenStr}`));
+            return;
+          } else {
+            parseState = "body";
+            expectedBodyBytes = len;
+          }
+        }
+        if (parseState === "body") {
+          if (buffer.length < expectedBodyBytes) return;
+          const chunkData = buffer.subarray(0, expectedBodyBytes);
+          buffer = buffer.subarray(expectedBodyBytes);
+          enqueueBodyChunk(chunkData);
+          parseState = "length";
+          // backpressure：消费者慢时暂停解析，待 pull 恢复
+          if (stdoutPaused) return;
+        }
+        if (parseState === "error") {
+          const sep = buffer.indexOf(0x0a);
+          if (sep === -1) return;
+          const errMsg = buffer.subarray(0, sep).toString("utf8");
+          buffer = buffer.subarray(sep + 1);
+          streamDone = true;
+          failStream(new Error(errMsg || "Response stream interrupted"));
+          return;
+        }
+      }
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    daemon.reader = (chunk: Buffer) => {
+      if (streamDone) return;
+      if (daemon.deadError) {
+        const error = new Error(daemon.deadError);
+        if (!responseResolved) {
+          responseResolved = true;
+          streamDone = true;
+          cleanup();
+          reject(error);
+        } else if (!streamDone) {
+          failStream(error);
+        }
+        return;
+      }
+      if (chunk.length > 0) {
+        buffer = Buffer.concat([buffer, chunk]);
+      }
+      if (!headerParsed) {
+        const sep = buffer.indexOf(0x0a);
+        if (sep === -1) return;
+        const headerBytes = buffer.subarray(0, sep);
+        const rest = buffer.subarray(sep + 1);
+        let parsed: RustReqwestResponseHeader;
+        try {
+          parsed = JSON.parse(headerBytes.toString("utf8")) as RustReqwestResponseHeader;
+        } catch (cause) {
+          responseResolved = true;
+          streamDone = true;
+          cleanup();
+          reject(new Error(`Rust reqwest daemon returned an invalid response header: ${errorMessage(cause)}`));
+          return;
+        }
+        header = parsed;
+        headerParsed = true;
+        buffer = rest;
+        if (header.error) {
+          responseResolved = true;
+          streamDone = true;
+          cleanup();
+          reject(new Error(header.error));
+          return;
+        }
+        if (header.chunked) {
+          // 新协议：chunked 分帧流式 body —— 创建 ReadableStream 并立即 resolve Response，
+          // 后续分块帧由 parseChunkFrames 逐帧推入流，实现端到端流式转发
+          const h = header;
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              bodyController = controller;
+            },
+            pull() {
+              resumeStdout();
+              // 消费者拉取后恢复解析 buffer 中可能残留的帧
+              parseChunkFrames();
+            },
+            cancel() {
+              streamDone = true;
+              cleanup();
+              killDaemon();
+            }
+          });
+          responseResolved = true;
+          resolve(
+            new Response(stream, {
+              status: h.status,
+              statusText: h.statusText ?? "",
+              headers: new Headers(h.headers ?? [])
+            })
+          );
+          // 继续解析 header 行之后已缓冲的分块帧（fall through 到 parseChunkFrames）
+        } else {
+          // 旧协议回退：bodyLength 固定长度，缓冲完整 body 后 resolve
+          remaining = header.bodyLength ?? 0;
+        }
+      }
+      if (!headerParsed) return;
+      const h = header as RustReqwestResponseHeader;
+      if (h.chunked) {
+        parseChunkFrames();
+      } else if (buffer.length >= remaining) {
+        responseResolved = true;
+        streamDone = true;
+        cleanup();
+        const body = remaining > 0 ? buffer.subarray(0, remaining) : Buffer.alloc(0);
+        resolve(
+          new Response(body, {
+            status: h.status,
+            statusText: h.statusText ?? "",
+            headers: new Headers(h.headers ?? [])
+          })
+        );
+      }
+    };
+
+    // 写请求行到 daemon stdin（不 end stdin —— daemon 需要保持 stdin 打开接收后续请求）
+    // stdio 配置为 ["pipe","pipe","pipe"]，stdin 必非 null
+    const stdin = daemon.child.stdin;
+    if (!stdin) {
+      responseResolved = true;
+      streamDone = true;
+      cleanup();
+      reject(new Error("Rust reqwest daemon stdin is not available"));
+      return;
+    }
+    const line = JSON.stringify(payload) + "\n";
+    stdin.write(line, "utf8", (err) => {
+      if (err && !responseResolved) {
+        responseResolved = true;
+        streamDone = true;
+        cleanup();
+        reject(new Error(`Failed to write to Rust reqwest daemon stdin: ${errorMessage(err)}`));
+      }
+    });
+  });
+}
+
+function killAllRustReqwestDaemons(): void {
+  for (const daemon of rustReqwestDaemons.values()) {
+    if (!daemon.child.killed) {
+      try {
+        daemon.child.kill();
+      } catch {
+        // 忽略 kill 错误（进程可能已退出）
+      }
+    }
+  }
+  rustReqwestDaemons.clear();
+}
+
+// 进程退出时统一清理所有 daemon，避免孤儿进程
+process.on("exit", killAllRustReqwestDaemons);
 
 export class OpenAICompatibleProvider implements AgentProvider {
   readonly id: string;
   private readonly baseUrl: string;
   private readonly fetchImpl?: typeof fetch;
-  // Wire mode 检测结果在每个 stream() 调用中独立跟踪，不跨 run 缓存
-  // @deprecated 使用 stream() 局部 `wireModeCache` Map 替代
+  // apiKey 在 provider 生命周期内不变，构造时一次性解析（保留原优先级）
+  private readonly resolvedApiKey: string | undefined;
+  // headers 同样在生命周期内不变（content-type / accept / auth / 自定义 headers）
+  private readonly resolvedHeaders: Record<string, string>;
+  // wireMode 探测结果提升为实例字段，跨多次 stream() 调用（同一 provider 实例的多次 run）复用
+  private readonly wireModeCache = new Map<ResolvedOpenAICompatibleEndpoint, SystemPromptWireMode>();
 
   constructor(private readonly options: OpenAICompatibleProviderOptions) {
     this.id = options.id ?? "openai-compatible";
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    this.fetchImpl = options.fetch ?? defaultKeepAliveFetch();
     if (!this.fetchImpl && (options.transport ?? "fetch") === "fetch") {
       throw new Error("A fetch implementation is required for OpenAICompatibleProvider");
     }
+    this.resolvedApiKey = resolveApiKey(this.options);
+    this.resolvedHeaders = freezeHeaders(this.options, this.resolvedApiKey);
   }
 
   async *stream(request: AgentProviderRequest): AsyncIterable<ProviderStreamEvent> {
     const retry = normalizeRetryOptions(this.options.retry);
     const startedAt = Date.now();
     const endpoints = this.resolvedEndpoints();
-    // 每个 stream() 调用独立跟踪 wire mode，不跨 run 共享
-    const wireModeCache = new Map<ResolvedOpenAICompatibleEndpoint, SystemPromptWireMode>();
+    // cache hint plan 只依赖 request.promptAssembly，整个 stream() 调用内不变，提前算一次
+    const cacheHintPlan = this.buildCacheHintPlan(request);
+    // body 字符串缓存：同一 request + endpoint + wireMode + cacheHintPlan 重试时复用序列化结果，
+    // 避免对相同 body 反复 JSON.stringify
+    let lastBodyObject: JsonObject | undefined;
+    let lastBodyString: string | undefined;
 
     // 多 endpoint 重试结构（三层，避免用 attempt=maxAttempts 等副作用跳出）：
     // 1) endpoint 层：当前 endpoint 不可用时 fall through 到下一个
@@ -247,7 +753,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
       const endpoint = endpoints[endpointIndex]!;
       const url = `${this.baseUrl}${this.requestPath(endpoint)}`;
       attemptLoop: for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
-        let wireMode = wireModeCache.get(endpoint) ?? this.defaultSystemPromptWireMode();
+        let wireMode = this.wireModeCache.get(endpoint) ?? this.defaultSystemPromptWireMode();
         let retriedSystemPromptCompatibility = false;
         // wireMode 兼容重试：continue 留在本 attempt；break 进入下一 attempt；break attemptLoop 换 endpoint
         while (true) {
@@ -264,10 +770,20 @@ export class OpenAICompatibleProvider implements AgentProvider {
             ...requestDiagnosticFields(request, wireMode, this.options.stream !== false)
           });
 
+          const bodyObject = this.buildRequestBody({ request, endpoint, wireMode, cacheHintPlan, attempt });
+          let bodyString: string;
+          if (lastBodyObject && deepEqual(lastBodyObject, bodyObject)) {
+            bodyString = lastBodyString!;
+          } else {
+            bodyString = JSON.stringify(bodyObject);
+            lastBodyObject = bodyObject;
+            lastBodyString = bodyString;
+          }
+
           let fetchResult: ProviderFetchResult;
           let response: Response;
           try {
-            fetchResult = await this.fetchOnce(request, url, endpoint, wireMode);
+            fetchResult = await this.fetchOnce(request, url, bodyString);
             for (const diagnostic of fetchResult.diagnostics ?? []) {
               yield* this.diagnostic({
                 ...diagnostic,
@@ -318,7 +834,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
             if (this.shouldRetryWithSystemPromptUserPrefix(request, wireMode, retriedSystemPromptCompatibility, response.status, error)) {
               wireMode = "user-prefix";
               retriedSystemPromptCompatibility = true;
-              wireModeCache.set(endpoint, wireMode);
+              this.wireModeCache.set(endpoint, wireMode);
               yield* this.diagnostic({
                 phase: "request-error",
                 endpoint,
@@ -398,7 +914,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
                   wireMode = "user-prefix";
                   retriedSystemPromptCompatibility = true;
                   retrySystemPromptCompatibilityAfterStreamError = true;
-                  wireModeCache.set(endpoint, wireMode);
+                  this.wireModeCache.set(endpoint, wireMode);
                   yield* this.diagnostic({
                     phase: "request-error",
                     endpoint,
@@ -479,7 +995,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
           ) {
             wireMode = "user-prefix";
             retriedSystemPromptCompatibility = true;
-            wireModeCache.set(endpoint, wireMode);
+            this.wireModeCache.set(endpoint, wireMode);
             yield* this.diagnostic({
               phase: "request-error",
               endpoint,
@@ -515,25 +1031,26 @@ export class OpenAICompatibleProvider implements AgentProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    const apiKey =
-      this.options.apiKey ??
-      (this.options.apiKeyEnv ? readEnv(this.options.apiKeyEnv) : undefined) ??
-      (this.options.apiKeyFile ? readSecretFileSync(this.options.apiKeyFile) : undefined) ??
-      readEnv("FLOWBIT_API_KEY") ??
-      readEnv("OPENAI_API_KEY");
-    return {
-      "content-type": "application/json",
-      accept: this.options.stream === false ? "application/json" : "text/event-stream",
-      ...authHeaderObject(this.options.authHeader ?? "authorization", apiKey),
-      ...this.options.headers
-    };
+    // headers 在构造时已 resolve（apiKey + content-type + accept + auth + 自定义），
+    // 生命周期内不变，直接返回实例字段
+    return this.resolvedHeaders;
   }
 
-  private buildRequestBody(request: AgentProviderRequest, endpoint: ResolvedOpenAICompatibleEndpoint, wireMode: SystemPromptWireMode): JsonObject {
-    return endpoint === "responses" ? this.buildResponsesRequestBody(request, wireMode) : this.buildChatCompletionsRequestBody(request, wireMode);
+  /**
+   * 基于 RequestBuildContext 构建请求体，集中接入 cache hint plan。
+   * cache hint 是"提示"性质，provider 可能不支持：仅当 plan.providerHints 为
+   * openai-compatible 形态时注入 prompt_cache_key，其余情况优雅降级为 no-op。
+   */
+  private buildRequestBody(context: RequestBuildContext): JsonObject {
+    const body =
+      context.endpoint === "responses"
+        ? this.buildResponsesRequestBody(context)
+        : this.buildChatCompletionsRequestBody(context);
+    return this.withCacheHint(body, context.cacheHintPlan);
   }
 
-  private buildChatCompletionsRequestBody(request: AgentProviderRequest, wireMode: SystemPromptWireMode): JsonObject {
+  private buildChatCompletionsRequestBody(context: RequestBuildContext): JsonObject {
+    const { request, wireMode } = context;
     return compactObject({
       model: this.options.model,
       stream: this.options.stream !== false,
@@ -548,7 +1065,8 @@ export class OpenAICompatibleProvider implements AgentProvider {
     });
   }
 
-  private buildResponsesRequestBody(request: AgentProviderRequest, wireMode: SystemPromptWireMode): JsonObject {
+  private buildResponsesRequestBody(context: RequestBuildContext): JsonObject {
+    const { request, wireMode } = context;
     return compactObject({
       model: this.options.model,
       stream: this.options.stream !== false,
@@ -562,6 +1080,33 @@ export class OpenAICompatibleProvider implements AgentProvider {
     });
   }
 
+  /**
+   * 把 OpenAI 风格 cache hint 注入到请求体：
+   * Chat Completions / Responses API 均支持 prompt_cache_key 字段作为缓存亲和性提示。
+   * 非 openai-compatible hint（anthropic/gemini/unknown）直接返回原 body，不报错。
+   */
+  private withCacheHint(body: JsonObject, plan: ProviderCacheHintPlan | undefined): JsonObject {
+    if (!plan) return body;
+    const hints = plan.providerHints as OpenAICompatibleCacheHints | { kind: string };
+    if (hints.kind !== "openai-compatible") return body;
+    const affinityKey = (hints as OpenAICompatibleCacheHints).stablePromptCacheAffinityKey;
+    if (!affinityKey) return body;
+    return { ...body, prompt_cache_key: affinityKey };
+  }
+
+  /**
+   * 从 request.promptAssembly 生成 cache hint plan。
+   * promptAssembly 缺失或生成失败时返回 undefined（优雅降级，不报错）。
+   */
+  private buildCacheHintPlan(request: AgentProviderRequest): ProviderCacheHintPlan | undefined {
+    if (!request.promptAssembly) return undefined;
+    try {
+      return createProviderCacheHintPlan(request.promptAssembly);
+    } catch {
+      return undefined;
+    }
+  }
+
   private requestPath(endpoint: ResolvedOpenAICompatibleEndpoint): string {
     return endpoint === "responses" ? "/responses" : "/chat/completions";
   }
@@ -569,13 +1114,12 @@ export class OpenAICompatibleProvider implements AgentProvider {
   private async fetchOnce(
     request: AgentProviderRequest,
     url: string,
-    endpoint: ResolvedOpenAICompatibleEndpoint,
-    wireMode: SystemPromptWireMode
+    bodyString: string
   ): Promise<ProviderFetchResult> {
     const httpRequest: ProviderHttpRequest = {
       method: "POST",
-      headers: this.buildHeaders(),
-      body: JSON.stringify(this.buildRequestBody(request, endpoint, wireMode)),
+      headers: this.resolvedHeaders,
+      body: bodyString,
       timeoutMs: this.options.requestTimeoutMs
     };
     const transport = this.options.transport ?? "fetch";
@@ -587,7 +1131,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
     }
 
     try {
-      const fetchImpl = this.fetchImpl ?? (typeof globalThis !== "undefined" && typeof globalThis.fetch === "function" ? globalThis.fetch : undefined);
+      const fetchImpl = this.fetchImpl ?? defaultKeepAliveFetch();
       if (!fetchImpl) {
         return {
           response: await this.fetchWithRustReqwest(url, httpRequest, request.signal),
@@ -664,8 +1208,11 @@ export class OpenAICompatibleProvider implements AgentProvider {
 
   private rustReqwestArgs(): string[] {
     if (this.options.rustReqwestArgs) return this.options.rustReqwestArgs;
-    if (readEnv("AGENT_PROVIDER_HTTP_COMMAND")) return [];
-    return ["run", "-p", "agent-provider-http", "--quiet"];
+    // --stdio 标志：激活 TS 侧 daemon 客户端 + Rust 侧行循环主循环
+    // （Rust binary 忽略未知 args，--stdio 仅作为 TS 侧 daemon 模式检测信号）
+    if (readEnv("AGENT_PROVIDER_HTTP_COMMAND")) return ["--stdio"];
+    // cargo run 需要 -- 分隔 cargo 参数与 binary 参数
+    return ["run", "-p", "agent-provider-http", "--quiet", "--", "--stdio"];
   }
 
   private rustReqwestCwd(): string | undefined {
@@ -839,7 +1386,7 @@ export async function listOpenAICompatibleModels(options: {
   rustReqwestFetch?: typeof fetch;
   fetch?: typeof fetch;
 }): Promise<OpenAICompatibleModel[]> {
-  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const fetchImpl = options.fetch ?? defaultKeepAliveFetch();
   const transport = options.transport ?? "fetch";
   if (!fetchImpl && transport === "fetch") {
     throw new Error("A fetch implementation is required to list models");
@@ -1501,6 +2048,26 @@ async function fetchWithRustReqwestProcess(
   signal: AbortSignal,
   options: RustReqwestProcessOptions
 ): Promise<Response> {
+  // daemon 模式：命令带 --stdio 标志时走长驻进程，跨请求复用 reqwest::Client 连接池
+  if (isDaemonCapable(options)) {
+    const daemon = getOrCreateRustReqwestDaemon(options);
+    return fetchWithRustReqwestDaemon(daemon, url, request, signal);
+  }
+  // 单次 spawn 模式（向后兼容：测试用 process.execPath -e 一次性脚本，不含 --stdio）
+  return fetchWithRustReqwestSingleShot(url, request, signal, options);
+}
+
+/**
+ * 单次 spawn 模式：每次请求 spawn 新进程，请求完成后进程退出。
+ * 旧协议：响应 header JSON 行 + body 字节流（跟随至 stdout EOF，无长度前缀）。
+ * 保留用于非 daemon 命令（如测试中的 process.execPath -e 一次性脚本）。
+ */
+async function fetchWithRustReqwestSingleShot(
+  url: string,
+  request: ProviderHttpRequest,
+  signal: AbortSignal,
+  options: RustReqwestProcessOptions
+): Promise<Response> {
   return new Promise<Response>((resolveResponse, rejectResponse) => {
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
@@ -1701,7 +2268,7 @@ async function fetchWithOptionalRustReqwestOverride(
   }
   return fetchWithRustReqwestProcess(url, request, signal, {
     command: options.rustReqwestCommand ?? readEnv("AGENT_PROVIDER_HTTP_COMMAND") ?? "cargo",
-    args: options.rustReqwestArgs ?? (readEnv("AGENT_PROVIDER_HTTP_COMMAND") ? [] : ["run", "-p", "agent-provider-http", "--quiet"]),
+    args: options.rustReqwestArgs ?? (readEnv("AGENT_PROVIDER_HTTP_COMMAND") ? ["--stdio"] : ["run", "-p", "agent-provider-http", "--quiet", "--", "--stdio"]),
     cwd: options.rustReqwestCwd ?? readEnv("AGENT_PROVIDER_HTTP_CWD") ?? defaultWorkspaceRoot()
   });
 }
@@ -2051,6 +2618,34 @@ function readSecretFileSync(filePath: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 按 provider 生命周期内不变的优先级解析 apiKey：
+ * options.apiKey → apiKeyEnv → apiKeyFile → FLOWBIT_API_KEY → OPENAI_API_KEY。
+ * apiKeyFile 保持原有同步读取语义（构造函数里同步完成，不引入异步）。
+ */
+function resolveApiKey(options: OpenAICompatibleProviderOptions): string | undefined {
+  return (
+    options.apiKey ??
+    (options.apiKeyEnv ? readEnv(options.apiKeyEnv) : undefined) ??
+    (options.apiKeyFile ? readSecretFileSync(options.apiKeyFile) : undefined) ??
+    readEnv("FLOWBIT_API_KEY") ??
+    readEnv("OPENAI_API_KEY")
+  );
+}
+
+/**
+ * 在构造时一次性冻结请求 headers（content-type / accept / auth / 自定义 headers）。
+ * 之后所有请求复用同一份 headers 对象，避免每次请求重新解析。
+ */
+function freezeHeaders(options: OpenAICompatibleProviderOptions, apiKey: string | undefined): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    accept: options.stream === false ? "application/json" : "text/event-stream",
+    ...authHeaderObject(options.authHeader ?? "authorization", apiKey),
+    ...options.headers
+  };
 }
 
 function defaultWorkspaceRoot(): string {

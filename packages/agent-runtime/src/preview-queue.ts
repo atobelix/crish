@@ -1,4 +1,5 @@
 import { createId } from "./session";
+import { BoundedMap } from "@crish/shared-utils";
 import type { JsonObject, JsonValue, ToolArtifact } from "@crish/shared-types";
 
 export type PreviewStatus = "pending" | "applied" | "discarded" | "expired";
@@ -99,12 +100,14 @@ export interface PreviewListOptions {
 }
 
 const DEFAULT_PREVIEW_TTL_MS = 30 * 60 * 1000;
+/** 预览队列上限：防止长期运行时累积过期预览导致内存泄漏。 */
+const MAX_PREVIEWS = 200;
 
 export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
   private readonly defaultTtlMs: number;
   private readonly idFactory: () => string;
   private readonly now: () => Date | number;
-  private readonly previews = new Map<string, Preview<TPayload>>();
+  private readonly previews = new BoundedMap<string, Preview<TPayload>>(MAX_PREVIEWS);
   private operationQueue: Promise<void> = Promise.resolve();
 
   constructor(options: PreviewQueueOptions = {}) {
@@ -375,7 +378,7 @@ function cloneJsonObject(value?: JsonObject): JsonObject {
 }
 
 function cloneJsonValue<TValue extends JsonValue>(value: TValue): TValue {
-  return JSON.parse(JSON.stringify(value)) as TValue;
+  return structuredClone(value);
 }
 
 function toIso(timestamp: number): string {

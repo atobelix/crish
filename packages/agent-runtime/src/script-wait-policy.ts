@@ -7,6 +7,11 @@
  * - Never kill scripts just so the model can keep talking
  */
 
+import { BoundedMap } from "@crish/shared-utils";
+
+/** 任务元数据上限：后台任务完成后保留供查询，超过后按 FIFO 淘汰。 */
+const MAX_SCRIPT_TASK_METAS = 200;
+
 export type ScriptRunMode = "wait" | "continue";
 
 export interface ScriptTaskMeta {
@@ -77,7 +82,7 @@ export function suggestRunMode(command: string, avgDurationMs?: number): ScriptR
 }
 
 export class ScriptWaitPolicy {
-  private readonly tasks = new Map<string, ScriptTaskMeta>();
+  private readonly tasks = new BoundedMap<string, ScriptTaskMeta>(MAX_SCRIPT_TASK_METAS);
   /** Rolling average duration by command family */
   private readonly familyDurations = new Map<string, number[]>();
 

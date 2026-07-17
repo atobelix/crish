@@ -1,3 +1,5 @@
+import { RingBuffer } from "@crish/shared-utils";
+
 export type StateId = string;
 export type EventId = string;
 
@@ -111,11 +113,11 @@ export class StateMachineBuilder<S extends StateId, E extends EventId, C = unkno
 export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown> {
   private current: S;
   private context: C;
-  private history: TransitionRecord<S, E>[] = [];
+  private readonly maxHistoryLength = 1000;
+  private readonly history = new RingBuffer<TransitionRecord<S, E>>(this.maxHistoryLength);
   private destroyed = false;
   private readonly createdAt: string;
   private updatedAt: string;
-  private readonly maxHistoryLength = 1000;
 
   constructor(
     private readonly definition: StateMachineDefinition<S, E, C>,
@@ -125,7 +127,7 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
     if (options?.snapshot) {
       this.current = options.snapshot.current;
       this.context = options.snapshot.context;
-      this.history = options.snapshot.history as TransitionRecord<S, E>[];
+      this.history.fromArrayTail(options.snapshot.history as TransitionRecord<S, E>[]);
       this.createdAt = options.snapshot.createdAt;
       this.updatedAt = options.snapshot.updatedAt;
     } else {
@@ -153,7 +155,7 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
     return [...stateDef.transitions.keys()];
   }
 
-  getHistory(): ReadonlyArray<TransitionRecord<S, E>> { return this.history; }
+  getHistory(): ReadonlyArray<TransitionRecord<S, E>> { return this.history.toArray(); }
 
   getSnapshot(): StateMachineSnapshot<S, C> {
     return {
@@ -161,7 +163,7 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
       machineId: this.machineId,
       current: this.current,
       context: structuredClone(this.context),
-      history: [...this.history],
+      history: this.history.toArray(),
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -247,8 +249,7 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
     }
 
     const record: TransitionRecord<S, E> = { from, to, event, timestamp, payload };
-    this.history.push(record);
-    if (this.history.length > this.maxHistoryLength) this.history.shift();
+    this.history.pushOverwritingOldest(record);
 
     return { ok: true, from, to, event, timestamp, effects: allEffects };
   }

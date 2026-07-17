@@ -444,7 +444,7 @@ function observeSubagentEvent(
 }
 
 function extractFinalAssistantText(messages: AgentMessage[]): string {
-  const assistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const assistant = messages.findLast((message) => message.role === "assistant");
   if (!assistant) return "";
   return assistant.blocks
     .filter((block) => block.type === "text")

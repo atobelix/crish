@@ -1,3 +1,4 @@
+import { LruMap } from "@crish/shared-utils";
 import type { AgentMessage, AgentMessageBlock, JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 
 export type SecretKind = "secret" | "env" | "token" | "api-key" | "pattern";
@@ -54,6 +55,12 @@ export interface SecretRedactorOptions {
   restoreMap?: SecretRestoreMap;
   displayMap?: SecretDisplayMap;
   redactSensitiveJsonKeys?: boolean;
+  /**
+   * 占位符注册表容量上限。超出后按 LRU 策略淘汰最久未访问的 secret 记录，
+   * 防止 daemon 长跑或高频 redact 场景下注册表无界增长导致内存泄漏。
+   * 默认 256，覆盖典型会话内同时活跃的 secret 数量。
+   */
+  maxCachedSecrets?: number;
 }
 
 export interface SecretRedactionEntry {
@@ -119,6 +126,12 @@ interface PlaceholderRecord {
 const DEFAULT_MIN_SECRET_LENGTH = 8;
 const DEFAULT_PATTERN_MIN_SECRET_LENGTH = 16;
 const DEFAULT_PLACEHOLDER_PREFIX = "SECRET";
+/**
+ * 占位符注册表默认容量。pattern 匹配的 token/api-key 在长会话下可能产生
+ * 大量不同值，无界 Map 会导致内存泄漏。LRU 淘汰保证注册表有界，
+ * 256 覆盖典型会话内同时活跃的 secret 数量。
+ */
+const DEFAULT_MAX_CACHED_SECRETS = 256;
 const DEFAULT_SENSITIVE_NAME_PATTERN =
   /(?:api[_\-.]?key|access[_\-.]?token|refresh[_\-.]?token|id[_\-.]?token|(?:^|[_\-.])(?:token|secret|password|credential|auth)(?:$|[_\-.]))/i;
 const LOW_SIGNAL_VALUES = new Set([
@@ -299,8 +312,16 @@ export class SecretRegistry {
 }
 
 export class SecretRedactor {
-  private readonly valueToRecord = new Map<string, PlaceholderRecord>();
-  private readonly placeholderToRecord = new Map<string, PlaceholderRecord>();
+  /**
+   * 双向 LRU 注册表：
+   * - valueToRecord: secret value → record，用于 redact 时复用既有 placeholder
+   * - placeholderToRecord: placeholder → record，用于 restore/state 遍历
+   *
+   * 两者容量相同，placeholderFor 命中时同步刷新双方 LRU 位置以保持一致。
+   * 容量超限时淘汰最久未访问的记录，防止无界增长。
+   */
+  private readonly valueToRecord: LruMap<string, PlaceholderRecord>;
+  private readonly placeholderToRecord: LruMap<string, PlaceholderRecord>;
   private nextPlaceholder = 1;
   private readonly placeholderPrefix: string;
   private readonly redactSensitiveJsonKeys: boolean;
@@ -308,6 +329,9 @@ export class SecretRedactor {
   constructor(private readonly registry: SecretRegistry = new SecretRegistry(), options: SecretRedactorOptions = {}) {
     this.placeholderPrefix = sanitizePlaceholderPrefix(options.placeholderPrefix ?? DEFAULT_PLACEHOLDER_PREFIX);
     this.redactSensitiveJsonKeys = options.redactSensitiveJsonKeys ?? true;
+    const capacity = Math.max(1, Math.floor(options.maxCachedSecrets ?? DEFAULT_MAX_CACHED_SECRETS));
+    this.valueToRecord = new LruMap<string, PlaceholderRecord>(capacity);
+    this.placeholderToRecord = new LruMap<string, PlaceholderRecord>(capacity);
     if (options.restoreMap) {
       this.importRestoreMap(options.restoreMap, options.displayMap);
     }
@@ -453,15 +477,24 @@ export class SecretRedactor {
   }
 
   displayMap(): SecretDisplayMap {
-    return Object.fromEntries([...this.placeholderToRecord.values()].map((entry) => [entry.placeholder, entry.label]));
+    const result: SecretDisplayMap = {};
+    this.placeholderToRecord.forEachRecent((entry) => {
+      result[entry.placeholder] = entry.label;
+    });
+    return result;
   }
 
   restoreMap(): SecretRestoreMap {
-    return Object.fromEntries([...this.placeholderToRecord.values()].map((entry) => [entry.placeholder, entry.value]));
+    const result: SecretRestoreMap = {};
+    this.placeholderToRecord.forEachRecent((entry) => {
+      result[entry.placeholder] = entry.value;
+    });
+    return result;
   }
 
   state(): SecretRedactionState {
-    const entries = [...this.placeholderToRecord.values()].map((entry): SecretRedactionEntry => {
+    const entries: SecretRedactionEntry[] = [];
+    this.placeholderToRecord.forEachRecent((entry) => {
       const result: SecretRedactionEntry = {
         placeholder: entry.placeholder,
         kind: entry.kind,
@@ -469,7 +502,7 @@ export class SecretRedactor {
         valueLength: entry.value.length
       };
       if (entry.source !== undefined) result.source = entry.source;
-      return result;
+      entries.push(result);
     });
     const restoreMap = this.restoreMap();
     return {
@@ -568,7 +601,7 @@ export class SecretRedactor {
 
   private collectKnownSecretSpans(text: string): CandidateSpan[] {
     const spans: CandidateSpan[] = [];
-    const known = [...this.placeholderToRecord.values()].sort((left, right) => right.value.length - left.value.length);
+    const known = this.placeholderToRecord.values().sort((left, right) => right.value.length - left.value.length);
 
     for (const secret of known) {
       let index = text.indexOf(secret.value);
@@ -623,7 +656,12 @@ export class SecretRedactor {
     const normalized = normalizeSecretValue(value);
     if (!normalized) return value;
     const existing = this.valueToRecord.get(normalized);
-    if (existing) return existing.placeholder;
+    if (existing) {
+      // 同步刷新 placeholderToRecord 的 LRU 位置，保持双向缓存访问顺序一致，
+      // 避免一侧被淘汰另一侧残留导致 placeholder 复用与 restore 不一致。
+      this.placeholderToRecord.set(existing.placeholder, existing);
+      return existing.placeholder;
+    }
 
     const placeholder = `[${this.placeholderPrefix}_${this.nextPlaceholder++}]`;
     const record: PlaceholderRecord = {

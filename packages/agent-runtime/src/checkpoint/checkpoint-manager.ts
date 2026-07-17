@@ -15,6 +15,12 @@
  */
 
 import type { AgentMessage } from "@crish/shared-types";
+import { BoundedMap } from "@crish/shared-utils";
+
+/** Checkpoint 记录上限：每 turn 可能创建一个，100 足以覆盖典型会话的回溯需求。 */
+const MAX_CHECKPOINTS = 100;
+/** 恢复备份上限：恢复操作较少，50 足以覆盖回退链。 */
+const MAX_BACKUPS = 50;
 
 // ─── Checkpoint 元数据 ────────────────────────────────────
 
@@ -75,8 +81,8 @@ export interface RestoreResult {
 // ─── CheckpointManager ────────────────────────────────────
 
 export class CheckpointManager {
-  private checkpoints = new Map<string, CheckpointMetadata>();
-  private backups = new Map<string, CheckpointMetadata>();
+  private checkpoints = new BoundedMap<string, CheckpointMetadata>(MAX_CHECKPOINTS);
+  private backups = new BoundedMap<string, CheckpointMetadata>(MAX_BACKUPS);
   private currentSchemaVersion = 1;
 
   constructor(private readonly sessionId: string) {}

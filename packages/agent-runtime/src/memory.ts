@@ -1,10 +1,14 @@
-import { mkdir, open, readFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat as statFile, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
+import { BoundedMap, isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentTool } from "./types";
+
+/** InMemoryMemoryStore 条目上限：search 默认只返回最近 20 条，保留充裕余量。 */
+const MAX_IN_MEMORY_ENTRIES = 500;
 
 export type MemoryScope = "session" | "project" | "user";
 
@@ -33,7 +37,7 @@ export interface MemoryStore {
 
 export class InMemoryMemoryStore implements MemoryStore {
   private readonly entries: MemoryEntry[] = [];
-  private readonly deletedIds = new Set<string>();
+  private readonly deletedIds = new BoundedMap<string, true>(MAX_IN_MEMORY_ENTRIES);
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
     const now = nowIso();
@@ -44,6 +48,9 @@ export class InMemoryMemoryStore implements MemoryStore {
       updatedAt: now
     };
     this.entries.push(saved);
+    if (this.entries.length > MAX_IN_MEMORY_ENTRIES) {
+      this.entries.splice(0, this.entries.length - MAX_IN_MEMORY_ENTRIES);
+    }
     return saved;
   }
 
@@ -52,15 +59,30 @@ export class InMemoryMemoryStore implements MemoryStore {
   }
 
   async delete(memoryId: string): Promise<boolean> {
-    const exists = this.entries.some((entry) => entry.id === memoryId && !this.deletedIds.has(entry.id));
+    const exists = this.entries.some((entry) => entry.id === memoryId && !this.deletedIds.has(memoryId));
     if (!exists) return false;
-    this.deletedIds.add(memoryId);
+    this.deletedIds.set(memoryId, true);
     return true;
   }
 }
 
 export class JsonlMemoryStore implements MemoryStore {
+  /**
+   * 软删除记录占文件总记录数的比例达到该阈值时触发 compaction。
+   * 30% 是经验值：低于此比例 compaction 收益有限，高于则文件膨胀明显。
+   */
+  private static readonly COMPACTION_RATIO_THRESHOLD = 0.3;
+  /**
+   * 软删除记录绝对数量下限。小文件即使比例高也不 compaction，
+   * 避免在低基数下频繁重写的开销超过收益。
+   */
+  private static readonly COMPACTION_MIN_DELETED_RECORDS = 100;
+
   private appendQueue: Promise<void> = Promise.resolve();
+  private appendBatcher: JsonlAppendBatcher | undefined;
+  private cachedEntries: MemoryEntry[] | undefined;
+  private cachedMtimeMs: number | undefined;
+  private cachedStats: { totalRecords: number; deletedRecords: number } | undefined;
 
   constructor(private readonly filePath: string) {}
 
@@ -72,8 +94,10 @@ export class JsonlMemoryStore implements MemoryStore {
       createdAt: now,
       updatedAt: now
     };
-    await mkdir(dirname(this.filePath), { recursive: true });
     await this.enqueueAppend(JSON.stringify(saved));
+    // invalidateEntriesCache 已在 enqueueAppend 内同步执行，此处 flush 确保
+    // pending 数据落盘，使后续 readEntries 读到完整文件内容。
+    await this.flushPendingAppends();
     return saved;
   }
 
@@ -88,43 +112,201 @@ export class JsonlMemoryStore implements MemoryStore {
     if (!entries.some((entry) => entry.id === id)) {
       return false;
     }
-    await mkdir(dirname(this.filePath), { recursive: true });
     await this.enqueueAppend(JSON.stringify({ type: "delete", memoryId: id, deletedAt: nowIso() }));
+    await this.flushPendingAppends();
+    // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
+    await this.maybeCompact();
     return true;
   }
 
+  /**
+   * 释放持久化的追加句柄。
+   *
+   * 正常运行期间 append() 会复用同一个文件句柄以提升吞吐，
+   * 在关闭/卸载场景下应调用此方法确保句柄被释放。
+   */
+  async close(): Promise<void> {
+    const closeTask = this.appendQueue.then(() => this.releaseAppendHandle());
+    this.appendQueue = closeTask.catch(() => undefined);
+    await closeTask;
+  }
+
+  private async releaseAppendHandle(): Promise<void> {
+    if (this.appendBatcher) {
+      try {
+        await this.appendBatcher.close();
+      } catch {
+        // 忽略关闭错误
+      }
+      this.appendBatcher = undefined;
+    }
+  }
+
+  private invalidateEntriesCache(): void {
+    this.cachedEntries = undefined;
+    this.cachedMtimeMs = undefined;
+    this.cachedStats = undefined;
+  }
+
+  /**
+   * 读取并缓存条目。
+   *
+   * 以 stat().mtimeMs 作为缓存失效判据：若文件未变更则直接返回缓存，
+   * 避免 search 反复读全文件。remember()/delete() 写入后会显式置失效，
+   * 覆盖同一毫秒内多次写入导致 mtimeMs 相同的边界情况。缓存 miss 时
+   * 先 flush batcher 确保 pending 数据落盘后再读取文件。
+   */
   private async readEntries(): Promise<MemoryEntry[]> {
-    const bytes = await readFile(this.filePath).catch(() => null);
-    if (!bytes) return [];
+    // 先 flush pending appends，确保文件反映所有写入后再 stat。
+    // 这样 mtimeMs 判据与文件实际内容一致，避免读到旧 mtime 命中缓存。
+    if (this.appendBatcher) {
+      await this.appendBatcher.flush();
+    }
+    const stat = await statFile(this.filePath).catch((error: unknown) => {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    });
+    if (!stat) {
+      this.cachedEntries = [];
+      this.cachedMtimeMs = undefined;
+      this.cachedStats = { totalRecords: 0, deletedRecords: 0 };
+      return this.cachedEntries;
+    }
+    if (this.cachedEntries !== undefined && this.cachedMtimeMs === stat.mtimeMs) {
+      return this.cachedEntries;
+    }
+    const bytes = await readFile(this.filePath);
     const decoded = decodeTextBuffer(bytes);
-    if (decoded.encoding === "binary") return [];
     const entries = new Map<string, MemoryEntry>();
     const deletedIds = new Set<string>();
-    for (const line of decoded.text.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const record = JSON.parse(trimmed) as unknown;
-        if (isMemoryDeleteRecord(record)) {
-          deletedIds.add(record.memoryId);
-          entries.delete(record.memoryId);
+    let totalRecords = 0;
+    let deletedRecords = 0;
+    if (decoded.encoding !== "binary") {
+      for (const line of decoded.text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const record = JSON.parse(trimmed) as unknown;
+          totalRecords += 1;
+          if (isMemoryDeleteRecord(record)) {
+            deletedIds.add(record.memoryId);
+            entries.delete(record.memoryId);
+            deletedRecords += 1;
+            continue;
+          }
+          const entry = normalizeMemoryEntry(record);
+          if (!deletedIds.has(entry.id)) {
+            entries.set(entry.id, entry);
+          }
+        } catch {
           continue;
         }
-        const entry = normalizeMemoryEntry(record);
-        if (!deletedIds.has(entry.id)) {
-          entries.set(entry.id, entry);
-        }
-      } catch {
-        continue;
       }
     }
-    return [...entries.values()];
+    this.cachedEntries = [...entries.values()];
+    this.cachedMtimeMs = stat.mtimeMs;
+    this.cachedStats = { totalRecords, deletedRecords };
+    return this.cachedEntries;
   }
 
   private async enqueueAppend(line: string): Promise<void> {
-    const appendTask = this.appendQueue.then(() => appendJsonLine(this.filePath, line));
+    const appendTask = this.appendQueue.then(async () => {
+      const batcher = await this.ensureAppendBatcher();
+      await batcher.append(line);
+      // 同步失效缓存：在 enqueueAppend 返回前清空缓存，关闭
+      // "append 返回 → invalidateEntriesCache" 之间的竞态窗口，
+      // 避免并发 readEntries 命中旧缓存。
+      this.invalidateEntriesCache();
+    });
     this.appendQueue = appendTask.catch(() => undefined);
     await appendTask;
+  }
+
+  /**
+   * 懒初始化 JsonlAppendBatcher。
+   *
+   * batcher 内部缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync
+   * 显著提升吞吐。首行换行与目录 fsync 由 batcher 自身处理。
+   */
+  private async ensureAppendBatcher(): Promise<JsonlAppendBatcher> {
+    if (!this.appendBatcher) {
+      await mkdir(dirname(this.filePath), { recursive: true });
+      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath });
+    }
+    return this.appendBatcher;
+  }
+
+  /**
+   * 等待所有已入队的 append 落盘后再返回。
+   *
+   * remember()/delete() 在 invalidateEntriesCache 后调用此方法，
+   * 确保 pending 数据落盘，使后续读取看到完整文件内容。
+   */
+  private async flushPendingAppends(): Promise<void> {
+    await this.appendQueue;
+    await this.appendBatcher?.flush();
+  }
+
+  /**
+   * 软删除累积达到阈值时触发 compaction，重写文件只保留活跃 entries。
+   *
+   * 动机：delete() 以 tombstone 形式追加到 JSONL 文件，长会话下 tombstone
+   * 累积导致文件膨胀、readEntries 解析大量无效行、内存缓存承载历史负担。
+   * compaction 把所有未删除 entries 原子重写到原文件，回收空间。
+   *
+   * 阈值：deletedRecords >= 100 且 deletedRecords/totalRecords >= 0.3。
+   * 小文件不触发，避免频繁 compaction 的开销超过收益。
+   */
+  private async maybeCompact(): Promise<void> {
+    // delete() 的 enqueueAppend 已 invalidate 缓存，此处重新读取以获取
+    // 包含最新 tombstone 的统计。
+    await this.readEntries();
+    const stats = this.cachedStats;
+    if (!stats || stats.totalRecords === 0) return;
+    const ratio = stats.deletedRecords / stats.totalRecords;
+    if (
+      stats.deletedRecords >= JsonlMemoryStore.COMPACTION_MIN_DELETED_RECORDS &&
+      ratio >= JsonlMemoryStore.COMPACTION_RATIO_THRESHOLD
+    ) {
+      await this.compactEntries();
+    }
+  }
+
+  /**
+   * 重写文件只保留未删除 entries。
+   *
+   * 通过 appendQueue 串行化，确保 compaction 期间无并发 append。
+   * 使用 tmp + rename 原子覆写，崩溃时要么旧文件完整、要么新文件完整。
+   * compaction 后必须释放 appendBatcher：rename 后旧 fd 指向被覆写的 inode，
+   * 后续 append 必须重新打开新文件；同时重置缓存强制下次读取 compacted 文件。
+   */
+  private async compactEntries(): Promise<void> {
+    const compactTask = this.appendQueue.then(async () => {
+      // readEntries 内部会 flush pending tombstone，确保读到完整文件
+      const entries = await this.readEntries();
+      // 原子写入 tmp + rename 覆盖原文件
+      const tmpPath = `${this.filePath}.compact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      await mkdir(dirname(tmpPath), { recursive: true });
+      const content = entries.length > 0
+        ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+        : "";
+      try {
+        await writeFile(tmpPath, content, "utf8");
+        await rename(tmpPath, this.filePath);
+      } catch (error) {
+        // rename 失败时清理 tmp 残留，避免污染工作区
+        await unlink(tmpPath).catch(() => undefined);
+        throw error;
+      }
+      // rename 成功后旧 appendBatcher 的 fd 指向被覆写的 inode，必须释放
+      await this.releaseAppendHandle();
+      // 重置缓存，强制下次 readEntries 读取 compacted 文件
+      this.invalidateEntriesCache();
+    });
+    this.appendQueue = compactTask.catch(() => undefined);
+    await compactTask;
   }
 }
 
@@ -156,30 +338,6 @@ function normalizeMemoryEntry(value: unknown): MemoryEntry {
       ? { metadata: record.metadata as JsonObject }
       : {})
   };
-}
-
-async function appendJsonLine(path: string, line: string): Promise<void> {
-  const handle = await open(path, "a");
-  try {
-    await handle.writeFile(`${line}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await fsyncDirectory(dirname(path));
-}
-
-async function fsyncDirectory(path: string): Promise<void> {
-  try {
-    const handle = await open(path, "r");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    // Directory fsync is best-effort on Windows and some filesystems.
-  }
 }
 
 export function createMemoryTools(store: MemoryStore): AgentTool[] {

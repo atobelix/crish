@@ -1,5 +1,11 @@
 import { isAbsolute, resolve, sep } from "node:path";
+import { BoundedMap } from "@crish/shared-utils";
 import { createId } from "./session";
+
+/** 读快照 session 维度上限：按 session 聚合的路径快照，防止跨 session 累积。 */
+const MAX_READ_SNAPSHOT_SESSIONS = 100;
+/** 单 session 内读快照路径上限：防止超长 session 中路径快照单调增长。 */
+const MAX_READ_SNAPSHOTS_PER_SESSION = 1000;
 
 export type LeaseScope = { type: "workspace" } | { type: "files"; paths: string[] };
 export type NormalizedLeaseScope = { type: "workspace" } | { type: "files"; paths: string[] };
@@ -98,7 +104,7 @@ export class WorkspaceMutationCoordinator {
   private readonly now: () => Date | number;
   private readonly caseSensitivePaths: boolean;
   private readonly leases = new Map<string, ActiveMutationLease>();
-  private readonly readSnapshots = new Map<string, Map<string, string>>();
+  private readonly readSnapshots = new BoundedMap<string, BoundedMap<string, string>>(MAX_READ_SNAPSHOT_SESSIONS);
   private waiters: WaitingMutationLeaseRequest[] = [];
   private expiryTimer?: ReturnType<typeof setTimeout>;
 
@@ -246,7 +252,7 @@ export class WorkspaceMutationCoordinator {
     const normalizedPath = this.normalizePath(path);
     let snapshots = this.readSnapshots.get(normalizedSessionId);
     if (!snapshots) {
-      snapshots = new Map<string, string>();
+      snapshots = new BoundedMap<string, string>(MAX_READ_SNAPSHOTS_PER_SESSION);
       this.readSnapshots.set(normalizedSessionId, snapshots);
     }
     snapshots.set(normalizedPath, snapshotTag);

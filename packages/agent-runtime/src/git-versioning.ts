@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
-import { isRecord } from "@crish/shared-utils";
+import { AsyncMutex, isRecord } from "@crish/shared-utils";
 
 export type GitCheckpointStrategy = "commit" | "snapshot";
 
@@ -220,9 +220,15 @@ export class GitCommandError extends Error {
 }
 
 export class GitCliVersioningService implements GitVersioningService {
+  private readonly mutex = new AsyncMutex();
+
   constructor(private readonly options: GitCliVersioningServiceOptions = {}) {}
 
   async detectRepository(request: GitDetectRepositoryRequest): Promise<GitRepositoryDetectionResult> {
+    return this.mutex.runExclusive(() => this.detectRepositoryLocked(request));
+  }
+
+  private async detectRepositoryLocked(request: GitDetectRepositoryRequest): Promise<GitRepositoryDetectionResult> {
     const cwd = resolve(request.cwd);
     const inside = await this.git(["rev-parse", "--is-inside-work-tree"], { cwd, allowFailure: true });
     if (inside.exitCode !== 0 || inside.stdout.trim() !== "true") {
@@ -251,6 +257,10 @@ export class GitCliVersioningService implements GitVersioningService {
   }
 
   async createCheckpoint(request: CreateGitCheckpointRequest): Promise<GitCheckpoint> {
+    return this.mutex.runExclusive(() => this.createCheckpointLocked(request));
+  }
+
+  private async createCheckpointLocked(request: CreateGitCheckpointRequest): Promise<GitCheckpoint> {
     const repo = await this.requireRepository(request.cwd);
     const strategy = request.strategy ?? "snapshot";
     if (strategy === "commit") {
@@ -260,6 +270,10 @@ export class GitCliVersioningService implements GitVersioningService {
   }
 
   async diffCheckpoint(request: DiffGitCheckpointRequest): Promise<GitCheckpointDiff> {
+    return this.mutex.runExclusive(() => this.diffCheckpointLocked(request));
+  }
+
+  private async diffCheckpointLocked(request: DiffGitCheckpointRequest): Promise<GitCheckpointDiff> {
     const repo = await this.requireRepository(request.cwd);
     const checkpoint = await this.readCheckpoint(repo, request.checkpoint, request.refNamespace);
     const pathArgs = this.pathArgs(repo.root, request.paths);
@@ -281,6 +295,10 @@ export class GitCliVersioningService implements GitVersioningService {
   }
 
   async diffWorkspace(request: DiffGitWorkspaceRequest): Promise<GitWorkspaceDiff> {
+    return this.mutex.runExclusive(() => this.diffWorkspaceLocked(request));
+  }
+
+  private async diffWorkspaceLocked(request: DiffGitWorkspaceRequest): Promise<GitWorkspaceDiff> {
     const repo = await this.requireRepository(request.cwd);
     const pathArgs = this.pathArgs(repo.root, request.paths);
     const diffBase = request.staged ? ["diff", "--cached"] : ["diff"];
@@ -303,27 +321,38 @@ export class GitCliVersioningService implements GitVersioningService {
   async listCheckpoints(request: ListGitCheckpointsRequest): Promise<GitCheckpoint[]> {
     const repo = await this.requireRepository(request.cwd);
     const namespace = normalizeRefNamespace(request.refNamespace ?? this.options.refNamespace);
-    const refs = await this.git(["for-each-ref", "--format=%(refname)%09%(objectname)", namespace], {
+    const refs = await this.git(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(contents)%00", namespace], {
       cwd: repo.root
     });
     const checkpoints: GitCheckpoint[] = [];
-    for (const line of refs.stdout.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      const [refName, objectName] = line.split("\t");
-      if (!refName || !objectName) continue;
-      const checkpoint = await this.readCheckpointFromRef(repo, refName, objectName).catch(() => null);
-      if (checkpoint) checkpoints.push(checkpoint);
+    const parts = refs.stdout.split("\0");
+    for (let i = 0; i + 2 < parts.length; i += 3) {
+      const refName = parts[i]?.trim();
+      const objectName = parts[i + 1]?.trim();
+      const rawContents = parts[i + 2];
+      if (!refName || !objectName || !rawContents) continue;
+      try {
+        const metadata = parseCheckpointMetadata(rawContents);
+        const checkpoint = this.checkpointFromMetadata(repo, { ...metadata, refName }, objectName);
+        checkpoints.push(checkpoint);
+      } catch {
+        // Skip parsing errors gracefully
+      }
     }
     checkpoints.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     return checkpoints;
   }
 
   async restoreCheckpoint(request: RestoreGitCheckpointRequest): Promise<GitCheckpointRestoreResult> {
+    return this.mutex.runExclusive(() => this.restoreCheckpointLocked(request));
+  }
+
+  private async restoreCheckpointLocked(request: RestoreGitCheckpointRequest): Promise<GitCheckpointRestoreResult> {
     const repo = await this.requireRepository(request.cwd);
     const checkpoint = await this.readCheckpoint(repo, request.checkpoint, request.refNamespace);
     const beforeStatus = await this.readStatus(repo.root);
     const cleanUntracked = request.cleanUntracked ?? false;
-    const diff = await this.diffCheckpoint({ cwd: repo.root, checkpoint: checkpoint.refName });
+    const diff = await this.diffCheckpointLocked({ cwd: repo.root, checkpoint: checkpoint.refName });
     const changedPaths = [...new Set(diff.nameStatus.map((file) => file.path))].sort();
     if (request.expectedChangedPaths !== undefined) {
       assertExpectedChangedPaths(repo.root, request.expectedChangedPaths, changedPaths);
@@ -536,7 +565,7 @@ export class GitCliVersioningService implements GitVersioningService {
   }
 
   private async requireRepository(cwd: string): Promise<GitRepository> {
-    const detected = await this.detectRepository({ cwd });
+    const detected = await this.detectRepositoryLocked({ cwd });
     if (!detected.found) {
       throw new Error(`Git repository not found: ${detected.reason}`);
     }

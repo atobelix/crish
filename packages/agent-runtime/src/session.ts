@@ -1,11 +1,9 @@
-import { constants } from "node:fs";
-import type { FileHandle } from "node:fs/promises";
-import { mkdir, open as openFile, readFile, rename, unlink } from "node:fs/promises";
+import { mkdir, open as openFile, readFile, rename, stat as statFile, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { AgentEvent, AgentMessage, ContextCompressionRecord } from "@crish/shared-types";
 import { SessionError } from "@crish/shared-types";
 import type { SessionEntry, SessionHeader, SessionPersistenceStore } from "./types";
-import { isRecord, errorMessage } from "@crish/shared-utils";
+import { AsyncMutex, errorMessage, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
 
 const SESSION_FILE_VERSION = 1;
 export type SessionLeafPointerEntry = Extract<SessionEntry, { type: "leaf-pointer" }>;
@@ -163,55 +161,80 @@ export interface JsonlSessionStoreOptions {
 
 export class JsonlSessionStore implements SessionPersistenceStore {
   private opened = false;
-  private appendHandle: FileHandle | undefined;
+  private appendBatcher: JsonlAppendBatcher | undefined;
+  /**
+   * 串行化所有触碰 appendBatcher / 重写文件的公共方法。
+   *
+   * readAll 在 needsRewrite 时会调用 releaseAppendHandle 关闭 appendBatcher，
+   * 若此时并发的 append 已经捕获 batcher 引用并正在写入，后续 rename 会
+   * 抛 EBADF/EPERM。AsyncMutex 保证 readAll 释放句柄时不会有并发的 append
+   * 正在使用它，同时保留 append 句柄缓存的吞吐优势。
+   */
+  private readonly mutex = new AsyncMutex();
 
   constructor(private readonly filePath: string, private readonly options: JsonlSessionStoreOptions = {}) {}
 
   async open(session: SessionHeader): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    const mode = this.options.mode ?? "create";
-    if (mode !== "create") {
-      const existing = await readExistingSessionFile(this.filePath);
-      if (existing) {
-        if (existing.needsRewrite) {
-          await writeSessionFileAtomically(this.filePath, existing.header, existing.entries);
+    await this.mutex.runExclusive(async () => {
+      await mkdir(dirname(this.filePath), { recursive: true });
+      const mode = this.options.mode ?? "create";
+      if (mode !== "create") {
+        const existing = await readExistingSessionFile(this.filePath);
+        if (existing) {
+          if (existing.needsRewrite) {
+            await writeSessionFileAtomically(this.filePath, existing.header, existing.entries);
+          }
+          this.opened = true;
+          return;
         }
-        this.opened = true;
-        return;
+        if (mode === "append") {
+          throw new SessionError(`Session file does not exist: ${this.filePath}`, "not_found");
+        }
       }
-      if (mode === "append") {
-        throw new SessionError(`Session file does not exist: ${this.filePath}`, "not_found");
-      }
-    }
-    await writeSessionFileAtomically(this.filePath, migrateSessionHeader(session).header, []);
-    this.opened = true;
+      await writeSessionFileAtomically(this.filePath, migrateSessionHeader(session).header, []);
+      this.opened = true;
+    });
   }
 
   async append(entry: SessionEntry): Promise<void> {
     if (!this.opened) {
       throw new SessionError("Session store must be opened before appending entries", "invalid_state");
     }
-    try {
-      await this.appendJsonlLineWithCachedHandle(JSON.stringify(entry));
-    } catch (cause) {
-      if (cause instanceof SessionError) {
-        throw cause;
+    await this.mutex.runExclusive(async () => {
+      try {
+        const batcher = await this.ensureAppendBatcher();
+        await batcher.append(JSON.stringify(entry));
+        // 立即 flush 确保 append 返回后数据已落盘。
+        // session store 的调用方（含测试）依赖 append 的同步持久化语义：
+        // 新建 store 实例读取或进程重启后必须看到已写入的 entry。
+        // batcher 仍提供句柄缓存与集中化的换行/目录 fsync 逻辑。
+        await batcher.flush();
+      } catch (cause) {
+        if (cause instanceof SessionError) {
+          throw cause;
+        }
+        throw new SessionError(
+          `Failed to append session entry to ${this.filePath}: ${errorMessage(cause)}`,
+          "storage",
+        );
       }
-      throw new SessionError(
-        `Failed to append session entry to ${this.filePath}: ${errorMessage(cause)}`,
-        "storage",
-      );
-    }
+    });
   }
 
   async readAll(): Promise<SessionEntry[]> {
-    const parsed = await readExistingSessionFile(this.filePath);
-    if (parsed?.needsRewrite) {
-      // 重写前必须释放持久化句柄，否则 Windows 上 rename 会因文件锁定失败
-      await this.releaseAppendHandle();
-      await writeSessionFileAtomically(this.filePath, parsed.header, parsed.entries);
-    }
-    return parsed?.entries ?? [];
+    return this.mutex.runExclusive(async () => {
+      // 先 flush pending appends，确保文件反映所有写入后再读取
+      if (this.appendBatcher) {
+        await this.appendBatcher.flush();
+      }
+      const parsed = await readExistingSessionFile(this.filePath);
+      if (parsed?.needsRewrite) {
+        // 重写前必须释放持久化句柄，否则 Windows 上 rename 会因文件锁定失败
+        await this.releaseAppendHandle();
+        await writeSessionFileAtomically(this.filePath, parsed.header, parsed.entries);
+      }
+      return parsed?.entries ?? [];
+    });
   }
 
   /**
@@ -221,55 +244,44 @@ export class JsonlSessionStore implements SessionPersistenceStore {
    * 在关闭/卸载场景下应调用此方法确保句柄被释放。
    */
   async close(): Promise<void> {
-    await this.releaseAppendHandle();
-    this.opened = false;
+    await this.mutex.runExclusive(async () => {
+      await this.releaseAppendHandle();
+      this.opened = false;
+    });
   }
 
   private async releaseAppendHandle(): Promise<void> {
-    if (this.appendHandle) {
+    if (this.appendBatcher) {
       try {
-        await this.appendHandle.close();
+        await this.appendBatcher.close();
       } catch {
         // 忽略关闭错误
       }
-      this.appendHandle = undefined;
+      this.appendBatcher = undefined;
     }
   }
 
   /**
-   * 使用持久化句柄追加一行 JSONL。
+   * 懒初始化 JsonlAppendBatcher。
    *
-   * 相比每次打开/关闭文件，缓存句柄可显著提升吞吐。
-   * 句柄失效时会自动释放并让下次 append 重新打开。
+   * batcher 内部缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync
+   * 显著提升吞吐。首行换行与目录 fsync 由 batcher 自身处理。同时做一次
+   * 防御性 stat 检查，确保 header 已存在（open() 应已写入）。
    */
-  private async appendJsonlLineWithCachedHandle(line: string): Promise<void> {
-    if (!this.appendHandle) {
-      this.appendHandle = await openFile(this.filePath, constants.O_APPEND | constants.O_RDWR);
-    }
-    const handle = this.appendHandle;
-    try {
-      const stat = await handle.stat();
+  private async ensureAppendBatcher(): Promise<JsonlAppendBatcher> {
+    if (!this.appendBatcher) {
+      const stat = await statFile(this.filePath).catch((cause) => {
+        throw new SessionError(
+          `Failed to access session file ${this.filePath}: ${errorMessage(cause)}`,
+          "storage",
+        );
+      });
       if (stat.size === 0) {
         throw new SessionError(`Session file is empty before append: ${this.filePath}`, "invalid_session");
       }
-      let prefix = "";
-      const tail = Buffer.alloc(1);
-      await handle.read(tail, 0, 1, stat.size - 1);
-      if (tail[0] !== 10) {
-        prefix = "\n";
-      }
-      await handle.writeFile(`${prefix}${line}\n`, "utf8");
-      await handle.sync();
-    } catch (cause) {
-      // 句柄可能已失效（文件被移动/删除等），释放并让下次 append 重新打开
-      try {
-        await handle.close();
-      } catch {
-        // 忽略关闭错误
-      }
-      this.appendHandle = undefined;
-      throw cause;
+      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath });
     }
+    return this.appendBatcher;
   }
 }
 

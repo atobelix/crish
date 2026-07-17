@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
 import type { AgentMessage, AgentMessageBlock, JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 import type { AgentRole, AgentTool } from "./types";
 
@@ -135,7 +134,8 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
   const volatileContext = input.volatileContext ?? [];
   const stableContextPrompt = renderPromptContextBlocks(stableContext, "stable");
   const volatileContextPrompt = renderPromptContextBlocks(volatileContext, "volatile");
-  const materializedMessages = materializePromptMessages(input.messages, volatileContextPrompt);
+  const { currentUserMessageId, currentUserMessageIndex } = analyzePromptMessages(input.messages);
+  const materializedMessages = materializePromptMessages(input.messages, volatileContextPrompt, currentUserMessageIndex);
   const tools = stableToolOrder(input.tools);
   const payload: PromptAssemblyPayload = {
     systemPrompt: joinPromptParts([input.systemPrompt, stableContextPrompt]),
@@ -147,6 +147,10 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
   const toolSchemaHash = hashJson({ version: PROMPT_ASSEMBLY_VERSION, tools: toolSchemas });
   const blocks: PromptCacheBlock[] = [];
   const stableBlockIds: string[] = [];
+  const stableBlockKinds: PromptAssemblyBlockKind[] = [];
+  const stableBlockFingerprints: Array<{ id: string; kind: PromptAssemblyBlockKind; hash: string }> = [];
+  const volatileBlockIds: string[] = [];
+  const volatileBlockKinds: PromptAssemblyBlockKind[] = [];
   let order = 0;
 
   const addBlock = (
@@ -155,20 +159,35 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
     content: JsonValue,
     options: { id?: string; role?: PromptCacheBlock["role"]; label?: string } = {}
   ): PromptCacheBlock => {
-    const hash = hashJson({ version: PROMPT_ASSEMBLY_VERSION, kind, content });
+    const { hash, byteLength } = fingerprintBlock(kind, content);
     const block: PromptCacheBlock = compactObject({
       id: options.id ?? kind,
       order: order++,
       kind,
       stability,
       hash,
-      byteLength: Buffer.byteLength(canonicalJson(content), "utf8"),
+      byteLength,
       role: options.role,
       label: options.label
     }) as unknown as PromptCacheBlock;
     blocks.push(block);
-    if (stability === "stable") stableBlockIds.push(block.id);
+    if (stability === "stable") {
+      stableBlockIds.push(block.id);
+      stableBlockKinds.push(kind);
+      stableBlockFingerprints.push({ id: block.id, kind, hash });
+    } else {
+      volatileBlockIds.push(block.id);
+      volatileBlockKinds.push(kind);
+    }
     return block;
+  };
+
+  const addMessageBlock = (message: AgentMessage): void => {
+    addBlock(classifyMessageBlock(message, currentUserMessageId), "volatile", messageFingerprint(message) as unknown as JsonValue, {
+      id: `message:${message.id}`,
+      role: message.role,
+      label: message.id
+    });
   };
 
   if (input.systemPrompt?.trim()) {
@@ -183,27 +202,19 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
     addBlock(block.kind, "stable", block.content, { id: block.id, label: block.label });
   }
 
-  const currentUserMessageId = latestUserMessageId(input.messages);
-  for (const message of messagesBeforeCurrentUser(input.messages, currentUserMessageId)) {
-    const kind = classifyMessageBlock(message, currentUserMessageId);
-    addBlock(kind, "volatile", messageFingerprint(message) as unknown as JsonValue, {
-      id: `message:${message.id}`,
-      role: message.role,
-      label: message.id
-    });
+  // 单次遍历：当前用户消息之前的消息（按索引区间迭代，避免 findIndex/slice）
+  for (let index = 0; index < currentUserMessageIndex; index++) {
+    addMessageBlock(input.messages[index]!);
   }
 
   for (const block of volatileContext) {
     addBlock(block.kind === "custom-stable" ? "custom-volatile" : block.kind, "volatile", block.content, { id: block.id, label: block.label });
   }
 
-  for (const message of messagesFromCurrentUser(input.messages, currentUserMessageId)) {
-    const kind = classifyMessageBlock(message, currentUserMessageId);
-    addBlock(kind, "volatile", messageFingerprint(message) as unknown as JsonValue, {
-      id: `message:${message.id}`,
-      role: message.role,
-      label: message.id
-    });
+  // 单次遍历：当前用户消息及其后的消息（按索引区间迭代，避免 findIndex/slice）
+  const fromStartIndex = currentUserMessageIndex < 0 ? input.messages.length : currentUserMessageIndex;
+  for (let index = fromStartIndex; index < input.messages.length; index++) {
+    addMessageBlock(input.messages[index]!);
   }
 
   const stablePrefixHash =
@@ -211,9 +222,7 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
       ? hashJson({
           version: PROMPT_ASSEMBLY_VERSION,
           layout: "stable-prefix-v1",
-          blocks: blocks
-            .filter((block) => block.stability === "stable")
-            .map((block) => ({ id: block.id, kind: block.kind, hash: block.hash }))
+          blocks: stableBlockFingerprints
         })
       : EMPTY_HASH;
   const cacheKey = `prompt:v${PROMPT_ASSEMBLY_VERSION}:${stablePrefixHash}`;
@@ -229,7 +238,15 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
     cacheKey,
     cacheBlocks: blocks,
     cacheCandidates: cacheCandidatesForStrategy(strategy.cacheStrategy, stableBlockIds, stablePrefixHash, cacheKey),
-    boundary: promptBoundaryMetadata(blocks, stablePrefixHash, cacheKey)
+    boundary: {
+      layout: "stable-prefix-v1",
+      stableBlockIds,
+      volatileBlockIds,
+      stableBlockKinds,
+      volatileBlockKinds,
+      stablePrefixHash,
+      cacheKey
+    }
   };
 
   return { payload, metadata };
@@ -237,20 +254,6 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
 
 function stableToolOrder(tools: AgentTool[]): AgentTool[] {
   return [...tools].sort((left, right) => left.name.localeCompare(right.name) || left.label.localeCompare(right.label));
-}
-
-function promptBoundaryMetadata(blocks: PromptCacheBlock[], stablePrefixHash: string, cacheKey: string): PromptAssemblyMetadata["boundary"] {
-  const stableBlocks = blocks.filter((block) => block.stability === "stable");
-  const volatileBlocks = blocks.filter((block) => block.stability === "volatile");
-  return {
-    layout: "stable-prefix-v1",
-    stableBlockIds: stableBlocks.map((block) => block.id),
-    volatileBlockIds: volatileBlocks.map((block) => block.id),
-    stableBlockKinds: stableBlocks.map((block) => block.kind),
-    volatileBlockKinds: volatileBlocks.map((block) => block.kind),
-    stablePrefixHash,
-    cacheKey
-  };
 }
 
 export function renderPromptContextBlocks(
@@ -381,15 +384,24 @@ function isTransientDiagnosticMessage(message: AgentMessage): boolean {
   return message.metadata?.kind === "transient-diagnostic" || message.metadata?.kind === "transient-diagnostics";
 }
 
-function latestUserMessageId(messages: AgentMessage[]): string | undefined {
+function analyzePromptMessages(messages: AgentMessage[]): {
+  currentUserMessageId: string | undefined;
+  currentUserMessageIndex: number;
+} {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
-    if (message.role === "user") return message.id;
+    if (message.role === "user") {
+      return { currentUserMessageId: message.id, currentUserMessageIndex: index };
+    }
   }
-  return undefined;
+  return { currentUserMessageId: undefined, currentUserMessageIndex: -1 };
 }
 
-function materializePromptMessages(messages: AgentMessage[], volatileContextPrompt: string | undefined): AgentMessage[] {
+function materializePromptMessages(
+  messages: AgentMessage[],
+  volatileContextPrompt: string | undefined,
+  currentUserMessageIndex: number
+): AgentMessage[] {
   if (!volatileContextPrompt?.trim()) return messages;
   const contextMessage: AgentMessage = {
     id: CONTEXT_MESSAGE_ID,
@@ -398,23 +410,8 @@ function materializePromptMessages(messages: AgentMessage[], volatileContextProm
     blocks: [{ type: "text", text: volatileContextPrompt }],
     metadata: { kind: "prompt-context", stability: "volatile" }
   };
-  const currentUserMessageId = latestUserMessageId(messages);
-  if (!currentUserMessageId) return [...messages, contextMessage];
-  const index = messages.findIndex((message) => message.id === currentUserMessageId);
-  if (index < 0) return [...messages, contextMessage];
-  return [...messages.slice(0, index), contextMessage, ...messages.slice(index)];
-}
-
-function messagesBeforeCurrentUser(messages: AgentMessage[], currentUserMessageId: string | undefined): AgentMessage[] {
-  if (!currentUserMessageId) return messages;
-  const index = messages.findIndex((message) => message.id === currentUserMessageId);
-  return index < 0 ? messages : messages.slice(0, index);
-}
-
-function messagesFromCurrentUser(messages: AgentMessage[], currentUserMessageId: string | undefined): AgentMessage[] {
-  if (!currentUserMessageId) return [];
-  const index = messages.findIndex((message) => message.id === currentUserMessageId);
-  return index < 0 ? [] : messages.slice(index);
+  if (currentUserMessageIndex < 0) return [...messages, contextMessage];
+  return [...messages.slice(0, currentUserMessageIndex), contextMessage, ...messages.slice(currentUserMessageIndex)];
 }
 
 function toolSchemaFingerprint(tool: AgentTool): JsonObject {
@@ -482,7 +479,47 @@ function canonicalValue(value: unknown): unknown {
 }
 
 function hashJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+  return fnv1a(canonicalJson(value));
+}
+
+/**
+ * Single-pass block fingerprint: canonicalize `content` once and derive both the
+ * wrapper hash and the byte length from that one serialization.
+ *
+ * Invariant: `wrapperCanon` must match `canonicalJson({ version, kind, content })`
+ * byte-for-byte. `canonicalValue` sorts object keys alphabetically, so the wrapper
+ * object serializes as `{"content":<contentCanon>,"kind":<kind>,"version":<version>}`.
+ * Building it from the pre-computed `contentCanon` avoids canonicalizing `content`
+ * a second time (previously done once inside `hashJson` and once for `byteLength`).
+ */
+function fingerprintBlock(
+  kind: PromptAssemblyBlockKind,
+  content: JsonValue
+): { hash: string; byteLength: number } {
+  const contentCanon = canonicalJson(content);
+  const wrapperCanon = `{"content":${contentCanon},"kind":${JSON.stringify(kind)},"version":${PROMPT_ASSEMBLY_VERSION}}`;
+  return {
+    hash: fnv1a(wrapperCanon),
+    byteLength: Buffer.byteLength(contentCanon, "utf8")
+  };
+}
+
+/**
+ * FNV-1a 32-bit non-cryptographic hash. Used for cache keys, deduplication, and
+ * change detection where cryptographic strength is not required. Roughly 10-50x
+ * faster than SHA-256 on small strings.
+ *
+ * Output: up to 8 lowercase hex characters (unsigned 32-bit). Collision risk is
+ * negligible for cache-affinity use; a collision at worst causes a cache miss,
+ * never data corruption.
+ */
+function fnv1a(str: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 function compactObject(input: Record<string, unknown>): JsonObject {

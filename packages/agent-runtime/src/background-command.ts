@@ -17,6 +17,7 @@ import {
 import { defineTool } from "./tools";
 import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 import type { AgentTool } from "./types";
+import { BoundedMap } from "@crish/shared-utils";
 import {
   formatDuration,
   getSharedScriptWaitPolicy,
@@ -24,6 +25,9 @@ import {
   type ScriptWaitPolicy,
   PARALLEL_SOFT_LIMIT_MS,
 } from "./script-wait-policy";
+
+/** 后台任务记录上限：已完成任务保留供查询，超过后按 FIFO 淘汰最旧记录。 */
+const MAX_BACKGROUND_TASKS = 200;
 
 export type BackgroundCommandState = "running" | "succeeded" | "failed" | "cancelled" | "timed-out";
 
@@ -104,7 +108,7 @@ interface BackgroundCommandRecord {
 }
 
 export class BackgroundCommandManager {
-  private readonly tasks = new Map<string, BackgroundCommandRecord>();
+  private readonly tasks = new BoundedMap<string, BackgroundCommandRecord>(MAX_BACKGROUND_TASKS);
   private readonly listeners = new Set<BackgroundCommandListener>();
 
   constructor(private readonly options: BackgroundCommandManagerOptions) {}
@@ -138,27 +142,83 @@ export class BackgroundCommandManager {
     };
     this.tasks.set(record.id, record);
 
-    const child = spawn(this.shell().command, this.shell().args(command), {
-      cwd,
-      detached: process.platform !== "win32",
-      env: this.guard().scrubEnvironment ? createGuardedProcessEnv() : process.env,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
+    let child: ChildProcess;
+    try {
+      child = spawn(this.shell().command, this.shell().args(command), {
+        cwd,
+        detached: process.platform !== "win32",
+        env: this.guard().scrubEnvironment ? createGuardedProcessEnv() : process.env,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+    } catch (cause) {
+      // spawn 同步抛错（极少见，但需兜底）：record 已在 tasks Map 中，
+      // 必须走 finish 收尾，否则会以 "running" 状态永久残留 + 定时器未挂无法清理。
+      this.finish(record, {
+        state: "failed",
+        error: cause instanceof Error ? cause.message : String(cause)
+      });
+      throw cause;
+    }
     record.child = child;
     record.updatedAt = Date.now();
     this.emit({ type: "task-start", timestamp: nowIso(), task: this.toSnapshot(record) });
 
-    child.stdout.on("data", (chunk: Buffer) => {
-      record.stdout.append(chunk);
+    let throttleTimeout: ReturnType<typeof setTimeout> | undefined;
+    let pendingStream: "stdout" | "stderr" | undefined;
+
+    const emitOutput = (stream: "stdout" | "stderr") => {
       record.updatedAt = Date.now();
-      this.emit({ type: "task-output", timestamp: nowIso(), task: this.toSnapshot(record), stream: "stdout" });
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      record.stderr.append(chunk);
-      record.updatedAt = Date.now();
-      this.emit({ type: "task-output", timestamp: nowIso(), task: this.toSnapshot(record), stream: "stderr" });
-    });
+      this.emit({ type: "task-output", timestamp: nowIso(), task: this.toSnapshot(record), stream });
+    };
+
+    const handleData = (stream: "stdout" | "stderr", chunk: Buffer) => {
+      if (stream === "stdout") {
+        record.stdout.append(chunk);
+      } else {
+        record.stderr.append(chunk);
+      }
+      
+      if (!throttleTimeout) {
+        emitOutput(stream);
+        throttleTimeout = setTimeout(() => {
+          throttleTimeout = undefined;
+          if (pendingStream) {
+            const s = pendingStream;
+            pendingStream = undefined;
+            emitOutput(s);
+          }
+        }, 60);
+      } else {
+        pendingStream = stream;
+      }
+    };
+
+    // 显式 null 守卫：spawn 配置 stdio: ["ignore","pipe","pipe"] 时 stdout/stderr 必为非空，
+    // 但 try/catch 中以 ChildProcess 类型存储丢失了字面量 narrowing；显式检查更稳健，
+    // 万一未来 stdio 配置变化也不会崩溃。
+    if (child.stdout) {
+      child.stdout.on("data", (chunk: Buffer) => {
+        handleData("stdout", chunk);
+      });
+    }
+    if (child.stderr) {
+      child.stderr.on("data", (chunk: Buffer) => {
+        handleData("stderr", chunk);
+      });
+    }
+
+    const cleanupThrottle = () => {
+      if (throttleTimeout) {
+        clearTimeout(throttleTimeout);
+        throttleTimeout = undefined;
+      }
+      if (pendingStream) {
+        const s = pendingStream;
+        pendingStream = undefined;
+        emitOutput(s);
+      }
+    };
 
     record.timeout = setTimeout(() => {
       if (isTerminalState(record.state)) return;
@@ -173,12 +233,14 @@ export class BackgroundCommandManager {
     }, heartbeatIntervalMs(input.heartbeatIntervalMs, this.options.heartbeatIntervalMs));
 
     child.on("error", (cause) => {
+      cleanupThrottle();
       this.finish(record, {
         state: "failed",
         error: cause instanceof Error ? cause.message : String(cause)
       });
     });
     child.on("close", (exitCode, signal) => {
+      cleanupThrottle();
       const state = record.cancelRequested
         ? "cancelled"
         : record.timedOut
@@ -246,6 +308,30 @@ export class BackgroundCommandManager {
   subscribe(listener: BackgroundCommandListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * 关停全部运行中任务并清理追踪状态。
+   *
+   * 异常路径兜底：daemon 关停 / workspace 切换 / manager 替换时调用。
+   * - 终止所有运行中子进程（killProcessTree）
+   * - 清理 timeout / heartbeat 定时器（经 finish 路径）
+   * - 清空 tasks Map，防止累积已完成记录导致内存增长
+   * - 清空 listeners，防止后续 emit 触发已卸载回调
+   *
+   * 幂等：多次调用安全；已终态任务不会被再次终止。
+   */
+  dispose(): void {
+    for (const record of this.tasks.values()) {
+      if (!isTerminalState(record.state)) {
+        if (record.child) {
+          record.terminationDiagnostics.push(...terminateChild(record.child, this.guard()));
+        }
+        this.finish(record, { state: "cancelled", exitCode: null, signal: "disposed" });
+      }
+    }
+    this.tasks.clear();
+    this.listeners.clear();
   }
 
   private finish(

@@ -28,6 +28,7 @@ import type {
   ToolExecutionContext,
 } from "@crish/shared-types";
 import { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS, DEFAULT_MAX_TURNS } from "@crish/shared-types";
+import { RingBuffer } from "@crish/shared-utils";
 import type {
   AgentRuntimeOptions,
   AgentTool,
@@ -85,6 +86,9 @@ import {
   type TurnContext,
   type ErrorContext,
 } from "./hooks";
+
+/** 流式 delta 队列容量上限；超容量覆盖最旧 delta 以提供背压保护。 */
+const DELTA_QUEUE_CAPACITY = 5000;
 
 // ─── 内部类型 ─────────────────────────────────────────────
 
@@ -391,7 +395,8 @@ export class AgentSessionLoop {
         case "streaming": {
           const callIterator = this.buildProviderCall();
           // 流式 delta 经队列边收边 yield，避免只能等整段 message-end
-          const deltaQueue: AgentEvent[] = [];
+          // 流式 delta 队列：RingBuffer 提供 O(1) shift 与背压保护（超容量覆盖最旧 delta）。
+          const deltaQueue = new RingBuffer<AgentEvent>(DELTA_QUEUE_CAPACITY);
           let deltaWaiters: Array<() => void> = [];
           const wake = () => {
             const w = deltaWaiters;
@@ -403,7 +408,7 @@ export class AgentSessionLoop {
             this.tools,
             this.abortController.signal,
             (d) => {
-              deltaQueue.push({
+              deltaQueue.pushOverwritingOldest({
                 type: "message-delta",
                 sessionId: this.sessionId,
                 block:
@@ -426,7 +431,7 @@ export class AgentSessionLoop {
             return r;
           });
           while (true) {
-            while (deltaQueue.length > 0) {
+            while (deltaQueue.size > 0) {
               const next = deltaQueue.shift()!;
               yield* this.emitEvent(next);
             }
@@ -438,7 +443,7 @@ export class AgentSessionLoop {
               }),
             ]);
           }
-          while (deltaQueue.length > 0) {
+          while (deltaQueue.size > 0) {
             yield* this.emitEvent(deltaQueue.shift()!);
           }
           if (!consumeResult) {

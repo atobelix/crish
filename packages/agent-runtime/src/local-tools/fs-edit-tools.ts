@@ -83,11 +83,10 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
           });
           const content = requireString(input, "content");
           const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
-          await writeFile(filePath, encodeTextBuffer(content, encoding));
-          const afterBytes = await readFile(filePath);
-          const afterDecoded = decodeTextBuffer(afterBytes);
+          const afterBytes = encodeTextBuffer(content, encoding);
+          await writeFile(filePath, afterBytes);
           const newSnapshotTag = computeSnapshotTag(afterBytes);
-          const resultPreview = createEditResultPreview("", afterDecoded.text, true);
+          const resultPreview = createEditResultPreview("", content, true);
           return withPreMutationCheckpointOutput({
             text: [
               `Wrote ${displayPath(options.workspaceRoot, filePath)} (${content.length} chars)`,
@@ -106,7 +105,7 @@ export function createWriteFileTool(options: LocalToolOptions & { name?: string 
               path: displayPath(options.workspaceRoot, filePath),
               encoding,
               chars: content.length,
-              charsAfter: afterDecoded.text.length,
+              charsAfter: content.length,
               newSnapshotTag,
               createdParentDirectories: parentInfo.created,
               parentDirectory: parentInfo.parentDisplay,
@@ -251,12 +250,11 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
         workspaceRoot: options.workspaceRoot
       });
       const encoding = await resolveWriteEncoding(filePath, stringField(input, "encoding"));
-      await writeFile(filePath, encodeTextBuffer(afterText, encoding));
-      const afterBytes = await readFile(filePath);
-      const afterDecoded = decodeTextBuffer(afterBytes);
+      const afterBytes = encodeTextBuffer(afterText, encoding);
+      await writeFile(filePath, afterBytes);
       const newSnapshotTag = computeSnapshotTag(afterBytes);
       const diffPreview = createUnifiedDiffPreview(beforeText, afterText);
-      const resultPreview = createEditResultPreview(beforeText, afterDecoded.text, fullContent !== undefined);
+      const resultPreview = createEditResultPreview(beforeText, afterText, fullContent !== undefined);
       const diffArtifact: ToolArtifact = {
         kind: "diff",
         title: `Diff: ${relativePath}`,
@@ -288,7 +286,7 @@ export function createEditTool(options: LocalToolOptions & { name?: string }): A
           changed: true,
           encoding,
           charsBefore: beforeText.length,
-          charsAfter: afterDecoded.text.length,
+          charsAfter: afterText.length,
           snapshotTag: currentSnapshotTag ?? null,
           newSnapshotTag,
           createdParentDirectories: parentInfo.created,
@@ -647,18 +645,17 @@ async function applyPreparedWorkspaceEditFiles(files: PreparedWorkspaceEditFile[
         relativePath: file.relativePath
       });
       // Parent was validated/created above; do not silently mkdir again.
-      await writeBytesAtomically(file.filePath, encodeTextBuffer(file.afterText, file.writeEncoding), {
+      const afterBytes = encodeTextBuffer(file.afterText, file.writeEncoding);
+      await writeBytesAtomically(file.filePath, afterBytes, {
         createParents: false
       });
-      const afterBytes = await readFile(file.filePath);
-      const afterDecoded = decodeTextBuffer(afterBytes);
       applied.push({
         ...file,
         createdParentDirectories: parentInfo.created,
         parentDirectory: parentInfo.parentDisplay,
         newSnapshotTag: computeSnapshotTag(afterBytes),
         charsBefore: file.beforeText.length,
-        charsAfter: afterDecoded.text.length
+        charsAfter: file.afterText.length
       });
     }
     return { ok: true, files: applied };

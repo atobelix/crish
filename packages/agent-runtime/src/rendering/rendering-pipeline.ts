@@ -19,6 +19,10 @@ import {
   type ConexEventDomain,
   type ConexDiagnostic,
 } from "../event-architecture/canonical-event";
+import { BoundedMap } from "@crish/shared-utils";
+
+/** 诊断检查记录上限：渲染项追踪记录按 FIFO 淘汰，防止长跑场景下单调增长。 */
+const MAX_INSPECTION_RECORDS = 500;
 
 // ─── 渲染项 ───────────────────────────────────────────────
 
@@ -298,7 +302,7 @@ export class RenderingPipeline {
   // ─── 内部方法 ────────────────────────────────────────────
 
   private addStageResult(result: RenderStageResult): void {
-    this.addStageResult(result);
+    this.stageResults.push(result);
     if (this.stageResults.length > this.maxStageResults) {
       this.stageResults.shift();
     }
@@ -406,7 +410,7 @@ export interface RenderingPipelineDiagnostics {
  * 4. 生成诊断报告
  */
 export class DiagnosticInspector {
-  private inspections = new Map<string, InspectionRecord>();
+  private inspections = new BoundedMap<string, InspectionRecord>(MAX_INSPECTION_RECORDS);
 
   /**
    * 开始检查一个渲染项

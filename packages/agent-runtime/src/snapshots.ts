@@ -1,4 +1,5 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolArtifact } from "@crish/shared-types";
 
@@ -71,7 +72,7 @@ export async function createFileSnapshot(request: FileSnapshotRequest): Promise<
 
   const bytes = await readFile(absoluteFile);
   await mkdir(dirname(snapshotPath), { recursive: true });
-  await writeFile(snapshotPath, bytes);
+  await atomicWriteFile(snapshotPath, bytes);
 
   return {
     kind: "file",
@@ -96,7 +97,7 @@ export async function restoreFileSnapshot(request: RestoreSnapshotRequest): Prom
 
   const bytes = await readFile(snapshotPath);
   await mkdir(dirname(targetPath), { recursive: true });
-  await writeFile(targetPath, bytes);
+  await atomicWriteFile(targetPath, bytes);
 
   return {
     kind: "file",
@@ -224,4 +225,14 @@ function isWindowsDrivePath(path: string): boolean {
 
 function isWindowsUncPath(path: string): boolean {
   return path.startsWith("\\\\") || path.startsWith("//");
+}
+
+/**
+ * 原子覆写：先写 tmp 文件再 rename，避免 mid-write 崩溃留下截断内容。
+ * tmp 文件名含 pid + 时间戳 + UUID，避免并发碰撞；与目标同目录保证 rename 原子。
+ */
+async function atomicWriteFile(targetPath: string, data: string | Buffer): Promise<void> {
+  const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  await writeFile(tmpPath, data);
+  await rename(tmpPath, targetPath);
 }

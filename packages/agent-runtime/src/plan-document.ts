@@ -782,7 +782,7 @@ function cloneSource(source: PlanDocumentSource | undefined): PlanDocumentSource
 }
 
 function cloneJsonObject(value: JsonObject | undefined): JsonObject {
-  return value === undefined ? {} : (JSON.parse(JSON.stringify(value)) as JsonObject);
+  return value === undefined ? {} : structuredClone(value);
 }
 
 function cloneOptionalJsonObject(value: JsonObject | undefined): JsonObject | undefined {

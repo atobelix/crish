@@ -1,3 +1,4 @@
+import { BoundedMap } from "@crish/shared-utils";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
 import type {
@@ -12,6 +13,13 @@ import type {
   ContextStateReader,
   ContextStateSnapshot
 } from "./types";
+
+/** 任务台账上限：保留最近的任务记录，超容量淘汰最旧。 */
+const MAX_CONTEXT_TASKS = 100;
+/** 会话事件上限：snapshotForCompression 只取最近 40 条，保留 5x 余量。 */
+const MAX_SESSION_EVENTS = 200;
+/** 文件快照提示上限：snapshotForCompression 只取最近 40 条，保留 5x 余量。 */
+const MAX_FILE_HINTS = 200;
 
 export interface ContextTask {
   id: string;
@@ -38,7 +46,7 @@ export interface FileSnapshotHint {
 }
 
 export class InMemoryContextState implements ContextStateReader {
-  private readonly tasks = new Map<string, ContextTask>();
+  private readonly tasks = new BoundedMap<string, ContextTask>(MAX_CONTEXT_TASKS);
   private readonly events: SessionEventNote[] = [];
   private readonly fileHints: FileSnapshotHint[] = [];
   private compressionWindow = 0;
@@ -74,6 +82,9 @@ export class InMemoryContextState implements ContextStateReader {
       compressionWindow: this.compressionWindow
     };
     this.events.push(event);
+    if (this.events.length > MAX_SESSION_EVENTS) {
+      this.events.splice(0, this.events.length - MAX_SESSION_EVENTS);
+    }
     return event;
   }
 
@@ -86,6 +97,9 @@ export class InMemoryContextState implements ContextStateReader {
       createdAt: nowIso()
     };
     this.fileHints.push(hint);
+    if (this.fileHints.length > MAX_FILE_HINTS) {
+      this.fileHints.splice(0, this.fileHints.length - MAX_FILE_HINTS);
+    }
     return hint;
   }
 

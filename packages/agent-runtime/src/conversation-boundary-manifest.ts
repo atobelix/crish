@@ -1,7 +1,7 @@
-import { mkdir, open, readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { nowIso } from "./session";
-import { isNodeError } from "@crish/shared-utils";
+import { isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 
 export type ConversationBoundaryCheckpointSource = "runtime" | "tool" | "external" | "unknown";
@@ -94,6 +94,7 @@ export class ConversationBoundaryManifestService {
   private readonly manifestPath: string;
   private readonly now: () => string;
   private appendQueue: Promise<void> = Promise.resolve();
+  private appendBatcher: JsonlAppendBatcher | undefined;
 
   constructor(options: ConversationBoundaryManifestServiceOptions) {
     this.manifestPath = resolve(options.manifestPath);
@@ -102,19 +103,71 @@ export class ConversationBoundaryManifestService {
 
   async append(input: ConversationBoundaryManifestInput): Promise<ConversationBoundaryManifestRecord> {
     const record = createConversationBoundaryManifestRecord(input, this.now);
-    await mkdir(dirname(this.manifestPath), { recursive: true });
-    const appendTask = this.appendQueue.then(() => appendJsonLine(this.manifestPath, serializeConversationBoundaryManifestRecord(record)));
+    const appendTask = this.appendQueue.then(async () => {
+      const batcher = await this.ensureAppendBatcher();
+      await batcher.append(serializeConversationBoundaryManifestRecord(record));
+      // 同步持久化语义：调用方依赖 append 返回后数据已落盘（例如跨进程/跨实例读取）。
+      // batcher 仍提供 FileHandle 缓存 + 集中化换行/目录 fsync 收益。
+      await batcher.flush();
+    });
     this.appendQueue = appendTask.catch(() => undefined);
     await appendTask;
     return record;
   }
 
+  /**
+   * 释放持久化的追加句柄。
+   *
+   * 正常运行期间 append() 会复用同一个文件句柄以提升吞吐，
+   * 在关闭/卸载场景下应调用此方法确保句柄被释放。
+   */
+  async close(): Promise<void> {
+    const closeTask = this.appendQueue.then(() => this.releaseAppendHandle());
+    this.appendQueue = closeTask.catch(() => undefined);
+    await closeTask;
+  }
+
+  private async releaseAppendHandle(): Promise<void> {
+    if (this.appendBatcher) {
+      try {
+        await this.appendBatcher.close();
+      } catch {
+        // 忽略关闭错误
+      }
+      this.appendBatcher = undefined;
+    }
+  }
+
+  /**
+   * 懒初始化 JsonlAppendBatcher。
+   *
+   * batcher 内部缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync
+   * 显著提升吞吐。首行换行与目录 fsync 由 batcher 自身处理。
+   */
+  private async ensureAppendBatcher(): Promise<JsonlAppendBatcher> {
+    if (!this.appendBatcher) {
+      await mkdir(dirname(this.manifestPath), { recursive: true });
+      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.manifestPath });
+    }
+    return this.appendBatcher;
+  }
+
+  /**
+   * 等待所有已入队的 append 落盘后再返回，确保后续读取看到完整数据。
+   */
+  private async flushPendingAppends(): Promise<void> {
+    await this.appendQueue;
+    await this.appendBatcher?.flush();
+  }
+
   async list(options: ConversationBoundaryManifestListOptions = {}): Promise<ConversationBoundaryManifestRecord[]> {
+    await this.flushPendingAppends();
     const result = await readConversationBoundaryManifest(this.manifestPath);
     return filterRecords(result.records, options);
   }
 
   async read(): Promise<ConversationBoundaryManifestReadResult> {
+    await this.flushPendingAppends();
     return readConversationBoundaryManifest(this.manifestPath);
   }
 
@@ -271,30 +324,6 @@ export function conversationBoundaryManifestRecordToRewindTargetFacts(
     ...(record.checkpointSource !== undefined ? { checkpointSource: record.checkpointSource } : {}),
     ...(record.metadata !== undefined ? { metadata: record.metadata } : {})
   };
-}
-
-async function appendJsonLine(path: string, line: string): Promise<void> {
-  const handle = await open(path, "a");
-  try {
-    await handle.writeFile(`${line}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await fsyncDirectory(dirname(path));
-}
-
-async function fsyncDirectory(path: string): Promise<void> {
-  try {
-    const handle = await open(path, "r");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    // Directory fsync is best-effort on Windows and some filesystems.
-  }
 }
 
 function filterRecords(

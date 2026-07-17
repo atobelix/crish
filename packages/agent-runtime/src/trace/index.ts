@@ -15,6 +15,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { BoundedMap } from "@crish/shared-utils";
 
 // ─── 追踪核心类型 ─────────────────────────────────────────
 
@@ -84,7 +85,7 @@ export interface TraceQueryResult {
 // ─── TraceManager ─────────────────────────────────────────
 
 export class TraceManager {
-  private traces = new Map<string, TraceSpan[]>();
+  private traces: BoundedMap<string, TraceSpan[]>;
   private activeSpans = new Map<string, TraceSpan>();
   private maxTraces: number;
   private maxSpansPerTrace: number;
@@ -92,6 +93,7 @@ export class TraceManager {
   constructor(options?: { maxTraces?: number; maxSpansPerTrace?: number }) {
     this.maxTraces = options?.maxTraces ?? 1000;
     this.maxSpansPerTrace = options?.maxSpansPerTrace ?? 500;
+    this.traces = new BoundedMap<string, TraceSpan[]>(this.maxTraces);
   }
 
   /**
@@ -275,31 +277,27 @@ export class TraceManager {
 
   /**
    * 清理旧的 Trace
+   *
+   * traces 已由 BoundedMap 在容量上限自动按 FIFO 淘汰，此处仅做按龄清理。
+   * 先收集待删除 key 再统一 delete，避免迭代中修改 BoundedMap 内部 insertionOrder。
    */
   cleanup(maxAge: number): number {
     const cutoff = Date.now() - maxAge;
     let cleaned = 0;
+    const stale: string[] = [];
 
     for (const [traceId, spans] of this.traces) {
       const allEnded = spans.every((s) => s.endedAt !== undefined);
       const oldestStart = Math.min(...spans.map((s) => s.startedAt));
 
       if (allEnded && oldestStart < cutoff) {
-        this.traces.delete(traceId);
-        cleaned++;
+        stale.push(traceId);
       }
     }
 
-    // 强制限制 Trace 数量
-    if (this.traces.size > this.maxTraces) {
-      const entries = [...this.traces.entries()].sort(
-        (a, b) => Math.min(...a[1].map((s) => s.startedAt)) - Math.min(...b[1].map((s) => s.startedAt))
-      );
-      const toDelete = entries.slice(0, this.traces.size - this.maxTraces);
-      for (const [traceId] of toDelete) {
-        this.traces.delete(traceId);
-        cleaned++;
-      }
+    for (const traceId of stale) {
+      this.traces.delete(traceId);
+      cleaned++;
     }
 
     return cleaned;

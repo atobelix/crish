@@ -1,3 +1,5 @@
+import { BoundedMap } from "@crish/shared-utils";
+
 export type ProjectProgressStatus = "pending" | "in_progress" | "blocked" | "completed" | "cancelled";
 
 export interface ProjectProgressClock {
@@ -82,6 +84,10 @@ const DEFAULT_MAX_PRINCIPLES = 20;
 const DEFAULT_MAX_PROGRESS_ITEMS = 40;
 const DEFAULT_MAX_RECENT_TASKS = 12;
 const DEFAULT_MAX_LINE_LENGTH = 180;
+/** 台账存储上限：snapshot 只取前 N 条，存储保留 2-3x 余量防止无界增长。 */
+const MAX_STORED_PRINCIPLES = 50;
+const MAX_STORED_PROGRESS_ITEMS = 100;
+const MAX_STORED_TASK_RECORDS = 100;
 
 const STATUS_RANK: Record<ProjectProgressStatus, number> = {
   in_progress: 0,
@@ -93,9 +99,9 @@ const STATUS_RANK: Record<ProjectProgressStatus, number> = {
 
 export class ProjectProgressLedger {
   private readonly now: () => string;
-  private readonly principles = new Map<string, StablePrincipleRecord>();
-  private readonly progressItems = new Map<string, GlobalProgressItemRecord>();
-  private readonly taskRecords = new Map<string, AgentTaskRecord>();
+  private readonly principles = new BoundedMap<string, StablePrincipleRecord>(MAX_STORED_PRINCIPLES);
+  private readonly progressItems = new BoundedMap<string, GlobalProgressItemRecord>(MAX_STORED_PROGRESS_ITEMS);
+  private readonly taskRecords = new BoundedMap<string, AgentTaskRecord>(MAX_STORED_TASK_RECORDS);
 
   constructor(options: ProjectProgressLedgerOptions = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
@@ -262,12 +268,12 @@ function sortTasks(records: AgentTaskRecord[]): AgentTaskRecord[] {
   );
 }
 
-function findByCanonicalText<T extends { id: string; text: string }>(records: Map<string, T>, text: string): T | undefined {
+function findByCanonicalText<T extends { id: string; text: string }>(records: { values(): Iterable<T> }, text: string): T | undefined {
   const canonical = canonicalText(text);
   return [...records.values()].find((record) => canonicalText(record.text) === canonical);
 }
 
-function findByCanonicalTitle<T extends { id: string; title: string }>(records: Map<string, T>, title: string): T | undefined {
+function findByCanonicalTitle<T extends { id: string; title: string }>(records: { values(): Iterable<T> }, title: string): T | undefined {
   const canonical = canonicalText(title);
   return [...records.values()].find((record) => canonicalText(record.title) === canonical);
 }
