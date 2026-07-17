@@ -168,14 +168,16 @@ export function goalContinuationDecisionFromAssessment(assessment: GoalRoundAsse
 }
 
 export function structuredGoalContinuationDecisionFromEvents(events: readonly AgentEvent[]): DecisionMatch | undefined {
-  for (const event of [...events].reverse()) {
+  for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
+    const event = events[eventIndex];
     if (event.type === "tool-end") {
       const decision = goalContinuationDecisionFromJson(event.result.output.json);
       if (decision) return { decision, source: "tool-output" };
     }
     if (event.type === "tool-batch-end") {
-      for (const result of [...event.calls].reverse()) {
-        const decision = goalContinuationDecisionFromJson(result.output.json);
+      const calls = event.calls;
+      for (let callIndex = calls.length - 1; callIndex >= 0; callIndex -= 1) {
+        const decision = goalContinuationDecisionFromJson(calls[callIndex].output.json);
         if (decision) return { decision, source: "tool-output" };
       }
     }
@@ -188,14 +190,16 @@ export function structuredGoalContinuationDecisionFromEvents(events: readonly Ag
 }
 
 export function goalContinuationDecisionFromEvents(events: readonly AgentEvent[]): GoalContinuationDecision | undefined {
-  for (const event of [...events].reverse()) {
+  for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
+    const event = events[eventIndex];
     if (event.type === "tool-end") {
       const decision = goalContinuationDecisionFromJson(event.result.output.json);
       if (decision) return decision;
     }
     if (event.type === "tool-batch-end") {
-      for (const result of [...event.calls].reverse()) {
-        const decision = goalContinuationDecisionFromJson(result.output.json);
+      const calls = event.calls;
+      for (let callIndex = calls.length - 1; callIndex >= 0; callIndex -= 1) {
+        const decision = goalContinuationDecisionFromJson(calls[callIndex].output.json);
         if (decision) return decision;
       }
     }
@@ -218,7 +222,9 @@ export function goalContinuationDecisionFromJson(value: JsonValue | undefined): 
 }
 
 export function goalContinuationDecisionFromMessage(message: AgentMessage): GoalContinuationDecision | undefined {
-  for (const block of [...message.blocks].reverse()) {
+  const blocks = message.blocks;
+  for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+    const block = blocks[blockIndex];
     if (block.type !== "text") continue;
     const fromMarker = parseGoalDecisionMarker(block.text);
     if (fromMarker) return fromMarker;
@@ -269,7 +275,8 @@ function terminalAssessmentFromRun(run: OrchestratorRunRecord): EventFailure | u
 function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailure | undefined {
   const providerFailure = latestProviderFailure(events);
 
-  for (const event of [...events].reverse()) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
     if (event.type === "runtime-error") {
       return {
         state: "failed",
@@ -324,21 +331,21 @@ function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailu
 }
 
 function latestProviderFailure(events: readonly AgentEvent[]): JsonObject | undefined {
-  const event = [...events]
-    .reverse()
-    .find((entry): entry is Extract<AgentEvent, { type: "provider-diagnostic" }> =>
+  const event = events.findLast(
+    (entry): entry is Extract<AgentEvent, { type: "provider-diagnostic" }> =>
       entry.type === "provider-diagnostic" && isProviderFailureDiagnostic(entry.diagnostic)
-    );
+  );
   return event?.diagnostic as unknown as JsonObject | undefined;
 }
 
 function latestToolErrorFromEvents(events: readonly AgentEvent[]): string | undefined {
-  for (const event of [...events].reverse()) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
     if (event.type === "tool-end" && event.result.isError) {
       return event.result.output.text ?? `Tool ${event.result.toolName} failed.`;
     }
     if (event.type === "tool-batch-end") {
-      const failed = [...event.calls].reverse().find((result) => result.isError);
+      const failed = event.calls.findLast((result) => result.isError);
       if (failed) return failed.output.text ?? `Tool ${failed.toolName} failed.`;
     }
   }
@@ -591,7 +598,7 @@ function latestEvent<TType extends AgentEvent["type"]>(
   events: readonly AgentEvent[],
   type: TType
 ): Extract<AgentEvent, { type: TType }> | undefined {
-  return [...events].reverse().find((event): event is Extract<AgentEvent, { type: TType }> => event.type === type);
+  return events.findLast((event): event is Extract<AgentEvent, { type: TType }> => event.type === type);
 }
 
 function compactAssessment(assessment: GoalRoundAssessment): GoalRoundAssessment {
@@ -621,7 +628,39 @@ function stringField(record: Record<string, JsonValue>, key: string): string | u
 }
 
 function hashJson(value: JsonValue): string {
-  return hashText(stableJson(value));
+  let hash = 0x811c9dc5;
+  const feed = (text: string): void => {
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  };
+  const visit = (node: JsonValue): void => {
+    if (Array.isArray(node)) {
+      feed("[");
+      for (let i = 0; i < node.length; i += 1) {
+        if (i > 0) feed(",");
+        visit(node[i]);
+      }
+      feed("]");
+      return;
+    }
+    if (isRecord(node)) {
+      const keys = Object.keys(node).sort();
+      feed("{");
+      for (let i = 0; i < keys.length; i += 1) {
+        if (i > 0) feed(",");
+        feed(JSON.stringify(keys[i]));
+        feed(":");
+        visit(node[keys[i]]);
+      }
+      feed("}");
+      return;
+    }
+    feed(JSON.stringify(node));
+  };
+  visit(value);
+  return (hash >>> 0).toString(36);
 }
 
 function hashText(text: string): string {
@@ -631,17 +670,6 @@ function hashText(text: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(36);
-}
-
-function stableJson(value: JsonValue): string {
-  if (Array.isArray(value)) return `[${value.map((item) => stableJson(item)).join(",")}]`;
-  if (isRecord(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 

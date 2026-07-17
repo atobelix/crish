@@ -79,6 +79,16 @@ export interface CompressionInput {
 
 // ─── EventStoreProjection ──────────────────────────────────
 
+const TIMELINE_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "session-created",
+  "run-started",
+  "runtime-event",
+  "run-completed",
+  "run-failed",
+  "goal-round-started",
+  "goal-round-completed",
+]);
+
 export class EventStoreProjection {
   constructor(private readonly eventStore: OrchestratorEventStore) {}
 
@@ -137,22 +147,17 @@ export class EventStoreProjection {
    */
   async buildTimeline(sessionId: string): Promise<TimelineEntry[]> {
     const events = await this.eventStore.readSession(sessionId);
+    return this.buildTimelineFromEvents(events);
+  }
 
-    return events
-      .filter((event) => {
-        // 只提取有意义的事件类型
-        return [
-          "session-created",
-          "run-started",
-          "runtime-event",
-          "run-completed",
-          "run-failed",
-          "goal-round-started",
-          "goal-round-completed",
-        ].includes(event.type);
-      })
-      .map((event) => this.eventToTimelineEntry(event))
-      .filter((entry): entry is TimelineEntry => entry !== null);
+  private buildTimelineFromEvents(events: OrchestratorEvent[]): TimelineEntry[] {
+    const timeline: TimelineEntry[] = [];
+    for (const event of events) {
+      if (!TIMELINE_EVENT_TYPES.has(event.type)) continue;
+      const entry = this.eventToTimelineEntry(event);
+      if (entry !== null) timeline.push(entry);
+    }
+    return timeline;
   }
 
   /**
@@ -166,7 +171,10 @@ export class EventStoreProjection {
    */
   async buildPatterns(sessionId: string): Promise<SessionPatterns> {
     const events = await this.eventStore.readSession(sessionId);
+    return this.buildPatternsFromEvents(events);
+  }
 
+  private buildPatternsFromEvents(events: OrchestratorEvent[]): SessionPatterns {
     const successPatterns: UsagePattern[] = [];
     const failurePatterns: UsagePattern[] = [];
 
@@ -232,17 +240,15 @@ export class EventStoreProjection {
     const allEvents = await this.eventStore.readSession(sessionId);
 
     const events = allEvents.filter((e) => e.sequence <= cutPointSequence);
-    const timeline = await this.buildTimeline(sessionId);
-    const patterns = await this.buildPatterns(sessionId);
+    const timeline = this.buildTimelineFromEvents(events);
+    const patterns = this.buildPatternsFromEvents(allEvents);
+    const eventIdSet = new Set(events.map((e) => e.id));
 
     return {
       events,
-      timeline: timeline.filter((t) => {
-        // 只保留在压缩范围内的 timeline 条目
-        return t.relatedEventIds.some((id) =>
-          events.some((e) => e.id === id)
-        );
-      }),
+      timeline: timeline.filter((t) =>
+        t.relatedEventIds.some((id) => eventIdSet.has(id))
+      ),
       patterns,
       cutPointSequence,
     };

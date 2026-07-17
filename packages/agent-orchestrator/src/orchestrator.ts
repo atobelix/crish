@@ -1,5 +1,5 @@
 import type { JsonObject, AgentEvent, AgentMessage, DiagnosticRecord } from "@crish/shared-types";
-import { compactJsonObject, isRecord, clone } from "@crish/shared-utils";
+import { compactJsonObject, isRecord, clone, BoundedMap } from "@crish/shared-utils";
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type AgentOrchestratorOptions,
@@ -46,10 +46,17 @@ import {
 } from "./event-scan-goal-strategy";
 import { summarizeOrchestratorSessionEvents } from "./session-summary";
 
+/** Session 注册表上限：daemon 长跑场景下防止无界增长，超限按 FIFO 淘汰最旧 session。 */
+const MAX_ORCHESTRATOR_SESSIONS = 1000;
+/** Run 记录上限：包含已完成 run，供历史查询，超限按 FIFO 淘汰。 */
+const MAX_ORCHESTRATOR_RUNS = 5000;
+/** Pending input 上限：典型场景下 pending input 数量很少，设为 500 作为安全上限。 */
+const MAX_ORCHESTRATOR_PENDING_INPUTS = 500;
+
 export class AgentOrchestrator {
-  private readonly sessions = new Map<string, OrchestratorSessionRecord>();
-  private readonly runs = new Map<string, OrchestratorRunRecord>();
-  private readonly pendingInputs = new Map<string, PendingInputRecord>();
+  private readonly sessions = new BoundedMap<string, OrchestratorSessionRecord>(MAX_ORCHESTRATOR_SESSIONS);
+  private readonly runs = new BoundedMap<string, OrchestratorRunRecord>(MAX_ORCHESTRATOR_RUNS);
+  private readonly pendingInputs = new BoundedMap<string, PendingInputRecord>(MAX_ORCHESTRATOR_PENDING_INPUTS);
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly eventStore: OrchestratorEventStore;
   private sequence = 0;
@@ -843,7 +850,8 @@ export class AgentOrchestrator {
 
   private async waitForPendingEmits(active: ActiveRun): Promise<void> {
     while (active.pendingEmits.size > 0) {
-      await Promise.allSettled([...active.pendingEmits]);
+      const first = active.pendingEmits.values().next().value;
+      if (first) await first.catch(() => undefined);
     }
   }
 

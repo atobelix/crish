@@ -1,10 +1,10 @@
 import { constants } from "node:fs";
-import { mkdir, open as openFile, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open as openFile, readFile, rename, stat as statFile, writeFile } from "node:fs/promises";
 import { createReadStream, type ReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline";
-import { isRecord } from "@crish/shared-utils";
+import { AsyncMutex, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
 import {
   ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION,
   ORCHESTRATOR_PROTOCOL_VERSION,
@@ -234,12 +234,12 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private cachedEvents?: OrchestratorEvent[];
   private cachedEventsBySession = new Map<string, OrchestratorEvent[]>();
   /**
-   * 持久化的追加写文件句柄。
+   * 批量 fsync 的 JSONL 追加写入器。
    *
-   * 避免每次 append 都打开/关闭文件，显著提升吞吐。
-   * 在 close() 或写入失败时释放。
+   * 缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync 显著提升吞吐。
+   * 在 close() 时释放。
    */
-  private appendHandle?: import("node:fs/promises").FileHandle;
+  private appendBatcher?: JsonlAppendBatcher;
   private cachedEventsByRun = new Map<string, OrchestratorEvent[]>();
   private cachedSessionSummaries = new Map<string, MutableSessionEventSummary>();
   private sessionSummaryCacheReady = false;
@@ -296,6 +296,16 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * 上次成功刷盘的时间戳。
    */
   private lastIndexFlushTime = 0;
+
+  /**
+   * 串行化 flushIndex 的互斥锁。
+   *
+   * append() 内部、listSessionSummaries() 与 close() 都会调用 flushIndex()，其中
+   * 后两者不在 appendQueue 内执行。若不加锁，并发的 append 与外部 flushIndex 会
+   * 同时读写同一份内存索引与磁盘 companion file，导致索引内容交错或丢失。该锁
+   * 确保任意时刻只有一个 flushIndex 临界区在执行（FIFO 公平排队）。
+   */
+  private readonly flushMutex = new AsyncMutex();
 
   /**
    * 尾部启动读取的事件数量（默认 1000）。
@@ -357,10 +367,19 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
         // 计算字节偏移（当前文件大小即为新事件的起始偏移）
         const serialized = JSON.stringify(event);
+        const byteLength = Buffer.byteLength(serialized, "utf8") + 1; // +1 for trailing newline
+        // ensureAppendBatcher 在首次构造 batcher 时同步 currentFileSize 并预测
+        // batcher 是否会补首行 "\n" 前缀，将其计入 currentFileSize。此后 byteOffset
+        // 直接取 currentFileSize，batcher.append 仅向 pending buffer 追加，不改变
+        // 文件不变式（每次 append 都带 "\n"，文件始终以 "\n" 结尾）。
+        const batcher = await this.ensureAppendBatcher();
+        await batcher.append(serialized);
+        // 立即 flush 确保 append 返回后数据已落盘。
+        // event-store 的调用方（含测试）依赖 append 的同步持久化语义：
+        // 直接 readFile 或新建 store 实例读取时必须看到已写入的事件。
+        // batcher 仍提供句柄缓存与集中化的换行/目录 fsync 逻辑。
+        await batcher.flush();
         const byteOffset = this.currentFileSize;
-        const byteLength = Buffer.byteLength(serialized, "utf8") + 1; // +1 for newline
-
-        await this.appendLineWithCachedHandle(serialized);
         this.currentFileSize += byteLength;
 
         // 追踪字节偏移
@@ -632,6 +651,10 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private async ensureEventCache(): Promise<void> {
     await this.flush();
     if (this.cachedEvents) return;
+    // 读路径校正 currentFileSize：外部写入（或崩溃的对端）可能在 ensureHeader
+    // 之后扩展日志，使增量维护的 currentFileSize 失真。此处通过 appendQueue
+    // 串行化 stat，避免与并发 append 的增量更新互相覆盖。
+    await this.refreshFileSize();
     const raw = await readFile(this.filePath, "utf8").catch((cause) => {
       const error = cause as NodeJS.ErrnoException;
       if (error.code === "ENOENT") return null;
@@ -806,9 +829,39 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   async flush(): Promise<void> {
     await this.appendQueue;
+    await this.appendBatcher?.flush();
     if (this.latchedFailure) {
       throw this.latchedFailure;
     }
+  }
+
+  /**
+   * 在 appendQueue 串行化下用 stat 刷新 currentFileSize。
+   *
+   * currentFileSize 由 append 增量维护（currentFileSize += byteLength），但外部
+   * 写入（或崩溃的对端进程）会让它失真。读路径在读取前调用此方法校正。通过链入
+   * appendQueue 串行化，避免与并发 append 的增量更新互相覆盖（lost update）：
+   * 若直接在读路径里 stat 并赋值，stat 读取与赋值之间可能插入一个 append 的增量
+   * 更新，导致刚写入的事件偏移被旧值覆盖，字节偏移索引随之错位。
+   */
+  private async refreshFileSize(): Promise<void> {
+    const next = this.appendQueue.then(async () => {
+      // 先 flush batcher，确保 pending 数据落盘后再 stat。
+      // 否则 stat.size 不含 pending append，currentFileSize 会被低估，
+      // 导致后续 append 的 byteOffset 计算错位、字节偏移索引损坏。
+      await this.appendBatcher?.flush();
+      try {
+        const stat = await statFile(this.filePath);
+        this.currentFileSize = stat.size;
+      } catch {
+        // 文件可能尚不存在或暂时不可访问：保持现有 currentFileSize，不阻断读路径。
+      }
+    });
+    this.appendQueue = next.then(
+      () => undefined,
+      () => undefined
+    );
+    await next;
   }
 
   async close(): Promise<void> {
@@ -818,48 +871,50 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     if (this.indexDirty) {
       await this.flushIndex();
     }
-    // 释放持久化的追加写句柄
-    if (this.appendHandle) {
+    // 释放批量追加写入器
+    if (this.appendBatcher) {
       try {
-        await this.appendHandle.close();
+        await this.appendBatcher.close();
       } catch {
         // 句柄释放失败不应阻断 close
       }
-      this.appendHandle = undefined;
+      this.appendBatcher = undefined;
     }
   }
 
   /**
-   * 使用持久化句柄追加一行 JSONL。
+   * 懒初始化 JsonlAppendBatcher。
    *
-   * 相比每次打开/关闭文件，缓存句柄可显著提升吞吐。
-   * 句柄失效时会自动重新打开。
+   * batcher 内部缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync
+   * 显著提升吞吐。首行换行与目录 fsync 由 batcher 自身处理。
+   *
+   * 字节偏移索引兼容：batcher 的 ensureLeadingNewline 在 handle 打开时检查
+   * 文件末尾是否为 "\n"，若否则补一个 "\n"。我们在构造 batcher 前先 stat + 读
+   * 尾字节，预测该前缀字节数并计入 currentFileSize，保证后续 byteOffset 计算
+   * 准确。预测与 batcher 实际写入之间存在极小 TOCTOU 窗口（仅首次构造时），
+   * 与原 appendLineWithCachedHandle 的窗口语义一致。
    */
-  private async appendLineWithCachedHandle(line: string): Promise<void> {
-    if (!this.appendHandle) {
-      this.appendHandle = await openFile(this.filePath, constants.O_APPEND | constants.O_RDWR);
-    }
-    const handle = this.appendHandle;
-    try {
-      const stat = await handle.stat();
-      let prefix = "";
-      if (stat.size > 0) {
-        const tail = Buffer.alloc(1);
-        await handle.read(tail, 0, 1, stat.size - 1);
-        if (tail[0] !== 10) prefix = "\n";
+  private async ensureAppendBatcher(): Promise<JsonlAppendBatcher> {
+    if (!this.appendBatcher) {
+      // 预测 batcher 是否会补首行 "\n" 前缀
+      const stat = await statFile(this.filePath).catch(() => null);
+      let prefixBytes = 0;
+      if (stat && stat.size > 0) {
+        const handle = await openFile(this.filePath, constants.O_RDONLY);
+        try {
+          const tail = Buffer.alloc(1);
+          await handle.read(tail, 0, 1, stat.size - 1);
+          if (tail[0] !== 10) {
+            prefixBytes = 1;
+          }
+        } finally {
+          await handle.close();
+        }
       }
-      await handle.writeFile(`${prefix}${line}\n`, "utf8");
-      await handle.sync();
-    } catch (cause) {
-      // 句柄可能已失效（文件被移动/删除等），释放并让下次 append 重新打开
-      try {
-        await handle.close();
-      } catch {
-        // 忽略关闭错误
-      }
-      this.appendHandle = undefined;
-      throw cause;
+      this.currentFileSize = (stat?.size ?? 0) + prefixBytes;
+      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath });
     }
+    return this.appendBatcher;
   }
 
   /**
@@ -883,6 +938,13 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * @returns 是否实际执行了写入（false 表示索引不脏或未加载）
    */
   async flushIndex(): Promise<boolean> {
+    // 串行化所有 flushIndex 调用方（append 内部、listSessionSummaries、close）。
+    // listSessionSummaries 与 close 不在 appendQueue 内，若不加锁会与并发 append
+    // 内的 flushIndex 竞争同一份内存索引与磁盘 companion file，导致写入交错或丢失。
+    return this.flushMutex.runExclusive(() => this.flushIndexInner());
+  }
+
+  private async flushIndexInner(): Promise<boolean> {
     if (!this.indexDirty) return false;
 
     const needsSummaryIndexWrite = this.sessionSummaryCacheReady && this.metadata !== undefined;
