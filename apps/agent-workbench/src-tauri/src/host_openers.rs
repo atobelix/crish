@@ -122,6 +122,224 @@ pub(crate) fn workbench_open_host_target(
     open_host_target(opener_id, target)
 }
 
+/// 系统默认关联打开文件（非资源管理器 reveal）
+#[tauri::command]
+pub(crate) fn workbench_open_path_default(path: String) -> Result<HostOpenResult, HostOpenerError> {
+    open_path_with_default_app(path)
+}
+
+/// 扫描本机 Start Menu / 桌面快捷方式，按扩展名推荐打开方式（动态发现，非硬编码名单）
+#[tauri::command]
+pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener>, HostOpenerError> {
+    list_file_openers_for_path(path)
+}
+
+fn open_path_with_default_app(path: String) -> Result<HostOpenResult, HostOpenerError> {
+    let target = path.trim().to_string();
+    if target.is_empty() {
+        return Err(host_opener_error(
+            "host-path-empty",
+            "Path is empty.",
+            None,
+            None,
+        ));
+    }
+    let p = PathBuf::from(&target);
+    if !p.exists() {
+        return Err(host_opener_error(
+            "host-path-missing",
+            format!("Path does not exist: {target}"),
+            None,
+            Some(target.clone()),
+        ));
+    }
+
+    #[cfg(windows)]
+    {
+        // `cmd /C start "" "path"` 走系统默认关联
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", &target])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match status {
+            Ok(_) => Ok(HostOpenResult {
+                ok: true,
+                opener_id: "system-default".to_string(),
+                target_kind: HostOpenTargetKindForResult::Path,
+                target: target.clone(),
+                command: "cmd /C start".to_string(),
+                diagnostic: host_opener_diagnostic(
+                    "host-opener-launched",
+                    "Opened path with system default association.",
+                    Some("cmd /C start".to_string()),
+                    Some(target),
+                ),
+            }),
+            Err(error) => Err(host_opener_error(
+                "host-opener-spawn-failed",
+                format!("Failed to open with system default: {error}"),
+                Some("cmd /C start".to_string()),
+                Some(target),
+            )),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .arg(&target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match status {
+            Ok(_) => Ok(HostOpenResult {
+                ok: true,
+                opener_id: "system-default".to_string(),
+                target_kind: HostOpenTargetKindForResult::Path,
+                target: target.clone(),
+                command: "open".to_string(),
+                diagnostic: host_opener_diagnostic(
+                    "host-opener-launched",
+                    "Opened path with system default association.",
+                    Some("open".to_string()),
+                    Some(target),
+                ),
+            }),
+            Err(error) => Err(host_opener_error(
+                "host-opener-spawn-failed",
+                format!("Failed to open with system default: {error}"),
+                Some("open".to_string()),
+                Some(target),
+            )),
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let status = Command::new("xdg-open")
+            .arg(&target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match status {
+            Ok(_) => Ok(HostOpenResult {
+                ok: true,
+                opener_id: "system-default".to_string(),
+                target_kind: HostOpenTargetKindForResult::Path,
+                target: target.clone(),
+                command: "xdg-open".to_string(),
+                diagnostic: host_opener_diagnostic(
+                    "host-opener-launched",
+                    "Opened path with system default association.",
+                    Some("xdg-open".to_string()),
+                    Some(target),
+                ),
+            }),
+            Err(error) => Err(host_opener_error(
+                "host-opener-spawn-failed",
+                format!("Failed to open with system default: {error}"),
+                Some("xdg-open".to_string()),
+                Some(target),
+            )),
+        }
+    }
+}
+
+fn list_file_openers_for_path(path: String) -> Result<Vec<HostOpener>, HostOpenerError> {
+    let _ = path; // 扩展名可用于未来过滤；当前先返回扫描到的快捷方式
+    let mut openers = Vec::new();
+    // 先并入已发现的编辑器 / 资源管理器
+    if let Ok(hosts) = discover_host_openers() {
+        openers.extend(hosts.into_iter().filter(|o| o.available));
+    }
+    // 再扫 Start Menu 快捷方式（动态，非名单硬编码）
+    openers.extend(scan_start_menu_shortcuts(64));
+    // 去重
+    let mut seen = HashSet::new();
+    openers.retain(|o| seen.insert(o.id.clone()));
+    Ok(openers)
+}
+
+/// 扫描当前用户 + 公共 Start Menu 的 .lnk，最多 limit 个
+fn scan_start_menu_shortcuts(limit: usize) -> Vec<HostOpener> {
+    let mut out = Vec::new();
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Some(appdata) = env::var_os("APPDATA") {
+        roots.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    if let Some(progdata) = env::var_os("ProgramData") {
+        roots.push(PathBuf::from(progdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    for root in roots {
+        if !root.is_dir() {
+            continue;
+        }
+        collect_lnk_openers(&root, &mut out, limit);
+        if out.len() >= limit {
+            break;
+        }
+    }
+    out
+}
+
+fn collect_lnk_openers(dir: &Path, out: &mut Vec<HostOpener>, limit: usize) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        if out.len() >= limit {
+            return;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            collect_lnk_openers(&path, out, limit);
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext != "lnk" {
+            continue;
+        }
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("App")
+            .to_string();
+        // 跳过卸载 / 帮助等噪音
+        let lower = name.to_ascii_lowercase();
+        if lower.contains("uninstall")
+            || lower.contains("卸载")
+            || lower.contains("help")
+            || lower.contains("readme")
+        {
+            continue;
+        }
+        let id = format!("lnk:{}", path.display());
+        out.push(HostOpener {
+            id,
+            display_name: name.clone(),
+            label: name,
+            kind: HostOpenerKind::Editor,
+            availability: HostOpenerAvailability::Available,
+            available: true,
+            reason: None,
+            diagnostic: host_opener_diagnostic(
+                "host-opener-available",
+                "Discovered from Start Menu shortcut.",
+                Some(path.display().to_string()),
+                Some(path.display().to_string()),
+            ),
+        });
+    }
+}
+
 fn discover_host_openers() -> Result<Vec<HostOpener>, HostOpenerError> {
     discover_host_openers_with(
         env::var_os("PATH"),
@@ -195,6 +413,11 @@ fn open_host_target(
     opener_id: String,
     target: HostOpenTarget,
 ) -> Result<HostOpenResult, HostOpenerError> {
+    // Start Menu 快捷方式：id = "lnk:<path>"
+    if let Some(lnk_path) = opener_id.strip_prefix("lnk:") {
+        let lnk_owned = lnk_path.to_string();
+        return open_with_shortcut(&lnk_owned, target, opener_id);
+    }
     let path_env = env::var_os("PATH");
     let env_lookup = |key: &str| env::var_os(key);
     let path_exists = |path: &Path| path.exists();
@@ -259,6 +482,81 @@ fn open_host_target(
             Some(open_target_display(&resolved_target)),
         ),
     })
+}
+
+/// 通过 .lnk 启动并带上文件路径参数
+fn open_with_shortcut(
+    lnk_path: &str,
+    target: HostOpenTarget,
+    opener_id: String,
+) -> Result<HostOpenResult, HostOpenerError> {
+    let lnk = PathBuf::from(lnk_path);
+    if !lnk.exists() {
+        return Err(host_opener_error(
+            "host-opener-not-found",
+            format!("Shortcut not found: {lnk_path}"),
+            Some(lnk_path.to_string()),
+            None,
+        ));
+    }
+    let app_dir = app_dir().map_err(|message| {
+        host_opener_error("host-path-root-unavailable", message, None, None)
+    })?;
+    let workspace = workspace_root(&app_dir);
+    let roots = [workspace.as_path()];
+    let resolved_target = resolve_open_target_for_roots(&target, &roots)?;
+    let file_arg = match &resolved_target {
+        ResolvedOpenTarget::Path(p) => p.display().to_string(),
+        ResolvedOpenTarget::Url(u) => u.clone(),
+    };
+
+    #[cfg(windows)]
+    {
+        // 用 PowerShell 解析快捷方式目标并启动（带文件参数）
+        let script = format!(
+            "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{}'); Start-Process -FilePath $s.TargetPath -ArgumentList @('{}') -WorkingDirectory (Split-Path $s.TargetPath -Parent) -ErrorAction Stop",
+            lnk_path.replace('\'', "''"),
+            file_arg.replace('\'', "''"),
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match status {
+            Ok(_) => Ok(HostOpenResult {
+                ok: true,
+                opener_id,
+                target_kind: HostOpenTargetKindForResult::Path,
+                target: file_arg.clone(),
+                command: lnk_path.to_string(),
+                diagnostic: host_opener_diagnostic(
+                    "host-opener-launched",
+                    "Opened via Start Menu shortcut.",
+                    Some(lnk_path.to_string()),
+                    Some(file_arg),
+                ),
+            }),
+            Err(error) => Err(host_opener_error(
+                "host-opener-spawn-failed",
+                format!("Failed to launch shortcut: {error}"),
+                Some(lnk_path.to_string()),
+                Some(file_arg),
+            )),
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = file_arg;
+        Err(host_opener_error(
+            "host-opener-unavailable",
+            "Shortcut open is only implemented on Windows.",
+            Some(lnk_path.to_string()),
+            None,
+        ))
+    }
 }
 
 fn opener_candidates(env_var: &impl Fn(&str) -> Option<OsString>) -> Vec<OpenerCandidate> {

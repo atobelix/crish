@@ -1,11 +1,14 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     ffi::c_void,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::process::Command as TokioCommand;
+use tokio::time::{timeout, Duration};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -364,6 +367,289 @@ fn current_uptime_ms() -> u128 {
 fn process_started_at_millis() -> u128 {
     static STARTED_AT: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
     *STARTED_AT.get_or_init(now_millis)
+}
+
+// ==================== Interactive terminal shell ====================
+
+const DEFAULT_SHELL_TIMEOUT_MS: u64 = 60_000;
+const MAX_SHELL_OUTPUT_BYTES: usize = 400_000;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkbenchRunShellRequest {
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkbenchRunShellResult {
+    ok: bool,
+    stdout: String,
+    stderr: String,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    cancelled: bool,
+    shell: String,
+    cwd: String,
+    duration_ms: u64,
+    truncated: bool,
+}
+
+/// 终端面板直接执行：Windows 用系统 powershell.exe，其它平台用 bash。
+/// 与 agent shell_command 同源语义，但不经 daemon 审批（用户主动输入）。
+#[tauri::command]
+pub(crate) async fn workbench_run_shell(
+    request: WorkbenchRunShellRequest,
+) -> Result<WorkbenchRunShellResult, String> {
+    let command = request.command.trim().to_string();
+    if command.is_empty() {
+        return Err("command must be a non-empty string".to_string());
+    }
+    if command.len() > 32_000 {
+        return Err("command too long".to_string());
+    }
+
+    let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
+    let timeout_ms = request
+        .timeout_ms
+        .unwrap_or(DEFAULT_SHELL_TIMEOUT_MS)
+        .clamp(1_000, 600_000);
+
+    let (program, args, shell_label) = build_shell_invocation(&command)?;
+    let started = now_millis();
+
+    let mut child_cmd = TokioCommand::new(&program);
+    child_cmd
+        .args(&args)
+        .current_dir(&cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    // Windows: hide console flash
+    #[cfg(windows)]
+    {
+        #[allow(unused_imports)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        child_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    // Prefer UTF-8 for child tools
+    child_cmd.env("PYTHONUTF8", "1");
+    child_cmd.env("PYTHONIOENCODING", "utf-8");
+
+    let child = child_cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn {shell_label}: {e}"))?;
+    let child_pid = child.id();
+
+    // wait_with_output 会拿走 child；超时后靠 kill_on_drop + taskkill 树杀
+    let wait_fut = child.wait_with_output();
+    let timed = timeout(Duration::from_millis(timeout_ms), wait_fut).await;
+
+    let finished = now_millis();
+    let duration_ms = finished.saturating_sub(started) as u64;
+
+    match timed {
+        Ok(Ok(output)) => {
+            let (stdout, trunc_out) = clamp_output_bytes(&output.stdout);
+            let (stderr, trunc_err) = clamp_output_bytes(&output.stderr);
+            let exit_code = output.status.code();
+            Ok(WorkbenchRunShellResult {
+                ok: output.status.success(),
+                stdout,
+                stderr,
+                exit_code,
+                timed_out: false,
+                cancelled: false,
+                shell: shell_label,
+                cwd: cwd.display().to_string(),
+                duration_ms,
+                truncated: trunc_out || trunc_err,
+            })
+        }
+        Ok(Err(e)) => Err(format!("shell wait failed: {e}")),
+        Err(_elapsed) => {
+            if let Some(pid) = child_pid {
+                let _ = terminate_process_tree(pid);
+            }
+            Ok(WorkbenchRunShellResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: format!("(命令超时，已终止 · {timeout_ms}ms)"),
+                exit_code: None,
+                timed_out: true,
+                cancelled: false,
+                shell: shell_label,
+                cwd: cwd.display().to_string(),
+                duration_ms,
+                truncated: false,
+            })
+        }
+    }
+}
+
+fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(raw) = cwd.map(str::trim).filter(|s| !s.is_empty()) {
+        let p = PathBuf::from(raw);
+        if p.is_dir() {
+            return Ok(p);
+        }
+        return Err(format!("cwd is not a directory: {raw}"));
+    }
+    // 回落到 monorepo 根或当前进程目录
+    if let Ok(app) = crate::host_paths::app_dir() {
+        let root = crate::host_paths::workspace_root(&app);
+        if root.is_dir() {
+            return Ok(root);
+        }
+    }
+    std::env::current_dir().map_err(|e| format!("no valid cwd: {e}"))
+}
+
+fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String), String> {
+    if cfg!(windows) {
+        let ps = resolve_system_powershell()?;
+        let script = build_windows_powershell_script(command);
+        let encoded = encode_powershell_encoded_command(&script);
+        Ok((
+            ps,
+            vec![
+                "-NoLogo".into(),
+                "-NoProfile".into(),
+                "-ExecutionPolicy".into(),
+                "Bypass".into(),
+                "-EncodedCommand".into(),
+                encoded,
+            ],
+            "powershell.exe".into(),
+        ))
+    } else {
+        Ok((
+            "bash".into(),
+            vec!["-lc".into(), command.to_string()],
+            "bash".into(),
+        ))
+    }
+}
+
+/// 优先系统目录下的 Windows PowerShell 5.x，再回落 PATH 上的 powershell.exe。
+fn resolve_system_powershell() -> Result<String, String> {
+    if let Ok(root) = std::env::var("SystemRoot") {
+        let candidate = Path::new(&root)
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("powershell.exe");
+        if candidate.is_file() {
+            return Ok(candidate.display().to_string());
+        }
+    }
+    // PATH 探测
+    if which_on_path("powershell.exe") {
+        return Ok("powershell.exe".into());
+    }
+    Err("system powershell.exe not found".into())
+}
+
+fn which_on_path(name: &str) -> bool {
+    let Ok(path) = std::env::var("PATH") else {
+        return false;
+    };
+    for dir in std::env::split_paths(&path) {
+        let p = dir.join(name);
+        if p.is_file() {
+            return true;
+        }
+    }
+    false
+}
+
+/// 与 agent-runtime 对齐：UTF-8 输出 + base64 载荷，避免引号/管道被外壳二次解析弄坏。
+fn build_windows_powershell_script(user_command: &str) -> String {
+    let payload = base64_encode_std(user_command.as_bytes());
+    [
+        "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
+        "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
+        "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
+        "$env:PYTHONUTF8='1'",
+        "$env:PYTHONIOENCODING='utf-8'",
+        "$global:LASTEXITCODE=$null",
+        &format!(
+            "$__conexCmd = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{payload}'))"
+        ),
+        "& ([scriptblock]::Create($__conexCmd))",
+        "$success=$?",
+        "$exitCode=$LASTEXITCODE",
+        "if ($exitCode -ne $null -and $exitCode -ne 0) { exit $exitCode }",
+        "if (-not $success) { exit 1 }",
+    ]
+    .join("; ")
+}
+
+/// PowerShell -EncodedCommand：UTF-16LE → base64
+fn encode_powershell_encoded_command(script: &str) -> String {
+    let utf16: Vec<u16> = script.encode_utf16().collect();
+    let mut bytes = Vec::with_capacity(utf16.len() * 2);
+    for u in utf16 {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    base64_encode_std(&bytes)
+}
+
+fn base64_encode_std(data: &[u8]) -> String {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut i = 0;
+    while i + 3 <= data.len() {
+        let n = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8) | (data[i + 2] as u32);
+        out.push(TABLE[((n >> 18) & 63) as usize] as char);
+        out.push(TABLE[((n >> 12) & 63) as usize] as char);
+        out.push(TABLE[((n >> 6) & 63) as usize] as char);
+        out.push(TABLE[(n & 63) as usize] as char);
+        i += 3;
+    }
+    let rem = data.len() - i;
+    if rem == 1 {
+        let n = (data[i] as u32) << 16;
+        out.push(TABLE[((n >> 18) & 63) as usize] as char);
+        out.push(TABLE[((n >> 12) & 63) as usize] as char);
+        out.push('=');
+        out.push('=');
+    } else if rem == 2 {
+        let n = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8);
+        out.push(TABLE[((n >> 18) & 63) as usize] as char);
+        out.push(TABLE[((n >> 12) & 63) as usize] as char);
+        out.push(TABLE[((n >> 6) & 63) as usize] as char);
+        out.push('=');
+    }
+    out
+}
+
+fn clamp_output_bytes(raw: &[u8]) -> (String, bool) {
+    if raw.len() <= MAX_SHELL_OUTPUT_BYTES {
+        return (decode_console_bytes(raw), false);
+    }
+    let head = &raw[..MAX_SHELL_OUTPUT_BYTES / 2];
+    let tail = &raw[raw.len() - MAX_SHELL_OUTPUT_BYTES / 2..];
+    let omitted = raw.len() - head.len() - tail.len();
+    let text = format!(
+        "{}\n\n[output truncated: {} bytes omitted]\n\n{}",
+        decode_console_bytes(head),
+        omitted,
+        decode_console_bytes(tail)
+    );
+    (text, true)
+}
+
+fn decode_console_bytes(raw: &[u8]) -> String {
+    // 先按 UTF-8；失败则 lossy（Windows 控制台偶发本机代码页）
+    match std::str::from_utf8(raw) {
+        Ok(s) => s.to_string(),
+        Err(_) => String::from_utf8_lossy(raw).into_owned(),
+    }
 }
 
 // ==================== Process Termination ====================

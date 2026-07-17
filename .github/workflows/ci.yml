@@ -1,4 +1,9 @@
 # 核心类型检查 + 单测（desktop helpers + agent packages）
+# Local equivalents (no husky — run manually or via CI):
+#   npm run check:core          # includes check:desktop
+#   npm run check:store-types
+#   npm run test:core
+#   npm run test:desktop-helpers
 name: ci
 
 on:
@@ -19,13 +24,11 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Typecheck core packages
+      - name: Typecheck core packages (runtime/orchestrator/daemon/workbench/desktop)
         run: npm run check:core
-      - name: Unit tests (core + desktop helpers)
-        run: |
-          npx vitest run \
-            packages/agent-runtime/src \
-            packages/agent-orchestrator/src \
-            packages/agent-daemon/src \
-            apps/crish-desktop/src/api \
-            apps/crish-desktop/src/store
+      - name: Store type hygiene (no set as any in layoutStore)
+        run: npm run check:store-types
+      - name: Unit tests (core packages)
+        run: npm run test:core
+      - name: Unit tests (desktop helpers)
+        run: npm run test:desktop-helpers

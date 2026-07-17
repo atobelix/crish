@@ -101,7 +101,7 @@ export async function createWorkbenchRuntime(options: WorkbenchRuntimeFactoryOpt
     sessionStore,
     resumeSession: options.resumeSession,
     maxTurns: options.maxTurns ?? budgetProfile.maxTurns,
-    permissionPolicy: createPermissionPolicy({ mode: "project" }),
+    permissionPolicy: createPermissionPolicy({ mode: "project" }), // TrustZone ask matrix (shared with daemon)
     ...createProductRuntimeDefaults({
       cwd,
       contextWindowTokens: settings.provider.model.contextWindowTokens,

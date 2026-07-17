@@ -11,7 +11,8 @@ tauri-build.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-tauri.workspace = true
+# protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）
+tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }

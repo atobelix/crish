@@ -199,6 +199,13 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "workbench_apply_session_action", status: "implemented", feature: "session metadata action" },
   { command: "workbench_patch_plan_document", status: "implemented", feature: "plan document patch" },
   { command: "workbench_performance_snapshot", status: "implemented", feature: "performance diagnostics" },
+  {
+    command: "workbench_run_shell",
+    status: "implemented",
+    surface: "product",
+    feature: "interactive terminal shell",
+    reason: "Runs user-typed terminal commands via system PowerShell (Windows) or bash (Unix).",
+  },
   { command: "workbench_provider_diagnostics", status: "implemented", feature: "provider diagnostics" },
   {
     command: "workbench_dev_cli_probe",
