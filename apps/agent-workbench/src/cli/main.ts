@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { AgentRuntime } from "@crish/agent-runtime";
+import { AsyncMutex } from "@crish/shared-utils";
 import {
   createBackgroundTaskContinuationDecision,
   finishBackgroundTask,
@@ -265,9 +266,10 @@ async function createCliEventLogWriter(argv = process.argv, cwd = process.cwd())
   if (!eventLogPath) return undefined;
   await mkdir(dirname(eventLogPath), { recursive: true });
   await writeFile(eventLogPath, "", "utf8");
+  const writeMutex = new AsyncMutex();
   return {
     async write(value) {
-      await appendFile(eventLogPath, `${JSON.stringify(value)}\n`, "utf8");
+      await writeMutex.runExclusive(() => appendFile(eventLogPath, `${JSON.stringify(value)}\n`, "utf8"));
     }
   };
 }

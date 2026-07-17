@@ -1,6 +1,8 @@
 //! 凭证存储：OS/DPAPI 加密密钥读写，以及进程内降级内存存储。
 
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -12,6 +14,11 @@ pub(crate) struct CredentialStore {
     mode: CredentialStoreMode,
     memory_key: Option<String>,
     pub(crate) unavailable: bool,
+    // OS 凭证内存缓存：避免每次 read 都重新进行 DPAPI 解密。
+    // 缓存 None 表示"已知文件不存在"（避免重复文件系统访问）；
+    // key 不在 map 中表示"尚未读取，需要从 OS 解密"。
+    // 缓存仅存在于进程内存中，不持久化——进程退出即失效（安全）。
+    os_cache: RefCell<HashMap<PathBuf, Option<String>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,11 +53,13 @@ impl CredentialStore {
                 mode: CredentialStoreMode::Os,
                 memory_key: None,
                 unavailable: false,
+                os_cache: RefCell::new(HashMap::new()),
             },
             Err(_) => Self {
                 mode: CredentialStoreMode::MemoryOnly,
                 memory_key: None,
                 unavailable: true,
+                os_cache: RefCell::new(HashMap::new()),
             },
         }
     }
@@ -61,12 +70,24 @@ impl CredentialStore {
             mode: CredentialStoreMode::MemoryOnly,
             memory_key: None,
             unavailable: true,
+            os_cache: RefCell::new(HashMap::new()),
         }
     }
 
     pub(crate) fn read(&self, path: &Path) -> Result<Option<String>, String> {
         match self.mode {
-            CredentialStoreMode::Os => read_os_secret(path),
+            CredentialStoreMode::Os => {
+                // 先查内存缓存（克隆出 Option<Option<String>> 以便立即释放 RefCell 借用）
+                if let Some(cached) = self.os_cache.borrow().get(path).cloned() {
+                    return Ok(cached);
+                }
+                // 缓存未命中：调用 OS 解密并写入缓存
+                let value = read_os_secret(path)?;
+                self.os_cache
+                    .borrow_mut()
+                    .insert(path.to_path_buf(), value.clone());
+                Ok(value)
+            }
             CredentialStoreMode::MemoryOnly => Ok(self.memory_key.clone()),
         }
     }
@@ -78,7 +99,13 @@ impl CredentialStore {
     ) -> Result<CredentialPersistence, String> {
         match self.mode {
             CredentialStoreMode::Os => match write_os_secret(path, value) {
-                Ok(()) => Ok(CredentialPersistence::Persisted),
+                Ok(()) => {
+                    // 写入成功后同步更新内存缓存，保证后续 read 命中
+                    self.os_cache
+                        .borrow_mut()
+                        .insert(path.to_path_buf(), Some(value.to_string()));
+                    Ok(CredentialPersistence::Persisted)
+                }
                 Err(error) => {
                     self.mode = CredentialStoreMode::MemoryOnly;
                     self.unavailable = true;
@@ -102,6 +129,8 @@ impl CredentialStore {
         match self.mode {
             CredentialStoreMode::Os => {
                 remove_os_secret(path)?;
+                // 清除文件后同步失效缓存条目，下次 read 会重新读取（应返回 None）
+                self.os_cache.borrow_mut().remove(path);
                 Ok(CredentialPersistence::Unset)
             }
             CredentialStoreMode::MemoryOnly => Ok(CredentialPersistence::Unset),

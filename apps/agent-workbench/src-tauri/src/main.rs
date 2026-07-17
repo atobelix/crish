@@ -77,6 +77,7 @@ macro_rules! register_handlers {
             fs_commands::list_directory,
             fs_commands::read_file_content,
             fs_commands::write_file_content,
+            fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
         ]
     };
@@ -143,6 +144,7 @@ macro_rules! register_handlers {
             fs_commands::list_directory,
             fs_commands::read_file_content,
             fs_commands::write_file_content,
+            fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
             // 开发专用命令
             cli_bridge::workbench_dev_cli_probe,

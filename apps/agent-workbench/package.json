@@ -14,6 +14,7 @@
   "dependencies": {
     "@crish/agent-runtime": "file:../../packages/agent-runtime",
     "@crish/shared-types": "file:../../packages/shared-types",
+    "@crish/shared-utils": "file:../../packages/shared-utils",
     "@crish/crish-desktop": "file:../crish-desktop"
   },
   "devDependencies": {

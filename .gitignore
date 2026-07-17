@@ -4,6 +4,9 @@ node_modules/
 # Build outputs
 dist/
 build/
+
+# Assets (binary/media files, not tracked in git)
+assets/
 *.tsbuildinfo
 target-tauri-dev/
 
