@@ -37,6 +37,7 @@ import { formatEngineDegradeToast } from '../hooks/useToastQueue';
 import { useLayoutStore } from '../store/layoutStore';
 import { closeSettings } from '../store/settingsUiStore';
 import { SettingsSelect } from './SettingsSelect';
+import { SettingsPage } from './settings/SettingsUI';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -619,143 +620,135 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   };
 
   return (
-    <div
-      className="skills-tab"
-      aria-busy={anyBusy || undefined}
-      aria-labelledby={titleId}
-    >
-      <header className="settings-page-head">
-        <div className="skills-head-row">
-          <h2 className="settings-page-title" id={titleId}>
-            技能
-          </h2>
-          {/* 主焦点：列表启停；顶栏只留一个主操作 + ⋯ */}
-          <div className="skills-tab-actions" role="toolbar" aria-label="技能操作">
+    <SettingsPage
+      title="技能"
+      meta={
+        <div className="skills-tab-actions" role="toolbar" aria-label="技能操作">
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={() =>
+              setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
+            }
+            title="导入本机技能或用 AI 创建"
+            aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
+            aria-expanded={createMode !== 'none'}
+            aria-controls={createBoxId}
+          >
+            <Lucide.Plus size={14} aria-hidden />
+            {createMode !== 'none' ? '收起' : '新建'}
+          </button>
+          <div className="skills-more-wrap">
             <button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={() =>
-                setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
-              }
-              title="导入本机技能或用 AI 创建"
-              aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
-              aria-expanded={createMode !== 'none'}
-              aria-controls={createBoxId}
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-expanded={moreOpen}
+              aria-controls={moreMenuId}
+              aria-haspopup="menu"
+              title="更多操作"
+              aria-label="更多操作"
             >
-              <Lucide.Plus size={14} aria-hidden />
-              {createMode !== 'none' ? '收起' : '新建'}
+              <Lucide.MoreHorizontal size={16} aria-hidden />
             </button>
-            <div className="skills-more-wrap">
-              <button
-                type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
-                onClick={() => setMoreOpen((v) => !v)}
-                aria-expanded={moreOpen}
-                aria-controls={moreMenuId}
-                aria-haspopup="menu"
-                title="更多操作"
-                aria-label="更多操作"
+            {moreOpen ? (
+              <div
+                id={moreMenuId}
+                className="skills-more-menu"
+                role="menu"
+                aria-label="更多技能操作"
               >
-                <Lucide.MoreHorizontal size={16} aria-hidden />
-              </button>
-              {moreOpen ? (
-                <div
-                  id={moreMenuId}
-                  className="skills-more-menu"
-                  role="menu"
-                  aria-label="更多技能操作"
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="skills-more-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void handleSyncAll();
+                  }}
+                  disabled={syncBusy || skills.length === 0}
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="skills-more-item"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      void handleSyncAll();
-                    }}
-                    disabled={syncBusy || skills.length === 0}
-                  >
-                    {syncBusy ? '同步中…' : '同步到引擎'}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="skills-more-item"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      void refresh({ promptNew: true });
-                    }}
-                    disabled={loading || discoverBusy}
-                  >
-                    发现新技能
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="skills-more-item"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      void refresh();
-                    }}
-                    disabled={loading}
-                  >
-                    刷新列表
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="skills-more-item"
-                    onClick={() => {
-                      const next = !enableCommands;
-                      const prev = enableCommands;
-                      setEnableCommands(next);
-                      setMoreOpen(false);
-                      void clientApi
-                        .saveSettingsEx(getWorkspacePath() || '', 'global', {
-                          enableSkillCommands: next,
-                        })
-                        .then((merged) => {
-                          useLayoutStore.getState().setAppSettings(merged);
-                        })
-                        .catch((err) => {
-                          setEnableCommands(prev);
-                          onShowToast?.(`快捷命令保存失败：${errText(err)}`);
-                        })
-                        .finally(() => {
-                          window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-                        });
-                    }}
-                  >
-                    {enableCommands ? '关闭快捷命令' : '开启快捷命令'}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={`skills-more-item ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
-                    onClick={() => void runBatchActivation('enabled')}
-                    disabled={batchBusy || filtered.length === 0}
-                  >
-                    {batchConfirm === 'enabled'
-                      ? `再点确认全启（${batchEnableCount}）`
-                      : '全部启用'}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={`skills-more-item ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
-                    onClick={() => void runBatchActivation('disabled')}
-                    disabled={batchBusy || filtered.length === 0}
-                  >
-                    {batchConfirm === 'disabled'
-                      ? `再点确认全禁（${batchDisableCount}）`
-                      : '全部禁用'}
-                  </button>
-                </div>
-              ) : null}
-            </div>
+                  {syncBusy ? '同步中…' : '同步到引擎'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="skills-more-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void refresh({ promptNew: true });
+                  }}
+                  disabled={loading || discoverBusy}
+                >
+                  发现新技能
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="skills-more-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void refresh();
+                  }}
+                  disabled={loading}
+                >
+                  刷新列表
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="skills-more-item"
+                  onClick={() => {
+                    const next = !enableCommands;
+                    const prev = enableCommands;
+                    setEnableCommands(next);
+                    setMoreOpen(false);
+                    void clientApi
+                      .saveSettingsEx(getWorkspacePath() || '', 'global', {
+                        enableSkillCommands: next,
+                      })
+                      .then((merged) => {
+                        useLayoutStore.getState().setAppSettings(merged);
+                      })
+                      .catch((err) => {
+                        setEnableCommands(prev);
+                        onShowToast?.(`快捷命令保存失败：${errText(err)}`);
+                      })
+                      .finally(() => {
+                        window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+                      });
+                  }}
+                >
+                  {enableCommands ? '关闭快捷命令' : '开启快捷命令'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`skills-more-item ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
+                  onClick={() => void runBatchActivation('enabled')}
+                  disabled={batchBusy || filtered.length === 0}
+                >
+                  {batchConfirm === 'enabled'
+                    ? `再点确认全启（${batchEnableCount}）`
+                    : '全部启用'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`skills-more-item ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
+                  onClick={() => void runBatchActivation('disabled')}
+                  disabled={batchBusy || filtered.length === 0}
+                >
+                  {batchConfirm === 'disabled'
+                    ? `再点确认全禁（${batchDisableCount}）`
+                    : '全部禁用'}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
-      </header>
+      }
+    >
 
       {loadError ? (
         <div className="skills-fs-warn" role="alert">
@@ -1226,7 +1219,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           )}
         </section>
       </div>
-
-    </div>
+    </SettingsPage>
   );
 };

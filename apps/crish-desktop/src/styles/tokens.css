@@ -4,80 +4,91 @@
 html[data-theme="default"],
 html[data-theme="light"] {
   /*
-   * 浅色两档底：≈2% 灰（主面）/ ≈4.5% 灰（侧栏·次面）
-   * 文字三档：正黑 / ≈90% 黑 / ≈50% 灰（次要）
-   * 有底色包裹的正文必须用 --text-primary（正黑）保对比
+   * Premium Light Theme
+   * Pure neutral/monochrome greys
    */
-  --bg-primary: #fafafa;
-  --bg-secondary: #f3f3f3;
-  --bg-tertiary: #f3f3f3;
-  --bg-hover: #efefef;
-  --bg-active: #ebebeb;
-  --bg-card: #fafafa;
-  --bg-elevated: #fafafa;
-  --text-primary: #000000;
-  --text-secondary: #1a1a1a;
-  --text-tertiary: #808080;
-  /*
-   * 描边契约（ChatGPT / Kimi 抽象法则）：
-   * - 控件默认无描边，用浅底区分
-   * - 需要分隔时用极浅 hairline，禁止近黑实线
-   */
-  --border-color: #ececec;
-  --border-subtle: #f0f0f0;
+  --bg-primary: hsl(35, 4%, 92.5%);     /* #edebe7: 调整后的主背景色，护眼暖灰 */
+  --bg-secondary: hsl(35, 4%, 94.5%);   /* #f2f1ed: 调整后的次级背景色 */
+  --bg-tertiary: hsl(35, 4%, 93%);      /* #eceae5: 调整后的三级背景色 */
+  --bg-hover: hsl(35, 5%, 93.5%);       /* #eeece7: 极浅悬停灰，清爽且无脏感 */
+  --bg-active: hsl(35, 5%, 91.5%);      /* #eceae5: 激活/选中状态，轻微加深 */
+  --bg-card: #ffffff;                    /* 卡片保持白色，形成高对比的精致感 */
+  --bg-elevated: #ffffff;                /* 弹窗与下拉菜单底板保持纯白，保证字迹和布局清晰 */
+  --bg-workspace: var(--bg-primary);     /* 保持与 primary 一致的护眼暖灰 */
+  --card-header-bg: hsl(35, 4%, 94.5%);  /* #f2f1ed: 页眉中性略偏暖灰色（不超过2%偏色） */
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-tertiary: #888888;
+  
+  --border-color: hsl(35, 4%, 89%);
+  --border-subtle: hsl(35, 4%, 93%);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
-  --hairline-strong: #ebebeb;
-  /* 软 pill / 次按钮共用 */
-  --control-soft-bg: color-mix(in srgb, var(--text-primary) 4.5%, var(--bg-primary));
-  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 7.5%, var(--bg-primary));
-  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary));
-  /* focus：几乎不可见，仅 1px 极淡描边变化 */
-  --focus-ring-color: transparent;
-  --focus-ring: none;
-  --focus-ring-strong: none;
+  --hairline-strong: var(--border-color);
+  
+  --control-soft-bg: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary));
+  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 14%, var(--bg-primary));
+  --md-code-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-secondary));
+  --md-code-border: var(--border-color);
+  --md-code-fg: var(--text-primary);
+  --focus-ring-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --focus-ring: 0 0 0 2px var(--focus-ring-color);
+  --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--text-primary) 12%, transparent);
 
-  --accent-color: #000000;
-  --accent-light: #f3f3f3;
-  --accent-hover: #000000;
-  --accent-soft: #efefef;
+  --accent-color: #0f172a;
+  --accent-light: #f8fafc;
+  --accent-hover: #1e293b;
+  --accent-soft: #f1f5f9;
 
   --accent-orange: #f59e0b;
   --accent-orange-light: #fffbeb;
-  /* 点缀：亮黄绿（高 G 略黄压蓝）；仅开关开态/成功/关键 CTA */
-  --accent-green: #2dbe6c;
-  --accent-green-hover: #25a85e;
-  --accent-green-light: #f0fdf4;
-  --accent-green-soft: #e8faf0;
-  --accent-green-muted: #c6f0d6;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --accent-green-light: #ecfdf5;
+  --accent-green-soft: #d1fae5;
+  --accent-green-muted: #a7f3d0;
   --accent-red: #ef4444;
   --accent-red-light: #fef2f2;
-  --accent-blue: #666666;
-  --accent-blue-light: #f5f5f5;
-  --accent-violet: #666666;
-  --accent-violet-light: #f5f5f5;
+  --accent-blue: #3b82f6;
+  --accent-blue-light: #eff6ff;
+  --accent-violet: #8b5cf6;
+  --accent-violet-light: #f5f3ff;
+  --accent-primary: var(--accent-blue);
+  --accent-secondary: var(--accent-blue-light);
+  --accent-chart-in: var(--accent-blue-light);
+  --accent-chart-out: var(--accent-blue);
 
-  /* 白天跟随应用浅色，避免终端永远是黑底；描边走 hairline 契约 */
-  --terminal-bg: var(--bg-primary);
-  --terminal-fg: var(--text-primary);
-  --terminal-muted: var(--text-tertiary);
-  --terminal-border: var(--hairline);
-  --terminal-cmd: var(--text-secondary);
-  --terminal-bar-fill: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --terminal-bg: #0f172a; /* Premium dark terminal in light mode */
+  --terminal-fg: #f8fafc;
+  --terminal-err: #f87171;
+  --terminal-muted: #94a3b8;
+  --terminal-border: transparent;
+  --terminal-cmd: #cbd5e1;
+  --terminal-bar-fill: rgba(255, 255, 255, 0.1);
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.08), 0 4px 10px -4px rgba(0, 0, 0, 0.03);
-  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
-  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', 'JetBrains Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
+  /* Premium Smooth Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+
+  /* Materials & Animations */
+  --bg-glass: rgba(255, 255, 255, 0.75);
+  --backdrop-blur: blur(16px);
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
   --dropdown-padding: 6px;
   --dropdown-gap: 2px;
@@ -87,19 +98,20 @@ html[data-theme="light"] {
   --item-font-size: var(--font-size-base);
 
   --header-height: 44px;
-  --sidebar-width: 240px;
+  --sidebar-width: 260px;
 
   /*
    * 文字层级（正文 14 为基准）
    * xxs/xs 仅用于时间、角标等极密元信息，慎用
    */
-  --font-size-xxs: 11px;
-  --font-size-xs: 12px;
-  --font-size-sm: 13px;
-  --font-size-base: 14px;
-  --font-size-md: 14px;
-  --font-size-lg: 15px;
-  --font-size-xl: 17px;
+  --font-size-adjust: 0px;
+  --font-size-xxs: calc(11px + var(--font-size-adjust));
+  --font-size-xs: calc(12px + var(--font-size-adjust));
+  --font-size-sm: calc(13px + var(--font-size-adjust));
+  --font-size-base: calc(14px + var(--font-size-adjust));
+  --font-size-md: calc(14px + var(--font-size-adjust));
+  --font-size-lg: calc(15px + var(--font-size-adjust));
+  --font-size-xl: calc(17px + var(--font-size-adjust));
 
   /*
    * 字重阶梯（统一，禁止散落 400/600 字面量）：
@@ -199,57 +211,70 @@ html[data-theme="light"] {
  *   --hairline-strong = 可交互描边（输入壳、浮层菜单、用户气泡）
  * 禁止组件再写独立 color-mix 百分比描边 */
 html[data-theme="dark"] {
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #262626;
-  --bg-tertiary: #2e2e2e;
-  --bg-hover: #333333;
-  --bg-active: #3a3a3a;
-  --bg-card: #222222;
-  --bg-elevated: #2a2a2a;
-  --text-primary: #f2f2f2;
-  --text-secondary: #c4c4c4;
-  --text-tertiary: #9a9a9a;
-  /* 描边用中灰，禁止近黑/纯黑描边；subtle 略抬以保证 #1e1e1e 上 hairline 可辨 */
-  --border-color: #3f3f3f;
-  --border-subtle: #363636;
+  /* Premium Dark Theme (Neutral/Vercel style) */
+  --bg-primary: hsl(0, 0%, 6%);
+  --bg-secondary: hsl(0, 0%, 8.5%);
+  --bg-tertiary: hsl(0, 0%, 10%);
+  --bg-hover: hsl(0, 0%, 10%);
+  --bg-active: hsl(0, 0%, 13%);
+  --bg-card: hsl(0, 0%, 6%);
+  --bg-elevated: hsl(0, 0%, 8.5%);
+  --text-primary: #f0f0f0;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  
+  --border-color: hsl(0, 0%, 18%);
+  --border-subtle: hsl(0, 0%, 14%);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
-  --hairline-strong: #3a3a3a;
-  --control-soft-bg: color-mix(in srgb, var(--text-primary) 8%, var(--bg-primary));
-  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
-  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 16%, var(--bg-primary));
-  --focus-ring-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --hairline-strong: var(--border-color);
+  
+  --control-soft-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary));
+  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 15%, var(--bg-primary));
+  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 20%, var(--bg-primary));
+  --focus-ring-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
-  --focus-ring-strong: 0 0 0 2px color-mix(in srgb, var(--text-primary) 22%, transparent);
-  --accent-color: #ececec;
-  --accent-light: #333333;
+  --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--text-primary) 22%, transparent);
+
+  --accent-color: #f8fafc;
+  --accent-light: #1e293b;
   --accent-hover: #ffffff;
-  --accent-soft: #3a3a3a;
-  --accent-orange: #d97706;
-  --accent-orange-light: #2a2010;
-  --accent-green: #3dd68c;
-  --accent-green-hover: #2dbe6c;
-  --accent-green-light: #1a2a22;
-  --accent-green-soft: #1e3228;
-  --accent-green-muted: #2a4034;
-  --accent-red: #f87171;
-  --accent-red-light: #2a1414;
-  --accent-blue: #a3a3a3;
-  --accent-blue-light: #333333;
-  --accent-violet: #a3a3a3;
-  --accent-violet-light: #333333;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.28);
-  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.32);
-  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.4);
-  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.38);
-  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.45);
-  --terminal-bg: #1a1a1a;
-  --terminal-fg: #d4d4d4;
-  --terminal-muted: #7a7a7a;
-  /* 终端描边对齐 hairline 契约，勿再写独立 rgba 百分比 */
+  --accent-soft: #334155;
+
+  --accent-orange: #f59e0b;
+  --accent-orange-light: #451a03;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --accent-green-light: #064e3b;
+  --accent-green-soft: #065f46;
+  --accent-green-muted: #047857;
+  --accent-red: #ef4444;
+  --accent-red-light: #450a0a;
+  --accent-blue: #3b82f6;
+  --accent-blue-light: #1e3a8a;
+  --accent-violet: #8b5cf6;
+  --accent-violet-light: #2e1065;
+  --accent-primary: var(--accent-blue);
+  --accent-secondary: var(--accent-blue-light);
+  --accent-chart-in: var(--accent-blue-light);
+  --accent-chart-out: var(--accent-blue);
+
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+
+  --terminal-bg: #000000;
+  --terminal-fg: #ededed;
+  --terminal-err: #ef4444; /* Standard red or softer red in pure dark */
+  --terminal-muted: #71717a;
   --terminal-border: var(--hairline);
-  --terminal-cmd: #b0b0b0;
-  --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --terminal-cmd: #a1a1aa;
+  --terminal-bar-fill: rgba(255, 255, 255, 0.05);
+
+  --bg-glass: rgba(10, 10, 10, 0.75);
   color-scheme: dark;
 }
 
@@ -265,13 +290,13 @@ html[data-theme="dark"] {
   --header-height: 40px;
 
   /* 紧凑档：底 13，元信息不低于 11；中文仍保持 body 行高不压扁 */
-  --font-size-xxs: 11px;
-  --font-size-xs: 12px;
-  --font-size-sm: 13px;
-  --font-size-base: 13px;
-  --font-size-md: 13px;
-  --font-size-lg: 14px;
-  --font-size-xl: 16px;
+  --font-size-xxs: calc(11px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(16px + var(--font-size-adjust, 0px));
 
   --icon-size: 15px;
   --icon-size-sm: 13px;
@@ -325,13 +350,13 @@ html[data-theme="dark"] {
   --item-font-size: var(--font-size-base);
   --header-height: 44px;
 
-  --font-size-xxs: 11px;
-  --font-size-xs: 12px;
-  --font-size-sm: 13px;
-  --font-size-base: 14px;
-  --font-size-md: 14px;
-  --font-size-lg: 15px;
-  --font-size-xl: 17px;
+  --font-size-xxs: calc(11px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(15px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(17px + var(--font-size-adjust, 0px));
 
   --icon-size: 16px;
   --icon-size-sm: 14px;
@@ -386,13 +411,13 @@ html[data-theme="dark"] {
   --header-height: 48px;
 
   /* 大档：中文可读性优先，body 行高再抬半档 */
-  --font-size-xxs: 12px;
-  --font-size-xs: 13px;
-  --font-size-sm: 14px;
-  --font-size-base: 15px;
-  --font-size-md: 15px;
-  --font-size-lg: 16px;
-  --font-size-xl: 18px;
+  --font-size-xxs: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(15px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(15px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(16px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(18px + var(--font-size-adjust, 0px));
 
   --icon-size: 17px;
   --icon-size-sm: 15px;

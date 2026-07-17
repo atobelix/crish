@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
+import { Tooltip } from './settings/SettingsUI';
 
 export type SettingsSelectOption = {
   value: string;
@@ -115,7 +116,10 @@ export const SettingsSelect: React.FC<Props> = ({
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
     };
-  }, [open]);
+  }, [open, pos]);
+
+
+
 
   const toggle = () => {
     if (disabled) return;
@@ -132,6 +136,7 @@ export const SettingsSelect: React.FC<Props> = ({
             className="settings-select-menu settings-select-menu--portal"
             role="listbox"
             id={listId}
+            onWheel={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
               top: pos.top,
@@ -142,7 +147,8 @@ export const SettingsSelect: React.FC<Props> = ({
               zIndex: 20050,
             }}
           >
-            <div className="settings-select-scroll" style={{ maxHeight: pos.maxH - (footer ? 48 : 8) }}>
+            {footer ? <div className="settings-select-header">{footer}</div> : null}
+            <div className="settings-select-scroll" style={{ maxHeight: pos.maxH - (footer ? 38 : 8) }}>
               {options.map((opt) => {
                 const showGroup = opt.group && opt.group !== lastGroup;
                 if (opt.group) lastGroup = opt.group;
@@ -152,29 +158,28 @@ export const SettingsSelect: React.FC<Props> = ({
                     {showGroup ? (
                       <div className="settings-select-group">{opt.group}</div>
                     ) : null}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      className={`settings-select-item ${active ? 'is-active' : ''}`}
-                      onClick={() => {
-                        onChange(opt.value);
-                        setOpen(false);
-                      }}
-                    >
-                      <span
-                        className="settings-select-item-label"
-                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                    <Tooltip content={opt.hint} disabled={!opt.hint}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        className={`settings-select-item ${active ? 'is-active' : ''}`}
+                        onClick={() => {
+                          onChange(opt.value);
+                          setOpen(false);
+                        }}
                       >
-                        {opt.label}
-                      </span>
-                      {opt.hint ? (
-                        <span className="settings-select-item-hint">{opt.hint}</span>
-                      ) : null}
-                      {active ? (
-                        <Lucide.Check size={14} className="settings-select-check" />
-                      ) : null}
-                    </button>
+                        <span
+                          className="settings-select-item-label"
+                          style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                        >
+                          {opt.label}
+                        </span>
+                        {active ? (
+                          <Lucide.Check size={14} className="settings-select-check" />
+                        ) : null}
+                      </button>
+                    </Tooltip>
                   </React.Fragment>
                 );
               })}
@@ -182,7 +187,6 @@ export const SettingsSelect: React.FC<Props> = ({
                 <div className="settings-select-empty">暂无选项</div>
               ) : null}
             </div>
-            {footer ? <div className="settings-select-footer">{footer}</div> : null}
           </div>,
           document.body,
         )

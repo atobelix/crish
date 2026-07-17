@@ -29,8 +29,6 @@ import {
 import {
   getActiveProject,
   getWorkspacePath,
-  listProjects,
-  openProject,
 } from '../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 
@@ -66,6 +64,8 @@ export type ChatEmptyStateProps = {
   onCreateSession?: () => void;
   /** filter-empty */
   onClearFilter?: () => void;
+  /** Centered composer element for session-empty state */
+  composer?: React.ReactNode;
 };
 
 function EmptyIcon({ kind }: { kind: ChatEmptyKind }) {
@@ -136,6 +136,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   onSetChatInput,
   onCreateSession,
   onClearFilter,
+  composer,
 }) => {
   const reactId = useId();
 
@@ -162,7 +163,6 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     resolveChatEmptyActionLabel(primaryAction) ?? copy.actionLabel;
 
   const activeProject = getActiveProject();
-  const projects = copy.showProjectBar ? listProjects() : [];
   const projectName = projectDisplayName(activeProject);
 
   const ariaLabel = chatEmptyKindAriaLabel(kind);
@@ -241,12 +241,55 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         </div>
       ) : null}
 
-      <h3 id={titleId} className="chat-empty-title">
-        {copy.title}
-      </h3>
-      <p id={subId} className="chat-empty-sub">
-        {copy.sub}
-      </p>
+      {kind === 'session-empty' ? (
+        <div className="chat-empty-hero">
+          <h3 id={titleId} className="chat-empty-title chat-empty-title--hero">
+            我们该在
+            {showProjectBar && onShowProjectPicker ? (
+              <div className="chat-empty-project-inline" data-empty-region="project-bar">
+                <button
+                  type="button"
+                  className="chat-empty-project-btn chat-empty-project-btn--inline"
+                  aria-expanded={showProjectPicker}
+                  aria-haspopup="menu"
+                  aria-label={
+                    activeProject
+                      ? `当前项目：${projectName}，点击切换`
+                      : getWorkspacePath()
+                        ? '当前目录，点击选择项目'
+                        : '选择项目'
+                  }
+                  onClick={() => onShowProjectPicker((v) => !v)}
+                >
+                  <Lucide.Folder size={18} strokeWidth={2} aria-hidden />
+                  <span>{projectName}</span>
+                  <Lucide.ChevronDown size={16} style={{ opacity: 0.5 }} aria-hidden />
+                </button>
+                {showProjectPicker ? (
+                  <ProjectPickerMenu
+                    open
+                    onClose={() => onShowProjectPicker(false)}
+                    onChanged={() => onProjectChanged?.()}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <span className="chat-empty-project-text"> {projectName} </span>
+            )}
+            中处理什么？
+          </h3>
+        </div>
+      ) : (
+        <h3 id={titleId} className="chat-empty-title">
+          {copy.title}
+        </h3>
+      )}
+
+      {copy.sub ? (
+        <p id={subId} className="chat-empty-sub">
+          {copy.sub}
+        </p>
+      ) : null}
 
       {shellCue ? (
         <p
@@ -277,54 +320,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         </button>
       ) : null}
 
-      {showProjectBar && onShowProjectPicker ? (
-        <div className="chat-empty-project-bar" data-empty-region="project-bar">
-          <div className="chat-empty-project-anchor">
-            <button
-              type="button"
-              className="chat-empty-project-btn"
-              aria-expanded={showProjectPicker}
-              aria-haspopup="menu"
-              aria-label={
-                activeProject
-                  ? `当前项目：${projectName}，点击切换`
-                  : getWorkspacePath()
-                    ? '当前目录，点击选择项目'
-                    : '选择项目'
-              }
-              onClick={() => onShowProjectPicker((v) => !v)}
-            >
-              <Lucide.Folder size={15} strokeWidth={1.75} aria-hidden />
-              <span>{projectName}</span>
-              <Lucide.ChevronDown size={14} style={{ opacity: 0.5 }} aria-hidden />
-            </button>
-            {showProjectPicker ? (
-              <ProjectPickerMenu
-                open
-                onClose={() => onShowProjectPicker(false)}
-                onChanged={() => onProjectChanged?.()}
-              />
-            ) : null}
-          </div>
-          {projects.length > 0 && !activeProject && onProjectChanged ? (
-            <button
-              type="button"
-              className="chat-empty-last-btn"
-              data-empty-action="open-recent-project"
-              aria-label={`打开最近项目：${projects[0]?.name ?? ''}`}
-              onClick={() => {
-                const last = projects[0];
-                if (last) {
-                  openProject(last.id);
-                  onProjectChanged();
-                }
-              }}
-            >
-              最近：{projects[0]?.name}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {composer && <div className="chat-empty-composer-wrap">{composer}</div>}
 
       {showPrompts && onSetChatInput ? (
         <div

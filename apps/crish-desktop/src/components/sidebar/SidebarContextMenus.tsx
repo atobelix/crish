@@ -244,7 +244,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             data-action="open-current"
             onClick={() => onSessionAction('open-current')}
           >
-            <Lucide.MessageSquare size={14} strokeWidth={1.75} aria-hidden />
+            <Lucide.MessageCircle size={14} strokeWidth={1.75} aria-hidden />
             <span>在此处打开</span>
           </button>
           <button
@@ -277,7 +277,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             data-action="rename"
             onClick={() => onSessionAction('rename')}
           >
-            <Lucide.Pencil size={14} strokeWidth={1.75} aria-hidden />
+            <Lucide.PenLine size={14} strokeWidth={1.75} aria-hidden />
             <span>重命名</span>
           </button>
           <button
@@ -312,7 +312,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             data-action="branch"
             onClick={() => onSessionAction('branch')}
           >
-            <Lucide.GitBranch size={14} strokeWidth={1.75} aria-hidden />
+            <Lucide.GitFork size={14} strokeWidth={1.75} aria-hidden />
             <span>分叉</span>
           </button>
 
@@ -326,7 +326,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             title="导出为 Markdown"
             onClick={() => onSessionAction('export')}
           >
-            <Lucide.Download size={14} strokeWidth={1.75} aria-hidden />
+            <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
             <span>导出 Markdown</span>
           </button>
         </div>

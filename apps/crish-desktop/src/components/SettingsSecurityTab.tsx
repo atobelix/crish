@@ -3,6 +3,12 @@
  */
 import React, { useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
 import {
@@ -198,104 +204,61 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   );
 
   return (
-    <div className="settings-pane settings-pane--modern settings-pane--security">
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title">安全</h2>
-        </div>
-      </header>
-
-      <section className="settings-group" aria-labelledby={permLabelId}>
-        <div className="settings-group-label" id={permLabelId}>
-          权限
-        </div>
-        <div className="settings-list settings-list--security">
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--security"
-            title={permissionTitle}
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id={`${permLabelId}-row`}>
-                权限模式
-              </div>
-              <div className="settings-list-sub settings-list-sub--force settings-security-desc">
-                工具执行前要不要先确认
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--security">
+    <SettingsPage title="安全">
+      <SettingsSection title="权限">
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={`${permLabelId}-row`}>权限模式</span>}
+            desc="工具执行前要不要先确认"
+            control={
               <SettingsSelect
                 className="settings-security-select"
                 value={permissionMode}
                 options={permissionOptions}
                 onChange={onPermissionChange}
               />
-            </div>
-          </div>
-        </div>
-      </section>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-      <section className="settings-group" aria-label="工作区">
-        <div className="settings-group-label">工作区</div>
-        <div className="settings-list settings-list--security">
+      <SettingsSection title="工作区">
+        <SettingsCard>
           {workspacePaths.length > 0 ? (
             workspacePaths.map((path) => {
               const leaf = pathLeaf(path);
               return (
-                <div
+                <SettingsRow
                   key={path}
-                  className="settings-list-row settings-list-row--single settings-list-row--security"
-                  title={path}
-                >
-                  <div className="settings-list-copy">
-                    <div className="settings-list-title settings-path-ellipsis" title={path}>
-                      {leaf}
-                    </div>
-                    <div className="settings-list-sub settings-list-sub--force settings-security-desc settings-security-path">
-                      {path}
-                    </div>
-                  </div>
-                </div>
+                  title={<span className="settings-path-ellipsis" title={path}>{leaf}</span>}
+                  desc={<span className="settings-security-path">{path}</span>}
+                />
               );
             })
           ) : (
-            <div
-              className="settings-list-row settings-list-row--single settings-list-row--security"
-              title="先在对话里打开一个项目"
-            >
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">未打开项目</div>
-                <div className="settings-list-sub settings-list-sub--force settings-security-desc">
-                  打开项目后会显示在这里
-                </div>
-              </div>
-            </div>
+            <SettingsRow
+              title={<span className="settings-list-empty">未打开项目</span>}
+              desc="打开项目后会显示在这里"
+            />
           )}
-        </div>
-      </section>
+        </SettingsCard>
+      </SettingsSection>
 
-      <section className="settings-group" aria-label="信任命令">
-        <div className="settings-group-label">信任命令</div>
-        <div className="settings-list settings-list--security">
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--security"
-            title={`${WHITELIST_MATCH_HINT}。${WHITELIST_LOCAL_HINT}`}
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title">
-                <label htmlFor={wlInputId}>添加命令</label>
-              </div>
-              <div className="settings-list-sub settings-list-sub--force settings-security-desc">
-                匹配后可自动放行
-              </div>
+      <SettingsSection title="信任命令">
+        <SettingsCard>
+          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', alignItems: 'center' }}>
+            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor={wlInputId} style={{ fontSize: '14px', color: 'var(--text-primary)' }}>添加命令</label>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>匹配后可自动放行</span>
             </div>
-            <div className="settings-list-control settings-list-control--security settings-list-control--inline-form">
+            <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
               <input
                 id={wlInputId}
                 type="text"
                 placeholder="如 git status"
                 value={newWhitelistCmd}
                 onChange={(e) => setNewWhitelistCmd(e.target.value)}
-                className="settings-field-input settings-field-input--sm settings-field-input--w160 settings-security-input"
+                className="settings-field-input settings-field-input--sm settings-field-input--grow"
                 title={inputRiskTitle}
                 spellCheck={false}
                 autoComplete="off"
@@ -303,6 +266,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 autoCapitalize="off"
                 aria-label="要信任的命令"
                 aria-invalid={draftBlocked || undefined}
+                style={{ flex: 1 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -326,6 +290,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 aria-label="添加命令"
                 disabled={!draftTrimmed || draftBlocked}
                 onClick={() => addWhitelist()}
+                style={{ borderRadius: '6px' }}
               >
                 添加
               </button>
@@ -336,6 +301,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   title={`清空全部 ${whitelist.length} 条（需确认）`}
                   aria-label={`清空全部 ${whitelist.length} 条白名单`}
                   onClick={clearWhitelist}
+                  style={{ borderRadius: '6px' }}
                 >
                   清空
                 </button>
@@ -343,21 +309,12 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
             </div>
           </div>
 
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--security settings-list-row--security-chips"
-            title="一键添加常用只读命令"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title">常用</div>
-              <div className="settings-list-sub settings-list-sub--force settings-security-desc">
-                点击加入
-              </div>
+          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px' }}>
+            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>常用预设</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>点击一键加入信任</span>
             </div>
-            <div
-              className="settings-list-control settings-list-control--security settings-list-control--chips"
-              role="group"
-              aria-label="常用只读命令"
-            >
+            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {QUICK_WHITELIST_CMDS.map((cmd) => {
                 const already = whitelist.some(
                   (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase(),
@@ -372,6 +329,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                     aria-label={already ? `${cmd} 已添加` : `添加 ${cmd}`}
                     title={already ? '已添加' : `添加 ${cmd}`}
                     onClick={() => addWhitelist(cmd)}
+                    style={{ height: '28px', padding: '0 10px', fontSize: '12px', borderRadius: '6px' }}
                   >
                     {cmd}
                   </button>
@@ -379,63 +337,42 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
               })}
             </div>
           </div>
+        </SettingsCard>
+      </SettingsSection>
 
-          {whitelist.length > 0 ? (
-            <div
-              className="settings-list-row settings-list-row--single settings-list-row--security settings-list-row--security-chips"
-              title={WHITELIST_LOCAL_HINT}
-            >
-              <div className="settings-list-copy">
-                <div className="settings-list-title">已添加</div>
-                <div className="settings-list-sub settings-list-sub--force settings-security-desc" role="status">
-                  {whitelist.length} 条 · 高风险命令不能加入
-                </div>
-              </div>
-              <div
-                className="settings-list-control settings-list-control--security settings-list-control--chips"
-                role="list"
-                aria-label="已允许的命令"
-              >
-                {whitelist.map((cmd) => {
-                  const risk = classifyShellRisk(cmd);
-                  const riskTag = RISK_LABEL_ZH[risk.level];
-                  return (
-                    <span
-                      key={cmd}
-                      className="settings-chip"
-                      role="listitem"
-                      title={`${cmd} · ${riskTag}：${risk.message}`}
-                    >
-                      <span className="settings-chip-label">{cmd}</span>
-                      <button
-                        type="button"
-                        className="settings-chip-x"
-                        onClick={() => removeWhitelist(cmd)}
-                        title={`移除 ${cmd}`}
-                        aria-label={`移除 ${cmd}`}
-                      >
-                        <Lucide.X size={12} />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
+      <SettingsSection title={`已信任命令 (${whitelist.length})`}>
+        <SettingsCard>
+          {whitelist.length === 0 ? (
+            <SettingsRow
+              title={<span className="settings-list-empty">还没有信任的命令</span>}
+              desc="上方输入命令并添加，或点击常用预设"
+            />
           ) : (
-            <div
-              className="settings-list-row settings-list-row--single settings-list-row--security"
-              title={whitelistEmptyTitle}
-            >
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">还没有信任命令</div>
-                <div className="settings-list-sub settings-list-sub--force settings-security-desc">
-                  可手动输入，或点上方常用命令
-                </div>
-              </div>
-            </div>
+            whitelist.map((cmd) => {
+              const risk = classifyShellRisk(cmd);
+              const riskTag = RISK_LABEL_ZH[risk.level];
+              return (
+                <SettingsRow
+                  key={cmd}
+                  title={<span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{cmd}</span>}
+                  desc={`${riskTag} · ${risk.message}`}
+                  control={
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                      onClick={() => removeWhitelist(cmd)}
+                      title={`移除 ${cmd}`}
+                      aria-label={`移除 ${cmd}`}
+                    >
+                      <Lucide.Trash2 size={14} aria-hidden />
+                    </button>
+                  }
+                />
+              );
+            })
           )}
-        </div>
-      </section>
-    </div>
+        </SettingsCard>
+      </SettingsSection>
+    </SettingsPage>
   );
 };

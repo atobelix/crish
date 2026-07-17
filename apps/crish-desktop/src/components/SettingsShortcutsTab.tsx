@@ -1,37 +1,25 @@
 /**
  * 设置 · 快捷键：查看与改键；成功静默，冲突/写入失败才提示。
  */
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 
 type Props = {
   onShowToast: (msg: string) => void;
 };
 
 const DEFAULT_SHORTCUTS: Record<string, string> = {
-  toggle_settings: 'Ctrl + ,',
-  new_session: 'Ctrl + N',
-  focus_composer: 'Ctrl + L',
-  branch_session: 'Escape Escape',
-  command_palette: '/',
-  stop_generation: 'Ctrl + Shift + Backspace',
-  open_models: 'Ctrl + Shift + M',
-  open_usage: 'Ctrl + Shift + U',
-  open_security: 'Ctrl + Shift + E',
-  open_shortcuts: 'Ctrl + Shift + K',
-  open_extensions: 'Ctrl + Shift + X',
-  open_schedule: 'Ctrl + Shift + J',
-  toggle_sidebar: 'Ctrl + B',
-  toggle_runtime: 'Ctrl + `',
-  toggle_plan_mode: 'Ctrl + Shift + P',
-  close_tab: 'MiddleClick',
-  cheatsheet: 'Ctrl + Shift + /',
+  toggle_settings: 'Ctrl + ,', new_session: 'Ctrl + N', focus_composer: 'Ctrl + L',
+  branch_session: 'Escape Escape', command_palette: '/', stop_generation: 'Ctrl + Shift + Backspace',
+  open_models: 'Ctrl + Shift + M', open_usage: 'Ctrl + Shift + U', open_security: 'Ctrl + Shift + E',
+  open_shortcuts: 'Ctrl + Shift + K', open_extensions: 'Ctrl + Shift + X', open_schedule: 'Ctrl + Shift + J',
+  toggle_sidebar: 'Ctrl + B', toggle_runtime: 'Ctrl + `', toggle_plan_mode: 'Ctrl + Shift + P',
+  close_tab: 'MiddleClick', cheatsheet: 'Ctrl + Shift + /',
 };
 
 const SHORTCUT_ITEMS = [
@@ -56,76 +44,38 @@ const SHORTCUT_ITEMS = [
 
 type ShortcutItem = (typeof SHORTCUT_ITEMS)[number];
 
-/** 与 shortcutBindings 同源，改键后全局立即生效 */
-const STORAGE_KEY = 'conex_custom_shortcuts';
 
 /** 键名片段 → 中文展示（存储仍为英文 token，仅 UI 本地化） */
 const KEY_PART_ZH: Record<string, string> = {
-  Ctrl: 'Ctrl',
-  Control: 'Ctrl',
-  Shift: 'Shift',
-  Alt: 'Alt',
-  Meta: 'Win',
-  Command: '⌘',
-  Cmd: '⌘',
-  Escape: 'Esc',
-  Esc: 'Esc',
-  Space: '空格',
-  Enter: '回车',
-  Return: '回车',
-  Backspace: '退格',
-  Delete: '删除',
-  Del: '删除',
-  Tab: 'Tab',
-  Insert: '插入',
-  Home: 'Home',
-  End: 'End',
-  PageUp: '上页',
-  PageDown: '下页',
-  ArrowUp: '↑',
-  ArrowDown: '↓',
-  ArrowLeft: '←',
-  ArrowRight: '→',
-  Up: '↑',
-  Down: '↓',
-  Left: '←',
-  Right: '→',
-  MiddleClick: '鼠标中键',
-  Middle: '鼠标中键',
-  LeftClick: '鼠标左键',
-  RightClick: '鼠标右键',
-  DoubleClick: '双击',
-  Click: '单击',
+  Ctrl: 'Ctrl', Control: 'Ctrl', Shift: 'Shift', Alt: 'Alt', Meta: 'Win',
+  Command: '⌘', Cmd: '⌘', Escape: 'Esc', Esc: 'Esc', Space: '空格',
+  Enter: '回车', Return: '回车', Backspace: '退格', Delete: '删除', Del: '删除',
+  Tab: 'Tab', Insert: '插入', Home: 'Home', End: 'End', PageUp: '上页', PageDown: '下页',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+  Up: '↑', Down: '↓', Left: '←', Right: '→',
+  MiddleClick: '鼠标中键', Middle: '鼠标中键', LeftClick: '鼠标左键',
+  RightClick: '鼠标右键', DoubleClick: '双击', Click: '单击',
 };
 
-function normalizeKeyPart(raw: string): string {
-  return raw.trim();
-}
+function normalizeKeyPart(raw: string): string { return raw.trim(); }
 
-/**
- * 将存储键位串格式化为中文可读标签。
- * 支持「A + B」「Escape Escape」「MiddleClick」等形态。
- */
 function formatShortcutLabel(raw: string | undefined | null): string {
   if (raw == null) return '未设置';
   const s = String(raw).trim();
   if (!s) return '未设置';
-
-  // 双击 Esc 等：连续同键空格分隔
   if (!s.includes('+') && /\s+/.test(s)) {
     const parts = s.split(/\s+/).map(normalizeKeyPart).filter(Boolean);
-    if (parts.length >= 2 && parts.every((p) => p === parts[0])) {
-      const one = KEY_PART_ZH[parts[0]] || parts[0];
-      return `双击 ${one}`;
-    }
+    if (parts.length >= 2 && parts.every((p) => p === parts[0])) return `双击 ${KEY_PART_ZH[parts[0]] || parts[0]}`;
     return parts.map((p) => KEY_PART_ZH[p] || p).join(' · ');
   }
-
-  // 组合键：Ctrl + ,
   const combo = s.split(/\s*\+\s*/).map(normalizeKeyPart).filter(Boolean);
   if (combo.length === 0) return '未设置';
   return combo.map((p) => KEY_PART_ZH[p] || p).join(' + ');
 }
+
+/** 与 shortcutBindings 同源，改键后全局立即生效 */
+const STORAGE_KEY = 'conex_custom_shortcuts';
+
 
 function isValidShortcutValue(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= 64;
@@ -359,93 +309,75 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
 
   let flatIdx = -1;
 
-  return (
-    <div className="settings-pane settings-pane--modern settings-pane--shortcuts">
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title" id={`${listId}-title`}>
-            快捷键
-          </h2>
-          <div className="settings-head-tools settings-head-tools--shortcuts">
-            <input
-              id={filterId}
-              type="search"
-              className="settings-field-input settings-field-input--sm settings-field-input--w160 settings-shortcuts-filter"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索…"
-              spellCheck={false}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              aria-label="搜索快捷键"
-              aria-controls={listId}
-              aria-describedby={headMetaId}
-              title={filterTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  if (recordingShortcutId) {
-                    setRecordingShortcutId(null);
-                  } else if (query) {
-                    clearQuery();
-                  }
-                } else if (e.key === 'ArrowDown' && flatIds.length > 0) {
-                  e.preventDefault();
-                  requestAnimationFrame(() => btnRefs.current[focusIndex]?.focus());
-                }
-              }}
-            />
-            {hasQuery ? (
-              <button
-                type="button"
-                className="settings-shortcuts-filter-clear"
-                onClick={clearQuery}
-                title="清空筛选"
-                aria-label="清空筛选"
-              >
-                清空
-              </button>
-            ) : null}
-            {headMetaText ? (
-              <span
-                id={headMetaId}
-                className="settings-head-meta"
-                title={filterTitle}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {headMetaText}
-              </span>
-            ) : (
-              <span id={headMetaId} className="sr-only" />
-            )}
-          </div>
-        </div>
-      </header>
+  const headerMeta = (
+    <div className="settings-head-tools settings-head-tools--shortcuts">
+      <input
+        id={filterId}
+        type="search"
+        className="settings-field-input settings-field-input--sm settings-field-input--w160 settings-shortcuts-filter"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="搜索…"
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        aria-label="搜索快捷键"
+        aria-controls={listId}
+        aria-describedby={headMetaId}
+        title={filterTitle}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            if (recordingShortcutId) {
+              setRecordingShortcutId(null);
+            } else if (query) {
+              clearQuery();
+            }
+          } else if (e.key === 'ArrowDown' && flatIds.length > 0) {
+            e.preventDefault();
+            requestAnimationFrame(() => btnRefs.current[focusIndex]?.focus());
+          }
+        }}
+      />
+      {hasQuery ? (
+        <button
+          type="button"
+          className="settings-shortcuts-filter-clear"
+          onClick={clearQuery}
+          title="清空筛选"
+          aria-label="清空筛选"
+        >
+          清空
+        </button>
+      ) : null}
+      {headMetaText ? (
+        <span
+          id={headMetaId}
+          className="settings-head-meta"
+          title={filterTitle}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {headMetaText}
+        </span>
+      ) : (
+        <span id={headMetaId} className="sr-only" />
+      )}
+    </div>
+  );
 
+  return (
+    <SettingsPage title="快捷键" meta={headerMeta}>
       {grouped.length === 0 ? (
-        <section className="settings-group" aria-label="无结果">
-          <div
-            className="settings-list settings-list--shortcuts"
-            role="status"
-            aria-live="polite"
-          >
-            <div
-              className="settings-list-row settings-list-row--single settings-list-row--shortcuts"
-              title="试试更短的关键词，或清空筛选"
-            >
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">
-                  {hasQuery ? `无匹配「${query.trim()}」` : '暂无快捷键'}
-                </div>
-                <div className="settings-list-sub settings-list-sub--force">
-                  {hasQuery ? '试试更短关键词，或清空筛选' : ''}
-                </div>
-              </div>
-              {hasQuery ? (
-                <div className="settings-list-control settings-list-control--shortcuts">
+        <SettingsSection>
+          <SettingsCard>
+            <SettingsRow
+              title={hasQuery ? `无匹配「${query.trim()}」` : '暂无快捷键'}
+              desc={hasQuery ? '试试更短关键词，或清空筛选' : ''}
+              control={
+                hasQuery ? (
                   <button
                     type="button"
                     className="settings-shortcuts-filter-clear"
@@ -455,29 +387,18 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
                   >
                     清空筛选
                   </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
+                ) : null
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
       ) : (
         <div id={listId} aria-labelledby={`${listId}-title`} onKeyDown={onListKeyDown}>
           {grouped.map(([groupName, items]) => {
             const groupLabelId = `${listId}-g-${groupName}`;
             return (
-              <section
-                key={groupName}
-                className="settings-group"
-                aria-labelledby={groupLabelId}
-              >
-                <div className="settings-group-label" id={groupLabelId}>
-                  {groupName}
-                </div>
-                <div
-                  className="settings-list settings-list--shortcuts"
-                  role="list"
-                  aria-label={`${groupName}快捷键`}
-                >
+              <SettingsSection key={groupName} title={groupName}>
+                <SettingsCard>
                   {items.map((sh) => {
                     flatIdx += 1;
                     const rowIndex = flatIdx;
@@ -493,78 +414,59 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
                           : -1;
 
                     return (
-                      <div
+                      <SettingsRow
                         key={sh.id}
-                        className="settings-list-row settings-list-row--single settings-list-row--shortcuts"
-                        role="listitem"
-                        title={
-                          customized
-                            ? `${sh.desc} · 已自定义，可恢复默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`
-                            : sh.desc
-                        }
-                      >
-                        <div className="settings-list-copy">
-                          <div
-                            className="settings-list-title"
-                            aria-label={
-                              customized ? `${sh.label}，已自定义` : sh.label
-                            }
-                          >
-                            {sh.label}
-                          </div>
-                          {sh.desc ? (
-                            <div className="settings-list-sub settings-list-sub--force settings-shortcuts-desc">
-                              {sh.desc}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="settings-list-control settings-list-control--shortcuts">
-                          {customized && !isRecording ? (
+                        title={sh.label}
+                        desc={sh.desc}
+                        control={
+                          <div className="settings-list-control settings-list-control--shortcuts" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {customized && !isRecording ? (
+                              <button
+                                type="button"
+                                className="settings-shortcuts-filter-clear"
+                                onClick={() => restoreDefault(sh.id)}
+                                title={`恢复默认：${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                                aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                              >
+                                还原
+                              </button>
+                            ) : null}
                             <button
                               type="button"
-                              className="settings-shortcuts-filter-clear"
-                              onClick={() => restoreDefault(sh.id)}
-                              title={`恢复默认：${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
-                              aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                              ref={(el) => {
+                                btnRefs.current[rowIndex] = el;
+                              }}
+                              onClick={() =>
+                                setRecordingShortcutId(isRecording ? null : sh.id)
+                              }
+                              onFocus={() => setFocusIndex(rowIndex)}
+                              className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
+                              aria-pressed={isRecording}
+                              aria-label={
+                                isRecording
+                                  ? `正在录制「${sh.label}」，按键设置，Esc 取消`
+                                  : `「${sh.label}」当前 ${displayKey}，点击重新录制`
+                              }
+                              title={
+                                isRecording
+                                  ? '按键录制中，Esc 取消'
+                                  : `当前：${displayKey}，点击重新录制`
+                              }
+                              tabIndex={tabIndex}
                             >
-                              还原
+                              {isRecording ? '按下新键…' : displayKey}
                             </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            ref={(el) => {
-                              btnRefs.current[rowIndex] = el;
-                            }}
-                            onClick={() =>
-                              setRecordingShortcutId(isRecording ? null : sh.id)
-                            }
-                            onFocus={() => setFocusIndex(rowIndex)}
-                            className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
-                            aria-pressed={isRecording}
-                            aria-label={
-                              isRecording
-                                ? `正在录制「${sh.label}」，按键设置，Esc 取消`
-                                : `「${sh.label}」当前 ${displayKey}，点击重新录制`
-                            }
-                            title={
-                              isRecording
-                                ? '按键录制中，Esc 取消'
-                                : `当前：${displayKey}，点击重新录制`
-                            }
-                            tabIndex={tabIndex}
-                          >
-                            {isRecording ? '按下新键…' : displayKey}
-                          </button>
-                        </div>
-                      </div>
+                          </div>
+                        }
+                      />
                     );
                   })}
-                </div>
-              </section>
+                </SettingsCard>
+              </SettingsSection>
             );
           })}
         </div>
       )}
-    </div>
+    </SettingsPage>
   );
 };

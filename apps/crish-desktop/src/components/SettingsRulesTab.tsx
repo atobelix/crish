@@ -22,6 +22,12 @@ import {
 import { formatEngineDegradeToast } from '../hooks/useToastQueue';
 import { useLayoutStore } from '../store/layoutStore';
 import { SettingsSelect } from './SettingsSelect';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -102,6 +108,7 @@ export const SettingsRulesTab: React.FC<Props> = ({
   const descId = useId();
   const addInputId = useId();
   const listLabelId = useId();
+  const scopeSelectId = useId();
 
   const isGlobal = scopeKey === SCOPE_GLOBAL;
   const activeProject = useMemo(
@@ -135,7 +142,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
   }, [scopeProjects]);
 
   const ruleCount = customRules.length;
-  const headMeta = `${ruleCount} 条`;
   const emptyHint = '可点常用项，或自己输入一条规则';
 
   // 项目列表随打开/关闭变化
@@ -456,111 +462,59 @@ export const SettingsRulesTab: React.FC<Props> = ({
 
   if (!loaded) {
     return (
-      <div className="settings-pane settings-pane--modern settings-pane--rules">
-        <header className="settings-page-head">
-          <div className="settings-head-inline">
-            <h2 className="settings-page-title">规则</h2>
-          </div>
-        </header>
-        <div
-          className="settings-list"
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <div className="settings-list-row settings-list-row--rule">
-            <div className="settings-list-copy">
-              <div className="settings-list-title settings-list-empty">
-                加载中…
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SettingsPage title="规则">
+        <SettingsSection>
+          <SettingsCard>
+            <SettingsRow title="加载中…" />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
     );
   }
 
-  return (
-    <div
-      className="settings-pane settings-pane--modern settings-pane--rules"
-      aria-busy={busy || undefined}
-    >
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title">规则</h2>
-          <div className="settings-head-tools">
-            <SettingsSelect
-              value={scopeKey}
-              options={scopeOptions}
-              onChange={handleScopeChange}
-              disabled={busy}
-              placeholder="选择范围…"
-            />
-            <button
-              ref={fullEditorBtnRef}
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
-              onClick={openFullEditor}
-              title={`编辑${scopeLabel}全文`}
-              aria-label={`编辑${scopeLabel}全文`}
-              disabled={busy}
-            >
-              编辑全文
-            </button>
-            {ruleCount > 0 ? (
-              <span
-                className="settings-head-meta"
-                title={`${scopeLabel}规则条数`}
-                aria-live="polite"
-              >
-                {headMeta}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
-      <section className="settings-group" aria-labelledby={listLabelId}>
-        <div className="settings-group-label" id={listLabelId}>
-          当前规则
-          <span className="settings-group-count">{scopeLabel}</span>
-        </div>
-        <div
-          className="settings-list settings-list--rules"
-          role="list"
-          aria-label={`${scopeLabel}短规则列表`}
+  const headerMeta = (
+    <div className="settings-head-tools settings-head-tools--rules">
+      <div className="settings-head-tools-row">
+        <label htmlFor={scopeSelectId} className="sr-only">
+          规则作用域
+        </label>
+        <SettingsSelect
+          value={scopeKey}
+          options={scopeOptions}
+          onChange={setScopeKey}
+          disabled={busy}
+          className="settings-rules-scope-select"
+        />
+        <button
+          ref={fullEditorBtnRef}
+          type="button"
+          className="ui-btn ui-btn-secondary ui-btn-sm"
+          onClick={openFullEditor}
+          title={`编辑${scopeLabel}全文`}
+          aria-label={`编辑${scopeLabel}全文`}
+          disabled={busy}
         >
+          编辑全文
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <SettingsPage title="规则" meta={headerMeta}>
+      <SettingsSection title={`当前规则 (${scopeLabel})`}>
+        <SettingsCard>
           {ruleCount === 0 ? (
-            <div
-              className="settings-list-row settings-list-row--rule"
-              role="status"
-              title={emptyHint}
-            >
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">
-                  还没有规则
-                </div>
-                <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
-                  可点下方常用项，或自己输入
-                </div>
-              </div>
-            </div>
+            <SettingsRow
+              title={<span className="settings-list-empty">还没有规则</span>}
+              desc="可点下方常用项，或自己输入"
+            />
           ) : (
             customRules.map((rule, idx) => (
-              <div
+              <SettingsRow
                 key={`${idx}-${rule.slice(0, 24)}`}
-                className="settings-list-row settings-list-row--rule"
-                role="listitem"
-              >
-                <div className="settings-list-copy">
-                  <div
-                    className="settings-list-title settings-rule-item-text"
-                    title={rule}
-                  >
-                    {rule}
-                  </div>
-                </div>
-                <div className="settings-list-control">
+                title={<span className="settings-rule-item-text" title={rule}>{rule}</span>}
+                control={
                   <button
                     type="button"
                     onClick={() => handleDeleteCustomRule(idx)}
@@ -571,31 +525,21 @@ export const SettingsRulesTab: React.FC<Props> = ({
                   >
                     <Lucide.Trash2 size={14} aria-hidden />
                   </button>
-                </div>
-              </div>
+                }
+              />
             ))
           )}
-        </div>
-      </section>
+        </SettingsCard>
+      </SettingsSection>
 
-      <section className="settings-group" aria-label="快速添加">
-        <div className="settings-group-label">添加</div>
-        <div className="settings-list settings-list--rules">
-          <div
-            className="settings-list-row settings-list-row--rule settings-list-row--presets"
-            title="点击加入；已有的会变灰"
-          >
-            <div className="settings-list-copy settings-list-copy--shrink">
-              <div className="settings-list-title">常用</div>
-              <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
-                一键加入
-              </div>
+      <SettingsSection title="快速添加">
+        <SettingsCard>
+          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>常用</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>一键加入</span>
             </div>
-            <div
-              className="settings-list-control settings-list-control--chips"
-              role="group"
-              aria-label="常用规则预设"
-            >
+            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {RULE_PRESETS.map((preset) => {
                 const exists = customRules.some(
                   (r) => normalizeRuleLine(r) === normalizeRuleLine(preset),
@@ -619,19 +563,12 @@ export const SettingsRulesTab: React.FC<Props> = ({
             </div>
           </div>
 
-          <div
-            className="settings-list-row settings-list-row--rule"
-            title="回车即可添加"
-          >
-            <div className="settings-list-copy settings-list-copy--shrink">
-              <label className="settings-list-title" htmlFor={addInputId}>
-                自定义
-              </label>
-              <div className="settings-list-sub settings-list-sub--force settings-rules-desc">
-                输入后添加
-              </div>
+          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', alignItems: 'center' }}>
+            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor={addInputId} style={{ fontSize: '14px', color: 'var(--text-primary)' }}>自定义</label>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>输入后添加</span>
             </div>
-            <div className="settings-list-control settings-list-control--inline-form">
+            <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
               <input
                 ref={addInputRef}
                 id={addInputId}
@@ -644,6 +581,7 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 aria-label="自定义规则"
                 autoComplete="off"
                 spellCheck={false}
+                style={{ flex: 1 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -658,13 +596,14 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 disabled={busy || !normalizeRuleLine(newRuleText)}
                 aria-label="添加规则"
                 title={`加入${scopeLabel}短规则`}
+                style={{ borderRadius: '6px' }}
               >
                 添加
               </button>
             </div>
           </div>
-        </div>
-      </section>
+        </SettingsCard>
+      </SettingsSection>
 
       {editingOpen ? (
         <div
@@ -743,6 +682,7 @@ export const SettingsRulesTab: React.FC<Props> = ({
           </div>
         </div>
       ) : null}
-    </div>
+    </SettingsPage>
   );
 };
+

@@ -1,0 +1,187 @@
+/* --- SettingsUI.css (Unified modern card-based settings layout) --- */
+
+.settings-ui-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: min(720px, 100%);
+  padding-bottom: 40px;
+}
+
+.settings-ui-page-head {
+  margin: 0;
+  padding: 0;
+}
+
+.settings-ui-head-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-ui-page-title {
+  margin: 0;
+  font-size: var(--font-size-2xl, 24px);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.settings-ui-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.settings-ui-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-ui-section-title {
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  letter-spacing: 0.01em;
+}
+
+.settings-ui-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 统一的高级卡片容器，严格遵守极微弱灰度（<=4%），无厚重阴影，纯粹的圆角与 1px hairline */
+.settings-ui-card {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 16px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-ui-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.settings-ui-row:last-child {
+  border-bottom: none;
+}
+
+.settings-ui-row-clickable {
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--transition-fast);
+}
+
+.settings-ui-row-clickable:hover {
+  background: var(--bg-hover);
+}
+
+.settings-ui-row-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-ui-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-ui-row-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+  line-height: var(--line-height-ui);
+}
+
+.settings-ui-row-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+}
+
+.settings-ui-row-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Modern portal tooltip */
+.modern-select-tooltip {
+  pointer-events: none;
+  animation: tooltip-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+.modern-select-tooltip-inner {
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  color: var(--text-primary, #1f2937);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.modern-select-tooltip-arrow {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: var(--bg-primary, #ffffff);
+  border-right: 1px solid var(--border-subtle, #e5e7eb);
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+}
+
+/* Dark mode theme support */
+html[data-theme="dark"] .modern-select-tooltip-inner {
+  background: var(--bg-elevated, #1f2937);
+  border-color: var(--border-subtle, #374151);
+  color: var(--text-primary, #f9fafb);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="dark"] .modern-select-tooltip-arrow {
+  background: var(--bg-elevated, #1f2937);
+  border-color: var(--border-subtle, #374151);
+}

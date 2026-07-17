@@ -1,7 +1,7 @@
 /**
  * 设置 · 外观：主题、密度、字体与阅读相关选项；改完即生效，仅失败提示。
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import type { Settings } from '../api/clientApi';
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
@@ -12,6 +12,12 @@ import {
 } from '../api/shellChrome';
 import { FontSettingsSection } from './FontSettingsSection';
 import { SettingsSelect } from './SettingsSelect';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -78,6 +84,7 @@ function normalizeCodeIndent(raw: unknown): string {
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
+  const hideThinkingId = useId();
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
   const uiSize = useLayoutStore((s) => s.uiSize);
   const setUiSize = useLayoutStore((s) => s.setUiSize);
@@ -206,49 +213,41 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     [save, settings],
   );
 
+  if (loadError && !settings) {
+    return (
+      <SettingsPage title="外观">
+        <SettingsSection title="错误">
+          <SettingsCard>
+            <SettingsRow
+              title={<span className="settings-list-empty" role="alert">{loadError}</span>}
+              control={
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  onClick={() => {
+                    setLoadError(null);
+                    setLoadTick((n) => n + 1);
+                  }}
+                >
+                  重试
+                </button>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
+    );
+  }
+
   if (!settings) {
     return (
-      <div className="settings-pane settings-pane--modern settings-pane--appearance">
-        <header className="settings-page-head">
-          <div className="settings-head-inline">
-            <h2 className="settings-page-title">外观</h2>
-          </div>
-        </header>
-        {loadError ? (
-          <section className="settings-group" aria-label="错误">
-            <div className="settings-list">
-              <div className="settings-list-row settings-list-row--single">
-                <div className="settings-list-copy">
-                  <div className="settings-list-title settings-list-empty" role="alert">
-                    {loadError}
-                  </div>
-                </div>
-                <div className="settings-list-control">
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                    aria-label="重新加载外观设置"
-                    onClick={() => {
-                      setLoadError(null);
-                      setLoadTick((n) => n + 1);
-                    }}
-                  >
-                    重试
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <div className="settings-list" role="status" aria-live="polite" aria-busy="true">
-            <div className="settings-list-row settings-list-row--single">
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">加载中…</div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <SettingsPage title="外观">
+        <SettingsSection>
+          <SettingsCard>
+            <SettingsRow title={<span className="settings-list-empty">加载中…</span>} />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
     );
   }
 
@@ -259,229 +258,173 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const chrome = parseShellChromeMode(shellChromeMode);
 
   return (
-    <div
-      className="settings-pane settings-pane--modern settings-pane--appearance"
-      aria-busy={saving || undefined}
-    >
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title">外观</h2>
-        </div>
-      </header>
-
-      <section className="settings-group" aria-labelledby="settings-appearance-display-label">
-        <div className="settings-group-label" id="settings-appearance-display-label">
-          主题与阅读
-        </div>
-        <div className="settings-list">
-          <div className="settings-list-row settings-list-row--single" >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id="settings-appearance-theme-label">
-                主题
-              </div>
-            </div>
-            <div className="settings-list-control">
-              <div
-                className="ui-segment ui-segment--inline settings-choice-group"
-                role="group"
-                aria-labelledby="settings-appearance-theme-label"
-                aria-label="界面主题"
-              >
-                {THEME_OPTS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`ui-segment-item ${theme === opt.id ? 'active' : ''}`}
-                    disabled={saving}
-                    aria-pressed={theme === opt.id}
-                    title={opt.hint}
-                    onClick={() => applyTheme(opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="settings-list-row settings-list-row--single"
-            title="界面疏密"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id="settings-appearance-density-label">
-                密度
-              </div>
-            </div>
-            <div className="settings-list-control">
-              <div
-                className="ui-segment ui-segment--inline settings-choice-group settings-density-segment"
-                role="group"
-                aria-labelledby="settings-appearance-density-label"
-                aria-label="界面密度"
-              >
-                {DENSITY_OPTS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`ui-segment-item ${density === opt.id ? 'active' : ''}`}
-                    disabled={saving}
-                    aria-pressed={density === opt.id}
-                    aria-label={`${opt.label}：${opt.hint}`}
-                    title={opt.hint}
-                    onClick={() => applyDensity(opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="settings-list-row settings-list-row--single"
-            title="窗口布局风格"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id="settings-appearance-chrome-label">
-                界面形态
-              </div>
-            </div>
-            <div className="settings-list-control">
-              <div
-                className="ui-segment ui-segment--inline settings-choice-group"
-                role="group"
-                aria-labelledby="settings-appearance-chrome-label"
-                aria-label="界面形态"
-              >
-                {CHROME_OPTS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`ui-segment-item ${chrome === opt.id ? 'active' : ''}`}
-                    disabled={saving}
-                    aria-pressed={chrome === opt.id}
-                    title={opt.hint}
-                    onClick={() => applyChrome(opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-list-row settings-list-row--single" title="代码块缩进">
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id="settings-appearance-indent-label">
-                代码缩进
-              </div>
-            </div>
-            <div className="settings-list-control">
-              <SettingsSelect
-                value={codeIndent}
-                disabled={saving}
-                options={[...INDENT_OPTS]}
-                onChange={(v) => {
-                  const next = normalizeCodeIndent(v);
-                  if (next === codeIndent) return;
-                  void save({
-                    markdown: { ...(settings.markdown || {}), codeBlockIndent: next },
-                  });
-                }}
-              />
-            </div>
-          </div>
-
-          <label
-            className="settings-list-row settings-list-row--single settings-list-row--clickable"
-            title="对话里不显示思考内容"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title">隐藏思考过程</div>
-            </div>
-            <div className="settings-list-control">
-              <input
-                type="checkbox"
-                className="settings-switch"
-                checked={hideThinking}
-                disabled={saving}
-                aria-label="隐藏思考过程"
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  if (next === hideThinking) return;
-                  void save({ hideThinkingBlock: next });
-                }}
-              />
-            </div>
-          </label>
-        </div>
-      </section>
-
-      <section className="settings-group" aria-label="字体">
-        <div className="settings-group-label">字体</div>
-        <div className="settings-list settings-list--flush settings-list--fonts">
-          <FontSettingsSection
-            onShowToast={onShowToast}
-            onPersistSettings={async (fonts) => {
-              const ok = await save({ fonts });
-              if (!ok) {
-                // 抛出让字体区知道 settings 未同步（本地栈仍已生效）；toast 已由 save 发出
-                throw new Error('字体设置未写入 settings');
+    <SettingsPage title="外观">
+        <SettingsSection title="主题与阅读">
+          <SettingsCard>
+            <SettingsRow
+              title={<span id="settings-appearance-theme-label">主题</span>}
+              control={
+                <div
+                  className="ui-segment ui-segment--inline settings-choice-group"
+                  role="group"
+                  aria-labelledby="settings-appearance-theme-label"
+                >
+                  {THEME_OPTS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`ui-segment-item ${theme === opt.id ? 'active' : ''}`}
+                      disabled={saving}
+                      aria-pressed={theme === opt.id}
+                      title={opt.hint}
+                      onClick={() => applyTheme(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               }
-            }}
-          />
-        </div>
-      </section>
+            />
 
-      <section className="settings-group" aria-labelledby="settings-appearance-reset-label">
-        <div className="settings-group-label" id="settings-appearance-reset-label">
-          其他
-        </div>
-        <div className="settings-list">
-          <div
-            className="settings-list-row settings-list-row--single"
-            title="恢复默认外观"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title">重置外观</div>
-            </div>
-            <div className="settings-list-control">
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={saving}
-                aria-label="重置外观为默认"
-                title="恢复默认"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      const { DEFAULT_FONT_PREFS, setFontPreferences } = await import(
-                        '../api/fontStore'
-                      );
-                      const ok = await save({
-                        theme: 'default',
-                        hideThinkingBlock: false,
-                        markdown: { ...(settings.markdown || {}), codeBlockIndent: '  ' },
-                        fonts: { ...DEFAULT_FONT_PREFS },
-                      });
-                      if (!ok) return;
-                      const { setTheme } = await import('../api/themeStore');
-                      setTheme('default');
-                      await setFontPreferences({ ...DEFAULT_FONT_PREFS });
-                      applyDensity('medium');
-                    } catch (err) {
-                      onShowToast('重置失败：' + String(err));
-                    }
-                  })();
-                }}
-              >
-                重置
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+            <SettingsRow
+              title={<span id="settings-appearance-density-label">密度</span>}
+              control={
+                <div
+                  className="ui-segment ui-segment--inline settings-choice-group settings-density-segment"
+                  role="group"
+                  aria-labelledby="settings-appearance-density-label"
+                >
+                  {DENSITY_OPTS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`ui-segment-item ${density === opt.id ? 'active' : ''}`}
+                      disabled={saving}
+                      aria-pressed={density === opt.id}
+                      title={opt.hint}
+                      onClick={() => applyDensity(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
+
+            <SettingsRow
+              title={<span id="settings-appearance-chrome-label">界面形态</span>}
+              control={
+                <div
+                  className="ui-segment ui-segment--inline settings-choice-group"
+                  role="group"
+                  aria-labelledby="settings-appearance-chrome-label"
+                >
+                  {CHROME_OPTS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`ui-segment-item ${chrome === opt.id ? 'active' : ''}`}
+                      disabled={saving}
+                      aria-pressed={chrome === opt.id}
+                      title={opt.hint}
+                      onClick={() => applyChrome(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
+
+            <SettingsRow
+              title={<span id="settings-appearance-indent-label">代码缩进</span>}
+              control={
+                <SettingsSelect
+                  value={codeIndent}
+                  disabled={saving}
+                  options={[...INDENT_OPTS]}
+                  onChange={(v) => {
+                    const next = normalizeCodeIndent(v);
+                    if (next === codeIndent) return;
+                    void save({
+                      markdown: { ...(settings.markdown || {}), codeBlockIndent: next },
+                    });
+                  }}
+                />
+              }
+            />
+
+            <SettingsRow
+              title={<label htmlFor={hideThinkingId} style={{ cursor: 'pointer', display: 'block', width: '100%' }}>隐藏思考过程</label>}
+              control={
+                <input
+                  id={hideThinkingId}
+                  type="checkbox"
+                  className="settings-switch"
+                  checked={hideThinking}
+                  disabled={saving}
+                  aria-label="隐藏思考过程"
+                  onChange={(e) => {
+                    void save({ hideThinkingBlock: e.target.checked });
+                  }}
+                />
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+
+        <SettingsSection title="字体">
+          <SettingsCard>
+            <FontSettingsSection
+              onShowToast={onShowToast}
+              onPersistSettings={async (fonts) => {
+                const ok = await save({ fonts });
+                if (!ok) {
+                  throw new Error('字体设置未写入 settings');
+                }
+              }}
+            />
+          </SettingsCard>
+        </SettingsSection>
+
+        <SettingsSection title="其他">
+          <SettingsCard>
+            <SettingsRow
+              title="重置外观"
+              control={
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const { DEFAULT_FONT_PREFS, setFontPreferences } = await import(
+                          '../api/fontStore'
+                        );
+                        const ok = await save({
+                          theme: 'default',
+                          hideThinkingBlock: false,
+                          markdown: { ...(settings.markdown || {}), codeBlockIndent: '  ' },
+                          fonts: { ...DEFAULT_FONT_PREFS },
+                        });
+                        if (!ok) return;
+                        const { setTheme } = await import('../api/themeStore');
+                        setTheme('default');
+                        await setFontPreferences({ ...DEFAULT_FONT_PREFS });
+                        applyDensity('medium');
+                      } catch (err) {
+                        onShowToast('重置失败：' + String(err));
+                      }
+                    })();
+                  }}
+                >
+                  重置
+                </button>
+              }
+            />
+        </SettingsCard>
+        </SettingsSection>
+    </SettingsPage>
   );
 };

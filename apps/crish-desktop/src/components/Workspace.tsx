@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
-import type { WorkspaceState, CardGroupState, ColumnState } from '../store/layoutStore';
+import type { CardGroupState, ColumnState } from '../store/layoutStore';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CardPanel } from './CardPanel';
 import * as Lucide from 'lucide-react';
@@ -8,7 +8,7 @@ import * as Lucide from 'lucide-react';
 import type { ShowToastFn } from '../hooks/useToastQueue';
 
 interface WorkspaceProps {
-  ws: WorkspaceState;
+  wsId: string;
   onShowToast: ShowToastFn;
 }
 
@@ -35,75 +35,34 @@ type RenderedColumn = Omit<ColumnState, 'groups'> & {
   groups: RenderedGroup[];
 };
 
-/** 空工作区壳：无列 / 列被清空时仍给中文可操作反馈（不静默空白） */
-function WorkspaceEmptyShell({
-  wsId,
-  onActivate,
-}: {
-  wsId: string;
-  onActivate?: () => void;
-}) {
-  return (
-    <div
-      className="workspace-empty-shell"
-      role="status"
-      aria-live="polite"
-      data-ws-id={wsId}
-      data-empty="true"
-      onPointerDown={onActivate}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 'var(--space-2, 6px)',
-        flex: 1,
-        minHeight: 160,
-        padding: 'var(--space-5, 16px) var(--space-4, 12px)',
-        textAlign: 'center',
-        color: 'var(--text-secondary, #6b7280)',
-        fontSize: 'var(--font-size-sm, 13px)',
-        lineHeight: 'var(--line-height-ui, 1.35)',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Lucide.LayoutPanelLeft
-        size={22}
-        strokeWidth={1.5}
-        aria-hidden
-        style={{ opacity: 0.55 }}
-      />
-      <div
-        style={{
-          fontWeight: 500,
-          color: 'var(--text-primary, #111)',
-          lineHeight: 'var(--line-height-ui, 1.35)',
-        }}
-      >
-        工作区暂无面板
-      </div>
-      <div style={{ maxWidth: 260, lineHeight: 'var(--line-height-body, 1.55)' }}>
-        从侧栏打开对话，或用标签栏「+」添加文件、终端、预览等面板。
-      </div>
-    </div>
-  );
-}
+import { WorkspaceEmptyState } from './workspace/WorkspaceEmptyState';
 
-export const Workspace: React.FC<WorkspaceProps> = React.memo(({ ws, onShowToast }) => {
+export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToast }) => {
   const resizeColumns = useLayoutStore((s) => s.resizeColumns);
   const resizeGroups = useLayoutStore((s) => s.resizeGroups);
   const closeWorkspace = useLayoutStore((s) => s.closeWorkspace);
-  const workspaces = useLayoutStore((s) => s.workspaces);
   const activeWorkspaceIndex = useLayoutStore((s) => s.activeWorkspaceIndex);
   const draggedTab = useLayoutStore((s) => s.draggedTab);
   const dropPreview = useLayoutStore((s) => s.dropPreview);
   const containerRef = useRef<HTMLDivElement>(null);
   const liveRegionRef = useRef<HTMLDivElement>(null);
 
-  const wsIndex = workspaces.findIndex((w) => w.id === ws.id);
+  const ws = useLayoutStore(
+    React.useCallback((s) => s.workspaces.find((w) => w.id === wsId), [wsId])
+  );
+
+  const wsIndex = useLayoutStore(
+    React.useCallback((s) => s.workspaces.findIndex((w) => w.id === wsId), [wsId])
+  );
+
+  const isSplitMode = useLayoutStore(
+    (s) => s.workspaces.length > 1
+  );
+
+  if (!ws) return null;
+
   const isActiveWorkspace =
     wsIndex >= 0 ? wsIndex === activeWorkspaceIndex : false;
-  const isSplitMode = workspaces.length > 1;
   const ordinal = workspaceOrdinalLabel(ws.id);
   const regionLabel = isSplitMode
     ? `拆分工作区 ${ordinal}${isActiveWorkspace ? '（当前）' : ''}`
@@ -507,7 +466,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ ws, onShowToast
       {/* Main Column Grid — isolated so a panel crash doesn't blank the whole workspace chrome */}
       <AppErrorBoundary compact>
         {isEmptyWorkspace ? (
-          <WorkspaceEmptyShell wsId={ws.id} onActivate={focusThisWorkspace} />
+          <WorkspaceEmptyState wsId={ws.id} onActivate={focusThisWorkspace} />
         ) : (
           <div
             className="workspace-canvas"

@@ -44,7 +44,7 @@
 .md-rendered .md-code-block,
 .md-rendered pre {
   background: var(--md-code-bg, var(--bg-secondary));
-  border: 1px solid var(--md-code-border, var(--hairline, var(--border-subtle)));
+  border: none;
   border-radius: 8px;
   color: var(--md-code-fg, var(--text-primary));
   font-family: var(--font-mono);
@@ -495,7 +495,7 @@
 .md-path-link {
   display: inline;
   border: none;
-  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-primary);
   font: inherit;
   font-family: var(--font-mono);
@@ -506,7 +506,7 @@
   text-decoration: none;
 }
 .md-path-link:hover {
-  background: color-mix(in srgb, var(--accent-green) 22%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

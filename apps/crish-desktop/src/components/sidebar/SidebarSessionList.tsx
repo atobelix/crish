@@ -39,6 +39,7 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../api/sessionSearch';
+import { Tooltip } from '../settings/SettingsUI';
 
 /** 去重：同 id 只保留首次出现，避免 store 抖动产生幽灵双行 */
 function dedupeSessionsById(list: SessionState[]): SessionState[] {
@@ -371,54 +372,56 @@ const SessionRow = memo(function SessionRow({
           />
         ) : (
           <>
-            <span
-              className="session-text-col"
-              title={snippet ? `${displayText}\n${snippet}` : displayText}
-            >
-              <span className="session-text">{displayText}</span>
-              {snippet ? (
-                <span className="session-search-snippet" aria-hidden>
-                  {snippet}
-                </span>
-              ) : null}
-            </span>
+            <Tooltip content={snippet ? `${displayText}\n${snippet}` : displayText}>
+              <span className="session-text-col">
+                <span className="session-text">{displayText}</span>
+                {snippet ? (
+                  <span className="session-search-snippet" aria-hidden>
+                    {snippet}
+                  </span>
+                ) : null}
+              </span>
+            </Tooltip>
             <span className="session-trailing">
               {isRunning ? (
-                <span
-                  className="session-running-spinner"
-                  title="处理中"
-                  role="status"
-                  aria-label="处理中"
-                />
+                <Tooltip content="处理中">
+                  <span
+                    className="session-running-spinner"
+                    role="status"
+                    aria-label="处理中"
+                  />
+                </Tooltip>
               ) : (
                 <>
                   {/* 相对时间：nowTick 驱动；空标签不占位；<time> 带 ISO 便于无障碍/抓取 */}
                   {timeLabel ? (
-                    <time
-                      className="session-time"
-                      dateTime={timeDateTime}
-                      title={timeAbsolute || timeLabel}
-                      aria-hidden
-                      data-session-time={timeLabel}
-                      data-session-time-abs={timeAbsolute || undefined}
-                    >
-                      {timeLabel}
-                    </time>
+                    <Tooltip content={timeAbsolute || timeLabel}>
+                      <time
+                        className="session-time"
+                        dateTime={timeDateTime}
+                        aria-hidden
+                        data-session-time={timeLabel}
+                        data-session-time-abs={timeAbsolute || undefined}
+                      >
+                        {timeLabel}
+                      </time>
+                    </Tooltip>
                   ) : null}
-                  <button
-                    type="button"
-                    className="session-actions-btn"
-                    title="更多操作"
-                    aria-label="更多操作"
-                    aria-haspopup="menu"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openRowMenu(e);
-                    }}
-                  >
-                    <Lucide.MoreHorizontal size={16} aria-hidden />
-                  </button>
+                  <Tooltip content="更多操作">
+                    <button
+                      type="button"
+                      className="session-actions-btn"
+                      aria-label="更多操作"
+                      aria-haspopup="menu"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openRowMenu(e);
+                      }}
+                    >
+                      <Lucide.MoreHorizontal size={16} strokeWidth={1.75} aria-hidden />
+                    </button>
+                  </Tooltip>
                 </>
               )}
             </span>
@@ -658,6 +661,13 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     [sortedSessions],
   );
 
+  // 置顶为空时自动折叠
+  useEffect(() => {
+    if (pinnedSessions.length === 0 && !pinnedCollapsed) {
+      onTogglePinned();
+    }
+  }, [pinnedSessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { byProjectId, general: generalSessions } = useMemo(
     () => groupUnpinnedByProject(unpinned, projects),
     [unpinned, projects],
@@ -826,7 +836,6 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     (e: React.PointerEvent, sessionId: string, folderName?: string) => {
       if (e.button !== 0) return;
       if (renamingSessionId === sessionId) return;
-      e.preventDefault();
       const startX = e.clientX;
       const startY = e.clientY;
       let dragging = false;
@@ -841,6 +850,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         const dy = me.clientY - startY;
         if (!dragging && Math.sqrt(dx * dx + dy * dy) > 6) {
           dragging = true;
+          (e as unknown as PointerEvent).preventDefault?.();
           setActiveDragItem({ type: 'session', sessionId, folderName });
           if (el) {
             dragOverlay = el.cloneNode(true) as HTMLDivElement;
@@ -1016,16 +1026,9 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             onClick={onTogglePinned}
             aria-expanded={!pinnedCollapsed}
             aria-controls="sb-pinned-zone"
+            style={{ width: '100%', cursor: 'pointer' }}
           >
-            <span>
-              置顶
-              {pinnedSessions.length > 0 ? (
-                <span className="sb-section-count" aria-hidden>
-                  {' '}
-                  {pinnedSessions.length}
-                </span>
-              ) : null}
-            </span>
+            <span>置顶</span>
             <Lucide.ChevronDown
               size={14}
               className={pinnedCollapsed ? 'chev-collapsed' : ''}
@@ -1061,12 +1064,19 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       {/* 2) 项目 — 仅「全部」范围显示，避免「仅置顶」时空项目噪音 */}
       {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
         <section className="sb-section" aria-label="项目">
-          <div className="sb-section-label-row">
+          <div
+            className="sb-section-label-row"
+            onClick={onToggleProjectsSection}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="sb-section-label-left">
               <button
                 type="button"
                 className="sb-section-label"
-                onClick={onToggleProjectsSection}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleProjectsSection();
+                }}
                 aria-expanded={!projectsSectionCollapsed}
               >
                 <span>项目</span>
@@ -1080,18 +1090,19 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               </button>
             </div>
             <div className="sb-section-label-right">
-              <button
-                type="button"
-                className="sb-section-new"
-                title="添加本地项目"
-                aria-label="添加本地项目"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddProject();
-                }}
-              >
-                <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
-              </button>
+              <Tooltip content="添加本地项目">
+                <button
+                  type="button"
+                  className="sb-section-new"
+                  aria-label="添加本地项目"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddProject();
+                  }}
+                >
+                  <Lucide.FolderPlus size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           </div>
           {!projectsSectionCollapsed && (
@@ -1111,12 +1122,14 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                         className="folder-header"
                         aria-expanded={open}
                         onClick={() => {
-                          openProject(p.id);
-                          onOpenProject(p.id);
+                          onToggleProjectCollapsed(p.id);
                         }}
-                        onDoubleClick={() => onToggleProjectCollapsed(p.id)}
                       >
-                        <Lucide.FolderOpen size={15} strokeWidth={1.65} aria-hidden />
+                        {open ? (
+                          <Lucide.FolderOpen size={14} strokeWidth={1.75} aria-hidden />
+                        ) : (
+                          <Lucide.Folder size={14} strokeWidth={1.75} aria-hidden />
+                        )}
                         <span className="folder-name">{p.name}</span>
                         {sess.length > 0 ? (
                           <span
@@ -1132,35 +1145,22 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                             {sess.length}
                           </span>
                         ) : null}
-                        <span
-                          className="folder-collapse-btn"
-                          aria-hidden
+                      </button>
+                      <Tooltip content="在此项目新建对话">
+                        <button
+                          type="button"
+                          className="folder-new-session"
+                          aria-label={`在 ${p.name} 新建对话`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onToggleProjectCollapsed(p.id);
+                            openProject(p.id);
+                            onOpenProject(p.id);
+                            onNewSession();
                           }}
                         >
-                          <Lucide.ChevronDown
-                            size={14}
-                            className={open ? '' : 'chev-collapsed'}
-                            aria-hidden
-                          />
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="folder-new-session"
-                        title="在此项目新建对话"
-                        aria-label={`在 ${p.name} 新建对话`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openProject(p.id);
-                          onOpenProject(p.id);
-                          onNewSession();
-                        }}
-                      >
-                        <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
-                      </button>
+                          <Lucide.FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
+                        </button>
+                      </Tooltip>
                     </div>
                     {open && sess.length > 0 ? (
                       <ul
@@ -1187,53 +1187,57 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       {/* 3) 对话（可窗口化） */}
       {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
         <section className="sb-section" aria-label="对话">
-          <div className="sb-section-label-row">
+          <div
+            className="sb-section-label-row"
+            onClick={onToggleGeneral}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="sb-section-label-left">
               <button
                 type="button"
                 className="sb-section-label"
-                onClick={onToggleGeneral}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleGeneral();
+                }}
                 aria-expanded={!generalCollapsed}
               >
-                <span>
-                  对话
-                  {generalSessions.length > 0 ? (
-                    <span className="sb-section-count" aria-hidden>
-                      {' '}
-                      {generalSessions.length}
-                    </span>
-                  ) : null}
-                </span>
+                <span>对话</span>
                 <Lucide.ChevronDown
                   size={14}
                   className={generalCollapsed ? 'chev-collapsed' : ''}
                   aria-hidden
                 />
               </button>
-              <button
-                type="button"
-                className="sb-section-sort"
-                title="排序与过滤"
-                aria-label="排序与过滤"
-                aria-haspopup="menu"
-                onClick={onSortBtnClick}
-              >
-                <Lucide.ArrowUpDown size={14} aria-hidden />
-              </button>
+              <Tooltip content="排序与过滤">
+                <button
+                  type="button"
+                  className="sb-section-sort"
+                  aria-label="排序与过滤"
+                  aria-haspopup="menu"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSortBtnClick(e);
+                  }}
+                >
+                  <Lucide.ChevronsUpDown size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
             <div className="sb-section-label-right">
-              <button
-                type="button"
-                className="sb-section-new"
-                title="新建对话"
-                aria-label="新建对话"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNewSession();
-                }}
-              >
-                <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
-              </button>
+              <Tooltip content="新建对话">
+                <button
+                  type="button"
+                  className="sb-section-new"
+                  aria-label="新建对话"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNewSession();
+                  }}
+                >
+                  <Lucide.MessageCirclePlus size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           </div>
           {!generalCollapsed && (

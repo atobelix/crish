@@ -38,7 +38,65 @@ function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
+function useVirtualScroll({
+  itemCount,
+  itemHeight,
+  containerRef,
+  overscan = 15,
+}: {
+  itemCount: number;
+  itemHeight: number;
+  containerRef: React.RefObject<HTMLElement | null>;
+  overscan?: number;
+}) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      setScrollTop(el.scrollTop);
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    resizeObserver.observe(el);
+
+    setScrollTop(el.scrollTop);
+    setContainerHeight(el.getBoundingClientRect().height);
+
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [containerRef]);
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
+  const endIndex = Math.min(
+    itemCount - 1,
+    Math.floor((scrollTop + containerHeight) / itemHeight) + overscan
+  );
+
+  const totalHeight = itemCount * itemHeight;
+  const offsetY = startIndex * itemHeight;
+
+  return {
+    startIndex,
+    endIndex,
+    totalHeight,
+    offsetY,
+  };
+}
+
 const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
+  const diffScrollParentRef = useRef<HTMLDivElement>(null);
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
   const diffFiles = useLayoutStore((s) => s.diffFiles);
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
@@ -113,14 +171,14 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return activeDiffSource ? [activeDiffSource] : [];
   }, [diffFiles, activeDiffSource]);
 
-  const current = activeDiffSource || fileList[0] || null;
+  const current = activeDiffSource;
 
   const applyFiles = useCallback(
     (files: FileDiff[], mode: SourceMode) => {
       // Git 占位路径正常；会话 AI 汇总再过一道发布门槛
       const next = mode === 'session' ? filterPublishableDiffs(files) : files;
       setDiffFiles(next);
-      setActiveDiffSource(next[0] || null);
+      setActiveDiffSource(null);
       setSourceMode(mode);
       setPanelErr('');
       dismissSoftHint();
@@ -259,6 +317,16 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     if (!q) return current.changes;
     return current.changes.filter((c) => c.content.toLowerCase().includes(q));
   }, [current, diffSearchQuery]);
+
+  const { startIndex, endIndex, totalHeight } = useVirtualScroll({
+    itemCount: filteredChanges.length,
+    itemHeight: 20,
+    containerRef: diffScrollParentRef,
+  });
+
+  const visibleChanges = useMemo(() => {
+    return filteredChanges.slice(startIndex, endIndex + 1);
+  }, [filteredChanges, startIndex, endIndex]);
 
   const searchActive = diffSearchQuery.trim().length > 0;
   const noSearchHits = Boolean(current && searchActive && filteredChanges.length === 0);
@@ -582,16 +650,11 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       ) : null}
 
       <div className="diff-body-wrap">
-        {fileList.length > 1 ? (
+        {!current && fileList.length > 0 ? (
           <div
             className="diff-file-list"
             role="listbox"
             aria-label="变更文件列表"
-            aria-activedescendant={
-              current
-                ? `diff-file-${current.filePath.replace(/[^\w.-]+/g, '_')}`
-                : undefined
-            }
           >
             {fileList.map((f) => {
               const active = current?.filePath === f.filePath;
@@ -619,82 +682,93 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           </div>
         ) : null}
 
-        <div className={`diff-body ${diffViewMode === 'split' ? 'is-split' : ''}`}>
-          {gitLoading && !current ? (
-            <div className="diff-empty" role="status" aria-live="polite">
-              <Lucide.Loader2 size={22} className="spin" style={{ opacity: 0.45 }} aria-hidden />
-              <div>载入 Git 变更…</div>
-            </div>
-          ) : !current ? (
-            <div className="diff-empty" role="status" aria-live="polite">
-              <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
-              <div>暂无变更</div>
-              <div className="diff-empty-sub">
-                上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。
+        {current || fileList.length === 0 || gitLoading ? (
+          <div className={`diff-body ${diffViewMode === 'split' ? 'is-split' : ''}`} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}>
+            {gitLoading && !current ? (
+              <div className="diff-empty" role="status" aria-live="polite">
+                <Lucide.Loader2 size={22} className="spin" style={{ opacity: 0.45 }} aria-hidden />
+                <div>载入 Git 变更…</div>
               </div>
-              <div className="diff-empty-actions">
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  disabled={!hasAiTurns || applyBusy}
-                  aria-label="查看 AI 改动"
-                  onClick={() => switchSource('session')}
-                >
-                  AI 改动
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  disabled={gitLoading || applyBusy}
-                  aria-label="载入 Git 未提交变更"
-                  onClick={() => switchSource('git')}
-                >
-                  <Lucide.GitBranch size={15} aria-hidden />
-                  Git
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="diff-current-header">
-                <div className="diff-current-path" title={current.filePath}>
-                  {/* 窄栏时优先显示文件名，完整路径放 title */}
-                  <span className="diff-current-basename">{basename(current.filePath)}</span>
-                  <span className="diff-current-fullpath">{current.filePath}</span>
+            ) : !current ? (
+              <div className="diff-empty" role="status" aria-live="polite">
+                <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
+                <div>暂无变更</div>
+                <div className="diff-empty-sub">
+                  上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。
                 </div>
-                <div className="diff-apply-actions">
+                <div className="diff-empty-actions">
                   <button
                     type="button"
-                    className="diff-icon-btn diff-icon-btn--accept"
-                    title={
-                      currentCanApply
-                        ? '接受并写入磁盘'
-                        : '此 diff 无法安全自动应用'
-                    }
-                    aria-label={
-                      currentCanApply
-                        ? `接受并写入 ${basename(current.filePath)}`
-                        : '无法安全自动应用'
-                    }
-                    disabled={applyBusy || !currentCanApply}
-                    onClick={() => void acceptCurrent()}
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={!hasAiTurns || applyBusy}
+                    aria-label="查看 AI 改动"
+                    onClick={() => switchSource('session')}
                   >
-                    <Lucide.Check size={15} aria-hidden />
+                    AI 改动
                   </button>
                   <button
                     type="button"
-                    className="diff-icon-btn"
-                    title="从列表拒绝（不回滚磁盘）"
-                    aria-label={`拒绝 ${basename(current.filePath)}`}
-                    disabled={applyBusy}
-                    onClick={rejectCurrent}
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    disabled={gitLoading || applyBusy}
+                    aria-label="载入 Git 未提交变更"
+                    onClick={() => switchSource('git')}
                   >
-                    <Lucide.X size={15} aria-hidden />
+                    <Lucide.GitBranch size={15} aria-hidden />
+                    Git
                   </button>
-                  {fileList.length > 1 ? (
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="diff-current-header">
+                  <button
+                    type="button"
+                    className="diff-back-btn"
+                    title="返回文件列表"
+                    aria-label="返回文件列表"
+                    onClick={() => setActiveDiffSource(null)}
+                  >
+                    <Lucide.ChevronLeft size={16} strokeWidth={2.2} aria-hidden />
+                    <span>列表</span>
+                  </button>
+                  <div className="diff-current-path" title={current.filePath}>
+                    {/* 窄栏时优先显示文件名，完整路径放 title */}
+                    <span className="diff-current-basename">{basename(current.filePath)}</span>
+                    <span className="diff-current-fullpath">{current.filePath}</span>
+                  </div>
+                  <div className="diff-apply-actions">
                     <button
                       type="button"
                       className="diff-icon-btn diff-icon-btn--accept"
+                      title={
+                        currentCanApply
+                          ? '接受并写入磁盘'
+                          : '此 diff 无法安全自动应用'
+                      }
+                      aria-label={
+                        currentCanApply
+                          ? `接受并写入 ${basename(current.filePath)}`
+                          : '无法安全自动应用'
+                      }
+                      disabled={applyBusy || !currentCanApply}
+                      onClick={() => void acceptCurrent()}
+                    >
+                      <Lucide.Check size={15} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="diff-icon-btn"
+                      title="从列表拒绝（不回滚磁盘）"
+                      aria-label={`拒绝 ${basename(current.filePath)}`}
+                      disabled={applyBusy}
+                      onClick={rejectCurrent}
+                    >
+                      <Lucide.X size={15} aria-hidden />
+                    </button>
+                    {fileList.length > 1 ? (
+                      <button
+                        type="button"
+                        className="diff-icon-btn diff-icon-btn--accept"
                       title="批量接受列表中可安全应用的文件"
                       aria-label="全部接受可安全应用的文件"
                       disabled={applyBusy}
@@ -728,28 +802,50 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
                   </div>
                 </div>
               ) : (
-                <pre
-                  className="diff-lines"
-                  aria-label={`${basename(current.filePath)} 的变更内容${
-                    searchActive ? `（已筛选，${filteredChanges.length} 行）` : ''
-                  }`}
+                <div
+                  ref={diffScrollParentRef}
+                  style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}
                 >
-                  {filteredChanges.map((c, i) => (
-                    <div
-                      key={i}
-                      className={`diff-line diff-line--${c.type}`}
-                    >
-                      <span className="diff-line-mark" aria-hidden>
-                        {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
-                      </span>
-                      <span className="diff-line-text">{c.content}</span>
+                  <pre
+                    className="diff-lines"
+                    style={{ margin: 0, padding: '8px 0 16px', overflowY: 'visible', position: 'relative', height: `${totalHeight}px` }}
+                    aria-label={`${basename(current.filePath)} 的变更内容${
+                      searchActive ? `（已筛选，${filteredChanges.length} 行）` : ''
+                    }`}
+                  >
+                    <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+                      {visibleChanges.map((c, index) => {
+                        const globalIdx = startIndex + index;
+                        const top = globalIdx * 20;
+                        return (
+                          <div
+                            key={globalIdx}
+                            className={`diff-line diff-line--${c.type}`}
+                            style={{
+                              position: 'absolute',
+                              top: `${top}px`,
+                              left: 0,
+                              width: '100%',
+                              height: '20px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span className="diff-line-mark" aria-hidden>
+                              {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
+                            </span>
+                            <span className="diff-line-text">{c.content}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </pre>
+                  </pre>
+                </div>
               )}
             </>
           )}
         </div>
+        ) : null}
       </div>
     </div>
   );

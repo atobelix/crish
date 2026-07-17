@@ -19,6 +19,7 @@ import {
 import { isDemoMode } from '../api/appMode';
 import { clientApi, type McpServer } from '../api/clientApi';
 import { SettingsSelect } from './SettingsSelect';
+import { SettingsPage } from './settings/SettingsUI';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -491,45 +492,19 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   /* ───────── 演示模式 ───────── */
   if (demo) {
     return (
-      <div className="settings-pane settings-pane--modern mcp-tab">
-        <header className="settings-page-head">
-          <div className="mcp-head-row">
-            <h2 className="settings-page-title" id={listLabelId}>
-              扩展服务
-            </h2>
-            <div
-              className="mcp-status-bar"
-              id={statusBarId}
-              role="status"
-              aria-live="polite"
-              aria-label="状态"
-            >
-              <span className="mcp-status-pill" title="本地演示数据，不写入引擎">
-                演示
-              </span>
-              <span className="mcp-status-pill" title={`共 ${demoServers.length} 个服务`}>
-                服务 {demoServers.length}
-              </span>
-              <span
-                className={`mcp-status-pill ${demoEnabledCount > 0 ? 'is-on' : ''}`}
-                title={`已启用 ${demoEnabledCount}`}
-              >
-                启用 {demoEnabledCount}
-              </span>
-              {filterActive ? (
-                <span className="mcp-status-pill" title="当前筛选结果数">
-                  显示 {filteredDemo.length}
-                </span>
-              ) : null}
-              {loading ? (
-                <span className="mcp-status-pill" aria-busy="true">
-                  刷新中…
-                </span>
-              ) : null}
-            </div>
+      <SettingsPage
+        title="扩展服务"
+        meta={
+          <div className="mcp-head-stats">
+            <span className="mcp-status-pill is-demo" aria-live="polite">
+              演示模式
+            </span>
+            <span className="mcp-status-pill" aria-live="polite">
+              {demoEnabledCount} 个启用 / 共 {demoServers.length} 个
+            </span>
           </div>
-        </header>
-
+        }
+      >
         {toolbar}
 
         {showAdd ? (
@@ -698,65 +673,56 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             : null}
           {loading && demoServers.length === 0 ? renderFilterEmpty(true) : null}
         </div>
-      </div>
+      </SettingsPage>
     );
   }
 
   /* ───────── 正式 / 引擎模式 ───────── */
   return (
-    <div className="settings-pane settings-pane--modern mcp-tab">
-      <header className="settings-page-head">
-        <div className="mcp-head-row">
-          <h2 className="settings-page-title" id={listLabelId}>
-            扩展服务
-          </h2>
-          <div
-            className="mcp-status-bar"
-            id={statusBarId}
-            role="status"
-            aria-live="polite"
-            aria-label="状态"
+    <SettingsPage
+      title="扩展服务"
+      meta={
+        <div className="mcp-head-stats">
+          <span
+            className={`mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
+            title={
+              status?.configured
+                ? '引擎已配置扩展服务'
+                : '引擎侧未配置扩展服务'
+            }
           >
+            {status?.configured ? '已配置' : '未配置'}
+          </span>
+          {status?.readiness ? (
             <span
-              className={`mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
-              title={
-                status?.configured
-                  ? '引擎已配置扩展服务'
-                  : '引擎侧未配置扩展服务'
-              }
+              className={`mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
+              title={`就绪：${mcpStateLabel(status.readiness)}`}
             >
-              {status?.configured ? '已配置' : '未配置'}
+              {mcpStateLabel(status.readiness)}
             </span>
-            {status?.readiness ? (
-              <span
-                className={`mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
-                title={`就绪：${mcpStateLabel(status.readiness)}`}
-              >
-                {mcpStateLabel(status.readiness)}
-              </span>
-            ) : null}
-            <span className="mcp-status-pill" title={`共 ${servers.length} 个服务`}>
-              服务 {servers.length}
+          ) : null}
+          <span className="mcp-status-pill" title={`共 ${servers.length} 个服务`}>
+            服务 {servers.length}
+          </span>
+          <span
+            className={`mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
+            title={canStartStop ? '可从界面启动/停止' : stopHint}
+          >
+            {canStartStop ? '启停可用' : '启停不可用'}
+          </span>
+          {filterActive ? (
+            <span className="mcp-status-pill" title="当前筛选结果数">
+              显示 {filtered.length}
             </span>
-            <span
-              className={`mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
-              title={canStartStop ? '可从界面启动/停止' : stopHint}
-            >
-              {canStartStop ? '启停可用' : '启停不可用'}
+          ) : null}
+          {loading ? (
+            <span className="mcp-status-pill" aria-busy="true">
+              刷新中…
             </span>
-            {filterActive ? (
-              <span className="mcp-status-pill" title="当前筛选结果数">
-                显示 {filtered.length}
-              </span>
-            ) : null}
-            {loading ? (
-              <span className="mcp-status-pill" aria-busy="true">
-                刷新中…
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
-      </header>
+      }
+    >
 
       {toolbar}
 
@@ -913,6 +879,6 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           </div>
         ) : null}
       </div>
-    </div>
+    </SettingsPage>
   );
 };

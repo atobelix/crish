@@ -28,6 +28,7 @@ import { discoverSkills, type DesktopSkill } from '../api/skillsApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { setAppSettings } from '../api/storeAccess';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { SettingsPage } from './settings/SettingsUI';
 
 const SkillsSettingsTab = lazy(() =>
   import('./SkillsSettingsTab').then((m) => ({ default: m.SkillsSettingsTab })),
@@ -35,6 +36,39 @@ const SkillsSettingsTab = lazy(() =>
 const McpSettingsTab = lazy(() =>
   import('./McpSettingsTab').then((m) => ({ default: m.McpSettingsTab })),
 );
+
+const SKILLS_CACHE_KEY = 'crish_skills_cache_v1';
+const MCP_SERVERS_CACHE_KEY = 'crish_mcp_servers_cache_v1';
+
+function loadSkillsCache(): DesktopSkill[] {
+  try {
+    const raw = localStorage.getItem(SKILLS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSkillsCache(list: DesktopSkill[]) {
+  try {
+    localStorage.setItem(SKILLS_CACHE_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
+}
+
+function loadMcpServersCache(): McpServerInfo[] {
+  try {
+    const raw = localStorage.getItem(MCP_SERVERS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMcpServersCache(list: McpServerInfo[]) {
+  try {
+    localStorage.setItem(MCP_SERVERS_CACHE_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
+}
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -59,11 +93,10 @@ function packageName(pkg: string | PackageSource): string {
 }
 
 export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
-  const titleId = useId();
   const [view, setView] = useState<MainView>('installed');
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => loadSkillsCache().length === 0 && loadMcpServersCache().length === 0);
   const hydratedRef = useRef(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [manage, setManage] = useState<ManageKind>(null);
@@ -77,8 +110,8 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   } | null>(null);
   const [toolTick, setToolTick] = useState(0);
 
-  const [skills, setSkills] = useState<DesktopSkill[]>([]);
-  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
+  const [skills, setSkills] = useState<DesktopSkill[]>(() => loadSkillsCache());
+  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>(() => loadMcpServersCache());
   const [packages, setPackages] = useState<(string | PackageSource)[]>([]);
   const [catalogInstalled, setCatalogInstalled] = useState<Set<string>>(() =>
     loadCatalogInstalledIds(),
@@ -92,7 +125,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   const refresh = useCallback(async () => {
     setLoadError(null);
     // 首次进入才显示列表加载中；已有数据时后台刷新不整页卡住
-    if (!hydratedRef.current) setLoading(true);
+    if (!hydratedRef.current && skills.length === 0 && mcpServers.length === 0) {
+      setLoading(true);
+    }
 
     const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
       new Promise((resolve) => {
@@ -139,7 +174,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         ),
       ]);
       setSkills(skillRes.skills || []);
+      saveSkillsCache(skillRes.skills || []);
       setMcpServers(mcpRes.servers || []);
+      saveMcpServersCache(mcpRes.servers || []);
       setPackages(settings?.packages || []);
       setCatalogInstalled(loadCatalogInstalledIds());
       if (settings?.mcpDisabledTools) {
@@ -154,7 +191,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     } finally {
       setLoading(false);
     }
-  }, [cwd, onShowToast]);
+  }, [cwd, onShowToast, skills.length, mcpServers.length]);
 
   useEffect(() => {
     void refresh();
@@ -600,25 +637,22 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   if (manage === 'skill' || manage === 'mcp') {
     const label = manage === 'skill' ? '技能' : 'MCP';
     return (
-      <div className="settings-pane settings-pane--modern settings-pane--extensions">
-        <header className="settings-page-head">
-          <div className="settings-head-inline">
-            <button
-              type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
-              onClick={() => {
-                setManage(null);
-                void refresh();
-              }}
-            >
-              <Lucide.ArrowLeft size={14} aria-hidden />
-              扩展
-            </button>
-            <h2 className="settings-page-title settings-page-title--sub">
-              {label}
-            </h2>
-          </div>
-        </header>
+      <SettingsPage
+        title={label}
+        meta={
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+            onClick={() => {
+              setManage(null);
+              void refresh();
+            }}
+          >
+            <Lucide.ArrowLeft size={14} aria-hidden />
+            返回扩展
+          </button>
+        }
+      >
         <Suspense
           fallback={
             <div className="ext-empty" role="status">
@@ -634,38 +668,31 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             )}
           </AppErrorBoundary>
         </Suspense>
-      </div>
+      </SettingsPage>
     );
   }
 
   return (
-    <div
-      className="settings-pane settings-pane--modern settings-pane--extensions"
-      aria-labelledby={titleId}
-      aria-busy={loading || undefined}
-    >
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title" id={titleId}>
-            扩展
-          </h2>
-          <div className="settings-head-tools">
-            <button
-              type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
-              onClick={() => void refresh()}
-              disabled={loading}
-              aria-label="刷新"
-            >
-              <Lucide.RefreshCw
-                size={14}
-                className={loading ? 'spin' : undefined}
-                aria-hidden
-              />
-            </button>
-          </div>
+    <SettingsPage
+      title="扩展"
+      meta={
+        <div className="settings-head-tools">
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新"
+          >
+            <Lucide.RefreshCw
+              size={14}
+              className={loading ? 'spin' : undefined}
+              aria-hidden
+            />
+          </button>
         </div>
-      </header>
+      }
+    >
 
       <div className="ext-toolbar ext-toolbar--one" role="group" aria-label="筛选">
         <div className="settings-choice-group" role="group" aria-label="视图">
@@ -889,6 +916,6 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
           )}
         </div>
       )}
-    </div>
+    </SettingsPage>
   );
 };

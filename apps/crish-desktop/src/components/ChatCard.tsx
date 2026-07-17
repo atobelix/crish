@@ -22,12 +22,10 @@ import {
   updateMessageToolCall,
 } from '../api/storeAccess';
 import type { ShowToastFn } from '../hooks/useToastQueue';
-import * as Lucide from 'lucide-react';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { isDemoMode } from '../api/appMode';
 import { fetchEngineStatus, type EngineStatus } from '../api/engineConfig';
 import {
-  activateProfileModel,
   anyProfileHasKey,
   getActiveModelId,
   getActiveProfile,
@@ -36,11 +34,10 @@ import {
   resolveDisplayModelId,
   resolvePreferredModelSelection,
 } from '../api/providerProfiles';
-import { ModelPicker } from './ModelPicker';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatEmptyState } from './ChatEmptyState';
+import { Tooltip } from './settings/SettingsUI';
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
-import { networkUserMessage } from '../api/userFacingErrors';
 import { toolHumanLabel } from '../api/toolPresentation';
 import {
   getSkillSlashCommandsCached,
@@ -101,9 +98,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   const [engineModel, setEngineModel] = useState('');
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
-  const [pickerBusy, setPickerBusy] = useState(false);
-  const [pickerInlineError, setPickerInlineError] = useState('');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [pickerInlineError, setPickerInlineError] = useState('');
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   /** chat = 对话流；scheduled = 主区定时任务（与 layoutStore 同步，供 CardPanel 藏面包屑） */
   const mainSurface = useLayoutStore((s) => s.chatMainSurface || 'chat');
@@ -195,39 +191,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     return off;
   }, []);
 
-  const selectProfileModel = async (profileId: string, modelId: string) => {
-    if (pickerBusy) return;
-    setPickerBusy(true);
-    setPickerInlineError('');
-    try {
-      const res = await activateProfileModel(profileId, modelId);
-      if (!res.ok) {
-        setPickerInlineError(
-          res.error === 'not_connected'
-            ? networkUserMessage()
-            : res.error === 'empty_model'
-              ? '请选择有效模型'
-              : res.error === 'profile_not_found'
-                ? '供应商不存在，请到设置重新配置'
-                : '切换失败，请到设置检查密钥与地址',
-        );
-        return;
-      }
-      // activate 已写 LS + 引擎 + settings.defaultModel，并 emit model-changed
-      setEngineModel(modelId);
-      setActiveProfileId(profileId);
-      setShowModelDropdown(false);
-      setEngineHint(await fetchEngineStatus());
-      // 警告仅内联（不 toast 成功；策略：错误/警告可见，成功看底栏模型名）
-      if (res.warning === 'model_mismatch') {
-        setPickerInlineError('引擎回报模型不一致，请到设置检查后重试');
-      } else if (res.warning === 'no_local_key') {
-        setPickerInlineError('未带本地密钥，请确认引擎侧已有密钥');
-      }
-    } finally {
-      setPickerBusy(false);
-    }
-  };
+
 
   const getModelDisplayName = (modelId: string) => {
     if (!modelId) return '选择模型';
@@ -556,6 +520,13 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   });
 
   useEffect(() => {
+    if (pickerInlineError) {
+      onShowToast(pickerInlineError);
+      setPickerInlineError('');
+    }
+  }, [pickerInlineError, onShowToast]);
+
+  useEffect(() => {
     return onUiEvent('stop-generation', () => {
       handleStopGeneration();
     });
@@ -726,6 +697,92 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     }
   }, []);
 
+  const composerElement = (
+    <ChatComposer
+      chatInput={chatInput}
+      setChatInput={setChatInput}
+      isComposing={isComposing}
+      setIsComposing={setIsComposing}
+      slashMenuOpen={slashMenuOpen}
+      setSlashMenuOpen={setSlashMenuOpen}
+      slashSelectedIndex={slashSelectedIndex}
+      setSlashSelectedIndex={setSlashSelectedIndex}
+      filteredCommands={filteredCommands}
+      loadSkillSlash={loadSkillSlash}
+      onPasteImage={handlePasteImage}
+      onSend={() => { void handleSendChat(false); }}
+      onStop={handleStopGeneration}
+      canSend={canSend}
+      isProcessing={messages.some((m) => m.status === 'processing')}
+      attachments={attachments}
+      setAttachments={setAttachments}
+      fileInputRef={fileInputRef}
+      onFilesSelected={async (files) => {
+        const next: ChatAttachment[] = [];
+        for (const f of files) {
+          if (isImageFile(f)) {
+            try {
+              next.push(await blobToImageAttachment(f, f.name));
+            } catch {
+              next.push({ name: f.name, mime: f.type || undefined });
+            }
+            continue;
+          }
+          const isText =
+            f.type.startsWith('text/') ||
+            /\.(txt|md|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|yml|yaml|toml|xml|csv|log|sh|ps1)$/i.test(
+              f.name,
+            );
+          if (isText && f.size < 512_000) {
+            try {
+              const text = await f.text();
+              next.push({ name: f.name, text });
+            } catch {
+              next.push({ name: f.name });
+            }
+          } else {
+            next.push({ name: f.name });
+          }
+        }
+        addAttachments(next);
+      }}
+      showPlusMenu={showPlusMenu}
+      setShowPlusMenu={setShowPlusMenu}
+      permissionMode={permissionMode}
+      onPermissionChange={(m) => {
+        setPermissionMode(m);
+      }}
+      onOpenSchedule={() => {
+        setMainSurface('scheduled');
+      }}
+      onCloseSiblingMenus={() => setShowPlusMenu(false)}
+      rightActions={
+        showModelPicker ? (
+          <Tooltip
+            content={
+              getActiveProfile()
+                ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
+                : '服务商与模型（可在设置中更改）'
+            }
+          >
+            <div
+              className="model-badge model-badge--readonly"
+              style={{ cursor: 'default', opacity: 0.8 }}
+            >
+              <span className="model-text">
+                {getModelDisplayName(
+                  resolveDisplayModelId(engineModel) ||
+                    engineModel ||
+                    (needsModelSetup ? '填写模型' : '无可用模型'),
+                )}
+              </span>
+            </div>
+          </Tooltip>
+        ) : null
+      }
+    />
+  );
+
   return (
     <div
       className="chat-body"
@@ -781,6 +838,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             onSetChatInput={setChatInput}
             onCreateSession={handleCreateSessionFromEmpty}
             onClearFilter={() => setLocalMsgFilter('')}
+            composer={emptyKind === 'session-empty' ? composerElement : undefined}
           />
         ) : (
           <ChatMessageList
@@ -809,7 +867,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
               handleStopGeneration();
               withdrawMessage(wsId, activeSessionId, assistantMsgId);
               const msgs = getSessionById(activeSessionId)?.messages || [];
-              let userMsgId = [...msgs].reverse().find((m) => m.sender === 'user')?.id;
+              let userMsgId = msgs.findLast((m) => m.sender === 'user')?.id;
               if (!userMsgId) {
                 userMsgId = `user-msg-${Date.now()}`;
                 addMessage(wsId, activeSessionId, {
@@ -904,124 +962,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
           }
         />
 
-        <ChatComposer
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            isComposing={isComposing}
-            setIsComposing={setIsComposing}
-            slashMenuOpen={slashMenuOpen}
-            setSlashMenuOpen={setSlashMenuOpen}
-            slashSelectedIndex={slashSelectedIndex}
-            setSlashSelectedIndex={setSlashSelectedIndex}
-            filteredCommands={filteredCommands}
-            loadSkillSlash={loadSkillSlash}
-            onPasteImage={handlePasteImage}
-            onSend={() => { void handleSendChat(false); }}
-            onStop={handleStopGeneration}
-            canSend={canSend}
-            isProcessing={messages.some((m) => m.status === 'processing')}
-            attachments={attachments}
-            setAttachments={setAttachments}
-            fileInputRef={fileInputRef}
-            onFilesSelected={async (files) => {
-              const next: ChatAttachment[] = [];
-              for (const f of files) {
-                if (isImageFile(f)) {
-                  try {
-                    next.push(await blobToImageAttachment(f, f.name));
-                  } catch {
-                    next.push({ name: f.name, mime: f.type || undefined });
-                  }
-                  continue;
-                }
-                const isText =
-                  f.type.startsWith('text/') ||
-                  /\.(txt|md|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|yml|yaml|toml|xml|csv|log|sh|ps1)$/i.test(
-                    f.name,
-                  );
-                if (isText && f.size < 512_000) {
-                  try {
-                    const text = await f.text();
-                    next.push({ name: f.name, text });
-                  } catch {
-                    next.push({ name: f.name });
-                  }
-                } else {
-                  next.push({ name: f.name });
-                }
-              }
-              addAttachments(next);
-            }}
-            showPlusMenu={showPlusMenu}
-            setShowPlusMenu={setShowPlusMenu}
-            permissionMode={permissionMode}
-            onPermissionChange={(m) => {
-              setPermissionMode(m);
-            }}
-            onOpenSchedule={() => {
-              setMainSurface('scheduled');
-            }}
-            onCloseSiblingMenus={() => setShowModelDropdown(false)}
-            rightActions={
-              showModelPicker ? (
-                <div
-                  ref={modelSelectorRef}
-                  className={`model-badge${showModelDropdown ? ' is-open' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  aria-haspopup="menu"
-                  aria-expanded={showModelDropdown}
-                  aria-label={
-                    getActiveProfile()
-                      ? `当前模型 ${resolveDisplayModelId(engineModel) || engineModel || '未选'}`
-                      : '选择服务商与模型'
-                  }
-                  title={
-                    getActiveProfile()
-                      ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
-                      : '选择服务商与模型'
-                  }
-                  onClick={() => {
-                    setShowModelDropdown((prev) => !prev);
-                    setShowPlusMenu(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setShowModelDropdown((prev) => !prev);
-                      setShowPlusMenu(false);
-                    } else if (e.key === 'Escape' && showModelDropdown) {
-                      e.preventDefault();
-                      setShowModelDropdown(false);
-                    }
-                  }}
-                >
-                  <span className="model-text">
-                    {getModelDisplayName(
-                      resolveDisplayModelId(engineModel) ||
-                        engineModel ||
-                        (needsModelSetup ? '填写模型' : '选择模型'),
-                    )}
-                  </span>
-                  <Lucide.ChevronDown size={14} style={{ opacity: 0.55 }} />
-                  <ModelPicker
-                    open={showModelDropdown}
-                    onClose={() => setShowModelDropdown(false)}
-                    engineModel={engineModel}
-                    busy={pickerBusy}
-                    error={pickerInlineError}
-                    onSelect={(profileId, modelId) => {
-                      void selectProfileModel(profileId, modelId);
-                    }}
-                    onOpenSettings={() => {
-                      setShowModelDropdown(false);
-                      openSettings('models');
-                    }}
-                  />
-                </div>
-              ) : null
-            }
-          />
+        {emptyKind !== 'session-empty' && composerElement}
       </div>
     </div>
   );

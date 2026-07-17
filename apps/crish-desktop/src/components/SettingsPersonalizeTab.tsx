@@ -11,13 +11,25 @@ import {
 import {
   coercePermissionMode,
   PERMISSION_MODES,
-  permissionModeMeta,
   transitionPermissionMode,
   type PermissionMode,
 } from '../api/permissionModes';
 import { getWorkspacePath } from '../api/projectStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { SettingsSelect } from './SettingsSelect';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
+import {
+  readStoredTheme,
+  readStoredPersonalization,
+  writeStoredPersonalization,
+  applyPersonalization,
+  type PersonalizationSettings,
+} from '../api/themeStore';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -94,14 +106,55 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
 
-  const interactLabelId = useId();
   const permLabelId = useId();
   const styleLabelId = useId();
   const tabLabelId = useId();
+  const skinLabelId = useId();
+
+  const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() => readStoredTheme());
+  const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => readStoredPersonalization());
+
+  // 同步黑夜白天主题的变化
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvt = e as CustomEvent<{ theme: 'default' | 'dark' }>;
+      if (customEvt?.detail?.theme) {
+        setActiveTheme(customEvt.detail.theme);
+      }
+    };
+    window.addEventListener('crish-theme-changed', handler);
+    return () => {
+      window.removeEventListener('crish-theme-changed', handler);
+    };
+  }, []);
+
+  const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
+    const next = { ...personalization, ...updates };
+    setPersonalization(next);
+    writeStoredPersonalization(next);
+    applyPersonalization(next, activeTheme);
+  };
+
+  const skinOptions = useMemo(() => {
+    const list = activeTheme === 'dark'
+      ? [
+          { value: 'dark-cozy', label: '护眼暗灰' },
+          { value: 'deep-night', label: '深邃夜空' },
+          { value: 'dark-forest', label: '森林绿影' },
+        ]
+      : [
+          { value: 'warm-gray', label: '护眼暖灰' },
+          { value: 'cream', label: '杏仁奶油' },
+          { value: 'paper', label: '极简纸质' },
+          { value: 'classic-gray', label: '经典浅灰' },
+        ];
+    
+    list.push({ value: 'custom', label: '自定义颜色' });
+    return list;
+  }, [activeTheme]);
 
   // 非法权限值回落 ask
   const permissionMode = coercePermissionMode(permissionModeRaw);
-  const permMeta = permissionModeMeta(permissionMode);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,93 +263,148 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
     })();
   };
 
-  const permissionTitle = [permMeta.description, permMeta.matrixHint]
-    .filter(Boolean)
-    .join(' · ');
+
+
+  if (loadError && !settings) {
+    return (
+      <SettingsPage title="个性化">
+        <SettingsSection title="错误">
+          <SettingsCard>
+            <SettingsRow
+              title={<span className="settings-list-empty" role="alert">{loadError}</span>}
+              control={
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  onClick={() => {
+                    setLoadError(null);
+                    setLoadTick((n) => n + 1);
+                  }}
+                >
+                  重试
+                </button>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
+    );
+  }
 
   if (!settings) {
     return (
-      <div className="settings-pane settings-pane--modern settings-pane--personalize">
-        <header className="settings-page-head">
-          <div className="settings-head-inline">
-            <h2 className="settings-page-title">个性化</h2>
-          </div>
-        </header>
-        {loadError ? (
-          <section className="settings-group" aria-label="错误">
-            <div className="settings-list settings-list--personalize">
-              <div className="settings-list-row settings-list-row--single settings-list-row--personalize">
-                <div className="settings-list-copy">
-                  <div
-                    className="settings-list-title settings-list-empty"
-                    role="alert"
-                  >
-                    {loadError}
-                  </div>
-                </div>
-                <div className="settings-list-control settings-list-control--personalize">
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                    aria-label="重新加载个性化设置"
-                    onClick={() => {
-                      setLoadError(null);
-                      setLoadTick((n) => n + 1);
-                    }}
-                  >
-                    重试
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <div
-            className="settings-list settings-list--personalize"
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <div className="settings-list-row settings-list-row--single settings-list-row--personalize">
-              <div className="settings-list-copy">
-                <div className="settings-list-title settings-list-empty">加载中…</div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <SettingsPage title="个性化">
+        <SettingsSection>
+          <SettingsCard>
+            <SettingsRow title={<span className="settings-list-empty">加载中…</span>} />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
     );
   }
 
   return (
-    <div
-      className="settings-pane settings-pane--modern settings-pane--personalize"
-      aria-busy={saving || undefined}
-    >
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title">个性化</h2>
-        </div>
-      </header>
+    <SettingsPage title="个性化">
+      <SettingsSection title="外观与字号">
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={skinLabelId}>外观主题皮肤</span>}
+            desc={activeTheme === 'dark' ? '深色模式下可选的预设皮肤' : '浅色模式下可选的预设皮肤'}
+            control={
+              <SettingsSelect
+                className="settings-personalize-select"
+                value={personalization.skin}
+                options={skinOptions}
+                onChange={(v) => updatePersonalization({ skin: v })}
+                disabled={!ready}
+                placeholder="选择预设…"
+              />
+            }
+          />
 
-      <section className="settings-group" aria-labelledby={interactLabelId}>
-        <div className="settings-group-label" id={interactLabelId}>
-          对话与界面
-        </div>
-        <div className="settings-list settings-list--personalize">
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--personalize"
-            title={permissionTitle}
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id={permLabelId}>
-                权限模式
+          {personalization.skin === 'custom' && (
+            <>
+              <SettingsRow
+                title="自定义背景色"
+                desc="自适应计算次级背景、悬浮与激活色彩"
+                control={
+                  <input
+                    type="color"
+                    value={personalization.customBg}
+                    onChange={(e) => updatePersonalization({ customBg: e.target.value })}
+                    disabled={!ready}
+                    style={{
+                      cursor: 'pointer',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      width: '40px',
+                      height: '24px',
+                      padding: 0,
+                      background: 'transparent',
+                    }}
+                  />
+                }
+              />
+              <SettingsRow
+                title="自定义文本色"
+                desc="自适应计算副文本、边框与悬浮文本色"
+                control={
+                  <input
+                    type="color"
+                    value={personalization.customFg}
+                    onChange={(e) => updatePersonalization({ customFg: e.target.value })}
+                    disabled={!ready}
+                    style={{
+                      cursor: 'pointer',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      width: '40px',
+                      height: '24px',
+                      padding: 0,
+                      background: 'transparent',
+                    }}
+                  />
+                }
+              />
+            </>
+          )}
+
+          <SettingsRow
+            title="字号大小微调"
+            desc={`基准字号为 14px，当前字号: ${14 + personalization.fontSizeAdjust}px`}
+            control={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="range"
+                  min="-2"
+                  max="4"
+                  step="1"
+                  value={personalization.fontSizeAdjust}
+                  onChange={(e) => updatePersonalization({ fontSizeAdjust: parseInt(e.target.value, 10) })}
+                  disabled={!ready}
+                  style={{
+                    cursor: 'pointer',
+                    accentColor: 'var(--text-primary)',
+                    width: '100px',
+                    height: '4px',
+                    borderRadius: '2px',
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '40px', textAlign: 'right', fontWeight: 600 }}>
+                  {personalization.fontSizeAdjust >= 0 ? '+' : ''}{personalization.fontSizeAdjust}px
+                </span>
               </div>
-              <div className="settings-list-sub settings-list-sub--force settings-personalize-desc">
-                工具调用前要不要先问你
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--personalize">
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="对话与界面">
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={permLabelId}>权限模式</span>}
+            desc="工具调用前要不要先问你"
+            control={
               <SettingsSelect
                 className="settings-personalize-select"
                 value={permissionMode}
@@ -305,22 +413,13 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
                 disabled={!ready}
                 placeholder="选择…"
               />
-            </div>
-          </div>
+            }
+          />
 
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--personalize"
-            title={style.description}
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id={styleLabelId}>
-                回答风格
-              </div>
-              <div className="settings-list-sub settings-list-sub--force settings-personalize-desc">
-                {style.description}
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--personalize">
+          <SettingsRow
+            title={<span id={styleLabelId}>回答风格</span>}
+            desc={style.description}
+            control={
               <SettingsSelect
                 className="settings-personalize-select"
                 value={responseStyle}
@@ -329,35 +428,29 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
                 disabled={!ready}
                 placeholder="选择…"
               />
-            </div>
-          </div>
+            }
+          />
 
-          <label
-            className="settings-list-row settings-list-row--single settings-list-row--personalize settings-list-row--clickable"
-            title="右侧多个面板合成标签，少占空间"
-          >
-            <div className="settings-list-copy">
-              <div className="settings-list-title" id={tabLabelId}>
-                合并右侧面板
-              </div>
-              <div className="settings-list-sub settings-list-sub--force settings-personalize-desc">
-                总览、文件等收成标签
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--personalize">
+          <SettingsRow
+            title={<label htmlFor={tabLabelId} style={{ cursor: 'pointer', display: 'block', width: '100%' }}>合并右侧面板</label>}
+            desc="总览、文件等收成标签"
+            control={
               <input
+                id={tabLabelId}
                 type="checkbox"
                 className="settings-switch settings-switch--personalize"
                 checked={tabModeEnabled}
                 disabled={!ready}
-                aria-labelledby={tabLabelId}
                 aria-label="合并右侧面板"
-                onChange={(e) => onTabMode(e.target.checked)}
+                onChange={(e) => {
+                  onTabMode(e.target.checked);
+                }}
               />
-            </div>
-          </label>
-        </div>
-      </section>
-    </div>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+    </SettingsPage>
   );
 };
+

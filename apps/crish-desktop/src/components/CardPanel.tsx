@@ -23,7 +23,7 @@ import { FilesCard } from './FilesCard';
 import { OverviewCard } from './OverviewCard';
 import { useTabDrag } from '../hooks/useTabDrag';
 import { onUiEvent } from '../api/uiEvents';
-import { clearAgentPanelFocus, closeAgentSidePanel } from '../api/openAgentPanel';
+import { closeAgentSidePanel } from '../api/openAgentPanel';
 import { collapseToolColumnPreserve, getPanelTitle } from '../store/layoutHelpers';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { IconSidebarRight } from './SidebarToggleIcons';
@@ -375,7 +375,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
       case 'preview': return <Lucide.Globe {...props} />;
       case 'files': return <Lucide.FolderTree {...props} />;
       case 'diff': return <Lucide.GitBranch {...props} />;
-      case 'tasks': return <Lucide.CheckSquare {...props} />;
+      case 'tasks': return <Lucide.CircleCheck {...props} />;
       case 'terminal': return <Lucide.Terminal {...props} />;
       case 'settings': return <Lucide.Settings {...props} />;
       case 'runtime': return <Lucide.Gauge {...props} />;
@@ -540,8 +540,12 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
   /** 定时任务主面：不展示会话面包屑（ScheduledTasksPanel 自带返回） */
   const scheduledChrome =
     activeCardId === 'chat' && chatMainSurface === 'scheduled';
-  /** classic 聊天面包屑 / 工具列标签；inset 聊天用 SessionStrip；定时任务无 header */
-  const showCardHeader = !insetChatChrome && !scheduledChrome;
+  
+  /** 纯空态：不展示面包屑 */
+  const isEmptyChat = activeCardId === 'chat' && (!activeSession || (activeSession.messages.length === 0 && !activeSession.isPinned));
+
+  /** classic 聊天面包屑 / 工具列标签；inset 聊天用 SessionStrip；定时任务或空态无 header */
+  const showCardHeader = !insetChatChrome && !scheduledChrome && !isEmptyChat;
 
   return (
     <div

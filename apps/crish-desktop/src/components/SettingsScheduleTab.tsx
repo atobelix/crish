@@ -36,10 +36,16 @@ import {
   getSessionById,
   renameSession,
 } from '../api/storeAccess';
-import { SettingsSelect } from './SettingsSelect';
 import { useLayoutStore } from '../store/layoutStore';
 import { setComposerSeed } from '../api/composerSeed';
 import { closeSettings } from '../store/settingsUiStore';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
+import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -356,95 +362,69 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
   };
 
   return (
-    <div
-      className="settings-pane settings-pane--modern sched-settings"
-      aria-busy={workflowsLoading || wfBusy}
-      aria-label="定时任务"
-    >
-      <header className="settings-page-head">
-        <div className="sched-settings-head">
-          <h2 className="settings-page-title" id="sched-settings-title">
-            定时任务
-          </h2>
+    <SettingsPage title="定时任务">
+      <div
+        aria-busy={workflowsLoading || wfBusy}
+        aria-label="定时任务"
+      >
+        <div className="sched-settings-toolbar" role="toolbar" aria-label="筛选与新建" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div className="settings-choice-group" role="group" aria-label="任务筛选">
+            {FILTER_OPTIONS.map((opt) => {
+              const active = filter === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`settings-choice-btn ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  onClick={() => setFilter(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            onClick={openMainScheduled}
-            aria-label="在主界面打开"
-            title="在主界面打开"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            aria-expanded={createMode !== 'none'}
+            aria-controls="sched-settings-form"
+            disabled={wfBusy}
+            onClick={() => {
+              if (createMode !== 'none') {
+                closeForm();
+              } else {
+                setCreateMode('paths');
+                setWfError('');
+                setWfOk('');
+              }
+            }}
           >
-            主界面打开
+            <Lucide.Plus size={16} aria-hidden />
+            {createMode !== 'none' ? '收起' : '新建'}
           </button>
         </div>
-        <p
-          className="sched-settings-stats"
-          title="任务概况"
-          aria-live="polite"
-        >
-          {stats.total === 0
-            ? '暂无任务'
-            : `${stats.total} 个 · ${stats.enabled} 启用 · ${stats.disabled} 暂停`}
-        </p>
-      </header>
 
-      <div className="sched-settings-toolbar" role="toolbar" aria-label="筛选与新建">
-        <div className="settings-choice-group" role="group" aria-label="任务筛选">
-          {FILTER_OPTIONS.map((opt) => {
-            const active = filter === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                className={`settings-choice-btn ${active ? 'active' : ''}`}
-                aria-pressed={active}
-                onClick={() => setFilter(opt.id)}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
-          aria-expanded={createMode !== 'none'}
-          aria-controls="sched-settings-form"
-          disabled={wfBusy}
-          onClick={() => {
-            if (createMode !== 'none') {
-              closeForm();
-            } else {
-              setCreateMode('paths');
-              setWfError('');
-              setWfOk('');
-            }
-          }}
-        >
-          <Lucide.Plus size={16} aria-hidden />
-          {createMode !== 'none' ? '收起' : '新建'}
-        </button>
-      </div>
+        {(wfError || wfOk) && (
+          <div
+            className="sched-settings-status"
+            aria-live="polite"
+            aria-relevant="additions text"
+          >
+            {wfError ? (
+              <span className="settings-list-sub settings-list-sub--force" role="alert">
+                {wfError}
+              </span>
+            ) : null}
+            {wfOk && !wfError ? (
+              <span className="settings-list-sub settings-list-sub--force" role="status">
+                {wfOk}
+              </span>
+            ) : null}
+          </div>
+        )}
 
-      {(wfError || wfOk) && (
-        <div
-          className="sched-settings-status"
-          aria-live="polite"
-          aria-relevant="additions text"
-        >
-          {wfError ? (
-            <span className="settings-list-sub settings-list-sub--force" role="alert">
-              {wfError}
-            </span>
-          ) : null}
-          {wfOk && !wfError ? (
-            <span className="settings-list-sub settings-list-sub--force" role="status">
-              {wfOk}
-            </span>
-          ) : null}
-        </div>
-      )}
-
-      {createMode === 'paths' ? (
+        {createMode === 'paths' ? (
         <div className="settings-create-paths" id="sched-settings-form">
           <button
             type="button"
@@ -471,9 +451,9 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
             </span>
           </button>
         </div>
-      ) : null}
+        ) : null}
 
-      {createMode === 'form' ? (
+        {createMode === 'form' ? (
         <div
           id="sched-settings-form"
           className="sched-settings-form"
@@ -584,83 +564,85 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
             </div>
           ) : null}
         </div>
-      ) : null}
+        ) : null}
 
-      {emptyCopy ? (
-        <div className="sched-settings-empty" role="status" aria-live="polite">
-          {emptyCopy.title}
-          {emptyCopy.hint ? (
-            <span className="settings-list-sub settings-list-sub--force">
-              {' '}
-              {emptyCopy.hint}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <div
-          className="sched-settings-list"
-          role="list"
-          aria-labelledby="sched-settings-title"
-        >
-          {filtered.map((w) => {
-            const enabled = w.enabled !== false;
-            const statusLabel = workflowEnabledLabel(enabled);
-            const schedText = scheduleLabel(w.schedule);
-            return (
-              <div key={w.id} className="sched-settings-row" role="listitem">
-                <span
-                  className="sched-settings-row-name"
-                  title={w.prompt || w.name}
-                >
-                  {w.name}
-                </span>
-                <span
-                  className="sched-settings-row-schedule"
-                  title={`${schedText}${enabled ? '' : ` · ${statusLabel}`}`}
-                >
-                  {schedText}
-                  {!enabled ? ` · ${statusLabel}` : ''}
-                </span>
-                <input
-                  type="checkbox"
-                  className="settings-switch"
-                  checked={enabled}
-                  disabled={wfBusy}
-                  title={enabled ? '暂停' : '启用'}
-                  aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
-                  onChange={() => {
-                    void handleToggle(w);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  title="立即执行"
-                  aria-label={`立即执行 ${w.name}`}
-                  disabled={wfBusy}
-                  onClick={() => {
-                    void handleTrigger(w);
-                  }}
-                >
-                  <Lucide.Zap size={16} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  title="删除"
-                  aria-label={`删除 ${w.name}`}
-                  disabled={wfBusy}
-                  onClick={() => {
-                    void handleDelete(w);
-                  }}
-                >
-                  <Lucide.Trash2 size={16} aria-hidden />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+        <SettingsSection>
+        <SettingsCard>
+          {emptyCopy ? (
+            <SettingsRow
+              title={<span className="sched-settings-empty" role="status" aria-live="polite">{emptyCopy.title}</span>}
+              desc={emptyCopy.hint}
+            />
+          ) : (
+            <div
+              className="sched-settings-list"
+              role="list"
+              aria-labelledby="sched-settings-title"
+            >
+              {filtered.map((w) => {
+                const enabled = w.enabled !== false;
+                const statusLabel = workflowEnabledLabel(enabled);
+                const schedText = scheduleLabel(w.schedule);
+                return (
+                  <SettingsRow
+                    key={w.id}
+                    title={<span className="sched-settings-row-name" title={w.prompt || w.name}>{w.name}</span>}
+                    desc={
+                      <span
+                        className="sched-settings-row-schedule"
+                        title={`${schedText}${enabled ? '' : ` · ${statusLabel}`}`}
+                      >
+                        {schedText}
+                        {!enabled ? ` · ${statusLabel}` : ''}
+                      </span>
+                    }
+                    control={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          className="settings-switch"
+                          checked={enabled}
+                          disabled={wfBusy}
+                          title={enabled ? '暂停' : '启用'}
+                          aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
+                          onChange={() => {
+                            void handleToggle(w);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          title="立即执行"
+                          aria-label={`立即执行 ${w.name}`}
+                          disabled={wfBusy}
+                          onClick={() => {
+                            void handleTrigger(w);
+                          }}
+                        >
+                          <Lucide.Zap size={16} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          title="删除"
+                          aria-label={`删除 ${w.name}`}
+                          disabled={wfBusy}
+                          onClick={() => {
+                            void handleDelete(w);
+                          }}
+                        >
+                          <Lucide.Trash2 size={16} aria-hidden />
+                        </button>
+                      </div>
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
+        </SettingsCard>
+        </SettingsSection>
+      </div>
+    </SettingsPage>
   );
 };

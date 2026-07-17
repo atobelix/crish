@@ -10,6 +10,12 @@ import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { getWorkspacePath } from '../api/projectStore';
 import { loadMirrorMeta } from '../api/sessionDiskMirror';
 import { networkUserMessage } from '../api/userFacingErrors';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -192,236 +198,152 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
         : null;
 
   return (
-    <div className="settings-pane settings-pane--modern settings-pane--profile">
-      <header className="settings-page-head">
-        <div className="settings-head-inline">
-          <h2 className="settings-page-title">账户</h2>
-          {engineMeta ? (
-            <span
-              id={headMetaId}
-              className="settings-head-meta settings-head-meta--error"
-              title="连接异常"
-              role="status"
-              aria-live="polite"
-            >
-              {engineMeta}
-            </span>
-          ) : null}
-        </div>
-      </header>
-
-      <section className="settings-group" aria-labelledby={identityLabelId}>
-        <div className="settings-group-label" id={identityLabelId}>
-          当前环境
-        </div>
-        <div className="settings-list settings-list--profile">
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--profile"
-            title={workspaceTitle}
+    <SettingsPage
+      title="账户"
+      meta={
+        engineMeta ? (
+          <span
+            id={headMetaId}
+            className="settings-head-meta settings-head-meta--error"
+            title="连接异常"
+            role="status"
+            aria-live="polite"
           >
-            <div className="settings-list-copy settings-list-copy--with-icon settings-list-copy--profile">
-              <div className="settings-profile-avatar-sm" aria-hidden>
-                <Lucide.User size={16} strokeWidth={1.75} />
-              </div>
-              <div className="settings-list-title-wrap">
-                <div className="settings-list-title">当前项目</div>
-                <div className="settings-list-sub settings-list-sub--force settings-profile-desc">
-                  {hasWorkspace ? '本机工作区' : '尚未打开项目'}
-                </div>
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--profile">
-              {hasWorkspace ? (
-                <span
-                  className="settings-path-ellipsis settings-path-ellipsis--profile"
-                  title={cwd}
-                >
+            {engineMeta}
+          </span>
+        ) : null
+      }
+    >
+
+      <SettingsSection title="当前环境">
+        <SettingsCard>
+          <SettingsRow
+            icon={<Lucide.User size={18} strokeWidth={1.75} />}
+            title="当前项目"
+            desc={hasWorkspace ? '本机工作区' : '尚未打开项目'}
+            control={
+              hasWorkspace ? (
+                <span className="settings-path-ellipsis" title={cwd}>
                   {workspaceDisplay}
                 </span>
               ) : (
-                <span
-                  className="settings-list-empty"
-                  title={workspaceTitle}
-                  role="status"
-                >
+                <span className="settings-list-empty" title={workspaceTitle} role="status">
                   {workspaceDisplay}
                 </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+              )
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-      <section className="settings-group" aria-labelledby={dataLabelId}>
-        <div className="settings-group-label" id={dataLabelId}>
-          数据
-        </div>
-        <div className="settings-list settings-list--profile">
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--profile"
-            title="对话与设置保存在本机，不上传云端"
-          >
-            <div className="settings-list-copy settings-list-copy--profile">
-              <div className="settings-list-title">会话数据</div>
-              <div className="settings-list-sub settings-list-sub--force settings-profile-desc">
-                仅保存在本机
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--profile">
-              <span className="settings-list-meta" title="不上传云端">
-                本机
-              </span>
-            </div>
-          </div>
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--profile"
-            title={dataLocation}
-          >
-            <div className="settings-list-copy settings-list-copy--profile">
-              <div className="settings-list-title">存储位置</div>
-              <div className="settings-list-sub settings-list-sub--force settings-profile-desc">
-                应用数据目录
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--profile">
+      <SettingsSection title="数据">
+        <SettingsCard>
+          <SettingsRow
+            title="会话数据"
+            desc="仅保存在本机"
+            control={<span className="settings-list-meta" title="不上传云端">本机</span>}
+          />
+          <SettingsRow
+            title="存储位置"
+            desc="应用数据目录"
+            control={
               <span
-                className={
-                  storageIsPath
-                    ? 'settings-path-ellipsis settings-path-ellipsis--profile'
-                    : 'settings-list-meta'
-                }
+                className={storageIsPath ? 'settings-path-ellipsis' : 'settings-list-meta'}
                 title={dataLocation}
               >
                 {storageDisplay}
               </span>
-            </div>
-          </div>
-          <div
-            className="settings-list-row settings-list-row--single settings-list-row--profile"
-            title="导出或导入设置备份"
-          >
-            <div className="settings-list-copy settings-list-copy--profile">
-              <div className="settings-list-title">设置备份</div>
-              <div className="settings-list-sub settings-list-sub--force settings-profile-desc">
-                导出或导入配置
-              </div>
-            </div>
-            <div className="settings-list-control settings-list-control--profile">
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={exporting}
-                title={exporting ? '正在导出…' : '导出备份'}
-                aria-label="导出设置"
-                aria-busy={exporting || undefined}
-                onClick={() => {
-                  void handleExportSettings();
-                }}
-              >
-                {exporting ? '导出中…' : '导出'}
-              </button>
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={importing}
-                title={importing ? '正在导入…' : '从备份导入'}
-                aria-label="导入设置"
-                aria-busy={importing || undefined}
-                onClick={() => {
-                  void handleImportSettings();
-                }}
-              >
-                {importing ? '导入中…' : '导入'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {showDeveloper ? (
-        <section className="settings-group" aria-labelledby={devLabelId}>
-          <div className="settings-group-label" id={devLabelId}>
-            高级
-          </div>
-          <div className="settings-list settings-list--profile">
-            <div
-              className="settings-list-row settings-list-row--single settings-list-row--profile"
-              title="高级：连接地址，保存后重启生效"
-            >
-              <div className="settings-list-copy settings-list-copy--profile">
-                <div className="settings-list-title">
-                  <label htmlFor={daemonWsInputId}>服务地址</label>
-                </div>
-                <div className="settings-list-sub settings-list-sub--force settings-profile-desc">
-                  高级连接设置
-                </div>
-              </div>
-              <div className="settings-list-control settings-list-control--profile settings-list-control--inline-form">
-                <input
-                  id={daemonWsInputId}
-                  type="text"
-                  className="settings-field-input settings-field-input--sm settings-field-input--w220 settings-profile-input"
-                  value={daemonWsDraft}
-                  onChange={(e) => setDaemonWsDraft(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  title="服务地址；保存后重启生效"
-                  aria-label="服务地址"
-                  aria-describedby={daemonStatusId}
-                  placeholder={DEFAULT_DAEMON_WS}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSaveDaemonWs();
-                    } else if (e.key === 'Escape' && daemonWsDirty) {
-                      e.preventDefault();
-                      setDaemonWsDraft(daemonWsSaved);
-                    }
-                  }}
-                />
+            }
+          />
+          <SettingsRow
+            title="设置备份"
+            desc="导出或导入配置"
+            control={
+              <>
                 <button
                   type="button"
                   className="ui-btn ui-btn-secondary ui-btn-sm"
-                  disabled={!canSaveDaemonWs}
-                  title={
-                    !daemonWsTrimmed
-                      ? '请填写服务地址'
-                      : !daemonWsDirty
-                        ? '地址未更改'
-                        : '保存后重启生效'
-                  }
-                  aria-label="保存服务地址"
-                  onClick={handleSaveDaemonWs}
+                  disabled={exporting}
+                  title={exporting ? '正在导出…' : '导出备份'}
+                  onClick={() => handleExportSettings()}
                 >
-                  保存
+                  {exporting ? '导出中…' : '导出'}
                 </button>
                 <button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  disabled={busy}
-                  title="测试连接"
-                  aria-label="测试连接"
-                  aria-busy={busy || undefined}
-                  onClick={handleTestDaemon}
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  disabled={importing}
+                  title={importing ? '正在导入…' : '从备份导入'}
+                  onClick={() => handleImportSettings()}
                 >
-                  {busy ? '测试中…' : '测试'}
+                  {importing ? '导入中…' : '导入'}
                 </button>
-                <span
-                  id={daemonStatusId}
-                  className="settings-list-meta"
-                  title={daemonStatus}
-                  role="status"
-                  aria-live="polite"
-                >
-                  {daemonStatus}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
+              </>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      {showDeveloper ? (
+        <SettingsSection title="高级">
+          <SettingsCard>
+            <SettingsRow
+              title={<label htmlFor={daemonWsInputId}>服务地址</label>}
+              desc="高级连接设置"
+              control={
+                <>
+                  <input
+                    id={daemonWsInputId}
+                    type="text"
+                    className="settings-field-input settings-field-input--sm settings-field-input--w220"
+                    value={daemonWsDraft}
+                    onChange={(e) => setDaemonWsDraft(e.target.value)}
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    title="服务地址；保存后重启生效"
+                    placeholder={DEFAULT_DAEMON_WS}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveDaemonWs();
+                      } else if (e.key === 'Escape' && daemonWsDirty) {
+                        e.preventDefault();
+                        setDaemonWsDraft(daemonWsSaved);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={!canSaveDaemonWs}
+                    onClick={handleSaveDaemonWs}
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    disabled={busy}
+                    onClick={handleTestDaemon}
+                  >
+                    {busy ? '测试中…' : '测试'}
+                  </button>
+                  <span
+                    id={daemonStatusId}
+                    className="settings-list-meta"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {daemonStatus}
+                  </span>
+                </>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
       ) : null}
-    </div>
+    </SettingsPage>
   );
 };

@@ -352,13 +352,13 @@ samp,
   display: flex;
   align-items: center;
   background-color: var(--bg-secondary);
-  border-radius: 999px;
+  border-radius: 999px !important;
   padding: 0 12px;
-  width: 300px;
-  height: var(--control-height);
-  gap: 8px;
-  /* 极浅描边；禁止黑实线 / 粗 focus 环（含浏览器默认 outline） */
-  border: 1px solid var(--hairline, #eeeeee) !important;
+  width: 240px;
+  height: 30px;
+  gap: 6px;
+  border: 1px solid var(--border-subtle) !important;
+  box-sizing: border-box;
   box-shadow: none !important;
   outline: none !important;
   transition: border-color 0.12s ease, background-color 0.12s ease;
@@ -385,9 +385,10 @@ samp,
   box-shadow: none !important;
   width: 100%;
   font-family: var(--font-sans);
-  font-size: var(--font-size-base);
+  font-size: 13px !important;
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
+  padding: 0 !important;
 }
 .search-bar input:focus,
 .search-bar input:focus-visible {
@@ -451,7 +452,7 @@ samp,
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width var(--transition-smooth);
   z-index: 10;
   position: relative;
   overflow: hidden;
@@ -463,10 +464,18 @@ samp,
   border-right: none;
 }
 
+body.is-resizing,
+body.is-resizing * {
+  transition: none !important;
+  cursor: col-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .sidebar-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 2px 14px 8px;
+  padding: 0 2px 14px 6px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -951,10 +960,10 @@ samp,
 /* L1→L2：会话行是卡顶灰带，激活 tab 向下开口连正文 */
 .ws-chrome-row--sessions {
   --ws-chrome-sess-h: 32px;
-  /* 比 #e8e8e6 稍白，又比纯白正文略深 */
-  --ws-session-strip: #f0f0ee;
-  /* 用户吸取的细线色 */
-  --ws-session-line: #f3f3f3;
+  /* 使用与 card-header 统一的微暖灰色，剔除偏色 */
+  --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
+  /* 与 hairline 边框线色对齐 */
+  --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
   /* 激活标签 = 正文白，相融 */
   --ws-chrome-merge: var(--shell-inset-bg, var(--bg-primary));
   min-height: 38px;
@@ -1360,8 +1369,8 @@ samp,
 .app-container[data-shell-chrome="classic"],
 .app-container[data-shell-chrome="inset"] {
   /* 壳层略偏暖灰，内容卡更白，形成「大矩形底 + 内圆角卡」 */
-  --shell-chrome-bg: color-mix(in srgb, var(--bg-secondary) 82%, #b8b4ac 18%);
-  --shell-inset-bg: var(--bg-primary);
+  --shell-chrome-bg: color-mix(in srgb, var(--bg-secondary) 78%, #b8b4ac 22%);
+  --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --shell-inset-radius: 14px;
   --shell-inset-pad: 5px;
   --shell-inset-gap: 0;
@@ -1468,7 +1477,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   /* 与右侧项目 tab 字高视觉中心对齐（tab 贴底 h≈30） */
   align-items: flex-end;
   height: 100%;
-  padding: 0 6px 0 10px;
+  padding: 0 6px 0 6px;
   box-sizing: border-box;
   min-width: 0;
   -webkit-app-region: drag;
@@ -1698,38 +1707,30 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: color-mix(in srgb, #e81123 18%, transparent);
   color: #c50f1f;
 }
-.app-container[data-shell-chrome="inset"] .sidebar-search-slot {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 8px 10px 8px 10px;
-  padding: 0 10px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--shell-inset-bg) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
-  box-sizing: border-box;
-}
-.app-container[data-shell-chrome="inset"] .sidebar-search-slot .search-icon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-.app-container[data-shell-chrome="inset"] .sidebar-search-slot input {
+.sb-nav-item input[type="search"] {
   flex: 1 1 auto;
   min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
   font: inherit;
-  font-size: 12.5px;
-  color: var(--text-primary);
+  font-size: 14px !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
 }
-.app-container[data-shell-chrome="inset"] .sidebar-search-slot input::placeholder {
-  color: var(--text-tertiary);
+.sb-nav-item input[type="search"]::placeholder {
+  color: var(--text-secondary) !important;
+  opacity: 0.9;
 }
-.app-container[data-shell-chrome="inset"] .sidebar-wrapper.collapsed .sidebar-search-slot {
-  display: none;
+.sb-nav-item input[type="search"]::-webkit-search-cancel-button,
+.sb-nav-item input[type="search"]::-webkit-search-results-button,
+.sb-nav-item input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none !important;
+}
+.sidebar-wrapper.collapsed .sb-nav-item {
+  display: none !important;
 }
 /*
  * inset 第二行：左会话条 + 右工具 card-header 共用同一套几何
@@ -1737,8 +1738,8 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
  */
 .app-container[data-shell-chrome="inset"] {
   --ws-chrome-merge: var(--shell-inset-bg);
-  --ws-session-strip: #f0f0ee;
-  --ws-session-line: #f3f3f3;
+  --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
+  --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
   --ws-row2-min-h: 36px;
   --ws-row2-pad-t: 6px;
   --ws-row2-pad-x: 12px; /* 左右第二行同内边距 */
@@ -2028,9 +2029,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .app-container[data-shell-chrome="inset"] .workspace-card.flat-layout {
   border-top: none !important;
 }
-.app-container[data-shell-chrome="inset"] .sidebar-search-slot {
-  margin: 6px 12px 10px 12px;
-}
+
 /* 聊天列：无第三行面包屑；背景与激活 tab 一致 */
 .app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body {
   border-top: none !important;
@@ -2073,6 +2072,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 /* Suppress transition during manual resize drag */
 .resizing-active .workspace-column {
   transition: none !important;
+}
+.resizing-active iframe,
+.resizing-active webview {
+  pointer-events: none !important;
 }
 
 /* --- FLAT WORKSPACE CARDS --- */
@@ -2124,7 +2127,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 .workspace-card.flat-layout .card-header {
-  background-color: var(--bg-primary);
+  background-color: var(--card-header-bg, var(--bg-primary));
   /* 与消息区 / settings 行分界同 --hairline；flat 下需压过通用 border 规则 */
   border-bottom: 1px solid var(--hairline, var(--border-subtle)) !important;
   position: relative;
@@ -2154,7 +2157,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   gap: var(--card-header-gap, 6px);
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
   user-select: none;
-  background-color: var(--bg-primary);
+  background-color: var(--card-header-bg, var(--bg-primary));
   flex-shrink: 0;
   box-sizing: border-box;
   min-width: 0;
@@ -2217,7 +2220,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: var(--panel-h-scrollbar-size, 3px);
 }
 .tabs-bar::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   border-radius: 999px;
 }
 .tabs-bar::-webkit-scrollbar-track {
@@ -2623,7 +2626,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   min-width: 0; /* flex chain: allow Diff/预览等面板在窄栏内收缩 */
   overflow: auto;
   position: relative;
-  background-color: var(--bg-primary);
+  background-color: var(--shell-inset-bg, var(--bg-primary));
   display: flex;
   flex-direction: column;
 }
@@ -2822,6 +2825,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
   box-shadow: none;
+  white-space: nowrap;
 }
 
 .ui-segment-item:hover {
@@ -2886,16 +2890,16 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   position: fixed;
   display: none;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
   z-index: 10000;
-  background: var(--bg-elevated, #fff);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-radius: 12px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  padding: 6px;
-  min-width: 180px;
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  min-width: 200px;
   user-select: none;
 }
 
@@ -2909,19 +2913,19 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   border: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 8px 12px;
   font-family: var(--font-sans);
   font-size: var(--item-font-size);
   text-align: left;
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 8px;
-  transition: background 0.1s ease;
+  transition: background 0.15s ease;
 }
 
 .context-menu-item:hover {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  background: var(--control-soft-bg-hover);
   color: var(--text-primary);
 }
 
@@ -3171,19 +3175,19 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 /* --- PREMIUM SLEEK SCROLLBARS --- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border-radius: 2px;
   transition: background 0.15s ease;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
 * {
@@ -3384,13 +3388,13 @@ body.dragging-card * {
 
 /* 次按钮 = 软填充 pill，无描边（对齐「新建」） */
 .ui-btn-secondary {
-  background: var(--control-soft-bg, var(--bg-secondary));
+  background: var(--control-soft-bg);
   color: var(--text-secondary);
   border: none;
   border-radius: 999px;
 }
 .ui-btn-secondary:hover {
-  background: var(--control-soft-bg-hover, var(--bg-hover));
+  background: var(--control-soft-bg-hover);
   color: var(--text-primary);
 }
 
@@ -3629,7 +3633,7 @@ select.ui-input {
 .sidebar-footer {
   display: flex;
   align-items: center;
-  padding: 10px 10px 12px;
+  padding: 10px 10px 12px 6px;
   border-top: none;
   gap: 8px;
 }
@@ -3719,8 +3723,8 @@ select.ui-input {
 }
 /* ---- Crish sidebar v3 (distinct hierarchy) ---- */
 .crish-sidebar {
-  background: var(--bg-secondary, #f4f4f5);
-  border-right: 1px solid var(--border-subtle, #e8e8ea);
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3749,13 +3753,13 @@ select.ui-input {
 }
 .crish-sidebar .sidebar-scroll {
   padding-right: 2px;
-  padding-left: 8px;
+  padding-left: 6px;
 }
 .sidebar-top-actions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
+  gap: var(--space-2, 6px);
+  margin-bottom: 12px;
 }
 /* 顶栏导航：默认安静，hover / 选中时才抬升（不再常亮描边） */
 .sb-nav-item {
@@ -3783,21 +3787,21 @@ select.ui-input {
   color: var(--text-tertiary);
 }
 .sb-nav-item:hover {
-  background: var(--bg-hover);
+  background: var(--control-soft-bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-subtle);
+  border-color: transparent;
 }
 .sb-nav-item:hover svg {
   color: var(--text-secondary);
 }
 .sb-nav-item.is-active {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--control-soft-bg-active);
   color: var(--text-primary);
   border-color: transparent;
   box-shadow: none;
 }
 .sb-nav-item.is-active svg {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .sb-nav-link {
   display: flex;
@@ -3821,11 +3825,11 @@ select.ui-input {
   height: var(--icon-size);
 }
 .sb-nav-link:hover {
-  background: transparent;
+  background: var(--control-soft-bg-hover);
   color: var(--text-primary);
 }
 .sb-nav-link.active {
-  background: transparent;
+  background: var(--control-soft-bg-active);
   color: var(--text-primary);
 }
 .sb-section {
@@ -3833,6 +3837,7 @@ select.ui-input {
   flex-direction: column;
   gap: 2px;
   margin-top: 6px;
+  border: none !important;
 }
 .sb-section-grow {
   flex: 1;
@@ -3948,7 +3953,9 @@ select.ui-input {
   border-radius: 6px;
   min-height: 28px;
 }
-.sb-section-label:hover {
+.sb-section-label:hover,
+.sb-section-label-row:hover .sb-section-label,
+.sb-section-label-row:focus-within .sb-section-label {
   color: var(--text-secondary);
   background: transparent;
   font-weight: var(--font-weight-semibold);
@@ -3956,9 +3963,20 @@ select.ui-input {
 .sb-section-label svg {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.sb-section-label-row:hover .sb-section-label svg,
+.sb-section-label-row:focus-within .sb-section-label svg,
+.sb-section-label:hover svg,
+.sb-section-label:focus-visible svg {
+  opacity: 1;
 }
 .sb-section-label .chev-collapsed {
   transform: rotate(-90deg);
+}
+.sb-section-count {
+  display: none !important;
 }
 .sb-session-scroll {
   /* 旧嵌套滚动：保留兼容但默认不抢滚动 */
@@ -3968,7 +3986,7 @@ select.ui-input {
   padding-bottom: 0;
 }
 .crish-sidebar .folder-group {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .crish-sidebar .folder-header {
   display: flex;
@@ -4029,9 +4047,9 @@ select.ui-input {
   box-shadow: none;
   transition: color 0.12s ease, background-color 0.12s ease;
 }
-/* 默认清爽：无 hover 背景块 */
+/* 非激活 hover：轻灰背景，低于激活态 */
 .crish-sidebar .session-item:hover {
-  background: transparent;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium) !important;
 }
@@ -4189,29 +4207,30 @@ select.ui-input {
 }
 /* 紧凑右键菜单（侧栏会话：短标签、低行高、少内边距） */
 .context-menu.context-menu-compact {
-  min-width: 140px;
-  max-width: min(220px, calc(100vw - 16px));
-  padding: 3px;
-  gap: 0;
-  border-radius: 8px;
+  min-width: 160px;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 6px;
+  gap: 2px;
+  border-radius: 12px;
 }
 .context-menu.context-menu-compact .context-menu-item {
-  min-height: 28px;
-  padding: 3px 8px;
-  gap: 7px;
+  min-height: 32px;
+  padding: 6px 10px;
+  gap: 8px;
   font-size: var(--font-size-sm);
-  line-height: 1.25;
-  border-radius: 5px;
+  line-height: 1.35;
+  border-radius: 6px;
   color: var(--text-secondary);
+  transition: background 0.15s ease;
 }
 .context-menu.context-menu-compact .context-menu-item:hover,
 .context-menu.context-menu-compact .context-menu-item:focus-visible {
-  background-color: var(--bg-hover);
+  background-color: var(--control-soft-bg-hover);
   color: var(--text-primary);
   outline: none;
 }
 .context-menu.context-menu-compact .context-menu-item:focus-visible {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-color);
 }
 .context-menu.context-menu-compact .context-menu-item svg {
   width: 14px;
@@ -4826,10 +4845,7 @@ select.ui-input {
   border-radius: 999px;
 }
 .sb-quick-divider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 6px 8px;
-  border: none;
+  display: none;
 }
 .sb-quick-item {
   display: flex;
@@ -4974,7 +4990,7 @@ body {
 .sidebar-footer,
 .crish-sidebar .sidebar-footer {
   border-top: none !important;
-  padding: var(--space-2, 6px) var(--space-3, 8px) var(--space-3, 8px);
+  padding: var(--space-2, 6px) var(--space-3, 8px) var(--space-3, 8px) 6px !important;
   gap: var(--space-2, 6px);
 }
 .workspace-card {
@@ -5021,7 +5037,7 @@ body {
 /* 3) Sidebar density：间距阶梯 --space-*，行高对齐 --row-height */
 .crish-sidebar .sidebar-scroll {
   gap: var(--space-1, 4px);
-  padding: var(--space-3, 8px) var(--space-1, 4px) var(--space-2, 6px) var(--space-3, 8px);
+  padding: 0 var(--space-1, 4px) var(--space-2, 6px) 6px !important;
 }
 .crish-sidebar .sb-list-scroll {
   padding-bottom: var(--space-2, 6px);
@@ -5029,8 +5045,16 @@ body {
   padding-right: 2px;
 }
 .sidebar-top-actions {
-  gap: 2px;
-  margin-bottom: var(--space-2, 6px);
+  gap: var(--space-2, 6px);
+  margin-bottom: var(--space-3, 8px);
+}
+/* 搜索行是 div[role=search]，补 hover 效果与 button 一致 */
+.sidebar-top-actions .sb-nav-item[role="search"]:hover {
+  background: var(--control-soft-bg-hover);
+  cursor: text;
+}
+.sidebar-top-actions .sb-nav-item[role="search"]:hover svg {
+  color: var(--text-secondary);
 }
 .crish-sidebar .sb-section {
   gap: 2px;
@@ -5038,25 +5062,39 @@ body {
 }
 .crish-sidebar .sb-section-label-row {
   gap: var(--space-1, 4px);
-  min-height: var(--control-height-sm, 28px);
+  min-height: 28px !important;
+  height: 28px !important;
   padding-right: 2px;
 }
 .crish-sidebar .sb-section-label {
   gap: var(--space-1, 4px);
-  padding: var(--space-1, 4px) var(--space-2, 6px);
-  min-height: var(--control-height-sm, 28px);
+  padding: 0 var(--space-2, 6px);
+  min-height: 28px !important;
+  height: 28px !important;
   letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
 }
 .crish-sidebar .sb-nav-item,
 .crish-sidebar .sb-nav-link {
   gap: var(--space-2, 6px);
-  min-height: var(--row-height, var(--control-height));
+  min-height: 30px !important;
+  height: 30px !important;
   padding: 0 var(--space-3, 8px);
-  border-radius: var(--radius-md, 8px);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  background: transparent;
+}
+.crish-sidebar .folder-header-row {
+  min-height: 30px !important;
+  height: 30px !important;
 }
 .crish-sidebar .folder-header {
   gap: var(--space-2, 6px);
-  min-height: var(--row-height, var(--control-height));
+  min-height: 30px !important;
+  height: 30px !important;
   padding: 0 var(--space-2, 6px);
   border-radius: var(--radius-md, 8px);
 }
@@ -5065,26 +5103,57 @@ body {
   padding-left: var(--space-2, 6px);
 }
 .crish-sidebar .session-item {
-  min-height: var(--row-height, var(--control-height));
+  min-height: 30px !important;
+  height: 30px !important;
   padding: 0 var(--space-2, 6px) 0 var(--space-3, 8px);
   border-radius: var(--radius-md, 8px);
   gap: var(--space-2, 6px);
 }
 .session-item-wrap,
 .session-list-windowed > .session-item-wrap {
-  min-height: var(--row-height, var(--control-height));
-}
-.session-list-windowed > .session-item-wrap {
-  height: var(--row-height, var(--control-height));
+  min-height: 30px !important;
+  height: 30px !important;
 }
 .crish-sidebar .folder-group {
   margin-bottom: var(--space-1, 4px);
 }
 .sidebar-footer-settings {
   gap: var(--space-2, 6px);
-  padding: var(--space-2, 6px) var(--space-3, 8px);
+  padding: 4px var(--space-3, 8px) !important;
   border-radius: var(--radius-md, 8px);
-  min-height: var(--row-height, var(--control-height));
+  min-height: 30px !important;
+  height: 30px !important;
+  box-sizing: border-box;
+}
+.sb-mode-chip {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  box-sizing: border-box;
+}
+.sidebar-footer-update {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  box-sizing: border-box;
+}
+.crish-sidebar .sb-nav-item,
+.crish-sidebar .sb-nav-link,
+.crish-sidebar .session-item,
+.crish-sidebar .folder-header-row,
+.crish-sidebar .folder-header {
+  font-size: 14px !important;
+}
+.crish-sidebar .sb-section-label,
+.crish-sidebar .session-search-snippet,
+.crish-sidebar .session-item-meta,
+.crish-sidebar .sidebar-footer-settings {
+  font-size: 13px !important;
+}
+#crish-main {
+  padding-bottom: 0 !important;
 }
 
 /* 4) Empty-list spacing：侧栏空态 / 置顶区密度（不依赖 chat.css 兜底） */
@@ -5276,5 +5345,228 @@ body {
 .settings-cover-header--slim {
   justify-content: flex-end;
   gap: 4px;
+}
+
+
+/* ==========================================================================
+   UNIFIED FLOATING MENU SYSTEM (OVERHAUL)
+   - Abstracted into two refined sizes: Compact and Large/Detailed.
+   - Background is color-mix with backdrop-filter to match the premium frosted look of context menus.
+   - Nested border radii are mathematically proportioned (8px outer/5px inner, 10px outer/6px inner).
+   - Uniform inner/outer paddings, heights, margins, and gaps.
+   ========================================================================== */
+
+/* --- 1. COMPACT SIZE FLOATING MENUS --- */
+.settings-select-menu,
+.settings-select-menu--portal,
+.files-open-menu,
+.files-more-menu,
+.chat-more-menu,
+.tabs-add-menu,
+.context-menu,
+.perm-menu {
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent) !important;
+  backdrop-filter: var(--backdrop-blur) !important;
+  -webkit-backdrop-filter: var(--backdrop-blur) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 4px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  box-sizing: border-box !important;
+}
+
+/* Compact Menu Items */
+.settings-select-item,
+.files-open-item,
+.files-more-item,
+.chat-more-item,
+.tabs-add-item,
+.context-menu-item,
+.perm-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-height: 28px !important;
+  padding: 5px 8px !important;
+  border-radius: 5px !important;
+  font-size: var(--font-size-sm) !important;
+  color: var(--text-primary) !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  transition: background 0.1s ease, color 0.1s ease !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  font-family: inherit !important;
+  font-weight: var(--font-weight-normal) !important;
+}
+
+/* --- 2. LARGE/DETAILED SIZE FLOATING MENUS --- */
+.sb-quick-menu,
+.sort-filter-menu,
+.sort-filter-flyout,
+.cplus-main,
+.pp-menu {
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent) !important;
+  backdrop-filter: var(--backdrop-blur) !important;
+  -webkit-backdrop-filter: var(--backdrop-blur) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  box-sizing: border-box !important;
+}
+
+/* Large Menu Items */
+.sb-quick-item,
+.sort-filter-row,
+.sort-filter-option,
+.cplus-item,
+.pp-row,
+.pp-row-main,
+.pp-search {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-height: 32px !important;
+  padding: 7px 10px !important;
+  border-radius: 6px !important;
+  font-size: var(--font-size-sm) !important;
+  color: var(--text-primary) !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  transition: background 0.1s ease, color 0.1s ease !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  font-family: inherit !important;
+  font-weight: var(--font-weight-normal) !important;
+}
+
+/* --- 3. COMMON HOVER & ACTIVE/SELECTED INTERACTION STATES --- */
+.settings-select-item:hover,
+.files-open-item:hover,
+.files-more-item:hover,
+.chat-more-item:hover,
+.tabs-add-item:hover,
+.context-menu-item:hover,
+.perm-menu-item:hover,
+.sb-quick-item:hover,
+.sort-filter-row:hover,
+.sort-filter-row.is-open,
+.sort-filter-option:hover,
+.cplus-item:hover,
+.pp-row:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Active / Selected items */
+.settings-select-item.is-active,
+.sort-filter-option.is-on,
+.perm-menu-item.is-selected,
+.pp-row.is-selected {
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
+}
+
+/* --- 4. SEPARATORS & OTHER SPECIAL INNER LAYOUTS --- */
+.files-open-sep,
+.sb-quick-divider,
+.sort-filter-menu-title,
+.context-menu-divider {
+  margin: 4px 6px !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  height: 0 !important;
+  padding: 0 !important;
+}
+.sort-filter-menu-title {
+  border-bottom: none !important;
+  padding: 4px 8px 6px !important;
+  margin: 0 !important;
+  height: auto !important;
+}
+
+/* Ensure checkmark positioning inside menus is clean and absolute */
+.perm-menu-check,
+.sort-filter-check {
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+/* Special styling for icon coloring inside menu items */
+.settings-select-item svg,
+.files-open-item svg,
+.files-more-item svg,
+.chat-more-item svg,
+.tabs-add-item svg,
+.context-menu-item svg,
+.perm-menu-item svg,
+.sb-quick-item svg,
+.cplus-item svg,
+.pp-row-icon {
+  color: var(--text-secondary) !important;
+  flex-shrink: 0 !important;
+}
+
+/* --- 5. OVERRIDES FOR CODENAME/MESSAGE SURFACES --- */
+/* User Bubble - Dynamic and cozy semi-transparent overlay */
+.msg-user-bubble {
+  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Inline code (markdown blocks & chat flow) */
+.msg-assistant-text code,
+.msg-assistant-text .md-inline-code,
+.md-rendered .md-inline-code,
+.md-inline-code,
+.chat-doc-flow p code {
+  background: color-mix(in srgb, var(--text-primary) 3.2%, transparent) !important;
+  color: var(--text-primary) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 1px 5px !important;
+}
+
+/* Long code blocks - pre & wrapper (no borders, no horizontal scrollbar, wrap instead) */
+.msg-assistant-text pre,
+.msg-assistant-text .md-code-block,
+.md-rendered .md-code-block,
+.md-rendered pre,
+.msg-assistant-text .md-code-pre,
+.md-rendered .md-code-pre,
+.msg-assistant-text .md-code-block code,
+.md-rendered .md-code-block code {
+  background: color-mix(in srgb, var(--text-primary) 2.2%, transparent) !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+  overflow-x: visible !important;
+}
+
+/* Prevent any nested formatting (like bold/strong) from applying inside code blocks */
+.msg-assistant-text pre *,
+.msg-assistant-text .md-code-block *,
+.md-rendered pre *,
+.md-rendered .md-code-block * {
+  font-weight: var(--font-weight-code, 400) !important;
 }
 

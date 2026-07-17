@@ -27,11 +27,11 @@
 }
 
 .slash-commands-popover::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 .slash-commands-popover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-tertiary) 35%, transparent);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-tertiary) 15%, transparent);
+  border-radius: 2px;
 }
 
 .slash-command-item {
@@ -180,8 +180,8 @@
 .input-container:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: var(--hairline-strong, var(--border-color));
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
+  box-shadow: none !important;
   outline: none;
 }
 /* 侧栏 AgentCard / 内联 InlineAgentPanel denser 壳（仍复用同一半透 input-container） */
@@ -272,11 +272,11 @@
 
 /* 超 max-lines 后内部滚动条 thrash 时仍贴主题，勿系统白轨 */
 .input-container .composer-textarea::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 .input-container .composer-textarea::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-tertiary) 40%, transparent);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+  border-radius: 2px;
 }
 .input-container .composer-textarea::-webkit-scrollbar-track {
   background: transparent;

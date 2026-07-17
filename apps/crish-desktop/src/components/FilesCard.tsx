@@ -36,6 +36,63 @@ import {
 import { fileExtColor, highlightCode, langFromFilename } from '../api/codeHighlight';
 import { parseMarkdownToHtml } from '../api/markdownRender';
 
+function useVirtualScroll({
+  itemCount,
+  itemHeight,
+  containerRef,
+  overscan = 10,
+}: {
+  itemCount: number;
+  itemHeight: number;
+  containerRef: React.RefObject<HTMLElement | null>;
+  overscan?: number;
+}) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      setScrollTop(el.scrollTop);
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    resizeObserver.observe(el);
+
+    setScrollTop(el.scrollTop);
+    setContainerHeight(el.getBoundingClientRect().height);
+
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [containerRef]);
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
+  const endIndex = Math.min(
+    itemCount - 1,
+    Math.floor((scrollTop + containerHeight) / itemHeight) + overscan
+  );
+
+  const totalHeight = itemCount * itemHeight;
+  const offsetY = startIndex * itemHeight;
+
+  return {
+    startIndex,
+    endIndex,
+    totalHeight,
+    offsetY,
+  };
+}
+
 interface FilesCardProps {
   /** @deprecated 文件操作错误改行内；保留 prop 兼容 CardPanel */
   onShowToast?: (message: string) => void;
@@ -46,6 +103,7 @@ type ViewMode = 'browse' | 'detail';
 type TreeNode = FsDirEntry & { depth: number };
 
 export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
+  const fileListContainerRef = useRef<HTMLDivElement>(null);
   const [root, setRoot] = useState(() => getWorkspacePath());
   const [cwd, setCwd] = useState(root || '');
   const [entries, setEntries] = useState<FsDirEntry[]>([]);
@@ -329,6 +387,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     if (!q) return out;
     return out.filter((n) => n.name.toLowerCase().includes(q));
   }, [entries, expanded, filter]);
+
+  const { startIndex, endIndex, totalHeight } = useVirtualScroll({
+    itemCount: flatTree.length,
+    itemHeight: 28,
+    containerRef: fileListContainerRef,
+  });
+
+  const visibleItems = useMemo(() => {
+    return flatTree.slice(startIndex, endIndex + 1);
+  }, [flatTree, startIndex, endIndex]);
 
   const goUp = () => {
     if (!cwd || (root && cwd === root)) return;
@@ -1003,7 +1071,11 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
       <div className="files-body files-body--split">
         {/* 左：文件树（始终可见） */}
-        <div className="files-list files-list--pane">
+        <div
+          className="files-list files-list--pane"
+          ref={fileListContainerRef}
+          style={{ overflowY: 'auto', position: 'relative' }}
+        >
           {loading ? (
             <div className="files-empty files-empty--compact">加载中…</div>
           ) : error && !entries.length ? (
@@ -1018,7 +1090,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           ) : (
             <>
               {error ? (
-                <div className="files-inline-err" role="alert" aria-live="polite">
+                <div className="files-inline-err" role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <span className="files-inline-err-text">{error}</span>
                   <button
                     type="button"
@@ -1031,75 +1103,90 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   </button>
                 </div>
               ) : null}
-              {flatTree.map((e) => (
-                <div
-                  key={e.path}
-                  className={`files-row ${selected === e.path ? 'is-selected' : ''}`}
-                  style={{ paddingLeft: 4 + e.depth * 10 }}
-                  onClick={() => {
-                    if (e.isDir) {
-                      void (async () => {
-                        if (!expanded[e.path]) {
-                          try {
-                            const list = await loadDir(e.path);
-                            setExpanded((prev) => ({ ...prev, [e.path]: list }));
-                            setError('');
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : '展开失败');
-                          }
-                        } else {
-                          setExpanded((prev) => {
-                            const next = { ...prev };
-                            delete next[e.path];
-                            return next;
-                          });
+              <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+                {visibleItems.map((e, index) => {
+                  const globalIdx = startIndex + index;
+                  const top = globalIdx * 28;
+                  return (
+                    <div
+                      key={e.path}
+                      className={`files-row ${selected === e.path ? 'is-selected' : ''}`}
+                      style={{
+                        position: 'absolute',
+                        top: `${top}px`,
+                        left: 0,
+                        width: '100%',
+                        height: '28px',
+                        paddingLeft: 4 + e.depth * 10,
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      onClick={() => {
+                        if (e.isDir) {
+                          void (async () => {
+                            if (!expanded[e.path]) {
+                              try {
+                                const list = await loadDir(e.path);
+                                setExpanded((prev) => ({ ...prev, [e.path]: list }));
+                                setError('');
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : '展开失败');
+                              }
+                            } else {
+                              setExpanded((prev) => {
+                                const next = { ...prev };
+                                delete next[e.path];
+                                return next;
+                              });
+                            }
+                          })();
+                        } else void openFile(e.path);
+                      }}
+                      onDoubleClick={() => {
+                        if (e.isDir) void refresh(e.path);
+                        else {
+                          void openFile(e.path);
+                          void openPathDefault(e.path).catch(() => undefined);
                         }
-                      })();
-                    } else void openFile(e.path);
-                  }}
-                  onDoubleClick={() => {
-                    if (e.isDir) void refresh(e.path);
-                    else {
-                      void openFile(e.path);
-                      void openPathDefault(e.path).catch(() => undefined);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter') {
-                      if (e.isDir) void refresh(e.path);
-                      else void openFile(e.path);
-                    }
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={`files-row-twist ${e.isDir ? '' : 'is-leaf'}`}
-                    onClick={(ev) => (e.isDir ? void toggleExpand(e.path, ev) : undefined)}
-                    tabIndex={-1}
-                  >
-                    {e.isDir ? (
-                      expanded[e.path] ? (
-                        <Lucide.ChevronDown size={13} />
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter') {
+                          if (e.isDir) void refresh(e.path);
+                          else void openFile(e.path);
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className={`files-row-twist ${e.isDir ? '' : 'is-leaf'}`}
+                        onClick={(ev) => (e.isDir ? void toggleExpand(e.path, ev) : undefined)}
+                        tabIndex={-1}
+                      >
+                        {e.isDir ? (
+                          expanded[e.path] ? (
+                            <Lucide.ChevronDown size={13} />
+                          ) : (
+                            <Lucide.ChevronRight size={13} />
+                          )
+                        ) : null}
+                      </button>
+                      {e.isDir ? (
+                        <Lucide.Folder size={14} className="files-row-ico dir" />
                       ) : (
-                        <Lucide.ChevronRight size={13} />
-                      )
-                    ) : null}
-                  </button>
-                  {e.isDir ? (
-                    <Lucide.Folder size={14} className="files-row-ico dir" />
-                  ) : (
-                    <FileIcon name={e.name} />
-                  )}
-                  <span className="files-row-name" title={e.name}>
-                    {e.name}
-                  </span>
-                  {!e.isDir && e.size != null ? (
-                    <span className="files-row-meta">{formatSize(e.size)}</span>
-                  ) : null}
-                </div>
-              ))}
+                        <FileIcon name={e.name} />
+                      )}
+                      <span className="files-row-name" title={e.name}>
+                        {e.name}
+                      </span>
+                      {!e.isDir && e.size != null ? (
+                        <span className="files-row-meta">{formatSize(e.size)}</span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </>
           )}
         </div>

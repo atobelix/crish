@@ -29,9 +29,9 @@ import {
 import type { ShowToastFn } from '../hooks/useToastQueue';
 
 /** 侧栏宽度合法区间（与拖拽 / 键盘步进共用） */
-const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MIN = 220;
 const SIDEBAR_WIDTH_MAX = 360;
-const SIDEBAR_WIDTH_DEFAULT = 240;
+const SIDEBAR_WIDTH_DEFAULT = 260;
 const SIDEBAR_RESIZE_STEP = 12;
 const SIDEBAR_RESIZE_STEP_LARGE = 24;
 
@@ -43,6 +43,8 @@ interface SidebarProps {
   onOpenRuntime?: () => void;
   /** 顶栏搜索：过滤会话标题与消息正文等（见 sessionSearch）。 */
   searchQuery?: string;
+  searchInput?: string;
+  onSearchChange?: (val: string) => void;
 }
 
 const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
@@ -171,6 +173,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   onHoverLeave,
   onOpenRuntime: _onOpenRuntime,
   searchQuery = '',
+  searchInput = '',
+  onSearchChange,
 }) => {
   // zustand v5 需 traditional equality：无搜索忽略正文流式，有搜索退回引用比较
   const searchTrimmed = searchQuery.trim();
@@ -383,6 +387,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       useLayoutStore.setState({ sidebarCollapsed: false });
       document.documentElement.style.setProperty('--sidebar-width', `${capped}px`);
       setSidebarWidthPx(capped);
+      window.dispatchEvent(new Event('crish-sidebar-resize'));
       if (opts?.persist !== false) persistSidebarWidth(capped);
     },
     [persistSidebarWidth],
@@ -485,6 +490,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
     e.preventDefault();
+    document.body.classList.add('is-resizing');
     const startX = e.clientX;
     const startWidth =
       parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'), 10) ||
@@ -507,9 +513,11 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         }
         document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
         if (newWidth >= SIDEBAR_WIDTH_MIN) setSidebarWidthPx(newWidth);
+        window.dispatchEvent(new Event('crish-sidebar-resize'));
       }
     };
     const handlePointerUp = (upEvent: PointerEvent) => {
+      document.body.classList.remove('is-resizing');
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       const finalWidth = startWidth + (upEvent.clientX - startX);
@@ -604,14 +612,18 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
       >
+
         {/* 新建 / 定时：中文文案即可见名；新建仅 createSession 空壳路径 */}
         <div role="group" aria-label="侧栏快捷操作：新建对话与定时任务">
           <SidebarNav
             activeNav={activeNav}
             onNewSession={handleNewSession}
             onOpenScheduled={handleOpenScheduled}
+            searchInput={searchInput}
+            onSearchChange={onSearchChange}
           />
         </div>
+
         <SidebarSessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
@@ -681,7 +693,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                 })();
               }}
             >
-              <Lucide.Download size={14} aria-hidden />
+              <Lucide.RefreshCw size={14} strokeWidth={1.75} aria-hidden />
               <span className="sidebar-footer-update-label">更新</span>
             </button>
           ) : null}

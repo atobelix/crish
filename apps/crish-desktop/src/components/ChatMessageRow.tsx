@@ -281,7 +281,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   }, [msg.text, onShowToast]);
 
   const toggleExpand = useCallback(() => {
-    if (isLong) onToggleExpand(msg.id);
+    if (isLong) {
+      const sel = window.getSelection()?.toString();
+      if (sel) return;
+      onToggleExpand(msg.id);
+    }
   }, [isLong, msg.id, onToggleExpand]);
 
   const onBubbleKeyDown = useCallback(

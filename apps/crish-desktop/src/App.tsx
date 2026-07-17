@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react';
 import { useLayoutStore, initLayoutStorePersistence } from './store/layoutStore';
 import { getSessionById } from './store/sessionStore';
 import {
@@ -17,7 +17,7 @@ import { clientApi } from './api/clientApi';
 import { ensureDaemonConnected } from './api/daemonChatBridge';
 import { bootstrapDesktopBackend, getDesktopDaemonClient } from './api/daemonClient';
 import { isProductShell } from './api/productMode';
-import { productStartingMessage } from './api/userFacingErrors';
+
 import { isDemoMode } from './api/appMode';
 import {
   FirstRunWizard,
@@ -36,6 +36,7 @@ import { emitUiEvent, onUiEvent } from './api/uiEvents';
 import { createDebounced } from './api/debouncedValue';
 import { getActiveModelId, getActiveProfileId } from './api/providerProfiles';
 import { IconSidebarLeft } from './components/SidebarToggleIcons';
+import { CheatsheetModal } from './components/CheatsheetModal';
 import {
   listProjects,
   rebindSessionFoldersToProjects,
@@ -70,8 +71,11 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
-  const workspaces = useLayoutStore((s) => s.workspaces);
-  const activeWorkspaceIndex = useLayoutStore((s) => s.activeWorkspaceIndex);
+  const workspaceIdsStr = useLayoutStore((s) => s.workspaces.map((w) => w.id).join(','));
+  const workspaceIds = useMemo(() => workspaceIdsStr ? workspaceIdsStr.split(',') : [], [workspaceIdsStr]);
+  const activeWorkspaceId = useLayoutStore(
+    (s) => s.workspaces[s.activeWorkspaceIndex]?.id || 'ws-0'
+  );
   const uiSize = useLayoutStore((s) => s.uiSize);
   const shellChromeMode = useLayoutStore((s) => s.shellChromeMode);
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
@@ -82,7 +86,6 @@ function App() {
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
 
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
-  const activeWorkspace = workspaces[activeWorkspaceIndex];
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
   /** 跳过链接聚焦展开（无全局 sr-only CSS） */
@@ -583,18 +586,6 @@ function App() {
         跳到主内容
       </a>
 
-      {/* 本地壳立刻显示；引擎连接仅顶栏轻提示，不再整页挡死；不在此 createSession */}
-      {productShell && !engineReady ? (
-        <div
-          className="app-boot-banner"
-          role="status"
-          aria-live="polite"
-          aria-label="引擎启动状态"
-        >
-          <span className="app-boot-banner-dot" aria-hidden="true" />
-          <span>{productStartingMessage()}</span>
-        </div>
-      ) : null}
       {showFirstRun && (
         <FirstRunWizard
           onDone={() => {
@@ -633,21 +624,6 @@ function App() {
             >
               <IconSidebarLeft size={15} aria-hidden="true" />
             </button>
-            <div
-              className="search-bar no-drag"
-              role="search"
-              aria-label="会话搜索"
-              data-tauri-drag-region="false"
-            >
-              <Lucide.Search className="search-icon" size={16} aria-hidden="true" />
-              <input
-                type="search"
-                placeholder="搜索会话与消息…"
-                aria-label="搜索会话与消息"
-                value={sessionSearchInput}
-                onChange={(e) => setSessionSearchInput(e.target.value)}
-              />
-            </div>
           </div>
           <div className="app-header-right no-drag" role="toolbar" aria-label="顶栏操作">
             <button
@@ -668,7 +644,7 @@ function App() {
               aria-pressed={runtimeFloatOpen}
               onClick={() => setRuntimeFloatOpen((v) => !v)}
             >
-              <Lucide.Activity size={16} aria-hidden="true" />
+              <Lucide.Gauge size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
             <div
               className="window-controls no-drag"
@@ -791,23 +767,6 @@ function App() {
           }}
         >
           <AppErrorBoundary compact title="侧栏出错">
-            {/* inset：搜索从顶栏迁到侧栏顶，顶栏彻底变成壳层拖拽区 */}
-            {shellChromeMode === 'inset' ? (
-              <div
-                className="sidebar-search-slot no-drag"
-                role="search"
-                aria-label="会话搜索"
-              >
-                <Lucide.Search className="search-icon" size={14} aria-hidden="true" />
-                <input
-                  type="search"
-                  placeholder="搜索会话与消息…"
-                  aria-label="搜索会话与消息"
-                  value={sessionSearchInput}
-                  onChange={(e) => setSessionSearchInput(e.target.value)}
-                />
-              </div>
-            ) : null}
             <Sidebar
               onShowToast={handleShowToast}
               hoverExpanded={sidebarCollapsed && isHoveredExpanded}
@@ -815,6 +774,8 @@ function App() {
               onHoverEnter={handleSidebarHoverEnter}
               onOpenRuntime={() => setRuntimeFloatOpen(true)}
               searchQuery={sessionSearch}
+              searchInput={sessionSearchInput}
+              onSearchChange={setSessionSearchInput}
             />
           </AppErrorBoundary>
         </div>
@@ -832,8 +793,8 @@ function App() {
              */}
             <div className="workspaces-container" role="region" aria-label="工作区面板">
               <AppErrorBoundary compact title="工作区出错">
-                {workspaces.map((ws) => (
-                  <Workspace key={ws.id} ws={ws} onShowToast={handleShowToast} />
+                {workspaceIds.map((id) => (
+                  <Workspace key={id} wsId={id} onShowToast={handleShowToast} />
                 ))}
               </AppErrorBoundary>
             </div>
@@ -855,64 +816,7 @@ function App() {
       
       {/* Centered Cheatsheet Modal Overlay */}
       {showCheatsheet && (
-        <div
-          className="cheatsheet-overlay"
-          role="presentation"
-          onClick={() => setShowCheatsheet(false)}
-        >
-          <div
-            className="cheatsheet-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cheatsheet-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="cheatsheet-header">
-              <div className="cheatsheet-title-wrap">
-                <Lucide.Keyboard
-                  size={16}
-                  style={{ color: 'var(--accent-color)' }}
-                  aria-hidden="true"
-                />
-                <h3 className="cheatsheet-title" id="cheatsheet-title">
-                  快捷键
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCheatsheet(false)}
-                className="cheatsheet-close-btn"
-                aria-label="关闭快捷键帮助"
-              >
-                <Lucide.X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            
-            <div className="cheatsheet-body">
-              <div className="cheatsheet-row">
-                <span className="cheatsheet-label">打开系统设置</span>
-                <kbd className="cheatsheet-key">Ctrl + ,</kbd>
-              </div>
-              <div className="cheatsheet-row">
-                <span className="cheatsheet-label">分支分叉当前会话</span>
-                <kbd className="cheatsheet-key">双击 Escape</kbd>
-              </div>
-              <div className="cheatsheet-row">
-                <span className="cheatsheet-label">聊天命令行提示</span>
-                <kbd className="cheatsheet-key">输入 /</kbd>
-              </div>
-              <div className="cheatsheet-row">
-                <span className="cheatsheet-label">关闭当前选中卡片</span>
-                <kbd className="cheatsheet-key">中键点击标签页</kbd>
-              </div>
-            </div>
-            
-            <div className="cheatsheet-footer-tip">
-              <strong>布局提示：</strong>
-              工作区卡片支持拖拽与合并。拖动标签页在其他卡片边缘悬停即可快速分屏，或在标签栏中拖拽重排。
-            </div>
-          </div>
-        </div>
+        <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
       )}
 
       {/* 设置：全覆盖；z-index 与 settings.css(.settings-cover=13000) 双保险；ErrorBoundary 展示真实错误 */}
@@ -945,7 +849,7 @@ function App() {
               }
             >
               <SettingsPanel
-                wsId={activeWorkspace?.id || 'ws-0'}
+                wsId={activeWorkspaceId}
                 onShowToast={handleShowToast}
                 onClose={() => setShowSettingsOverlay(false)}
                 initialTab={settingsActiveTab || 'profile'}

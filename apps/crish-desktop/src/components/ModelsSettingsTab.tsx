@@ -1,13 +1,12 @@
 /**
  * 设置 · 模型：选择服务商、配置密钥，并管理可用模型。
  */
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 import {
   addModelToProfile,
   createCustomProfile,
-  isEmptyModelCatalog,
   loadProfiles,
   mergeModelIds,
   normalizeModelIds,
@@ -23,7 +22,6 @@ import {
   activateProfileModel,
   getActiveProfileId,
   getActiveModelId,
-  truncateProfileLabel,
 } from '../api/providerProfiles';
 import {
   formatContextLabelZh,
@@ -38,7 +36,13 @@ import {
   testProviderModel,
   type ModelCapabilityKey,
 } from '../api/modelCatalog';
-import { estimateCostUsd, loadPrices, upsertPrice } from '../api/pricingStore';
+
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsCard,
+  SettingsRow,
+} from './settings/SettingsUI';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -97,8 +101,222 @@ function emptyAddDraft(): AddDraft {
   };
 }
 
+
+interface ModelsCascadeSelectProps {
+  profiles: ProviderProfile[];
+  activeProfileId: string;
+  activeModelId: string;
+  onChange: (profileId: string, modelId: string) => void;
+}
+
+const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
+  profiles,
+  activeProfileId,
+  activeModelId,
+  onChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [flyProfileId, setFlyProfileId] = useState<string | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number; width: number } | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  const place = () => {
+    if (!triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 4,
+      right: window.innerWidth - r.right,
+      width: Math.max(r.width, 220),
+    });
+  };
+
+  React.useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    place();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+      setFlyProfileId(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setFlyProfileId(null);
+      }
+    };
+    const onReposition = (e?: Event) => {
+      if (e?.target && menuRef.current?.contains(e.target as Node)) {
+        return;
+      }
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) {
+        setOpen(false);
+        setFlyProfileId(null);
+      } else {
+        place();
+      }
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
+    };
+  }, [open, pos]);
+
+  const enabledProfiles = useMemo(() => {
+    return profiles.filter((p) => p.enabled !== false && p.models.length > 0);
+  }, [profiles]);
+
+  const activeProfile = enabledProfiles.find((p) => p.id === activeProfileId);
+  const activeLabel =
+    activeProfile && activeModelId
+      ? `${profileDisplayLabel(activeProfile).replace(/\s*\/\s*默认$/, '')} · ${formatModelDisplayName(
+          activeProfile.id,
+          activeModelId
+        )}`
+      : '请选择默认模型...';
+
+  const flyProfile = enabledProfiles.find((p) => p.id === flyProfileId);
+
+  return (
+    <div className={`settings-select ${open ? 'is-open' : ''}`} style={{ display: 'inline-block' }}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="settings-select-trigger"
+        onClick={() => setOpen((prev) => !prev)}
+        style={{ minWidth: '220px', justifyContent: 'space-between' }}
+      >
+        <span
+          className="settings-select-value"
+          style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+        >
+          {activeLabel}
+        </span>
+        <Lucide.ChevronDown size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+      </button>
+
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          className="sort-filter-menu open"
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            right: pos.right,
+            width: pos.width,
+            overflow: 'visible',
+            zIndex: 100000,
+          }}
+          onMouseLeave={() => setFlyProfileId(null)}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          <div className="sort-filter-menu-title">选择服务商与模型</div>
+          {enabledProfiles.length === 0 ? (
+            <div className="sort-filter-option" style={{ color: 'var(--text-tertiary)', cursor: 'default' }}>
+              暂无已启用的可用模型
+            </div>
+          ) : (
+            enabledProfiles.map((p) => {
+              const isFly = flyProfileId === p.id;
+              const isCurrentActive = p.id === activeProfileId;
+              const cleanLabel = profileDisplayLabel(p).replace(/\s*\/\s*默认$/, '');
+
+              return (
+                <div
+                  key={p.id}
+                  className={`sort-filter-row ${isFly ? 'is-open' : ''}`}
+                  onMouseEnter={() => setFlyProfileId(p.id)}
+                  style={{ position: 'relative', cursor: 'pointer' }}
+                >
+                  <span
+                    className="sort-filter-row-label"
+                    style={{ fontWeight: isCurrentActive ? '500' : 'normal' }}
+                  >
+                    {cleanLabel}
+                  </span>
+                  <Lucide.ChevronRight size={14} className="sort-filter-chev" />
+
+                  {isFly && flyProfile && flyProfile.id === p.id && (
+                    <div
+                      className="sort-filter-flyout"
+                      style={{
+                        position: 'absolute',
+                        right: 'calc(100% + 6px)',
+                        top: 0,
+                        minWidth: '180px',
+                        maxHeight: '280px',
+                        overflowY: 'auto',
+                        overscrollBehavior: 'contain',
+                        zIndex: 100001,
+                      }}
+                      onWheel={(e) => e.stopPropagation()}
+                    >
+                      {flyProfile.models.map((m) => {
+                        const selected =
+                          p.id === activeProfileId && m === activeModelId;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            className={`sort-filter-option ${selected ? 'is-on' : ''}`}
+                            onClick={() => {
+                              onChange(p.id, m);
+                              setOpen(false);
+                              setFlyProfileId(null);
+                            }}
+                          >
+                            <span
+                              style={{
+                                textOverflow: 'ellipsis',
+                                overflow: 'hidden',
+                                whiteSpace: 'nowrap',
+                                flex: 1,
+                              }}
+                            >
+                              {formatModelDisplayName(p.id, m)}
+                            </span>
+                            {selected && (
+                              <Lucide.Check size={14} className="sort-filter-check" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
-  const baseId = useId();
   const [profiles, setProfiles] = useState<ProviderProfile[]>(() => {
     try {
       return loadProfiles();
@@ -122,21 +340,15 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   });
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
-  const [scanBusy, setScanBusy] = useState(false);
   const [testBusy, setTestBusy] = useState<string | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [priceIn, setPriceIn] = useState('');
-  const [priceOut, setPriceOut] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const [checkBusy, setCheckBusy] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
   /** 展开配置的模型 id */
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
   /** 手动添加面板 */
   const [manualOpen, setManualOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AddDraft>(() => emptyAddDraft());
-  /** 获取列表弹窗（portal） */
-  const [fetchOpen, setFetchOpen] = useState(false);
-  const [fetchIds, setFetchIds] = useState<string[]>([]);
-  const [fetchMsg, setFetchMsg] = useState<{ ok: boolean; text: string } | null>(null);
   /** 展开配置草稿（不改模型 id，避免主路径与能力区抢位） */
   const [cfgDraft, setCfgDraft] = useState<{
     displayName: string;
@@ -149,12 +361,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     [profiles, selectedId],
   );
 
-  const profileStats = useMemo(() => {
-    const total = profiles.length;
-    const withKey = profiles.filter((p) => profileHasKey(p)).length;
-    const catalogEmpty = isEmptyModelCatalog(profiles);
-    return { total, withKey, catalogEmpty };
-  }, [profiles]);
+
 
   const refresh = () => {
     try {
@@ -180,7 +387,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     }
     if (selected) {
       setKeyDraft('');
-      setMoreOpen(false);
       setModelFilter('');
       setConfigOpenId(null);
       setCfgDraft(null);
@@ -193,11 +399,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (fetchOpen) {
-        setFetchOpen(false);
-        e.preventDefault();
-        return;
-      }
       if (addOpen) {
         setAddOpen(false);
         e.preventDefault();
@@ -222,7 +423,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fetchOpen, addOpen, configOpenId, manualOpen, modelFilter]);
+  }, [addOpen, configOpenId, manualOpen, modelFilter]);
 
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
@@ -313,8 +514,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const openConfigFor = (model: string) => {
     if (!selected) return;
     const meta = getModelMeta(selected.id, model);
-    // 展开模型配置时收起计费区，避免两块内容叠在同一视口
-    setMoreOpen(false);
     setManualOpen(false);
     setConfigOpenId(model);
     setCfgDraft({
@@ -341,64 +540,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
   };
 
-  const runScan = async () => {
-    if (!selected) {
-      notify(false, '请先选择服务商');
-      return;
-    }
-    setFetchOpen(true);
-    setFetchIds([]);
-    setFetchMsg(null);
-    setScanBusy(true);
-    try {
-      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
-      if (!fresh.apiKey?.trim()) {
-        // hasKey 仅标记但无内存密钥：仍无法直连接口，需用户再贴一次
-        setFetchMsg({
-          ok: false,
-          text: fresh.hasKey
-            ? '密钥未载入，请重新粘贴并保存后再获取'
-            : '请先填写并保存密钥',
-        });
-        notify(
-          false,
-          fresh.hasKey
-            ? '密钥未载入，请重新粘贴并保存后再获取'
-            : '请先填写并保存密钥',
-        );
-        return;
-      }
-      const r = await scanProviderModels(fresh);
-      if (r.ok && r.models?.length) {
-        const merged = mergeModelIds(fresh.models, r.models);
-        upsertProfile({ ...fresh, models: merged });
-        refresh();
-        setFetchIds(r.models);
-        setFetchMsg({
-          ok: true,
-          text: `已获取 ${r.models.length} 个`,
-        });
-
-      } else if (r.ok) {
-        setFetchIds([]);
-        setFetchMsg({
-          ok: false,
-          text: '没有拉到模型，可检查地址或手动添加',
-        });
-      } else {
-        setFetchIds([]);
-        setFetchMsg({ ok: false, text: r.error || '获取失败' });
-        notify(false, r.error || '获取失败');
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setFetchMsg({ ok: false, text: msg });
-      notify(false, msg);
-    } finally {
-      setScanBusy(false);
-    }
-  };
-
   const runTest = async (model: string) => {
     if (!selected) return;
     const key = `${selected.id}::${model}`;
@@ -417,20 +558,47 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       setTestBusy(null);
     }
   };
-
-  const activateModel = (model: string) => {
+  const runScan = async () => {
     if (!selected) return;
-    void activateProfileModel(selected.id, model).then((r) => {
-      if (!r.ok) {
-        notify(false, `切换失败：${r.error || '未知错误'}`);
-      } else if (r.warning === 'no_local_key') {
-        notify(false, '本地没有密钥，请先保存');
-      } else if (r.warning === 'model_mismatch') {
-        notify(false, '切换未生效，请重试');
+    setScanBusy(true);
+    try {
+      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const r = await scanProviderModels(fresh);
+      if (r.ok && r.models?.length) {
+        const merged = mergeModelIds(fresh.models, r.models);
+        upsertProfile({ ...fresh, models: merged });
+        refresh();
+        notify(true, `已自动获取 ${r.models.length} 个模型`);
+      } else {
+        notify(false, r.error || '未能检测到服务器可用模型');
       }
-      refresh();
-    });
+    } catch (e) {
+      notify(false, e instanceof Error ? e.message : String(e));
+    } finally {
+      setScanBusy(false);
+    }
   };
+
+  const runCheck = async () => {
+    if (!selected) return;
+    setCheckBusy(true);
+    try {
+      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const firstModel = fresh.models[0] || '';
+      const r = await testProviderModel(fresh, firstModel);
+      if (r.ok) {
+        notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
+      } else {
+        notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
+      }
+    } catch (e) {
+      notify(false, e instanceof Error ? e.message : String(e));
+    } finally {
+      setCheckBusy(false);
+    }
+  };
+
+
 
   const modelsList = useMemo(() => {
     if (!selected) return [] as string[];
@@ -447,823 +615,464 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const modelsCount = normalizeModelIds(selected?.models).length;
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';
   const hasKeySelected = selected ? profileHasKey(selected) : false;
-  const activeModelId =
-    selected && getActiveProfileId() === selected.id ? getActiveModelId() || '' : '';
-  const savedPrices = useMemo(() => loadPrices(), [profiles, priceIn, priceOut, moreOpen]);
 
-  const fetchModal =
-    fetchOpen && typeof document !== 'undefined'
-      ? createPortal(
-          <div
-            className="settings-dialog-backdrop"
-            role="presentation"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setFetchOpen(false);
+
+
+  const addRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!addOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) {
+        setAddOpen(false);
+      }
+    };
+    const onScroll = () => {
+      setAddOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [addOpen]);
+
+  const headerMeta = (
+    <div ref={addRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        type="button"
+        className="settings-select-trigger"
+        onClick={() => setAddOpen((v) => !v)}
+      >
+        <Lucide.Plus size={13} style={{ opacity: 0.75 }} />
+        <span>添加服务商</span>
+      </button>
+
+      {addOpen && (
+        <div
+          className="sort-filter-menu open"
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 'calc(100% + 6px)',
+            minWidth: '180px',
+            zIndex: 10000,
+          }}
+          role="menu"
+          aria-label="添加服务商"
+        >
+          <div className="sort-filter-menu-title">接口类型</div>
+          <button
+            type="button"
+            role="menuitem"
+            className="sort-filter-option"
+            onClick={() => {
+              addFromTemplate('openai');
+              setAddOpen(false);
             }}
           >
-            <div
-              className="settings-dialog settings-dialog--models"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={`${baseId}-fetch-title`}
+            OpenAI 格式
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="sort-filter-option"
+            onClick={() => {
+              addFromTemplate('anthropic');
+              setAddOpen(false);
+            }}
+          >
+            Anthropic 格式
+          </button>
+
+          <div className="sort-filter-menu-title" style={{ marginTop: '4px' }}>常用服务</div>
+          {PRESETS.map((pr) => (
+            <button
+              key={pr.id}
+              type="button"
+              role="menuitem"
+              className="sort-filter-option"
+              onClick={() => {
+                addFromPreset(pr);
+                setAddOpen(false);
+              }}
             >
-              <div className="settings-dialog-head">
-                <div id={`${baseId}-fetch-title`} className="settings-dialog-title">
-                  获取模型列表
-                  {selectedLabel ? ` · ${selectedLabel}` : ''}
-                </div>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  aria-label="关闭"
-                  onClick={() => setFetchOpen(false)}
-                >
-                  <Lucide.X size={16} aria-hidden />
-                </button>
-              </div>
-              <div className="settings-dialog-body">
-                <p className="models-fetch-note">
-                  这是尝试性拉取：成功后会合并进本供应商列表，但仍需在列表中配置展示名、上下文与能力。
-                </p>
-                <div className="models-catalog-list" role="list" aria-label="获取结果">
-                  {scanBusy && fetchIds.length === 0 ? (
-                    <div className="models-empty models-empty--inline" role="status">
-                      正在获取模型…
-                    </div>
-                  ) : !scanBusy && fetchMsg && !fetchMsg.ok && fetchIds.length === 0 ? (
-                    <div className="models-empty models-empty--inline models-empty--err" role="alert">
-                      {fetchMsg.text}
-                    </div>
-                  ) : !scanBusy && fetchIds.length === 0 ? (
-                    <div className="models-empty models-empty--inline" role="status">
-                      没有结果，可手动添加
-                    </div>
-                  ) : fetchIds.length === 0 ? (
-                    <div className="models-empty models-empty--inline" role="status">
-                      正在获取模型…
-                    </div>
-                  ) : (
-                    fetchIds.map((m) => (
-                      <div key={m} className="models-catalog-row" role="listitem">
-                        <span className="models-catalog-name" title={m}>
-                          {m}
-                        </span>
-                        <span className="models-rail-meta">已加入</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div className="settings-dialog-foot">
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  disabled={scanBusy}
-                  onClick={() => void runScan()}
-                >
-                  {scanBusy ? '获取中…' : '重新获取'}
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  onClick={() => setFetchOpen(false)}
-                >
-                  完成
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
+              {pr.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const activeProfileId = getActiveProfileId();
+  const globalActiveModelId = getActiveModelId();
 
   return (
-    <div className="models-tab">
-      <header className="settings-page-head">
-        <div className="models-head-row">
-          <h2 className="settings-page-title" id={`${baseId}-title`}>
-            模型
-          </h2>
-          <span className="models-head-stats" role="status" aria-live="polite">
-            {profileStats.total > 0
-              ? profileStats.withKey < profileStats.total
-                ? `${profileStats.total - profileStats.withKey} 个缺密钥`
-                : `${profileStats.total} 个服务商`
-              : '从左侧添加'}
-          </span>
-        </div>
-      </header>
+    <SettingsPage title="模型" meta={headerMeta}>
+      {/* Default model */}
+      <SettingsSection title="默认模型">
+        <SettingsCard>
+          <SettingsRow
+            title="全局默认模型"
+            desc="新建对话时使用此模型"
+            control={
+              <ModelsCascadeSelect
+                profiles={profiles}
+                activeProfileId={activeProfileId || ''}
+                activeModelId={globalActiveModelId || ''}
+                onChange={(pId, mId) => {
+                  activateProfileModel(pId, mId);
+                }}
+              />
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
+      {/* Provider split layout */}
       <div className="models-split">
-        <aside className="models-rail" aria-labelledby={`${baseId}-title`}>
-          <div className="models-rail-list" role="list" aria-label="供应商列表">
+        {/* Left rail */}
+        <aside className="models-rail" aria-label="服务商列表">
+          {/* Rail header */}
+          <div className="mrl-header">
+            <h3 className="settings-ui-section-title">AI 服务商</h3>
+          </div>
+
+          {/* Provider list */}
+          <div className="mrl-list" role="list">
             {profiles.length === 0 ? (
-              <div className="models-empty models-empty--inline" role="status">
-                还没有服务商
-              </div>
+              <div className="mrl-empty">还没有服务商</div>
             ) : (
               profiles.map((p) => {
-                const active = p.id === selectedId;
-                const live = getActiveProfileId() === p.id;
+                const isActive = p.id === selectedId;
                 const label = profileDisplayLabel(p);
-                const short = truncateProfileLabel(label, 18);
                 const keyOk = profileHasKey(p);
+                const enabled = p.enabled !== false;
+
                 return (
                   <button
                     key={p.id}
                     type="button"
                     role="listitem"
-                    className={`models-rail-item ${active ? 'is-active' : ''}`}
-                    aria-current={active ? 'true' : undefined}
+                    className={`mrl-item${isActive ? ' is-active' : ''}`}
+                    aria-current={isActive ? 'true' : undefined}
                     onClick={() => setSelectedId(p.id)}
                   >
-                    <span className="models-rail-name" title={label}>
-                      {short}
-                    </span>
-                    <span className="models-rail-meta">
-                      {!keyOk ? '缺密钥' : live ? '使用中' : p.enabled === false ? '停用' : ''}
-                    </span>
+                    <div className="mrl-item-row-top">
+                      <span className="mrl-item-name" title={label}>{label}</span>
+                      <span
+                        className="mrl-item-dot"
+                        title={!keyOk ? '缺少密钥' : !enabled ? '已停用' : '已配置并启用'}
+                        style={{
+                          background: !keyOk ? '#e6a817' : !enabled ? 'var(--text-tertiary)' : '#22c55e',
+                          opacity: !enabled ? 0.6 : 1,
+                        }}
+                      />
+                    </div>
                   </button>
                 );
               })
             )}
           </div>
-
-          <div className="models-rail-add-wrap">
-            <button
-              type="button"
-              className="models-rail-add"
-              aria-expanded={addOpen}
-              onClick={() => setAddOpen((v) => !v)}
-            >
-              <Lucide.Plus size={16} aria-hidden />
-              添加服务商
-            </button>
-            {addOpen ? (
-              <div className="models-add-menu" role="menu" aria-label="添加服务商方式">
-                <div className="models-add-label">接口类型</div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="models-add-item"
-                  onClick={() => addFromTemplate('openai')}
-                >
-                  OpenAI 格式
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="models-add-item"
-                  onClick={() => addFromTemplate('anthropic')}
-                >
-                  Anthropic 格式
-                </button>
-                <div className="models-add-divider" />
-                <div className="models-add-label">常用服务</div>
-                {PRESETS.map((pr) => (
-                  <button
-                    key={pr.id}
-                    type="button"
-                    role="menuitem"
-                    className="models-add-item"
-                    onClick={() => addFromPreset(pr)}
-                  >
-                    {pr.name}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
         </aside>
 
-        <section
-          className="models-detail"
-          aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}
-        >
+        {/* Right detail */}
+        <section className="models-detail" aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}>
           {!selected ? (
-            <div className="models-empty models-empty--inline" role="status">
-              {profiles.length === 0
-                ? '从左侧添加服务商'
-                : '选择服务商'}
+            <div className="mrd-empty">
+              {profiles.length === 0 ? '从左侧添加服务商以开始' : '在左侧选择一个服务商'}
             </div>
           ) : (
-            <>
-              <div className="models-detail-top">
-                <div>
-                  <div className="models-detail-name" title={selected.id}>
-                    {selectedLabel}
-                  </div>
+            <div className="mrd-body">
+              {/* Detail header */}
+              <div className="mrd-head">
+                <div className="mrd-head-left">
+                  <h3 className="mrd-title">{selectedLabel}</h3>
                 </div>
-                <div className="models-detail-top-actions">
-                  <label
-                    className="models-switch"
-                    htmlFor={`${baseId}-enable`}
-                    title={selected.enabled === false ? '已停用' : '已启用'}
+                <div className="mrd-head-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-sm"
+                    style={{
+                      height: '26px',
+                      padding: '0 10px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      borderRadius: '6px',
+                      border: selected.enabled !== false ? '1px solid color-mix(in srgb, #22c55e 30%, transparent)' : '1px solid var(--border-subtle)',
+                      background: selected.enabled !== false ? 'color-mix(in srgb, #22c55e 12%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+                      color: selected.enabled !== false ? '#15803d' : 'var(--text-tertiary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={() => { setProfileEnabled(selected.id, selected.enabled === false); refresh(); }}
                   >
-                    <input
-                      id={`${baseId}-enable`}
-                      type="checkbox"
-                      checked={selected.enabled !== false}
-                      onChange={(e) => {
-                        setProfileEnabled(selected.id, e.target.checked);
+                    {selected.enabled !== false ? '已启用' : '已停用'}
+                  </button>
 
-                        refresh();
-                      }}
-                    />
-                    <span className="models-switch-ui" aria-hidden />
-                    <span className="models-switch-text">启用</span>
-                  </label>
-                  {selected.id.startsWith('custom-') ? (
+                  {selected.id.startsWith('custom-') && (
                     <button
                       type="button"
-                      className="models-icon-btn danger"
-                      title="删除服务商"
-                      aria-label={`删除服务商 ${selectedLabel}`}
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
+                      title={`删除「${selectedLabel}」`}
                       onClick={() => {
-                        if (
-                          !window.confirm(`确定删除「${selectedLabel}」？此操作不可撤销。`)
-                        ) {
-                          return;
-                        }
+                        if (!window.confirm(`确定删除服务商「${selectedLabel}」？此操作不可撤销。`)) return;
                         const next = removeProfile(selected.id);
                         setProfiles(next);
                         setSelectedId(next[0]?.id || null);
-
                       }}
                     >
-                      <Lucide.Trash2 size={16} aria-hidden />
+                      <Lucide.Trash2 size={14} />
                     </button>
-                  ) : null}
+                  )}
                 </div>
               </div>
 
-              <section className="models-conn" aria-label="连接">
-                <label className="models-field-block" htmlFor={`${baseId}-url`}>
-                  <span className="models-field-label" id={`${baseId}-url-label`}>
-                    接口地址
-                  </span>
+              {/* Credentials */}
+              <div className="mrd-fields">
+                <div className="mrd-field">
+                  <label className="mrd-field-label">Base URL</label>
                   <input
-                    id={`${baseId}-url`}
-                    className="settings-field-input"
+                    className="mrd-field-input"
                     value={selected.baseUrl}
-                    spellCheck={false}
-                    aria-labelledby={`${baseId}-url-label`}
                     placeholder="https://api.example.com/v1"
-                    onChange={(e) => {
-                      upsertProfile({ ...selected, baseUrl: e.target.value });
-                      refresh();
-                    }}
+                    spellCheck={false}
+                    onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); refresh(); }}
                     onBlur={() => {
                       if (!selected) return;
                       void saveProfileBaseUrl(selected.id, selected.baseUrl).then((r) => {
-                        if (!r.ok) {
-                          notify(false, `地址保存失败：${r.error || '未知错误'}`);
-                        } else if (r.synced) {
-
-                        }
+                        if (!r.ok) notify(false, `地址保存失败：${r.error || '未知错误'}`);
                         refresh();
                       });
                     }}
                   />
-                </label>
-                <label className="models-field-block" htmlFor={`${baseId}-key`}>
-                  <span className="models-field-label" id={`${baseId}-key-label`}>
-                    密钥
-                    {!hasKeySelected ? (
-                      <span className="models-inline-badge models-inline-badge--warn">
-                        未配置
-                      </span>
-                    ) : (
-                      <span className="models-inline-badge">已保存</span>
-                    )}
-                  </span>
-                  <div className="models-key-row">
+                </div>
+                <div className="mrd-field">
+                  <label className="mrd-field-label">API Key</label>
+                  <div className="mrd-key-row">
                     <input
-                      id={`${baseId}-key`}
-                      className="settings-field-input"
+                      className="mrd-field-input"
                       type="password"
-                      autoComplete="off"
-                      spellCheck={false}
-                      aria-labelledby={`${baseId}-key-label`}
-                      placeholder={hasKeySelected ? '粘贴新密钥' : '粘贴密钥'}
+                      placeholder={hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'}
                       value={keyDraft}
                       onChange={(e) => setKeyDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && keyDraft.trim()) {
-                          e.preventDefault();
-                          void saveKey();
-                        }
-                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }}
                     />
                     <button
                       type="button"
-                      className="models-btn"
+                      className="ui-btn ui-btn-secondary ui-btn-sm"
                       disabled={!keyDraft.trim()}
                       onClick={() => void saveKey()}
+                      style={{ borderRadius: '7px', height: '34px', padding: '0 14px', flexShrink: 0 }}
                     >
                       保存
-                    </button>
-                  </div>
-                </label>
-              </section>
-
-              <div className="models-summary">
-                <div className="models-summary-row">
-                  <div className="models-summary-current">
-                    <span className="models-summary-label">对话使用</span>
-                    <span
-                      className="models-summary-value"
-                      title={activeModelId || '尚未选用'}
-                    >
-                      {activeModelId
-                        ? formatModelDisplayName(selected.id, activeModelId)
-                        : modelsCount > 0
-                          ? '未选用'
-                          : '暂无模型'}
-                    </span>
-                    <span className="models-summary-meta">
-                      {modelsCount > 0
-                        ? `${modelsCount} 个可选`
-                        : hasKeySelected
-                          ? '可获取或添加'
-                          : '先保存密钥'}
-                    </span>
-                  </div>
-                  <div className="models-summary-actions">
-                    <button
-                      type="button"
-                      className="models-btn"
-                      disabled={scanBusy || !hasKeySelected}
-                      aria-busy={scanBusy}
-                      title={
-                        hasKeySelected
-                          ? '从服务商获取模型'
-                          : '请先保存密钥'
-                      }
-                      onClick={() => void runScan()}
-                    >
-                      {scanBusy ? '获取中…' : '获取模型'}
-                    </button>
-                    <button
-                      type="button"
-                      className="models-btn ghost"
-                      onClick={() => {
-                        setMoreOpen(false);
-                        closeConfig();
-                        setManualOpen(true);
-                        setAddDraft(emptyAddDraft());
-                      }}
-                    >
-                      <Lucide.Plus size={14} aria-hidden />
-                      添加
                     </button>
                   </div>
                 </div>
               </div>
 
-              {manualOpen ? (
-                <div className="models-config-panel" role="form" aria-label="手动添加模型">
-                  <label className="models-config-field models-config-field--full">
-                    <span>模型 id（必填）</span>
+              {/* Model list header */}
+              <div className="mrd-models-head">
+                <span className="mrd-models-label">模型列表</span>
+                <div className="mrd-models-actions">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    disabled={checkBusy}
+                    onClick={runCheck}
+                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
+                    title="检查连通性"
+                  >
+                    {checkBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
+                    <span>检查连通性</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    disabled={scanBusy}
+                    onClick={runScan}
+                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
+                    title="自动获取服务商模型列表"
+                  >
+                    {scanBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.RefreshCw size={13} />}
+                    <span>自动获取</span>
+                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <Lucide.Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
                     <input
-                      className="settings-field-input"
-                      value={addDraft.modelId}
-                      placeholder="如 deepseek-chat"
-                      spellCheck={false}
-                      autoFocus
-                      onChange={(e) =>
-                        setAddDraft((d) => ({ ...d, modelId: e.target.value }))
-                      }
-                    />
-                  </label>
-                  <div className="models-config-grid models-config-grid--two">
-                    <label className="models-config-field">
-                      <span>展示名称</span>
-                      <input
-                        className="settings-field-input"
-                        value={addDraft.displayName}
-                        placeholder="可选，如 DeepSeek V3"
-                        onChange={(e) =>
-                          setAddDraft((d) => ({ ...d, displayName: e.target.value }))
-                        }
-                      />
-                    </label>
-                    <label className="models-config-field">
-                      <span>上下文长度</span>
-                      <input
-                        className="settings-field-input"
-                        value={addDraft.contextLength}
-                        placeholder="如 128000"
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setAddDraft((d) => ({ ...d, contextLength: e.target.value }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="models-cap-row" role="group" aria-label="支持的能力">
-                    {MODEL_CAPABILITY_OPTIONS.map((opt) => (
-                      <label
-                        key={opt.key}
-                        className={`models-cap-chip${addDraft.caps[opt.key] ? ' is-on' : ''}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!addDraft.caps[opt.key]}
-                          onChange={(e) =>
-                            setAddDraft((d) => ({
-                              ...d,
-                              caps: { ...d.caps, [opt.key]: e.target.checked },
-                            }))
-                          }
-                        />
-                        <span className="models-cap-chip-ico" aria-hidden>
-                          {opt.key === 'tools' ? (
-                            <Lucide.Wrench size={13} />
-                          ) : opt.key === 'vision' ? (
-                            <Lucide.Eye size={13} />
-                          ) : (
-                            <Lucide.Brain size={13} />
-                          )}
-                        </span>
-                        <span>{opt.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="models-config-actions">
-                    <button
-                      type="button"
-                      className="models-btn ghost"
-                      onClick={() => {
-                        setManualOpen(false);
-                        setAddDraft(emptyAddDraft());
-                      }}
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      className="models-btn"
-                      disabled={!addDraft.modelId.trim()}
-                      onClick={handleManualAdd}
-                    >
-                      添加到列表
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <section className="models-list-section" aria-label="模型列表">
-                <div className="models-list-head">
-                  <span className="models-list-title">模型</span>
-                  {modelsCount > 4 ? (
-                    <input
-                      className="settings-field-input models-filter-input"
-                      type="search"
-                      placeholder="筛选…"
+                      type="text"
+                      placeholder="搜索..."
                       value={modelFilter}
                       onChange={(e) => setModelFilter(e.target.value)}
-                      aria-label="筛选模型"
+                      className="mrd-search"
+                      spellCheck={false}
                     />
-                  ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}
+                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
+                    title="添加模型"
+                  >
+                    <Lucide.Plus size={13} />
+                    <span>添加模型</span>
+                  </button>
                 </div>
+              </div>
 
-                <div className="models-main-list" role="list" aria-label="已配置模型">
-                  {modelsCount === 0 ? (
-                    <div className="models-empty models-empty--inline" role="status">
-                      暂无模型 · 点「获取列表」或「添加」
+              {/* Manual add form */}
+              {manualOpen && (
+                <div className="mrd-add-form">
+                  <div className="mrd-add-form-fields">
+                    <label className="mrd-add-label">
+                      <span>模型 ID *</span>
+                      <input className="mrd-field-input" placeholder="如 deepseek-chat" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} />
+                    </label>
+                    <label className="mrd-add-label">
+                      <span>展示名称</span>
+                      <input className="mrd-field-input" placeholder="可选" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} />
+                    </label>
+                    <label className="mrd-add-label">
+                      <span>上下文长度</span>
+                      <input className="mrd-field-input" placeholder="128000" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} />
+                    </label>
+                  </div>
+                  <div className="mrd-add-form-footer">
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {MODEL_CAPABILITY_OPTIONS.map((opt) => {
+                        const on = !!addDraft.caps[opt.key];
+                        return (
+                          <label key={opt.key} className={`mrd-cap-pill${on ? ' is-on' : ''}`}>
+                            <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setAddDraft((d) => ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }))} />
+                            {opt.label}
+                          </label>
+                        );
+                      })}
                     </div>
-                  ) : modelsList.length === 0 ? (
-                    <div className="models-empty models-empty--inline" role="status">
-                      无匹配「{modelFilter.trim()}」
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setManualOpen(false)}>取消</button>
+                      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!addDraft.modelId.trim()} onClick={handleManualAdd}>添加</button>
                     </div>
-                  ) : (
-                    modelsList.map((m) => {
-                      const meta = getModelMeta(selected.id, m);
-                      const off = meta.enabled === false;
-                      const tKey = `${selected.id}::${m}`;
-                      const isLive =
-                        getActiveProfileId() === selected.id && getActiveModelId() === m;
-                      const expanded = configOpenId === m && !!cfgDraft;
-                      const display =
-                        expanded && cfgDraft?.displayName?.trim()
-                          ? cfgDraft.displayName.trim()
-                          : formatModelDisplayName(selected.id, m, meta);
-                      const liveCtx =
-                        expanded && cfgDraft
-                          ? (() => {
-                              const n = parseInt(
-                                cfgDraft.contextLength.replace(/[^\d]/g, ''),
-                                10,
-                              );
-                              return Number.isFinite(n) && n > 0
-                                ? formatContextLabelZh(n)
-                                : formatContextLabelZh(meta.contextLength);
-                            })()
-                          : formatContextLabelZh(meta.contextLength);
-                      return (
-                        <div
-                          key={m}
-                          className={`models-main-row${off ? ' is-off' : ''}${
-                            expanded ? ' is-open' : ''
-                          }${isLive ? ' is-live' : ''}`}
-                          role="listitem"
+                  </div>
+                </div>
+              )}
+
+              {/* Model rows */}
+              <div className="mrd-model-list">
+                {modelsList.map((m) => {
+                  const meta = getModelMeta(selected.id, m);
+                  const off = meta.enabled === false;
+                  const tKey = `${selected.id}::${m}`;
+                  const isLive = getActiveProfileId() === selected.id && getActiveModelId() === m;
+                  const expanded = configOpenId === m && !!cfgDraft;
+                  const display = expanded && cfgDraft?.displayName?.trim()
+                    ? cfgDraft.displayName.trim()
+                    : formatModelDisplayName(selected.id, m, meta);
+                  const liveCtx = expanded && cfgDraft
+                    ? (() => { const n = parseInt(cfgDraft.contextLength.replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? formatContextLabelZh(n) : formatContextLabelZh(meta.contextLength); })()
+                    : formatContextLabelZh(meta.contextLength);
+
+                  return (
+                    <div
+                      key={m}
+                      className={`mrd-model-row${off ? ' is-off' : ''}${isLive ? ' is-live' : ''}`}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.closest('.models-switch') || target.closest('.mrd-delete-btn')) {
+                          return;
+                        }
+                        if (expanded) closeConfig();
+                        else openConfigFor(m);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="mrd-model-info">
+                        <span className="mrd-model-name">{display}</span>
+                        <div className="mrd-model-meta">
+                          {liveCtx && <span className="mrd-ctx-pill">{liveCtx}</span>}
+                          {meta.capabilities?.tools && <span className="mrd-cap-tag" title="支持工具调用"><Lucide.Wrench size={10} /></span>}
+                          {meta.capabilities?.vision && <span className="mrd-cap-tag" title="支持视觉"><Lucide.Eye size={10} /></span>}
+                          {meta.capabilities?.reasoning && <span className="mrd-cap-tag" title="支持思考"><Lucide.BrainCircuit size={10} /></span>}
+                        </div>
+                      </div>
+                      <div className="mrd-model-actions">
+                        <label className="models-switch" title={off ? '已停用，点击启用' : '点击停用'}>
+                          <input type="checkbox" checked={!off} onChange={(e) => { setModelEnabled(selected.id, m, e.target.checked); refresh(); }} />
+                          <span className="models-switch-ui" />
+                        </label>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          style={{ padding: '0 5px', height: '26px', color: expanded ? 'var(--accent-primary)' : 'var(--text-tertiary)' }}
+                          title="配置"
+                          onClick={(e) => { e.stopPropagation(); if (expanded) closeConfig(); else openConfigFor(m); }}
                         >
-                          <div className="models-main-row-top">
-                            <button
-                              type="button"
-                              className="models-main-row-info models-main-row-info--btn"
-                              onClick={() => {
-                                if (expanded) closeConfig();
-                                else openConfigFor(m);
-                              }}
-                              aria-expanded={expanded}
-                            >
-                              <span className="models-main-row-name" title={display}>
-                                {display}
-                              </span>
-                              {liveCtx ? (
-                                <span className="models-ctx" title={`上下文 ${liveCtx}`}>
-                                  <Lucide.Layers size={12} aria-hidden />
-                                  <span>{liveCtx}</span>
-                                </span>
-                              ) : null}
-                            </button>
-                            <div className="models-main-row-actions">
-                              {isLive ? (
-                                <span className="models-pill models-pill--live" title="当前对话使用此模型">
-                                  使用中
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="models-btn models-btn--use"
-                                  disabled={off}
-                                  onClick={() => activateModel(m)}
-                                  title={off ? '请先启用此模型' : '用于对话'}
-                                >
-                                  使用
-                                </button>
-                              )}
-                              <label
-                                className={`models-switch${off ? ' is-off' : ' is-on'}`}
-                                title={off ? '已停用（对话列表不可选）' : '已启用'}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={!off}
-                                  onChange={(e) => {
-                                    setModelEnabled(selected.id, m, e.target.checked);
-                                    refresh();
-                                  }}
-                                />
-                                <span className="models-switch-ui" aria-hidden />
-                                <span className="sr-only">
-                                  {off ? '启用' : '停用'} {display}
-                                </span>
-                              </label>
-                              <button
-                                type="button"
-                                className={`models-icon-btn${expanded ? ' is-on' : ''}`}
-                                title={expanded ? '收起' : '配置'}
-                                aria-expanded={expanded}
-                                onClick={() => {
-                                  if (expanded) closeConfig();
-                                  else openConfigFor(m);
-                                }}
-                              >
-                                {expanded ? (
-                                  <Lucide.ChevronUp size={15} aria-hidden />
-                                ) : (
-                                  <Lucide.SlidersHorizontal size={15} aria-hidden />
-                                )}
+                          <Lucide.SlidersHorizontal size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn"
+                          style={{ padding: '0 5px', height: '26px', color: 'var(--text-tertiary)' }}
+                          title="删除"
+                          onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) closeConfig(); refresh(); }}
+                        >
+                          <Lucide.Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      {/* Expanded config sub-panel */}
+                      {expanded && cfgDraft && (
+                        <div className="mrd-model-cfg" onClick={(e) => e.stopPropagation()}>
+                          <div className="mrd-cfg-fields">
+                            <label className="mrd-cfg-label">
+                              <span>展示名称</span>
+                              <input className="mrd-field-input" value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} />
+                            </label>
+                            <label className="mrd-cfg-label">
+                              <span>上下文长度</span>
+                              <input className="mrd-field-input" value={cfgDraft.contextLength} placeholder="如 1000000" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} />
+                            </label>
+                          </div>
+                          <div className="mrd-cfg-footer">
+                            <div className="mrd-cap-group">
+                              {MODEL_CAPABILITY_OPTIONS.map((opt) => {
+                                const on = !!cfgDraft.caps[opt.key];
+                                return (
+                                  <label key={opt.key} className={`mrd-cap-pill${on ? ' is-on' : ''}`}>
+                                    <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }) : null)} />
+                                    {opt.label}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="mrd-cfg-actions">
+                              <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)} title="测试连通性">
+                                {testBusy === tKey ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
                               </button>
-                              <button
-                                type="button"
-                                className="models-icon-btn danger"
-                                title="移除"
-                                onClick={() => {
-                                  removeModelFromProfile(selected.id, m);
-                                  if (configOpenId === m) closeConfig();
-                                  refresh();
-                                }}
-                              >
-                                <Lucide.Trash2 size={14} aria-hidden />
-                              </button>
+                              <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={closeConfig}>收起</button>
+                              <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={saveConfig}>保存</button>
                             </div>
                           </div>
-
-                          {expanded && cfgDraft ? (
-                            <div
-                              className="models-config-panel models-config-panel--inline"
-                              role="form"
-                              aria-label={`${display} 配置`}
-                            >
-                              <div className="models-config-grid models-config-grid--two">
-                                <label className="models-config-field">
-                                  <span>展示名称</span>
-                                  <input
-                                    className="settings-field-input"
-                                    value={cfgDraft.displayName}
-                                    placeholder={m}
-                                    onChange={(e) =>
-                                      setCfgDraft((d) =>
-                                        d ? { ...d, displayName: e.target.value } : d,
-                                      )
-                                    }
-                                  />
-                                </label>
-                                <label className="models-config-field">
-                                  <span>上下文长度</span>
-                                  <input
-                                    className="settings-field-input"
-                                    value={cfgDraft.contextLength}
-                                    placeholder="如 128000"
-                                    inputMode="numeric"
-                                    onChange={(e) =>
-                                      setCfgDraft((d) =>
-                                        d ? { ...d, contextLength: e.target.value } : d,
-                                      )
-                                    }
-                                  />
-                                </label>
-                              </div>
-                              <div className="models-config-idline" title={m}>
-                                <span className="models-config-idline-label">id</span>
-                                <code className="models-config-idline-value">{m}</code>
-                              </div>
-                              <div className="models-cap-row" role="group" aria-label="支持的能力">
-                                {MODEL_CAPABILITY_OPTIONS.map((opt) => (
-                                  <label
-                                    key={opt.key}
-                                    className={`models-cap-chip${
-                                      cfgDraft.caps[opt.key] ? ' is-on' : ''
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={!!cfgDraft.caps[opt.key]}
-                                      onChange={(e) =>
-                                        setCfgDraft((d) =>
-                                          d
-                                            ? {
-                                                ...d,
-                                                caps: {
-                                                  ...d.caps,
-                                                  [opt.key]: e.target.checked,
-                                                },
-                                              }
-                                            : d,
-                                        )
-                                      }
-                                    />
-                                    <span className="models-cap-chip-ico" aria-hidden>
-                                      {opt.key === 'tools' ? (
-                                        <Lucide.Wrench size={13} />
-                                      ) : opt.key === 'vision' ? (
-                                        <Lucide.Eye size={13} />
-                                      ) : (
-                                        <Lucide.Brain size={13} />
-                                      )}
-                                    </span>
-                                    <span>{opt.label}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <div className="models-config-actions">
-                                <button
-                                  type="button"
-                                  className="models-btn ghost"
-                                  title="测试连通"
-                                  disabled={testBusy === tKey}
-                                  onClick={() => void runTest(m)}
-                                >
-                                  {testBusy === tKey ? '测试中…' : '测试'}
-                                </button>
-                                <span className="models-config-actions-spacer" aria-hidden />
-                                <button
-                                  type="button"
-                                  className="models-btn ghost"
-                                  onClick={closeConfig}
-                                >
-                                  收起
-                                </button>
-                                <button
-                                  type="button"
-                                  className="models-btn"
-                                  onClick={saveConfig}
-                                >
-                                  保存
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </section>
-
-              <section className="models-billing" aria-label="计费单价">
-                <button
-                  type="button"
-                  className="models-billing-toggle"
-                  aria-expanded={moreOpen}
-                  onClick={() => {
-                    setMoreOpen((v) => {
-                      const next = !v;
-                      if (next) closeConfig();
-                      return next;
-                    });
-                  }}
-                >
-                  <span className="models-billing-title">计费单价</span>
-                  <span className="models-billing-toggle-side">
-                    {savedPrices.length > 0 ? `${savedPrices.length}` : '—'}
-                    <Lucide.ChevronDown
-                      size={14}
-                      className={`models-billing-chevron${moreOpen ? ' is-open' : ''}`}
-                      aria-hidden
-                    />
-                  </span>
-                </button>
-                {moreOpen ? (
-                  <div className="models-billing-body">
-                    <div className="models-price-row">
-                      <label className="models-price-field">
-                        <span>输入 $/1M</span>
-                        <input
-                          className="settings-field-input"
-                          placeholder="0.27"
-                          inputMode="decimal"
-                          value={priceIn}
-                          onChange={(e) => setPriceIn(e.target.value)}
-                        />
-                      </label>
-                      <label className="models-price-field">
-                        <span>输出 $/1M</span>
-                        <input
-                          className="settings-field-input"
-                          placeholder="1.10"
-                          inputMode="decimal"
-                          value={priceOut}
-                          onChange={(e) => setPriceOut(e.target.value)}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="models-btn ghost"
-                        onClick={() => {
-                          const model =
-                            getActiveModelId() || normalizeModelIds(selected.models)[0];
-                          if (!model) {
-                            notify(false, '无可用模型，请先添加或获取列表');
-                            return;
-                          }
-                          const inp = parseFloat(priceIn);
-                          const out = parseFloat(priceOut);
-                          upsertPrice({
-                            model,
-                            inputPerMTok: Number.isFinite(inp) ? inp : 0,
-                            outputPerMTok: Number.isFinite(out) ? out : 0,
-                          });
-                          setPriceIn('');
-                          setPriceOut('');
-
-                        }}
-                      >
-                        保存
-                      </button>
+                      )}
                     </div>
-                    {savedPrices.length > 0 ? (
-                      <ul className="models-price-list" aria-label="已保存单价">
-                        {savedPrices.slice(0, 6).map((pr) => (
-                          <li key={pr.model} className="models-price-item">
-                            <span className="models-price-model" title={pr.model}>
-                              {pr.model}
-                            </span>
-                            <span className="models-price-rates">
-                              {pr.inputPerMTok} / {pr.outputPerMTok}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="models-billing-empty" role="status">
-                        暂无
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </section>
-            </>
+                  );
+                })}
+
+                {modelsCount === 0 && (
+                  <div className="mrd-model-empty">暂无模型 · 点击右上角「+」手动添加</div>
+                )}
+                {modelsCount > 0 && modelsList.length === 0 && (
+                  <div className="mrd-model-empty">无匹配的「{modelFilter.trim()}」</div>
+                )}
+              </div>
+            </div>
           )}
         </section>
       </div>
-
-      {fetchModal}
-    </div>
+    </SettingsPage>
   );
 };

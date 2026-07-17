@@ -126,14 +126,14 @@ const TAB_META: TabMeta[] = [
   {
     id: 'personalize',
     label: '个性化',
-    icon: Lucide.SlidersHorizontal,
+    icon: Lucide.Paintbrush,
     group: '个人',
     keywords: ['个性化', '偏好', '交互', '标签页', 'personalize', 'preference'],
   },
   {
     id: 'models',
     label: '模型',
-    icon: Lucide.Cpu,
+    icon: Lucide.Orbit,
     group: '智能',
     keywords: ['模型', '供应商', '密钥', 'API', 'llm', 'model', 'provider', 'openai', 'claude'],
   },
@@ -161,7 +161,7 @@ const TAB_META: TabMeta[] = [
   {
     id: 'plugins',
     label: '扩展',
-    icon: Lucide.Blocks,
+    icon: Lucide.Puzzle,
     group: '工作',
     keywords: [
       '扩展',
@@ -183,14 +183,14 @@ const TAB_META: TabMeta[] = [
   {
     id: 'shortcuts',
     label: '快捷键',
-    icon: Lucide.Keyboard,
+    icon: Lucide.Command,
     group: '工作',
     keywords: ['快捷键', '键盘', '热键', 'shortcuts', 'hotkey', 'keymap'],
   },
   {
     id: 'security',
     label: '安全',
-    icon: Lucide.Shield,
+    icon: Lucide.Lock,
     group: '安全',
     keywords: ['安全', '权限', '白名单', '信任', 'security', 'permission', 'allowlist'],
   },

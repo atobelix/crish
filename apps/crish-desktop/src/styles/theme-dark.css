@@ -54,8 +54,8 @@ html[data-theme="dark"] .input-container {
 }
 html[data-theme="dark"] .input-container:focus-within {
   background: var(--composer-shell-bg-focus);
-  border-color: var(--text-tertiary);
-  box-shadow: var(--focus-ring);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
+  box-shadow: none !important;
 }
 html[data-theme="dark"] .input-container .composer-textarea,
 html[data-theme="dark"] .input-container textarea {
@@ -179,7 +179,7 @@ html[data-theme="dark"] .shortcut-key-btn {
 html[data-theme="dark"] .shortcut-key-btn.recording {
   background: var(--bg-active);
   color: var(--text-primary);
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color) !important;
 }
 
 html[data-theme="dark"] .settings-btn-primary {
@@ -233,17 +233,22 @@ html[data-theme="dark"] .ui-badge {
 /* focus 契约与 chat composer / settings.css 一致：text-tertiary 边 + --focus-ring */
 html[data-theme="dark"] .settings-field-input:focus,
 html[data-theme="dark"] .settings-nav-search:focus,
-html[data-theme="dark"] .settings-select.is-open .settings-select-trigger,
-html[data-theme="dark"] .settings-select-trigger:focus-visible,
 html[data-theme="dark"] .ui-input:focus,
+html[data-theme="dark"] .mrd-field-input:focus,
 html[data-theme="dark"] .search-bar:focus-within {
-  background-color: transparent;
-  border-color: var(--text-tertiary);
-  box-shadow: var(--focus-ring);
+  background-color: transparent !important;
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
+  box-shadow: none !important;
 }
-html[data-theme="dark"] .settings-select-trigger:focus-visible,
+html[data-theme="dark"] .settings-select.is-open .settings-select-trigger,
+html[data-theme="dark"] .settings-select-trigger:focus-visible {
+  background-color: var(--control-soft-bg-active, var(--bg-active)) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: none !important;
+}
 html[data-theme="dark"] .settings-field-input:focus-visible {
-  box-shadow: var(--focus-ring-strong, var(--focus-ring));
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
+  box-shadow: none !important;
 }
 html[data-theme="dark"] .search-bar:focus-within {
   background-color: var(--bg-hover);

@@ -40,7 +40,7 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
     label: '模型与密钥',
     title: '打开模型与 API 密钥设置',
     ariaLabel: '打开模型与密钥设置',
-    icon: <Lucide.Cpu size={16} strokeWidth={1.75} aria-hidden />,
+    icon: <Lucide.Orbit size={16} strokeWidth={1.75} aria-hidden />,
     tab: 'models',
   },
   {
@@ -88,7 +88,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
     }
   }, []);
 
-  useLayoutEffect(() => {
+  const repositionMenu = useCallback(() => {
     if (!open || !btnRef.current) {
       setMenuPos(null);
       return;
@@ -102,6 +102,10 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
     const bottom = window.innerHeight - r.top + 6;
     setMenuPos({ left, bottom, width });
   }, [open]);
+
+  useLayoutEffect(() => {
+    repositionMenu();
+  }, [open, repositionMenu]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,19 +130,21 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
       });
     };
     const onViewport = () => {
-      // 滚动/缩放会错位 fixed 菜单：关闭不抢焦点
+      // 滚动会错位 fixed 菜单：关闭不抢焦点 (resize 走 repositionMenu 贴合不关闭)
       restoreOnCloseRef.current = false;
       setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     window.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onViewport);
+    window.addEventListener('resize', repositionMenu);
+    window.addEventListener('crish-sidebar-resize', repositionMenu);
     // capture：侧栏内部滚动也关掉，避免菜单悬空
     window.addEventListener('scroll', onViewport, true);
     return () => {
       document.removeEventListener('mousedown', onDoc);
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onViewport);
+      window.removeEventListener('resize', repositionMenu);
+      window.removeEventListener('crish-sidebar-resize', repositionMenu);
       window.removeEventListener('scroll', onViewport, true);
       if (restoreOnCloseRef.current) {
         btnRef.current?.focus();

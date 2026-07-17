@@ -16,6 +16,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
+import { Tooltip } from './settings/SettingsUI';
 import {
   PERMISSION_MODES,
   coercePermissionMode,
@@ -33,8 +34,8 @@ type Props = {
 const ITEM_SEL =
   'button.perm-menu-item:not(:disabled):not([aria-disabled="true"])';
 
-/** 紧凑菜单宽（原 260 → 248） */
-const MENU_WIDTH = 248;
+/** 紧凑菜单宽 */
+const MENU_WIDTH = 120;
 
 function listMenuItems(root: HTMLElement | null): HTMLButtonElement[] {
   if (!root) return [];
@@ -247,29 +248,26 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
               const active = mode === m.id;
               const itemId = `${baseItemId}-${m.id}`;
               return (
-                <button
-                  key={m.id}
-                  id={itemId}
-                  type="button"
-                  className={`perm-menu-item${active ? ' is-selected' : ''}`}
-                  role="menuitemradio"
-                  aria-checked={active}
-                  tabIndex={-1}
-                  title={m.description}
-                  aria-label={`${m.label}：${m.description}`}
-                  style={{
-                    padding: '7px 10px',
-                    paddingRight: 26,
-                    gap: 2,
-                  }}
-                  onClick={() => selectMode(m.id)}
-                >
-                  <span className="perm-menu-title">{m.label}</span>
-                  <span className="perm-menu-desc">{m.description}</span>
-                  {active ? (
-                    <Lucide.Check size={13} className="perm-menu-check" aria-hidden />
-                  ) : null}
-                </button>
+                <Tooltip key={m.id} content={m.description}>
+                  <button
+                    id={itemId}
+                    type="button"
+                    className={`perm-menu-item${active ? ' is-selected' : ''}`}
+                    role="menuitemradio"
+                    aria-checked={active}
+                    tabIndex={-1}
+                    aria-label={`${m.label}：${m.description}`}
+                    style={{
+                      paddingRight: 26,
+                    }}
+                    onClick={() => selectMode(m.id)}
+                  >
+                    <span className="perm-menu-title">{m.label}</span>
+                    {active ? (
+                      <Lucide.Check size={13} className="perm-menu-check" aria-hidden />
+                    ) : null}
+                  </button>
+                </Tooltip>
               );
             })}
           </div>,

@@ -93,10 +93,43 @@ function formatRunWhen(when: string): string {
   });
 }
 
+const WORKFLOWS_CACHE_KEY = 'crish_workflows_cache_v1';
+const WORKFLOW_RUNS_CACHE_KEY = 'crish_workflow_runs_cache_v1';
+
+function loadWorkflowsCache(): WorkflowDefinition[] {
+  try {
+    const raw = localStorage.getItem(WORKFLOWS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveWorkflowsCache(list: WorkflowDefinition[]) {
+  try {
+    localStorage.setItem(WORKFLOWS_CACHE_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
+}
+
+function loadWorkflowRunsCache(): WorkflowRunEntry[] {
+  try {
+    const raw = localStorage.getItem(WORKFLOW_RUNS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveWorkflowRunsCache(list: WorkflowRunEntry[]) {
+  try {
+    localStorage.setItem(WORKFLOW_RUNS_CACHE_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
+}
+
 export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat }) => {
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [runs, setRuns] = useState<WorkflowRunEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>(() => loadWorkflowsCache());
+  const [runs, setRuns] = useState<WorkflowRunEntry[]>(() => loadWorkflowRunsCache());
+  const [loading, setLoading] = useState(() => loadWorkflowsCache().length === 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -114,17 +147,20 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
   );
 
   const refresh = async () => {
-    setLoading(true);
+    if (workflows.length === 0) {
+      setLoading(true);
+    }
     try {
       const [wfs, rs] = await Promise.all([listWorkflows(), listWorkflowRuns()]);
       setWorkflows(wfs);
-      setRuns(
-        [...rs].sort((a, b) => {
-          const ta = Date.parse(a.startedAt || a.scheduledFor || '') || 0;
-          const tb = Date.parse(b.startedAt || b.scheduledFor || '') || 0;
-          return tb - ta;
-        }),
-      );
+      saveWorkflowsCache(wfs);
+      const sortedRuns = [...rs].sort((a, b) => {
+        const ta = Date.parse(a.startedAt || a.scheduledFor || '') || 0;
+        const tb = Date.parse(b.startedAt || b.scheduledFor || '') || 0;
+        return tb - ta;
+      });
+      setRuns(sortedRuns);
+      saveWorkflowRunsCache(sortedRuns);
     } catch (e) {
       setError(networkUserMessage(e) || '无法加载定时任务');
     } finally {
