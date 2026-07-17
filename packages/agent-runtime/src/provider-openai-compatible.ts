@@ -6,20 +6,63 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { errorMessage } from "@crish/shared-utils";
 import type {
-  AgentMessage,
   JsonObject,
   JsonValue,
   ProviderDiagnostic,
-  ProviderErrorKind,
-  ToolOutput
+  ProviderErrorKind
 } from "@crish/shared-types";
 import type {
   AgentProvider,
   AgentProviderRequest,
-  AgentTool,
   ProviderUsage,
   ProviderStreamEvent
 } from "./types";
+import {
+  authHeaderObject,
+  compactObject,
+  maxTokensObject,
+  reasoningEffortObject,
+  textContent,
+  toChatMessages,
+  toChatToolChoice,
+  toOpenAITool,
+  toResponsesInput,
+  toResponsesTool,
+  toResponsesToolChoice,
+  type OpenAICompatibleAuthHeader,
+  type OpenAICompatibleMaxTokensField,
+  type OpenAICompatibleReasoningContentMode,
+  type OpenAICompatibleReasoningEffort,
+  type OpenAICompatibleReasoningEffortFormat,
+  type OpenAICompatibleToolChoice,
+  type ResolvedOpenAICompatibleEndpoint,
+  type SystemPromptWireMode
+} from "./openai-request-build";
+import {
+  delay,
+  normalizeRetryOptions,
+  parseRetryAfterMs,
+  retryDelayMs,
+  withinRetryBudget,
+  type OpenAICompatibleRetryOptions
+} from "./openai-retry";
+import {
+  isSseReadDiagnostic,
+  readSseJson,
+  type SseDiagnosticsOptions
+} from "./openai-stream-parse";
+
+// 公共类型：从纯模块再导出，保持 package 对外 API 不变
+export type { OpenAICompatibleRetryOptions } from "./openai-retry";
+export type {
+  OpenAICompatibleAuthHeader,
+  OpenAICompatibleMaxTokensField,
+  OpenAICompatibleReasoningContentMode,
+  OpenAICompatibleReasoningEffort,
+  OpenAICompatibleReasoningEffortFormat,
+  OpenAICompatibleToolChoice,
+  SystemPromptWireMode
+} from "./openai-request-build";
 
 export interface OpenAICompatibleProviderOptions {
   id?: string;
@@ -52,14 +95,6 @@ export interface OpenAICompatibleProviderOptions {
   rustReqwestCwd?: string;
   rustReqwestFetch?: typeof fetch;
   fetch?: typeof fetch;
-}
-
-export interface OpenAICompatibleRetryOptions {
-  maxAttempts?: number;
-  initialDelayMs?: number;
-  maxDelayMs?: number;
-  totalBudgetMs?: number;
-  jitterRatio?: number;
 }
 
 export interface OpenAICompatibleDiagnosticsOptions {
@@ -103,15 +138,7 @@ export interface OpenAICompatibleProviderConfig {
 }
 
 export type OpenAICompatibleEndpoint = "auto" | "chat-completions" | "responses";
-type ResolvedOpenAICompatibleEndpoint = Exclude<OpenAICompatibleEndpoint, "auto">;
 export type OpenAICompatibleTransport = "fetch" | "rust-reqwest" | "auto";
-export type OpenAICompatibleAuthHeader = "authorization" | "api-key" | "x-api-key" | "none";
-export type OpenAICompatibleMaxTokensField = "max_tokens" | "max_completion_tokens" | "max_output_tokens";
-export type OpenAICompatibleReasoningContentMode = "omit" | "include" | "require";
-export type OpenAICompatibleReasoningEffort = "off" | "auto" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export type OpenAICompatibleReasoningEffortFormat = "auto" | "responses" | "chat-completions" | "none";
-export type OpenAICompatibleToolChoice = "auto" | "none" | "required" | { type: "function"; name: string };
-export type SystemPromptWireMode = "native-system-role" | "user-prefix";
 
 export interface OpenAICompatibleProviderConfigLoadOptions {
   env?: Record<string, string | undefined>;
@@ -123,26 +150,6 @@ export interface OpenAICompatibleModel {
   object?: string;
   created?: number;
   ownedBy?: string;
-}
-
-/** OpenAI chat content part (multimodal user turns) */
-type ChatContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string; detail?: string } };
-
-interface ChatMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content?: string | null | ChatContentPart[];
-  tool_call_id?: string;
-  reasoning_content?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
 }
 
 interface PendingToolCall {
@@ -158,23 +165,6 @@ interface ResponsePendingToolCall {
   argumentsText: string;
   argumentsDone?: boolean;
   itemDone?: boolean;
-}
-
-interface SseDiagnosticsOptions {
-  enabled: boolean;
-  providerId: string;
-  endpoint: ResolvedOpenAICompatibleEndpoint;
-  url: string;
-  attempt: number;
-  maxAttempts: number;
-  configuredModel?: string;
-  firstByteTimeoutMs?: number;
-  streamIdleTimeoutMs?: number;
-}
-
-interface SseReadDiagnostic {
-  __kind: "diagnostic";
-  diagnostic: ProviderDiagnostic;
 }
 
 const DEFAULT_DIAGNOSTIC_HEADERS = [
@@ -971,306 +961,6 @@ function resolveModelsUrl(options: { baseUrl: string; modelsUrl?: string; models
   return `${normalizeBaseUrl(options.baseUrl)}${normalizedPath}`;
 }
 
-function toChatMessages(
-  systemPrompt: string | undefined,
-  messages: AgentMessage[],
-  reasoningContentMode: OpenAICompatibleReasoningContentMode,
-  wireMode: SystemPromptWireMode = "native-system-role"
-): ChatMessage[] {
-  const result: ChatMessage[] = [];
-  if (systemPrompt?.trim()) {
-    result.push(
-      wireMode === "user-prefix"
-        ? { role: "user", content: systemPromptAsUserPrefix(systemPrompt) }
-        : { role: "system", content: systemPrompt }
-    );
-  }
-
-  for (const message of messages) {
-    if (message.role === "tool") {
-      for (const block of message.blocks) {
-        if (block.type === "tool-result") {
-          result.push({
-            role: "tool",
-            tool_call_id: block.toolCallId,
-            content: stringifyToolOutput(block.output)
-          });
-        }
-      }
-      continue;
-    }
-
-    if (message.role === "assistant") {
-      const content = message.blocks
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("");
-      const toolCalls = message.blocks
-        .filter((block) => block.type === "tool-call")
-        .map((block) => ({
-          id: block.id,
-          type: "function" as const,
-          function: {
-            name: block.toolName,
-            arguments: JSON.stringify(block.input)
-          }
-        }));
-      const reasoning = reasoningContentObject(message, reasoningContentMode);
-      if (!content && toolCalls.length === 0 && !reasoning.reasoning_content) {
-        continue;
-      }
-      result.push({
-        role: "assistant",
-        content: content || null,
-        ...reasoning,
-        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
-      });
-      continue;
-    }
-
-    if (message.role === "system") {
-      result.push({
-        role: wireMode === "user-prefix" ? "user" : "system",
-        content:
-          wireMode === "user-prefix"
-            ? systemPromptAsUserPrefix(textContent(message))
-            : message.blocks
-                .filter((block) => block.type === "text")
-                .map((block) => block.text)
-                .join("")
-      });
-      continue;
-    }
-
-    // user / other: prefer multimodal contentParts from metadata when images present
-    result.push({
-      role: message.role,
-      content: userMessageContent(message)
-    });
-  }
-  return result;
-}
-
-/**
- * Build OpenAI user content: multimodal parts when metadata.contentParts has image_url;
- * otherwise plain text from blocks.
- */
-function userMessageContent(message: AgentMessage): string | ChatContentPart[] {
-  const parts = normalizeContentParts(message.metadata?.contentParts);
-  const hasImage = parts.some((p) => p.type === "image_url");
-  if (!hasImage) {
-    return textContent(message);
-  }
-  // Prefer structured parts; ensure at least one text part (strip inline dataUrls to avoid double payload)
-  const out: ChatContentPart[] = [];
-  let sawText = false;
-  for (const p of parts) {
-    if (p.type === "text") {
-      const cleaned = stripInlineDataUrls(p.text).trim();
-      if (cleaned) {
-        out.push({ type: "text", text: cleaned });
-        sawText = true;
-      }
-    } else if (p.type === "image_url" && p.image_url.url) {
-      out.push(p);
-    }
-  }
-  if (!sawText) {
-    const fallback = stripInlineDataUrls(textContent(message)).trim();
-    if (fallback) out.unshift({ type: "text", text: fallback });
-  }
-  return out.length > 0 ? out : textContent(message);
-}
-
-function normalizeContentParts(value: unknown): ChatContentPart[] {
-  if (!Array.isArray(value)) return [];
-  const parts: ChatContentPart[] = [];
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue;
-    const p = raw as Record<string, unknown>;
-    if (p.type === "text" && typeof p.text === "string") {
-      parts.push({ type: "text", text: p.text });
-      continue;
-    }
-    if (p.type === "image_url") {
-      const imageUrl = p.image_url;
-      if (imageUrl && typeof imageUrl === "object") {
-        const url = (imageUrl as { url?: unknown }).url;
-        if (typeof url === "string" && url.trim()) {
-          const detail = (imageUrl as { detail?: unknown }).detail;
-          parts.push({
-            type: "image_url",
-            image_url: {
-              url,
-              ...(typeof detail === "string" ? { detail } : {})
-            }
-          });
-        }
-      } else if (typeof p.url === "string" && p.url.trim()) {
-        parts.push({ type: "image_url", image_url: { url: p.url } });
-      }
-    }
-  }
-  return parts;
-}
-
-function stripInlineDataUrls(text: string): string {
-  if (!text) return "";
-  return text
-    .replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+/g, "[image]")
-    .replace(/!\[([^\]]*)\]\(data:image\/[^)]+\)/g, "![$1]([image])");
-}
-
-function reasoningContentObject(
-  message: AgentMessage,
-  mode: OpenAICompatibleReasoningContentMode
-): Pick<ChatMessage, "reasoning_content"> {
-  if (mode === "omit") return {};
-  const thought = thoughtContent(message);
-  if (thought) return { reasoning_content: thought };
-  return {};
-}
-
-function thoughtContent(message: AgentMessage): string {
-  const fromBlocks = message.blocks
-    .filter((block) => block.type === "thought")
-    .map((block) => block.text)
-    .join("");
-  if (fromBlocks) return fromBlocks;
-  return typeof message.metadata?.thought === "string" ? message.metadata.thought : "";
-}
-
-function toOpenAITool(tool: AgentTool): JsonObject {
-  return {
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema ?? {
-        type: "object",
-        properties: {},
-        additionalProperties: true
-      }
-    }
-  };
-}
-
-function toResponsesInput(
-  systemPrompt: string | undefined,
-  messages: AgentMessage[],
-  wireMode: SystemPromptWireMode = "native-system-role"
-): JsonObject[] {
-  const result: JsonObject[] = [];
-  if (systemPrompt?.trim()) {
-    result.push({
-      type: "message",
-      role: wireMode === "user-prefix" ? "user" : "system",
-      content: wireMode === "user-prefix" ? systemPromptAsUserPrefix(systemPrompt) : systemPrompt.trim()
-    });
-  }
-
-  for (const message of messages) {
-    if (message.role === "tool") {
-      for (const block of message.blocks) {
-        if (block.type === "tool-result") {
-          result.push({
-            type: "function_call_output",
-            call_id: block.toolCallId,
-            output: stringifyToolOutput(block.output)
-          });
-        }
-      }
-      continue;
-    }
-
-    if (message.role === "user") {
-      const multimodal = userMessageContent(message);
-      if (Array.isArray(multimodal)) {
-        const responsesContent: JsonValue[] = multimodal.map((part) => {
-          if (part.type === "image_url") {
-            const image: JsonObject = {
-              type: "input_image",
-              image_url: part.image_url.url
-            };
-            if (part.image_url.detail) image.detail = part.image_url.detail;
-            return image;
-          }
-          return { type: "input_text", text: part.text };
-        });
-        if (responsesContent.length > 0) {
-          result.push({
-            type: "message",
-            role: "user",
-            content: responsesContent
-          });
-        }
-      } else if (multimodal) {
-        result.push({
-          type: "message",
-          role: "user",
-          content: multimodal
-        });
-      }
-    } else {
-      const content = textContent(message);
-      if (content) {
-        result.push({
-          type: "message",
-          role: message.role === "system" && wireMode === "user-prefix" ? "user" : message.role,
-          content: message.role === "system" && wireMode === "user-prefix" ? systemPromptAsUserPrefix(content) : content
-        });
-      }
-    }
-
-    if (message.role === "assistant") {
-      for (const block of message.blocks) {
-        if (block.type === "tool-call") {
-          result.push({
-            type: "function_call",
-            call_id: block.id,
-            name: block.toolName,
-            arguments: JSON.stringify(block.input),
-            status: "completed"
-          });
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-function textContent(message: AgentMessage): string {
-  return message.blocks
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-}
-
-function toResponsesTool(tool: AgentTool): JsonObject {
-  return {
-    type: "function",
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema ?? {
-      type: "object",
-      properties: {},
-      additionalProperties: true
-    },
-    strict: false
-  };
-}
-
-function toChatToolChoice(choice: OpenAICompatibleToolChoice): JsonValue {
-  if (typeof choice === "string") return choice;
-  return { type: "function", function: { name: choice.name } };
-}
-
-function toResponsesToolChoice(choice: OpenAICompatibleToolChoice): JsonValue {
-  if (typeof choice === "string") return choice;
-  return { type: "function", name: choice.name };
-}
-
 async function* parseChatCompletionsJsonResponse(body: JsonObject): AsyncIterable<ProviderStreamEvent> {
   const error = providerBodyError(body);
   if (error) {
@@ -1652,196 +1342,6 @@ function providerBodyError(body: Record<string, unknown> | undefined): string | 
   );
 }
 
-async function* readSseJson(
-  body: ReadableStream<Uint8Array>,
-  diagnostics?: SseDiagnosticsOptions,
-  signal?: AbortSignal
-): AsyncIterable<JsonObject | SseReadDiagnostic> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const startedAt = Date.now();
-  let chunks = 0;
-  let bytes = 0;
-  let emittedFirstByte = false;
-  let completed = false;
-
-  try {
-    while (true) {
-      const { done, value } = await readStreamChunk(
-        reader,
-        emittedFirstByte ? diagnostics?.streamIdleTimeoutMs : diagnostics?.firstByteTimeoutMs,
-        emittedFirstByte ? "stream idle" : "streaming first byte",
-        signal
-      );
-      if (done) {
-        completed = true;
-        break;
-      }
-      chunks += 1;
-      bytes += value.byteLength;
-      if (!emittedFirstByte) {
-        emittedFirstByte = true;
-        if (diagnostics?.enabled) {
-          yield {
-            __kind: "diagnostic",
-            diagnostic: {
-              phase: "sse-first-byte",
-              providerId: diagnostics.providerId,
-              endpoint: diagnostics.endpoint,
-              url: diagnostics.url,
-              attempt: diagnostics.attempt,
-              maxAttempts: diagnostics.maxAttempts,
-              elapsedMs: Date.now() - startedAt,
-              chunks,
-              bytes
-            }
-          };
-        }
-      }
-      buffer += decoder.decode(value, { stream: true });
-
-      let separatorIndex = findSseSeparator(buffer);
-      while (separatorIndex !== -1) {
-        const frame = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === "\r" ? 4 : 2));
-        const parsed = parseSseFrame(frame);
-        if (parsed === "[DONE]") {
-          completed = true;
-          yield* sseStreamEndDiagnostic(diagnostics, startedAt, chunks, bytes);
-          return;
-        }
-        if (parsed) yield parsed;
-        separatorIndex = findSseSeparator(buffer);
-      }
-    }
-  } finally {
-    if (!completed) {
-      await reader.cancel(createSseAbortError(signal)).catch(() => undefined);
-    }
-    reader.releaseLock();
-  }
-
-  if (buffer.trim().length > 0) {
-    const parsed = parseSseFrame(buffer);
-    if (parsed && parsed !== "[DONE]") {
-      yield parsed;
-    }
-  }
-  completed = true;
-  yield* sseStreamEndDiagnostic(diagnostics, startedAt, chunks, bytes);
-}
-
-function* sseStreamEndDiagnostic(
-  diagnostics: SseDiagnosticsOptions | undefined,
-  startedAt: number,
-  chunks: number,
-  bytes: number
-): Iterable<SseReadDiagnostic> {
-  if (!diagnostics?.enabled) return;
-  yield {
-    __kind: "diagnostic",
-    diagnostic: {
-      phase: "stream-end",
-      providerId: diagnostics.providerId,
-      endpoint: diagnostics.endpoint,
-      url: diagnostics.url,
-      attempt: diagnostics.attempt,
-      maxAttempts: diagnostics.maxAttempts,
-      elapsedMs: Date.now() - startedAt,
-      chunks,
-      bytes
-    }
-  };
-}
-
-function readStreamChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  timeoutMs: number | undefined,
-  timeoutLabel: string,
-  signal?: AbortSignal
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal?.aborted) {
-    const error = createSseAbortError(signal);
-    void reader.cancel(error);
-    return Promise.reject(error);
-  }
-  if (!timeoutMs && !signal) return reader.read();
-  return new Promise((resolveRead, reject) => {
-    let settled = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    let abortFromSignal: (() => void) | undefined;
-    const cleanup = (): void => {
-      if (timeout !== undefined) clearTimeout(timeout);
-      if (abortFromSignal) signal?.removeEventListener("abort", abortFromSignal);
-    };
-    const rejectAfterCancel = (error: Error): void => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      void reader.cancel(error).finally(() => reject(error));
-    };
-    abortFromSignal = (): void => {
-      rejectAfterCancel(createSseAbortError(signal));
-    };
-    if (timeoutMs) {
-      timeout = setTimeout(() => {
-        rejectAfterCancel(new Error(`${timeoutLabel} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-    }
-    signal?.addEventListener("abort", abortFromSignal, { once: true });
-    if (signal?.aborted) {
-      abortFromSignal();
-      return;
-    }
-    reader.read().then(
-      (result) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolveRead(result);
-      },
-      (error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      }
-    );
-  });
-}
-
-function createSseAbortError(signal: AbortSignal | undefined): Error {
-  const reason = signal?.aborted ? signal.reason : undefined;
-  if (reason instanceof Error) return reason;
-  if (typeof reason === "string" && reason.length > 0) return new Error(reason);
-  return new Error(signal?.aborted ? "aborted" : "stream consumer cancelled");
-}
-
-function isSseReadDiagnostic(value: JsonObject | SseReadDiagnostic): value is SseReadDiagnostic {
-  return (value as SseReadDiagnostic).__kind === "diagnostic";
-}
-
-function findSseSeparator(input: string): number {
-  const lf = input.indexOf("\n\n");
-  const crlf = input.indexOf("\r\n\r\n");
-  if (lf === -1) return crlf;
-  if (crlf === -1) return lf;
-  return Math.min(lf, crlf);
-}
-
-function parseSseFrame(frame: string): JsonObject | "[DONE]" | null {
-  const data = frame
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice("data:".length).trim())
-    .join("\n");
-  if (!data) return null;
-  if (data === "[DONE]") return "[DONE]";
-  return JSON.parse(data) as JsonObject;
-}
-
 function mergeToolCallDelta(pending: Map<number, PendingToolCall>, raw: unknown): void {
   if (!raw || typeof raw !== "object") return;
   const record = raw as Record<string, unknown>;
@@ -1921,41 +1421,6 @@ function numberField(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function authHeaderObject(authHeader: OpenAICompatibleAuthHeader, apiKey: string | undefined): Record<string, string> {
-  if (!apiKey || authHeader === "none") return {};
-  if (authHeader === "api-key") return { "api-key": apiKey };
-  if (authHeader === "x-api-key") return { "x-api-key": apiKey };
-  return { authorization: `Bearer ${apiKey}` };
-}
-
-function maxTokensObject(field: OpenAICompatibleMaxTokensField, value: number | undefined): Partial<Record<OpenAICompatibleMaxTokensField, number>> {
-  return value === undefined ? {} : { [field]: value };
-}
-
-function reasoningEffortObject(
-  endpoint: ResolvedOpenAICompatibleEndpoint,
-  _model: string,
-  effort: OpenAICompatibleReasoningEffort | undefined,
-  format: OpenAICompatibleReasoningEffortFormat | undefined
-): JsonObject {
-  const wireEffort = normalizeReasoningEffort(effort);
-  if (!wireEffort || format === "none") return {};
-  const resolvedFormat = format ?? "auto";
-  if (resolvedFormat === "responses" || (resolvedFormat === "auto" && endpoint === "responses")) {
-    return { reasoning: { effort: wireEffort } };
-  }
-  if (resolvedFormat === "chat-completions" || (resolvedFormat === "auto" && endpoint === "chat-completions")) {
-    return { reasoning_effort: wireEffort };
-  }
-  return {};
-}
-
-function normalizeReasoningEffort(effort: OpenAICompatibleReasoningEffort | undefined): string | undefined {
-  if (!effort || effort === "auto" || effort === "off") return undefined;
-  if (effort === "xhigh") return "high";
-  return effort;
-}
-
 function actualModelFromPayload(payload: Record<string, unknown> | undefined): string | undefined {
   if (!payload) return undefined;
   return stringField(payload.model) ?? stringField(recordField(payload.response, undefined)?.model);
@@ -1986,13 +1451,6 @@ function modelMismatchStreamEvent(
 function isMimoModel(model: string): boolean {
   const normalized = model.trim().toLowerCase();
   return normalized === "mimo" || normalized.startsWith("mimo-") || normalized.includes("/mimo-");
-}
-
-function stringifyToolOutput(output: ToolOutput): string {
-  if (output.text) return output.text;
-  if (output.json !== undefined) return JSON.stringify(output.json);
-  if (output.artifacts?.length) return JSON.stringify(output.artifacts);
-  return "";
 }
 
 async function readError(response: Response): Promise<string> {
@@ -2248,23 +1706,38 @@ async function fetchWithOptionalRustReqwestOverride(
   });
 }
 
-function compactObject(input: Record<string, unknown>): JsonObject {
-  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as JsonObject;
-}
-
-function normalizeRetryOptions(options: OpenAICompatibleRetryOptions | undefined): Required<OpenAICompatibleRetryOptions> {
-  return {
-    maxAttempts: Math.max(1, Math.floor(options?.maxAttempts ?? 1)),
-    initialDelayMs: Math.max(1, Math.floor(options?.initialDelayMs ?? 750)),
-    maxDelayMs: Math.max(1, Math.floor(options?.maxDelayMs ?? 8_000)),
-    totalBudgetMs: Math.max(1, Math.floor(options?.totalBudgetMs ?? 60_000)),
-    jitterRatio: Math.min(1, Math.max(0, options?.jitterRatio ?? 0))
-  };
-}
-
 interface ProviderErrorClassification {
   kind: ProviderErrorKind;
   retryable: boolean;
+}
+
+/**
+ * 基于错误消息字符串分类 provider 错误。
+ * 供 session-loop 等上层使用，避免在多处重复正则判定瞬时错误。
+ * 完整分类（带 Response 对象）仍用 classifyHttpProviderError。
+ */
+export function classifyProviderErrorMessage(message: string): ProviderErrorClassification {
+  const m = message.toLowerCase();
+  // 用户取消：不可重试（优先判定，避免被网络分类吞掉）
+  if (/aborted|cancelled|canceled/.test(m)) return { kind: "cancelled", retryable: false };
+  // 认证 / 配额：不可重试
+  if (/401|403|unauthor|forbidden/.test(m)) return { kind: "auth", retryable: false };
+  if (/402|insufficient[_\s-]*(quota|balance|credit)|余额不足|额度不足/.test(m)) return { kind: "quota", retryable: false };
+  // 速率限制：可重试
+  if (/429|rate.?limit/.test(m)) return { kind: "rate-limit", retryable: true };
+  // 网关 / 服务端错误：可重试
+  if (/\b502\b|\b503\b|\b504\b|\b520\b|\b522\b|\b523\b|\b524\b|bad gateway|gateway timeout|server error|overloaded|temporarily unavailable/.test(m)) {
+    return { kind: "server", retryable: true };
+  }
+  // 超时：可重试
+  if (/timeout|timed out/.test(m)) return { kind: "timeout", retryable: true };
+  // 网络错误：可重试
+  if (/econnreset|enotfound|fetch failed|network|socket/.test(m)) {
+    return { kind: "network", retryable: true };
+  }
+  // Schema / 参数：不可重试
+  if (/400|422|schema|invalid|bad request/.test(m)) return { kind: "schema", retryable: false };
+  return { kind: "unknown", retryable: false };
 }
 
 function classifyTransportProviderError(reason: string): ProviderErrorClassification {
@@ -2376,10 +1849,6 @@ function requestDiagnosticFields(
   >;
 }
 
-function systemPromptAsUserPrefix(systemPrompt: string): string {
-  return `System instructions for this run:\n\n${systemPrompt.trim()}`;
-}
-
 function looksLikeGatewayChallenge(response: Response, error: string): boolean {
   const mitigated = response.headers.get("cf-mitigated") ?? "";
   const server = response.headers.get("server") ?? "";
@@ -2394,48 +1863,10 @@ function formatProviderError(error: string, kind: ProviderErrorKind): string {
   return `[${kind}] ${error}`;
 }
 
-function parseRetryAfterMs(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const seconds = Number(trimmed);
-  if (Number.isFinite(seconds)) return Math.max(0, Math.floor(seconds * 1000));
-  const dateMs = Date.parse(trimmed);
-  if (!Number.isFinite(dateMs)) return undefined;
-  return Math.max(0, dateMs - Date.now());
-}
-
 function trimDiagnosticReason(reason: string): string {
   const normalized = reason.replace(/\s+/g, " ").trim();
   return normalized.length <= 500 ? normalized : `${normalized.slice(0, 500)}...`;
 }
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  let abort: (() => void) | undefined;
-  return new Promise<void>((resolveDelay, reject) => {
-    const timeout = setTimeout(resolveDelay, ms);
-    abort = (): void => {
-      clearTimeout(timeout);
-      reject(new Error("aborted"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  }).finally(() => {
-    if (abort) signal.removeEventListener("abort", abort);
-  });
-}
-
-function retryDelayMs(options: Required<OpenAICompatibleRetryOptions>, attempt: number): number {
-  const base = Math.min(options.maxDelayMs, options.initialDelayMs * 2 ** (attempt - 1));
-  if (options.jitterRatio <= 0) return base;
-  const spread = base * options.jitterRatio;
-  return Math.max(1, Math.floor(base - spread + Math.random() * spread * 2));
-}
-
-function withinRetryBudget(startedAt: number, totalBudgetMs: number): boolean {
-  return Date.now() - startedAt < totalBudgetMs;
-}
-
 
 function objectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

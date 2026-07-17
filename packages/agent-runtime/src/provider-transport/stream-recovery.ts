@@ -23,6 +23,7 @@ import type {
 } from "@crish/shared-types";
 import type { ProviderStreamEvent } from "../types";
 import {
+  ConnectionError,
   ConnectionManager,
   StreamInterruptedError,
   type ProviderTransport,
@@ -92,6 +93,8 @@ export interface RecoveryDecision {
  */
 export class StreamRecovery {
   private accumulator: StreamAccumulator;
+  /** Stable counter for tool-call events missing an id (avoids Date.now collisions). */
+  private missingToolCallSeq = 0;
 
   constructor() {
     this.accumulator = this.createAccumulator();
@@ -115,6 +118,7 @@ export class StreamRecovery {
     existingResults: ToolResultBlock[] = []
   ): AsyncGenerator<ProviderStreamEvent> {
     this.accumulator = this.createAccumulator();
+    this.missingToolCallSeq = 0;
 
     try {
       for await (const event of connectionManager.stream(request)) {
@@ -122,25 +126,36 @@ export class StreamRecovery {
         yield event;
 
         if (request.signal.aborted) {
-          // 用户主动取消 → 检查是否有孤儿工具调用
+          // 用户取消：若已有未配对 tool-call，把孤儿结果带出，避免下一轮悬挂 tool_use
           const orphans = this.findOrphanToolCalls(existingResults);
           if (orphans.length > 0) {
-            // 在取消的情况下也合入孤儿结果（不 yield，直接返回）
-            // 上层 ConversationEngine 会在下一轮检查这些
+            throw new StreamRecoveryError(
+              "流已取消，合成未完成工具调用的错误结果",
+              this.accumulator,
+              orphans
+            );
           }
           return;
         }
       }
 
-      // 流正常结束 → 检查是否有孤儿工具调用
+      // 流正常结束但 provider 未配 tool_result：仍合成孤儿，避免会话层挂死
       const orphans = this.findOrphanToolCalls(existingResults);
       if (orphans.length > 0) {
-        // 孤儿结果在下一轮 ConversationEngine 中通过 synthesizeOrphanedToolResults 处理
-        // 这里标记流正常结束即可
+        throw new StreamRecoveryError(
+          "流正常结束但仍有未配对工具调用，合成孤儿 tool_result",
+          this.accumulator,
+          orphans
+        );
       }
     } catch (err) {
+      // Already a recovery decision with orphans/partial content — rethrow as-is.
+      if (err instanceof StreamRecoveryError) {
+        throw err;
+      }
+
       // 流中断 → 分析情况并恢复
-      const decision = this.decideRecovery(err, connectionManager, existingResults);
+      const decision = this.decideRecovery(err, connectionManager, existingResults, request.signal);
 
       // 记录诊断
       if (this.accumulator.diagnostics.length === 0) {
@@ -154,14 +169,39 @@ export class StreamRecovery {
       switch (decision.action.type) {
         case "retry": {
           // 情况 C：什么都没收到 → 换通道重试
-          // 递归调用，但传入新的 transport
+          if (request.signal.aborted) {
+            throw new StreamRecoveryError(
+              "流恢复取消：备用通道重试前已 abort",
+              this.accumulator
+            );
+          }
           const retryTransport = decision.action.transport;
           try {
             for await (const event of retryTransport.provider.stream(request)) {
               this.accumulate(event);
               yield event;
+              if (request.signal.aborted) {
+                const orphans = this.findOrphanToolCalls(existingResults);
+                if (orphans.length > 0) {
+                  throw new StreamRecoveryError(
+                    "备用通道流已取消，合成未完成工具调用的错误结果",
+                    this.accumulator,
+                    orphans
+                  );
+                }
+                return;
+              }
+            }
+            const orphansAfterRetry = this.findOrphanToolCalls(existingResults);
+            if (orphansAfterRetry.length > 0) {
+              throw new StreamRecoveryError(
+                "备用通道结束但仍有未配对工具调用，合成孤儿 tool_result",
+                this.accumulator,
+                orphansAfterRetry
+              );
             }
           } catch (retryErr) {
+            if (retryErr instanceof StreamRecoveryError) throw retryErr;
             // 第二次也失败 → 上报给上层
             throw new StreamRecoveryError(
               `流恢复失败：两个通道均无法完成调用。${err instanceof Error ? err.message : String(err)}`,
@@ -172,14 +212,12 @@ export class StreamRecovery {
         }
 
         case "synthesize-orphans": {
-          // 情况 A：有未完成的工具调用 → 合成孤儿 tool_result
-          // 标记流为 tool-call 结束（让 ConversationEngine 处理孤儿合成）
-          yield {
-            type: "stop",
-            reason: "tool-call" as const,
-            usage: undefined,
-          };
-          return;
+          // 情况 A：有未完成的工具调用 → 把孤儿结果挂到错误上交给 Gateway / 会话层
+          throw new StreamRecoveryError(
+            decision.diagnostic,
+            this.accumulator,
+            decision.action.orphans
+          );
         }
 
         case "surface-error": {
@@ -213,24 +251,36 @@ export class StreamRecovery {
   private accumulate(event: ProviderStreamEvent): void {
     switch (event.type) {
       case "text-delta":
-        this.accumulator.text += event.text;
+        this.accumulator.text += typeof event.text === "string" ? event.text : "";
         this.accumulator.hasContent = true;
         break;
 
       case "thought-delta":
-        this.accumulator.thought += event.text;
+        this.accumulator.thought += typeof event.text === "string" ? event.text : "";
         this.accumulator.hasContent = true;
         break;
 
-      case "tool-call":
+      case "tool-call": {
+        const rawId = typeof event.id === "string" ? event.id.trim() : "";
+        const id =
+          rawId.length > 0 ? rawId : `call-missing-${++this.missingToolCallSeq}`;
+        const toolName =
+          typeof event.toolName === "string" && event.toolName.trim().length > 0
+            ? event.toolName.trim()
+            : "unknown-tool";
+        const input =
+          event.input && typeof event.input === "object" && !Array.isArray(event.input)
+            ? event.input
+            : {};
         this.accumulator.pendingToolCalls.push({
-          id: event.id ?? `call-${Date.now()}`,
-          toolName: event.toolName,
-          input: event.input,
+          id,
+          toolName,
+          input,
           resolved: false,
         });
         this.accumulator.hasContent = true;
         break;
+      }
 
       case "provider-diagnostic":
         this.accumulator.diagnostics.push({
@@ -250,28 +300,41 @@ export class StreamRecovery {
    * 找出没有配对的工具调用（孤儿）。
    *
    * 孤儿 = pendingToolCalls 中 resolved=false 且不在 existingResults 中的调用。
+   * 同一 toolCallId 只合成一次。
    */
   private findOrphanToolCalls(
     existingResults: ToolResultBlock[]
   ): ToolResultBlock[] {
-    const resolvedIds = new Set(existingResults.map((r) => r.toolCallId));
+    const resolvedIds = new Set(
+      existingResults
+        .map((r) => r.toolCallId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    );
+    const seen = new Set<string>();
     const orphans: ToolResultBlock[] = [];
 
     for (const pending of this.accumulator.pendingToolCalls) {
-      if (!resolvedIds.has(pending.id)) {
-        orphans.push({
-          type: "tool-result",
-          toolCallId: pending.id,
-          toolName: pending.toolName,
-          output: {
-            text: JSON.stringify({
-              error: "工具调用因流中断未能完成执行",
-              toolName: pending.toolName,
-            }),
-          },
-          isError: true,
-        });
+      if (pending.resolved) {
+        resolvedIds.add(pending.id);
+        continue;
       }
+      if (!pending.id || resolvedIds.has(pending.id) || seen.has(pending.id)) {
+        continue;
+      }
+      seen.add(pending.id);
+      orphans.push({
+        type: "tool-result",
+        toolCallId: pending.id,
+        toolName: pending.toolName,
+        output: {
+          text: JSON.stringify({
+            error: "工具调用因流中断未能完成执行",
+            toolName: pending.toolName,
+            toolCallId: pending.id,
+          }),
+        },
+        isError: true,
+      });
     }
 
     return orphans;
@@ -283,14 +346,15 @@ export class StreamRecovery {
   private decideRecovery(
     error: unknown,
     connectionManager: ConnectionManager,
-    existingResults: ToolResultBlock[]
+    existingResults: ToolResultBlock[],
+    signal?: AbortSignal
   ): RecoveryDecision {
     const isStreamInterrupted = error instanceof StreamInterruptedError;
     const transportId = isStreamInterrupted
       ? error.transportId
       : "unknown";
 
-    // 情况 A：有未完成的工具调用
+    // 情况 A：有未完成的工具调用（优先于文字，避免 tool_use 悬挂）
     const orphans = this.findOrphanToolCalls(existingResults);
     if (orphans.length > 0) {
       const toolNames = orphans.map((o) => o.toolName).join(", ");
@@ -312,6 +376,28 @@ export class StreamRecovery {
           message: `响应被中断（已输出${contentDesc}）。请检查网络后重试。`,
         },
         diagnostic: `流中断时已有内容输出（${contentDesc}），不重试以避免模型重复`,
+      };
+    }
+
+    // ConnectionManager already exhausted every transport — do not re-pick a failed one.
+    if (error instanceof ConnectionError) {
+      return {
+        action: {
+          type: "surface-error",
+          message: error.message || "无法连接，请检查网络。所有可用通道均已尝试。",
+        },
+        diagnostic: `所有传输通道已耗尽 (${error.code})，停止恢复`,
+      };
+    }
+
+    // 已 abort：无内容也不再换通道
+    if (signal?.aborted) {
+      return {
+        action: {
+          type: "surface-error",
+          message: "请求已取消。",
+        },
+        diagnostic: "流中断时 signal 已 abort，跳过备用通道",
       };
     }
 
@@ -363,20 +449,33 @@ export function synthesizeOrphanedToolResults(
   assistantMessage: AgentMessage,
   existingResults: ToolResultBlock[]
 ): ToolResultBlock[] {
-  const toolCalls = assistantMessage.blocks.filter(
+  const toolCalls = (assistantMessage.blocks ?? []).filter(
     (b): b is ToolCallBlock => b.type === "tool-call"
   );
-  const resolvedIds = new Set(existingResults.map((r) => r.toolCallId));
+  const resolvedIds = new Set(
+    existingResults
+      .map((r) => r.toolCallId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
+  );
+  const seen = new Set<string>();
 
   return toolCalls
-    .filter((tc) => !resolvedIds.has(tc.id))
+    .filter((tc) => {
+      const id = typeof tc.id === "string" ? tc.id : "";
+      if (!id || resolvedIds.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
     .map((tc) => ({
       type: "tool-result" as const,
       toolCallId: tc.id,
-      toolName: tc.toolName,
+      toolName:
+        typeof tc.toolName === "string" && tc.toolName.trim().length > 0
+          ? tc.toolName
+          : "unknown-tool",
       output: {
         text: JSON.stringify({
-          error: `工具 "${tc.toolName}" 因流中断未能完成执行`,
+          error: `工具 "${tc.toolName || "unknown-tool"}" 因流中断未能完成执行`,
           toolCallId: tc.id,
         }),
       } as ToolOutput,
@@ -392,18 +491,28 @@ export function synthesizeOrphansFromPending(
   pendingToolCalls: PendingToolCall[],
   existingResults: ToolResultBlock[]
 ): ToolResultBlock[] {
-  const resolvedIds = new Set(existingResults.map((r) => r.toolCallId));
+  const resolvedIds = new Set(
+    existingResults
+      .map((r) => r.toolCallId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
+  );
+  const seen = new Set<string>();
 
   return pendingToolCalls
-    .filter((tc) => !resolvedIds.has(tc.id))
+    .filter((tc) => {
+      if (tc.resolved) return false;
+      if (!tc.id || resolvedIds.has(tc.id) || seen.has(tc.id)) return false;
+      seen.add(tc.id);
+      return true;
+    })
     .map((tc) => ({
       type: "tool-result" as const,
       toolCallId: tc.id,
-      toolName: tc.toolName,
+      toolName: tc.toolName || "unknown-tool",
       output: {
         text: JSON.stringify({
           error: "工具调用因流中断未能完成执行",
-          toolName: tc.toolName,
+          toolName: tc.toolName || "unknown-tool",
           toolCallId: tc.id,
         }),
       } as ToolOutput,
@@ -419,10 +528,17 @@ export function synthesizeOrphansFromPending(
  */
 export class StreamRecoveryError extends Error {
   public readonly accumulator: StreamAccumulator;
+  /** Orphan tool-results synthesized for incomplete tool_use (case A). */
+  public readonly orphans: ToolResultBlock[];
 
-  constructor(message: string, accumulator: StreamAccumulator) {
+  constructor(
+    message: string,
+    accumulator: StreamAccumulator,
+    orphans: ToolResultBlock[] = []
+  ) {
     super(message);
     this.name = "StreamRecoveryError";
     this.accumulator = accumulator;
+    this.orphans = orphans;
   }
 }

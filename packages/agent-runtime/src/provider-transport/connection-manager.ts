@@ -148,11 +148,16 @@ export class ConnectionManager {
   }
 
   /**
-   * 选择下一个最佳传输通道（排除指定的）。
+   * 选择下一个最佳传输通道（排除已尝试的）。
    * 用于当前通道失败后切换到备用通道。
+   *
+   * Accepts one id or many — failover must exclude *all* already-tried
+   * transports, otherwise a higher-ranked failed transport can be reselected
+   * and the retry loop never advances.
    */
-  selectNext(excludeId: string): ProviderTransport | null {
-    const candidates = this.transports.filter((t) => t.id !== excludeId);
+  selectNext(excludeIds: string | Iterable<string>): ProviderTransport | null {
+    const excluded = new Set(typeof excludeIds === "string" ? [excludeIds] : excludeIds);
+    const candidates = this.transports.filter((t) => !excluded.has(t.id));
     if (candidates.length === 0) return null;
 
     const sorted = [...candidates].sort((a, b) => {
@@ -184,7 +189,11 @@ export class ConnectionManager {
     const window = this.slidingWindows.get(transportId);
     if (!window) return;
 
-    window.push({ success, latencyMs, timestamp: Date.now() });
+    // Clamp latency so NaN/Infinity/negative never poison avgLatency ranking.
+    const safeLatency =
+      Number.isFinite(latencyMs) && latencyMs >= 0 ? latencyMs : 0;
+
+    window.push({ success: Boolean(success), latencyMs: safeLatency, timestamp: Date.now() });
 
     // 维护滑动窗口大小
     while (window.length > SLIDING_WINDOW_SIZE) {
@@ -220,38 +229,54 @@ export class ConnectionManager {
       const transport =
         triedIds.size === 0
           ? this.select()
-          : this.selectNext([...triedIds][triedIds.size - 1]);
+          : this.selectNext(triedIds);
 
-      if (!transport) break;
+      if (!transport || triedIds.has(transport.id)) break;
 
       triedIds.add(transport.id);
 
       const startTime = Date.now();
       let streamError: unknown = undefined;
-      let receivedEvents = false;
+      /** True only for content that must not be spliced with another transport's stream. */
+      let yieldedContent = false;
 
       try {
         for await (const event of transport.provider.stream(request)) {
-          receivedEvents = true;
-          yield event;
-
           // 检查是否被用户取消
           if (request.signal.aborted) {
+            if (isContentBearingStreamEvent(event)) yieldedContent = true;
+            yield event;
             this.recordResult(transport.id, true, Date.now() - startTime);
             return;
           }
 
-          // 如果收到错误事件，视为传输失败
+          // stop(error) with no prior content: fail over silently (do not leak the error stop).
           if (event.type === "stop" && event.reason === "error") {
             streamError = new Error(event.error ?? "Provider 返回错误");
+            if (yieldedContent) {
+              yield event;
+            }
             break;
           }
+
+          if (isContentBearingStreamEvent(event)) {
+            yieldedContent = true;
+          }
+          yield event;
         }
 
         // 正常完成（或收到错误 stop 事件后走到这里）
         if (streamError) {
           this.recordResult(transport.id, false, Date.now() - startTime);
-          // 继续尝试下一个通道
+          if (yieldedContent) {
+            // Already yielded text/tool-call deltas — must not append another transport's stream.
+            throw new StreamInterruptedError(
+              transport.id,
+              streamError instanceof Error ? streamError.message : String(streamError),
+              true
+            );
+          }
+          // Pure fail with no user-visible content: try next transport.
           continue;
         }
 
@@ -263,15 +288,19 @@ export class ConnectionManager {
         );
         return;
       } catch (err) {
+        if (err instanceof StreamInterruptedError) {
+          throw err;
+        }
+
         // 网络错误或流中断
         this.recordResult(transport.id, false, Date.now() - startTime);
 
-        if (receivedEvents) {
-          // 已经收到了一些事件，不能透明切换——上层需要处理部分输出
+        if (yieldedContent) {
+          // 已经产出内容事件，不能透明切换——上层需要处理部分输出
           throw new StreamInterruptedError(
             transport.id,
             err instanceof Error ? err.message : String(err),
-            receivedEvents
+            true
           );
         }
 
@@ -321,16 +350,51 @@ export class ConnectionManager {
    * 使用快照中的值。快照中不存在于当前传输列表的条目会被忽略。
    */
   loadSnapshot(snapshot: ConnectionManagerSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.transports)) return;
+
     for (const snap of snapshot.transports) {
+      if (!snap || typeof snap.id !== "string") continue;
       const transport = this.transports.find((t) => t.id === snap.id);
       if (!transport) continue;
 
-      transport.avgLatency = snap.avgLatency;
-      transport.successRate = snap.successRate;
-      transport.lastUsed = snap.lastUsed;
-      this.slidingWindows.set(snap.id, snap.slidingWindow);
+      transport.avgLatency =
+        Number.isFinite(snap.avgLatency) && snap.avgLatency >= 0 ? snap.avgLatency : 0;
+      transport.successRate =
+        Number.isFinite(snap.successRate)
+          ? Math.min(1, Math.max(0, snap.successRate))
+          : 0;
+      transport.lastUsed =
+        Number.isFinite(snap.lastUsed) && snap.lastUsed >= 0 ? snap.lastUsed : 0;
+
+      const rawWindow = Array.isArray(snap.slidingWindow) ? snap.slidingWindow : [];
+      const sanitized = rawWindow
+        .filter((e) => e && typeof e === "object")
+        .slice(-SLIDING_WINDOW_SIZE)
+        .map((e) => ({
+          success: Boolean(e.success),
+          latencyMs:
+            Number.isFinite(e.latencyMs) && e.latencyMs >= 0 ? e.latencyMs : 0,
+          timestamp:
+            Number.isFinite(e.timestamp) && e.timestamp >= 0
+              ? e.timestamp
+              : Date.now(),
+        }));
+      this.slidingWindows.set(snap.id, sanitized);
+
+      // Recompute from sanitized window when present so corrupt rates cannot stick.
+      if (sanitized.length > 0) {
+        const successes = sanitized.filter((e) => e.success).length;
+        transport.successRate = successes / sanitized.length;
+        transport.avgLatency =
+          sanitized.reduce((sum, e) => sum + e.latencyMs, 0) / sanitized.length;
+      }
     }
   }
+}
+
+/** Content that would corrupt a multi-transport stream if spliced with another attempt. */
+function isContentBearingStreamEvent(event: ProviderStreamEvent): boolean {
+  return event.type === "text-delta" || event.type === "thought-delta" || event.type === "tool-call";
 }
 
 // ─── 错误类型 ──────────────────────────────────────────────
