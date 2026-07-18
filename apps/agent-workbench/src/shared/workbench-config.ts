@@ -1,7 +1,7 @@
 import { createDefaultLongRunPolicy, type WorkbenchLongRunPolicy } from "./workbench-contract";
 
 const CRISH_DEFAULT_PROVIDER_CONFIG = {
-  providerId: "flowbit-mimo",
+  providerId: "crish-mimo",
   baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
   model: "mimo-v2.5",
   endpoint: "chat-completions" as const,
@@ -164,7 +164,7 @@ export function createDefaultWorkbenchSettings(): WorkbenchRuntimeSettings {
     createMimoProfile(CRISH_DEFAULT_PROVIDER_CONFIG.model, CRISH_DEFAULT_PROVIDER_CONFIG.model);
   return {
     provider: {
-      id: "flowbit-mimo",
+      id: "crish-mimo",
       baseUrl: CRISH_DEFAULT_PROVIDER_CONFIG.baseUrl,
       endpoint: CRISH_DEFAULT_PROVIDER_CONFIG.endpoint,
       authHeader: "authorization",

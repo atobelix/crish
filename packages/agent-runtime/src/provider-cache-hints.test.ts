@@ -37,7 +37,7 @@ function assembled(providerFamily: Parameters<typeof assemblePromptForProvider>[
       {
         id: "project-profile",
         kind: "project-profile",
-        content: { cwd: "C:/Software/conex", branch: "main" }
+        content: { cwd: "C:/workspace/crish", branch: "main" }
       }
     ],
     messages: [createTextMessage("user", "Inspect the current turn.")],

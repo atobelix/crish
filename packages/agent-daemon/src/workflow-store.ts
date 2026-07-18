@@ -157,7 +157,7 @@ export class FileWorkflowStore implements WorkflowStore {
       };
       assertWorkflowDefinition(workflow, "$.workflow");
       state.workflows.push(workflow);
-      return clone(workflow);
+      return workflow;
     });
   }
 
@@ -184,7 +184,7 @@ export class FileWorkflowStore implements WorkflowStore {
       };
       assertWorkflowDefinition(updated, "$.workflow");
       state.workflows[index] = updated;
-      return clone(updated);
+      return updated;
     });
   }
 
@@ -237,7 +237,7 @@ export class FileWorkflowStore implements WorkflowStore {
       };
       assertWorkflowRunEntry(run, "$.run");
       state.runs.push(run);
-      return clone(run);
+      return run;
     });
   }
 
@@ -266,7 +266,7 @@ export class FileWorkflowStore implements WorkflowStore {
 
       assertWorkflowRunEntry(updated, "$.run");
       state.runs[index] = updated;
-      return clone(updated);
+      return updated;
     });
   }
 
@@ -308,8 +308,10 @@ export class FileWorkflowStore implements WorkflowStore {
   private async load(): Promise<WorkflowStoreState> {
     if (this.state) return this.state;
 
-    const workflows = await this.loadWorkflowsFile();
-    const runs = await this.loadRunsFile();
+    const [workflows, runs] = await Promise.all([
+      this.loadWorkflowsFile(),
+      this.loadRunsFile()
+    ]);
 
     const state: WorkflowStoreState = {
       version: WORKFLOW_STORE_VERSION,

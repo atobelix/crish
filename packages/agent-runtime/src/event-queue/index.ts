@@ -14,6 +14,7 @@
  * 4. 优雅关闭：关闭时排空队列
  */
 
+import { RingBuffer } from "@crish/shared-utils";
 import type { ConexCanonicalEvent } from "../event-architecture/canonical-event";
 
 // ─── 背压策略 ─────────────────────────────────────────────
@@ -66,7 +67,7 @@ export interface QueueStats {
 // ─── AsyncEventQueue ──────────────────────────────────────
 
 export class AsyncEventQueue {
-  private queue: ConexCanonicalEvent[] = [];
+  private readonly queue: RingBuffer<ConexCanonicalEvent>;
   private totalEnqueued = 0;
   private totalDequeued = 0;
   private totalDropped = 0;
@@ -76,7 +77,9 @@ export class AsyncEventQueue {
   private consumers: Array<(events: ConexCanonicalEvent[]) => void | Promise<void>> = [];
   private consumeTimer?: ReturnType<typeof setInterval>;
 
-  constructor(private readonly options: AsyncEventQueueOptions = DEFAULT_QUEUE_OPTIONS) {}
+  constructor(private readonly options: AsyncEventQueueOptions = DEFAULT_QUEUE_OPTIONS) {
+    this.queue = new RingBuffer<ConexCanonicalEvent>(Math.max(1, options.maxQueueSize));
+  }
 
   /**
    * 入队事件
@@ -91,7 +94,7 @@ export class AsyncEventQueue {
     // 内存限制检查
     if (this.options.maxMemoryBytes > 0 &&
         this.estimatedMemoryBytes + eventSize > this.options.maxMemoryBytes) {
-      if (this.options.backpressureStrategy === "drop-oldest" && this.queue.length > 0) {
+      if (this.options.backpressureStrategy === "drop-oldest" && this.queue.size > 0) {
         this.dropOldest();
       } else if (this.options.backpressureStrategy === "reject") {
         this.totalRejected++;
@@ -100,7 +103,7 @@ export class AsyncEventQueue {
     }
 
     // 队列满检查
-    if (this.queue.length >= this.options.maxQueueSize) {
+    if (this.queue.size >= this.options.maxQueueSize) {
       switch (this.options.backpressureStrategy) {
         case "drop-oldest":
           this.dropOldest();
@@ -118,6 +121,7 @@ export class AsyncEventQueue {
       }
     }
 
+    // 经前面的容量检查后队列必有空位，push 不会失败
     this.queue.push(event);
     this.totalEnqueued++;
     this.estimatedMemoryBytes += eventSize;
@@ -143,15 +147,17 @@ export class AsyncEventQueue {
    * 出队事件
    */
   dequeue(count?: number): ConexCanonicalEvent[] {
-    const n = Math.min(count ?? this.options.batchSize, this.queue.length);
+    const n = Math.min(count ?? this.options.batchSize, this.queue.size);
     if (n === 0) return [];
 
-    const events = this.queue.splice(0, n);
-    this.totalDequeued += events.length;
-
-    for (const event of events) {
+    const events: ConexCanonicalEvent[] = [];
+    for (let i = 0; i < n; i++) {
+      const event = this.queue.shift();
+      if (event === undefined) break;
+      events.push(event);
       this.estimatedMemoryBytes -= this.estimateEventSize(event);
     }
+    this.totalDequeued += events.length;
 
     return events;
   }
@@ -170,7 +176,7 @@ export class AsyncEventQueue {
     if (this.consumeTimer) return;
 
     this.consumeTimer = setInterval(() => {
-      if (this.queue.length === 0) return;
+      if (this.queue.size === 0) return;
 
       const events = this.dequeue();
       if (events.length === 0) return;
@@ -203,7 +209,7 @@ export class AsyncEventQueue {
     this.stopConsuming();
 
     // 排空队列
-    while (this.queue.length > 0) {
+    while (this.queue.size > 0) {
       const events = this.dequeue();
       for (const consumer of this.consumers) {
         try {
@@ -219,12 +225,12 @@ export class AsyncEventQueue {
    * 获取队列统计
    */
   getStats(): QueueStats {
-    const averageEventSize = this.queue.length > 0
-      ? this.estimatedMemoryBytes / this.queue.length
+    const averageEventSize = this.queue.size > 0
+      ? this.estimatedMemoryBytes / this.queue.size
       : 0;
 
     return {
-      currentSize: this.queue.length,
+      currentSize: this.queue.size,
       maxSize: this.options.maxQueueSize,
       totalEnqueued: this.totalEnqueued,
       totalDequeued: this.totalDequeued,
@@ -232,8 +238,8 @@ export class AsyncEventQueue {
       totalRejected: this.totalRejected,
       estimatedMemoryBytes: this.estimatedMemoryBytes,
       averageEventSize,
-      isFull: this.queue.length >= this.options.maxQueueSize,
-      isEmpty: this.queue.length === 0
+      isFull: this.queue.size >= this.options.maxQueueSize,
+      isEmpty: this.queue.size === 0
     };
   }
 
@@ -248,11 +254,22 @@ export class AsyncEventQueue {
   }
 
   private estimateEventSize(event: ConexCanonicalEvent): number {
-    // 粗略估算：JSON 序列化后的字节数
-    try {
-      return JSON.stringify(event).length * 2; // UTF-16
-    } catch {
-      return 1024; // 默认 1KB
+    // 近似估算：遍历顶层字段并按类型估算字节，避免 JSON.stringify 热路径开销。
+    // UTF-16 字符串按 2 字节/字符计；对象/数组按字段数粗估。
+    let size = 256; // 事件结构基础开销
+    for (const key of Object.keys(event)) {
+      size += key.length * 2 + 16;
+      const value = (event as unknown as Record<string, unknown>)[key];
+      if (typeof value === "string") {
+        size += value.length * 2;
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        size += 8;
+      } else if (Array.isArray(value)) {
+        size += value.length * 64;
+      } else if (value && typeof value === "object") {
+        size += Object.keys(value).length * 64;
+      }
     }
+    return size;
   }
 }

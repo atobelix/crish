@@ -151,6 +151,7 @@ export class ProcessManager {
           this.hooks.onTimeout?.(record);
           this.terminate(processId);
         }, options.maxRuntimeMs);
+        record.runtimeTimer.unref();
       }
     } catch (error) {
       record.state = "error";
@@ -184,6 +185,8 @@ export class ProcessManager {
 
     // 阶段2：超时后 SIGKILL
     const timeout = record.options.gracefulTimeoutMs ?? 5000;
+    // 清理可能存在的旧 terminationTimer，避免重复调用 terminate 时定时器泄漏
+    if (record.terminationTimer) clearTimeout(record.terminationTimer);
     record.terminationTimer = setTimeout(() => {
       if (record.state === "terminating" && child.pid && !child.killed) {
         record.state = "force-killing";
@@ -195,6 +198,7 @@ export class ProcessManager {
         }
       }
     }, timeout);
+    record.terminationTimer.unref();
   }
 
   /**
@@ -204,6 +208,9 @@ export class ProcessManager {
     for (const [processId, record] of this.processes) {
       if (record.state === "running" || record.state === "spawning") {
         this.terminate(processId);
+      } else {
+        // 已终止的记录：清理可能残留的定时器和监听器，避免泄漏
+        this.disposeRecord(record);
       }
     }
   }
@@ -247,6 +254,7 @@ export class ProcessManager {
     let cleaned = 0;
     for (const [processId, record] of this.processes) {
       if (record.state === "exited" || record.state === "error") {
+        this.disposeRecord(record);
         this.processes.delete(processId);
         cleaned++;
       }
@@ -260,12 +268,11 @@ export class ProcessManager {
     const record = this.processes.get(processId);
     if (!record) return;
 
-    // 清理定时器
-    if (record.terminationTimer) clearTimeout(record.terminationTimer);
-    if (record.runtimeTimer) clearTimeout(record.runtimeTimer);
-
     // 先保存终止前的状态，用于判断退出类型
     const stateBeforeExit = record.state;
+
+    // 统一清理定时器和子进程监听器
+    this.disposeRecord(record);
 
     record.state = "exited";
     record.exitedAt = new Date().toISOString();
@@ -290,10 +297,31 @@ export class ProcessManager {
     const record = this.processes.get(processId);
     if (!record) return;
 
+    // 统一清理定时器和子进程监听器，避免 spawn 失败后定时器泄漏
+    this.disposeRecord(record);
+
     record.state = "error";
     record.exitKind = "spawn-error";
     record.exitedAt = new Date().toISOString();
 
     this.hooks.onError?.(record, error);
+  }
+
+  /**
+   * 统一释放进程记录持有的资源：定时器和子进程事件监听器。
+   *
+   * 在所有终止路径（handleProcessExit / handleProcessError / cleanup / terminateAll）中调用，
+   * 确保 runtimeTimer、terminationTimer 和 child 上的监听器不泄漏。
+   */
+  private disposeRecord(record: ManagedProcessRecord): void {
+    if (record.runtimeTimer) {
+      clearTimeout(record.runtimeTimer);
+      record.runtimeTimer = undefined;
+    }
+    if (record.terminationTimer) {
+      clearTimeout(record.terminationTimer);
+      record.terminationTimer = undefined;
+    }
+    record.childProcess?.removeAllListeners();
   }
 }

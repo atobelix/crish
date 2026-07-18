@@ -306,6 +306,13 @@ export class BackgroundCommandManager {
   }
 
   subscribe(listener: BackgroundCommandListener): () => void {
+    const MAX_LISTENERS = 100;
+    if (this.listeners.size >= MAX_LISTENERS) {
+      const oldest = this.listeners.values().next().value;
+      if (oldest !== undefined) {
+        this.listeners.delete(oldest);
+      }
+    }
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

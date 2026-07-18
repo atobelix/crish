@@ -611,6 +611,12 @@ export class AgentSessionLoop {
 
         // ── executing-tools: 批量执行工具调用 ─────────────────
         case "executing-tools": {
+          if (this.abortController.signal.aborted) {
+            this.dispatch("ABORT");
+            endReason = "aborted";
+            break;
+          }
+
           // 重新获取 tool calls（从最后一条 assistant 消息）
           const messages = this.conversation.getMessagesMutable();
           const lastAssistant = messages.filter((m) => m.role === "assistant").pop();

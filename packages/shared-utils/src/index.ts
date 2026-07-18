@@ -15,3 +15,5 @@ export { AsyncMutex, AsyncSemaphore } from "./async-mutex";
 export { JsonlAppendBatcher } from "./jsonl-append-batcher";
 export type { JsonlAppendBatcherOptions } from "./jsonl-append-batcher";
 export { deepEqual, shallowEqual } from "./deep-equal";
+export { BoundedArray } from "./bounded-array";
+

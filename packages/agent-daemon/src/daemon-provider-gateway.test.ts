@@ -24,7 +24,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
     });
 
     const plan = await controller.planProvider({ runId: "run_1", cwd: "C:/workspace" });
@@ -32,7 +32,7 @@ describe("DaemonProviderGatewayController", () => {
       ok: true,
       requestedModel: "mimo-v2.5",
       selectedRoute: {
-        providerId: "flowbit",
+        providerId: "crish",
         upstreamModel: "mimo-v2.5",
         endpointType: "auto",
         endpointSupport: "auto",
@@ -40,7 +40,7 @@ describe("DaemonProviderGatewayController", () => {
         credentialSourceType: "api-key",
         credentialSource: {
           type: "api-key",
-          providerId: "flowbit",
+          providerId: "crish",
           baseUrl: "https://gateway.example/v1",
         },
       },
@@ -57,7 +57,7 @@ describe("DaemonProviderGatewayController", () => {
     });
 
     const provider = await controller.createProvider({ runId: "run_1", cwd: "C:/workspace" });
-    expect(provider.id).toBe("flowbit");
+    expect(provider.id).toBe("crish");
     expect(JSON.stringify(controller.getStatusSnapshot())).not.toContain("sk-direct");
     expect(controller.getStatusSnapshot()).toMatchObject({
       credentialMode: "direct",
@@ -76,7 +76,7 @@ describe("DaemonProviderGatewayController", () => {
         selectedStreamingSupport: "streaming",
         selectedCredentialSource: {
           type: "api-key",
-          providerId: "flowbit",
+          providerId: "crish",
           baseUrl: "https://gateway.example/v1",
         },
       },
@@ -106,7 +106,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
       diagnostics: false,
     });
 
@@ -154,7 +154,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
       diagnostics: false,
     });
 
@@ -235,7 +235,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
       diagnostics: false,
       requestTimeoutMs: 1_000,
     });
@@ -276,7 +276,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
       stream: false,
       diagnostics: false,
     });
@@ -608,7 +608,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-old",
       baseUrl: "https://old.example/v1",
       model: "old-model",
-      providerId: "flowbit",
+      providerId: "crish",
     });
 
     controller.update({
@@ -653,7 +653,7 @@ describe("DaemonProviderGatewayController", () => {
       {
         baseUrl: "https://default.example",
         model: "default-model",
-        providerId: "flowbit",
+        providerId: "crish",
       }
     );
 
@@ -675,7 +675,7 @@ describe("DaemonProviderGatewayController", () => {
       {
         baseUrl: "https://default.example",
         model: "mimo-v2.5",
-        providerId: "flowbit",
+        providerId: "crish",
       }
     );
     const controller = new DaemonProviderGatewayController(config);
@@ -708,7 +708,7 @@ describe("DaemonProviderGatewayController", () => {
       apiKey: "sk-old-direct",
       baseUrl: "https://gateway.example/v1",
       model: "mimo-v2.5",
-      providerId: "flowbit",
+      providerId: "crish",
     });
 
     controller.update({
@@ -744,7 +744,7 @@ describe("DaemonProviderGatewayController", () => {
         apiKey: "default-key",
         baseUrl: "https://default.example",
         model: "default-model",
-        providerId: "flowbit",
+        providerId: "crish",
       },
       env: {
         CRISH_API_KEY: "env-key",

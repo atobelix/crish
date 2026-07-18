@@ -289,7 +289,7 @@ export class RuntimeMetricsCollector {
   private readonly spans = new BoundedMap<string, RuntimeSpanSummary>(MAX_TRACE_SPANS + 1);
   // 容量 MAX_TRACE_SPANS+1：保证 push 总能成功，再由 pruneSpans 用 O(1) shift 收敛到上限。
   private readonly spanOrder = new RingBuffer<string>(MAX_TRACE_SPANS + 1);
-  private readonly errors: RuntimeErrorSummary[] = [];
+  private readonly errors = new RingBuffer<RuntimeErrorSummary>(MAX_TRACE_ERRORS);
   private activeMessageSpanId: string | undefined;
   private readonly failures: RuntimeFailureMetricsSnapshot = {
     errorCount: 0,
@@ -741,8 +741,7 @@ export class RuntimeMetricsCollector {
   }
 
   private recordError(error: RuntimeErrorSummary): void {
-    this.errors.push(compactError(error));
-    if (this.errors.length > MAX_TRACE_ERRORS) this.errors.splice(0, this.errors.length - MAX_TRACE_ERRORS);
+    this.errors.pushOverwritingOldest(compactError(error));
   }
 
   private errorSummary(
@@ -770,9 +769,9 @@ export class RuntimeMetricsCollector {
       startedAt: this.startedAt,
       endedAt: this.endedAt,
       spanCount: spans.length,
-      errorCount: this.errors.length,
+      errorCount: this.errors.size,
       spans: spans.map((span) => compactSpan({ traceId: this.sessionId, sessionId: this.sessionId, ...span })),
-      recentErrors: this.errors.map((error) => compactError({ traceId: this.sessionId, sessionId: this.sessionId, ...error }))
+      recentErrors: this.errors.toArray().map((error) => compactError({ traceId: this.sessionId, sessionId: this.sessionId, ...error }))
     }) as unknown as RuntimeTraceSummary;
   }
 

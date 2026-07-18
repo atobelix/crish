@@ -1,3 +1,4 @@
+import { BoundedMap } from "@crish/shared-utils";
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   ScriptWaitPolicy,
@@ -28,7 +29,7 @@ describe("script-wait-policy", () => {
     const p2 = new ScriptWaitPolicy();
     const meta = p2.registerStart("task-long", "npm run build --production", "continue");
     // inject fake history for package-build family
-    (p2 as unknown as { familyDurations: Map<string, number[]> }).familyDurations.set(meta.family, [
+    (p2 as unknown as { familyDurations: BoundedMap<string, number[]> }).familyDurations.set(meta.family, [
       180_000,
       200_000,
       220_000,

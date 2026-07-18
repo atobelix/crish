@@ -56,8 +56,8 @@ export const DAEMON_PROTOCOL_MESSAGE_GROUPS = {
     outbound: ["checkpoints-listed", "checkpoint-diff", "checkpoint-restored"],
   },
   config: {
-    inbound: ["update-config"],
-    outbound: ["config-updated"],
+    inbound: ["update-config", "probe-provider-models", "probe-provider-chat"],
+    outbound: ["config-updated", "provider-models-probed", "provider-chat-probed"],
   },
   daemon: {
     inbound: ["hello", "ping", "get-status", "list-capabilities"],

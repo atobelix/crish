@@ -103,7 +103,7 @@ export class WorkspaceMutationCoordinator {
   private readonly idFactory: () => string;
   private readonly now: () => Date | number;
   private readonly caseSensitivePaths: boolean;
-  private readonly leases = new Map<string, ActiveMutationLease>();
+  private readonly leases = new BoundedMap<string, ActiveMutationLease>(1000);
   private readonly readSnapshots = new BoundedMap<string, BoundedMap<string, string>>(MAX_READ_SNAPSHOT_SESSIONS);
   private waiters: WaitingMutationLeaseRequest[] = [];
   private expiryTimer?: ReturnType<typeof setTimeout>;
@@ -137,8 +137,17 @@ export class WorkspaceMutationCoordinator {
       });
     }
 
-    const timeoutMs = request.timeoutMs;
-    if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs < 0)) {
+    const MAX_WAITERS = 100;
+    if (this.waiters.length >= MAX_WAITERS) {
+      return Promise.resolve({
+        ok: false,
+        reason: "timeout",
+        conflictingLeases: this.conflictingActiveLeases(scope)
+      });
+    }
+
+    const timeoutMs = request.timeoutMs ?? 30_000;
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
       throw new Error("timeoutMs must be a non-negative finite number");
     }
     if (timeoutMs === 0) {
@@ -158,17 +167,15 @@ export class WorkspaceMutationCoordinator {
         signal: request.signal
       };
 
-      if (timeoutMs !== undefined) {
-        waiter.timeout = setTimeout(() => {
-          this.removeWaiter(waiter);
-          this.settleWaiter(waiter, {
-            ok: false,
-            reason: "timeout",
-            conflictingLeases: this.conflictingActiveLeases(scope)
-          });
-        }, timeoutMs);
-        unrefTimer(waiter.timeout);
-      }
+      waiter.timeout = setTimeout(() => {
+        this.removeWaiter(waiter);
+        this.settleWaiter(waiter, {
+          ok: false,
+          reason: "timeout",
+          conflictingLeases: this.conflictingActiveLeases(scope)
+        });
+      }, timeoutMs);
+      unrefTimer(waiter.timeout);
 
       if (request.signal) {
         waiter.abortHandler = () => {

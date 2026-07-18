@@ -19,6 +19,8 @@ import type {
   UpdateConfigMessage,
   ProbeProviderModelsMessage,
   ProbeProviderChatMessage,
+  ProviderModelsProbedMessage,
+  ProviderChatProbedMessage,
 } from "../../types.js";
 import type {
   JsonObject,
@@ -76,6 +78,7 @@ import {
   optionalBoolean,
   optionalEnum,
   optionalInteger,
+  optionalNumber,
   optionalString,
   optionalStringArray,
   rejectUnknownFields,
@@ -1097,5 +1100,49 @@ export function validateProbeProviderChatMessage(
     baseUrl: baseUrl!,
     apiKey: apiKey!,
     model: model!,
+  });
+}
+
+const PROVIDER_MODELS_PROBED_FIELDS = ["type", "ok", "models", "error"];
+
+export function validateProviderModelsProbedMessage(
+  input: UnknownRecord
+): ProtocolValidationResult<ProviderModelsProbedMessage> {
+  const issues: ProtocolValidationIssue[] = [];
+  rejectUnknownFields(input, PROVIDER_MODELS_PROBED_FIELDS, issues);
+
+  const okVal = requiredBoolean(input, "ok", "$.ok", issues);
+  const models = requiredArray(input, "models", "$.models", issues);
+  const error = optionalString(input, "error", "$.error", issues);
+
+  if (issues.length > 0) return invalid("Invalid provider-models-probed message", issues);
+
+  return ok({
+    type: "provider-models-probed",
+    ok: okVal!,
+    models: (models || []).map((m) => String(m)),
+    error,
+  });
+}
+
+const PROVIDER_CHAT_PROBED_FIELDS = ["type", "ok", "latencyMs", "error"];
+
+export function validateProviderChatProbedMessage(
+  input: UnknownRecord
+): ProtocolValidationResult<ProviderChatProbedMessage> {
+  const issues: ProtocolValidationIssue[] = [];
+  rejectUnknownFields(input, PROVIDER_CHAT_PROBED_FIELDS, issues);
+
+  const okVal = requiredBoolean(input, "ok", "$.ok", issues);
+  const latencyMs = optionalNumber(input, "latencyMs", "$.latencyMs", issues);
+  const error = optionalString(input, "error", "$.error", issues);
+
+  if (issues.length > 0) return invalid("Invalid provider-chat-probed message", issues);
+
+  return ok({
+    type: "provider-chat-probed",
+    ok: okVal!,
+    latencyMs,
+    error,
   });
 }

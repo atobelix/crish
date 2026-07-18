@@ -1,4 +1,4 @@
-import { BoundedMap } from "@crish/shared-utils";
+import { BoundedMap, BoundedArray } from "@crish/shared-utils";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
 import type {
@@ -21,57 +21,6 @@ const MAX_SESSION_EVENTS = 200;
 /** 文件快照提示上限：snapshotForCompression 只取最近 40 条，保留 5x 余量。 */
 const MAX_FILE_HINTS = 200;
 
-/**
- * 有界数组：固定容量、追加式淘汰的环形缓冲。
- *
- * 替代 `push + splice(0, n)` 模式：
- * - push 永远 O(1)（覆盖最旧元素，不再整体移位）
- * - filter / slice 仍返回普通数组，调用方可继续链式使用
- *
- * 适用于 events / fileHints 这类「只追加、超容量淘汰最旧、按需切片读取」的场景。
- */
-class BoundedArray<T> {
-  private readonly buffer: T[];
-  private head = 0;
-  private count = 0;
-
-  constructor(private readonly capacity: number) {
-    this.buffer = new Array(capacity);
-  }
-
-  push(item: T): T {
-    if (this.count < this.capacity) {
-      this.buffer[(this.head + this.count) % this.capacity] = item;
-      this.count++;
-    } else {
-      this.buffer[this.head] = item;
-      this.head = (this.head + 1) % this.capacity;
-    }
-    return item;
-  }
-
-  filter(predicate: (item: T) => boolean): T[] {
-    const result: T[] = [];
-    for (let i = 0; i < this.count; i++) {
-      const item = this.buffer[(this.head + i) % this.capacity]!;
-      if (predicate(item)) result.push(item);
-    }
-    return result;
-  }
-
-  slice(start?: number, end?: number): T[] {
-    if (this.count === 0) return [];
-    const items: T[] = new Array(this.count);
-    for (let i = 0; i < this.count; i++) {
-      items[i] = this.buffer[(this.head + i) % this.capacity]!;
-    }
-    return items.slice(start, end);
-  }
-
-  get length(): number {
-    return this.count;
-  }
-}
 
 export interface ContextTask {
   id: string;
@@ -99,8 +48,8 @@ export interface FileSnapshotHint {
 
 export class InMemoryContextState implements ContextStateReader {
   private readonly tasks = new BoundedMap<string, ContextTask>(MAX_CONTEXT_TASKS);
-  private readonly events: SessionEventNote[] = [];
-  private readonly fileHints: FileSnapshotHint[] = [];
+  private readonly events = new BoundedArray<SessionEventNote>(MAX_SESSION_EVENTS);
+  private readonly fileHints = new BoundedArray<FileSnapshotHint>(MAX_FILE_HINTS);
   private compressionWindow = 0;
   private previousCompressionSummary: string | undefined;
 
@@ -134,9 +83,6 @@ export class InMemoryContextState implements ContextStateReader {
       compressionWindow: this.compressionWindow
     };
     this.events.push(event);
-    if (this.events.length > MAX_SESSION_EVENTS) {
-      this.events.splice(0, this.events.length - MAX_SESSION_EVENTS);
-    }
     return event;
   }
 
@@ -149,9 +95,6 @@ export class InMemoryContextState implements ContextStateReader {
       createdAt: nowIso()
     };
     this.fileHints.push(hint);
-    if (this.fileHints.length > MAX_FILE_HINTS) {
-      this.fileHints.splice(0, this.fileHints.length - MAX_FILE_HINTS);
-    }
     return hint;
   }
 

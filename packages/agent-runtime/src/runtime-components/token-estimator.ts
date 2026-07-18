@@ -29,6 +29,10 @@ function charsPerToken(model?: string): number {
 }
 
 export class UsageBasedTokenEstimator implements TokenEstimator {
+  // 缓存每个 block 对象的字符数估算，避免在 agent 循环中反复 JSON.stringify 同一 block。
+  // block 对象通常是不可变的（创建后不再修改），缓存按引用失效（GC 回收后自动清理）。
+  private readonly blockCharCache = new WeakMap<object, number>();
+
   estimate(messages: AgentMessage[], model?: string): number {
     if (messages.length === 0) return 0;
 
@@ -37,17 +41,26 @@ export class UsageBasedTokenEstimator implements TokenEstimator {
 
     for (const msg of messages) {
       for (const block of msg.blocks) {
-        if (block.type === "text" || block.type === "thought") {
-          totalChars += block.text.length;
-        } else if (block.type === "tool-call") {
-          totalChars += block.toolName.length + JSON.stringify(block.input).length;
-        } else if (block.type === "tool-result") {
-          totalChars += (block.output.text?.length ?? 0) + JSON.stringify(block.output.json ?? "").length;
-        }
+        totalChars += this.blockChars(block);
       }
       totalChars += msg.role.length + 10;
     }
 
     return Math.ceil(totalChars / ratio);
+  }
+
+  private blockChars(block: AgentMessage["blocks"][number]): number {
+    const cached = this.blockCharCache.get(block);
+    if (cached !== undefined) return cached;
+    let chars = 0;
+    if (block.type === "text" || block.type === "thought") {
+      chars = block.text.length;
+    } else if (block.type === "tool-call") {
+      chars = block.toolName.length + JSON.stringify(block.input).length;
+    } else if (block.type === "tool-result") {
+      chars = (block.output.text?.length ?? 0) + JSON.stringify(block.output.json ?? "").length;
+    }
+    this.blockCharCache.set(block, chars);
+    return chars;
   }
 }

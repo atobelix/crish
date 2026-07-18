@@ -7,8 +7,8 @@ import { resolveScopedContext } from "./scoped-context";
 describe("prompt context composer", () => {
   it("keeps scoped context and stable project progress in stable blocks", () => {
     const scoped = resolveScopedContext({
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
       rules: [{ id: "single-track", text: "Use daemon as the product state source.", activation: "enabled" }]
     });
     const ledger = new ProjectProgressLedger({ now: () => "2026-01-01T00:00:00.000Z" });
@@ -101,7 +101,7 @@ describe("prompt context composer", () => {
 
   it("preserves PromptAssembly stable prefix across current user turn changes", () => {
     const scoped = resolveScopedContext({
-      cwd: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
       rules: [{ id: "cache-rule", text: "Keep rules deterministic.", activation: "enabled" }]
     });
     const context = composePromptContext({ scopedContext: scoped });

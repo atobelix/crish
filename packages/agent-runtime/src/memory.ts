@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
-import { BoundedMap, isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
+import { BoundedMap, isNodeError, JsonlAppendBatcher, RingBuffer } from "@crish/shared-utils";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentTool } from "./types";
 
@@ -36,7 +36,7 @@ export interface MemoryStore {
 }
 
 export class InMemoryMemoryStore implements MemoryStore {
-  private readonly entries: MemoryEntry[] = [];
+  private readonly entries = new RingBuffer<MemoryEntry>(MAX_IN_MEMORY_ENTRIES);
   private readonly deletedIds = new BoundedMap<string, true>(MAX_IN_MEMORY_ENTRIES);
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
@@ -47,19 +47,16 @@ export class InMemoryMemoryStore implements MemoryStore {
       createdAt: now,
       updatedAt: now
     };
-    this.entries.push(saved);
-    if (this.entries.length > MAX_IN_MEMORY_ENTRIES) {
-      this.entries.splice(0, this.entries.length - MAX_IN_MEMORY_ENTRIES);
-    }
+    this.entries.pushOverwritingOldest(saved);
     return saved;
   }
 
   async search(options: MemorySearchOptions = {}): Promise<MemoryEntry[]> {
-    return filterMemories(this.entries.filter((entry) => !this.deletedIds.has(entry.id)), options);
+    return filterMemories(this.entries.toArray().filter((entry) => !this.deletedIds.has(entry.id)), options);
   }
 
   async delete(memoryId: string): Promise<boolean> {
-    const exists = this.entries.some((entry) => entry.id === memoryId && !this.deletedIds.has(memoryId));
+    const exists = this.entries.toArray().some((entry) => entry.id === memoryId && !this.deletedIds.has(memoryId));
     if (!exists) return false;
     this.deletedIds.set(memoryId, true);
     return true;
@@ -83,6 +80,7 @@ export class JsonlMemoryStore implements MemoryStore {
   private cachedEntries: MemoryEntry[] | undefined;
   private cachedMtimeMs: number | undefined;
   private cachedStats: { totalRecords: number; deletedRecords: number } | undefined;
+  private hasPendingLocalWrites = false;
 
   constructor(private readonly filePath: string) {}
 
@@ -94,10 +92,12 @@ export class JsonlMemoryStore implements MemoryStore {
       createdAt: now,
       updatedAt: now
     };
+    if (this.cachedEntries !== undefined) {
+      this.cachedEntries.push(saved);
+      if (this.cachedStats) this.cachedStats.totalRecords++;
+    }
+    this.hasPendingLocalWrites = true;
     await this.enqueueAppend(JSON.stringify(saved));
-    // invalidateEntriesCache 已在 enqueueAppend 内同步执行，此处 flush 确保
-    // pending 数据落盘，使后续 readEntries 读到完整文件内容。
-    await this.flushPendingAppends();
     return saved;
   }
 
@@ -112,8 +112,14 @@ export class JsonlMemoryStore implements MemoryStore {
     if (!entries.some((entry) => entry.id === id)) {
       return false;
     }
+    if (this.cachedEntries !== undefined) {
+      this.cachedEntries = this.cachedEntries.filter((e) => e.id !== id);
+      if (this.cachedStats) {
+        this.cachedStats.deletedRecords++;
+      }
+    }
+    this.hasPendingLocalWrites = true;
     await this.enqueueAppend(JSON.stringify({ type: "delete", memoryId: id, deletedAt: nowIso() }));
-    await this.flushPendingAppends();
     // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
     await this.maybeCompact();
     return true;
@@ -174,6 +180,11 @@ export class JsonlMemoryStore implements MemoryStore {
       this.cachedStats = { totalRecords: 0, deletedRecords: 0 };
       return this.cachedEntries;
     }
+    if (this.hasPendingLocalWrites && this.cachedEntries !== undefined) {
+      this.cachedMtimeMs = stat.mtimeMs;
+      this.hasPendingLocalWrites = false;
+      return this.cachedEntries;
+    }
     if (this.cachedEntries !== undefined && this.cachedMtimeMs === stat.mtimeMs) {
       return this.cachedEntries;
     }
@@ -208,6 +219,7 @@ export class JsonlMemoryStore implements MemoryStore {
     this.cachedEntries = [...entries.values()];
     this.cachedMtimeMs = stat.mtimeMs;
     this.cachedStats = { totalRecords, deletedRecords };
+    this.hasPendingLocalWrites = false;
     return this.cachedEntries;
   }
 
@@ -215,10 +227,6 @@ export class JsonlMemoryStore implements MemoryStore {
     const appendTask = this.appendQueue.then(async () => {
       const batcher = await this.ensureAppendBatcher();
       await batcher.append(line);
-      // 同步失效缓存：在 enqueueAppend 返回前清空缓存，关闭
-      // "append 返回 → invalidateEntriesCache" 之间的竞态窗口，
-      // 避免并发 readEntries 命中旧缓存。
-      this.invalidateEntriesCache();
     });
     this.appendQueue = appendTask.catch(() => undefined);
     await appendTask;

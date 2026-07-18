@@ -307,8 +307,13 @@ export class DefaultProviderGateway implements ProviderGateway {
     }
     const matching = routes.filter((route) => routeMatchesRequest(route, request, requestedModel));
     const active = matching.filter((route) => route.status !== "disabled");
-    const cooldown = active.filter((route) => routeInCooldown(route, this.now()));
-    const available = active.filter((route) => !routeInCooldown(route, this.now()));
+    const now = this.now();
+    const cooldown: typeof active = [];
+    const available: typeof active = [];
+    for (const route of active) {
+      if (routeInCooldown(route, now)) cooldown.push(route);
+      else available.push(route);
+    }
 
     routeDecision.push(`candidate_routes:${active.length}`);
     routeDecision.push(`available_routes:${available.length}`);

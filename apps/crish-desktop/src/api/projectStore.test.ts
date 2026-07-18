@@ -20,9 +20,9 @@ beforeEach(() => {
 
 describe('stableProjectIdFromPath', () => {
   it('same path → same id (case/slash normalized)', () => {
-    const a = stableProjectIdFromPath('C:\\Software\\conex');
-    const b = stableProjectIdFromPath('C:/Software/conex/');
-    const c = stableProjectIdFromPath('c:/software/conex');
+    const a = stableProjectIdFromPath('C:\\workspace\\crish');
+    const b = stableProjectIdFromPath('C:/workspace/crish/');
+    const c = stableProjectIdFromPath('c:/workspace/crish');
     expect(a).toBe(b);
     expect(a).toBe(c);
     expect(a.startsWith('proj-')).toBe(true);
@@ -35,7 +35,7 @@ describe('stableProjectIdFromPath', () => {
 
 describe('orphan proj-* recovery', () => {
   it('rebinds single-project orphan folders like proj-mrlldzn', () => {
-    const p = addProjectFromPath('C:/Software/conex', 'conex');
+    const p = addProjectFromPath('C:/workspace/crish', 'crish');
     const sessions = [
       { id: '1', folder: 'proj-mrlldzn' },
       { id: '2', folder: GENERAL_FOLDER },

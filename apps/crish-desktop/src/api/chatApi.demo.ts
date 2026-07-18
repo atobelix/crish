@@ -45,10 +45,10 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
           {
             id: 'tc-grep-1',
             name: 'grep_search',
-            arguments: 'data-flowbit-inline="1"',
+            arguments: 'data-crish-inline="1"',
             status: 'success',
-            explanation: '在工作区搜索冲突的行内按钮标签 data-flowbit-inline="1"',
-            output: 'ripgrep searching pattern "data-flowbit-inline=\\"1\\"" in path "/c/Software/conex"...\n\nFound 3 matches across 2 files:\n\n1. apps/browser-extension/src/trigger-injector.ts:\n   Line 42: <button data-flowbit-inline="1" class="fab-trigger-btn">F</button>\n   Line 108: const target = document.querySelector("[data-flowbit-inline=\\"1\\"]");\n\n2. packages/shared-types/src/config.ts:\n   Line 15:   inlineSelector?: "[data-flowbit-inline=\\"1\\"]";\n\nSearch complete. 48 files analyzed, 3 matches found. Execution time: 42ms.'
+            explanation: '在工作区搜索冲突的行内按钮标签 data-crish-inline="1"',
+            output: 'ripgrep searching pattern "data-crish-inline=\\"1\\"" in path "C:/workspace/crish"...\n\nFound 3 matches across 2 files:\n\n1. apps/browser-extension/src/trigger-injector.ts:\n   Line 42: <button data-crish-inline="1" class="fab-trigger-btn">F</button>\n   Line 108: const target = document.querySelector("[data-crish-inline=\\"1\\"]");\n\n2. packages/shared-types/src/config.ts:\n   Line 15:   inlineSelector?: "[data-crish-inline=\\"1\\"]";\n\nSearch complete. 48 files analyzed, 3 matches found. Execution time: 42ms.'
           },
           {
             id: 'tc-read-1',
@@ -56,7 +56,7 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
             arguments: 'trigger-injector.ts',
             status: 'success',
             explanation: '读取 trigger-injector.ts 以分析按钮挂载逻辑与生命周期',
-            output: 'Reading file "trigger-injector.ts"...\nFile size: 2450 bytes.\nFile contents read successfully:\n\n=================== FILE START ===================\nimport { SVG_ICON } from "./icons";\nimport { getSharedConfig } from "@conex/shared-types";\n\nexport function acquireInlineBtn() {\n  // Attempt to locate an existing button injected into the DOM tree\n  let btn = document.querySelector("[data-flowbit-inline]");\n  \n  if (!btn) {\n    console.log("[Flowbit] Creating new action button element");\n    btn = document.createElement("button");\n    btn.setAttribute("data-flowbit-inline", "1");\n    btn.className = "fab-trigger-btn";\n  }\n  \n  // BUG HERE: We are returning the button instance directly without\n  // validating if another extension has hijacked the inner HTML or\n  // modified the SVG child elements.\n  return btn;\n}\n\nexport function mountTrigger(container: HTMLElement) {\n  const btn = acquireInlineBtn();\n  if (btn && !container.contains(btn)) {\n    container.appendChild(btn);\n    console.log("[Flowbit] Action trigger button mounted successfully");\n  }\n}\n=================== FILE END ==================='
+            output: 'Reading file "trigger-injector.ts"...\nFile size: 2450 bytes.\nFile contents read successfully:\n\n=================== FILE START ===================\nimport { SVG_ICON } from "./icons";\nimport { getSharedConfig } from "@conex/shared-types";\n\nexport function acquireInlineBtn() {\n  // Attempt to locate an existing button injected into the DOM tree\n  let btn = document.querySelector("[data-crish-inline]");\n  \n  if (!btn) {\n    console.log("[Crish] Creating new action button element");\n    btn = document.createElement("button");\n    btn.setAttribute("data-crish-inline", "1");\n    btn.className = "fab-trigger-btn";\n  }\n  \n  // BUG HERE: We are returning the button instance directly without\n  // validating if another extension has hijacked the inner HTML or\n  // modified the SVG child elements.\n  return btn;\n}\n\nexport function mountTrigger(container: HTMLElement) {\n  const btn = acquireInlineBtn();\n  if (btn && !container.contains(btn)) {\n    container.appendChild(btn);\n    console.log("[Crish] Action trigger button mounted successfully");\n  }\n}\n=================== FILE END ==================='
           }
         ]
       },
@@ -69,17 +69,17 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
           {
             id: 'tc-grep-2',
             name: 'grep_search',
-            arguments: 'flowbit-inline-style',
+            arguments: 'crish-inline-style',
             status: 'success',
-            explanation: '在整个工作区搜索 flowbit-inline-style 样式以排除命名冲突',
-            output: 'Searching pattern "flowbit-inline-style" in all workspace modules...\n\nSearching... (excluding node_modules, dist, and .git)\n- apps/browser-extension/src/content-script.css: Line 85: .flowbit-inline-style-container { display: flex; }\n- apps/browser-extension/dist/assets/index.css: Line 412: .flowbit-inline-style-container{display:flex;}\n\nFound 2 matches in 2 files. No conflicting global styles or style selectors declared by external design systems.'
+            explanation: '在整个工作区搜索 crish-inline-style 样式以排除命名冲突',
+            output: 'Searching pattern "crish-inline-style" in all workspace modules...\n\nSearching... (excluding node_modules, dist, and .git)\n- apps/browser-extension/src/content-script.css: Line 85: .crish-inline-style-container { display: flex; }\n- apps/browser-extension/dist/assets/index.css: Line 412: .crish-inline-style-container{display:flex;}\n\nFound 2 matches in 2 files. No conflicting global styles or style selectors declared by external design systems.'
           }
         ]
       },
       {
         id: 'msg-4',
         sender: 'assistant',
-        text: '找到根源了！由于其他一些浏览器插件（如 "All API Hub"）也向 DOM 注入了带有 `[data-flowbit-inline]` 属性的按钮，我们的 `acquireInlineBtn` 误以为它是我们自己创建的并直接复用。但由于它的 `innerHTML` 只有 "F" 并没有 SVG 图标，导致最终界面上呈现出了字符 "F" 的按钮。我已经修改了该逻辑，确保按钮被复用时自动覆盖并重置其 SVG 结构。',
+        text: '找到根源了！由于其他一些浏览器插件（如 "All API Hub"）也向 DOM 注入了带有 `[data-crish-inline]` 属性的按钮，我们的 `acquireInlineBtn` 误以为它是我们自己创建的并直接复用。但由于它的 `innerHTML` 只有 "F" 并没有 SVG 图标，导致最终界面上呈现出了字符 "F" 的按钮。我已经修改了该逻辑，确保按钮被复用时自动覆盖并重置其 SVG 结构。',
         timestamp: Date.now() - 3200000,
         toolCalls: [
           {
@@ -95,7 +95,7 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
                 deletions: 5,
                 changes: [
                   { type: 'normal', content: 'export function acquireInlineBtn() {' },
-                  { type: 'normal', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
+                  { type: 'normal', content: '  let btn = document.querySelector("[data-crish-inline]");' },
                   { type: 'deletion', content: '  return btn;' },
                   { type: 'addition', content: '  if (btn) {' },
                   { type: 'addition', content: '    // Overwrite content if it has been mutated by other content scripts' },
@@ -104,7 +104,7 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
                   { type: 'addition', content: '    }' },
                   { type: 'addition', content: '  } else {' },
                   { type: 'addition', content: '    btn = document.createElement("button");' },
-                  { type: 'addition', content: '    btn.setAttribute("data-flowbit-inline", "1");' },
+                  { type: 'addition', content: '    btn.setAttribute("data-crish-inline", "1");' },
                   { type: 'addition', content: '    btn.className = "fab-trigger-btn";' },
                   { type: 'addition', content: '    btn.innerHTML = SVG_ICON;' },
                   { type: 'addition', content: '  }' },
@@ -149,7 +149,7 @@ const INITIAL_MOCK_SESSIONS: SessionState[] = [
       {
         id: 'msg-7',
         sender: 'assistant',
-        text: '我已经追踪到并修复了这个问题的根源。以下是本次修改的全面总结：\n\n**1. 根源分析**\n- 我们的扩展在挂载触发器时，会调用 `acquireInlineBtn` 查找 DOM 中已有的 `[data-flowbit-inline]` 属性按钮。\n- 由于另一个第三方 Chrome 插件（如 "All API Hub"）往页面上注入了一个占位的 `<button data-flowbit-inline="1">F</button>`，我们的逻辑在查找到该元素后，直接将其复用，而没有清除或重写它的 innerHTML。\n- 结果导致原本应该显示 SVG 矢量图标的按钮只显示了字符 "F"，严重影响了界面的视觉品质与整体稳重感。\n\n**2. 解决方案实现**\n- 我在 [trigger-injector.ts](file:///c:/Software/conex/reference/crish-desktop/src/components/CardPanel.tsx) 中重构了 `acquireInlineBtn` 的复用检测。\n- 如果查找到已有按钮但它的 innerHTML 不是我们的标准 SVG 图标，将强制清空并注入 `SVG_ICON`，否则将全新创建按钮并注入图标。\n- 随后我运行了生产包构建，在 482ms 内顺利编译通过，且无任何语法警告。\n- 执行了 `npm run test:unit` 单元测试，3 项用例全部满分通过，证明逻辑没有任何回归问题。\n\n**3. 下步手动操作建议**\n- 您可以进入浏览器 `chrome://extensions` 页面，点击 "Chat Sync Bridge" 的 **重新加载** 按钮。\n- 重新打开 Claude 或 ChatGPT 会话页面，强制刷新 (Ctrl+F5) 以清空内容脚本缓存，即可看到美化后的 SVG 触发图标显示在行内。',
+        text: '我已经追踪到并修复了这个问题的根源。以下是本次修改的全面总结：\n\n**1. 根源分析**\n- 我们的扩展在挂载触发器时，会调用 `acquireInlineBtn` 查找 DOM 中已有的 `[data-crish-inline]` 属性按钮。\n- 由于另一个第三方 Chrome 插件（如 "All API Hub"）往页面上注入了一个占位的 `<button data-crish-inline="1">F</button>`，我们的逻辑在查找到该元素后，直接将其复用，而没有清除或重写它的 innerHTML。\n- 结果导致原本应该显示 SVG 矢量图标的按钮只显示了字符 "F"，严重影响了界面的视觉品质与整体稳重感。\n\n**2. 解决方案实现**\n- 我在 [trigger-injector.ts](file:///C:/workspace/crish/reference/crish-desktop/src/components/CardPanel.tsx) 中重构了 `acquireInlineBtn` 的复用检测。\n- 如果查找到已有按钮但它的 innerHTML 不是我们的标准 SVG 图标，将强制清空并注入 `SVG_ICON`，否则将全新创建按钮并注入图标。\n- 随后我运行了生产包构建，在 482ms 内顺利编译通过，且无任何语法警告。\n- 执行了 `npm run test:unit` 单元测试，3 项用例全部满分通过，证明逻辑没有任何回归问题。\n\n**3. 下步手动操作建议**\n- 您可以进入浏览器 `chrome://extensions` 页面，点击 "Chat Sync Bridge" 的 **重新加载** 按钮。\n- 重新打开 Claude 或 ChatGPT 会话页面，强制刷新 (Ctrl+F5) 以清空内容脚本缓存，即可看到美化后的 SVG 触发图标显示在行内。',
         timestamp: Date.now() - 2800000
       }
     ]
@@ -306,7 +306,7 @@ export const streamMockAssistantResponse = (
       callbacks.onToolStart(grepId, 'grep_search', 'useLayoutStore.getState()', '搜索工作区中所有对 layoutStore 状态库的直接引用');
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      let grepResults = `ripgrep searching pattern "useLayoutStore.getState()" in path "c:/Software/conex"...\n\n`;
+      let grepResults = `ripgrep searching pattern "useLayoutStore.getState()" in path "C:/workspace/crish"...\n\n`;
       const filesList = [
         'src/components/CardPanel.tsx',
         'src/components/Sidebar.tsx',
@@ -661,7 +661,7 @@ export interface LayoutStoreState {
       if (isCancelled) return;
       callbacks.onToolSuccess(
         toolId1, 
-        'ripgrep searching pattern "acquireInlineBtn" in path "c:/Software/conex"...\n\n' +
+        'ripgrep searching pattern "acquireInlineBtn" in path "C:/workspace/crish"...\n\n' +
         'Found 3 matches across 2 files:\n\n' +
         '1. apps/browser-extension/src/content-script.ts:\n' +
         '   Line 120: const btn = acquireInlineBtn();\n' +
@@ -693,12 +693,12 @@ export interface LayoutStoreState {
         'import { getSharedConfig } from "@conex/shared-types";\n\n' +
         'export function acquireInlineBtn() {\n' +
         '  // Attempt to locate an existing button injected into the DOM tree\n' +
-        '  let btn = document.querySelector("[data-flowbit-inline]");\n' +
+        '  let btn = document.querySelector("[data-crish-inline]");\n' +
         '  \n' +
         '  if (!btn) {\n' +
-        '    console.log("[Flowbit] Creating new action button element");\n' +
+        '    console.log("[Crish] Creating new action button element");\n' +
         '    btn = document.createElement("button");\n' +
-        '    btn.setAttribute("data-flowbit-inline", "1");\n' +
+        '    btn.setAttribute("data-crish-inline", "1");\n' +
         '    btn.className = "fab-trigger-btn";\n' +
         '  }\n' +
         '  \n' +
@@ -711,7 +711,7 @@ export interface LayoutStoreState {
         '  const btn = acquireInlineBtn();\n' +
         '  if (btn && !container.contains(btn)) {\n' +
         '    container.appendChild(btn);\n' +
-        '    console.log("[Flowbit] Action trigger button mounted successfully");\n' +
+        '    console.log("[Crish] Action trigger button mounted successfully");\n' +
         '  }\n' +
         '}\n' +
         '=================== FILE END ==================='
@@ -730,9 +730,9 @@ export interface LayoutStoreState {
       if (isCancelled) return;
       callbacks.onToolSuccess(
         toolId3,
-        'ripgrep searching pattern "inlineSelector" in path "c:/Software/conex/packages"...\n\n' +
+        'ripgrep searching pattern "inlineSelector" in path "C:/workspace/crish/packages"...\n\n' +
         'Found 1 match in packages/shared-types/src/config.ts:\n' +
-        'Line 15:   inlineSelector?: "[data-flowbit-inline=\\"1\\"]";\n\n' +
+        'Line 15:   inlineSelector?: "[data-crish-inline=\\"1\\"]";\n\n' +
         'Search operation completed in 62ms.'
       );
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -744,8 +744,8 @@ export interface LayoutStoreState {
 
       const summaryText = '我已经追踪到这个问题的根源了，总结一下发现：\n\n' +
         '**问题原因**：\n' +
-        '- 在 `trigger-injector.ts` 中，`acquireInlineBtn` 会优先寻找页面上是否已有 `[data-flowbit-inline]` 属性的按钮，若有则进行复用。\n' +
-        '- 页面上由于被其他 Chrome 插件注入了一个空按钮标签 `<button data-flowbit-inline="1">F</button>`，导致我们的内容脚本直接复用了它。\n' +
+        '- 在 `trigger-injector.ts` 中，`acquireInlineBtn` 会优先寻找页面上是否已有 `[data-crish-inline]` 属性的按钮，若有则进行复用。\n' +
+        '- 页面上由于被其他 Chrome 插件注入了一个空按钮标签 `<button data-crish-inline="1">F</button>`，导致 our 内容脚本直接复用了它。\n' +
         '- 但我们在复用时并没有对其 innerHTML 进行 SVG 覆盖重置，因此按钮只显示了一个字符 "F" 并没有显示图标，导致了界面排版的降级。\n\n' +
         '**修改方案**：\n' +
         '- 重构 `acquireInlineBtn`，使其在复用按钮时，若发现内部未挂载 SVG，则自动擦除并注入标准的 `SVG_ICON` 图标。\n' +

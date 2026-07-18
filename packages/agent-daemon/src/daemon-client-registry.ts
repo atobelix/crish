@@ -9,6 +9,7 @@ export interface ConnectedClient {
   ws: WebSocket;
   id: string;
   connectedAt: number;
+  pendingMessagesCount?: number;
 }
 
 export type DaemonClientTransportDiagnosticCode =
@@ -166,8 +167,32 @@ export class DaemonClientRegistry {
       return false;
     }
 
+    client.pendingMessagesCount ??= 0;
+    const MAX_PENDING_MESSAGES = 200;
+    if (client.pendingMessagesCount >= MAX_PENDING_MESSAGES) {
+      this.reportTransportFailure(ws, {
+        code: "CLIENT_SEND_BACKPRESSURE",
+        message: `Client ${client.id} exceeded daemon WebSocket pending message queue limit (200)`,
+        source: "client",
+        severity: "warning",
+        clientId: client.id,
+        metadata: {
+          clientId: client.id,
+          operation,
+          pendingMessagesCount: client.pendingMessagesCount,
+          maxPendingMessages: MAX_PENDING_MESSAGES,
+        },
+      });
+      this.closeClient(ws, SEND_BACKPRESSURE_CLOSE_CODE, "Daemon send backpressure");
+      return false;
+    }
+
+    client.pendingMessagesCount++;
     try {
       ws.send(payload, (error) => {
+        if (client.pendingMessagesCount !== undefined) {
+          client.pendingMessagesCount--;
+        }
         if (error) {
           this.reportTransportFailure(ws, {
             code: "CLIENT_SEND_FAILED",

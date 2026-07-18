@@ -11,13 +11,13 @@ import { createLocalWorkspaceTools } from "@crish/agent-runtime";
 import type { AgentTool, BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-runtime";
 // DAEMON_DEFAULT_PROVIDER inlined (removed from shared-types in step 10)
 const DAEMON_DEFAULT_PROVIDER = {
-  providerId: "flowbit",
-  baseUrl: "https://api.flowbit.me",
+  providerId: "crish",
+  baseUrl: "https://api.crish.me",
   model: "mimo-v2.5",
   endpoint: "auto" as const,
   stream: true,
   credentialMode: "auto" as const,
-  apiKeyEnv: "FLOWBIT_API_KEY",
+  apiKeyEnv: "CRISH_API_KEY",
 };
 import {
   createDaemonProviderFactory,

@@ -382,11 +382,6 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         // 文件不变式（每次 append 都带 "\n"，文件始终以 "\n" 结尾）。
         const batcher = await this.ensureAppendBatcher();
         await batcher.append(serialized);
-        // 立即 flush 确保 append 返回后数据已落盘。
-        // event-store 的调用方（含测试）依赖 append 的同步持久化语义：
-        // 直接 readFile 或新建 store 实例读取时必须看到已写入的事件。
-        // batcher 仍提供句柄缓存与集中化的换行/目录 fsync 逻辑。
-        await batcher.flush();
         const byteOffset = this.currentFileSize;
         this.currentFileSize += byteLength;
 
@@ -415,6 +410,8 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
     assertNonEmptyId(sessionId, "sessionId", this.filePath);
     const read = normalizeReadOptions(afterSequence, options, this.filePath);
+
+    await this.flush();
 
     if (!this.byteIndexLoaded) {
       await this.tryLoadByteOffsetIndex();
@@ -510,22 +507,34 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     // Empty brand-new store: header only (or just-created file) yields nothing.
     const stream = createReadStream(this.filePath, { encoding: "utf8" });
     const rl = createInterface({ input: stream, crlfDelay: Infinity });
+    let streamError: Error | null = null;
+    stream.on("error", (error: Error) => {
+      streamError = error;
+    });
 
     let headerSkipped = false;
-    for await (const line of rl) {
-      if (!line.trim()) continue;
+    try {
+      for await (const line of rl) {
+        if (!line.trim()) continue;
 
-      if (!headerSkipped) {
-        headerSkipped = true;
-        // 跳过 header 行
-        continue;
-      }
+        if (!headerSkipped) {
+          headerSkipped = true;
+          // 跳过 header 行
+          continue;
+        }
 
-      const parsed = parseJsonLine(line);
-      if (isOrchestratorEvent(parsed) && parsed.sequence > read.afterSequence) {
-        yield parsed;
+        const parsed = parseJsonLine(line);
+        if (isOrchestratorEvent(parsed) && parsed.sequence > read.afterSequence) {
+          yield parsed;
+        }
       }
+    } finally {
+      // 确保底层 fd 被释放：无论正常结束、迭代异常还是提前 return
+      stream.destroy();
     }
+
+    // 流在迭代过程中出错但未被 for-await-of 传播时，这里补抛
+    if (streamError) throw streamError;
   }
 
   // ─── 三层读取策略：字节偏移索引（tier 2）─
@@ -723,7 +732,8 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   /**
    * Ensure known event ids are loaded so append can enforce uniqueness.
-   * Prefer the warm event cache; otherwise scan the JSONL for valid event ids only.
+   * Prefer the warm event cache; otherwise stream-scan the JSONL for valid event ids only,
+   * avoiding loading the entire file into memory.
    */
   private async ensureEventIdsLoaded(): Promise<void> {
     if (this.eventIdsReady) return;
@@ -736,28 +746,37 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       return;
     }
 
-    const raw = await readFile(this.filePath, "utf8").catch((cause) => {
-      const error = cause as NodeJS.ErrnoException;
-      if (error.code === "ENOENT") return null;
-      throw cause;
+    // 冷启动：流式扫描只提取 event id，避免 readFile 全量加载到内存。
+    // 注意：不能调 readAllStreaming()（它内部 flush() 会 await appendQueue 导致死锁，
+    // 因为本方法在 append 的 enqueueAppend 回调内被调用）。
+    // 直接用 createReadStream + readline 逐行读取——此时 append 队列正在执行，
+    // 之前的事件已通过 batcher.flush() 落盘，createReadStream 能读到全部已持久化数据。
+    const stream = createReadStream(this.filePath, { encoding: "utf8" });
+    let streamError: Error | null = null;
+    stream.on("error", (error: Error) => {
+      streamError = error;
     });
-    if (!raw?.trim()) {
-      this.eventIdsReady = true;
-      return;
-    }
-
-    const lines = raw.split(/\r?\n/);
-    let headerSkipped = false;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      if (!headerSkipped) {
-        headerSkipped = true;
-        continue;
+    try {
+      const rl = createInterface({ input: stream, crlfDelay: Infinity });
+      let headerSkipped = false;
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        if (!headerSkipped) {
+          headerSkipped = true;
+          continue;
+        }
+        const parsed = parseJsonLine(line);
+        if (isOrchestratorEvent(parsed)) {
+          this.knownEventIds.add(parsed.id);
+        }
       }
-      const parsed = parseJsonLine(line);
-      if (isOrchestratorEvent(parsed)) {
-        this.knownEventIds.add(parsed.id);
-      }
+      if (streamError) throw streamError;
+    } catch (error) {
+      // ENOENT（文件刚创建尚未写入 header）等非致命错误：视为无已知 id
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") throw error;
+    } finally {
+      stream.destroy();
     }
     this.eventIdsReady = true;
   }

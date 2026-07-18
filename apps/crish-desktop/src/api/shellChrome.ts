@@ -13,6 +13,7 @@ export const SHELL_CHROME_IDS = ['classic', 'inset'] as const satisfies readonly
 export const SHELL_CHROME_STORAGE_KEY = 'crish_shell_chrome';
 
 export function parseShellChromeMode(raw: unknown): ShellChromeMode {
+  if (raw === undefined) return DEFAULT_SHELL_CHROME;
   if (raw === 'inset' || raw === 'classic') return raw;
-  return DEFAULT_SHELL_CHROME;
+  return 'classic';
 }

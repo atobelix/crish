@@ -1,5 +1,5 @@
 import type { JsonObject, AgentEvent, AgentMessage, DiagnosticRecord } from "@crish/shared-types";
-import { compactJsonObject, isRecord, clone, BoundedMap } from "@crish/shared-utils";
+import { compactJsonObject, isRecord, clone, BoundedMap, RingBuffer } from "@crish/shared-utils";
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type AgentOrchestratorOptions,
@@ -894,7 +894,10 @@ export class AgentOrchestrator {
       sessionId,
       ...(runId ? { runId } : {}),
       timestamp: this.now(),
-      payload: clone(payload)
+      payload: {
+        ...payload,
+        ...(payload.run && typeof payload.run === "object" ? { run: { ...payload.run } } : {})
+      }
     };
   }
 
@@ -1655,7 +1658,9 @@ interface RestoredRunReplayState {
 }
 
 class AsyncQueue<T> implements AsyncIterable<T> {
-  private readonly items: T[] = [];
+  // 内部使用 RingBuffer 实现 O(1) shift（替代 Array.shift 的 O(n) 重排）。
+  // 队列无上界：RingBuffer 满时自动扩容（两倍容量），保证不丢事件。
+  private buffer = new RingBuffer<T>(256);
   private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
   private closed = false;
 
@@ -1666,7 +1671,12 @@ class AsyncQueue<T> implements AsyncIterable<T> {
       waiter({ value: item, done: false });
       return;
     }
-    this.items.push(item);
+    if (!this.buffer.push(item)) {
+      const grown = new RingBuffer<T>(this.buffer.maxCapacity * 2);
+      this.buffer.forEach((v) => grown.push(v));
+      grown.push(item);
+      this.buffer = grown;
+    }
   }
 
   close(): void {
@@ -1684,7 +1694,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   }
 
   private next(): Promise<IteratorResult<T>> {
-    const item = this.items.shift();
+    const item = this.buffer.shift();
     if (item !== undefined) {
       return Promise.resolve({ value: item, done: false });
     }

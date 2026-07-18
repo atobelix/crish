@@ -225,11 +225,6 @@ export class JsonlSessionStore implements SessionPersistenceStore {
       try {
         const batcher = await this.ensureAppendBatcher();
         await batcher.append(JSON.stringify(entry));
-        // 立即 flush 确保 append 返回后数据已落盘。
-        // session store 的调用方（含测试）依赖 append 的同步持久化语义：
-        // 新建 store 实例读取或进程重启后必须看到已写入的 entry。
-        // batcher 仍提供句柄缓存与集中化的换行/目录 fsync 逻辑。
-        await batcher.flush();
       } catch (cause) {
         if (cause instanceof SessionError) {
           throw cause;

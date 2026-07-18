@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
-  if (typeof globalThis.localStorage !== 'undefined' && globalThis.localStorage?.getItem) {
+  if (typeof globalThis.localStorage !== 'undefined' && typeof globalThis.localStorage?.getItem === 'function') {
     return;
   }
   const map = new Map<string, string>();

@@ -373,7 +373,7 @@ export const PROVIDER_CONFIG_SCHEMA: ConfigSchema = {
     providerId: {
       mergeStrategy: "override",
       required: false,
-      defaultValue: "flowbit",
+      defaultValue: "crish",
       validate: (v) => typeof v === "string",
       validateMessage: "providerId must be a string",
     },

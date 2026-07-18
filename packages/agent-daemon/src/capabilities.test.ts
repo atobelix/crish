@@ -262,7 +262,7 @@ function lifecycle(): DaemonLifecycleSnapshot {
     totalClientConnectionCount: 1,
     totalClientDisconnectCount: 0,
     activeRunCount: 0,
-    eventStore: { status: "ok", path: "C:/Software/conex/events.jsonl" },
+    eventStore: { status: "ok", path: "C:/workspace/crish/events.jsonl" },
     providerReadiness: "ready",
     mcpReadiness: "unknown",
   };

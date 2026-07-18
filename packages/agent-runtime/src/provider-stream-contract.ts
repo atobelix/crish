@@ -142,7 +142,7 @@ export interface ProviderStreamContractAdapterOptions extends ProviderStreamEven
 }
 
 export const DEFAULT_PROVIDER_STREAM_DELTA_COALESCING_OPTIONS = {
-  maxDelayMs: 25,
+  maxDelayMs: 5,
   maxChars: 2048,
   maxEvents: 32
 } as const satisfies Required<Omit<ProviderStreamDeltaCoalescingOptions, "now">>;

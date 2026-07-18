@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
@@ -183,6 +183,8 @@ interface RunGitOptions {
   env?: NodeJS.ProcessEnv;
   allowFailure?: boolean;
   maxOutputBytes?: number;
+  /** 子进程超时（ms），0 表示不限制。默认 DEFAULT_GIT_TIMEOUT_MS。 */
+  timeoutMs?: number;
 }
 
 interface GitCheckpointMetadata {
@@ -206,7 +208,8 @@ const DEFAULT_AUTHOR: GitCheckpointAuthor = {
   name: "Agent Runtime",
   email: "agent-runtime@local"
 };
-const DEFAULT_MAX_OUTPUT_BYTES = 20_000_000;
+const DEFAULT_MAX_OUTPUT_BYTES = 2_000_000;
+const DEFAULT_GIT_TIMEOUT_MS = 30_000;
 
 export class GitCommandError extends Error {
   constructor(
@@ -281,7 +284,7 @@ export class GitCliVersioningService implements GitVersioningService {
     const patch = (
       await this.git([...diffBase, ...pathArgs], {
         cwd: repo.root,
-        maxOutputBytes: request.staged ? DEFAULT_MAX_OUTPUT_BYTES : DEFAULT_MAX_OUTPUT_BYTES * 2
+        maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES
       })
     ).stdout;
     const stat = (await this.git([...diffBase, "--stat", ...pathArgs], { cwd: repo.root })).stdout;
@@ -305,7 +308,7 @@ export class GitCliVersioningService implements GitVersioningService {
     const patch = (
       await this.git([...diffBase, ...pathArgs], {
         cwd: repo.root,
-        maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES * 2
+        maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES
       })
     ).stdout;
     const stat = (await this.git([...diffBase, "--stat", ...pathArgs], { cwd: repo.root })).stdout;
@@ -392,6 +395,12 @@ export class GitCliVersioningService implements GitVersioningService {
   }
 
   private async createCommitCheckpoint(repo: GitRepository, request: CreateGitCheckpointRequest): Promise<GitCheckpoint> {
+    if (!(await this.checkGitignorePresent(repo.root))) {
+      console.warn(
+        `[git-versioning] git commit checkpoint created without .gitignore in ${repo.root}; ` +
+          "worktree may contain generated files. Consider creating a .gitignore file."
+      );
+    }
     const statusBefore = await this.readStatus(repo.root);
     const id = createId("git_checkpoint");
     const refName = this.checkpointRef(id, request.refNamespace);
@@ -587,8 +596,31 @@ export class GitCliVersioningService implements GitVersioningService {
     return branch.exitCode === 0 ? branch.stdout.trim() : null;
   }
 
+  private async checkGitignorePresent(cwd: string): Promise<boolean> {
+    const gitignorePath = join(cwd, ".gitignore");
+    const excludePath = join(cwd, ".git", "info", "exclude");
+    try {
+      await access(gitignorePath);
+      return true;
+    } catch {
+      // .gitignore not present; fall through to check local exclude file
+    }
+    try {
+      await access(excludePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async readStatus(cwd: string): Promise<GitWorkspaceStatus> {
-    const result = await this.git(["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd });
+    if (!(await this.checkGitignorePresent(cwd))) {
+      console.warn(
+        `[git-versioning] git status run without .gitignore in ${cwd}; ` +
+          "untracked output may be large. Consider creating a .gitignore file."
+      );
+    }
+    const result = await this.git(["status", "--porcelain=v1", "-z", "--untracked-files=normal"], { cwd });
     return parseStatus(result.stdout);
   }
 
@@ -613,6 +645,7 @@ export class GitCliVersioningService implements GitVersioningService {
 
   private git(args: string[], options: RunGitOptions): Promise<GitCommandResult> {
     const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS;
     return new Promise((resolveGit, reject) => {
       const child = spawn(this.options.gitPath ?? "git", args, {
         cwd: options.cwd,
@@ -624,26 +657,64 @@ export class GitCliVersioningService implements GitVersioningService {
       const stderr: Buffer[] = [];
       let totalBytes = 0;
       let killedForOutput = false;
+      let killedForTimeout = false;
+      let settled = false;
 
       const collect = (target: Buffer[]) => (chunk: Buffer) => {
         totalBytes += chunk.byteLength;
         if (totalBytes > maxOutputBytes) {
           killedForOutput = true;
-          child.kill();
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // 进程可能已退出
+          }
           return;
         }
         target.push(chunk);
       };
 
+      const timeoutTimer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              if (settled) return;
+              killedForTimeout = true;
+              try {
+                child.kill("SIGKILL");
+              } catch {
+                // 进程可能已退出
+              }
+            }, timeoutMs)
+          : null;
+      if (timeoutTimer) timeoutTimer.unref();
+
+      const cleanup = (): void => {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        child.stdout.removeAllListeners();
+        child.stderr.removeAllListeners();
+      };
+
       child.stdout.on("data", collect(stdout));
       child.stderr.on("data", collect(stderr));
-      child.on("error", reject);
+      child.on("error", (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      });
       child.on("close", (exitCode) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         const result: GitCommandResult = {
           stdout: Buffer.concat(stdout).toString("utf8"),
           stderr: Buffer.concat(stderr).toString("utf8"),
           exitCode: exitCode ?? 1
         };
+        if (killedForTimeout) {
+          reject(new Error(`git ${args.join(" ")} timed out after ${timeoutMs}ms`));
+          return;
+        }
         if (killedForOutput) {
           reject(new Error(`git ${args.join(" ")} exceeded ${maxOutputBytes} output bytes`));
           return;

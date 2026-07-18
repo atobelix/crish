@@ -193,8 +193,15 @@ export async function runProcessCommand(command: string, options: ProcessRunOpti
 
 export function terminateChild(child: ChildProcess, guard: Required<ProcessGuardOptions>): ProcessTerminationDiagnostic[] {
   if (!guard.killProcessTree) {
-    const ok = child.kill();
-    return [{ platform: process.platform, strategy: "child-kill", ok }];
+    let ok = true;
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      ok = false;
+    }
+    // SIGTERM 升级到 SIGKILL：防止子进程忽略 SIGTERM 永久挂起
+    scheduleKillEscalation(child, () => child.kill("SIGKILL"));
+    return [{ platform: process.platform, strategy: "child-kill", ok, signal: "SIGTERM" }];
   }
   return terminateProcessTree(child);
 }
@@ -333,6 +340,32 @@ function shouldRunViaCmdExe(command: string): boolean {
 
 // ─── 内部工具 ─────────────────────────────────────────────
 
+const PROCESS_KILL_ESCALATION_MS = 5_000;
+
+/**
+ * 调度 SIGKILL 升级：在 SIGTERM 发出后，若进程在升级窗口内仍未退出，则发送 SIGKILL。
+ *
+ * 两阶段终止模式：给子进程优雅退出的机会，但防止其忽略 SIGTERM 永久挂起。
+ * 当子进程退出时（'exit' 事件）自动取消 SIGKILL 定时器，避免不必要的强制终止。
+ * 定时器调用 unref()，不会阻止 Node.js 进程优雅退出。
+ */
+function scheduleKillEscalation(child: ChildProcess, sendKill: () => void): void {
+  // 子进程已退出则无需升级
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  const timer = setTimeout(() => {
+    try {
+      sendKill();
+    } catch {
+      // 进程可能在定时器触发前已退出
+    }
+  }, PROCESS_KILL_ESCALATION_MS);
+  timer.unref();
+  child.once("exit", () => {
+    clearTimeout(timer);
+  });
+}
+
 function terminateProcessTree(child: ChildProcess): ProcessTerminationDiagnostic[] {
   if (!child.pid) {
     const ok = child.kill();
@@ -360,8 +393,15 @@ function terminateProcessTree(child: ChildProcess): ProcessTerminationDiagnostic
   }
   try {
     process.kill(-child.pid, "SIGTERM");
+    // 进程组 SIGTERM 升级到 SIGKILL：防止子进程树忽略信号永久挂起
+    scheduleKillEscalation(child, () => {
+      if (child.pid) process.kill(-child.pid, "SIGKILL");
+    });
     return [{ platform: process.platform, strategy: "process-tree", ok: true, signal: "SIGTERM" }];
   } catch (cause) {
+    // 进程组信号失败，回退到直接 kill 子进程并同样调度 SIGKILL 升级
+    const childKillOk = child.kill("SIGTERM");
+    scheduleKillEscalation(child, () => child.kill("SIGKILL"));
     return [
       {
         platform: process.platform,
@@ -370,7 +410,7 @@ function terminateProcessTree(child: ChildProcess): ProcessTerminationDiagnostic
         message: cause instanceof Error ? cause.message : String(cause),
         signal: "SIGTERM"
       },
-      { platform: process.platform, strategy: "child-kill", ok: child.kill() }
+      { platform: process.platform, strategy: "child-kill", ok: childKillOk }
     ];
   }
 }

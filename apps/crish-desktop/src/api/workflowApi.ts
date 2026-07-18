@@ -121,10 +121,10 @@ export const WORKFLOW_INTERVAL_MINUTES_MAX = 60 * 24 * 7;
  */
 export const WORKFLOW_JOBS_EMPTY_LABELS = {
   list: '暂无任务',
-  listHint: '点上方新建',
-  settings: '还没有定时任务',
+  listHint: '用上方模板创建',
+  settings: '暂无计划任务',
   settingsFilter: '没有符合筛选的任务',
-  runtime: '还没有定时任务',
+  runtime: '引擎 workflow 暂无计划任务',
   loading: '加载中…',
 } as const;
 

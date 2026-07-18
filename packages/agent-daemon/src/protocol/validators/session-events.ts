@@ -951,7 +951,7 @@ export function validateTaskSnapshot(
   if ("latestError" in value) {
     optionalString(value, "latestError", `${path}.latestError`, issues);
   }
-  if ("approval" in value) {
+  if ("approval" in value && value.approval !== undefined) {
     validateTaskApproval(value.approval, `${path}.approval`, issues);
   }
 

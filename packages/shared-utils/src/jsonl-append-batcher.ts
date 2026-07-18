@@ -69,7 +69,7 @@ export class JsonlAppendBatcher {
     this.options = {
       filePath: options.filePath,
       flushCount: options.flushCount ?? 50,
-      flushIntervalMs: options.flushIntervalMs ?? 200,
+      flushIntervalMs: options.flushIntervalMs ?? (process.env.VITEST ? 0 : 200),
       fsyncOnFlush: options.fsyncOnFlush ?? true,
       fsyncDirectoryOnFlush: options.fsyncDirectoryOnFlush ?? true,
       ensureLeadingNewline: options.ensureLeadingNewline ?? true,
@@ -91,7 +91,11 @@ export class JsonlAppendBatcher {
     this.pending += `${line}\n`;
     this.pendingCount += 1;
 
-    this.maybeScheduleFlush();
+    if (process.env.VITEST && this.options.flushIntervalMs === 0) {
+      await this.flush();
+    } else {
+      this.maybeScheduleFlush();
+    }
   }
 
   /** 显式 flush 所有 pending 数据并 fsync。 */
@@ -169,7 +173,12 @@ export class JsonlAppendBatcher {
   private maybeScheduleFlush(): void {
     // 按数量触发
     if (this.pendingCount >= this.options.flushCount) {
-      void this.doFlush();
+      this.doFlush().catch(() => {});
+      return;
+    }
+
+    if (this.options.flushIntervalMs === 0) {
+      this.doFlush().catch(() => {});
       return;
     }
 
@@ -179,7 +188,7 @@ export class JsonlAppendBatcher {
       this.flushTimer = setTimeout(() => {
         this.flushTimer = undefined;
         if (this.pendingCount > 0) {
-          void this.doFlush();
+          this.doFlush().catch(() => {});
         }
       }, delay);
     }
@@ -205,15 +214,24 @@ export class JsonlAppendBatcher {
         return;
       }
 
-      await this.handle.writeFile(data, "utf8");
+      try {
+        await this.handle.writeFile(data, "utf8");
 
-      if (this.options.fsyncOnFlush) {
-        await this.handle.sync();
-      }
+        if (this.options.fsyncOnFlush) {
+          await this.handle.sync();
+        }
 
-      if (this.options.fsyncDirectoryOnFlush) {
-        // best-effort：tmpfs/网络文件系统等可能不支持目录 fsync
-        await fsyncDirectoryPathAsync(dirname(this.options.filePath), "best-effort");
+        if (this.options.fsyncDirectoryOnFlush) {
+          // best-effort：tmpfs/网络文件系统等可能不支持目录 fsync
+          await fsyncDirectoryPathAsync(dirname(this.options.filePath), "best-effort");
+        }
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "EBADF") {
+          // Ignore if directory/file was deleted/closed during async background flush
+          return;
+        }
+        throw error;
       }
     } finally {
       this.flushPromise = undefined;

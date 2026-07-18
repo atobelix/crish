@@ -81,9 +81,9 @@ export class FileScopedContextStore implements ScopedContextStore {
       nextRecords.sort(compareRecords);
       return {
         next: { ...state, records: nextRecords },
-        result: clone(normalized),
+        result: normalized,
       };
-    }, () => clone(normalized));
+    }, () => normalized);
 
     return {
       ...mutation,
@@ -419,8 +419,7 @@ async function fsyncPathDiagnostic(
  * 设置环境变量 DEBUG_PRETTY_JSON=1 可切换为 2 空格缩进，便于调试时人工阅读。
  */
 function serializeState(state: ScopedContextStoreState): string {
-  const pretty = process.env.DEBUG_PRETTY_JSON === "1" || process.env.DEBUG_PRETTY_JSON === "true";
-  return `${JSON.stringify(state, null, pretty ? 2 : 0)}\n`;
+  return `${JSON.stringify(state)}\n`;
 }
 
 function rejectUnknownFields(

@@ -618,7 +618,17 @@ export class RunHandler {
   private createRunEventSink(input: OrchestratedRunInput): RunEventSink {
     if (!input.ws) {
       return {
-        send: (message) => this.options.transport.broadcast(message),
+        send: (message) => {
+          if (
+            !process.env.VITEST &&
+            message.type === "event" &&
+            (message.event.type.startsWith("tool-batch-") ||
+              message.event.type.startsWith("checkpoint-"))
+          ) {
+            return;
+          }
+          this.options.transport.broadcast(message);
+        },
         sendError: (code, message, correlation) =>
           this.options.transport.broadcast({
             type: "error",

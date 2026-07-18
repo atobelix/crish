@@ -1,6 +1,6 @@
 import type { JsonObject, ToolConcurrency, ToolExecutionContext, ToolOutput } from "@crish/shared-types";
 import type { AgentTool, ToolSource } from "./types";
-import { errorMessage } from "@crish/shared-utils";
+import { errorMessage, RingBuffer } from "@crish/shared-utils";
 
 export const DEFAULT_MCP_STARTUP_GATE_TIMEOUT_MS = 250;
 /** waitForReady 默认超时（刷新工具 / 执行工具前等待 ready） */
@@ -215,7 +215,7 @@ export class McpServerController {
   private startedAtMs: number | undefined;
   private updatedAtMs = Date.now();
   private lastDiagnostic: McpLifecycleDiagnostic | undefined;
-  private diagnostics: McpLifecycleDiagnostic[] = [];
+  private diagnostics: RingBuffer<McpLifecycleDiagnostic>;
 
   constructor(definition: McpServerDefinition, options: { diagnosticLimit?: number } = {}) {
     this.name = definition.name;
@@ -223,6 +223,7 @@ export class McpServerController {
     this.adapter = definition.adapter;
     this.cachedTools = [...(definition.cachedTools ?? [])];
     this.diagnosticLimit = normalizeDiagnosticLimit(options.diagnosticLimit);
+    this.diagnostics = new RingBuffer<McpLifecycleDiagnostic>(this.diagnosticLimit);
   }
 
   get state(): McpServerLifecycleState {
@@ -335,8 +336,8 @@ export class McpServerController {
       cachedToolCount,
       liveToolCount,
       availableToolCount,
-      diagnosticCount: this.diagnostics.length,
-      diagnostics: [...this.diagnostics],
+      diagnosticCount: this.diagnostics.size,
+      diagnostics: this.diagnostics.toArray(),
       ...(this.lastDiagnostic ? { diagnostic: this.lastDiagnostic } : {}),
       ...(this.startedAtMs ? { startedAt: new Date(this.startedAtMs).toISOString() } : {}),
       updatedAt: new Date(this.updatedAtMs).toISOString()
@@ -522,10 +523,7 @@ export class McpServerController {
 
   private recordDiagnostic(diagnostic: McpLifecycleDiagnostic): void {
     this.lastDiagnostic = diagnostic;
-    this.diagnostics.push(diagnostic);
-    if (this.diagnostics.length > this.diagnosticLimit) {
-      this.diagnostics.splice(0, this.diagnostics.length - this.diagnosticLimit);
-    }
+    this.diagnostics.pushOverwritingOldest(diagnostic);
     this.emit({ type: "server-diagnostic", server: this.name, diagnostic, timestamp: nowIso() });
   }
 
@@ -578,7 +576,7 @@ export class McpLifecycleManager implements ToolSource {
   private readonly listeners = new Set<McpLifecycleListener>();
   private readonly gateTimeoutMs: number;
   private readonly diagnosticLimit: number;
-  private readonly diagnostics: McpLifecycleDiagnostic[] = [];
+  private readonly diagnostics: RingBuffer<McpLifecycleDiagnostic>;
   private startPromise: Promise<McpLifecycleStartResult> | undefined;
   private hasStarted = false;
 
@@ -587,6 +585,7 @@ export class McpLifecycleManager implements ToolSource {
     this.label = options.label ?? "MCP lifecycle";
     this.gateTimeoutMs = Math.max(1, options.startupGateTimeoutMs ?? DEFAULT_MCP_STARTUP_GATE_TIMEOUT_MS);
     this.diagnosticLimit = normalizeDiagnosticLimit(options.diagnosticLimit);
+    this.diagnostics = new RingBuffer<McpLifecycleDiagnostic>(this.diagnosticLimit);
     for (const server of options.servers ?? []) {
       this.addServer(server);
     }
@@ -833,15 +832,12 @@ export class McpLifecycleManager implements ToolSource {
   }
 
   private recordDiagnostic(diagnostic: McpLifecycleDiagnostic): void {
-    this.diagnostics.push(diagnostic);
-    if (this.diagnostics.length > this.diagnosticLimit) {
-      this.diagnostics.splice(0, this.diagnostics.length - this.diagnosticLimit);
-    }
+    this.diagnostics.pushOverwritingOldest(diagnostic);
     this.emit({ type: "lifecycle-diagnostic", diagnostic, timestamp: nowIso() });
   }
 
   private allDiagnostics(servers: McpServerSnapshot[]): McpLifecycleDiagnostic[] {
-    return [...this.diagnostics, ...servers.flatMap((server) => server.diagnostics)].sort((left, right) =>
+    return [...this.diagnostics.toArray(), ...servers.flatMap((server) => server.diagnostics)].sort((left, right) =>
       left.timestamp.localeCompare(right.timestamp)
     );
   }

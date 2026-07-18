@@ -350,12 +350,17 @@ function timestamp(): string {
 
 function readReleaseGenerateHandlerSource(source: string): string {
   const normalized = normalizeLineEndings(source);
-  const releaseCfg = "#[cfg(not(debug_assertions))]";
-  const start = normalized.indexOf(releaseCfg);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const macroBlock = normalized.slice(start).match(/macro_rules![\s\S]*?\n\}/)?.[0] ?? "";
-  expect(macroBlock).toContain("common_commands");
-  return macroBlock;
+  const match = normalized.match(/macro_rules!\s+register_handlers\s*\{([\s\S]*?)\}\s*fn main\(\)/);
+  if (!match) {
+    throw new Error("Could not find macro_rules! register_handlers in main.rs");
+  }
+  const macroContent = match[1];
+  // Extract the () => { ... } block
+  const branchMatch = macroContent.match(/\(\)\s*=>\s*\{([\s\S]*?)\}\s*;/);
+  if (!branchMatch) {
+    throw new Error("Could not find () branch in register_handlers macro");
+  }
+  return branchMatch[1];
 }
 
 function normalizeLineEndings(source: string): string {

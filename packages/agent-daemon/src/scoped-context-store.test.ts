@@ -126,8 +126,8 @@ describe("scoped context query handlers", () => {
 
     const recommended = await createResolveScopedContextResponse(store, {
       type: "resolve-scoped-context",
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
     });
     expect(recommended).toMatchObject({
       type: "scoped-context-resolved",
@@ -147,8 +147,8 @@ describe("scoped context query handlers", () => {
 
     const enabledByUser = await createResolveScopedContextResponse(store, {
       type: "resolve-scoped-context",
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
       userEnabledIds: ["recommended-skill"],
     });
     expect(enabledByUser.stableContext.map((block) => block.id)).toEqual([

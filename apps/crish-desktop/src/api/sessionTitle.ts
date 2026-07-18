@@ -18,7 +18,7 @@ type TitleMessage = {
   /** 仅有思考内容亦视为实质（水合半成品勿当空壳剪掉） */
   thinking?: string | null;
 };
-type TitleSession = { title?: string; messages?: TitleMessage[] };
+type TitleSession = { title?: string | null; messages?: TitleMessage[] | null };
 
 /** 空壳判定所需的最小会话形状 */
 export type ShellSessionLike = {
@@ -403,7 +403,7 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
   const next = sessions.map((s) => {
     const title = maybeAutoTitleFromMessages(
       s.title,
-      s.messages,
+      s.messages || undefined,
       resolve ? { existingTitles: taken, excludeTitle: s.title } : undefined,
     );
     if (!title || title === s.title) {
@@ -433,7 +433,7 @@ export function prepareSessionsForUi<T extends ShellSessionLike & { id: string }
   activeSessionId?: string | null,
   opts?: { keepIds?: Iterable<string> | null },
 ): T[] {
-  const filled = fillDefaultSessionTitles(sessions);
+  const filled = fillDefaultSessionTitles(sessions) as T[];
   const keepIds =
     opts?.keepIds ??
     shellPruneKeepIds(activeSessionId || null, null, { activating: true });
@@ -448,7 +448,7 @@ export function prepareSessionsForUi<T extends ShellSessionLike & { id: string }
 export function sessionListDisplayTitle(s: TitleSession): string {
   const t = (s.title || '').trim();
   if (t && !isDefaultSessionTitle(t)) return t;
-  const derived = maybeAutoTitleFromMessages(t || '', s.messages);
+  const derived = maybeAutoTitleFromMessages(t || '', s.messages || undefined);
   if (derived) return derived;
   return EMPTY_SESSION_TITLE;
 }

@@ -24,7 +24,7 @@ describe("FileWorkflowStore", () => {
         id: "wf_persist",
         name: "Persistent workflow",
         prompt: "Run the daily check",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "daily", time: "09:00", timezone: "Asia/Shanghai" },
       },
       new Date("2026-06-08T00:00:00.000Z")
@@ -59,7 +59,7 @@ describe("FileWorkflowStore", () => {
         id: "wf_strict_dirsync",
         name: "Strict dirsync",
         prompt: "Run check",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "manual" },
       })
     ).rejects.toBeInstanceOf(WorkflowStoreWriteError);

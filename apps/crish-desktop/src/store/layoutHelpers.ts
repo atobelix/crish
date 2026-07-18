@@ -1004,10 +1004,10 @@ const DEFAULT_SESSIONS: SessionState[] = [
           {
             id: 'tc-grep-1',
             name: 'grep_search',
-            arguments: 'data-flowbit-inline="1"',
+            arguments: 'data-crish-inline="1"',
             status: 'success',
-            explanation: '在工作区搜索冲突的行内按钮标签 data-flowbit-inline="1"',
-            output: 'Searching pattern "data-flowbit-inline=\\"1\\""...\nFound 1 match in trigger-injector.ts:\nLine 42: <button data-flowbit-inline="1">F</button>'
+            explanation: '在工作区搜索冲突的行内按钮标签 data-crish-inline="1"',
+            output: 'Searching pattern "data-crish-inline=\\"1\\""...\nFound 1 match in trigger-injector.ts:\nLine 42: <button data-crish-inline="1">F</button>'
           },
           {
             id: 'tc-read-1',
@@ -1022,23 +1022,23 @@ const DEFAULT_SESSIONS: SessionState[] = [
       {
         id: 'msg-3',
         sender: 'assistant',
-        text: 'Found the culprit! Another extension is creating `<button data-flowbit-inline="1">F</button>`, and our code reuses it. Let me find which extension:',
+        text: 'Found the culprit! Another extension is creating `<button data-crish-inline="1">F</button>`, and our code reuses it. Let me find which extension:',
         timestamp: Date.now() - 3400000,
         toolCalls: [
           {
             id: 'tc-grep-2',
             name: 'grep_search',
-            arguments: 'flowbit-inline-style',
+            arguments: 'crish-inline-style',
             status: 'success',
-            explanation: '在整个工作区搜索 flowbit-inline-style 样式以排除命名冲突',
-            output: 'Searching pattern "flowbit-inline-style"...\nFound 0 matches in workspace.'
+            explanation: '在整个工作区搜索 crish-inline-style 样式以排除命名冲突',
+            output: 'Searching pattern "crish-inline-style"...\nFound 0 matches in workspace.'
           }
         ]
       },
       {
         id: 'msg-4',
         sender: 'assistant',
-        text: '找到根源了！另一个扩展创建了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 找到并重用它，但没有覆盖它的 `innerHTML`，所以按钮只显示 "F"，而非 SVG 图标。',
+        text: '找到根源了！另一个扩展创建了 `<button data-crish-inline="1">F</button>`，我们的 `acquireInlineBtn` 找到并重用它，但没有覆盖它的 `innerHTML`，所以按钮只显示 "F"，而非 SVG 图标。',
         timestamp: Date.now() - 3200000,
         toolCalls: [
           {
@@ -1054,9 +1054,9 @@ const DEFAULT_SESSIONS: SessionState[] = [
                 deletions: 5,
                 changes: [
                   { type: 'normal', content: 'function acquireInlineBtn() {' },
-                  { type: 'deletion', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
+                  { type: 'deletion', content: '  let btn = document.querySelector("[data-crish-inline]");' },
                   { type: 'deletion', content: '  return btn;' },
-                  { type: 'addition', content: '  let btn = document.querySelector("[data-flowbit-inline]");' },
+                  { type: 'addition', content: '  let btn = document.querySelector("[data-crish-inline]");' },
                   { type: 'addition', content: '  if (btn && btn.innerHTML !== SVG_ICON) {' },
                   { type: 'addition', content: '    btn.innerHTML = SVG_ICON;' },
                   { type: 'addition', content: '  }' },
@@ -1087,7 +1087,7 @@ const DEFAULT_SESSIONS: SessionState[] = [
       {
         id: 'msg-6',
         sender: 'assistant',
-        text: '我已经追踪到这个问题的根源了，总结一下发现：\n\n**当前状态：**\n- 扩展已加载，service worker 正常\n- 内容脚本已注入 (overlay 面板创建成功)\n  - 但 `mountTrigger()` 函数没有正常执行——`flowbit-inline-style` style 元素没有被创建，触发按钮也没有生成\n\n**根源：** 还有一个其他扩展（如 "All API Hub" 或 "HiSider"）在页面上注入了 `<button data-flowbit-inline="1">F</button>`，我们的 `acquireInlineBtn` 会找到并重用这个按钮，但不会覆盖它的 `innerHTML`，导致按钮只显示 "F" 而不是 SVG 图标。\n\n我已经修复了 `acquireInlineBtn` 让它检测到外部按钮时重新创建。\n\n但现在有一个更基础的问题：在新加载 of 页面上，`mountTrigger` 根本没有被触发（连 `<style>` 元素都没有），这说明内容脚本执行到 `showFlowbitFab()` 时可能抛出了异常，被 `bootstrap()` 的 `try-catch` 吞掉了。\n\n需要你手动做：\n1. 打开 `chrome://extensions`\n2. 找到 "Chat Sync Bridge"，点 移除\n3. 点击 **加载已解压的扩展程序** ➔ 选择 `C:\\Software\\codex_chatHistory\\apps\\browser-extension\\dist`\n4. 刷新 Claude 或 ChatGPT 页面\n\n这次移除再重新加载会触发全新的内容脚本注册，应该能解决 `mountTrigger` 不触发的问题。',
+        text: '我已经追踪到这个问题的根源了，总结一下发现：\n\n**当前状态：**\n- 扩展已加载，service worker 正常\n- 内容脚本已注入 (overlay 面板创建成功)\n  - 但 `mountTrigger()` 函数没有正常执行——`crish-inline-style` style 元素没有被创建，触发按钮也没有生成\n\n**根源：** 还有一个其他扩展（如 "All API Hub" 或 "HiSider"）在页面上注入了 `<button data-crish-inline="1">F</button>`，我们的 `acquireInlineBtn` 会找到并重用这个按钮，但不会覆盖它的 `innerHTML`，导致按钮只显示 "F" 而不是 SVG 图标。\n\n我已经修复了 `acquireInlineBtn` 让它检测到外部按钮时重新创建。\n\n但现在有一个更基础的问题：在新加载 of 页面上，`mountTrigger` 根本没有被触发（连 `<style>` 元素都没有），这说明内容脚本执行到 `showCrishFab()` 时可能抛出了异常，被 `bootstrap()` 的 `try-catch` 吞掉了。\n\n需要你手动做：\n1. 打开 `chrome://extensions`\n2. 找到 "Chat Sync Bridge"，点 移除\n3. 点击 **加载已解压的扩展程序** ➔ 选择 `C:\\path\\to\\crish\\apps\\browser-extension\\dist`\n4. 刷新 Claude 或 ChatGPT 页面\n\n这次移除再重新加载会触发全新的内容脚本注册，应该能解决 `mountTrigger` 不触发的问题。',
         timestamp: Date.now() - 2800000
       }
     ]

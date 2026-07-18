@@ -25,7 +25,7 @@ import type {
 import type { ContextCompressionRuntimeOptions } from "../types";
 import type { PromptAssemblyContextBlock } from "../prompt-assembly";
 import { ContextCompressor, type ContextCompressionResult } from "../context-compression";
-import { projectMessagesForProvider, type ContextProjectionOptions } from "../context-projection";
+import { projectMessageForProvider } from "../context-projection";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -57,6 +57,22 @@ export interface ContextManagerOptions {
 export class ContextManager {
   private compressor?: ContextCompressor;
   private readonly secretRedactor: SecretRedactor | undefined;
+  /**
+   * 消息投影增量缓存：以原始 message 引用为键，缓存其投影结果。
+   *
+   * 设计依据：
+   * - projectMessageForProvider 是纯函数（仅依赖 message + options），可安全缓存
+   * - options 在 ContextManager 构造时固定，整个生命周期不变
+   * - 消息列表追加式增长：每轮只新增末尾消息，前 N-1 条引用不变 → 缓存命中
+   * - 压缩后 kept 段保留原引用（slice 不复制对象），缓存仍命中；只有被压缩前缀和
+   *   新的 summary message 是缓存未命中
+   * - WeakMap 在消息被丢弃后自动 GC，无内存泄漏风险
+   *
+   * 仅缓存投影（budget + blob 外部化），不缓存 redact 结果：
+   * redact 依赖 SecretRedactor 内部 placeholder 注册表状态（LRU 可淘汰），
+   * 缓存 redact 结果可能在 LRU 淘汰后返回过期 placeholder，导致 restore 失败。
+   */
+  private readonly projectionCache = new WeakMap<AgentMessage, AgentMessage>();
 
   constructor(private readonly options: ContextManagerOptions) {
     if (options.compression && options.compression.enabled !== false) {
@@ -93,14 +109,39 @@ export class ContextManager {
   }
 
   /**
-   * 为 Provider 投影消息（预算控制、blob 外部化、密钥脱敏）
+   * 为 Provider 投影消息（预算控制、blob 外部化、密钥脱敏）。
+   *
+   * 单次遍历：对每条消息先查投影缓存（命中则复用），再立即脱敏写入结果槽。
+   * 相比原先「先全量 projectMessagesForProvider 再全量 redactMessages」的两遍遍历，
+   * 减少一次中间数组分配，且未命中缓存的旧消息也只需一次遍历。
    */
   projectForProvider(messages: AgentMessage[]): AgentMessage[] {
-    const projected = projectMessagesForProvider(messages, {
+    if (!this.secretRedactor) {
+      const result: AgentMessage[] = new Array(messages.length);
+      for (let i = 0; i < messages.length; i++) {
+        result[i] = this.projectMessageWithCache(messages[i]!);
+      }
+      return result;
+    }
+    const result: AgentMessage[] = new Array(messages.length);
+    for (let i = 0; i < messages.length; i++) {
+      const projected = this.projectMessageWithCache(messages[i]!);
+      result[i] = this.secretRedactor.redactMessage(projected).value;
+    }
+    return result;
+  }
+
+  /**
+   * 投影单条消息（带 WeakMap 缓存）。命中时直接复用，未命中时计算并写入缓存。
+   */
+  private projectMessageWithCache(message: AgentMessage): AgentMessage {
+    const cached = this.projectionCache.get(message);
+    if (cached) return cached;
+    const projected = projectMessageForProvider(message, {
       toolOutputBudget: this.options.toolOutputBudget
     });
-    if (!this.secretRedactor) return projected;
-    return this.secretRedactor.redactMessages(projected).value;
+    this.projectionCache.set(message, projected);
+    return projected;
   }
 
   /**
@@ -168,12 +209,17 @@ export class ContextManager {
     replaceMessages: (compressed: AgentMessage[]) => void,
     onEvent: (event: "compression-start" | "compression-end" | "compression-error", detail?: unknown) => Promise<void>
   ): Promise<void> {
-    if (!this.shouldCompress(messages)) return;
+    if (!this.compressor) return;
+    // 单次 shouldCompress 调用：决策结果同时用于门控（是否启动）和执行（传入 compress 跳过内部重复检查）。
+    // 原先流程会在此处调用 shouldCompress，再经由 this.compress → compressor.maybeCompress 第二次调用 shouldCompress。
+    const decision = this.compressor.shouldCompress(messages, "auto");
+    if (!decision.shouldCompress) return;
 
     await onEvent("compression-start");
 
     try {
-      const result = await this.compress(messages);
+      // 直接调用 compressor.compress 并传入已有 decision，跳过 compressor.maybeCompress 内部的重复 shouldCompress
+      const result = await this.compressor.compress(messages, "auto", decision.tokensBefore, decision);
       if (!result) {
         await onEvent("compression-end", { aborted: true, error: "No compressible context region" });
         return;

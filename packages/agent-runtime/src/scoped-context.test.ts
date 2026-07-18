@@ -6,8 +6,8 @@ import type { AgentSkill } from "./skills";
 describe("scoped context", () => {
   it("places enabled rules into stable prompt blocks and leaves recommendations out", () => {
     const resolution = resolveScopedContext({
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
       projectTags: ["typescript", "tauri"],
       rules: [
         {
@@ -47,14 +47,14 @@ describe("scoped context", () => {
     const record = skillToScopedContextRecord(skill);
 
     const recommended = resolveScopedContext({
-      cwd: "C:/Software/conex/packages/agent-runtime",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish/packages/agent-runtime",
+      projectRoot: "C:/workspace/crish",
       projectTags: ["typescript"],
       records: [record]
     });
     const enabled = resolveScopedContext({
-      cwd: "C:/Software/conex/packages/agent-runtime",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish/packages/agent-runtime",
+      projectRoot: "C:/workspace/crish",
       projectTags: ["typescript"],
       records: [record],
       userEnabledIds: [record.id]
@@ -69,8 +69,8 @@ describe("scoped context", () => {
 
   it("keeps stable context hashes unchanged when only volatile user messages change", () => {
     const scoped = resolveScopedContext({
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
       rules: [
         {
           id: "cache-prefix",
@@ -102,8 +102,8 @@ describe("scoped context", () => {
 
   it("reports disabled and inapplicable scoped items without putting them in prompt context", () => {
     const resolution = resolveScopedContext({
-      cwd: "C:/Software/conex",
-      projectRoot: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
+      projectRoot: "C:/workspace/crish",
       projectTags: ["runtime"],
       rules: [
         {
@@ -152,8 +152,8 @@ function fakeSkill(overrides: Partial<AgentSkill>): AgentSkill {
   return {
     name: "sample",
     description: "Sample skill",
-    filePath: "C:/Users/orange/.codex/skills/sample/SKILL.md",
-    baseDir: "C:/Users/orange/.codex/skills/sample",
+    filePath: "C:/workspace/crish/.codex/skills/sample/SKILL.md",
+    baseDir: "C:/workspace/crish/.codex/skills/sample",
     content: "Use safe UTF-8 reads and writes.",
     disableModelInvocation: false,
     ...overrides

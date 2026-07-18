@@ -1,6 +1,6 @@
 import type { JsonObject } from "./primitive-types";
 
-export class ConexError extends Error {
+export class CrishError extends Error {
   constructor(
     message: string,
     public readonly code: string,
@@ -9,11 +9,11 @@ export class ConexError extends Error {
     public readonly metadata?: JsonObject,
   ) {
     super(message);
-    this.name = "ConexError";
+    this.name = "CrishError";
   }
 }
 
-export class ProviderError extends ConexError {
+export class ProviderError extends CrishError {
   constructor(
     message: string,
     code: string,
@@ -25,7 +25,7 @@ export class ProviderError extends ConexError {
   }
 }
 
-export class PermissionError extends ConexError {
+export class PermissionError extends CrishError {
   constructor(
     message: string,
     code: string,
@@ -36,7 +36,7 @@ export class PermissionError extends ConexError {
   }
 }
 
-export class SessionError extends ConexError {
+export class SessionError extends CrishError {
   constructor(
     message: string,
     code: SessionErrorCode,
@@ -60,7 +60,7 @@ export type SessionErrorCode =
   | "invalid_state"
   | "storage";
 
-export class ProtocolError extends ConexError {
+export class ProtocolError extends CrishError {
   constructor(
     message: string,
     code: string,

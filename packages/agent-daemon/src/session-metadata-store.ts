@@ -129,7 +129,7 @@ export class FileSessionMetadataStore {
       return {
         next: { ...state, sessions: nextSessions },
         result: {
-          record: clone(updated),
+          record: updated,
           changed: !previous || !recordsEqual(previous, updated),
         },
       };
@@ -413,8 +413,7 @@ function requiredBoolean(
  * 设置环境变量 DEBUG_PRETTY_JSON=1 可切换为 2 空格缩进，便于调试时人工阅读。
  */
 function serializeState(state: SessionMetadataStoreState): string {
-  const pretty = process.env.DEBUG_PRETTY_JSON === "1" || process.env.DEBUG_PRETTY_JSON === "true";
-  return `${JSON.stringify(state, null, pretty ? 2 : 0)}\n`;
+  return `${JSON.stringify(state)}\n`;
 }
 
 

@@ -738,6 +738,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
     const retry = normalizeRetryOptions(this.options.retry);
     const startedAt = Date.now();
     const endpoints = this.resolvedEndpoints();
+    const diagEnabled = this.diagnosticsEnabled();
     // cache hint plan 只依赖 request.promptAssembly，整个 stream() 调用内不变，提前算一次
     const cacheHintPlan = this.buildCacheHintPlan(request);
     // body 字符串缓存：同一 request + endpoint + wireMode + cacheHintPlan 重试时复用序列化结果，
@@ -767,7 +768,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
             elapsedMs: attemptStartedAt - startedAt,
             configuredModel: this.options.model,
             reason: wireMode === "user-prefix" ? "system-prompt-user-prefix" : undefined,
-            ...requestDiagnosticFields(request, wireMode, this.options.stream !== false)
+            ...(diagEnabled ? requestDiagnosticFields(request, wireMode, this.options.stream !== false) : {})
           });
 
           const bodyObject = this.buildRequestBody({ request, endpoint, wireMode, cacheHintPlan, attempt });
@@ -927,7 +928,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
                     retryable: true,
                     errorKind: "schema",
                     reason: "Provider emitted a streaming system-role rejection; retrying this endpoint with the system prompt as a stable user-prefix instruction.",
-                    ...requestDiagnosticFields(request, "native-system-role", streamRequested)
+                    ...(diagEnabled ? requestDiagnosticFields(request, "native-system-role", streamRequested) : {})
                   });
                   break;
                 }
@@ -1008,7 +1009,7 @@ export class OpenAICompatibleProvider implements AgentProvider {
               retryable: true,
               errorKind: "schema",
               reason: "Provider returned a JSON system-role rejection; retrying this endpoint with the system prompt as a stable user-prefix instruction.",
-              ...requestDiagnosticFields(request, "native-system-role", streamRequested)
+              ...(diagEnabled ? requestDiagnosticFields(request, "native-system-role", streamRequested) : {})
             });
             continue;
           }
@@ -1391,7 +1392,7 @@ export async function listOpenAICompatibleModels(options: {
   if (!fetchImpl && transport === "fetch") {
     throw new Error("A fetch implementation is required to list models");
   }
-  const apiKey = options.apiKey ?? readEnv("FLOWBIT_API_KEY") ?? readEnv("OPENAI_API_KEY");
+  const apiKey = options.apiKey ?? readEnv("CRISH_API_KEY") ?? readEnv("FLOWBIT_API_KEY") ?? readEnv("OPENAI_API_KEY");
   const modelsUrl = resolveModelsUrl(options);
   const signal = new AbortController().signal;
   const request: ProviderHttpRequest = {
@@ -1597,7 +1598,9 @@ async function* parseChatCompletionsStreamingResponse(
     }
   }
 
-  for (const call of [...pending.entries()].sort(([left], [right]) => left - right).map(([, call]) => call)) {
+  // pending 的 key 是 tool_call 的 index（单调递增的数字），Map 插入顺序即升序，
+  // 无需 sort + map：直接遍历 values() 即可。
+  for (const call of pending.values()) {
     if (call.name) {
       yield { type: "tool-call", id: call.id, toolName: call.name, input: parseArguments(call.argumentsText) };
     }
@@ -2622,7 +2625,7 @@ function readSecretFileSync(filePath: string): string | undefined {
 
 /**
  * 按 provider 生命周期内不变的优先级解析 apiKey：
- * options.apiKey → apiKeyEnv → apiKeyFile → FLOWBIT_API_KEY → OPENAI_API_KEY。
+ * options.apiKey → apiKeyEnv → apiKeyFile → CRISH_API_KEY → FLOWBIT_API_KEY → OPENAI_API_KEY。
  * apiKeyFile 保持原有同步读取语义（构造函数里同步完成，不引入异步）。
  */
 function resolveApiKey(options: OpenAICompatibleProviderOptions): string | undefined {
@@ -2630,6 +2633,7 @@ function resolveApiKey(options: OpenAICompatibleProviderOptions): string | undef
     options.apiKey ??
     (options.apiKeyEnv ? readEnv(options.apiKeyEnv) : undefined) ??
     (options.apiKeyFile ? readSecretFileSync(options.apiKeyFile) : undefined) ??
+    readEnv("CRISH_API_KEY") ??
     readEnv("FLOWBIT_API_KEY") ??
     readEnv("OPENAI_API_KEY")
   );

@@ -12,7 +12,14 @@ export function projectMessagesForProvider(messages: AgentMessage[], options: Co
   return messages.map((message) => projectMessageForProvider(message, options));
 }
 
-function projectMessageForProvider(message: AgentMessage, options: ContextProjectionOptions): AgentMessage {
+/**
+ * 投影单条消息（budget + blob 外部化）。
+ *
+ * 导出此函数是为了让上层（ContextManager）可以基于消息引用做增量缓存：
+ * 同一 message 引用在上层 WeakMap 命中时直接复用，避免每轮重复投影。
+ * 该函数本身仍是纯函数，无副作用。
+ */
+export function projectMessageForProvider(message: AgentMessage, options: ContextProjectionOptions): AgentMessage {
   let changed = false;
   const blocks = message.blocks.map((block) => {
     const projected = projectBlockForProvider(block, options);

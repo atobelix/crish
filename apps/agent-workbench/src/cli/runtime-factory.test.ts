@@ -174,8 +174,8 @@ describe("workbench runtime factory", () => {
       return new Response(
         JSON.stringify({
           data: [
-            { id: "remote-only-model", owned_by: "flowbit" },
-            { id: "another-remote-model", owned_by: "flowbit" }
+            { id: "remote-only-model", owned_by: "crish" },
+            { id: "another-remote-model", owned_by: "crish" }
           ]
         }),
         { headers: { "content-type": "application/json" } }
@@ -188,6 +188,7 @@ describe("workbench runtime factory", () => {
         ...settings,
         provider: {
           ...settings.provider,
+          baseUrl: "https://api.crish.me",
           apiKey: "test-key",
           apiKeyEnv: undefined,
           modelsPath: "/models"
@@ -196,7 +197,7 @@ describe("workbench runtime factory", () => {
       fetch: fetchMock
     });
 
-    expect(requestUrl).toBe("https://api.flowbit.me/v1/models");
+    expect(requestUrl).toBe("https://api.crish.me/v1/models");
     expect(requestHeaders.get("authorization")).toBe("Bearer test-key");
     expect(result.discoveredModelIds).toEqual(["remote-only-model", "another-remote-model"]);
     expect(result.selectedModelId).toBe("mimo-v2.5");
@@ -214,19 +215,20 @@ describe("workbench runtime factory", () => {
         ...settings,
         provider: {
           ...settings.provider,
+          baseUrl: "https://api.crish.me",
           apiKey: "test-key",
           apiKeyEnv: undefined
         }
       },
       fetch: async () =>
-        new Response(JSON.stringify({ data: [{ id: "remote-only-model", owned_by: "flowbit" }] }), {
+        new Response(JSON.stringify({ data: [{ id: "remote-only-model", owned_by: "crish" }] }), {
           headers: { "content-type": "application/json" }
         })
     });
 
     await expect(toProviderOptions(refreshed.settings.provider, undefined, 64_000)).resolves.toMatchObject({
       model: "mimo-v2.5",
-      baseUrl: "https://api.flowbit.me",
+      baseUrl: "https://api.crish.me",
       apiKey: "test-key",
       transport: "auto",
       reasoningEffort: "auto",
@@ -239,14 +241,14 @@ describe("workbench runtime factory", () => {
     const configDir = join(tempDir, ".config");
     const configPath = join(configDir, "provider.json");
     await mkdir(configDir, { recursive: true });
-    await writeFile(join(configDir, "flowbit.key"), "relative-secret", "utf8");
+    await writeFile(join(configDir, "crish.key"), "relative-secret", "utf8");
     await writeFile(
       configPath,
       JSON.stringify({
         provider: {
           id: "relative-secret-test",
-          baseUrl: "https://api.flowbit.me",
-          apiKeyFile: "flowbit.key",
+          baseUrl: "https://api.crish.me",
+          apiKeyFile: "crish.key",
           model: "mimo-v2.5"
         }
       }),

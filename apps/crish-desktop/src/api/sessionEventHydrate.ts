@@ -242,9 +242,9 @@ export function projectEventsToMessages(events: unknown[]): {
 
     if (type === 'tool-end') {
       const { id, text, isError } = toolResult(agent.result);
-      const a = currentAssistant;
+      const a = currentAssistant as any;
       if (!a?.toolCalls) continue;
-      const tc = a.toolCalls.find((t) => t.id === id) || a.toolCalls[a.toolCalls.length - 1];
+      const tc = a.toolCalls.find((t: any) => t.id === id) || a.toolCalls[a.toolCalls.length - 1];
       if (tc) {
         tc.status = isError ? 'error' : 'success';
         tc.output = text || (isError ? 'failed' : 'OK');

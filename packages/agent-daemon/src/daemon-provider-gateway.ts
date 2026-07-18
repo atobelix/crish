@@ -90,7 +90,7 @@ export interface DaemonProviderFactoryMetadata {
   cwd: string;
 }
 
-const DEFAULT_PROVIDER_ID = "flowbit";
+const DEFAULT_PROVIDER_ID = "crish";
 const DEFAULT_ROUTE_ID = "default";
 const DEFAULT_ENDPOINT: OpenAICompatibleEndpoint = "auto";
 const DEFAULT_AUTH_HEADER: OpenAICompatibleAuthHeader = "authorization";
@@ -622,7 +622,8 @@ function providerRuntimeConfigFromEnv(env: Record<string, string | undefined>): 
 }
 
 function resolveApiKey(layers: ProviderConfigLayer[]): { value?: string; source: DaemonProviderApiKeySource } {
-  for (const layer of [...layers].reverse()) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
     if (!hasOwnConfigValue(layer.config, "apiKey")) continue;
     const value = nonEmpty(layer.config.apiKey);
     return value ? { value, source: layer.config.apiKeySource ?? layer.source } : { source: "unset" };
@@ -631,7 +632,8 @@ function resolveApiKey(layers: ProviderConfigLayer[]): { value?: string; source:
 }
 
 function resolveCredentialMode(layers: ProviderConfigLayer[]): DaemonProviderCredentialMode | undefined {
-  for (const layer of [...layers].reverse()) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
     if (!hasOwnConfigValue(layer.config, "credentialMode")) continue;
     const credentialMode = normalizeCredentialMode(layer.config.credentialMode);
     if (credentialMode) return credentialMode;
@@ -650,15 +652,16 @@ function resolveOptionalStringConfig(
   layers: ProviderConfigLayer[],
   key: "accountId" | "baseUrl" | "model" | "providerId" | "routeId" | "upstreamModel"
 ): string | undefined {
-  for (const layer of [...layers].reverse()) {
-    const value = nonEmpty(layer.config[key]);
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const value = nonEmpty(layers[i].config[key]);
     if (value) return value;
   }
   return undefined;
 }
 
 function resolveEndpointConfig(layers: ProviderConfigLayer[]): OpenAICompatibleEndpoint | undefined {
-  for (const layer of [...layers].reverse()) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
     if (!hasOwnConfigValue(layer.config, "endpoint")) continue;
     const endpoint = normalizeEndpoint(layer.config.endpoint);
     if (endpoint) return endpoint;
@@ -670,7 +673,8 @@ function resolveBooleanConfig(
   layers: ProviderConfigLayer[],
   key: "stream"
 ): boolean | undefined {
-  for (const layer of [...layers].reverse()) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
     if (!hasOwnConfigValue(layer.config, key)) continue;
     const value = normalizeBoolean(layer.config[key]);
     if (value !== undefined) return value;

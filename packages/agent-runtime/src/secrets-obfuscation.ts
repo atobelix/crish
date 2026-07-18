@@ -156,6 +156,7 @@ export class SecretRegistry {
   private nextPatternId = 1;
   private readonly minSecretLength: number;
   private readonly sensitiveNamePattern: RegExp;
+  private version = 0;
 
   constructor(options: SecretRegistryOptions = {}) {
     this.minSecretLength = Math.max(1, Math.floor(options.minSecretLength ?? DEFAULT_MIN_SECRET_LENGTH));
@@ -179,6 +180,7 @@ export class SecretRegistry {
       minLength
     };
     this.explicitSecrets.push(entry);
+    this.version++;
     return toSecretRegistration(entry);
   }
 
@@ -226,6 +228,7 @@ export class SecretRegistry {
       minLength: Math.max(1, Math.floor(options.minLength ?? DEFAULT_PATTERN_MIN_SECRET_LENGTH))
     };
     this.registeredPatterns.push(entry);
+    this.version++;
     return toPatternRegistration(entry);
   }
 
@@ -302,6 +305,11 @@ export class SecretRegistry {
     return matches;
   }
 
+  /** 注册表变更版本号，用于 SecretRedactor 缓存失效检测。 */
+  getVersion(): number {
+    return this.version;
+  }
+
   entriesForRedaction(): readonly RegisteredSecret[] {
     return this.explicitSecrets;
   }
@@ -325,6 +333,12 @@ export class SecretRedactor {
   private nextPlaceholder = 1;
   private readonly placeholderPrefix: string;
   private readonly redactSensitiveJsonKeys: boolean;
+  // 按 value.length 降序排列的 secrets 缓存，避免在 redactText 热路径上重复 sort。
+  // registeredSecretsCache 按 registry.version 失效；knownSecretsCache 按 dirty 标记失效。
+  private cachedRegisteredSecrets: RegisteredSecret[] | undefined;
+  private cachedRegisteredSecretsVersion = -1;
+  private cachedKnownSecrets: PlaceholderRecord[] | undefined;
+  private knownSecretsCacheDirty = true;
 
   constructor(private readonly registry: SecretRegistry = new SecretRegistry(), options: SecretRedactorOptions = {}) {
     this.placeholderPrefix = sanitizePlaceholderPrefix(options.placeholderPrefix ?? DEFAULT_PLACEHOLDER_PREFIX);
@@ -474,6 +488,8 @@ export class SecretRedactor {
       this.placeholderToRecord.set(placeholder, record);
       this.nextPlaceholder = Math.max(this.nextPlaceholder, placeholderSequence(placeholder) + 1);
     }
+    // 导入 restore map 改变了 known secrets 集合，需要失效缓存
+    this.knownSecretsCacheDirty = true;
   }
 
   displayMap(): SecretDisplayMap {
@@ -578,7 +594,12 @@ export class SecretRedactor {
 
   private collectRegisteredSecretSpans(text: string): CandidateSpan[] {
     const spans: CandidateSpan[] = [];
-    const secrets = [...this.registry.entriesForRedaction()].sort((left, right) => right.value.length - left.value.length);
+    const registryVersion = this.registry.getVersion();
+    if (this.cachedRegisteredSecrets === undefined || this.cachedRegisteredSecretsVersion !== registryVersion) {
+      this.cachedRegisteredSecrets = [...this.registry.entriesForRedaction()].sort((left, right) => right.value.length - left.value.length);
+      this.cachedRegisteredSecretsVersion = registryVersion;
+    }
+    const secrets = this.cachedRegisteredSecrets;
 
     for (const secret of secrets) {
       let index = text.indexOf(secret.value);
@@ -601,7 +622,11 @@ export class SecretRedactor {
 
   private collectKnownSecretSpans(text: string): CandidateSpan[] {
     const spans: CandidateSpan[] = [];
-    const known = this.placeholderToRecord.values().sort((left, right) => right.value.length - left.value.length);
+    if (this.knownSecretsCacheDirty || this.cachedKnownSecrets === undefined) {
+      this.cachedKnownSecrets = this.placeholderToRecord.values().sort((left, right) => right.value.length - left.value.length);
+      this.knownSecretsCacheDirty = false;
+    }
+    const known = this.cachedKnownSecrets;
 
     for (const secret of known) {
       let index = text.indexOf(secret.value);
@@ -673,6 +698,8 @@ export class SecretRedactor {
     };
     this.valueToRecord.set(normalized, record);
     this.placeholderToRecord.set(placeholder, record);
+    // 新增 placeholder 改变了 known secrets 集合，需要失效缓存
+    this.knownSecretsCacheDirty = true;
     return placeholder;
   }
 
@@ -771,7 +798,9 @@ function candidateFromMatch(match: RegExpExecArray, group: number): { value: str
 }
 
 function selectNonOverlappingSpans(spans: CandidateSpan[]): CandidateSpan[] {
-  const sorted = [...spans].sort((left, right) => {
+  // 调用方传入的 spans 是 collectTextSpans 产生的新数组，且调用后不再使用，
+  // 可直接原地排序避免一次 O(n) 复制。
+  const sorted = spans.sort((left, right) => {
     if (left.start !== right.start) return left.start - right.start;
     if (left.priority !== right.priority) return left.priority - right.priority;
     return right.end - right.start - (left.end - left.start);

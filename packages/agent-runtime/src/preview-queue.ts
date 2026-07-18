@@ -1,5 +1,5 @@
 import { createId } from "./session";
-import { BoundedMap } from "@crish/shared-utils";
+import { BoundedMap, deepFreeze } from "@crish/shared-utils";
 import type { JsonObject, JsonValue, ToolArtifact } from "@crish/shared-types";
 
 export type PreviewStatus = "pending" | "applied" | "discarded" | "expired";
@@ -142,8 +142,9 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
         metadata: cloneJsonObject(request.metadata)
       };
       preview.artifact = this.buildArtifact(preview, request.artifact);
-      this.previews.set(id, preview);
-      return clonePreview(preview);
+      const frozen = deepFreeze(preview);
+      this.previews.set(id, frozen);
+      return frozen;
     });
   }
 
@@ -151,7 +152,7 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
     return this.enqueue(() => {
       this.expireDuePreviews(this.nowMs());
       const preview = this.previews.get(id);
-      return preview ? clonePreview(preview) : undefined;
+      return preview;
     });
   }
 
@@ -160,8 +161,7 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
       this.expireDuePreviews(this.nowMs());
       const statuses = statusFilter(options.status);
       return [...this.previews.values()]
-        .filter((preview) => !statuses || statuses.has(preview.status))
-        .map((preview) => clonePreview(preview));
+        .filter((preview) => !statuses || statuses.has(preview.status));
     });
   }
 
@@ -192,8 +192,9 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
         applied.result = cloneJsonValue(transition.result);
       }
       applied.artifact = this.buildArtifact(applied, mergeArtifactInputs(preview.artifact, transition.artifact));
-      this.previews.set(id, applied);
-      return clonePreview(applied);
+      const frozenApplied = deepFreeze(applied);
+      this.previews.set(id, frozenApplied);
+      return frozenApplied;
     });
   }
 
@@ -220,8 +221,9 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
         discarded.result = cloneJsonValue(transition.result);
       }
       discarded.artifact = this.buildArtifact(discarded, mergeArtifactInputs(preview.artifact, transition.artifact));
-      this.previews.set(id, discarded);
-      return clonePreview(discarded);
+      const frozenDiscarded = deepFreeze(discarded);
+      this.previews.set(id, frozenDiscarded);
+      return frozenDiscarded;
     });
   }
 
@@ -234,14 +236,14 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
     if (preview.status !== "pending") {
       throw new Error(`Cannot ${operation} preview ${id} from ${preview.status} status`);
     }
-    return clonePreview(preview);
+    return preview;
   }
 
   private async runTransitionEffect<TResult extends JsonValue>(
     preview: PendingPreview<TPayload>,
     options: PreviewApplyOptions<TPayload, TResult> | PreviewDiscardOptions<TPayload, TResult>
   ): Promise<PreviewTransitionUpdate<TResult>> {
-    const effectUpdate = (await options.effect?.(clonePreview(preview))) ?? {};
+    const effectUpdate = (await options.effect?.(preview)) ?? {};
     return {
       result: effectUpdate.result !== undefined ? effectUpdate.result : options.result,
       metadata: mergeJsonObjects(options.metadata, effectUpdate.metadata),
@@ -305,7 +307,7 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
         expiredAt: now
       };
       expired.artifact = this.buildArtifact(expired, preview.artifact);
-      this.previews.set(preview.id, expired);
+      this.previews.set(preview.id, deepFreeze(expired));
     }
   }
 
@@ -367,10 +369,6 @@ function mergeArtifactInputs(left?: PreviewArtifactInput, right?: PreviewArtifac
     text: right?.text ?? left?.text,
     metadata: mergeJsonObjects(left?.metadata, right?.metadata)
   };
-}
-
-function clonePreview<TPayload extends JsonValue, TPreview extends Preview<TPayload>>(preview: TPreview): TPreview {
-  return cloneJsonValue(preview as unknown as JsonValue) as unknown as TPreview;
 }
 
 function cloneJsonObject(value?: JsonObject): JsonObject {

@@ -61,6 +61,18 @@ const DEFAULT_HARDLINE_ENTRIES: HardlineEntry[] = [
   // 原始内存 / 内核
   { pattern: /\bdd\b[^\n]*\bif=\/dev\/mem\b/i, reason: "raw memory read" },
   { pattern: /\bmodprobe\s+-r\s+/i, reason: "unload kernel module" },
+
+  // 远程代码执行：网络工具管道到解释器（不可审计的远程脚本执行）
+  { pattern: /\b(curl|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b.*\|\s*(bash|sh|zsh|dash|ksh|python|python3|node|perl|ruby|php|iex|Invoke-Expression)\b/i, reason: "remote code execution via piped interpreter" },
+
+  // rm -rf 根路径（字面 / 引号包裹 — 正则不识别引号语义，覆盖各种包裹形式）
+  { pattern: /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-rf|-fr|--recursive\b[^\n]*--force\b|--force\b[^\n]*--recursive\b)\s+\/(\s|"|'|$)/i, reason: "recursive force delete of root filesystem" },
+
+  // rm -rf + 动态/通配路径（变量、命令替换、波浪号、通配符、当前目录、父目录 — 值未知时可能解析为根路径）
+  { pattern: /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-rf|-fr)\s+(\$\w|~|\*|\.(\/|\s|$)|\.\.\/)/i, reason: "recursive force delete with dynamic or wildcard path" },
+
+  // find / -delete / find / -exec rm（在根路径上执行破坏性 find）
+  { pattern: /\bfind\s+\/(\s|$)[^\n]*(-delete|-exec\s+rm\b)/i, reason: "destructive find on root filesystem" },
 ];
 
 export class HardlinePatternRegistry {

@@ -119,6 +119,7 @@ export class ConversationEngine {
       blocks: [{ type: "text", text: this.options.systemPrompt }],
       createdAt: nowIso()
     });
+    this.refreshFrozenView();
   }
 
   /**
@@ -132,6 +133,7 @@ export class ConversationEngine {
       createdAt: nowIso()
     };
     this.messages.push(message);
+    this.refreshFrozenView();
     return message;
   }
 
@@ -151,21 +153,41 @@ export class ConversationEngine {
   }
 
   /**
-   * 追加工具结果消息
+   * 批量追加工具结果消息。
+   *
+   * 系统化改进：将多个 tool_result block 合并为单条 `role: "tool"` 消息，
+   * 而非每个结果单独成消息。这减少了消息数量与 provider 请求体的结构膨胀。
+   *
+   * 兼容性说明：
+   * - OpenAI Chat Completions 构建器（openai-request-build.ts buildChatMessages）
+   *   与 Responses API 构建器（buildResponsesInput）均通过 `for (const block of message.blocks)`
+   *   遍历 `role: "tool"` 消息的 blocks，为每个 tool-result 生成独立的输出项，
+   *   因此单条消息含多个 tool_result block 完全兼容。
+   * - 上下文压缩（context-compression.ts）同样遍历 blocks，兼容。
+   * - 未采用 Anthropic 风格的 `role: "user"` + 多 tool_result block 方案，
+   *   因为现有代码（openai-request-build / context-compression / agent-session-loop /
+   *   task-snapshot-projection）均通过 `role === "tool"` 识别工具结果消息，
+   *   改为 user 角色会破坏这些消费者，需要跨文件改动，风险过高。
+   *
+   * 注意：此方法当前在运行时未被调用（实际工具结果追加发生在 agent-session-loop.ts
+   * 通过 recordMessage -> appendMessage 逐条追加）。此处的批量化实现为未来
+   * 将调用方迁移到本方法做好准备。如需消除运行时的消息膨胀，需另行修改
+   * agent-session-loop.ts 的 executing-tools 分支（超出本次改动范围）。
+   *
+   * @returns 包含单条批量消息的数组（空输入时返回空数组）。保持原 `AgentMessage[]`
+   *          返回签名以兼容 API。
    */
   appendToolResults(results: ToolResultBlock[]): AgentMessage[] {
-    const messages: AgentMessage[] = [];
-    for (const result of results) {
-      const message: AgentMessage = {
-        id: createId("tool"),
-        role: "tool",
-        blocks: [result],
-        createdAt: nowIso()
-      };
-      this.messages.push(message);
-      messages.push(message);
-    }
-    return messages;
+    if (results.length === 0) return [];
+    const message: AgentMessage = {
+      id: createId("tool"),
+      role: "tool",
+      blocks: results.slice(),
+      createdAt: nowIso()
+    };
+    this.messages.push(message);
+    this.refreshFrozenView();
+    return [message];
   }
 
   /**
@@ -232,10 +254,18 @@ export class ConversationEngine {
   }
 
   /**
-   * 获取当前消息列表
+   * 获取当前消息列表（O(1)，无拷贝）。
+   *
+   * 返回内部 frozenMessages 引用：调用方必须将返回的数组视为只读，不得直接修改
+   * （如 push/splice/pop 等）。如需修改，请自行 `.slice()` 拷贝，或使用
+   * getMessagesMutable() 获取可变引用。
+   *
+   * 已确认所有调用方（agent-session-loop.ts）均不修改返回数组：
+   * - conversationNeedsTextSynthesis：只读遍历 + 局部 slice 子拷贝
+   * - SteeringContext.messages / TurnContext.messages：传递给评估/hook 的只读消费
    */
   getMessages(): AgentMessage[] {
-    return [...this.messages];
+    return this.frozenMessages;
   }
 
   /**
@@ -270,6 +300,7 @@ export class ConversationEngine {
     this.messages = [...snapshot.messages];
     this.turnCount = snapshot.turnCount;
     this.lastTurnAt = snapshot.lastTurnAt;
+    this.refreshFrozenView();
   }
 
   /**
@@ -277,6 +308,7 @@ export class ConversationEngine {
    */
   appendMessage(message: AgentMessage): void {
     this.messages.push(message);
+    this.refreshFrozenView();
   }
 
   /**

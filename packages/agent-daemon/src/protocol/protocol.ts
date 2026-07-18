@@ -39,6 +39,8 @@ import {
   validateConfigUpdatedMessage,
   validateProbeProviderModelsMessage,
   validateProbeProviderChatMessage,
+  validateProviderModelsProbedMessage,
+  validateProviderChatProbedMessage,
 } from "./validators/run.js";
 import {
   validateListSessionsMessage,
@@ -643,6 +645,10 @@ export function validateOutboundMessage(
       return { ok: true, value: base.value as unknown as DaemonOutboundMessage };
     case "scoped-context-resolved":
       return withMessageCorrelation(base.value, validateScopedContextResolvedMessage(base.value));
+    case "provider-models-probed":
+      return withMessageCorrelation(base.value, validateProviderModelsProbedMessage(base.value));
+    case "provider-chat-probed":
+      return withMessageCorrelation(base.value, validateProviderChatProbedMessage(base.value));
   }
   return { ok: false, error: { code: "UNKNOWN_MESSAGE_TYPE", message: `Unhandled outbound message type: ${base.value.type}`, issues: [] } };
 }
@@ -669,7 +675,7 @@ export function encodeOutboundMessage(
     ]);
   }
 
-  const validation = validateOutboundMessage(JSON.parse(payload));
+  const validation = validateOutboundMessage(message);
   if (!validation.ok) return validation;
 
   return ok(payload);

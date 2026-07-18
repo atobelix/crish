@@ -242,8 +242,29 @@ export function userMessageContent(message: AgentMessage): string | ChatContentP
  *
  * 调用方仅对返回值做只读访问（最终 JSON.stringify），不 mutate；故共享引用安全。
  */
-const chatMessagesCache = new WeakMap<AgentMessage[], Map<string, ChatMessage[]>>();
-const responsesInputCache = new WeakMap<AgentMessage[], Map<string, JsonObject[]>>();
+import { LruMap } from "@crish/shared-utils";
+
+function getMessagesFingerprint(messages: AgentMessage[]): string {
+  return messages.map((m) => {
+    const lastBlock = m.blocks[m.blocks.length - 1];
+    let blockFingerprint = "";
+    if (lastBlock) {
+      if (lastBlock.type === "text") {
+        blockFingerprint = `text:${lastBlock.text.length}`;
+      } else if (lastBlock.type === "thought") {
+        blockFingerprint = `thought:${lastBlock.text.length}`;
+      } else if (lastBlock.type === "tool-call") {
+        blockFingerprint = `tool-call:${lastBlock.id}:${lastBlock.toolName}`;
+      } else if (lastBlock.type === "tool-result") {
+        blockFingerprint = `tool-result:${lastBlock.toolCallId}:${lastBlock.toolName}`;
+      }
+    }
+    return `${m.id}:${m.blocks.length}:${blockFingerprint}`;
+  }).join(",");
+}
+
+const chatMessagesCache = new LruMap<string, ChatMessage[]>(100);
+const responsesInputCache = new LruMap<string, JsonObject[]>(100);
 
 function chatMessagesCacheKey(
   systemPrompt: string | undefined,
@@ -262,30 +283,23 @@ function responsesInputCacheKey(
 }
 
 /**
- * 以 messages 数组引用 + 字符串 key 二级查找缓存；未命中时调用 compute 计算并写入。
- * 不阻止 messages 数组 GC（WeakMap）；命中分支不触发 compute，避免重复 O(n) 转换。
+ * 以 messages 数组指纹 + 字符串 key 查找缓存；未命中时调用 compute 计算并写入。
  */
 function cachedTransform<V>(
-  cache: WeakMap<AgentMessage[], Map<string, V>>,
+  cache: LruMap<string, V>,
   messages: AgentMessage[],
   key: string,
   compute: () => V
 ): V {
-  const inner = cache.get(messages);
-  if (inner) {
-    const hit = inner.get(key);
-    if (hit !== undefined) return hit;
-  }
+  const fingerprint = getMessagesFingerprint(messages);
+  const cacheKey = `${fingerprint}\u0000${key}`;
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const value = compute();
-  if (inner) {
-    inner.set(key, value);
-  } else {
-    const fresh = new Map<string, V>();
-    fresh.set(key, value);
-    cache.set(messages, fresh);
-  }
+  cache.set(cacheKey, value);
   return value;
 }
+
 
 /** Agent messages → chat/completions messages */
 export function toChatMessages(

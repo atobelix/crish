@@ -1197,7 +1197,7 @@ export function optionalString(
   issues: ProtocolValidationIssue[],
   options: { nonEmpty?: boolean } = {}
 ): string | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   return readString(input[key], path, issues, options);
 }
 
@@ -1253,7 +1253,7 @@ export function optionalInteger(
   issues: ProtocolValidationIssue[],
   options: { min?: number } = {}
 ): number | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   return readInteger(input[key], path, issues, options);
 }
 
@@ -1278,7 +1278,7 @@ export function optionalNumber(
   issues: ProtocolValidationIssue[],
   options: { min?: number; max?: number } = {}
 ): number | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   return readNumber(input[key], path, issues, options);
 }
 
@@ -1309,7 +1309,7 @@ export function optionalNullableNumber(
   path: string,
   issues: ProtocolValidationIssue[]
 ): number | null | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   if (input[key] === null) return null;
   return optionalNumber(input, key, path, issues);
 }
@@ -1335,7 +1335,7 @@ export function optionalBoolean(
   path: string,
   issues: ProtocolValidationIssue[]
 ): boolean | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   if (typeof input[key] !== "boolean") {
     issues.push({ path, message: "Expected boolean" });
     return undefined;
@@ -1366,7 +1366,7 @@ export function optionalNullableString(
   path: string,
   issues: ProtocolValidationIssue[]
 ): string | null | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   return readNullableString(input[key], path, issues);
 }
 
@@ -1599,7 +1599,7 @@ export function optionalArray(
   path: string,
   issues: ProtocolValidationIssue[]
 ): unknown[] | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   if (!Array.isArray(input[key])) {
     issues.push({ path, message: "Expected array" });
     return undefined;
@@ -1629,7 +1629,7 @@ export function optionalStringArray(
   path: string,
   issues: ProtocolValidationIssue[]
 ): string[] | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   if (!Array.isArray(input[key])) {
     issues.push({ path, message: "Expected array" });
     return undefined;
@@ -1665,7 +1665,7 @@ export function optionalEnum<const T extends readonly string[]>(
   values: T,
   issues: ProtocolValidationIssue[]
 ): T[number] | undefined {
-  if (!(key in input)) return undefined;
+  if (!(key in input) || input[key] === undefined) return undefined;
   return readEnum(input[key], path, values, issues);
 }
 

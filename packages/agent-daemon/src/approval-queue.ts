@@ -64,10 +64,12 @@ interface PendingApproval {
   timer?: NodeJS.Timeout;
 }
 
+import { BoundedMap } from "@crish/shared-utils";
+
 export class ApprovalQueue {
   private pending = new Map<string, PendingApproval>();
-  private resolved = new Map<string, ApprovalQueueSnapshot>();
-  private scopes = new Map<string, ApprovalScope>();
+  private resolved = new BoundedMap<string, ApprovalQueueSnapshot>(1000);
+  private scopes = new BoundedMap<string, ApprovalScope>(1000);
   private defaultTimeoutMs: number | null;
   private resolvedRetentionMs: number;
   private readonly now: () => number;

@@ -601,8 +601,8 @@ function providerStatus(overrides: Partial<DaemonProviderStatusSnapshot> = {}): 
   return {
     credentialMode: "account-center",
     readiness: "ready",
-    providerId: "flowbit",
-    routeId: "default:flowbit:mimo-v2.5",
+    providerId: "crish",
+    routeId: "default:crish:mimo-v2.5",
     baseUrl: "https://gateway.example/v1",
     model: "mimo-v2.5",
     upstreamModel: "mimo-v2.5",

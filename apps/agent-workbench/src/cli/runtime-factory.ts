@@ -13,7 +13,8 @@ import {
   listOpenAICompatibleModels,
   type AgentRuntimeOptions,
   type AgentProvider,
-  type OpenAICompatibleProviderOptions
+  type OpenAICompatibleProviderOptions,
+  type RuntimePermissionPolicy
 } from "@crish/agent-runtime";
 import {
   createDefaultWorkbenchSettings,
@@ -35,6 +36,7 @@ export interface WorkbenchRuntimeFactoryOptions {
   apiKey?: string;
   resumeSession?: boolean;
   maxTurns?: number;
+  permissionPolicy?: RuntimePermissionPolicy;
 }
 
 export interface WorkbenchRuntimeFactoryResult {
@@ -101,7 +103,7 @@ export async function createWorkbenchRuntime(options: WorkbenchRuntimeFactoryOpt
     sessionStore,
     resumeSession: options.resumeSession,
     maxTurns: options.maxTurns ?? budgetProfile.maxTurns,
-    permissionPolicy: createPermissionPolicy({ mode: "project" }), // TrustZone ask matrix (shared with daemon)
+    permissionPolicy: options.permissionPolicy ?? createPermissionPolicy({ mode: "project" }), // TrustZone ask matrix (shared with daemon)
     ...createProductRuntimeDefaults({
       cwd,
       contextWindowTokens: settings.provider.model.contextWindowTokens,

@@ -1,5 +1,5 @@
 import type { AgentMessage, AgentMessageBlock, ProviderDiagnostic, ToolCallBlock } from "@crish/shared-types";
-import type { AgentTool } from "../types";
+import type { AgentTool, ProviderUsage } from "../types";
 import type { ProviderStreamContractEvent } from "../provider-stream-contract";
 import { createId, nowIso } from "../session";
 
@@ -33,6 +33,7 @@ export class ProviderResponseConsumer {
     let thoughtBuffer = "";
     let error: string | undefined;
     let sawContent = false;
+    let usage: ProviderUsage | undefined;
 
     for await (const event of callIterator) {
       if (signal.aborted) return { response: { type: "error", error: "aborted" }, diagnostics };
@@ -100,6 +101,9 @@ export class ProviderResponseConsumer {
           if (event.error) {
             error = event.error.message;
           }
+          if (event.usage) {
+            usage = event.usage;
+          }
           break;
         }
 
@@ -114,7 +118,7 @@ export class ProviderResponseConsumer {
         ? { type: "empty-response" }
         : error && blocks.length === 0
           ? { type: "error", error }
-          : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error) };
+          : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error, usage) };
 
     return { response, diagnostics };
   }
@@ -124,6 +128,7 @@ export class ProviderResponseConsumer {
     textBuffer: string,
     thoughtBuffer: string,
     error: string | undefined,
+    usage: ProviderUsage | undefined
   ): AgentMessage {
     const stopReason = error
       ? "error"
@@ -141,6 +146,7 @@ export class ProviderResponseConsumer {
         ...(error ? { error } : {}),
         text: textBuffer,
         ...(thoughtBuffer ? { thought: thoughtBuffer } : {}),
+        ...(usage ? { usage: usage as unknown as import("@crish/shared-types").JsonObject } : {}),
       },
     };
   }

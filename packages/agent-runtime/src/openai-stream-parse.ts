@@ -40,9 +40,12 @@ export async function* readSseJson(
   let emittedFirstByte = false;
   let completed = false;
 
-  // 1. 单次绑定 Abort 监听器，取消 reader 即会使 pending read() Promise reject
+  let cancelledError: Error | undefined;
+
+  // 1. 单次绑定 Abort 监听器，取消 reader 并抛出异常
   const abortHandler = () => {
     const error = createSseAbortError(signal);
+    cancelledError = error;
     reader.cancel(error).catch(() => undefined);
   };
   if (signal) {
@@ -64,6 +67,7 @@ export async function* readSseJson(
     if (effective === undefined) return;
     timeoutId = setTimeout(() => {
       const err = new Error(`${label} timed out after ${effective}ms`);
+      cancelledError = err;
       reader.cancel(err).catch(() => undefined);
     }, effective);
   };
@@ -82,6 +86,10 @@ export async function* readSseJson(
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
+      }
+
+      if (cancelledError) {
+        throw cancelledError;
       }
 
       if (done) {

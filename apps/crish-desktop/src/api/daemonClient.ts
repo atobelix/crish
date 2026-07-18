@@ -225,7 +225,7 @@ export class DesktopDaemonClient {
       }
     }
     const requestId = rid('req');
-    const payload = { ...command, requestId, correlationId: requestId };
+    const payload = { ...command, requestId };
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -259,7 +259,7 @@ export class DesktopDaemonClient {
       }
     }
     const requestId = rid('cmd');
-    this.socket!.send(JSON.stringify({ ...command, requestId, correlationId: requestId }));
+    this.socket!.send(JSON.stringify({ ...command, requestId }));
   }
 
   // ── internal ──────────────────────────────────────────────
@@ -468,7 +468,7 @@ export class DesktopDaemonClient {
     this.heartbeatMisses = 0;
     this.heartbeatTimer = setInterval(() => {
       if (!this.isConnected()) return;
-      void this.request({ type: 'get-status' }, 'status-response', 6_000)
+      void this.request({ type: 'ping' }, 'pong', 6_000)
         .then(() => {
           this.heartbeatMisses = 0;
         })

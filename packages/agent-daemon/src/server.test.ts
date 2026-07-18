@@ -874,8 +874,8 @@ describe("DaemonServer orchestrated runs", () => {
         ws,
         {
           type: "resolve-scoped-context",
-          cwd: "C:/Software/conex",
-          projectRoot: "C:/Software/conex",
+          cwd: "C:/workspace/crish",
+          projectRoot: "C:/workspace/crish",
         },
         (message) => message.type === "scoped-context-resolved"
       )
@@ -2163,7 +2163,7 @@ describe("DaemonServer orchestrated runs", () => {
           id: "wf_manual_one",
           name: "Manual One",
           prompt: "run workflow one",
-          cwd: "C:/Software/conex",
+          cwd: "C:/workspace/crish",
           mode: "task",
           schedule: { type: "manual" },
           enabled: true,
@@ -2189,7 +2189,7 @@ describe("DaemonServer orchestrated runs", () => {
         id: "wf_manual_two",
         name: "Manual Two",
         prompt: "run workflow two",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "manual" }
       },
       (message) => message.type === "workflow-created"
@@ -2269,7 +2269,7 @@ describe("DaemonServer orchestrated runs", () => {
         id: "wf_background",
         name: "Background",
         prompt: "hold in background",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "manual" }
       },
       (message) => message.type === "workflow-created"
@@ -2357,7 +2357,7 @@ describe("DaemonServer orchestrated runs", () => {
         id: "wf_approval",
         name: "Approval",
         prompt: "request approval",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "manual" }
       },
       (message) => message.type === "workflow-created"
@@ -2457,7 +2457,7 @@ describe("DaemonServer orchestrated runs", () => {
         id: "wf_approval_expire",
         name: "Approval Expire",
         prompt: "request approval expiry",
-        cwd: "C:/Software/conex",
+        cwd: "C:/workspace/crish",
         schedule: { type: "manual" }
       },
       (message) => message.type === "workflow-created"
@@ -2587,7 +2587,7 @@ describe("DaemonServer orchestrated runs", () => {
       id: "wf_due_daily",
       name: "Due Daily",
       prompt: "scheduled hold",
-      cwd: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
       mode: "task",
       schedule: { type: "daily", time: "00:00", timezone: "UTC" },
       enabled: true,
@@ -2637,7 +2637,7 @@ describe("DaemonServer orchestrated runs", () => {
       id: "wf_tick_background",
       name: "Tick Background",
       prompt: "scheduled hold",
-      cwd: "C:/Software/conex",
+      cwd: "C:/workspace/crish",
       mode: "task",
       schedule: { type: "daily", time: "00:00", timezone: "UTC" },
       enabled: true,
@@ -3372,8 +3372,8 @@ function statusProviderFactory() {
   factory.getProviderStatusSnapshot = () => ({
     credentialMode: "direct" as const,
     readiness: "ready" as const,
-    providerId: "flowbit",
-    routeId: "default:flowbit:mimo-v2.5",
+    providerId: "crish",
+    routeId: "default:crish:mimo-v2.5",
     baseUrl: "https://gateway.example/v1",
     model: "mimo-v2.5",
     upstreamModel: "mimo-v2.5",

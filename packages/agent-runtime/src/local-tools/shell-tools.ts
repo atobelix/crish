@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { JsonValue, ToolOutput } from "@crish/shared-types";
 import { classifyTerminalCommand, getHardlineCommandBlock } from "../permission/command-classification";
 import {
@@ -136,6 +137,8 @@ async function runTerminalCommand(
   if (hardline) {
     throw new Error(hardline.reason);
   }
+  // git add 全量暂存守卫：无 .gitignore 时拒绝 git add . / --all / -A / -u
+  await guardGitAddAll(command, options.cwd);
   const mutationCheckpoint = options.preMutationCheckpoint ? await options.preMutationCheckpoint() : null;
   const result = await runProcessCommand(command, options);
   const text = formatCommandResult(result);
@@ -166,6 +169,34 @@ async function runTerminalCommand(
       }
     }
   }, mutationCheckpoint);
+}
+
+/**
+ * 检测 git add 全量暂存命令（git add . / --all / -A / -u）。
+ * 如果目标仓库没有 .gitignore 且没有 .git/info/exclude，拒绝执行。
+ * 防止在没有 .gitignore 的仓库中暂存 node_modules、构建产物等海量文件。
+ */
+async function guardGitAddAll(command: string, cwd: string): Promise<void> {
+  // 只检查 git add 的全量变体
+  const isGitAddAll = /^\s*git\s+add\s+(\.(?:\s|$)|--all\b|-A\b|--update\b|-u\b)/i.test(command);
+  if (!isGitAddAll) return;
+
+  // 检查 .gitignore 和 .git/info/exclude 是否存在
+  const gitignorePath = join(cwd, ".gitignore");
+  const excludePath = join(cwd, ".git", "info", "exclude");
+  const [gitignoreExists, excludeExists] = await Promise.all([
+    stat(gitignorePath).then(() => true).catch(() => false),
+    stat(excludePath).then(() => true).catch(() => false),
+  ]);
+
+  if (!gitignoreExists && !excludeExists) {
+    throw new Error(
+      "Refusing to run 'git add' without a .gitignore file. " +
+      "Without .gitignore, this would stage all files including " +
+      "node_modules, build artifacts, and other generated files. " +
+      "Create a .gitignore file or use 'git add <specific-path>' instead."
+    );
+  }
 }
 
 /**

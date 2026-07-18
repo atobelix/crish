@@ -98,6 +98,7 @@ export class PlanDocumentStoreValidationError extends PlanDocumentStoreError {
 export class FilePlanDocumentStore implements PlanDocumentStore {
   private state?: PlanDocumentStoreState;
   private indexState?: PlanDocumentIndexState;
+  private readonly documentCache = new Map<string, PlanDocument>();
   private pending: Promise<void> = Promise.resolve();
 
   constructor(
@@ -112,13 +113,24 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
   }
 
   async getPlanDocument(documentId: string): Promise<PlanDocument> {
-    const state = await this.readState();
-    const document = state.documents.find((item) => item.id === documentId);
-    if (!document) {
+    await this.pending;
+    if (this.state) {
+      const doc = this.state.documents.find((item) => item.id === documentId);
+      if (doc) return doc;
+    }
+    const cached = this.documentCache.get(documentId);
+    if (cached) return cached;
+
+    const index = await this.loadIndex();
+    const exists = index.summaries.some((summary) => summary.id === documentId);
+    if (!exists) {
       throw new PlanDocumentNotFoundError(documentId);
     }
-    // 直接返回 frozen 引用：state 在写入时已 deepFreeze，调用方无法 mutate。
-    return document;
+
+    const doc = await this.readDocumentFile(documentId);
+    const frozen = deepFreeze(doc);
+    this.documentCache.set(documentId, frozen);
+    return frozen;
   }
 
   async createPlanDocument(input: CreatePlanDocumentInput): Promise<PlanDocument> {
@@ -128,7 +140,7 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
         throw new PlanDocumentConflictError(`Plan document already exists: ${document.id}`);
       }
       state.documents.push(document);
-      return clone(document);
+      return document;
     });
   }
 
@@ -142,7 +154,7 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
       try {
         const updated = applyPlanDocumentPatch(state.documents[index]!, patch);
         state.documents[index] = updated;
-        return clone(updated);
+        return updated;
       } catch (error) {
         if (error instanceof PlanDocumentPatchError && error.message.includes("version mismatch")) {
           throw new PlanDocumentConflictError(error.message);
@@ -199,6 +211,13 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
       await this.writeState(nextState, previousState);
       this.state = nextState;
       this.indexState = deepFreeze(indexFromState(nextState));
+
+      // 同步更新缓存
+      this.documentCache.clear();
+      for (const doc of nextState.documents) {
+        this.documentCache.set(doc.id, doc);
+      }
+
       return result;
     });
 
@@ -255,12 +274,17 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
 
     const index = await this.loadIndex();
 
-    // 并行读取所有 content 文件：Promise.all 保持输入顺序，与原串行 for-await
-    // 产出相同的 documents 顺序，但冷启动延迟从 O(n × 单文件 IO) 降为
-    // O(max(单文件 IO))。任一文件失败仍由 readDocumentFile 抛出
-    // PlanDocumentStoreReadError，错误语义不变。
+    // 并行读取所有 content 文件（使用缓存，避免重复读取）
     const documents = await Promise.all(
-      index.summaries.map((summary) => this.readDocumentFile(summary.id))
+      index.summaries.map(async (summary) => {
+        let doc = this.documentCache.get(summary.id);
+        if (!doc) {
+          doc = await this.readDocumentFile(summary.id);
+          doc = deepFreeze(doc);
+          this.documentCache.set(summary.id, doc);
+        }
+        return doc;
+      })
     );
 
     const state: PlanDocumentStoreState = {

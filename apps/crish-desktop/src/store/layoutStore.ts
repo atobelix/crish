@@ -493,7 +493,7 @@ const _initialTokenUsage = isDemoMode()
   : { ...DEFAULT_TOKEN_USAGE };
 const _initialTerminalLines: string[] = isDemoMode()
   ? [
-      'orange@Windows-PC MINGW64 /c/Software/conex',
+      'user@Windows-PC MINGW64 /c/workspace/crish',
       '$ npm run dev',
       '> zennav-server@1.0.0 dev',
       '> node server.js',

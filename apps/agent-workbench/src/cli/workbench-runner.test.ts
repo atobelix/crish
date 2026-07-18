@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createScriptedProvider } from "@crish/agent-runtime";
+import { createScriptedProvider, createPermissionPolicy } from "@crish/agent-runtime";
 import { createDefaultWorkbenchSettings } from "../shared/workbench-config";
 import { createWorkbenchRuntime } from "./runtime-factory";
 import { runWorkbenchTask } from "./workbench-runner";
@@ -28,7 +28,8 @@ describe("workbench runner", () => {
     const runtime = await createWorkbenchRuntime({
       cwd: workspaceRoot,
       settings: testSettings(),
-      provider
+      provider,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;
@@ -54,10 +55,9 @@ describe("workbench runner", () => {
         {
           type: "tool-call",
           id: "call_bg",
-          toolName: "shell_command",
+          toolName: "run_background",
           input: {
             command: "node -e \"setTimeout(() => console.log('后台完成'), 80)\"",
-            background: true,
             timeoutMs: 2_000
           }
         },
@@ -68,7 +68,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 1
+      maxTurns: 1,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;
@@ -122,7 +123,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 4
+      maxTurns: 4,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;
@@ -177,7 +179,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 1
+      maxTurns: 1,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;
@@ -225,7 +228,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 3
+      maxTurns: 3,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;
@@ -301,7 +305,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 8
+      maxTurns: 8,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     let finalSnapshot;
 
@@ -358,7 +363,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 5
+      maxTurns: 5,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     let finalSnapshot;
 
@@ -400,7 +406,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 4
+      maxTurns: 4,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     let finalSnapshot;
 
@@ -468,7 +475,8 @@ describe("workbench runner", () => {
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 6
+      maxTurns: 6,
+      permissionPolicy: createPermissionPolicy({ mode: "full-access" })
     });
     const events = [];
     let finalSnapshot;

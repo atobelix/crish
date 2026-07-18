@@ -79,8 +79,8 @@ const TRANSIENT_RUST_REQWEST_CONTEXT = /http request failed|connect|connection|t
  * 返回限频原因字符串，未检测到则返回 undefined。
  */
 export function detectProviderRateLimit(events: AgentEvent[]): string | undefined {
-  for (const event of [...events].reverse()) {
-    const text = extractEventText(event);
+  for (let i = events.length - 1; i >= 0; i--) {
+    const text = extractEventText(events[i]);
     if (RATE_LIMIT_PATTERN.test(text)) {
       return trimReason(text || "429 Too Many Requests", 300);
     }
@@ -93,7 +93,8 @@ export function detectProviderRateLimit(events: AgentEvent[]): string | undefine
  * 返回错误原因字符串，未检测到则返回 undefined。
  */
 export function detectTransientNetworkError(events: AgentEvent[]): string | undefined {
-  for (const event of [...events].reverse()) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
     if (event.type !== "runtime-error" && event.type !== "provider-diagnostic") continue;
     const text = extractEventText(event);
     if (TRANSIENT_NETWORK_PATTERNS.some((p) => p.test(text))) {
@@ -111,7 +112,8 @@ export function detectTransientNetworkError(events: AgentEvent[]): string | unde
  * 返回错误原因字符串，未检测到则返回 undefined。
  */
 export function detectFatalRuntimeError(events: AgentEvent[]): string | undefined {
-  for (const event of [...events].reverse()) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
     if (event.type !== "runtime-error") continue;
     const text = extractEventText(event);
     if (RATE_LIMIT_PATTERN.test(text)) continue;

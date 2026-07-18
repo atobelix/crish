@@ -513,7 +513,7 @@ export function assembleSessionsFromMirrorEntries(
   const getBody = (id: string): string | undefined => {
     if (!bodyById) return undefined;
     if (bodyById instanceof Map) return bodyById.get(id);
-    return bodyById[id];
+    return (bodyById as Record<string, string | undefined>)[id];
   };
 
   const sessions: SessionState[] = [];

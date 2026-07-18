@@ -135,6 +135,17 @@ const DESTRUCTIVE_PATTERNS: RegExp[] = [
   /\bchmod\s+(-R\s+)?777\b/i,
   /(^|[;&|]\s*)sudo\b/i,
   /\bSet-ExecutionPolicy\b/i,
+  // 解释器内联执行（内容不透明，无法审计实际操作）
+  /\b(bash|sh|zsh|dash|ksh)\s+(-c|--command)\b/i,
+  /\beval\s+["'`$]/i,
+  /\b(python|python3)\s+(-c|--command)\b/i,
+  /\bnode\s+(-e|--eval)\s+["'`]/i,
+  /\b(perl|ruby)\s+(-e)\s+["']/i,
+  /\bphp\s+(-r)\s+['"]/i,
+  // 权限提升（su -c / doas / pkexec — 非交互式提权执行）
+  /\bsu\s+.*(-c|--command)\b/i,
+  /\bdoas\b/i,
+  /\bpkexec\b/i,
 ];
 
 const PROCESS_PATTERNS: RegExp[] = [/\b(taskkill|Stop-Process|kill|pkill|killall)\b/i];

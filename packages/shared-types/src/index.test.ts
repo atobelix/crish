@@ -8,8 +8,6 @@ import {
   type SessionAction
 } from "./index";
 
-describe("provider defaults", () => {
-});
 
 describe("session workspace contracts", () => {
   it("keeps session actions protocol-versioned and discriminated", () => {

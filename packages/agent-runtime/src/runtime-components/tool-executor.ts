@@ -28,6 +28,7 @@ import type {
 import type { AgentTool } from "../types";
 import { validateToolInput, repairToolInput } from "../tools";
 import { createId, nowIso } from "../session";
+import { RingBuffer } from "@crish/shared-utils";
 import { SingleToolExecutor } from "./single-tool-executor";
 
 // ─── 工具执行完成结果 ─────────────────────────────────────
@@ -67,9 +68,12 @@ export type ToolExecuteHook = (
  *
  * 线程安全（单生产者-单消费者），支持 push/close/next 操作。
  * close 后所有等待的 next() 调用会收到 done=true。
+ *
+ * 内部使用 RingBuffer 实现 O(1) shift（替代 Array.shift 的 O(n) 重排）。
+ * 队列无上界：RingBuffer 满时自动扩容（两倍容量），保证不丢事件。
  */
 export class ProgressEventQueue<T> {
-  private readonly items: T[] = [];
+  private buffer = new RingBuffer<T>(256);
   private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
   private closed = false;
 
@@ -80,7 +84,12 @@ export class ProgressEventQueue<T> {
       waiter({ value: item, done: false });
       return;
     }
-    this.items.push(item);
+    if (!this.buffer.push(item)) {
+      const grown = new RingBuffer<T>(this.buffer.maxCapacity * 2);
+      this.buffer.forEach((v) => grown.push(v));
+      grown.push(item);
+      this.buffer = grown;
+    }
   }
 
   close(): void {
@@ -92,7 +101,7 @@ export class ProgressEventQueue<T> {
   }
 
   next(): Promise<IteratorResult<T>> {
-    const item = this.items.shift();
+    const item = this.buffer.shift();
     if (item !== undefined) {
       return Promise.resolve({ value: item, done: false });
     }
