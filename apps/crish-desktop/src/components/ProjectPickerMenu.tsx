@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ProjectPickerMenu.module.css';
 import {
   addProjectFromPath,
   getActiveProjectId,
@@ -9,6 +10,7 @@ import {
   setNoProject,
   type ProjectEntry,
 } from '../api/projectStore';
+import { Tooltip } from './settings/SettingsUI';
 
 type Props = {
   open: boolean;
@@ -105,11 +107,11 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
   };
 
   return (
-    <div ref={rootRef} className="pp-menu" role="listbox" aria-label="选择项目" onClick={(e) => e.stopPropagation()}>
+    <div ref={rootRef} className={styles.ppMenu} role="listbox" aria-label="选择项目" onClick={(e) => e.stopPropagation()}>
       {view === 'list' ? (
         <>
           {projects.length > 3 && (
-            <div className="pp-search">
+            <div className={styles.ppSearch}>
               <Lucide.Search size={16} strokeWidth={1.75} />
               <input
                 value={q}
@@ -120,56 +122,57 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
             </div>
           )}
 
-          <div className="pp-scroll">
+          <div className={styles.ppScroll}>
             {filtered.map((p) => {
               const selected = p.id === activeId;
               return (
-                <div key={p.id} className={`pp-row ${selected ? 'is-selected' : ''}`}>
+                <div key={p.id} className={`${styles.ppRow}${selected ? ` ${styles.isSelected}` : ''}`}>
                   <button
                     type="button"
-                    className="pp-row-main"
+                    className={styles.ppRowMain}
                     onClick={() => {
                       openProject(p.id);
                       onChanged?.();
                       onClose();
                     }}
                   >
-                    <Lucide.Folder size={16} className="pp-row-icon" />
-                    <span className="pp-row-text">
-                      <span className="pp-row-title">{p.name}</span>
-                      <span className="pp-row-path" title={p.path}>
+                    <Lucide.Folder size={16} className={styles.ppRowIcon} />
+                    <span className={styles.ppRowText}>
+                      <span className={styles.ppRowTitle}>{p.name}</span>
+                      <span className={styles.ppRowPath} title={p.path}>
                         {p.path}
                       </span>
                     </span>
-                    {selected && <Lucide.Check size={16} className="pp-check" />}
+                    {selected && <Lucide.Check size={16} className={styles.ppCheck} />}
                   </button>
-                  <button
-                    type="button"
-                    className="pp-row-more"
-                    title="移除"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeProject(p.id);
-                      refresh();
-                      onChanged?.();
-                    }}
-                  >
-                    <Lucide.X size={14} />
-                  </button>
+                  <Tooltip content="移除">
+                    <button
+                      type="button"
+                      className={styles.ppRowMore}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeProject(p.id);
+                        refresh();
+                        onChanged?.();
+                      }}
+                    >
+                      <Lucide.X size={14} />
+                    </button>
+                  </Tooltip>
                 </div>
               );
             })}
             {filtered.length === 0 && (
-              <div className="pp-empty">
+              <div className={styles.ppEmpty}>
                 {projects.length === 0 ? '暂无项目' : '无匹配'}
               </div>
             )}
           </div>
 
-          <div className="pp-footer">
+          <div className={styles.ppFooter}>
             <button
               type="button"
-              className="pp-footer-item"
+              className={styles.ppFooterItem}
               disabled={busy}
               onClick={async () => {
                 // 优先本机文件夹选择；失败则内嵌路径输入（不另开「页面感」视图）
@@ -194,7 +197,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
             </button>
             <button
               type="button"
-              className="pp-footer-item"
+              className={styles.ppFooterItem}
               onClick={() => {
                 setNoProject();
                 onChanged?.();
@@ -207,17 +210,19 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
           </div>
         </>
       ) : (
-        <div className="pp-add">
-          <div className="pp-add-header">
-            <button type="button" className="pp-back" onClick={() => setView('list')} title="返回">
-              <Lucide.ArrowLeft size={16} />
-            </button>
-            <span className="pp-add-title">输入路径</span>
+        <div className={styles.ppAdd}>
+          <div className={styles.ppAddHeader}>
+            <Tooltip content="返回">
+              <button type="button" className={styles.ppBack} onClick={() => setView('list')}>
+                <Lucide.ArrowLeft size={16} />
+              </button>
+            </Tooltip>
+            <span className={styles.ppAddTitle}>输入路径</span>
           </div>
 
           <button
             type="button"
-            className="pp-add-card"
+            className={styles.ppAddCard}
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -236,23 +241,23 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
               }
             }}
           >
-            <div className="pp-add-card-icon">
+            <div className={styles.ppAddCardIcon}>
               <Lucide.FolderInput size={16} />
             </div>
-            <div className="pp-add-card-copy">
-              <div className="pp-add-card-title">选择文件夹</div>
-              <div className="pp-add-card-desc">浏览本地目录并加入项目列表</div>
+            <div className={styles.ppAddCardCopy}>
+              <div className={styles.ppAddCardTitle}>选择文件夹</div>
+              <div className={styles.ppAddCardDesc}>浏览本地目录并加入项目列表</div>
             </div>
           </button>
 
-          <div className="pp-add-divider">
+          <div className={styles.ppAddDivider}>
             <span>或输入路径</span>
           </div>
 
-          <div className="pp-add-form">
+          <div className={styles.ppAddForm}>
             <input
-              className="pp-path-input"
-              placeholder="例如 C:/Software/conex"
+              className={styles.ppPathInput}
+              placeholder="例如 C:/workspace/crish"
               value={pathDraft}
               onChange={(e) => {
                 setPathDraft(e.target.value);
@@ -262,12 +267,12 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 if (e.key === 'Enter') commitPath(pathDraft);
               }}
             />
-            {pathError && <div className="pp-path-error">{pathError}</div>}
-            <div className="pp-add-actions">
-              <button type="button" className="pp-btn-ghost" onClick={() => setView('list')}>
+            {pathError && <div className={styles.ppPathError}>{pathError}</div>}
+            <div className={styles.ppAddActions}>
+              <button type="button" className={styles.ppBtnGhost} onClick={() => setView('list')}>
                 取消
               </button>
-              <button type="button" className="pp-btn-primary" onClick={() => commitPath(pathDraft)}>
+              <button type="button" className={styles.ppBtnPrimary} onClick={() => commitPath(pathDraft)}>
                 添加并打开
               </button>
             </div>

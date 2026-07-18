@@ -1,4 +1,4 @@
-.workspace-empty-state {
+.workspaceEmptyState {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -9,23 +9,23 @@
   padding: var(--space-6) var(--space-4);
   text-align: center;
   box-sizing: border-box;
-  animation: fade-in var(--transition-smooth) ease-out forwards;
+  animation: fadeIn var(--transition-smooth) ease-out forwards;
 }
 
-.workspace-empty-state .empty-state-icon-wrapper {
+.workspaceEmptyState .emptyStateIconWrapper {
   color: var(--text-tertiary);
   opacity: 0.6;
   margin-bottom: var(--space-2);
   transition: transform var(--transition-spring), opacity var(--transition-smooth);
 }
 
-.workspace-empty-state:hover .empty-state-icon-wrapper {
+.workspaceEmptyState:hover .emptyStateIconWrapper {
   opacity: 1;
   transform: scale(1.05);
   color: var(--accent-blue);
 }
 
-.workspace-empty-state .empty-state-title {
+.workspaceEmptyState .emptyStateTitle {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-lg);
   color: var(--text-primary);
@@ -33,14 +33,14 @@
   letter-spacing: -0.01em;
 }
 
-.workspace-empty-state .empty-state-desc {
+.workspaceEmptyState .emptyStateDesc {
   max-width: 280px;
   color: var(--text-secondary);
   font-size: var(--font-size-base);
   line-height: var(--line-height-body);
 }
 
-@keyframes fade-in {
+@keyframes fadeIn {
   from {
     opacity: 0;
     transform: translateY(4px);

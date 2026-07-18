@@ -42,6 +42,8 @@ import {
   setActiveSessionId,
 } from '../api/storeAccess';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './ScheduledTasksPanel.module.css';
+import { Tooltip } from './settings/SettingsUI';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -343,11 +345,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
 
   return (
     <div
-      className="sched-in-chat sched-in-chat--dense"
+      className={`${styles.schedInChat} ${styles.schedInChatDense}`}
       aria-busy={loading || busy}
       aria-label="定时任务"
     >
-      <div className="sched-in-chat-head">
+      <div className={styles.schedInChatHead}>
         <button
           type="button"
           className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -357,9 +359,9 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
           <Lucide.ArrowLeft size={16} aria-hidden />
           返回
         </button>
-        <div className="sched-in-chat-titles">
+        <div className={styles.schedInChatTitles}>
           <h3 id="sched-in-chat-title">定时任务</h3>
-          <span className="sched-in-chat-count" aria-live="polite">
+          <span className={styles.schedInChatCount} aria-live="polite">
             {workflows.length > 0 ? `${workflows.length} 条` : ' '}
           </span>
         </div>
@@ -383,13 +385,13 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
         </button>
       </div>
 
-      <div className="sched-preset-row">
-        <div className="sched-preset-chips" role="group" aria-label="计划模板">
+      <div className={styles.schedPresetRow}>
+        <div className={styles.schedPresetChips} role="group" aria-label="计划模板">
           {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
             <button
               key={p.id}
               type="button"
-              className="sched-preset-chip"
+              className={styles.schedPresetChip}
               disabled={busy}
               onClick={() => applyPreset(p.id)}
             >
@@ -402,12 +404,12 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
       {/* 状态：aria-live 行内；成功永不 toast */}
       <div className="sched-status-live" aria-live="polite" aria-relevant="additions text">
         {error ? (
-          <div className="sched-status-line is-err" role="alert" title={error}>
+          <div className={`${styles.schedStatusLine} ${styles.isErr}`} role="alert" title={error}>
             {error}
           </div>
         ) : null}
         {ok && !error ? (
-          <div className="sched-status-line is-ok" role="status">
+          <div className={`${styles.schedStatusLine} ${styles.isOk}`} role="status">
             {ok}
           </div>
         ) : null}
@@ -416,14 +418,14 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
       {showForm ? (
         <div
           id="sched-in-chat-form"
-          className="sched-form sched-form--stack"
+          className={`${styles.schedForm} ${styles.schedFormStack}`}
           role="form"
           aria-label="新建计划"
         >
-          <label className="sched-field">
-            <span className="sched-field-label">名称</span>
+          <label className={styles.schedField}>
+            <span className={styles.schedFieldLabel}>名称</span>
             <input
-              className="sched-field-input"
+              className={styles.schedFieldInput}
               placeholder="例如：每日代码体检"
               value={draft.name}
               disabled={busy}
@@ -432,10 +434,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               autoComplete="off"
             />
           </label>
-          <label className="sched-field">
-            <span className="sched-field-label">要做什么</span>
+          <label className={styles.schedField}>
+            <span className={styles.schedFieldLabel}>要做什么</span>
             <textarea
-              className="sched-field-input sched-field-textarea"
+              className={`${styles.schedFieldInput} ${styles.schedFieldTextarea}`}
               placeholder="描述任务内容…"
               value={draft.prompt}
               disabled={busy}
@@ -443,11 +445,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               onChange={(e) => setDraft((d) => ({ ...d, prompt: e.target.value }))}
             />
           </label>
-          <div className="sched-field-row">
-            <label className="sched-field sched-field--grow">
-              <span className="sched-field-label">频率</span>
+          <div className={styles.schedFieldRow}>
+            <label className={`${styles.schedField} ${styles.schedFieldGrow}`}>
+              <span className={styles.schedFieldLabel}>频率</span>
               <SettingsSelect
-                className="sched-select"
+                className={styles.schedSelect}
                 value={draft.scheduleType}
                 disabled={busy}
                 options={WORKFLOW_SCHEDULE_TYPES.map((t) => ({
@@ -464,10 +466,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               />
             </label>
             {draft.scheduleType === 'daily' ? (
-              <label className="sched-field">
-                <span className="sched-field-label">时间</span>
+              <label className={styles.schedField}>
+                <span className={styles.schedFieldLabel}>时间</span>
                 <input
-                  className="sched-field-input"
+                  className={styles.schedFieldInput}
                   type="time"
                   value={draft.dailyTime}
                   disabled={busy}
@@ -476,10 +478,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               </label>
             ) : null}
             {draft.scheduleType === 'intervalMinutes' ? (
-              <label className="sched-field">
-                <span className="sched-field-label">间隔（分钟）</span>
+              <label className={styles.schedField}>
+                <span className={styles.schedFieldLabel}>间隔（分钟）</span>
                 <input
-                  className="sched-field-input"
+                  className={styles.schedFieldInput}
                   type="number"
                   min={WORKFLOW_INTERVAL_MINUTES_MIN}
                   max={WORKFLOW_INTERVAL_MINUTES_MAX}
@@ -495,7 +497,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               </label>
             ) : null}
           </div>
-          <div className="sched-form-actions">
+          <div className={styles.schedFormActions}>
             <button
               type="button"
               className="ui-btn ui-btn-secondary ui-btn-sm"
@@ -521,73 +523,76 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
 
       {emptyCopy ? (
         <div
-          className={`sched-empty${loading ? '' : ' sched-empty--dense'}`}
+          className={`${styles.schedEmpty}${loading ? '' : ` ${styles.schedEmptyDense}`}`}
           role="status"
           aria-live="polite"
         >
           <span>{emptyCopy.title}</span>
           {emptyCopy.hint ? (
-            <span className="sched-empty-sub">{emptyCopy.hint}</span>
+            <span className={styles.schedEmptySub}>{emptyCopy.hint}</span>
           ) : null}
         </div>
       ) : (
-        <ul className="sched-list" aria-labelledby="sched-in-chat-title">
+        <ul className={styles.schedList} aria-labelledby="sched-in-chat-title">
           {workflows.map((w) => {
             const paused = w.enabled === false;
             const toggleLabel = paused ? `启用 ${w.name}` : `暂停 ${w.name}`;
             return (
-              <li key={w.id} className="sched-item sched-item--dense">
-                <div className="sched-item-main">
-                  <div className="sched-item-name" title={w.prompt || w.name}>
+              <li key={w.id} className={`${styles.schedItem} ${styles.schedItemDense}`}>
+                <div className={styles.schedItemMain}>
+                  <div className={styles.schedItemName} title={w.prompt || w.name}>
                     {w.name}
                   </div>
-                  <div className="sched-item-meta">
+                  <div className={styles.schedItemMeta}>
                     {scheduleLabel(w.schedule)}
                     {paused ? ` · ${workflowEnabledLabel(false)}` : ''}
                   </div>
                 </div>
-                <div className="sched-item-actions" role="group" aria-label={`${w.name} 操作`}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="立即触发"
-                    aria-label={`立即触发 ${w.name}`}
-                    disabled={busy}
-                    onClick={() => {
-                      void handleTrigger(w);
-                    }}
-                  >
-                    <Lucide.Play size={16} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title={paused ? '启用' : '暂停'}
-                    aria-label={toggleLabel}
-                    aria-pressed={!paused}
-                    disabled={busy}
-                    onClick={() => {
-                      void handleToggle(w);
-                    }}
-                  >
-                    {paused ? (
-                      <Lucide.PlayCircle size={16} aria-hidden />
-                    ) : (
-                      <Lucide.Pause size={16} aria-hidden />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="删除"
-                    aria-label={`删除 ${w.name}`}
-                    disabled={busy}
-                    onClick={() => {
-                      void handleDelete(w);
-                    }}
-                  >
-                    <Lucide.Trash2 size={16} aria-hidden />
-                  </button>
+                <div className={styles.schedItemActions} role="group" aria-label={`${w.name} 操作`}>
+                  <Tooltip content="立即触发">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      aria-label={`立即触发 ${w.name}`}
+                      disabled={busy}
+                      onClick={() => {
+                        void handleTrigger(w);
+                      }}
+                    >
+                      <Lucide.Play size={16} aria-hidden />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={paused ? '启用' : '暂停'}>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      aria-label={toggleLabel}
+                      aria-pressed={!paused}
+                      disabled={busy}
+                      onClick={() => {
+                        void handleToggle(w);
+                      }}
+                    >
+                      {paused ? (
+                        <Lucide.PlayCircle size={16} aria-hidden />
+                      ) : (
+                        <Lucide.Pause size={16} aria-hidden />
+                      )}
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="删除">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      aria-label={`删除 ${w.name}`}
+                      disabled={busy}
+                      onClick={() => {
+                        void handleDelete(w);
+                      }}
+                    >
+                      <Lucide.Trash2 size={16} aria-hidden />
+                    </button>
+                  </Tooltip>
                 </div>
               </li>
             );
@@ -596,11 +601,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
       )}
 
       {recentRuns.length > 0 ? (
-        <div className="sched-runs">
-          <div className="sched-runs-h" id="sched-runs-heading">
+        <div className={styles.schedRuns}>
+          <div className={styles.schedRunsH} id="sched-runs-heading">
             最近运行
           </div>
-          <ul className="sched-list sched-runs-list" aria-labelledby="sched-runs-heading">
+          <ul className={`${styles.schedList} ${styles.schedRunsList}`} aria-labelledby="sched-runs-heading">
             {recentRuns.map((r) => {
               const wfName =
                 workflows.find((w) => w.id === r.workflowId)?.name || r.workflowId;
@@ -610,28 +615,29 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               return (
                 <li
                   key={`${r.workflowId}-${r.runId}`}
-                  className="sched-item sched-item--dense sched-run-item"
+                  className={`${styles.schedItem} ${styles.schedItemDense} ${styles.schedRunItem}`}
                 >
-                  <div className="sched-item-main">
-                    <div className="sched-item-name">{wfName}</div>
-                    <div className="sched-item-meta" title={r.error || undefined}>
+                  <div className={styles.schedItemMain}>
+                    <div className={styles.schedItemName}>{wfName}</div>
+                    <div className={styles.schedItemMeta} title={r.error || undefined}>
                       {workflowRunStatusLabel(r.status)} · {whenLabel}
                       {r.error ? ` · ${r.error.slice(0, 24)}` : ''}
                     </div>
                   </div>
-                  <div className="sched-item-actions">
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title={canOpen ? '打开会话' : '无关联会话'}
-                      aria-label={
-                        canOpen ? `打开 ${wfName} 的运行会话` : `${wfName} 无关联会话`
-                      }
-                      disabled={!canOpen}
-                      onClick={() => openRunSession(r)}
-                    >
-                      <Lucide.MessageSquare size={16} aria-hidden />
-                    </button>
+                  <div className={styles.schedItemActions}>
+                    <Tooltip content={canOpen ? '打开会话' : '无关联会话'}>
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label={
+                          canOpen ? `打开 ${wfName} 的运行会话` : `${wfName} 无关联会话`
+                        }
+                        disabled={!canOpen}
+                        onClick={() => openRunSession(r)}
+                      >
+                        <Lucide.MessageSquare size={16} aria-hidden />
+                      </button>
+                    </Tooltip>
                   </div>
                 </li>
               );

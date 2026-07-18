@@ -1,0 +1,263 @@
+.firstRunRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 24px;
+}
+
+.firstRunCard {
+  width: min(440px, 100%);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.14);
+  padding: 22px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+.firstRunBrand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.firstRunLogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--text-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-normal);
+  font-size: 16px;
+}
+
+.firstRunTitle {
+  font-size: 16px;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+}
+
+.firstRunSub {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.firstRunSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.firstRunStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.firstRunStep.isActive {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  font-weight: var(--font-weight-normal);
+}
+
+.firstRunStep.isDone {
+  color: var(--text-secondary);
+}
+
+.firstRunStepNum {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-normal);
+}
+
+.firstRunStep.isActive .firstRunStepNum {
+  background: var(--text-primary);
+  color: #fff;
+}
+
+.firstRunBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 140px;
+}
+
+.firstRunLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+/* 向导下拉：SettingsSelect 全宽软触发 */
+.firstRunSelect :global(.settings-select) {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+.firstRunSelect :global(.settings-select-trigger) {
+  width: 100%;
+  min-height: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.firstRunInput {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  background: var(--control-soft-bg, var(--bg-secondary));
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: none;
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+.firstRunInput:focus {
+  background: var(--control-soft-bg-hover, var(--bg-hover));
+}
+
+.firstRunHint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.firstRunError {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.firstRunFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  border-top-color: var(--hairline, var(--border-subtle));
+}
+
+.firstRunLink {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.firstRunLink:hover {
+  color: var(--text-secondary);
+}
+
+.firstRunLinkCenter {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: -4px;
+  padding-bottom: 4px;
+}
+
+/* 模型步次级路径：稍后手填 / 打开设置（无 toast） */
+.firstRunModelAlt {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 4px 8px;
+}
+
+.firstRunModelAlt .firstRunLinkCenter {
+  margin-top: 0;
+}
+
+.firstRunBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  font-family: inherit;
+  padding: 9px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.firstRunBtn.primary {
+  background: var(--text-primary);
+  color: #fff;
+}
+
+.firstRunBtn.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.firstRunBtn.ghost {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.firstRunBtn.secondary {
+  width: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.firstRunProjectOk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+}
+
+.firstRunReady {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 8px;
+}

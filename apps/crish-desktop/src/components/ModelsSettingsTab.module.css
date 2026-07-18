@@ -1,0 +1,971 @@
+.modelsSplit {
+  display: flex;
+  gap: 0;
+  flex: 1;
+  height: max(480px, calc(100vh - 220px));
+  min-height: 420px;
+  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+.modelsRail {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.mrlHeader {
+  display: flex;
+  align-items: center;
+  padding: 12px 10px 8px;
+}
+
+.mrlLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.mrlAddBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mrlAddBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+}
+
+.mrlList {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mrlItem {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.mrlItem:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.mrlItem.isActive {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.mrlItemRowTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mrlItemName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mrlItemTag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-tertiary);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.mrlItemTag.isLive {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.mrlItemRowSub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.mrlItemDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mrlItemStatus {
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mrlItemCount {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.mrlEmpty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding: 20px 8px;
+  text-align: center;
+}
+
+/* 右侧详情 Canvas */
+.modelsDetail {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--bg-primary);
+}
+
+.mrdHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.mrdHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mrdTitle {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.mrdPill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.mrdPillOn {
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  color: #16a34a;
+}
+
+.mrdPillOff {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-tertiary);
+}
+
+.mrdToggleBtn {
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mrdToggleBtn:hover {
+  color: var(--text-primary);
+}
+
+/* Sub-card Sections */
+.mrdCard {
+  background: var(--bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mrdCardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mrdFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mrdField {
+  display: flex;
+  flex-direction: column;
+}
+
+.mrdFieldLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.mrdFieldBadgeOk {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #16a34a;
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.mrdFieldInput {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: none;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  width: 100%;
+}
+
+.mrdFieldInput:focus {
+  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
+  box-shadow: none;
+  outline: none;
+}
+
+.mrdKeyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mrdKeyRow .mrdFieldInput {
+  flex: 1;
+}
+
+/* Model Catalog Header & Row Items */
+.mrdModelsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mrdModelsLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mrdModelsActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mrdSearch {
+  height: 28px;
+  padding: 0 8px 0 26px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--bg-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  width: 140px;
+}
+
+.mrdSearch:focus {
+  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
+}
+
+.mrdModelList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mrdModelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--bg-primary);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mrdModelRow:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 60%, var(--bg-elevated));
+}
+
+.mrdModelRow.isLive {
+  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.mrdModelRow.isOff {
+  opacity: 0.6;
+}
+
+.mrdModelInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mrdModelName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mrdCtxPill {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.mrdCapTag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.mrdModelActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mrdEmpty {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* Switch UI */
+.modelsSwitch {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+}
+
+.modelsSwitch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.modelsSwitchUi {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  transition: 0.2s ease;
+  border-radius: 18px;
+}
+
+.modelsSwitchUi:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.2s ease;
+  border-radius: 50%;
+}
+
+.modelsSwitch input:checked + .modelsSwitchUi {
+  background-color: var(--accent-primary, #3b82f6);
+}
+
+.modelsSwitch input:checked + .modelsSwitchUi:before {
+  transform: translateX(14px);
+}
+
+.modelsBtn.dangerText:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-red, #b91c1c) 8%, transparent);
+  color: var(--accent-red, #b91c1c);
+}
+
+.modelsModelsHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding-bottom: 4px;
+}
+
+.modelsModelList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.modelsModelRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  min-height: 40px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.modelsModelRow:last-child {
+  border-bottom: none;
+}
+
+.modelsModelRow.isOff {
+  opacity: 0.5;
+}
+
+.modelsModelMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.modelsModelMain:hover {
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+.modelsModelName {
+  font-size: var(--font-size-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelsModelLive {
+  font-size: var(--font-size-xs);
+  color: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.modelsModelCtx {
+  flex-shrink: 0;
+}
+
+.modelsCtxBtn {
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.modelsCtxBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.modelsCtxInput {
+  width: 72px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: none;
+}
+
+.modelsCtxInput:focus,
+.modelsCtxInput:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
+  box-shadow: none;
+}
+
+/* 次要操作：主列表始终可点（避免与配置面板抢位时点不到）；旧 model-row 仍 hover 显 */
+.modelsIconBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.72;
+  pointer-events: auto;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.modelsMainRow .modelsIconBtn {
+  opacity: 0.78;
+  pointer-events: auto;
+}
+
+.modelsMainRow:hover .modelsIconBtn,
+.modelsMainRow:focus-within .modelsIconBtn,
+.modelsModelRow:hover .modelsIconBtn,
+.modelsModelRow:focus-within .modelsIconBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modelsModelRow .modelsIconBtn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modelsIconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.modelsIconBtn.danger:hover {
+  color: var(--accent-red);
+}
+
+/* 启停与测试稍优先：hover 时仍先露出 */
+.modelsIconBtnPrimary {
+  opacity: 0.35;
+  pointer-events: auto;
+}
+
+.modelsModelRow:hover .modelsIconBtnPrimary,
+.modelsModelRow:focus-within .modelsIconBtnPrimary {
+  opacity: 1;
+}
+
+.modelsAddModel {
+  display: flex;
+  gap: 8px;
+}
+
+.modelsAddModel .mrdFieldInput {
+  flex: 1;
+}
+
+/* 计费单价：与模型列表彻底分区，默认折叠，不与行操作抢位 */
+.modelsBilling {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+
+.modelsBillingToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.modelsBillingToggle:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.modelsBillingToggleMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modelsBillingTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modelsBillingSub {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.modelsBillingToggleSide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.modelsBillingChevron {
+  transition: transform 0.12s ease;
+}
+
+.modelsBillingChevron.isOpen {
+  transform: rotate(180deg);
+}
+
+.modelsBillingBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-primary));
+  min-width: 0;
+}
+
+.modelsBillingHint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.modelsBillingEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  padding: 4px 0;
+}
+
+.modelsPriceRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.modelsPriceField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.modelsPriceField .mrdFieldInput {
+  width: 112px;
+  max-width: 100%;
+}
+
+.modelsPriceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  overflow: hidden;
+}
+
+.modelsPriceItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: transparent;
+}
+
+.modelsPriceItem:last-child {
+  border-bottom: none;
+}
+
+.modelsPriceModel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.modelsPriceRates {
+  min-width: 0;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modelsPriceSample {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .modelsPriceItem {
+    grid-template-columns: 1fr;
+    gap: 2px 8px;
+  }
+  .modelsPriceField .mrdFieldInput {
+    width: 100%;
+  }
+}
+
+/* Add form */
+.mrdAddForm {
+  margin: 0 22px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mrdAddFormFields {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.7fr;
+  gap: 12px;
+}
+.mrdAddFormFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mrdAddLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.mrdCapPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  background: transparent;
+}
+.mrdCapPill:hover {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.mrdCapPill.isOn {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Expanded config sub-panel */
+.mrdModelCfg {
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  box-sizing: border-box;
+}
+.mrdCfgFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.mrdCfgLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.mrdCfgFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+.mrdCapGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mrdCapPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+.mrdCapPill:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+}
+.mrdCapPill.isOn {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+.mrdCfgActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Add model button */
+.mrdAddModelBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px dashed var(--border-subtle);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.mrdAddModelBtn:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+/* Empty states */
+.mrdModelEmpty {
+  padding: 20px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}

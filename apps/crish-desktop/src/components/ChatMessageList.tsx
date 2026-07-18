@@ -5,6 +5,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ChatMessageList.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { assistantCopyText } from '../api/toolPresentation';
@@ -46,8 +48,8 @@ function scrollToMessage(messageId: string) {
   ) as HTMLElement | null;
   if (!el) return false;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  el.classList.add('msg-row-pin-flash');
-  window.setTimeout(() => el.classList.remove('msg-row-pin-flash'), 1200);
+  el.classList.add(styles.rowPinFlash);
+  window.setTimeout(() => el.classList.remove(styles.rowPinFlash), 1200);
   return true;
 }
 
@@ -508,7 +510,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   return (
     <div
-      className="chat-message-list"
+      className={styles.list}
       role="region"
       aria-label="会话消息"
       data-window-start={messageWindow.startIndex}
@@ -556,50 +558,53 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         </div>
       ) : null}
       {pinnedItems.length > 0 ? (
-        <div className="chat-pinned-bar" role="region" aria-label="已固定消息">
-          <button
-            type="button"
-            className="chat-pinned-bar-toggle"
-            onClick={() => setPinsOpen((v) => !v)}
-            title={pinsOpen ? '收起固定列表' : '展开固定列表'}
-            aria-expanded={pinsOpen}
-            aria-controls="chat-pinned-list"
-            aria-label={
-              pinsOpen
-                ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
-                : `展开已固定消息列表，共 ${pinnedItems.length} 条`
-            }
-          >
-            <Lucide.Pin size={13} strokeWidth={2} aria-hidden />
-            <span>已固定 · {pinnedItems.length}</span>
-            <Lucide.ChevronDown
-              size={14}
-              className={`chat-pinned-chevron${pinsOpen ? ' is-open' : ''}`}
-              aria-hidden
-            />
-          </button>
+        <div className={styles.pinnedBar} role="region" aria-label="已固定消息">
+          <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
+            <button
+              type="button"
+              className={styles.pinnedBarToggle}
+              onClick={() => setPinsOpen((v) => !v)}
+              aria-expanded={pinsOpen}
+              aria-controls="chat-pinned-list"
+              aria-label={
+                pinsOpen
+                  ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
+                  : `展开已固定消息列表，共 ${pinnedItems.length} 条`
+              }
+            >
+              <Lucide.Pin size={13} strokeWidth={2} aria-hidden />
+              <span>已固定 · {pinnedItems.length}</span>
+              <Lucide.ChevronDown
+                size={14}
+                className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
+                aria-hidden
+              />
+            </button>
+          </Tooltip>
           {pinsOpen ? (
-            <ul id="chat-pinned-list" className="chat-pinned-list">
+            <ul id="chat-pinned-list" className={styles.pinnedList}>
               {pinnedItems.map((item) => (
-                <li key={item.id} className="chat-pinned-item">
-                  <button
-                    type="button"
-                    className="chat-pinned-jump"
-                    title="跳转到消息"
-                    aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
-                    onClick={() => jumpToPinned(item.id)}
-                  >
-                    <span className="chat-pinned-snippet">{item.snippet}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="chat-pinned-unpin msg-icon-btn"
-                    title="取消固定"
-                    aria-label={`取消固定：${item.snippet}`}
-                    onClick={() => togglePin(item.id)}
-                  >
-                    <Lucide.PinOff size={14} aria-hidden />
-                  </button>
+                <li key={item.id} className={styles.pinnedItem}>
+                  <Tooltip content="跳转到消息">
+                    <button
+                      type="button"
+                      className={styles.pinnedJump}
+                      aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
+                      onClick={() => jumpToPinned(item.id)}
+                    >
+                      <span className={styles.pinnedSnippet}>{item.snippet}</span>
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="取消固定">
+                    <button
+                      type="button"
+                      className={styles.pinnedUnpin}
+                      aria-label={`取消固定：${item.snippet}`}
+                      onClick={() => togglePin(item.id)}
+                    >
+                      <Lucide.PinOff size={14} aria-hidden />
+                    </button>
+                  </Tooltip>
                 </li>
               ))}
             </ul>
@@ -652,7 +657,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
             onOpenDiffPanel={onOpenDiffPanel}
             setPermissionMode={setPermissionMode}
             setPlanApproved={setPlanApproved}
-            onFillFollowUp={onSetChatInput ? handleFillFollowUp : undefined}
+            onFillFollowUp={handleFillFollowUp}
             onSendFollowUp={onSendFollowUp ? handleSendFollowUp : undefined}
             followUpDismissed={!!dismissedFollowUps[msg.id]}
             onDismissFollowUp={handleDismissFollowUp}

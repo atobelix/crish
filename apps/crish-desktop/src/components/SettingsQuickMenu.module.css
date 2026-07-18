@@ -1,0 +1,128 @@
+.sbQuickWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebarFooterSettings {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  transition: background 0.12s, color 0.12s;
+}
+
+.sidebarFooterSettings:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebarFooterSettings.isOpen {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sbQuickChev {
+  margin-left: auto;
+  opacity: 0.55;
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+
+.sidebarFooterSettings.isOpen .sbQuickChev {
+  transform: rotate(180deg);
+}
+
+.sbQuickMenu {
+  position: fixed;
+  z-index: 5000;
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 16px));
+  box-sizing: border-box;
+}
+
+.sbQuickSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 6px 10px;
+}
+
+.sbQuickLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 0 8px;
+}
+
+.sbQuickSegment {
+  width: 100%;
+}
+
+.sbQuickSegment :global(.ui-segment-item) {
+  flex: 1;
+  border-radius: 999px;
+}
+
+.sbQuickDivider {
+  margin: 4px 6px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  height: 0;
+  padding: 0;
+}
+
+.sbQuickItem {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.1s ease, color 0.1s ease;
+  text-align: left;
+  white-space: nowrap;
+  font-family: inherit;
+  font-weight: var(--font-weight-normal);
+}
+
+.sbQuickItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sbQuickItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  color: var(--text-primary);
+}
+
+.sbQuickItem svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}

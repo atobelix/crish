@@ -1,0 +1,327 @@
+.changeOverview {
+  margin: 6px 0 4px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  border-radius: 10px;
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-self: stretch;
+  container-type: inline-size;
+  container-name: change-overview;
+}
+
+.changeOverviewBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.changeOverviewToggle {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  padding: 4px 0;
+}
+
+.changeOverviewIco {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.changeOverviewTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.changeOverviewStat {
+  display: inline-flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  flex-shrink: 0;
+}
+
+.changeOverviewStat :global(.add) {
+  color: var(--accent-green);
+}
+
+.changeOverviewStat :global(.del) {
+  color: var(--accent-red);
+}
+
+.changeOverviewStatGlobalSm {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.changeOverviewChev {
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.changeOverviewChev.open {
+  transform: rotate(180deg);
+}
+
+.changeOverviewActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.changeOverviewReview {
+  flex: 0 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.changeOverviewReview:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.changeOverviewReview:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.changeOverviewList {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 8px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.changeOverviewRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.changeOverviewFile {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.changeOverviewFile:hover {
+  background: var(--bg-hover);
+}
+
+.changeOverviewName {
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changeOverviewPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changeOverviewFileActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.changeOverviewMiniBtn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.changeOverviewMiniBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.changeOverviewMiniBtn.accept {
+  color: var(--accent-green, #22c55e);
+  border-color: color-mix(in srgb, var(--accent-green, #22c55e) 35%, transparent);
+}
+
+.changeOverviewMiniBtn.accept:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-green, #22c55e) 12%, transparent);
+}
+
+.changeOverviewMiniBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 窄栏（对话列收窄 / 分栏）：隐藏长路径，动作换行不重叠 */
+@container change-overview (max-width: 420px) {
+  .changeOverviewPath {
+    display: none;
+  }
+  .changeOverviewBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .changeOverviewToggle {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .changeOverviewActions {
+    width: 100%;
+    justify-content: stretch;
+    gap: 6px;
+  }
+  .changeOverviewReview {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    justify-content: center;
+  }
+  .changeOverviewRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .changeOverviewFile {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .changeOverviewFileActions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-right: 0;
+  }
+}
+
+@container change-overview (max-width: 280px) {
+  .changeOverviewTitle {
+    font-size: var(--font-size-xs);
+  }
+  .changeOverviewStat {
+    font-size: 10px;
+  }
+  .changeOverviewReview,
+  .changeOverviewMiniBtn {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+}
+
+.filesActionHint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-primary));
+  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  font-size: var(--font-size-xxs);
+  color: var(--accent-red);
+  line-height: var(--line-height-tight, 1.25);
+}
+
+.filesActionHintText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filesActionHintDismiss {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.filesActionHintDismiss:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.filesActionHintDismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  color: var(--text-primary);
+}
+
+@media (max-width: 720px) {
+  .changeOverviewActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

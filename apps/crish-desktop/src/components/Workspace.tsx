@@ -48,13 +48,11 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   const containerRef = useRef<HTMLDivElement>(null);
   const liveRegionRef = useRef<HTMLDivElement>(null);
 
-  const ws = useLayoutStore(
-    React.useCallback((s) => s.workspaces.find((w) => w.id === wsId), [wsId])
-  );
+  const wsSelector = React.useMemo(() => (s: any) => s.workspaces.find((w: any) => w.id === wsId), [wsId]);
+  const ws = useLayoutStore(wsSelector);
 
-  const wsIndex = useLayoutStore(
-    React.useCallback((s) => s.workspaces.findIndex((w) => w.id === wsId), [wsId])
-  );
+  const wsIndexSelector = React.useMemo(() => (s: any) => s.workspaces.findIndex((w: any) => w.id === wsId), [wsId]);
+  const wsIndex = useLayoutStore(wsIndexSelector);
 
   const isSplitMode = useLayoutStore(
     (s) => s.workspaces.length > 1
@@ -227,9 +225,9 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   };
 
   const renderedColumns = React.useMemo(() => {
-    const baseCols: RenderedColumn[] = ws.columns.map((col, cIdx) => {
+    const baseCols: RenderedColumn[] = ws.columns.map((col: any, cIdx: number) => {
       const visibleGroups = draggedTab
-        ? col.groups.filter((g) => {
+        ? col.groups.filter((g: any) => {
             const isDraggingWholeGroup =
               g.id === draggedTab.sourceGroupId &&
               (!draggedTab.isTabDrag || g.cards.length === 1);
@@ -241,7 +239,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
       return {
         ...col,
         origColIdx: cIdx,
-        groups: col.groups.map((g, gIdx) => {
+        groups: col.groups.map((g: any, gIdx: number) => {
           const isDragged = draggedTab && g.id === draggedTab.sourceGroupId;
           const isDraggingWholeGroup =
             isDragged && (!draggedTab.isTabDrag || g.cards.length === 1);
@@ -343,7 +341,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
 
   const isEmptyWorkspace =
     !ws.columns.length ||
-    ws.columns.every((c) => !c.groups.length) ||
+    ws.columns.every((c: any) => !c.groups.length) ||
     (renderedColumns.length === 0);
 
   const colCountLabel = `${ws.columns.length} 列`;

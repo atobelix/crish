@@ -5,6 +5,8 @@
  * 反馈策略：成功静默；失败 toast + 行内；空态/软提示仅行内。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './DiffCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff } from '../store/layoutStore';
 import {
@@ -457,50 +459,53 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
 
   return (
     <div
-      className="diff-panel"
+      className={styles.panel}
       aria-label="代码变更面板"
       aria-busy={busy || undefined}
       data-source={sourceMode}
     >
-      <div className="diff-toolbar" role="toolbar" aria-label="变更工具栏">
-        <div className="diff-toolbar-left">
-          <div className="diff-source-seg" role="group" aria-label="变更来源">
-            <button
-              type="button"
-              className={`diff-source-btn ${sourceMode === 'session' ? 'is-on' : ''}`}
-              aria-pressed={sourceMode === 'session'}
-              title="当前对话中 AI 产生的改动"
-              disabled={applyBusy}
-              onClick={() => switchSource('session')}
-            >
-              AI 改动
-            </button>
-            <button
-              type="button"
-              className={`diff-source-btn ${sourceMode === 'git' ? 'is-on' : ''}`}
-              aria-pressed={sourceMode === 'git'}
-              title="工作区 Git 未提交变更"
-              disabled={gitLoading || applyBusy}
-              onClick={() => switchSource('git')}
-            >
-              {gitLoading ? 'Git…' : 'Git'}
-            </button>
+      <div className={styles.toolbar} role="toolbar" aria-label="变更工具栏">
+        <div className={styles.toolbarLeft}>
+          <div className={styles.sourceSeg} role="group" aria-label="变更来源">
+            <Tooltip content="当前对话中 AI 产生的改动">
+              <button
+                type="button"
+                className={`${styles.sourceBtn} ${sourceMode === 'session' ? styles.isOn : ''}`}
+                aria-pressed={sourceMode === 'session'}
+                disabled={applyBusy}
+                onClick={() => switchSource('session')}
+              >
+                AI 改动
+              </button>
+            </Tooltip>
+            <Tooltip content="工作区 Git 未提交变更">
+              <button
+                type="button"
+                className={`${styles.sourceBtn} ${sourceMode === 'git' ? styles.isOn : ''}`}
+                aria-pressed={sourceMode === 'git'}
+                disabled={gitLoading || applyBusy}
+                onClick={() => switchSource('git')}
+              >
+                {gitLoading ? 'Git…' : 'Git'}
+              </button>
+            </Tooltip>
           </div>
           {fileList.length > 0 ? (
-            <span
-              className="diff-toolbar-meta"
-              title={`${fileList.length} 个文件`}
-              aria-label={`${fileList.length} 个文件`}
-            >
-              {fileList.length} 文件
-            </span>
+            <Tooltip content={`${fileList.length} 个文件`}>
+              <span
+                className={styles.toolbarMeta}
+                aria-label={`${fileList.length} 个文件`}
+              >
+                {fileList.length} 文件
+              </span>
+            </Tooltip>
           ) : null}
         </div>
-        <div className="diff-toolbar-actions">
+        <div className={styles.toolbarActions}>
           {sourceMode !== 'git' ? (
-            <div className="diff-turn-select-wrap">
+            <div className={styles.turnSelectWrap}>
               <SettingsSelect
-                className="diff-turn-settings-select"
+                className={styles.turnSettingsSelect}
                 value={turnKey}
                 placeholder={hasAiTurns ? '选择回合…' : '暂无 AI 改动'}
                 disabled={!hasAiTurns || applyBusy}
@@ -513,71 +518,78 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
               />
             </div>
           ) : (
-            <span className="diff-toolbar-meta diff-toolbar-meta--git" title="工作区未提交变更">
-              工作区
-            </span>
+            <Tooltip content="工作区未提交变更">
+              <span className={`${styles.toolbarMeta} ${styles.toolbarMetaGit}`}>
+                工作区
+              </span>
+            </Tooltip>
           )}
           {fileList.length > 1 ? (
-            <button
-              type="button"
-              className="diff-icon-btn diff-icon-btn--accept"
-              title="全部接受（可安全应用的文件）"
-              aria-label="全部接受可安全应用的文件"
-              disabled={applyBusy}
-              onClick={() => void acceptAll()}
-            >
-              <Lucide.CheckCheck size={15} aria-hidden />
-            </button>
+            <Tooltip content="全部接受（可安全应用的文件）">
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
+                aria-label="全部接受可安全应用的文件"
+                disabled={applyBusy}
+                onClick={() => void acceptAll()}
+              >
+                <Lucide.CheckCheck size={15} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
-          <button
-            type="button"
-            className={`diff-icon-btn diff-view-btn ${diffViewMode === 'unified' ? 'is-on' : ''}`}
-            title="合并视图"
-            aria-label="合并视图"
-            aria-pressed={diffViewMode === 'unified'}
-            onClick={() => setDiffViewMode('unified')}
-          >
-            <Lucide.List size={15} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className={`diff-icon-btn diff-view-btn ${diffViewMode === 'split' ? 'is-on' : ''}`}
-            title="分栏视图"
-            aria-label="分栏视图"
-            aria-pressed={diffViewMode === 'split'}
-            onClick={() => setDiffViewMode('split')}
-          >
-            <Lucide.Columns2 size={15} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className={`diff-icon-btn ${searchOpen || searchActive ? 'is-on' : ''}`}
-            title="筛选行"
-            aria-label="筛选 diff 行"
-            aria-pressed={searchOpen || searchActive}
-            disabled={!current}
-            onClick={() => setSearchOpen((v) => !v)}
-          >
-            <Lucide.Search size={15} aria-hidden />
-          </button>
-          {fileList.length > 0 ? (
+          <Tooltip content="合并视图">
             <button
               type="button"
-              className="diff-icon-btn"
-              title="清空列表"
-              aria-label="清空变更列表"
-              disabled={applyBusy}
-              onClick={clearList}
+              className={`${styles.iconBtn} ${styles.viewBtn} ${diffViewMode === 'unified' ? styles.isOn : ''}`}
+              aria-label="合并视图"
+              aria-pressed={diffViewMode === 'unified'}
+              onClick={() => setDiffViewMode('unified')}
             >
-              <Lucide.Trash2 size={15} aria-hidden />
+              <Lucide.List size={15} aria-hidden />
             </button>
+          </Tooltip>
+          <Tooltip content="分栏视图">
+            <button
+              type="button"
+              className={`${styles.iconBtn} ${styles.viewBtn} ${diffViewMode === 'split' ? styles.isOn : ''}`}
+              aria-label="分栏视图"
+              aria-pressed={diffViewMode === 'split'}
+              onClick={() => setDiffViewMode('split')}
+            >
+              <Lucide.Columns2 size={15} aria-hidden />
+            </button>
+          </Tooltip>
+          <Tooltip content="筛选行">
+            <button
+              type="button"
+              className={`${styles.iconBtn} ${searchOpen || searchActive ? styles.isOn : ''}`}
+              aria-label="筛选 diff 行"
+              aria-pressed={searchOpen || searchActive}
+              disabled={!current}
+              onClick={() => setSearchOpen((v) => !v)}
+            >
+              <Lucide.Search size={15} aria-hidden />
+            </button>
+          </Tooltip>
+          {fileList.length > 0 ? (
+            <Tooltip content="清空列表">
+              <button
+                type="button"
+                className={styles.iconBtn}
+                aria-label="清空变更列表"
+                disabled={applyBusy}
+                onClick={clearList}
+              >
+                <Lucide.Trash2 size={15} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
 
       {(searchOpen || searchActive) && current ? (
-        <div className="diff-search-row">
-          <div className="diff-search">
+        <div className={styles.searchRow}>
+          <div className={styles.search}>
             <Lucide.Search size={14} aria-hidden />
             <input
               type="text"
@@ -595,16 +607,17 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
               }}
             />
             {searchActive ? (
-              <button
-                type="button"
-                className="diff-icon-btn"
-                style={{ width: 22, height: 22, flexShrink: 0 }}
-                title="清除筛选"
-                aria-label="清除筛选"
-                onClick={() => setDiffSearchQuery('')}
-              >
-                <Lucide.X size={12} aria-hidden />
-              </button>
+              <Tooltip content="清除筛选">
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  style={{ width: 22, height: 22, flexShrink: 0 }}
+                  aria-label="清除筛选"
+                  onClick={() => setDiffSearchQuery('')}
+                >
+                  <Lucide.X size={12} aria-hidden />
+                </button>
+              </Tooltip>
             ) : null}
           </div>
         </div>
@@ -613,90 +626,94 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       {/* 硬失败条：复用 files-action-hint 密度，避免 thrash panels.css */}
       {panelErr ? (
         <div className="files-action-hint" role="alert" aria-live="assertive">
-          <span className="files-action-hint-text" title={panelErr}>
-            {panelErr}
-          </span>
-          <button
-            type="button"
-            className="files-action-hint-dismiss"
-            title="关闭"
-            aria-label="关闭错误"
-            onClick={dismissPanelErr}
-          >
-            <Lucide.X size={12} aria-hidden />
-          </button>
+          <Tooltip content={panelErr}>
+            <span className="files-action-hint-text">
+              {panelErr}
+            </span>
+          </Tooltip>
+          <Tooltip content="关闭">
+            <button
+              type="button"
+              className="files-action-hint-dismiss"
+              aria-label="关闭错误"
+              onClick={dismissPanelErr}
+            >
+              <Lucide.X size={12} aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
       {/* 软提示：空结果等，不 toast；轻量 flex 复用既有 dismiss 控件 */}
       {!panelErr && softHint ? (
         <div
-          className="diff-apply-hint"
+          className={styles.applyHint}
           role="status"
           aria-live="polite"
           style={{ display: 'flex', alignItems: 'center', gap: 4 }}
         >
           <span style={{ flex: 1, minWidth: 0 }}>{softHint}</span>
-          <button
-            type="button"
-            className="files-action-hint-dismiss"
-            title="关闭"
-            aria-label="关闭提示"
-            onClick={dismissSoftHint}
-          >
-            <Lucide.X size={12} aria-hidden />
-          </button>
+          <Tooltip content="关闭">
+            <button
+              type="button"
+              className="files-action-hint-dismiss"
+              aria-label="关闭提示"
+              onClick={dismissSoftHint}
+            >
+              <Lucide.X size={12} aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
-      <div className="diff-body-wrap">
+      <div className={styles.bodyWrap}>
         {!current && fileList.length > 0 ? (
           <div
-            className="diff-file-list"
+            className={styles.fileList}
             role="listbox"
             aria-label="变更文件列表"
           >
             {fileList.map((f) => {
-              const active = current?.filePath === f.filePath;
+              const active = false;
               const itemId = `diff-file-${f.filePath.replace(/[^\w.-]+/g, '_')}`;
               return (
-                <button
-                  key={f.filePath}
-                  id={itemId}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  className={`diff-file-item ${active ? 'is-active' : ''}`}
-                  onClick={() => setActiveDiffSource(f)}
-                  title={f.filePath}
-                  aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
-                >
-                  <span className="diff-file-name">{basename(f.filePath)}</span>
-                  <span className="diff-file-stat" aria-hidden>
-                    <span className="add">+{f.additions}</span>
-                    <span className="del">−{f.deletions}</span>
-                  </span>
-                </button>
+                <Tooltip key={f.filePath} content={f.filePath}>
+                  <button
+                    id={itemId}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
+                    onClick={() => setActiveDiffSource(f)}
+                    aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
+                  >
+                    <span className={styles.fileName}>{basename(f.filePath)}</span>
+                    <span className={styles.fileStat} aria-hidden>
+                      <span className="add">+{f.additions}</span>
+                      <span className="del">−{f.deletions}</span>
+                    </span>
+                  </button>
+                </Tooltip>
               );
             })}
           </div>
         ) : null}
 
         {current || fileList.length === 0 || gitLoading ? (
-          <div className={`diff-body ${diffViewMode === 'split' ? 'is-split' : ''}`} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}>
+          <div className={`${styles.body} ${diffViewMode === 'split' ? 'is-split' : ''}`} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}>
             {gitLoading && !current ? (
-              <div className="diff-empty" role="status" aria-live="polite">
+              <div className={styles.empty} role="status" aria-live="polite">
                 <Lucide.Loader2 size={22} className="spin" style={{ opacity: 0.45 }} aria-hidden />
                 <div>载入 Git 变更…</div>
               </div>
             ) : !current ? (
-              <div className="diff-empty" role="status" aria-live="polite">
+              <div className={styles.empty} role="status" aria-live="polite">
                 <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
                 <div>暂无变更</div>
-                <div className="diff-empty-sub">
+                <div className={styles.emptySub}>
                   上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。
                 </div>
-                <div className="diff-empty-actions">
+                <div className={styles.emptyActions}>
                   <button
                     type="button"
                     className="ui-btn ui-btn-secondary ui-btn-sm"
@@ -720,131 +737,139 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
               </div>
             ) : (
               <>
-                <div className="diff-current-header">
-                  <button
-                    type="button"
-                    className="diff-back-btn"
-                    title="返回文件列表"
-                    aria-label="返回文件列表"
-                    onClick={() => setActiveDiffSource(null)}
-                  >
-                    <Lucide.ChevronLeft size={16} strokeWidth={2.2} aria-hidden />
-                    <span>列表</span>
-                  </button>
-                  <div className="diff-current-path" title={current.filePath}>
-                    {/* 窄栏时优先显示文件名，完整路径放 title */}
-                    <span className="diff-current-basename">{basename(current.filePath)}</span>
-                    <span className="diff-current-fullpath">{current.filePath}</span>
-                  </div>
-                  <div className="diff-apply-actions">
+                <div className={styles.currentHeader}>
+                  <Tooltip content="返回文件列表">
                     <button
                       type="button"
-                      className="diff-icon-btn diff-icon-btn--accept"
-                      title={
+                      className={styles.backBtn}
+                      aria-label="返回文件列表"
+                      onClick={() => setActiveDiffSource(null)}
+                    >
+                      <Lucide.ChevronLeft size={16} strokeWidth={2.2} aria-hidden />
+                      <span>列表</span>
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={current.filePath}>
+                    <div className={styles.currentPath}>
+                      {/* 窄栏时优先显示文件名，完整路径放 title */}
+                      <span className={styles.currentBasename}>{basename(current.filePath)}</span>
+                      <span className={styles.currentFullpath}>{current.filePath}</span>
+                    </div>
+                  </Tooltip>
+                  <div className={styles.applyActions}>
+                    <Tooltip
+                      content={
                         currentCanApply
                           ? '接受并写入磁盘'
                           : '此 diff 无法安全自动应用'
                       }
-                      aria-label={
-                        currentCanApply
-                          ? `接受并写入 ${basename(current.filePath)}`
-                          : '无法安全自动应用'
-                      }
-                      disabled={applyBusy || !currentCanApply}
-                      onClick={() => void acceptCurrent()}
                     >
-                      <Lucide.Check size={15} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      className="diff-icon-btn"
-                      title="从列表拒绝（不回滚磁盘）"
-                      aria-label={`拒绝 ${basename(current.filePath)}`}
-                      disabled={applyBusy}
-                      onClick={rejectCurrent}
-                    >
-                      <Lucide.X size={15} aria-hidden />
-                    </button>
-                    {fileList.length > 1 ? (
                       <button
                         type="button"
-                        className="diff-icon-btn diff-icon-btn--accept"
-                      title="批量接受列表中可安全应用的文件"
-                      aria-label="全部接受可安全应用的文件"
-                      disabled={applyBusy}
-                      onClick={() => void acceptAll()}
-                    >
-                      <Lucide.CheckCheck size={15} aria-hidden />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              {!currentCanApply ? (
-                <div className="diff-apply-hint" role="status">
-                  此 diff 无法安全自动应用，请在编辑器确认
-                </div>
-              ) : null}
-              {noSearchHits ? (
-                <div className="diff-empty" role="status" aria-live="polite">
-                  <div>无匹配行</div>
-                  <div className="diff-empty-sub">
-                    筛选「{diffSearchQuery.trim()}」无结果
+                        className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
+                        aria-label={
+                          currentCanApply
+                            ? `接受并写入 ${basename(current.filePath)}`
+                            : '无法安全自动应用'
+                        }
+                        disabled={applyBusy || !currentCanApply}
+                        onClick={() => void acceptCurrent()}
+                      >
+                        <Lucide.Check size={15} aria-hidden />
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="从列表拒绝（不回滚磁盘）">
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        aria-label={`拒绝 ${basename(current.filePath)}`}
+                        disabled={applyBusy}
+                        onClick={rejectCurrent}
+                      >
+                        <Lucide.X size={15} aria-hidden />
+                      </button>
+                    </Tooltip>
+                    {fileList.length > 1 ? (
+                      <Tooltip content="批量接受列表中可安全应用的文件">
+                        <button
+                          type="button"
+                          className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
+                          aria-label="全部接受可安全应用的文件"
+                          disabled={applyBusy}
+                          onClick={() => void acceptAll()}
+                        >
+                          <Lucide.CheckCheck size={15} aria-hidden />
+                        </button>
+                      </Tooltip>
+                    ) : null}
                   </div>
-                  <div className="diff-empty-actions">
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      aria-label="清除筛选"
-                      onClick={() => setDiffSearchQuery('')}
-                    >
-                      清除筛选
-                    </button>
-                  </div>
                 </div>
-              ) : (
-                <div
-                  ref={diffScrollParentRef}
-                  style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}
-                >
-                  <pre
-                    className="diff-lines"
-                    style={{ margin: 0, padding: '8px 0 16px', overflowY: 'visible', position: 'relative', height: `${totalHeight}px` }}
-                    aria-label={`${basename(current.filePath)} 的变更内容${
-                      searchActive ? `（已筛选，${filteredChanges.length} 行）` : ''
-                    }`}
-                  >
-                    <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
-                      {visibleChanges.map((c, index) => {
-                        const globalIdx = startIndex + index;
-                        const top = globalIdx * 20;
-                        return (
-                          <div
-                            key={globalIdx}
-                            className={`diff-line diff-line--${c.type}`}
-                            style={{
-                              position: 'absolute',
-                              top: `${top}px`,
-                              left: 0,
-                              width: '100%',
-                              height: '20px',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <span className="diff-line-mark" aria-hidden>
-                              {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
-                            </span>
-                            <span className="diff-line-text">{c.content}</span>
-                          </div>
-                        );
-                      })}
+                {!currentCanApply ? (
+                  <div className={styles.applyHint} role="status">
+                    此 diff 无法安全自动应用，请在编辑器确认
+                  </div>
+                ) : null}
+                {noSearchHits ? (
+                  <div className={styles.empty} role="status" aria-live="polite">
+                    <div>无匹配行</div>
+                    <div className={styles.emptySub}>
+                      筛选「{diffSearchQuery.trim()}」无结果
                     </div>
-                  </pre>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                    <div className={styles.emptyActions}>
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label="清除筛选"
+                        onClick={() => setDiffSearchQuery('')}
+                      >
+                        清除筛选
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={diffScrollParentRef}
+                    style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}
+                  >
+                    <pre
+                      className={styles.lines}
+                      style={{ margin: 0, padding: '8px 0 16px', overflowY: 'visible', position: 'relative', height: `${totalHeight}px` }}
+                      aria-label={`${basename(current.filePath)} 的变更内容${
+                        searchActive ? `（已筛选，${filteredChanges.length} 行）` : ''
+                      }`}
+                    >
+                      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+                        {visibleChanges.map((c, index) => {
+                          const globalIdx = startIndex + index;
+                          const top = globalIdx * 20;
+                          return (
+                            <div
+                              key={globalIdx}
+                              className={`${styles.line} ${styles[`line${c.type.charAt(0).toUpperCase() + c.type.slice(1)}`]}`}
+                              style={{
+                                position: 'absolute',
+                                top: `${top}px`,
+                                left: 0,
+                                width: '100%',
+                                height: '20px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <span className={styles.lineMark} aria-hidden>
+                                {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
+                              </span>
+                              <span className={styles.lineText}>{c.content}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </pre>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         ) : null}
       </div>
     </div>

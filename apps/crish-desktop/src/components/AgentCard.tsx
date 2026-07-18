@@ -5,6 +5,8 @@
  * 永不覆盖主对话、不 spawn 主会话 ghost。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './AgentCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../api/openAgentPanel';
 import { useLayoutStore } from '../store/layoutStore';
@@ -101,7 +103,7 @@ function AgentStatusChip({
   const modeHint = mode ? `模式：${mode}` : undefined;
   return (
     <span
-      className={`agent-card-badge agent-card-badge--${status}`}
+      className={`${styles.agentCardBadge} ${styles['agentCardBadge' + status.charAt(0).toUpperCase() + status.slice(1)] || ''}`}
       role="status"
       data-agent-status={status}
       aria-label={`状态：${label}${mode ? `，${modeHint}` : ''}`}
@@ -143,19 +145,19 @@ function AgentBrowsePad({
 
   return (
     <div
-      className="agent-card agent-card--launch agent-card--dense"
+      className={`${styles.agentCard} ${styles.agentCardLaunch} ${styles.agentCardDense}`}
       data-agent-side-only="1"
       data-agent-panel="browse"
       role="region"
       aria-label="协作体聊天列表"
     >
-      <header className="agent-card-header agent-card-header--slim">
-        <div className="agent-card-title-row">
+      <header className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}>
+        <div className={styles.agentCardTitleRow}>
           <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
-          <span className="agent-card-title">聊天</span>
+          <span className={styles.agentCardTitle}>聊天</span>
           {agents.length > 0 ? (
             <span
-              className="agent-card-badge"
+              className={styles.agentCardBadge}
               title={`共 ${agents.length} 个`}
               aria-label={`共 ${agents.length} 个子智能体`}
             >
@@ -164,7 +166,7 @@ function AgentBrowsePad({
           ) : null}
           {runningCount > 0 ? (
             <span
-              className="agent-card-badge agent-card-badge--running"
+              className={`${styles.agentCardBadge} ${styles.agentCardBadgeRunning}`}
               role="status"
               aria-label={`${runningCount} 个运行中`}
               title="运行中"
@@ -174,7 +176,7 @@ function AgentBrowsePad({
           ) : null}
           {pendingTotal > 0 ? (
             <span
-              className="agent-card-badge"
+              className={styles.agentCardBadge}
               role="status"
               aria-label={`${pendingTotal} 项待审批`}
               title="待审批工具"
@@ -186,7 +188,7 @@ function AgentBrowsePad({
         {onClose ? (
           <button
             type="button"
-            className="agent-card-btn"
+            className={styles.agentCardBtn}
             title={embedded ? '返回' : '关闭侧栏'}
             aria-label={embedded ? '返回' : '关闭侧栏'}
             onClick={onClose}
@@ -196,27 +198,27 @@ function AgentBrowsePad({
         ) : null}
       </header>
 
-      <div className="agent-launch-body">
+      <div className={styles.agentLaunchBody}>
         {agents.length === 0 ? (
           <div
-            className="agent-card-empty-hint agent-card-empty-hint--pad"
+            className={`${styles.agentCardEmptyHint} ${styles.agentCardEmptyHintPad}`}
             role="status"
             aria-live="polite"
           >
-            <p className="agent-card-empty-p" style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+            <p className={styles.agentCardEmptyP} style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
               <Lucide.Bot size={16} strokeWidth={1.5} aria-hidden />
               <span>暂无子智能体</span>
             </p>
-            <p className="agent-card-empty-p">
+            <p className={styles.agentCardEmptyP}>
               子智能体由主对话里的 AI 自动拉起，无需人工委派。
             </p>
-            <p className="agent-card-empty-p agent-card-empty-p--muted">
+            <p className={`${styles.agentCardEmptyP} ${styles.agentCardEmptyPMuted}`}>
               有协作时会出现在消息时间线；点开后仅在侧栏查看，不覆盖主对话。
             </p>
           </div>
         ) : (
-          <div className="agent-launch-list" role="list" aria-label="本会话子智能体">
-            <div className="agent-launch-list-h" id="agent-launch-list-heading">
+          <div className={styles.agentLaunchList} role="list" aria-label="本会话子智能体">
+            <div className={styles.agentLaunchListH} id="agent-launch-list-heading">
               本会话 · AI 已拉起
             </div>
             {sorted.map((a) => {
@@ -236,7 +238,7 @@ function AgentBrowsePad({
                   key={a.id}
                   type="button"
                   role="listitem"
-                  className="agent-launch-item"
+                  className={styles.agentLaunchItem}
                   data-agent-id={a.id}
                   data-agent-status={a.status}
                   aria-label={`${name}，${STATUS_LABEL[a.status]}${
@@ -251,10 +253,10 @@ function AgentBrowsePad({
                   }}
                 >
                   <Lucide.Bot size={13} strokeWidth={1.75} aria-hidden />
-                  <span className="agent-launch-item-t">{name}</span>
+                  <span className={styles.agentLaunchItemT}>{name}</span>
                   {pending > 0 ? (
                     <span
-                      className="agent-card-badge"
+                      className={styles.agentCardBadge}
                       aria-hidden
                       title={`${pending} 项待批`}
                     >
@@ -644,7 +646,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 
   return (
     <div
-      className={`agent-card agent-card--dense ${embedded ? 'agent-card--embedded' : ''}`}
+      className={`${styles.agentCard} ${styles.agentCardDense} ${embedded ? styles.agentCardEmbedded : ''}`}
       role="region"
       aria-label={regionLabel}
       aria-busy={running || sending || undefined}
@@ -654,13 +656,13 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
       data-agent-status={agent.status}
     >
       {/* 侧栏单 agent 详情：无人工委派；多 agent 用 AgentTeamBoard 在侧栏内切换 */}
-      <header className="agent-card-header agent-card-header--slim">
-        <div className="agent-card-title-row">
+      <header className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}>
+        <div className={styles.agentCardTitleRow}>
           {/* 返回浏览列表：不关 tab、不碰主列；browse 会触发 id 清空 → 清草稿 */}
           {siblingAgents.length > 0 ? (
             <button
               type="button"
-              className="agent-card-btn"
+              className={styles.agentCardBtn}
               title="返回子智能体列表"
               aria-label="返回子智能体列表"
               onClick={() => {
@@ -675,7 +677,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           ) : null}
           <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
           <span
-            className="agent-card-title"
+            className={styles.agentCardTitle}
             title={[
               titleName,
               agent.mode ? `模式：${agent.mode}` : '',
@@ -690,7 +692,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           <AgentStatusChip status={agent.status} mode={agent.mode} />
           {pendingApproval > 0 ? (
             <span
-              className="agent-card-badge"
+              className={styles.agentCardBadge}
               role="status"
               aria-label={`${pendingApproval} 项工具待审批`}
               title="待审批"
@@ -700,7 +702,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           ) : null}
           {durationLabel ? (
             <span
-              className="agent-card-badge"
+              className={styles.agentCardBadge}
               title={running ? '已运行时长' : '总时长'}
               aria-label={running ? `已运行 ${durationLabel}` : `用时 ${durationLabel}`}
             >
@@ -708,11 +710,11 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             </span>
           ) : null}
         </div>
-        <div className="agent-card-actions">
+        <div className={styles.agentCardActions}>
           {running ? (
             <button
               type="button"
-              className="agent-card-btn agent-card-btn--danger"
+              className={`${styles.agentCardBtn} ${styles.agentCardBtnDanger}`}
               title="停止子智能体"
               aria-label="停止子智能体"
               onClick={handleStop}
@@ -723,7 +725,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           {onClose ? (
             <button
               type="button"
-              className="agent-card-btn"
+              className={styles.agentCardBtn}
               title={embedded ? '返回' : '关闭侧栏'}
               aria-label={embedded ? '返回' : '关闭侧栏'}
               onClick={onClose}
@@ -755,7 +757,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
       ) : null}
 
       <div
-        className="agent-card-body"
+        className={styles.agentCardBody}
         ref={bodyRef}
         role="log"
         aria-label={`${titleName} 的消息`}
@@ -763,7 +765,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
         aria-busy={running || undefined}
       >
         {msgCount === 0 ? (
-          <div className="agent-card-empty-msgs" role="status" aria-live="polite">
+          <div className={styles.agentCardEmptyMsgs} role="status" aria-live="polite">
             {running ? (
               <>
                 <span
@@ -786,7 +788,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
                   <Lucide.MessageSquare size={13} strokeWidth={1.75} aria-hidden />
                   暂无消息
                 </span>
-                <span className="agent-card-empty-p agent-card-empty-p--muted" style={{ margin: 0 }}>
+                <span className={`${styles.agentCardEmptyP} ${styles.agentCardEmptyPMuted}`} style={{ margin: 0 }}>
                   可在下方输入，继续与子智能体对话
                 </span>
               </span>
@@ -806,11 +808,11 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 
       {/* 与主对话同一 ComposerField + footer 渐变；侧栏 denser：maxLines=3 */}
       <div
-        className="chat-footer agent-card-composer agent-card-composer--dense"
+        className={`chat-footer ${styles.agentCardComposer} ${styles.agentCardComposerDense}`}
         data-agent-composer="dense"
       >
         {sendError ? (
-          <div className="agent-card-send-error" role="alert" aria-live="assertive">
+          <div className={styles.agentCardSendError} role="alert" aria-live="assertive">
             {sendError}
           </div>
         ) : null}
@@ -875,8 +877,8 @@ function AgentMessageRow({
   if (msg.sender === 'user') {
     // 任务提示 / 用户输入：左侧对齐，与主对话用户气泡略有区别
     return (
-      <div className="msg-row msg-row-assistant agent-msg agent-msg--prompt">
-        <div className="agent-prompt-bubble">{msg.text}</div>
+      <div className={`msg-row msg-row-assistant ${styles.agentMsg} ${styles.agentMsgPrompt}`}>
+        <div className={styles.agentPromptBubble}>{msg.text}</div>
       </div>
     );
   }
@@ -885,7 +887,7 @@ function AgentMessageRow({
     !hideThinkingBlock &&
     Boolean(msg.thinking && msg.thinking.trim() && msg.thinking !== '正在处理…');
   return (
-    <div className="msg-row msg-row-assistant agent-msg">
+    <div className={`msg-row msg-row-assistant ${styles.agentMsg}`}>
       {showThinking ? (
         <details className="msg-thinking-fold">
           <summary className="msg-thinking-fold-sum">
@@ -936,7 +938,7 @@ function AgentMessageRow({
           );
         })}
         {msg.status === 'processing' && !(msg.text || '').trim() ? (
-          <div className="agent-msg-live" role="status" aria-live="polite">
+          <div className={styles.agentMsgLive} role="status" aria-live="polite">
             <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} aria-hidden />
             生成中…
           </div>

@@ -7,6 +7,7 @@
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
  */
 import React from 'react';
+import styles from './ChatStatusRibbons.module.css';
 import * as Lucide from 'lucide-react';
 import type { EngineStatus } from '../api/engineConfig';
 import type { RunNotice } from '../hooks/useChatStream';
@@ -504,7 +505,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       {/* 引导态：页内 soft-hint 互斥一条；FirstRun 盖层时 resolveSetupHintKind=null */}
       {setupHint === 'engine-down' && setupAction ? (
         <div
-          className="chat-soft-hint"
+          className={styles.chatSoftHint}
           data-setup-hint="engine-down"
           role="status"
           aria-live="polite"
@@ -513,13 +514,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           <Lucide.CloudOff
             size={14}
             strokeWidth={1.75}
-            className="chat-soft-hint-icon"
+            className={styles.chatSoftHintIcon}
             aria-hidden
           />
-          <span className="chat-soft-hint-text">{engineDownText}</span>
+          <span className={styles.chatSoftHintText}>{engineDownText}</span>
           <button
             type="button"
-            className="chat-soft-hint-action"
+            className={styles.chatSoftHintAction}
             aria-label={setupAction.ariaLabel}
             onClick={onOpenModelSettings}
           >
@@ -529,7 +530,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       ) : null}
       {setupHint === 'needs-key' && setupAction ? (
         <div
-          className="chat-soft-hint"
+          className={styles.chatSoftHint}
           data-setup-hint="needs-key"
           role="status"
           aria-live="polite"
@@ -538,13 +539,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           <Lucide.KeyRound
             size={14}
             strokeWidth={1.75}
-            className="chat-soft-hint-icon"
+            className={styles.chatSoftHintIcon}
             aria-hidden
           />
-          <span className="chat-soft-hint-text">{keySoftHintText}</span>
+          <span className={styles.chatSoftHintText}>{keySoftHintText}</span>
           <button
             type="button"
-            className="chat-soft-hint-action"
+            className={styles.chatSoftHintAction}
             aria-label={setupAction.ariaLabel}
             onClick={onOpenModelSettings}
           >
@@ -554,7 +555,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       ) : null}
       {setupHint === 'needs-model' && setupAction ? (
         <div
-          className="chat-soft-hint"
+          className={styles.chatSoftHint}
           data-setup-hint="needs-model"
           role="status"
           aria-live="polite"
@@ -563,13 +564,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           <Lucide.Cpu
             size={14}
             strokeWidth={1.75}
-            className="chat-soft-hint-icon"
+            className={styles.chatSoftHintIcon}
             aria-hidden
           />
-          <span className="chat-soft-hint-text">{modelSoftHintText}</span>
+          <span className={styles.chatSoftHintText}>{modelSoftHintText}</span>
           <button
             type="button"
-            className="chat-soft-hint-action"
+            className={styles.chatSoftHintAction}
             aria-label={setupAction.ariaLabel}
             onClick={onOpenModelDropdown}
           >
@@ -579,7 +580,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       ) : null}
       {setupHint === 'sync-engine' && setupAction ? (
         <div
-          className="chat-soft-hint"
+          className={styles.chatSoftHint}
           data-setup-hint="sync-engine"
           role="status"
           aria-live="polite"
@@ -588,13 +589,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           <Lucide.RefreshCw
             size={14}
             strokeWidth={1.75}
-            className="chat-soft-hint-icon"
+            className={styles.chatSoftHintIcon}
             aria-hidden
           />
-          <span className="chat-soft-hint-text">{syncEngineText}</span>
+          <span className={styles.chatSoftHintText}>{syncEngineText}</span>
           <button
             type="button"
-            className="chat-soft-hint-action"
+            className={styles.chatSoftHintAction}
             aria-label={setupAction.ariaLabel}
             onClick={onOpenModelDropdown}
           >
@@ -605,19 +606,19 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {inPlanMode ? (
         <div
-          className="plan-mode-ribbon plan-mode-ribbon--slim"
+          className={`${styles.planModeRibbon} ${styles.slim}`}
           role="status"
           aria-live="polite"
           aria-label={planAria}
         >
           <Lucide.ListChecks size={14} strokeWidth={1.75} aria-hidden />
-          <span className="plan-mode-ribbon-text" title={planTitle}>
+          <span className={styles.planModeRibbonText} title={planTitle}>
             {planLabel}
           </span>
           {showPlanApprove ? (
             <button
               type="button"
-              className="plan-mode-ribbon-icon-btn"
+              className={styles.planModeRibbonIconBtn}
               title="批准执行"
               aria-label="批准计划执行"
               onClick={onApprovePlan}
@@ -630,7 +631,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {goalModeActive ? (
         <div
-          className="plan-mode-ribbon goal-mode-ribbon plan-mode-ribbon--slim"
+          className={`${styles.planModeRibbon} ${styles.goalModeRibbon} ${styles.slim}`}
           role="status"
           aria-live="polite"
           aria-label={goalAria}
@@ -640,26 +641,26 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         >
           <Lucide.Target size={14} strokeWidth={1.75} aria-hidden />
           <span
-            className="plan-mode-ribbon-text"
+            className={styles.planModeRibbonText}
             title={(goalText || '').trim() || '目标模式'}
           >
             {goalLabel}
           </span>
           {goalProgressPct != null ? (
             <span
-              className="goal-mode-ribbon-meter"
+              className={styles.goalModeRibbonMeter}
               aria-hidden
               title={`${goalTasksDone}/${goalTasksTotal}`}
             >
               <span
-                className="goal-mode-ribbon-meter-fill"
+                className={styles.goalModeRibbonMeterFill}
                 style={{ width: `${goalProgressPct}%` }}
               />
             </span>
           ) : null}
           <button
             type="button"
-            className="plan-mode-ribbon-icon-btn is-danger"
+            className={`${styles.planModeRibbonIconBtn} is-danger`}
             title="停止目标"
             aria-label="停止目标"
             onClick={onStopGoal}
@@ -673,7 +674,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       {showScrollToBottom ? (
         <button
           type="button"
-          className="chat-scroll-fab"
+          className={styles.chatScrollFab}
           title="回到最新"
           aria-label="回到最新"
           onClick={onScrollToBottom}
@@ -687,24 +688,24 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
       {renderRunNotice ? (
         <div
-          className="run-notice"
+          className={styles.runNotice}
           role="status"
           aria-live={runNoticeLive}
           aria-atomic="true"
           aria-label={runNoticeAria}
         >
-          <div className="run-notice-main">
-            <span className="run-notice-kicker">运行提示</span>
-            <span className="run-notice-text">{runNoticeText}</span>
+          <div className={styles.runNoticeMain}>
+            <span className={styles.runNoticeKicker}>运行提示</span>
+            <span className={styles.runNoticeText}>{runNoticeText}</span>
             {runNotice?.detail ? (
-              <span className="run-notice-detail" title={runNotice.detail}>
+              <span className={styles.runNoticeDetail} title={runNotice.detail}>
                 {runNotice.detail}
               </span>
             ) : null}
           </div>
           <button
             type="button"
-            className="run-notice-dismiss"
+            className={styles.runNoticeDismiss}
             aria-label="关闭提示"
             onClick={onDismissRunNotice}
           >
@@ -717,17 +718,17 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       {renderApprovalDock ? (
         <button
           type="button"
-          className="approval-dock approval-dock--slim"
+          className={`${styles.approvalDock} ${styles.slim}`}
           title={approvalAria}
           aria-label={approvalAria}
           data-pending-count={pendingApprovalCount}
           onClick={handleApprovalDockClick}
         >
-          <span className="approval-dock-dot" aria-hidden />
-          <span className="approval-dock-label">{approvalLabel}</span>
+          <span className={styles.approvalDockDot} aria-hidden />
+          <span className={styles.approvalDockLabel}>{approvalLabel}</span>
           <Lucide.ChevronRight
             size={14}
-            className="approval-dock-go-icon"
+            className={styles.approvalDockGoIcon}
             aria-hidden
           />
         </button>

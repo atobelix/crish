@@ -3,6 +3,8 @@
  * 点击必须走 openAgentInSidePanel（或调用方 onSelect），永不 setActiveAgentId 盖住主对话。
  */
 import React, { useCallback, useId, useMemo, useRef } from 'react';
+import styles from './AgentCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import { openAgentInSidePanel } from '../api/openAgentPanel';
@@ -281,7 +283,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
       if (!showEmpty) return null;
       return (
         <div
-          className={`agent-team-board agent-team-board--hairline agent-team-board--empty ${compact ? 'agent-team-board--compact' : ''} ${className || ''}`}
+          className={`${styles.agentTeamBoard} ${styles.agentTeamBoardHairline} ${styles.agentTeamBoardEmpty || 'agent-team-board--empty'} ${compact ? styles.agentTeamBoardCompact : ''} ${className || ''}`}
           role="region"
           aria-label={regionLabel}
           data-agent-side-only="1"
@@ -289,20 +291,20 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           data-empty="1"
           data-density={density}
         >
-          <div className="agent-team-board-head">
+          <div className={styles.agentTeamBoardHead}>
             <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
-            <span className="agent-team-board-label">{headLabel}</span>
-            <span className="agent-team-board-count" title="协作数量">
+            <span className={styles.agentTeamBoardLabel}>{headLabel}</span>
+            <span className={styles.agentTeamBoardCount} title="协作数量">
               0
             </span>
           </div>
           <div
-            className="agent-team-board-grid"
+            className={styles.agentTeamBoardGrid}
             role="status"
             aria-live="polite"
             data-agent-team-empty="1"
           >
-            <div className="agent-team-card-summary" style={{ padding: '4px 2px' }}>
+            <div className={styles.agentTeamCardSummary} style={{ padding: '4px 2px' }}>
               暂无协作 agent
               {!compact ? (
                 <span style={{ display: 'block', marginTop: 2, color: 'var(--text-tertiary)' }}>
@@ -325,7 +327,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
 
     return (
       <div
-        className={`agent-team-board agent-team-board--hairline ${compact ? 'agent-team-board--compact' : ''} ${className || ''}`}
+        className={`${styles.agentTeamBoard} ${styles.agentTeamBoardHairline} ${compact ? styles.agentTeamBoardCompact : ''} ${className || ''}`}
         role="listbox"
         aria-label={regionLabel}
         aria-orientation={compact ? 'vertical' : 'horizontal'}
@@ -340,45 +342,49 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         onKeyDown={onListKeyDown}
         ref={listRef}
       >
-        <div className="agent-team-board-head">
+        <div className={styles.agentTeamBoardHead}>
           <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
-          <span className="agent-team-board-label">{headLabel}</span>
+          <span className={styles.agentTeamBoardLabel}>{headLabel}</span>
           {boardStats.runningN > 0 ? (
-            <span
-              className="agent-team-board-stat"
-              title="运行中"
-              aria-label={`${boardStats.runningN} 个运行中`}
-            >
-              {boardStats.runningN} 运行
-            </span>
+            <Tooltip content={`${boardStats.runningN} 个运行中`}>
+              <span
+                className={styles.agentTeamBoardStat}
+                aria-label={`${boardStats.runningN} 个运行中`}
+              >
+                {boardStats.runningN} 运行
+              </span>
+            </Tooltip>
           ) : null}
           {boardStats.failedN > 0 ? (
-            <span
-              className="agent-team-board-stat agent-team-board-stat--warn"
-              title="失败"
-              aria-label={`${boardStats.failedN} 个失败`}
-            >
-              {boardStats.failedN} 失败
-            </span>
+            <Tooltip content={`${boardStats.failedN} 个失败`}>
+              <span
+                className={`${styles.agentTeamBoardStat} ${styles.agentTeamBoardStatWarn}`}
+                aria-label={`${boardStats.failedN} 个失败`}
+              >
+                {boardStats.failedN} 失败
+              </span>
+            </Tooltip>
           ) : null}
           {boardStats.pendingN > 0 ? (
-            <span
-              className="agent-team-board-stat agent-team-board-stat--warn"
-              title="待审批工具"
-              aria-label={`${boardStats.pendingN} 项待批`}
-            >
-              {boardStats.pendingN} 待批
-            </span>
+            <Tooltip content={`${boardStats.pendingN} 项待批`}>
+              <span
+                className={`${styles.agentTeamBoardStat} ${styles.agentTeamBoardStatWarn}`}
+                aria-label={`${boardStats.pendingN} 项待批`}
+              >
+                {boardStats.pendingN} 待批
+              </span>
+            </Tooltip>
           ) : null}
-          <span
-            className="agent-team-board-count"
-            title="协作数量"
-            aria-label={`共 ${boardStats.total} 个协作`}
-          >
-            {boardStats.total}
-          </span>
+          <Tooltip content={`共 ${boardStats.total} 个协作`}>
+            <span
+              className={styles.agentTeamBoardCount}
+              aria-label={`共 ${boardStats.total} 个协作`}
+            >
+              {boardStats.total}
+            </span>
+          </Tooltip>
         </div>
-        <div className="agent-team-board-grid" role="presentation">
+        <div className={styles.agentTeamBoardGrid} role="presentation">
           {sorted.map((a) => {
             const prog = toolProgress(a);
             const pct = progressPercent(a, prog);
@@ -398,76 +404,79 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
               isOn || (!activeNorm && sorted[0]?.id === a.id);
 
             return (
-              <button
+              <Tooltip
                 key={a.id}
-                id={optionId}
-                type="button"
-                role="option"
-                tabIndex={isTabStop ? 0 : -1}
-                className={`agent-team-card agent-team-card--${a.status} ${isOn ? 'is-active' : ''}`}
-                onClick={() => select(a.id)}
-                aria-selected={isOn}
-                aria-current={isOn ? 'true' : undefined}
-                data-agent-id={a.id}
-                data-agent-status={a.status}
-                data-agent-active={isOn ? '1' : undefined}
-                data-agent-side-only="1"
-                aria-label={`${title}，${STATUS_LABEL[a.status]}${
-                  toolsHint ? `，${toolsHint}` : ''
-                }${dur ? `，${dur}` : ''}。在侧栏打开`}
-                title={[title, snippet, toolsHint, dur ? `用时 ${dur}` : '']
+                content={[title, snippet, toolsHint, dur ? `用时 ${dur}` : '']
                   .filter(Boolean)
                   .join('\n')}
               >
-                <div className="agent-team-card-top">
-                  <span className="agent-team-card-title">{title}</span>
-                  <span
-                    className={`agent-card-badge agent-card-badge--${a.status}`}
-                    aria-hidden
-                  >
-                    {STATUS_LABEL[a.status]}
-                  </span>
-                </div>
-                {/* compact：单行摘要+工具/时长，提高侧栏信息密度 */}
-                {compact ? (
-                  <div className="agent-team-card-meta-line">
-                    <span className="agent-team-card-summary agent-team-card-summary--inline">
-                      {snippet}
-                    </span>
-                    {toolsHint ? (
-                      <span className="agent-team-card-tools">{toolsHint}</span>
-                    ) : dur ? (
-                      <span className="agent-team-card-tools" title={`用时 ${dur}`}>
-                        {dur}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="agent-team-card-summary">
-                    {snippet}
-                    {dur ? (
-                      <span style={{ color: 'var(--text-tertiary)' }}>{` · ${dur}`}</span>
-                    ) : null}
-                  </div>
-                )}
-                {/* 进度条纯视觉：文案已进 button aria-label，避免 button 内嵌 progressbar 角色 */}
-                <div
-                  className="agent-team-card-progress"
-                  aria-hidden
-                  data-progress-pct={pct}
-                  data-progress-text={progressText}
+                <button
+                  id={optionId}
+                  type="button"
+                  role="option"
+                  tabIndex={isTabStop ? 0 : -1}
+                  className={`${styles.agentTeamCard} ${styles['agentTeamCard' + a.status.charAt(0).toUpperCase() + a.status.slice(1)] || ''} ${isOn ? styles.isActive : ''}`}
+                  onClick={() => select(a.id)}
+                  aria-selected={isOn}
+                  aria-current={isOn ? 'true' : undefined}
+                  data-agent-id={a.id}
+                  data-agent-status={a.status}
+                  data-agent-active={isOn ? '1' : undefined}
+                  data-agent-side-only="1"
+                  aria-label={`${title}，${STATUS_LABEL[a.status]}${
+                    toolsHint ? `，${toolsHint}` : ''
+                  }${dur ? `，${dur}` : ''}。在侧栏打开`}
                 >
-                  <div className="agent-team-card-bar">
-                    <div
-                      className={`agent-team-card-bar-fill agent-team-card-bar-fill--${a.status}`}
-                      style={{ width: `${pct}%` }}
-                    />
+                  <div className={styles.agentTeamCardTop}>
+                    <span className={styles.agentTeamCardTitle}>{title}</span>
+                    <span
+                      className={`${styles.agentCardBadge} ${styles['agentCardBadge' + a.status.charAt(0).toUpperCase() + a.status.slice(1)] || ''}`}
+                      aria-hidden
+                    >
+                      {STATUS_LABEL[a.status]}
+                    </span>
                   </div>
-                  {!compact && toolsHint ? (
-                    <span className="agent-team-card-tools">{toolsHint}</span>
-                  ) : null}
-                </div>
-              </button>
+                  {/* compact：单行摘要+工具/时长，提高侧栏信息密度 */}
+                  {compact ? (
+                    <div className={styles.agentTeamCardMetaLine}>
+                      <span className={`${styles.agentTeamCardSummary} ${styles.agentTeamCardSummaryInline}`}>
+                        {snippet}
+                      </span>
+                      {toolsHint ? (
+                        <span className={styles.agentTeamCardTools}>{toolsHint}</span>
+                      ) : dur ? (
+                        <span className={styles.agentTeamCardTools}>
+                          {dur}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className={styles.agentTeamCardSummary}>
+                      {snippet}
+                      {dur ? (
+                        <span style={{ color: 'var(--text-tertiary)' }}>{` · ${dur}`}</span>
+                      ) : null}
+                    </div>
+                  )}
+                  {/* 进度条纯视觉：文案已进 button aria-label，避免 button 内嵌 progressbar 角色 */}
+                  <div
+                    className={styles.agentTeamCardProgress}
+                    aria-hidden
+                    data-progress-pct={pct}
+                    data-progress-text={progressText}
+                  >
+                    <div className={styles.agentTeamCardBar}>
+                      <div
+                        className={`${styles.agentTeamCardBarFill} ${styles['agentTeamCardBarFill' + a.status.charAt(0).toUpperCase() + a.status.slice(1)] || ''}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {!compact && toolsHint ? (
+                      <span className={styles.agentTeamCardTools}>{toolsHint}</span>
+                    ) : null}
+                  </div>
+                </button>
+              </Tooltip>
             );
           })}
         </div>

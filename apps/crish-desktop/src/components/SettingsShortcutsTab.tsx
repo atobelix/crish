@@ -2,11 +2,13 @@
  * 设置 · 快捷键：查看与改键；成功静默，冲突/写入失败才提示。
  */
 import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import styles from './SettingsShortcutsTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 
 type Props = {
@@ -419,43 +421,45 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
                         title={sh.label}
                         desc={sh.desc}
                         control={
-                          <div className="settings-list-control settings-list-control--shortcuts" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}>
                             {customized && !isRecording ? (
+                              <Tooltip content={`恢复默认：${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}>
+                                <button
+                                  type="button"
+                                  className="settings-shortcuts-filter-clear"
+                                  onClick={() => restoreDefault(sh.id)}
+                                  aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                                >
+                                  还原
+                                </button>
+                              </Tooltip>
+                            ) : null}
+                            <Tooltip content={
+                              isRecording
+                                ? '按键录制中，Esc 取消'
+                                : `当前：${displayKey}，点击重新录制`
+                            }>
                               <button
                                 type="button"
-                                className="settings-shortcuts-filter-clear"
-                                onClick={() => restoreDefault(sh.id)}
-                                title={`恢复默认：${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
-                                aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                                ref={(el) => {
+                                  btnRefs.current[rowIndex] = el;
+                                }}
+                                onClick={() =>
+                                  setRecordingShortcutId(isRecording ? null : sh.id)
+                                }
+                                onFocus={() => setFocusIndex(rowIndex)}
+                                className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
+                                aria-pressed={isRecording}
+                                aria-label={
+                                  isRecording
+                                    ? `正在录制「${sh.label}」，按键设置，Esc 取消`
+                                    : `「${sh.label}」当前 ${displayKey}，点击重新录制`
+                                }
+                                tabIndex={tabIndex}
                               >
-                                还原
+                                {isRecording ? '按下新键…' : displayKey}
                               </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              ref={(el) => {
-                                btnRefs.current[rowIndex] = el;
-                              }}
-                              onClick={() =>
-                                setRecordingShortcutId(isRecording ? null : sh.id)
-                              }
-                              onFocus={() => setFocusIndex(rowIndex)}
-                              className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
-                              aria-pressed={isRecording}
-                              aria-label={
-                                isRecording
-                                  ? `正在录制「${sh.label}」，按键设置，Esc 取消`
-                                  : `「${sh.label}」当前 ${displayKey}，点击重新录制`
-                              }
-                              title={
-                                isRecording
-                                  ? '按键录制中，Esc 取消'
-                                  : `当前：${displayKey}，点击重新录制`
-                              }
-                              tabIndex={tabIndex}
-                            >
-                              {isRecording ? '按下新键…' : displayKey}
-                            </button>
+                            </Tooltip>
                           </div>
                         }
                       />

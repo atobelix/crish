@@ -12,6 +12,8 @@ import React, {
   useState,
 } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ApprovalAskCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import {
   approvalRiskBadgeLabel,
   approvalRiskKindLabel,
@@ -342,7 +344,9 @@ export const ApprovalAskCard: React.FC<Props> = ({
   return (
     <div
       ref={rootRef}
-      className={approvalCardClassName({ needsDouble, confirmArmed })}
+      className={`${styles.approvalCard} ${needsDouble ? styles.approvalCardElevated : ''} ${
+        confirmArmed ? styles.isConfirmArmed : ''
+      } ${approvalCardClassName({ needsDouble, confirmArmed })}`}
       role="region"
       aria-label={regionLabel}
       aria-labelledby={titleId}
@@ -358,49 +362,49 @@ export const ApprovalAskCard: React.FC<Props> = ({
       data-density={density}
       tabIndex={-1}
     >
-      <div className="approval-card-top">
-        <span className="approval-card-badge">
+      <div className={styles.approvalCardTop}>
+        <span className={styles.approvalCardBadge}>
           <Lucide.ShieldQuestion size={14} strokeWidth={1.75} aria-hidden />
           {badge}
         </span>
         <span
-          className="approval-card-status"
+          className={styles.approvalCardStatus}
           role="status"
           aria-live="polite"
           aria-atomic="true"
         >
           {statusText}
           {zoneHint ? (
-            <span className="approval-card-zone" title={zoneTitle}>
+            <span className={styles.approvalCardZone} title={zoneTitle}>
               {' '}
               · {zoneHint}
             </span>
           ) : null}
         </span>
       </div>
-      <div className="approval-card-title" id={titleId}>
+      <div className={styles.approvalCardTitle} id={titleId}>
         {question}
       </div>
       {showSummary ? (
-        <div className="approval-card-desc" id={descId}>
+        <div className={styles.approvalCardDesc} id={descId}>
           {summary}
         </div>
       ) : showReason ? (
         <div
-          className="approval-card-desc approval-card-reason"
+          className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
           id={descId}
           title={riskMeta?.riskReason}
         >
           {riskMeta?.riskReason}
         </div>
       ) : riskAriaSummary && riskAriaSummary !== question ? (
-        <div className="approval-card-desc" id={descId} hidden>
+        <div className={styles.approvalCardDesc} id={descId} hidden>
           {riskAriaSummary}
         </div>
       ) : null}
       {showSummary && showReason ? (
         <div
-          className="approval-card-desc approval-card-reason"
+          className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
           title={riskMeta?.riskReason}
         >
           {riskMeta?.riskReason}
@@ -408,7 +412,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
       ) : null}
       {chips.length > 0 ? (
         <div
-          className="approval-card-meta"
+          className={styles.approvalCardMeta}
           id={chipsId}
           role="list"
           aria-label="风险标签"
@@ -417,7 +421,17 @@ export const ApprovalAskCard: React.FC<Props> = ({
             <span
               key={chip.key}
               role="listitem"
-              className={`approval-card-chip approval-card-chip--${chip.tone}`}
+              className={`${styles.approvalCardChip} ${
+                chip.tone === 'warn'
+                  ? styles.approvalCardChipWarn
+                  : chip.tone === 'danger'
+                    ? styles.approvalCardChipDanger
+                    : chip.tone === 'info'
+                      ? styles.approvalCardChipInfo
+                      : chip.tone === 'neutral'
+                        ? styles.approvalCardChipNeutral
+                        : ''
+              }`}
               title={chip.label}
             >
               {chip.label}
@@ -426,23 +440,23 @@ export const ApprovalAskCard: React.FC<Props> = ({
         </div>
       ) : null}
       {hasCmd ? (
-        <div className="approval-card-cmd-wrap">
-          <span className="approval-card-cmd-label" id={cmdLabelId}>
+        <div className={styles.approvalCardCmdWrap}>
+          <span className={styles.approvalCardCmdLabel} id={cmdLabelId}>
             将执行
           </span>
-          <code className="approval-card-cmd" aria-labelledby={cmdLabelId}>
+          <code className={styles.approvalCardCmd} aria-labelledby={cmdLabelId}>
             {cmd}
           </code>
         </div>
       ) : null}
       {riskMeta?.recommendSnapshot ? (
-        <div className="approval-card-hint" role="note">
+        <div className={styles.approvalCardHint} role="note">
           建议先确认项目快照/可回退后再允许
         </div>
       ) : null}
       {confirmArmed ? (
         <div
-          className="approval-card-hint approval-card-hint--warn"
+          className={`${styles.approvalCardHint} ${styles.approvalCardHintWarn}`}
           id={warnId}
           role="alert"
           aria-live="assertive"
@@ -453,11 +467,11 @@ export const ApprovalAskCard: React.FC<Props> = ({
         </div>
       ) : null}
 
-      <label className="approval-card-note" htmlFor={noteId}>
+      <label className={styles.approvalCardNote} htmlFor={noteId}>
         <span>补充说明（可选，也可直接写你的要求）</span>
         <textarea
           id={noteId}
-          className="approval-card-input"
+          className={styles.approvalCardInput}
           rows={density === 'compact' && !note ? 1 : 2}
           maxLength={500}
           placeholder="例如：只允许这一次 / 不要改测试文件…"
@@ -467,45 +481,47 @@ export const ApprovalAskCard: React.FC<Props> = ({
           aria-label="补充说明（可选）"
         />
         {note.length > 0 || density === 'default' ? (
-          <span className="approval-card-count" aria-hidden={note.length === 0}>
+          <span className={styles.approvalCardCount} aria-hidden={note.length === 0}>
             {note.length}/500
           </span>
         ) : null}
       </label>
 
-      <div className="approval-card-actions" role="group" aria-label="审批操作">
+      <div className={styles.approvalCardActions} role="group" aria-label="审批操作">
         {confirmArmed ? (
-          <button
-            type="button"
-            className="approval-card-btn ghost approval-card-btn--disarm"
-            disabled={busy}
-            onClick={disarm}
-            title="取消二次确认准备（Esc）"
-            aria-label="取消二次确认准备"
-            aria-keyshortcuts="Escape"
-          >
-            取消准备
-          </button>
+          <Tooltip content="取消二次确认准备 (Esc)">
+            <button
+              type="button"
+              className={`${styles.approvalCardBtn} ${styles.ghost} ${styles.disarm}`}
+              disabled={busy}
+              onClick={disarm}
+              aria-label="取消二次确认准备"
+              aria-keyshortcuts="Escape"
+            >
+              取消准备
+            </button>
+          </Tooltip>
         ) : (
-          <button
-            type="button"
-            className="approval-card-btn ghost"
-            disabled={busy}
-            onClick={() => fireAllow(true)}
-            title="允许，并将命令前缀加入白名单"
-            aria-label={
-              needsDouble
-                ? '记住并准备允许（需再次确认）'
-                : '允许并记住命令前缀'
-            }
-            aria-busy={busy ? true : undefined}
-          >
-            {allowButtonLabel(needsDouble, confirmArmed, true)}
-          </button>
+          <Tooltip content="允许，并将命令前缀加入白名单">
+            <button
+              type="button"
+              className={`${styles.approvalCardBtn} ${styles.ghost}`}
+              disabled={busy}
+              onClick={() => fireAllow(true)}
+              aria-label={
+                needsDouble
+                  ? '记住并准备允许（需再次确认）'
+                  : '允许并记住命令前缀'
+              }
+              aria-busy={busy ? true : undefined}
+            >
+              {allowButtonLabel(needsDouble, confirmArmed, true)}
+            </button>
+          </Tooltip>
         )}
         <button
           type="button"
-          className="approval-card-btn deny"
+          className={`${styles.approvalCardBtn} ${styles.deny}`}
           disabled={busy}
           onClick={handleDeny}
           aria-label="拒绝此操作"
@@ -516,7 +532,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
         <button
           ref={allowBtnRef}
           type="button"
-          className={`approval-card-btn allow${confirmArmed ? ' is-armed' : ''}`}
+          className={`${styles.approvalCardBtn} ${styles.allow}${confirmArmed ? ` ${styles.isArmed}` : ''}`}
           disabled={busy}
           onClick={() => fireAllow(false)}
           aria-label={

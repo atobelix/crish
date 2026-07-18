@@ -1,0 +1,106 @@
+.moreWrap {
+  display: inline-block;
+  position: relative;
+  margin-left: -1px;
+}
+
+.moreBtn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: var(--radius-sm, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s, opacity 0.12s;
+  padding: 0;
+  opacity: 0.72;
+}
+
+.moreBtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* hover / open states */
+.moreBtn:hover,
+.moreBtn.isOpen,
+.moreBtn:focus-visible,
+.moreWrap:hover .moreBtn,
+.moreWrap.isOpen .moreBtn {
+  opacity: 1;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.moreBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Menu popup */
+.moreMenu {
+  position: absolute;
+  top: calc(100% + 3px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+  z-index: 40;
+  min-width: 148px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moreItem {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, color 0.15s ease;
+  box-sizing: border-box;
+
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: var(--font-size-xs, 12px);
+  min-height: 28px;
+}
+
+.moreItem svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.moreItem:hover,
+.moreItem:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.moreItem:hover svg,
+.moreItem:focus-visible svg {
+  color: var(--text-secondary);
+}
+
+.moreItem:focus-visible {
+  box-shadow: var(--focus-ring);
+}

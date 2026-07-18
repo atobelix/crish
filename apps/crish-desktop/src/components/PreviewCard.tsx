@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './PreviewCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import {
   canOpenExternally,
   clearPreviewHistory,
@@ -289,62 +291,66 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   const bookCount = bookmarks.length;
 
   return (
-    <div className="preview-browser" ref={rootRef}>
+    <div className={styles.browser} ref={rootRef}>
       <div
-        className="preview-browser-bar"
+        className={styles.bar}
         role="toolbar"
         aria-label="预览浏览器工具栏"
       >
-        <button
-          type="button"
-          className="preview-nav-btn"
-          title="后退"
-          disabled={!canBack}
-          onClick={goBack}
-          aria-label="后退"
-        >
-          <Lucide.ChevronLeft size={iconSz} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          className="preview-nav-btn"
-          title="前进"
-          disabled={!canForward}
-          onClick={goForward}
-          aria-label="前进"
-        >
-          <Lucide.ChevronRight size={iconSz} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          className="preview-nav-btn preview-nav-btn--hide-narrow"
-          title="主页（空白预览）"
-          onClick={goHome}
-          aria-label="主页"
-        >
-          <Lucide.Home size={iconSz} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          className="preview-nav-btn"
-          title="刷新"
-          disabled={blank || !frameSrc}
-          onClick={reload}
-          aria-label="刷新"
-          aria-busy={loading || undefined}
-        >
-          {loading ? (
-            <Lucide.Loader2
-              size={iconSz}
-              strokeWidth={1.75}
-              className="preview-spin"
-            />
-          ) : (
-            <Lucide.RotateCw size={iconSz} strokeWidth={1.75} />
-          )}
-        </button>
+        <Tooltip content="后退">
+          <button
+            type="button"
+            className={styles.navBtn}
+            disabled={!canBack}
+            onClick={goBack}
+            aria-label="后退"
+          >
+            <Lucide.ChevronLeft size={iconSz} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        <Tooltip content="前进">
+          <button
+            type="button"
+            className={styles.navBtn}
+            disabled={!canForward}
+            onClick={goForward}
+            aria-label="前进"
+          >
+            <Lucide.ChevronRight size={iconSz} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        <Tooltip content="主页（空白预览）">
+          <button
+            type="button"
+            className={`${styles.navBtn} ${styles.hideNarrow}`}
+            onClick={goHome}
+            aria-label="主页"
+          >
+            <Lucide.Home size={iconSz} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        <Tooltip content="刷新">
+          <button
+            type="button"
+            className={styles.navBtn}
+            disabled={blank || !frameSrc}
+            onClick={reload}
+            aria-label="刷新"
+            aria-busy={loading || undefined}
+          >
+            {loading ? (
+              <Lucide.Loader2
+                size={iconSz}
+                strokeWidth={1.75}
+                className={styles.spin}
+              />
+            ) : (
+              <Lucide.RotateCw size={iconSz} strokeWidth={1.75} />
+            )}
+          </button>
+        </Tooltip>
         <form
-          className="preview-url-form"
+          className={styles.urlForm}
           aria-label="预览地址栏"
           onSubmit={(e) => {
             e.preventDefault();
@@ -354,12 +360,12 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         >
           <Lucide.Globe
             size={iconSz}
-            className="preview-url-ico"
+            className={styles.urlIco}
             strokeWidth={1.75}
             aria-hidden
           />
           <input
-            className="preview-url-input"
+            className={styles.urlInput}
             value={urlInput}
             placeholder="localhost:5173 或 https://…"
             onChange={(e) => setUrlInput(e.target.value)}
@@ -370,188 +376,200 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             enterKeyHint="go"
           />
           {urlInput ? (
-            <button
-              type="button"
-              className="preview-url-clear"
-              title="清空"
-              onClick={() => setUrlInput('')}
-              aria-label="清空地址"
-            >
-              <Lucide.X size={12} strokeWidth={1.75} />
-            </button>
+            <Tooltip content="清空">
+              <button
+                type="button"
+                className={styles.urlClear}
+                onClick={() => setUrlInput('')}
+                aria-label="清空地址"
+              >
+                <Lucide.X size={12} strokeWidth={1.75} />
+              </button>
+            </Tooltip>
           ) : null}
         </form>
-        <button
-          type="button"
-          className={`preview-nav-btn ${bookmarked ? 'is-on' : ''}`}
-          title={
+        <Tooltip
+          content={
             !canBookmark
               ? '空白页无法加入书签'
               : bookmarked
                 ? '取消书签'
                 : '加入书签'
           }
-          onClick={onBookmark}
-          disabled={!canBookmark}
-          aria-label={bookmarked ? '取消书签' : '加入书签'}
-          aria-pressed={bookmarked}
         >
-          <Lucide.Star
-            size={iconSz}
-            strokeWidth={1.75}
-            fill={bookmarked ? 'currentColor' : 'none'}
-          />
-        </button>
-        <button
-          type="button"
-          className={`preview-nav-btn ${showHist ? 'is-on' : ''}`}
-          title="历史与书签"
-          data-hist-toggle=""
-          onClick={() => setShowHist((v) => !v)}
-          aria-label="历史与书签"
-          aria-expanded={showHist}
-          aria-controls={HIST_PANEL_ID}
-          aria-haspopup="dialog"
-        >
-          <Lucide.History size={iconSz} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          className="preview-nav-btn preview-nav-btn--hide-xnarrow"
-          title={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}
-          onClick={openExternal}
-          disabled={!canExternal}
-          aria-label="系统浏览器打开"
-        >
-          <Lucide.ExternalLink size={iconSz} strokeWidth={1.75} />
-        </button>
+          <button
+            type="button"
+            className={`${styles.navBtn} ${bookmarked ? styles.isOn : ''}`}
+            onClick={onBookmark}
+            disabled={!canBookmark}
+            aria-label={bookmarked ? '取消书签' : '加入书签'}
+            aria-pressed={bookmarked}
+          >
+            <Lucide.Star
+              size={iconSz}
+              strokeWidth={1.75}
+              fill={bookmarked ? 'currentColor' : 'none'}
+            />
+          </button>
+        </Tooltip>
+        <Tooltip content="历史与书签">
+          <button
+            type="button"
+            className={`${styles.navBtn} ${showHist ? styles.isOn : ''}`}
+            data-hist-toggle=""
+            onClick={() => setShowHist((v) => !v)}
+            aria-label="历史与书签"
+            aria-expanded={showHist}
+            aria-controls={HIST_PANEL_ID}
+            aria-haspopup="dialog"
+          >
+            <Lucide.History size={iconSz} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        <Tooltip content={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}>
+          <button
+            type="button"
+            className={`${styles.navBtn} ${styles.hideXNarrow}`}
+            onClick={openExternal}
+            disabled={!canExternal}
+            aria-label="系统浏览器打开"
+          >
+            <Lucide.ExternalLink size={iconSz} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
       </div>
 
       {!blank && hostLabel ? (
-        <div
-          className="preview-status-strip"
-          title={activeUrl}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <span
-            className={`preview-status-dot ${
-              loading ? 'is-loading' : loadError ? 'is-err' : 'is-ok'
-            }`}
-            aria-hidden
-          />
-          <span className="preview-status-host">{hostLabel}</span>
-          {!canEmbed ? (
-            <span className="preview-status-hint">不可嵌入</span>
-          ) : loadError ? (
-            <span className="preview-status-hint">加载失败</span>
-          ) : loading ? (
-            <span className="preview-status-hint">加载中</span>
-          ) : (
-            <span className="preview-status-hint">已就绪</span>
-          )}
-        </div>
+        <Tooltip content={activeUrl}>
+          <div
+            className={styles.statusStrip}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span
+              className={`${styles.statusDot} ${
+                loading ? styles.isLoading : loadError ? styles.isErr : styles.isOk
+              }`}
+              aria-hidden
+            />
+            <span className={styles.statusHost}>{hostLabel}</span>
+            {!canEmbed ? (
+              <span className={styles.statusHint}>不可嵌入</span>
+            ) : loadError ? (
+              <span className={styles.statusHint}>加载失败</span>
+            ) : loading ? (
+              <span className={styles.statusHint}>加载中</span>
+            ) : (
+              <span className={styles.statusHint}>已就绪</span>
+            )}
+          </div>
+        </Tooltip>
       ) : null}
 
       {showHist && (
         <div
           id={HIST_PANEL_ID}
           ref={histRef}
-          className="preview-hist-panel preview-hist-panel--float"
+          className={`${styles.histPanel} ${styles.histPanelFloat}`}
           role="dialog"
           aria-modal="true"
           aria-label="书签与历史"
         >
-          <div className="preview-hist-col">
-            <div className="preview-hist-title">
+          <div className={styles.histCol}>
+            <div className={styles.histTitle}>
               书签{bookCount > 0 ? `（${bookCount}）` : ''}
             </div>
             {bookmarks.length === 0 ? (
-              <div className="preview-hist-empty">暂无书签</div>
+              <div className={styles.histEmpty}>暂无书签</div>
             ) : (
               bookmarks.map((b) => {
                 const isCurrent = b.url === activeUrl && !blank;
                 return (
-                  <div key={b.url} className="preview-hist-row">
-                    <button
-                      type="button"
-                      className="preview-hist-item"
-                      title={b.url}
-                      onClick={() => pickHistory(b.url)}
-                      aria-current={isCurrent ? 'true' : undefined}
-                    >
-                      {isCurrent
-                        ? `当前 · ${b.title || b.url}`
-                        : b.title || b.url}
-                    </button>
-                    <button
-                      type="button"
-                      className="preview-hist-x"
-                      title="移除书签"
-                      aria-label={`移除书签 ${b.title || b.url}`}
-                      onClick={() => {
-                        removePreviewBookmark(b.url);
-                        setBookmarked(isPreviewBookmarked(activeUrl));
-                        setHistTick((n) => n + 1);
-                      }}
-                    >
-                      <Lucide.X size={12} />
-                    </button>
+                  <div key={b.url} className={styles.histRow}>
+                    <Tooltip content={b.url}>
+                      <button
+                        type="button"
+                        className={styles.histItem}
+                        onClick={() => pickHistory(b.url)}
+                        aria-current={isCurrent ? 'true' : undefined}
+                      >
+                        {isCurrent
+                          ? `当前 · ${b.title || b.url}`
+                          : b.title || b.url}
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="移除书签">
+                      <button
+                        type="button"
+                        className={styles.histX}
+                        aria-label={`移除书签 ${b.title || b.url}`}
+                        onClick={() => {
+                          removePreviewBookmark(b.url);
+                          setBookmarked(isPreviewBookmarked(activeUrl));
+                          setHistTick((n) => n + 1);
+                        }}
+                      >
+                        <Lucide.X size={12} />
+                      </button>
+                    </Tooltip>
                   </div>
                 );
               })
             )}
           </div>
-          <div className="preview-hist-col">
-            <div className="preview-hist-title-row">
-              <div className="preview-hist-title">
+          <div className={styles.histCol}>
+            <div className={styles.histTitleRow}>
+              <div className={styles.histTitle}>
                 最近访问{histCount > 0 ? `（${histCount}）` : ''}
               </div>
               {history.length > 0 ? (
-                <button
-                  type="button"
-                  className="preview-hist-clear"
-                  title="清空全部历史"
-                  aria-label="清空全部历史"
-                  onClick={() => {
-                    clearPreviewHistory();
-                    setHistTick((n) => n + 1);
-                  }}
-                >
-                  清空
-                </button>
+                <Tooltip content="清空全部历史">
+                  <button
+                    type="button"
+                    className={styles.histClear}
+                    aria-label="清空全部历史"
+                    onClick={() => {
+                      clearPreviewHistory();
+                      setHistTick((n) => n + 1);
+                    }}
+                  >
+                    清空
+                  </button>
+                </Tooltip>
               ) : null}
             </div>
             {history.length === 0 ? (
-              <div className="preview-hist-empty">暂无历史</div>
+              <div className={styles.histEmpty}>暂无历史</div>
             ) : (
               history.slice(0, 14).map((u) => {
                 const isCurrent = u === activeUrl && !blank;
                 const label = previewDisplayHost(u) || u;
                 return (
-                  <div key={u} className="preview-hist-row">
-                    <button
-                      type="button"
-                      className="preview-hist-item"
-                      title={u}
-                      onClick={() => pickHistory(u)}
-                      aria-current={isCurrent ? 'true' : undefined}
-                    >
-                      {isCurrent ? `当前 · ${label}` : label}
-                    </button>
-                    <button
-                      type="button"
-                      className="preview-hist-x"
-                      title="从历史移除"
-                      aria-label={`从历史移除 ${label}`}
-                      onClick={() => {
-                        removePreviewHistory(u);
-                        setHistTick((n) => n + 1);
-                      }}
-                    >
-                      <Lucide.X size={12} />
-                    </button>
+                  <div key={u} className={styles.histRow}>
+                    <Tooltip content={u}>
+                      <button
+                        type="button"
+                        className={styles.histItem}
+                        onClick={() => pickHistory(u)}
+                        aria-current={isCurrent ? 'true' : undefined}
+                      >
+                        {isCurrent ? `当前 · ${label}` : label}
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="从历史移除">
+                      <button
+                        type="button"
+                        className={styles.histX}
+                        aria-label={`从历史移除 ${label}`}
+                        onClick={() => {
+                          removePreviewHistory(u);
+                          setHistTick((n) => n + 1);
+                        }}
+                      >
+                        <Lucide.X size={12} />
+                      </button>
+                    </Tooltip>
                   </div>
                 );
               })
@@ -561,45 +579,45 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       )}
 
       <div
-        className="preview-browser-frame"
+        className={styles.frame}
         aria-busy={loading || undefined}
         aria-label="预览内容区"
       >
         {!canEmbed || blank || !frameSrc ? (
-          <div className="preview-browser-empty">
+          <div className={styles.empty}>
             <Lucide.Globe
               size={22}
               strokeWidth={1.5}
-              className="preview-empty-ico"
+              className={styles.emptyIco}
               aria-hidden
             />
-            <div className="preview-browser-empty-title">预览浏览器</div>
-            <div className="preview-browser-empty-desc">
+            <div className={styles.emptyTitle}>预览浏览器</div>
+            <div className={styles.emptyDesc}>
               输入本地地址（如 <code>localhost:5173</code>）或完整 URL。
-              <span className="preview-browser-note">
+              <span className={styles.browserNote}>
                 {' '}
                 部分站点禁止嵌入；可用外部打开。
               </span>
             </div>
-            <div className="preview-quick-row" role="group" aria-label="快捷本地地址">
+            <div className={styles.quickRow} role="group" aria-label="快捷本地地址">
               {QUICK_LOCAL.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  className="preview-quick-chip"
-                  onClick={() => navigate(u)}
-                  title={u}
-                >
-                  {u.replace(/^https?:\/\//, '')}
-                </button>
+                <Tooltip key={u} content={u}>
+                  <button
+                    type="button"
+                    className={styles.quickChip}
+                    onClick={() => navigate(u)}
+                  >
+                    {u.replace(/^https?:\/\//, '')}
+                  </button>
+                </Tooltip>
               ))}
             </div>
             {!canEmbed && !blank ? (
-              <div className="preview-browser-local-path">
-                <code className="preview-local-code">{activeUrl}</code>
+              <div className={styles.localPath}>
+                <code className={styles.localCode}>{activeUrl}</code>
                 <button
                   type="button"
-                  className="preview-quick-chip"
+                  className={styles.quickChip}
                   onClick={openExternal}
                   disabled={!canExternal}
                 >
@@ -609,26 +627,26 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             ) : null}
           </div>
         ) : loadError || !showFrame ? (
-          <div className="preview-browser-empty" role="alert">
+          <div className={styles.empty} role="alert">
             <Lucide.AlertTriangle
               size={20}
               strokeWidth={1.5}
-              className="preview-empty-ico"
+              className={styles.emptyIco}
               aria-hidden
             />
-            <div className="preview-browser-empty-title">
+            <div className={styles.emptyTitle}>
               {loadError ? '无法内嵌加载' : '预览空白'}
             </div>
-            <div className="preview-browser-empty-desc">
+            <div className={styles.emptyDesc}>
               {loadError
                 ? '站点可能设置了 X-Frame-Options / CSP，或地址无效。'
                 : '输入地址后在此内嵌打开；不支持的协议不会加载。'}
             </div>
-            <div className="preview-quick-row">
+            <div className={styles.quickRow}>
               {loadError ? (
                 <button
                   type="button"
-                  className="preview-quick-chip"
+                  className={styles.quickChip}
                   onClick={reload}
                 >
                   重试
@@ -637,7 +655,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
               {!blank ? (
                 <button
                   type="button"
-                  className="preview-quick-chip"
+                  className={styles.quickChip}
                   onClick={openExternal}
                   disabled={!canExternal}
                 >
@@ -652,7 +670,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             key={frameSrc}
             title="预览页面"
             src={frameSrc}
-            className="preview-iframe"
+            className={styles.iframe}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             referrerPolicy="no-referrer"
             // 禁止顶层导航逃逸；加载结果仅靠 onLoad / 超时收态

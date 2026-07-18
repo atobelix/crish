@@ -2,6 +2,7 @@ import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'reac
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 import { Tooltip } from './settings/SettingsUI';
+import styles from './SettingsSelect.module.css';
 
 export type SettingsSelectOption = {
   value: string;
@@ -133,7 +134,7 @@ export const SettingsSelect: React.FC<Props> = ({
       ? createPortal(
           <div
             ref={menuRef}
-            className="settings-select-menu settings-select-menu--portal"
+            className={`${styles.settingsSelectMenu} ${styles.settingsSelectMenuPortal}`}
             role="listbox"
             id={listId}
             onWheel={(e) => e.stopPropagation()}
@@ -147,8 +148,8 @@ export const SettingsSelect: React.FC<Props> = ({
               zIndex: 20050,
             }}
           >
-            {footer ? <div className="settings-select-header">{footer}</div> : null}
-            <div className="settings-select-scroll" style={{ maxHeight: pos.maxH - (footer ? 38 : 8) }}>
+            {footer ? <div className={styles.settingsSelectHeader}>{footer}</div> : null}
+            <div className={styles.settingsSelectScroll} style={{ maxHeight: pos.maxH - (footer ? 38 : 8) }}>
               {options.map((opt) => {
                 const showGroup = opt.group && opt.group !== lastGroup;
                 if (opt.group) lastGroup = opt.group;
@@ -156,27 +157,27 @@ export const SettingsSelect: React.FC<Props> = ({
                 return (
                   <React.Fragment key={opt.value}>
                     {showGroup ? (
-                      <div className="settings-select-group">{opt.group}</div>
+                      <div className={styles.settingsSelectGroup}>{opt.group}</div>
                     ) : null}
                     <Tooltip content={opt.hint} disabled={!opt.hint}>
                       <button
                         type="button"
                         role="option"
                         aria-selected={active}
-                        className={`settings-select-item ${active ? 'is-active' : ''}`}
+                        className={`${styles.settingsSelectItem}${active ? ` ${styles.isActive}` : ''}`}
                         onClick={() => {
                           onChange(opt.value);
                           setOpen(false);
                         }}
                       >
                         <span
-                          className="settings-select-item-label"
+                          className={styles.settingsSelectItemLabel}
                           style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
                         >
                           {opt.label}
                         </span>
                         {active ? (
-                          <Lucide.Check size={14} className="settings-select-check" />
+                          <Lucide.Check size={14} className={styles.settingsSelectCheck} />
                         ) : null}
                       </button>
                     </Tooltip>
@@ -184,7 +185,7 @@ export const SettingsSelect: React.FC<Props> = ({
                 );
               })}
               {!options.length ? (
-                <div className="settings-select-empty">暂无选项</div>
+                <div className={styles.settingsSelectEmpty}>暂无选项</div>
               ) : null}
             </div>
           </div>,
@@ -194,14 +195,14 @@ export const SettingsSelect: React.FC<Props> = ({
 
   return (
     <div
-      className={`settings-select ${open ? 'is-open' : ''} ${className || ''}`}
+      className={`${styles.settingsSelect}${open ? ` ${styles.isOpen}` : ''} ${className || ''}`}
       ref={rootRef}
     >
-      <div className="settings-select-trigger-row">
+      <div className={styles.settingsSelectTriggerRow}>
         <button
           ref={triggerRef}
           type="button"
-          className="settings-select-trigger"
+          className={styles.settingsSelectTrigger}
           disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -209,7 +210,7 @@ export const SettingsSelect: React.FC<Props> = ({
           onClick={toggle}
         >
           <span
-            className="settings-select-value"
+            className={styles.settingsSelectValue}
             style={
               valuePreviewFamily || selected?.previewFamily
                 ? { fontFamily: valuePreviewFamily || selected?.previewFamily }
@@ -218,7 +219,7 @@ export const SettingsSelect: React.FC<Props> = ({
           >
             {label}
           </span>
-          <Lucide.ChevronDown size={14} className="settings-select-chev" />
+          <Lucide.ChevronDown size={14} className={styles.settingsSelectChev} />
         </button>
         {trailing}
       </div>

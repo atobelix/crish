@@ -81,7 +81,7 @@ import {
   slashMissingArg,
 } from '../api/resolveSlashCommand';
 import { emitUiEvent } from '../api/uiEvents';
-import type { MessageToolApprovalMeta, SessionGoalMode } from '../store/types';
+import type { MessageToolApprovalMeta, MessageToolCall, SessionAgent, SessionGoalMode } from '../store/types';
 
 // ── Pure helpers (exported for unit tests; stream residual safety) ───────────
 
@@ -341,6 +341,7 @@ export interface UseChatStreamResult {
     input: string,
     userMsgId: string,
     sessionIdOverride?: string,
+    streamOptions?: StreamRequestOptions,
   ) => void;
   /**
    * 发送当前 composer；可选 textOverride 用于后续引导「直发」
@@ -513,7 +514,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const cancelled = mgr.consumeGoalCancelled(sid);
     const sess = getSessionById(sid);
     const asstText =
-      sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
+      sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId)?.text || '';
     if (sess?.goalMode?.active) {
       syncGoalTasksFromAssistantText(sid, asstText, sess.goalMode);
     }
@@ -566,10 +567,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       const st = useLayoutStore.getState();
       const sess = getSessionById(sid);
       const stillBusy = sess?.messages?.some(
-        (m) => m.sender === 'assistant' && m.status === 'processing',
+        (m: SessionMessage) => m.sender === 'assistant' && m.status === 'processing',
       );
       if (stillBusy) return;
-      const next = sess?.messages.find((m) => m.sender === 'user' && m.status === 'queued');
+      const next = sess?.messages.find((m: SessionMessage) => m.sender === 'user' && m.status === 'queued');
       if (next?.text) {
         st.setSessionMessageStatus(sid, next.id, 'processing');
         let prompt = next.text;
@@ -594,7 +595,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   ) => {
     // 空会话 / 空白 id：拒绝开流，绝不让 chatApi invent 远程 sess-* 壳
     const sid = resolveStreamSessionId(sessionIdOverride, getActiveSessionId());
-    if (!canStreamLocalSession(sid, !!sid && !!getSessionById(sid))) {
+    if (!sid || !canStreamLocalSession(sid, !!getSessionById(sid))) {
       return;
     }
 
@@ -774,7 +775,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         if (!info.subagentId) return;
         useLayoutStore.setState((state) => {
           const sess = state.sessionsById[sid];
-          const ag = sess?.agents?.find((a) => a.id === info.subagentId);
+          const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
           if (!ag) return;
           ag.messages = applySubagentEventToMessages(ag.messages || [], info.event);
         });
@@ -786,7 +787,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         let summary = info.summary || '';
         useLayoutStore.setState((state) => {
           const sess = state.sessionsById[sid];
-          const ag = sess?.agents?.find((a) => a.id === info.subagentId);
+          const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
           if (!ag) return;
           ag.status = info.status;
           if (info.summary) ag.summary = info.summary;
@@ -800,7 +801,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           const toolId = ag.parentToolCallId;
           if (toolId && sess?.messages) {
             for (const m of sess.messages) {
-              const tc = m.toolCalls?.find((t) => t.id === toolId);
+              const tc = m.toolCalls?.find((t: MessageToolCall) => t.id === toolId);
               if (!tc) continue;
               const st = String(info.status || '');
               const failed = /fail|error/i.test(st);
@@ -825,8 +826,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         // 热路径：O(1) getSessionById，避免 sessions.find
         const args =
           getSessionById(sid)
-            ?.messages?.find((m) => m.id === assistantMsgId)
-            ?.toolCalls?.find((t) => t.id === toolId)?.arguments || '';
+            ?.messages?.find((m: SessionMessage) => m.id === assistantMsgId)
+            ?.toolCalls?.find((t: MessageToolCall) => t.id === toolId)?.arguments || '';
 
         // 展示用清洗；diff：有引擎结构化结果就保留，否则仅 edit / unified diff 才解析
         const displayOut = sanitizeToolDisplayOutput(output || '');
@@ -851,7 +852,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
 
         // shell：仅镜像到终端缓冲区，不自动 openSidePanel / crish-open-terminal（避免每条命令抢焦点）
         if (isShellToolName(name) && displayOut) {
-          displayOut.split('\n').slice(0, 80).forEach((line) => addTerminalLine(line, sid));
+          displayOut.split('\n').slice(0, 80).forEach((line: string) => addTerminalLine(line, sid));
         }
 
         // 有可展示 diff 才推右侧变更（set 外调用，避免 immer 嵌套丢弃）
@@ -885,7 +886,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), chunk);
         // 有正文后清空占位思考，避免与正式输出叠在一起
         const cur = getSessionById(sid)
-          ?.messages.find((m) => m.id === assistantMsgId);
+          ?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
         if (cur?.thinking === '正在处理…') {
           thinkingBatcherRef.current?.drop(streamBatchKey(sid, assistantMsgId));
           store.updateMessageThinking(sid, assistantMsgId, '');
@@ -894,18 +895,18 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       onRunError: (message, kind, detail) => {
         // stop/切流后忽略；系统级提示不进助手气泡
         if (!assertLive()) return;
-        const asstErr = getSessionById(sid)?.messages.find((m) => m.id === assistantMsgId);
+        const asstErr = getSessionById(sid)?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
         const lastToolErr = (asstErr?.toolCalls || []).findLast(Boolean);
         recordStreamDiag({
           sessionId: sid,
-          runId: localRunId,
+          runId: localRunId || undefined,
           scope: kind || 'run-error',
           kind: kind || 'error',
           message,
           raw: detail || message,
           context: {
-            lastTool: lastToolErr?.name || null,
-            lastToolStatus: lastToolErr?.status || null,
+            lastTool: lastToolErr?.name ?? null,
+            lastToolStatus: lastToolErr?.status ?? null,
             toolCount: asstErr?.toolCalls?.length ?? 0,
           },
         });
@@ -935,21 +936,21 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const st = useLayoutStore.getState();
         const asst = getSessionById(sid)
-          ?.messages.find((m) => m.id === assistantMsgId);
+          ?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
         // 正常收口也记一条轻量诊断，方便对照「检查点后突然停」
         const lastTool = (asst?.toolCalls || []).findLast(Boolean);
-        const runningLeft = (asst?.toolCalls || []).filter((t) => t.status === 'running').length;
+        const runningLeft = (asst?.toolCalls || []).filter((t: MessageToolCall) => t.status === 'running').length;
         recordStreamDiag({
           sessionId: sid,
-          runId: localRunId,
+          runId: localRunId || undefined,
           scope: 'run-complete',
           kind: 'complete',
           message: runningLeft
             ? `流已收口，但仍有 ${runningLeft} 个工具显示运行中`
             : '流正常收口',
           context: {
-            lastTool: lastTool?.name || null,
-            lastToolStatus: lastTool?.status || null,
+            lastTool: lastTool?.name ?? null,
+            lastToolStatus: lastTool?.status ?? null,
             toolCount: asst?.toolCalls?.length ?? 0,
             gotRealText,
             elapsedSec: elapsed,
@@ -959,7 +960,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         // 有工具无正文时保持空文案，时间线已有工具行；无工具则给一句诚实说明
         if (asst && !gotRealText && !(asst.text || '').trim()) {
           const hasTools = (asst.toolCalls || []).some(
-            (t) => t.status === 'success' || t.status === 'error' || t.status === 'running',
+            (t: MessageToolCall) => t.status === 'success' || t.status === 'error' || t.status === 'running',
           );
           if (!hasTools) {
             const tip = '这一轮没有文字回复。若刚改过配置，请检查模型与网络。';
@@ -983,7 +984,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         // 清理正文里的思考占位，避免与思考行重复；对齐 blocks 时间线
         try {
           const latest = getSessionById(sid)
-            ?.messages.find((m) => m.id === assistantMsgId);
+            ?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
           const raw = latest?.text || '';
           const cleaned = stripThoughtPlaceholders(raw);
           if (cleaned !== raw) st.updateMessageText(sid, assistantMsgId, cleaned);
@@ -996,7 +997,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           // 收口时规范化时间线，保证持久化/重渲染与 live 一致
           useLayoutStore.setState((state) => {
             const sess = state.sessionsById[sid];
-            const msg = sess?.messages.find((m) => m.id === assistantMsgId);
+            const msg = sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
             if (!msg || msg.sender !== 'assistant') return;
             const n = normalizeAssistantTimeline({ ...msg });
             msg.blocks = n.blocks;
@@ -1023,7 +1024,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
               if (usage && (usage.sampleCount ?? 0) > 0 && (usage.promptTokens || usage.completionTokens)) {
                 const model = getActiveModelId() || 'unknown';
                 const cur = useLayoutStore.getState().tokenUsage;
-                const next = applyUsageDelta(cur, usage, (i, o) => estimateCostUsd(model, i, o));
+                const next = applyUsageDelta(cur, usage, (i: number, o: number) => estimateCostUsd(model, i, o));
                 const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
                 const dOut = Math.max(0, (next.output || 0) - (cur.output || 0));
                 const dCost = Math.max(0, (next.cost || 0) - (cur.cost || 0));
@@ -1044,8 +1045,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
             }
             if (!applied) {
               const sess = getSessionById(sid);
-              const userText = sess?.messages.find((m) => m.id === userMsgId)?.text || '';
-              const asstText = sess?.messages.find((m) => m.id === assistantMsgId)?.text || '';
+              const userText = sess?.messages.find((m: SessionMessage) => m.id === userMsgId)?.text || '';
+              const asstText = sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId)?.text || '';
               const approxIn = Math.max(1, Math.ceil(userText.length / 4));
               const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
               const model = getActiveModelId() || 'unknown';
@@ -1081,7 +1082,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           const liveGm = live?.goalMode;
           if (liveGm?.active) {
             const t =
-              live?.messages.find((m) => m.id === assistantMsgId)?.text || '';
+              live?.messages.find((m: SessionMessage) => m.id === assistantMsgId)?.text || '';
             syncGoalTasksFromAssistantText(sid, t, liveGm);
           }
         }
@@ -1119,7 +1120,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       patchSession(sid, { goalMode: null });
     }
     const asst = getSessionById(sid)
-      ?.messages.find((m) => m.id === cur.assistantMsgId);
+      ?.messages.find((m: SessionMessage) => m.id === cur.assistantMsgId);
     const placeholder = stopAssistantPlaceholderText(asst?.text);
     if (placeholder) {
       st.updateMessageText(sid, cur.assistantMsgId, placeholder);
@@ -1133,10 +1134,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     if (stopPatches.length) {
       useLayoutStore.setState((state) => {
         const msg = state.sessionsById[sid]
-          ?.messages.find((m) => m.id === cur.assistantMsgId);
+          ?.messages.find((m: SessionMessage) => m.id === cur.assistantMsgId);
         if (!msg?.toolCalls) return;
         for (const p of stopPatches) {
-          const tc = msg.toolCalls.find((t) => t.id === p.id);
+          const tc = msg.toolCalls.find((t: MessageToolCall) => t.id === p.id);
           if (!tc) continue;
           tc.status = p.status;
           tc.output = p.output;
@@ -1271,14 +1272,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           learnSid = createSessionCmd({ title: '新会话' });
         }
         learnSid = resolveStreamSessionId(learnSid, null);
-        if (!canStreamLocalSession(learnSid, !!learnSid && !!getSessionById(learnSid))) {
+        if (!learnSid || !canStreamLocalSession(learnSid, !!getSessionById(learnSid))) {
           onShowToast('会话不可用，规则已保存但未写入时间线');
           return;
         }
+        const validLearnSid = learnSid;
         const userMsgId = `user-msg-${Date.now()}`;
         const asstMsgId = `assistant-msg-${Date.now()}-learn`;
         useLayoutStore.setState((state) => {
-          const sess = state.sessionsById[learnSid!];
+          const sess = state.sessionsById[validLearnSid];
           if (!ensureSessionMessages(sess)) return;
           sess.messages.push({
             id: userMsgId,
@@ -1305,10 +1307,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     // createSession 只复用本地空壳或 mint 本地 id，不 invent 远程 daemon 壳
     let sessionId = resolveStreamSessionId(null, activeSessionId);
     if (!sessionId) {
-      sessionId = createSessionCmd({ title: '新会话' });
+      sessionId = createSessionCmd({ title: '新会话' }) || '';
     }
-    sessionId = resolveStreamSessionId(sessionId, null);
-    if (!canStreamLocalSession(sessionId, !!sessionId && !!getSessionById(sessionId))) {
+    if (!sessionId || !canStreamLocalSession(sessionId, !!getSessionById(sessionId))) {
       setPickerInlineError('会话不可用，请新建会话后重试');
       return;
     }
@@ -1352,7 +1353,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     let finalStreamOptions = streamOptions;
     if (finalStreamOptions?.content?.length && annBlock) {
       const parts = [...finalStreamOptions.content];
-      const firstText = parts.findIndex((p) => p.type === 'text');
+      const firstText = parts.findIndex((p: ChatContentPart) => p.type === 'text');
       const head = firstText >= 0 ? parts[firstText] : undefined;
       if (head && head.type === 'text') {
         parts[firstText] = {
@@ -1376,7 +1377,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     }
     if (activeAttachments.length > 0) {
       // 气泡仅轻量展示附件名（图片不把 dataUrl 塞进消息正文）
-      displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${activeAttachments.map((a) => a.name).join('、')}`;
+      displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${activeAttachments.map((a: ChatAttachment) => a.name).join('、')}`;
     }
 
     setChatInput('');
@@ -1392,13 +1393,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       return;
     }
     const sessMsgs = Array.isArray(sessLookup.messages) ? sessLookup.messages : [];
-    const isAiBusy = sessMsgs.some((m) => m.status === 'processing');
+    const isAiBusy = sessMsgs.some((m: SessionMessage) => m.status === 'processing');
 
     // 标题仍为默认时自动命名（首条优先；不覆盖用户手动 rename）
     {
       const sess = sessLookup;
       if (sess && isDefaultSessionTitle(sess.title)) {
-        const priorUser = sessMsgs.find((m) => m.sender === 'user' && (m.text || '').trim());
+        const priorUser = sessMsgs.find((m: SessionMessage) => m.sender === 'user' && (m.text || '').trim());
         const seed = (priorUser?.text || rawInput).trim();
         const nextTitle = deriveSessionTitle(seed);
         if (!isDefaultSessionTitle(nextTitle)) {

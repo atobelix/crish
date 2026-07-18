@@ -10,6 +10,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ChatMessageRow.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
 import {
   ChatToolStack,
@@ -301,22 +303,24 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
 
   return (
     <div
-      className={`msg-row msg-row-user${isSearchHit ? ' msg-search-hit' : ''}${isPinned ? ' is-pinned' : ''}`}
+      className={`${styles.row} ${styles.rowUser}${isSearchHit ? ` ${styles.searchHit}` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
       role="article"
       aria-label={rowAria}
     >
-      <div className="msg-user-stack">
+      <div className={styles.userStack}>
         {isPinned ? (
-          <span className="msg-pin-badge" title="已固定" aria-hidden="true">
-            <Lucide.Pin size={11} strokeWidth={2.25} />
-            已固定
-          </span>
+          <Tooltip content="已固定">
+            <span className={styles.pinBadge} aria-hidden="true">
+              <Lucide.Pin size={11} strokeWidth={2.25} />
+              已固定
+            </span>
+          </Tooltip>
         ) : null}
         <div
-          className={`msg-user-bubble ${isExpanded ? 'expanded' : ''}`}
+          className={`${styles.userBubble} ${isExpanded ? 'expanded' : ''}`}
           onClick={toggleExpand}
           onKeyDown={onBubbleKeyDown}
           style={{ cursor: isLong ? 'pointer' : 'default' }}
@@ -325,34 +329,36 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           aria-expanded={isLong ? isExpanded : undefined}
           aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
         >
-          <span className="msg-user-text">{displayText}</span>
+          <span className={styles.userText}>{displayText}</span>
           {msg.status === 'queued' && (
-            <span className="msg-status-badge queued">排队中</span>
+            <span className={styles.queued}>排队中</span>
           )}
         </div>
-        <div className="msg-user-meta">
-          <span className="msg-time">{formatTime(msg.timestamp)}</span>
+        <div className={styles.userMeta}>
+          <span className={styles.time}>{formatTime(msg.timestamp)}</span>
           {/* 默认只留复制；已固定时显示取消固定。钉/撤回走右键或悬停 secondary */}
-          <button
-            type="button"
-            className={`msg-icon-btn${copied ? ' is-copied' : ''}`}
-            title={copied ? '已复制' : '复制'}
-            aria-label={copied ? '已复制' : '复制消息'}
-            onClick={handleCopy}
-          >
-            {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
-          </button>
-          {isPinned ? (
+          <Tooltip content={copied ? '已复制' : '复制消息'}>
             <button
               type="button"
-              className="msg-icon-btn is-pinned-active"
-              title={pinLabels.title}
-              aria-label={pinLabels.ariaLabel}
-              aria-pressed
-              onClick={() => onTogglePin(msg.id)}
+              className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
+              aria-label={copied ? '已复制' : '复制消息'}
+              onClick={handleCopy}
             >
-              <Lucide.PinOff size={14} />
+              {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
             </button>
+          </Tooltip>
+          {isPinned ? (
+            <Tooltip content={pinLabels.title}>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.isPinnedActive}`}
+                aria-label={pinLabels.ariaLabel}
+                aria-pressed
+                onClick={() => onTogglePin(msg.id)}
+              >
+                <Lucide.PinOff size={14} />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
@@ -527,7 +533,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 
   return (
     <div
-      className={`msg-row msg-row-assistant ${isFollowUp ? 'is-followup' : ''}${isSearchHit ? ' msg-search-hit' : ''}${isPinned ? ' is-pinned' : ''}`}
+      className={`${styles.row} ${styles.rowAssistant} ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit}` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
       data-msg-id={msg.id}
       data-role="assistant"
       data-pinned={isPinned ? 'true' : undefined}
@@ -536,20 +542,22 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       aria-label={rowAria}
     >
       {isPinned ? (
-        <span className="msg-pin-badge" title="已固定" aria-hidden="true">
-          <Lucide.Pin size={11} strokeWidth={2.25} />
-          已固定
-        </span>
+        <Tooltip content="已固定">
+          <span className={styles.pinBadge} aria-hidden="true">
+            <Lucide.Pin size={11} strokeWidth={2.25} />
+            已固定
+          </span>
+        </Tooltip>
       ) : null}
       {/* 角色徽标已去掉（助手/你 不展示，靠气泡与排版区分） */}
       {/* 思考：默认折叠；折叠时不挂 body，展开后仍受 DOM 字符预算 */}
       {showThinking ? (
         <div
-          className={`msg-thinking-fold ${isThinkingMsg ? 'is-live' : ''}${thinkingBodyOpen ? ' is-open' : ''}`}
+          className={`${styles.thinkingFold} ${isThinkingMsg ? styles.isLive : ''}${thinkingBodyOpen ? ` ${styles.isOpen}` : ''}`}
         >
           <button
             type="button"
-            className="msg-thinking-fold-sum"
+            className={styles.thinkingFoldSum}
             aria-expanded={thinkingBodyOpen}
             aria-controls={thinkingBodyOpen ? thinkingBodyId : undefined}
             aria-label={thinkingFoldAria({
@@ -571,44 +579,56 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             ) : (
               <Lucide.ChevronRight
                 size={14}
-                className={`msg-thinking-chevron${thinkingBodyOpen ? ' is-open' : ''}`}
+                className={`${styles.thinkingChevron}${thinkingBodyOpen ? ` ${styles.isOpen}` : ''}`}
                 aria-hidden
               />
             )}
-            <span className="msg-thinking-fold-label">
+            <span className={styles.thinkingFoldLabel}>
               {isThinkingMsg ? '思考中' : '思考'}
               {isThinkingMsg ? (
-                <span className="msg-thinking-sec"> · {thinkingSeconds}s</span>
+                <span className={styles.thinkingSec}> · {thinkingSeconds}s</span>
               ) : thinkingBudget.truncated && thinkingBodyOpen ? (
-                <span className="msg-thinking-sec"> · 已截断</span>
+                <span className={styles.thinkingSec}> · 已截断</span>
               ) : null}
             </span>
           </button>
           {thinkingBodyOpen ? (
-            <div className="msg-thinking-fold-body" id={thinkingBodyId}>
+            <div className={styles.thinkingFoldBody} id={thinkingBodyId}>
               {thinkingBudget.text}
             </div>
           ) : null}
         </div>
       ) : null}
 
-      <div className="msg-assistant-body">
+      <div className={styles.assistantBody}>
         {(() => {
           try {
             const timeline = buildAssistantTimeline(msg);
             if (!timeline.length) {
-              const fallback = stripThoughtPlaceholders(msg.text || '');
-              if (!fallback.trim()) return null;
-              return (
-                <div className="msg-timeline-text">
-                  <div
-                    className={`msg-assistant-text md-rendered ${isThinkingMsg ? 'is-streaming' : ''}`}
-                    dangerouslySetInnerHTML={{
-                      __html: parseMarkdownToHtml(fallback),
-                    }}
-                  />
-                </div>
-              );
+               const fallback = stripThoughtPlaceholders(msg.text || '');
+               if (!fallback.trim()) return null;
+               if (isThinkingMsg) {
+                 return (
+                   <div className={styles.timelineText}>
+                     <div
+                       className={`${styles.assistantText} ${styles.isStreaming}`}
+                       style={{ whiteSpace: 'pre-wrap' }}
+                     >
+                       {fallback}
+                     </div>
+                   </div>
+                 );
+               }
+               return (
+                 <div className={styles.timelineText}>
+                   <div
+                     className={`${styles.assistantText} md-rendered`}
+                     dangerouslySetInnerHTML={{
+                       __html: parseMarkdownToHtml(fallback),
+                     }}
+                   />
+                 </div>
+               );
             }
             const textItems = timeline.filter((i) => i.kind === 'text');
             const lastTextKey = textItems.length
@@ -621,22 +641,34 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                 if (!bodyText.trim()) return null;
                 const imgs = extractImageRefs(bodyText);
                 const streaming = isThinkingMsg && item.key === lastTextKey;
+                if (streaming) {
+                  return (
+                    <div key={item.key} className={styles.timelineText}>
+                      <div
+                        className={`${styles.assistantText} ${styles.isStreaming}`}
+                        style={{ whiteSpace: 'pre-wrap' }}
+                      >
+                        {bodyText}
+                      </div>
+                    </div>
+                  );
+                }
                 return (
-                  <div key={item.key} className="msg-timeline-text">
+                  <div key={item.key} className={styles.timelineText}>
                     <div
-                      className={`msg-assistant-text md-rendered ${streaming ? 'is-streaming' : ''}`}
+                      className={`${styles.assistantText} md-rendered`}
                       dangerouslySetInnerHTML={{
                         __html: parseMarkdownToHtml(bodyText),
                       }}
                     />
                     {imgs.length > 0 && (
-                      <div className="msg-inline-images">
+                      <div className={styles.inlineImages}>
                         {imgs.map((src) => (
                           <img
                             key={src}
                             src={src}
                             alt=""
-                            className="md-img"
+                            className={styles.mdImg}
                             loading="lazy"
                           />
                         ))}
@@ -653,7 +685,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                 toolStackProps,
               );
               return (
-                <div key={item.key} className="msg-timeline-tools">
+                <div key={item.key} className={styles.timelineTools}>
                   <ChatToolStack {...host} />
                 </div>
               );
@@ -662,7 +694,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             console.error('[ChatMessageRow] timeline render', err);
             const fallback = stripThoughtPlaceholders(msg.text || '');
             return fallback ? (
-              <div className="msg-assistant-text md-rendered">{fallback}</div>
+              <div className={`${styles.assistantText} md-rendered`}>{fallback}</div>
             ) : null;
           }
         })()}
@@ -675,10 +707,10 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           !planApproved &&
           isLastAssistant &&
           looksLikePlan(assistantCopyText(msg) || msg.text || '') ? (
-            <div className="msg-plan-approve-row">
+            <div className={styles.planApproveRow}>
               <button
                 type="button"
-                className="msg-plan-approve-chip"
+                className={styles.planApproveChip}
                 onClick={() => {
                   setPermissionMode('ask');
                   setPlanApproved(true);
@@ -688,40 +720,43 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
               </button>
             </div>
           ) : null}
-          <div className="msg-assistant-meta">
-            <span className="msg-time">{formatTime(msg.timestamp)}</span>
+          <div className={styles.assistantMeta}>
+            <span className={styles.time}>{formatTime(msg.timestamp)}</span>
             {/* 精简：复制 + 最后一条可重试；钉/分支不再常驻刷屏 */}
-            <button
-              type="button"
-              className={`msg-icon-btn${copied ? ' is-copied' : ''}`}
-              title={copied ? '已复制' : '复制正文'}
-              aria-label={copied ? '已复制' : '复制正文'}
-              onClick={handleCopy}
-            >
-              {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
-            </button>
-            {isLastAssistant ? (
+            <Tooltip content={copied ? '已复制' : '复制正文'}>
               <button
                 type="button"
-                className="msg-icon-btn"
-                title="重新生成"
-                aria-label="重新生成"
-                onClick={() => onRegenerate(msg.id)}
+                className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
+                aria-label={copied ? '已复制' : '复制正文'}
+                onClick={handleCopy}
               >
-                <Lucide.RefreshCw size={14} />
+                {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
               </button>
+            </Tooltip>
+            {isLastAssistant ? (
+              <Tooltip content="重新生成">
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label="重新生成"
+                  onClick={() => onRegenerate(msg.id)}
+                >
+                  <Lucide.RefreshCw size={14} />
+                </button>
+              </Tooltip>
             ) : null}
             {isPinned ? (
-              <button
-                type="button"
-                className="msg-icon-btn is-pinned-active"
-                title={pinLabels.title}
-                aria-label={pinLabels.ariaLabel}
-                aria-pressed
-                onClick={() => onTogglePin(msg.id)}
-              >
-                <Lucide.PinOff size={14} />
-              </button>
+              <Tooltip content={pinLabels.title}>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${styles.isPinnedActive}`}
+                  aria-label={pinLabels.ariaLabel}
+                  aria-pressed
+                  onClick={() => onTogglePin(msg.id)}
+                >
+                  <Lucide.PinOff size={14} />
+                </button>
+              </Tooltip>
             ) : null}
           </div>
           {(() => {
@@ -742,55 +777,58 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             if (!suggestions.length) return null;
             return (
               <div
-                className="msg-followup-row"
+                className={styles.followupRow}
                 role="group"
                 aria-label="后续建议"
                 data-followup-for={msg.id}
               >
-                <div className="msg-followup-chips" role="list">
+                <div className={styles.followupChips} role="list">
                   {suggestions.map((s) => (
                     <div
                       key={s.id}
-                      className="msg-followup-chip"
+                      className={styles.followupChip}
                       role="listitem"
                       data-followup-id={s.id}
                     >
-                      <button
-                        type="button"
-                        className="msg-followup-chip-main"
-                        title={s.prompt}
-                        aria-label={`填入：${s.label}`}
-                        onClick={() => {
-                          onFillFollowUp?.(s.prompt);
-                          focusChatComposer();
-                        }}
-                      >
-                        <span className="msg-followup-chip-label">{s.label}</span>
-                      </button>
-                      {onSendFollowUp ? (
+                      <Tooltip content={s.prompt}>
                         <button
                           type="button"
-                          className="msg-followup-chip-send"
-                          title="直接发送"
-                          aria-label={`直接发送：${s.label}`}
-                          onClick={() => onSendFollowUp(s.prompt)}
+                          className={styles.followupChipMain}
+                          aria-label={`填入：${s.label}`}
+                          onClick={() => {
+                            onFillFollowUp?.(s.prompt);
+                            focusChatComposer();
+                          }}
                         >
-                          <Lucide.Send size={12} strokeWidth={2} aria-hidden />
+                          <span className={styles.followupChipLabel}>{s.label}</span>
                         </button>
+                      </Tooltip>
+                      {onSendFollowUp ? (
+                        <Tooltip content="直接发送">
+                          <button
+                            type="button"
+                            className={styles.followupChipSend}
+                            aria-label={`直接发送：${s.label}`}
+                            onClick={() => onSendFollowUp(s.prompt)}
+                          >
+                            <Lucide.Send size={12} strokeWidth={2} aria-hidden />
+                          </button>
+                        </Tooltip>
                       ) : null}
                     </div>
                   ))}
                 </div>
                 {onDismissFollowUp ? (
-                  <button
-                    type="button"
-                    className="msg-followup-dismiss msg-icon-btn"
-                    title="关闭建议"
-                    aria-label="关闭后续建议"
-                    onClick={() => onDismissFollowUp(msg.id)}
-                  >
-                    <Lucide.X size={14} aria-hidden />
-                  </button>
+                  <Tooltip content="关闭建议">
+                    <button
+                      type="button"
+                      className={`${styles.followupDismiss} ${styles.iconBtn}`}
+                      aria-label="关闭后续建议"
+                      onClick={() => onDismissFollowUp(msg.id)}
+                    >
+                      <Lucide.X size={14} aria-hidden />
+                    </button>
+                  </Tooltip>
                 ) : null}
               </div>
             );

@@ -289,7 +289,7 @@ describe('resolveSessionProgress / resolveSessionProgressItems', () => {
   it('falls back to assistant checklist when goal tasks empty', () => {
     const session = {
       messages: [
-        { id: 'a1', sender: 'assistant', text: '- [x] only-msg' },
+        { id: 'a1', sender: 'assistant', text: '- [x] only-msg', timestamp: 0 },
       ],
       goalMode: { active: true, goal: 'g', iteration: 0, tasks: [] },
     } as Pick<SessionState, 'messages' | 'goalMode'>;

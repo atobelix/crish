@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import styles from './RuntimePanel.module.css';
 import * as Lucide from 'lucide-react';
 import type { CronJob } from '../api/clientApi';
 import { useLayoutStore } from '../store/layoutStore';
@@ -398,13 +399,13 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   if (loading) {
     return (
       <div
-        className="rt-panel is-loading"
+        className={`${styles.panel} ${styles.isLoading}`}
         role="status"
         aria-busy="true"
         aria-label="加载运行状态"
       >
-        <div className="loading-spinner rt-spinner" aria-hidden />
-        <span className="rt-empty rt-empty--tight">加载中…</span>
+        <div className={`loading-spinner ${styles.spinner}`} aria-hidden />
+        <span className={`${styles.empty} ${styles.emptyTight}`}>加载中…</span>
       </div>
     );
   }
@@ -418,71 +419,71 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const engineTitle = formatEngineStatusTitle(engineOnline);
 
   return (
-    <div className="rt-panel" role="region" aria-label="运行状态">
+    <div className={styles.panel} role="region" aria-label="运行状态">
       {/* 引擎状态已在 float header 展示；面板内仅一行精简状态 */}
-      <section className="rt-section rt-section--engine" aria-labelledby="rt-sec-engine">
-        <div className="rt-section-head">
-          <h4 id="rt-sec-engine" className="rt-section-title">
+      <section className={`${styles.section} ${styles.sectionEngine}`} aria-labelledby="rt-sec-engine">
+        <div className={styles.sectionHead}>
+          <h4 id="rt-sec-engine" className={styles.sectionTitle}>
             引擎
           </h4>
           <div
-            className="rt-engine-status"
+            className={styles.engineStatus}
             role="status"
             aria-live="polite"
             aria-label={engineFull}
             title={engineTitle}
           >
-            <span className={`rt-dot ${engineOnline ? 'on' : 'off'}`} aria-hidden />
-            <span className="rt-row-meta rt-engine-meta">{engineShort}</span>
+            <span className={`${styles.dot} ${engineOnline ? styles.on : styles.off}`} aria-hidden />
+            <span className={`${styles.rowMeta} ${styles.engineMeta}`}>{engineShort}</span>
           </div>
         </div>
       </section>
 
-      <section className="rt-section rt-section--usage" aria-labelledby="rt-sec-usage">
-        <div className="rt-section-head">
-          <h4 id="rt-sec-usage" className="rt-section-title">
+      <section className={`${styles.section} ${styles.sectionUsage}`} aria-labelledby="rt-sec-usage">
+        <div className={styles.sectionHead}>
+          <h4 id="rt-sec-usage" className={styles.sectionTitle}>
             用量
           </h4>
-          <span className="rt-row-meta" aria-label={formatUsageRingAria(tokenPercent)}>
+          <span className={styles.rowMeta} aria-label={formatUsageRingAria(tokenPercent)}>
             {tokenPercent}%
           </span>
         </div>
-        <div className="rt-usage rt-usage--compact">
-          <div className="rt-usage-stats">
-            <div className="rt-stat-row">
-              <span className="rt-stat-label">输入</span>
-              <span className="rt-stat-value">{tokenUsage.input.toLocaleString()}</span>
+        <div className={`${styles.usage} ${styles.usageCompact}`}>
+          <div className={styles.usageStats}>
+            <div className={styles.statRow}>
+              <span className={styles.statLabel}>输入</span>
+              <span className={styles.statValue}>{tokenUsage.input.toLocaleString()}</span>
             </div>
-            <div className="rt-stat-row">
-              <span className="rt-stat-label">输出</span>
-              <span className="rt-stat-value">{tokenUsage.output.toLocaleString()}</span>
+            <div className={styles.statRow}>
+              <span className={styles.statLabel}>输出</span>
+              <span className={styles.statValue}>{tokenUsage.output.toLocaleString()}</span>
             </div>
-            <div className="rt-stat-row is-total">
-              <span className="rt-stat-label">费用</span>
-              <span className="rt-stat-value">${estimated.toFixed(4)}</span>
+            <div className={`${styles.statRow} ${styles.isTotal}`}>
+              <span className={styles.statLabel}>费用</span>
+              <span className={styles.statValue}>{"$"}{estimated.toFixed(4)}</span>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rt-section" aria-labelledby="rt-sec-live">
-        <div className="rt-section-head">
-          <h4 id="rt-sec-live" className="rt-section-title">
+      <section className={styles.section} aria-labelledby="rt-sec-live">
+        <div className={styles.sectionHead}>
+          <h4 id="rt-sec-live" className={styles.sectionTitle}>
             活动任务
           </h4>
           {liveCountLabel ? (
-            <span className="rt-row-meta" aria-live="polite" aria-label={`${liveCountLabel} 个进行中`}>
+            <span className={styles.rowMeta} aria-live="polite" aria-label={`${liveCountLabel} 个进行中`}>
               {liveCountLabel}
             </span>
           ) : null}
         </div>
         {liveTasks.length === 0 ? (
-          <div className="rt-empty" role="status">
+          <div className={styles.empty} role="status">
             {emptyLiveTasksHint(engineOnline)}
           </div>
         ) : (
           <div
-            className={`rt-list${liveTasks.length > 4 ? ' rt-list--scroll' : ''}`}
+            className={`${styles.list} ${liveTasks.length > 4 ? styles.listScroll : ''}`}
             role="list"
             aria-label="进行中的任务"
           >
@@ -492,7 +493,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               return (
                 <div
                   key={wk.id}
-                  className={`rt-row is-live${clickable ? ' is-clickable' : ''}`}
+                  className={`${styles.row} ${styles.isLive}${clickable ? ` ${styles.isClickable}` : ''}`}
                   role={clickable ? 'button' : 'listitem'}
                   tabIndex={clickable ? 0 : undefined}
                   title={clickable ? '打开对应会话' : undefined}
@@ -512,15 +513,15 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     }
                   }}
                 >
-                  <div className="rt-row-main">
-                    <div className="loading-spinner rt-spinner" aria-hidden />
-                    <div className="rt-row-text">
-                      <span className="rt-row-title">{wk.taskName}</span>
-                      <span className="rt-row-meta">已运行 {elapsedText}</span>
+                  <div className={styles.rowMain}>
+                    <div className={`loading-spinner ${styles.spinner}`} aria-hidden />
+                    <div className={styles.rowText}>
+                      <span className={styles.rowTitle}>{wk.taskName}</span>
+                      <span className={styles.rowMeta}>已运行 {elapsedText}</span>
                     </div>
                   </div>
                   {clickable ? (
-                    <Lucide.ChevronRight size={16} className="rt-row-chevron" aria-hidden />
+                    <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
                   ) : null}
                 </div>
               );
@@ -529,24 +530,24 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         )}
       </section>
 
-      <section className="rt-section" aria-labelledby="rt-sec-bg">
-        <div className="rt-section-head">
-          <h4 id="rt-sec-bg" className="rt-section-title">
+      <section className={styles.section} aria-labelledby="rt-sec-bg">
+        <div className={styles.sectionHead}>
+          <h4 id="rt-sec-bg" className={styles.sectionTitle}>
             后台常驻
           </h4>
           {bgCountLabel ? (
-            <span className="rt-row-meta" aria-live="polite" aria-label={`${bgCountLabel} 个后台任务`}>
+            <span className={styles.rowMeta} aria-live="polite" aria-label={`${bgCountLabel} 个后台任务`}>
               {bgCountLabel}
             </span>
           ) : null}
         </div>
         {bgTasks.length === 0 ? (
-          <div className="rt-empty" role="status">
+          <div className={styles.empty} role="status">
             {emptyBgTasksHint(engineOnline)}
           </div>
         ) : (
           <div
-            className={`rt-list${bgTasks.length > 4 ? ' rt-list--scroll' : ''}`}
+            className={`${styles.list}${bgTasks.length > 4 ? ` ${styles.listScroll}` : ''}`}
             role="list"
             aria-label="后台常驻任务"
           >
@@ -561,7 +562,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               return (
                 <div
                   key={t.id}
-                  className={`rt-row is-clickable${opening ? ' is-opening' : ''}`}
+                  className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
                   role="button"
                   tabIndex={0}
                   title="在终端中查看输出"
@@ -577,14 +578,14 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     }
                   }}
                 >
-                  <div className="rt-row-main">
-                    <Lucide.Terminal size={16} className="rt-row-ico" aria-hidden />
-                    <div className="rt-row-text">
-                      <span className="rt-row-title">{t.label}</span>
-                      <span className="rt-row-meta">{meta}</span>
+                  <div className={styles.rowMain}>
+                    <Lucide.Terminal size={16} className={styles.rowIco} aria-hidden />
+                    <div className={styles.rowText}>
+                      <span className={styles.rowTitle}>{t.label}</span>
+                      <span className={styles.rowMeta}>{meta}</span>
                     </div>
                   </div>
-                  <Lucide.ChevronRight size={16} className="rt-row-chevron" aria-hidden />
+                  <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
                 </div>
               );
             })}
@@ -593,14 +594,14 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       </section>
 
       {pendingApprovals.length > 0 && (
-        <section className="rt-section" aria-labelledby="rt-sec-approve">
-          <div className="rt-section-head">
-            <h4 id="rt-sec-approve" className="rt-section-title">
+        <section className={styles.section} aria-labelledby="rt-sec-approve">
+          <div className={styles.sectionHead}>
+            <h4 id="rt-sec-approve" className={styles.sectionTitle}>
               待确认
             </h4>
             {approvalCountLabel ? (
               <span
-                className="rt-row-meta"
+                className={styles.rowMeta}
                 aria-live="polite"
                 aria-label={`${approvalCountLabel} 项待确认`}
               >
@@ -608,14 +609,14 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               </span>
             ) : null}
           </div>
-          <div className="rt-list" role="list" aria-label="待确认工具">
+          <div className={styles.list} role="list" aria-label="待确认工具">
             {pendingApprovals.map((a, i) => {
               const toolLabel = a.toolName || '工具';
               const busy = approvalBusyId === (a.toolCallId || '');
               return (
                 <div
                   key={a.toolCallId || i}
-                  className="rt-row is-clickable"
+                  className={`${styles.row} ${styles.isClickable}`}
                   role="button"
                   tabIndex={0}
                   title="打开待确认会话"
@@ -628,17 +629,17 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                     }
                   }}
                 >
-                  <div className="rt-row-main">
-                    <span className="rt-dot warn" aria-hidden />
-                    <div className="rt-row-text">
-                      <span className="rt-row-title">{toolLabel}</span>
-                      <span className="rt-row-meta">
+                  <div className={styles.rowMain}>
+                    <span className={`${styles.dot} ${styles.warn}`} aria-hidden />
+                    <div className={styles.rowText}>
+                      <span className={styles.rowTitle}>{toolLabel}</span>
+                      <span className={styles.rowMeta}>
                         {a.summary || a.toolCallId || '等待批准'}
                       </span>
                     </div>
                   </div>
                   <div
-                    className="rt-row-actions"
+                    className={styles.rowActions}
                     role="group"
                     aria-label={`${toolLabel} 审批`}
                     onClick={(e) => e.stopPropagation()}
@@ -672,13 +673,13 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         </section>
       )}
 
-      <section className="rt-section" aria-labelledby="rt-sec-plan">
-        <div className="rt-section-head">
-          <h4 id="rt-sec-plan" className="rt-section-title">
+      <section className={styles.section} aria-labelledby="rt-sec-plan">
+        <div className={styles.sectionHead}>
+          <h4 id="rt-sec-plan" className={styles.sectionTitle}>
             计划任务
           </h4>
           {planCountLabel ? (
-            <span className="rt-row-meta" aria-live="polite" aria-label={`${planCountLabel} 个计划`}>
+            <span className={styles.rowMeta} aria-live="polite" aria-label={`${planCountLabel} 个计划`}>
               {planCountLabel}
             </span>
           ) : null}
@@ -694,32 +695,32 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
           </button>
         </div>
         {planCount === 0 ? (
-          <div className="rt-empty" role="status">
+          <div className={styles.empty} role="status">
             {emptyPlansHint(engineOnline)}
           </div>
         ) : (
-          <div className="rt-list rt-list--scroll" role="list" aria-label="计划任务列表">
+          <div className={`${styles.list} ${styles.listScroll}`} role="list" aria-label="计划任务列表">
             {workflows.map((w) => {
               const enabled = w.enabled !== false;
               return (
                 <div
                   key={w.id}
-                  className="rt-cron-card"
+                  className={styles.cronCard}
                   role="listitem"
                   aria-label={`${w.name}，${enabled ? '已启用' : '已停用'}，${scheduleLabel(w.schedule)}`}
                 >
-                  <div className="rt-cron-top">
-                    <div className="rt-cron-left">
+                  <div className={styles.cronTop}>
+                    <div className={styles.cronLeft}>
                       <span
-                        className={`rt-dot ${enabled ? 'on' : 'off'}`}
+                        className={`${styles.dot} ${enabled ? styles.on : styles.off}`}
                         aria-hidden
                       />
-                      <span className="rt-cron-expr">{scheduleLabel(w.schedule)}</span>
+                      <span className={styles.cronExpr}>{scheduleLabel(w.schedule)}</span>
                     </div>
                   </div>
-                  <div className="rt-cron-prompt">{w.name}</div>
+                  <div className={styles.cronPrompt}>{w.name}</div>
                   {w.prompt && (
-                    <div className="rt-cron-next">{(w.prompt as string).slice(0, 80)}</div>
+                    <div className={styles.cronNext}>{(w.prompt as string).slice(0, 80)}</div>
                   )}
                 </div>
               );
@@ -729,20 +730,20 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               return (
                 <div
                   key={job.id}
-                  className="rt-cron-card"
+                  className={styles.cronCard}
                   role="listitem"
                   aria-label={`${job.prompt || '计划'}，${active ? '进行中' : '已停用'}，${job.cronExpression}`}
                 >
-                  <div className="rt-cron-top">
-                    <div className="rt-cron-left">
+                  <div className={styles.cronTop}>
+                    <div className={styles.cronLeft}>
                       <span
-                        className={`rt-dot ${active ? 'on' : 'off'}`}
+                        className={`${styles.dot} ${active ? styles.on : styles.off}`}
                         aria-hidden
                       />
-                      <span className="rt-cron-expr">{job.cronExpression}</span>
+                      <span className={styles.cronExpr}>{job.cronExpression}</span>
                     </div>
                   </div>
-                  <div className="rt-cron-prompt">{job.prompt}</div>
+                  <div className={styles.cronPrompt}>{job.prompt}</div>
                 </div>
               );
             })}

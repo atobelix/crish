@@ -15,7 +15,9 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
+import styles from './SettingsProfileTab.module.css';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -202,15 +204,16 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
       title="账户"
       meta={
         engineMeta ? (
-          <span
-            id={headMetaId}
-            className="settings-head-meta settings-head-meta--error"
-            title="连接异常"
-            role="status"
-            aria-live="polite"
-          >
-            {engineMeta}
-          </span>
+          <Tooltip content="连接异常">
+            <span
+              id={headMetaId}
+              className={`${styles.settingsHeadMeta} ${styles.settingsHeadMetaError}`}
+              role="status"
+              aria-live="polite"
+            >
+              {engineMeta}
+            </span>
+          </Tooltip>
         ) : null
       }
     >
@@ -223,13 +226,17 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             desc={hasWorkspace ? '本机工作区' : '尚未打开项目'}
             control={
               hasWorkspace ? (
-                <span className="settings-path-ellipsis" title={cwd}>
-                  {workspaceDisplay}
-                </span>
+                <Tooltip content={cwd}>
+                  <span className={styles.settingsPathEllipsis}>
+                    {workspaceDisplay}
+                  </span>
+                </Tooltip>
               ) : (
-                <span className="settings-list-empty" title={workspaceTitle} role="status">
-                  {workspaceDisplay}
-                </span>
+                <Tooltip content={workspaceTitle}>
+                  <span className={styles.settingsListEmpty} role="status">
+                    {workspaceDisplay}
+                  </span>
+                </Tooltip>
               )
             }
           />
@@ -241,18 +248,23 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
           <SettingsRow
             title="会话数据"
             desc="仅保存在本机"
-            control={<span className="settings-list-meta" title="不上传云端">本机</span>}
+            control={
+              <Tooltip content="不上传云端">
+                <span className={styles.settingsListMeta}>本机</span>
+              </Tooltip>
+            }
           />
           <SettingsRow
             title="存储位置"
             desc="应用数据目录"
             control={
-              <span
-                className={storageIsPath ? 'settings-path-ellipsis' : 'settings-list-meta'}
-                title={dataLocation}
-              >
-                {storageDisplay}
-              </span>
+              <Tooltip content={dataLocation}>
+                <span
+                  className={storageIsPath ? styles.settingsPathEllipsis : styles.settingsListMeta}
+                >
+                  {storageDisplay}
+                </span>
+              </Tooltip>
             }
           />
           <SettingsRow
@@ -260,24 +272,26 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             desc="导出或导入配置"
             control={
               <>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  disabled={exporting}
-                  title={exporting ? '正在导出…' : '导出备份'}
-                  onClick={() => handleExportSettings()}
-                >
-                  {exporting ? '导出中…' : '导出'}
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
-                  disabled={importing}
-                  title={importing ? '正在导入…' : '从备份导入'}
-                  onClick={() => handleImportSettings()}
-                >
-                  {importing ? '导入中…' : '导入'}
-                </button>
+                <Tooltip content={exporting ? '正在导出…' : '导出备份'}>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={exporting}
+                    onClick={() => handleExportSettings()}
+                  >
+                    {exporting ? '导出中…' : '导出'}
+                  </button>
+                </Tooltip>
+                <Tooltip content={importing ? '正在导入…' : '从备份导入'}>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={importing}
+                    onClick={() => handleImportSettings()}
+                  >
+                    {importing ? '导入中…' : '导入'}
+                  </button>
+                </Tooltip>
               </>
             }
           />
@@ -292,28 +306,29 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
               desc="高级连接设置"
               control={
                 <>
-                  <input
-                    id={daemonWsInputId}
-                    type="text"
-                    className="settings-field-input settings-field-input--sm settings-field-input--w220"
-                    value={daemonWsDraft}
-                    onChange={(e) => setDaemonWsDraft(e.target.value)}
-                    spellCheck={false}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    title="服务地址；保存后重启生效"
-                    placeholder={DEFAULT_DAEMON_WS}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveDaemonWs();
-                      } else if (e.key === 'Escape' && daemonWsDirty) {
-                        e.preventDefault();
-                        setDaemonWsDraft(daemonWsSaved);
-                      }
-                    }}
-                  />
+                  <Tooltip content="服务地址；保存后重启生效">
+                    <input
+                      id={daemonWsInputId}
+                      type="text"
+                      className="settings-field-input settings-field-input--sm settings-field-input--w220"
+                      value={daemonWsDraft}
+                      onChange={(e) => setDaemonWsDraft(e.target.value)}
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      placeholder={DEFAULT_DAEMON_WS}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveDaemonWs();
+                        } else if (e.key === 'Escape' && daemonWsDirty) {
+                          e.preventDefault();
+                          setDaemonWsDraft(daemonWsSaved);
+                        }
+                      }}
+                    />
+                  </Tooltip>
                   <button
                     type="button"
                     className="ui-btn ui-btn-secondary ui-btn-sm"
@@ -332,7 +347,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
                   </button>
                   <span
                     id={daemonStatusId}
-                    className="settings-list-meta"
+                    className={styles.settingsListMeta}
                     role="status"
                     aria-live="polite"
                   >

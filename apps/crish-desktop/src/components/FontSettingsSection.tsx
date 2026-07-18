@@ -17,6 +17,7 @@ import {
 } from '../api/fontStore';
 import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
 import { SettingsRow, Tooltip } from './settings/SettingsUI';
+import styles from './FontSettingsSection.module.css';
 
 interface Props {
   onShowToast?: (msg: string) => void;
@@ -206,15 +207,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
 
     return (
       <div
-        className="settings-select-custom-header-area"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '6px 8px',
-          borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
-          background: 'var(--bg-subtle)',
-        }}
+        className={styles.settingsSelectCustomHeaderArea}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -228,7 +221,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
             }}
           />
           <input
-            className="settings-select-custom-input"
+            className={styles.settingsSelectCustomInput}
             placeholder="自定义字体名..."
             value={isCurrentDraft ? customDraft : ''}
             disabled={busy}
@@ -237,15 +230,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
             autoComplete="off"
             spellCheck={false}
             style={{
-              width: '100%',
-              height: '28px',
-              fontSize: '12px',
-              border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-              borderRadius: '6px',
               padding: hasDraft ? '0 26px 0 26px' : '0 8px 0 26px',
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              boxSizing: 'border-box',
             }}
             onFocus={() => setCustomTarget(target)}
             onChange={(e) => {
@@ -264,20 +249,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
             <Tooltip content="应用自定义字体">
               <button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
-                style={{
-                  position: 'absolute',
-                  right: '4px',
-                  width: '20px',
-                  height: '20px',
-                  padding: 0,
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent-primary)',
-                  background: 'color-mix(in srgb, var(--accent-primary) 10%, transparent)',
-                }}
+                className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customApplyBtn}`}
                 onClick={() => applyCustom(target)}
               >
                 <Lucide.Check size={12} />
@@ -289,18 +261,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
         <Tooltip content="扫描本机字体">
           <button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            style={{
-              width: '28px',
-              height: '28px',
-              padding: 0,
-              borderRadius: '5px',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-tertiary)',
-            }}
+            className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customActionBtn}`}
             disabled={busy || scanning}
             onClick={() => void scanLocal()}
           >
@@ -311,18 +272,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
         <Tooltip content="恢复默认字体">
           <button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            style={{
-              width: '28px',
-              height: '28px',
-              padding: 0,
-              borderRadius: '5px',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-tertiary)',
-            }}
+            className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customActionBtn}`}
             disabled={busy || (target === 'mono' ? atDefault : prefs.uiFont === DEFAULT_FONT_PREFS.uiFont)}
             onClick={() => {
               if (target === 'mono') {
@@ -378,15 +328,8 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
         control={
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <label
-              className="settings-row-check"
+              className={styles.settingsRowCheck}
               title="启用代码连字（liga / calt）"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                marginRight: '4px',
-                cursor: 'pointer',
-              }}
             >
               <input
                 type="checkbox"

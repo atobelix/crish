@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from './SidebarNav.module.css';
 import * as Lucide from 'lucide-react';
 
 export interface SidebarNavProps {
@@ -18,10 +19,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   onSearchChange,
 }) => {
   return (
-    <div className="sidebar-top-actions">
+    <div className={styles.topActions}>
       <button
         type="button"
-        className={`sb-nav-item ${activeNav === 'chat' ? 'is-active' : ''}`}
+        className={`${styles.navItem} ${activeNav === 'chat' ? styles.isActive : ''}`}
         onClick={onNewSession}
       >
         {/* 自定义新建对话图标：匹配顶部侧边栏按钮的软圆角 (rx=4.5)，且右上角留出缺口避免与画笔重合 */}
@@ -45,7 +46,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       </button>
       <button
         type="button"
-        className={`sb-nav-item ${activeNav === 'scheduled' ? 'is-active' : ''}`}
+        className={`${styles.navItem} ${activeNav === 'scheduled' ? styles.isActive : ''}`}
         onClick={onOpenScheduled}
       >
         <Lucide.Clock size={16} strokeWidth={1.75} />
@@ -53,7 +54,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       </button>
       {onSearchChange && (
         <div
-          className="sb-nav-item no-drag"
+          className={`${styles.navItem} no-drag`}
           role="search"
           aria-label="会话搜索"
           style={{

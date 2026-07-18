@@ -1,0 +1,404 @@
+/* SettingsUsageTab.module.css — extracted from inline styles in SettingsUsageTab.tsx */
+
+/* ----- Price row ----- */
+.priceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.priceRowModel {
+  flex: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.priceRowInput {
+  flex: 1;
+  height: 26px;
+  font-size: 12px;
+  padding: 0 6px;
+  width: 60px;
+}
+
+.priceRowBtn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* ----- Config button (page header meta) ----- */
+.configBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+}
+
+/* ----- Pricing modal overlay ----- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30000;
+}
+
+.modalBox {
+  width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.modalTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modalFilterInput {
+  width: 160px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.modalList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-right: 4px;
+}
+
+.modalEmptyState {
+  padding: 24px 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.modalAddRow {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+  align-items: center;
+}
+
+.modalAddInput {
+  height: 28px;
+  font-size: 12px;
+}
+
+.modalAddInputFlex2 {
+  height: 28px;
+  font-size: 12px;
+  flex: 2;
+}
+
+.modalAddInputFlex1 {
+  height: 28px;
+  font-size: 12px;
+  flex: 1;
+}
+
+.modalAddBtn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modalCloseBtn {
+  border-radius: 6px;
+}
+
+/* ----- Stats grid (top summary) ----- */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.statValue {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.statValueCost {
+  font-size: 20px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.statUnit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ----- Chart section ----- */
+.chartSection {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chartHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chartSegment {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.chartSegmentBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.chartSegmentBtn.active {
+  background: var(--bg-primary);
+}
+
+.chartBars {
+  display: flex;
+  height: 140px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.chartBarCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.chartBarInner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* bar wrapper: height is set dynamically via inline style */
+.chartBarStack {
+  width: 14px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* segment heights set dynamically via inline style */
+.chartBarOut {
+  width: 100%;
+  background: var(--accent-chart-out, var(--accent-primary));
+  opacity: 0.85;
+}
+
+.chartBarIn {
+  width: 100%;
+  background: var(--accent-chart-in, var(--accent-secondary));
+}
+
+.chartBarEmpty {
+  width: 14px;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+.chartBarLabel {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.chartLegend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.chartLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chartLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.chartLegendDotIn {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent-chart-in, var(--accent-secondary));
+}
+
+.chartLegendDotOut {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent-chart-out, var(--accent-primary));
+  opacity: 0.85;
+}
+
+/* ----- Model distribution ----- */
+.modelsSection {
+  border-top: 1px solid var(--border-subtle);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modelsSectionTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modelsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.modelName {
+  flex: 0 0 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.modelBarTrack {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* bar fill width set dynamically via inline style */
+.modelBarFill {
+  height: 100%;
+  background: var(--accent-primary, #4f46e5);
+  border-radius: 3px;
+}
+
+.modelTokens {
+  flex: 0 0 100px;
+  text-align: right;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.modelTokensUnit {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ----- Bottom actions bar ----- */
+.actionsBar {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+
+.actionBtn {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+}

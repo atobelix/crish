@@ -12,11 +12,13 @@ import {
 } from '../api/shellChrome';
 import { FontSettingsSection } from './FontSettingsSection';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './SettingsAppearanceTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 
 type Props = {
@@ -265,22 +267,22 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
               title={<span id="settings-appearance-theme-label">主题</span>}
               control={
                 <div
-                  className="ui-segment ui-segment--inline settings-choice-group"
+                  className={styles.settingsChoiceGroup}
                   role="group"
                   aria-labelledby="settings-appearance-theme-label"
                 >
                   {THEME_OPTS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`ui-segment-item ${theme === opt.id ? 'active' : ''}`}
-                      disabled={saving}
-                      aria-pressed={theme === opt.id}
-                      title={opt.hint}
-                      onClick={() => applyTheme(opt.id)}
-                    >
-                      {opt.label}
-                    </button>
+                    <Tooltip key={opt.id} content={opt.hint}>
+                      <button
+                        type="button"
+                        className={`${styles.segmentItem}${theme === opt.id ? ` ${styles.active}` : ''}`}
+                        disabled={saving}
+                        aria-pressed={theme === opt.id}
+                        onClick={() => applyTheme(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    </Tooltip>
                   ))}
                 </div>
               }
@@ -290,22 +292,22 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
               title={<span id="settings-appearance-density-label">密度</span>}
               control={
                 <div
-                  className="ui-segment ui-segment--inline settings-choice-group settings-density-segment"
+                  className={`${styles.settingsChoiceGroup} ${styles.settingsDensitySegment}`}
                   role="group"
                   aria-labelledby="settings-appearance-density-label"
                 >
                   {DENSITY_OPTS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`ui-segment-item ${density === opt.id ? 'active' : ''}`}
-                      disabled={saving}
-                      aria-pressed={density === opt.id}
-                      title={opt.hint}
-                      onClick={() => applyDensity(opt.id)}
-                    >
-                      {opt.label}
-                    </button>
+                    <Tooltip key={opt.id} content={opt.hint}>
+                      <button
+                        type="button"
+                        className={`${styles.segmentItem}${density === opt.id ? ` ${styles.active}` : ''}`}
+                        disabled={saving}
+                        aria-pressed={density === opt.id}
+                        onClick={() => applyDensity(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    </Tooltip>
                   ))}
                 </div>
               }
@@ -315,22 +317,22 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
               title={<span id="settings-appearance-chrome-label">界面形态</span>}
               control={
                 <div
-                  className="ui-segment ui-segment--inline settings-choice-group"
+                  className={styles.settingsChoiceGroup}
                   role="group"
                   aria-labelledby="settings-appearance-chrome-label"
                 >
                   {CHROME_OPTS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`ui-segment-item ${chrome === opt.id ? 'active' : ''}`}
-                      disabled={saving}
-                      aria-pressed={chrome === opt.id}
-                      title={opt.hint}
-                      onClick={() => applyChrome(opt.id)}
-                    >
-                      {opt.label}
-                    </button>
+                    <Tooltip key={opt.id} content={opt.hint}>
+                      <button
+                        type="button"
+                        className={`${styles.segmentItem}${chrome === opt.id ? ` ${styles.active}` : ''}`}
+                        disabled={saving}
+                        aria-pressed={chrome === opt.id}
+                        onClick={() => applyChrome(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    </Tooltip>
                   ))}
                 </div>
               }
@@ -355,7 +357,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
             />
 
             <SettingsRow
-              title={<label htmlFor={hideThinkingId} style={{ cursor: 'pointer', display: 'block', width: '100%' }}>隐藏思考过程</label>}
+              title={<label htmlFor={hideThinkingId} className="settings-ui-row-label">隐藏思考过程</label>}
               control={
                 <input
                   id={hideThinkingId}

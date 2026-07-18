@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import styles from './ChatCard.module.css';
 import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff } from '../store/layoutStore';
 import {
@@ -83,6 +84,8 @@ interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
 }
 
+const EMPTY_ARRAY: any[] = [];
+
 export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   wsId,
   colIdx: _colIdx,
@@ -92,7 +95,35 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 }) => {
   // 收紧订阅：只跟当前会话，避免 sessions 整表变更触发重渲染
   const activeSessionId = useSessionField(selectActiveSessionId);
-  const activeSession = useSessionField(selectActiveSession);
+  const messages = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.messages || EMPTY_ARRAY;
+  });
+  const agents = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.agents || EMPTY_ARRAY;
+  });
+  const goalMode = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.goalMode;
+  });
+  const hydratedFromEngine = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.hydratedFromEngine;
+  });
+  const engineCursor = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.engineCursor;
+  });
+  const engineLastRunId = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.engineLastRunId;
+  });
+  const activeSessionTitle = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active?.title;
+  });
+
   const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
   const appSettings = useLayoutStore((s) => s.appSettings);
 
@@ -214,9 +245,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   /** 有密钥即展示选择器（空 models 可手填）；无密钥时隐藏，改走 soft-hint */
   const showModelPicker = setupStatus.showModelPicker;
 
-  const messages = activeSession?.messages || [];
   /** /goal 目标模式进行中时展示停止 */
-  const goalModeActive = Boolean(activeSession?.goalMode?.active);
+  const goalModeActive = Boolean(goalMode?.active);
 
   // 切换会话时收起过滤 / 审批忙 / 水合超时 / 剪枝旁注，避免串会话
   useEffect(() => {
@@ -241,14 +271,16 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   /** 导出 Markdown：sessionExport（ChatHeaderMore / 与侧栏一致）；成功静默、失败 toast */
   const handleExportMarkdown = useCallback(() => {
     const byId = getSessionStoreState().sessionsById;
-    const result = tryDownloadSessionMarkdown(activeSession, new Date(), {
+    const session = getSessionStoreState().sessions.find((s) => s.id === activeSessionId);
+    if (!session) return;
+    const result = tryDownloadSessionMarkdown(session, new Date(), {
       sessionsById: byId,
     });
     if (result.ok === false) {
       onShowToast(result.error || '导出失败');
     }
     // 成功：浏览器下载即反馈，不 toast
-  }, [activeSession, onShowToast]);
+  }, [activeSessionId, onShowToast]);
 
   /** card-header ChatHeaderMore → export-session-md */
   useEffect(() => {
@@ -266,9 +298,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   // 当前会话待审批：按 toolId 去重（防双写双算）；dock 策略见 planApprovalUi
   const pendingApprovalScan = useMemo(() => {
-    const agentLists = (activeSession?.agents || []).map((ag) => ag.messages || []);
+    const agentLists = (agents || []).map((ag) => ag.messages || []);
     return collectPendingApprovals(messages, agentLists);
-  }, [messages, activeSession?.agents]);
+  }, [messages, agents]);
   const pendingApprovalMsgId = pendingApprovalScan.first?.msgId || '';
   const pendingApprovalToolId = pendingApprovalScan.first?.toolId || '';
   // 一次算出 mode/showDock/total，避免 dock 与内联各算各的漂移
@@ -287,7 +319,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         messages
           .flatMap((m) => m.toolCalls || [])
           .find((tc) => tc.id === first.toolId) ||
-        (activeSession?.agents || [])
+        (agents || [])
           .flatMap((ag) => ag.messages || [])
           .flatMap((m) => m.toolCalls || [])
           .find((tc) => tc.id === first.toolId);
@@ -295,7 +327,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
       return first.summary;
     }
     return '';
-  }, [pendingApprovalScan.first, messages, activeSession?.agents]);
+  }, [pendingApprovalScan.first, messages, agents]);
   // 单条主时间线 → 仅内联；多条/协作 → dock（plan 内再钳一次，禁止单条双 dock）
   const approvalDockVisible = approvalUiPlan.showDock;
   const pendingApprovalDockLabel = approvalDockLabel(
@@ -334,7 +366,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   }, []);
 
   const handlePasteImage = useCallback(
-    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    async (e: React.ClipboardEvent<any>) => {
       const items = e.clipboardData?.items;
       if (!items?.length) return;
       const imageFiles: File[] = [];
@@ -532,20 +564,18 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     });
   }, [handleStopGeneration]);
 
-  const openDiffInRightPanel = (diff: FileDiff) => {
+  const openDiffInRightPanel = useCallback((diff: FileDiff) => {
     setActiveDiffSourceAccess(diff);
     handleGlobalTabClick('diff');
-    // handleGlobalTabClick / focusOrOpenPanel 会确保 diff 面板 active
-    // 打开侧栏是可预期操作，不弹 toast
-  };
+  }, [handleGlobalTabClick]);
 
   /** 在右侧文件管理器中打开路径（按需预览；不 toast 刷屏） */
-  const openPathInFilesPanel = (filePath: string) => {
+  const openPathInFilesPanel = useCallback((filePath: string) => {
     openSidePanel('files');
     openFileInPanel(filePath);
-  };
+  }, []);
 
-  const handleApprovalAllow = (toolId: string, msgId: string, remember = false) => {
+  const handleApprovalAllow = useCallback((toolId: string, msgId: string, remember = false) => {
     // 无活动会话 / 忙时不写，避免幽灵审批落盘到空 id
     if (!activeSessionId || approvalBusy) return;
     const tid = String(toolId || '').trim();
@@ -565,7 +595,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
       );
       if (prefix) {
         addCommandPermission(prefix);
-        // 白名单写入后卡片即消失，不 toast 成功
       }
     }
     updateMessageToolCall(activeSessionId, mid, tid, {
@@ -585,9 +614,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     void daemonApproveTool(tid).finally(() => {
       window.setTimeout(() => setApprovalBusy(false), 200);
     });
-  };
+  }, [activeSessionId, approvalBusy]);
 
-  const handleApprovalDeny = (toolId: string, msgId: string) => {
+  const handleApprovalDeny = useCallback((toolId: string, msgId: string) => {
     if (!activeSessionId || approvalBusy) return;
     const tid = String(toolId || '').trim();
     const mid = String(msgId || '').trim();
@@ -600,7 +629,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     void daemonDenyTool(tid).finally(() => {
       window.setTimeout(() => setApprovalBusy(false), 200);
     });
-  };
+  }, [activeSessionId, approvalBusy]);
 
   // 子 agent 只在侧栏打开，主对话列永不被 AgentCard 覆盖；主列始终渲染 chat-body（永不 blank）
   const isFiltering = Boolean(localMsgFilter.trim());
@@ -618,19 +647,19 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
    */
   const messagesLoadingCandidate = useMemo(() => {
     if (isDemoMode()) return false;
-    if (!activeSessionId || !activeSession) return false;
+    if (!activeSessionId) return false;
     if (messages.length > 0) return false;
-    if (activeSession.hydratedFromEngine === true) return false;
+    if (hydratedFromEngine === true) return false;
     const isLocalMintId = /^sess-(branch-)?\d+$/i.test(activeSessionId);
     if (
       isLocalMintId &&
-      typeof activeSession.engineCursor !== 'number' &&
-      !activeSession.engineLastRunId
+      typeof engineCursor !== 'number' &&
+      !engineLastRunId
     ) {
       return false;
     }
     return true;
-  }, [activeSessionId, activeSession, messages.length]);
+  }, [activeSessionId, messages.length, hydratedFromEngine, engineCursor, engineLastRunId]);
 
   useEffect(() => {
     if (!messagesLoadingCandidate) {
@@ -645,21 +674,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const messagesLoading = messagesLoadingCandidate && !hydrateTimedOut;
 
   /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」） */
-  const shellActiveIsEmpty = Boolean(
-    activeSession && isEmptyShellSession(activeSession),
-  );
+  const shellActiveIsEmpty = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    return active ? isEmptyShellSession(active) : false;
+  });
   /**
    * 无活动会话时：若已有可复用空壳，新建将复用而非再堆幽灵。
    * 有活动会话时由 shellActiveIsEmpty 表达，不叠 willReuse。
    */
-  const shellWillReuse = useMemo(() => {
-    if (activeSessionId && activeSession) return false;
-    const sessions = getSessionStoreState().sessions;
+  const shellWillReuse = useSessionField((s) => {
+    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    if (s.activeSessionId && active) return false;
+    const sessions = s.sessions;
     return Boolean(findReusableEmptyShell(sessions));
-  }, [activeSessionId, activeSession, projectTick]);
+  });
 
   const emptyKind = resolveChatEmptyKind({
-    hasActiveSession: Boolean(activeSessionId && activeSession),
+    hasActiveSession: Boolean(activeSessionId),
     messageCount: messages.length,
     displayCount: displayMessages.length,
     filterQuery: localMsgFilter,
@@ -766,10 +797,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             }
           >
             <div
-              className="model-badge model-badge--readonly"
-              style={{ cursor: 'default', opacity: 0.8 }}
+              className={`${styles.modelBadge} ${styles.readonly}`}
             >
-              <span className="model-text">
+              <span className={styles.modelText}>
                 {getModelDisplayName(
                   resolveDisplayModelId(engineModel) ||
                     engineModel ||
@@ -785,7 +815,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   return (
     <div
-      className="chat-body"
+      className={styles.chatBody}
       role="region"
       aria-label={chatRegionAria}
       aria-busy={messagesLoading || undefined}
@@ -796,7 +826,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         engineOk === false ? 'false' : engineOk === true ? 'true' : 'unknown'
       }
       data-approval-mode={approvalUiPlan.mode}
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}
     >
       {/* 本会话消息过滤条：chat 主面；定时主面不展示 */}
       {mainSurface === 'chat' && showMsgFilter ? (
@@ -811,7 +840,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
       ) : null}
 
       <div
-        className="chat-doc-flow"
+        className={styles.chatDocFlow}
         ref={chatFlowRef}
         aria-busy={messagesLoading || undefined}
       >
@@ -843,7 +872,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         ) : (
           <ChatMessageList
             messages={displayMessages}
-            agents={activeSession?.agents || []}
+            agents={agents}
             activeSessionId={activeSessionId || ''}
             thinkingSeconds={thinkingSeconds}
             /* 过滤中展示全部命中，避免窗口裁掉早期匹配 */
@@ -886,7 +915,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
               // 分叉可撤销：toast + Undo；列表聚焦新会话
               if (!activeSessionId) return;
               const oldId = activeSessionId;
-              const base = activeSession?.title || '会话';
+              const base = activeSessionTitle || '会话';
               const newTitle = `${base} - 分支`;
               branchSession(activeSessionId, newTitle);
               const newBranchId = getSessionStoreState().activeSessionId;
@@ -912,7 +941,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
       {/* scheduled 主面隐藏 footer；子 agent 只在侧栏，主列 composer 始终存在 */}
       <div
-        className="chat-footer"
+        className={styles.chatFooter}
         style={{
           display: mainSurface === 'scheduled' ? 'none' : undefined,
         }}
@@ -931,13 +960,13 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             setPermissionMode('ask');
             setPlanApproved(true);
           }}
-          goalModeActive={goalModeActive && Boolean(activeSession?.goalMode)}
-          goalText={activeSession?.goalMode?.goal || ''}
-          goalIteration={activeSession?.goalMode?.iteration ?? 0}
+          goalModeActive={goalModeActive && Boolean(goalMode)}
+          goalText={goalMode?.goal || ''}
+          goalIteration={goalMode?.iteration ?? 0}
           goalTasksDone={
-            (activeSession?.goalMode?.tasks || []).filter((t) => t.done).length
+            (goalMode?.tasks || []).filter((t) => t.done).length
           }
-          goalTasksTotal={(activeSession?.goalMode?.tasks || []).length}
+          goalTasksTotal={(goalMode?.tasks || []).length}
           onStopGoal={() => {
             handleStopGeneration();
             if (activeSessionId) {

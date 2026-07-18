@@ -22,11 +22,13 @@ import {
 import { formatEngineDegradeToast } from '../hooks/useToastQueue';
 import { useLayoutStore } from '../store/layoutStore';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './SettingsRulesTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 
 type Props = {
@@ -534,41 +536,41 @@ export const SettingsRulesTab: React.FC<Props> = ({
 
       <SettingsSection title="快速添加">
         <SettingsCard>
-          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>常用</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>一键加入</span>
+          <div className={styles.sectionRow}>
+            <div className={styles.labelCol}>
+              <span className={styles.labelTitle}>常用</span>
+              <span className={styles.labelDesc}>一键加入</span>
             </div>
-            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div className={styles.presetGroup}>
               {RULE_PRESETS.map((preset) => {
                 const exists = customRules.some(
                   (r) => normalizeRuleLine(r) === normalizeRuleLine(preset),
                 );
                 return (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`settings-rule-preset${exists ? ' is-disabled' : ''}`}
-                    onClick={() => handleAddPreset(preset)}
-                    disabled={exists || busy}
-                    title={exists ? '已添加' : `添加：${preset}`}
-                    aria-label={
-                      exists ? `已添加：${preset}` : `添加预设：${preset}`
-                    }
-                  >
-                    {preset}
-                  </button>
+                  <Tooltip key={preset} content={exists ? '已添加' : `添加：${preset}`}>
+                    <button
+                      type="button"
+                      className={`settings-rule-preset${exists ? ' is-disabled' : ''}`}
+                      onClick={() => handleAddPreset(preset)}
+                      disabled={exists || busy}
+                      aria-label={
+                        exists ? `已添加：${preset}` : `添加预设：${preset}`
+                      }
+                    >
+                      {preset}
+                    </button>
+                  </Tooltip>
                 );
               })}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', alignItems: 'center' }}>
-            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor={addInputId} style={{ fontSize: '14px', color: 'var(--text-primary)' }}>自定义</label>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>输入后添加</span>
+          <div className={styles.sectionRowNoBorder}>
+            <div className={styles.labelCol}>
+              <label htmlFor={addInputId} className={styles.labelTitle}>自定义</label>
+              <span className={styles.labelDesc}>输入后添加</span>
             </div>
-            <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
+            <div className={styles.inputGroup}>
               <input
                 ref={addInputRef}
                 id={addInputId}
@@ -576,12 +578,11 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 placeholder="写一条规则…"
                 value={newRuleText}
                 onChange={(e) => setNewRuleText(e.target.value)}
-                className="settings-field-input settings-field-input--sm settings-field-input--grow"
+                className={`settings-field-input settings-field-input--sm settings-field-input--grow ${styles.inputGrow}`}
                 disabled={busy}
                 aria-label="自定义规则"
                 autoComplete="off"
                 spellCheck={false}
-                style={{ flex: 1 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -589,17 +590,17 @@ export const SettingsRulesTab: React.FC<Props> = ({
                   }
                 }}
               />
-              <button
-                type="button"
-                onClick={handleAddCustomRule}
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={busy || !normalizeRuleLine(newRuleText)}
-                aria-label="添加规则"
-                title={`加入${scopeLabel}短规则`}
-                style={{ borderRadius: '6px' }}
-              >
-                添加
-              </button>
+              <Tooltip content={`加入${scopeLabel}短规则`}>
+                <button
+                  type="button"
+                  onClick={handleAddCustomRule}
+                  className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                  disabled={busy || !normalizeRuleLine(newRuleText)}
+                  aria-label="添加规则"
+                >
+                  添加
+                </button>
+              </Tooltip>
             </div>
           </div>
         </SettingsCard>

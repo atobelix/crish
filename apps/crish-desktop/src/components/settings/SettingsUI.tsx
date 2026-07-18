@@ -1,20 +1,20 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import './SettingsUI.css';
+import styles from './SettingsUI.module.css';
 
 export const SettingsPage: React.FC<{
   title: string;
   children: React.ReactNode;
   meta?: React.ReactNode;
 }> = ({ title, children, meta }) => (
-  <div className="settings-ui-page">
-    <header className="settings-ui-page-head">
-      <div className="settings-ui-head-inline">
-        <h2 className="settings-ui-page-title">{title}</h2>
+  <div className={`${styles.settingsUiPage} settings-ui-page`}>
+    <header className={`${styles.settingsUiPageHead} settings-ui-page-head`}>
+      <div className={`${styles.settingsUiHeadInline} settings-ui-head-inline`}>
+        <h2 className={`${styles.settingsUiPageTitle} settings-ui-page-title`}>{title}</h2>
         {meta}
       </div>
     </header>
-    <div className="settings-ui-page-body">{children}</div>
+    <div className={`${styles.settingsUiPageBody} settings-ui-page-body`}>{children}</div>
   </div>
 );
 
@@ -22,15 +22,15 @@ export const SettingsSection: React.FC<{
   title?: React.ReactNode;
   children: React.ReactNode;
 }> = ({ title, children }) => (
-  <section className="settings-ui-section">
-    {title && <h3 className="settings-ui-section-title">{title}</h3>}
-    <div className="settings-ui-section-content">{children}</div>
+  <section className={`${styles.settingsUiSection} settings-ui-section`}>
+    {title && <h3 className={`${styles.settingsUiSectionTitle} settings-ui-section-title`}>{title}</h3>}
+    <div className={`${styles.settingsUiSectionContent} settings-ui-section-content`}>{children}</div>
   </section>
 );
 
 export const SettingsCard: React.FC<{ children: React.ReactNode }> = ({
   children,
-}) => <div className="settings-ui-card">{children}</div>;
+}) => <div className={`${styles.settingsUiCard} settings-ui-card`}>{children}</div>;
 
 export const SettingsRow: React.FC<{
   icon?: React.ReactNode;
@@ -43,18 +43,18 @@ export const SettingsRow: React.FC<{
   const Component = onClick ? 'button' : 'div';
   return (
     <Component
-      className={`settings-ui-row ${onClick ? 'settings-ui-row-clickable' : ''} ${className}`}
+      className={`${styles.settingsUiRow} ${onClick ? styles.settingsUiRowClickable + ' settings-ui-row-clickable' : ''} settings-ui-row ${className}`}
       onClick={onClick}
       type={onClick ? 'button' : undefined}
     >
-      {icon && <div className="settings-ui-row-icon">{icon}</div>}
-      <div className="settings-ui-row-body">
-        <div className="settings-ui-row-title">{title}</div>
-        {desc && <div className="settings-ui-row-desc">{desc}</div>}
+      {icon && <div className={`${styles.settingsUiRowIcon} settings-ui-row-icon`}>{icon}</div>}
+      <div className={`${styles.settingsUiRowBody} settings-ui-row-body`}>
+        <div className={`${styles.settingsUiRowTitle} settings-ui-row-title`}>{title}</div>
+        {desc && <div className={`${styles.settingsUiRowDesc} settings-ui-row-desc`}>{desc}</div>}
       </div>
       {control && (
         <div
-          className="settings-ui-row-control"
+          className={`${styles.settingsUiRowControl} settings-ui-row-control`}
           onClick={(e) => {
             // Prevent row click if control is clicked
             if (onClick) e.stopPropagation();
@@ -94,7 +94,7 @@ export const Tooltip: React.FC<{
       })}
       {hovered && rect && createPortal(
         <div
-          className="modern-select-tooltip"
+          className={`${styles.modernSelectTooltip} modern-select-tooltip`}
           style={{
             position: 'fixed',
             top: rect.top - 8,
@@ -103,8 +103,8 @@ export const Tooltip: React.FC<{
             zIndex: 20060,
           }}
         >
-          <div className="modern-select-tooltip-inner">{content}</div>
-          <div className="modern-select-tooltip-arrow" />
+          <div className={`${styles.modernSelectTooltipInner} modern-select-tooltip-inner`}>{content}</div>
+          <div className={`${styles.modernSelectTooltipArrow} modern-select-tooltip-arrow`} />
         </div>,
         document.body
       )}

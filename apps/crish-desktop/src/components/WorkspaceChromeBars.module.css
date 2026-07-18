@@ -1,0 +1,482 @@
+.wsChrome {
+  --ws-chrome-pad-x: 12px;
+  --ws-chrome-tab-gap: 2px;
+  --ws-chrome-ws-h: 32px;
+  --ws-chrome-sess-h: 32px;
+  --ws-chrome-strip: color-mix(in srgb, var(--bg-secondary) 88%, #c8c4bc 12%);
+  --ws-chrome-surface: var(--bg-primary);
+  --ws-chrome-pill: color-mix(in srgb, var(--bg-secondary) 70%, #d9d5cd 30%);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  user-select: none;
+  background: var(--ws-chrome-strip);
+  border-bottom: none;
+}
+
+.wsChromeRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-left: var(--ws-chrome-pad-x);
+  padding-right: var(--ws-chrome-pad-x);
+  gap: 2px;
+  box-sizing: border-box;
+}
+
+/* L0→L1：项目行贴壳层底，tab 向下开口连内容卡 */
+.wsChromeRowWorkspace,
+.wsChromeRowTitlebar {
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 0;
+  padding-left: 10px;
+  padding-right: 8px;
+  align-items: flex-end;
+  background: transparent;
+  border-radius: 0 !important;
+}
+
+/* L1→L2：会话行是卡顶灰带，激活 tab 向下开口连正文 */
+.wsChromeRowSessions {
+  --ws-chrome-sess-h: 32px;
+  /* 使用与 card-header 统一的微暖灰色，剔除偏色 */
+  --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
+  /* 与 hairline 边框线色对齐 */
+  --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
+  /* 激活标签 = 正文白，相融 */
+  --ws-chrome-merge: var(--shell-inset-bg, var(--bg-primary));
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 0;
+  padding-left: var(--shell-content-pad-x, 14px);
+  padding-right: var(--shell-content-pad-x, 14px);
+  background: var(--ws-session-strip);
+  border-top: none;
+  /* 线不用 border（易被圆角/子层影响），用伪元素画在底部 */
+  border-bottom: none;
+  align-items: flex-end;
+  gap: 2px;
+  position: relative;
+  z-index: 1;
+  overflow: hidden; /* 参与内容卡圆角裁切 */
+}
+
+/* #f3f3f3 底线：整行一条；激活 tab 白底叠在上面，该段自然无线 */
+.wsChromeRowSessions::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ws-session-line, #f3f3f3);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wsChromeScroll {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ws-chrome-tab-gap);
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wsChromeRowWorkspace .wsChromeScroll,
+.wsChromeRowTitlebar .wsChromeScroll {
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.wsChromeRowSessions .wsChromeScroll {
+  align-items: flex-end;
+  gap: 2px;
+  height: auto;
+  min-height: var(--ws-chrome-sess-h);
+}
+
+.wsChromeScroll::-webkit-scrollbar {
+  display: none;
+}
+
+.wsChromeTrail {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  /* 与文件夹页签底对齐 */
+  align-self: flex-end;
+  height: var(--ws-chrome-ws-h, 32px);
+  padding-right: 2px;
+  margin-bottom: 2px;
+}
+
+.wsChromeRowSessions .wsChromeTrail {
+  height: var(--ws-chrome-sess-h, 32px);
+  margin-bottom: 2px;
+}
+
+.wsChromeTrailBtn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wsChromeTrailBtn:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-primary);
+}
+
+/* 通用：字重 normal；标签放宽，空间够就别挤 */
+.wsChromeTab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  min-width: 120px;
+  height: var(--ws-chrome-ws-h);
+  padding: 0 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1.2;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.wsChromeTab:hover {
+  color: var(--text-primary);
+}
+
+.wsChromeTab.isActive {
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.wsChromeTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-weight: inherit;
+}
+
+/*
+ * 文件夹页签几何（相融的关键）：
+ * - 未激活：无底/透明，贴在灰带上，字偏暗
+ * - 激活：仅顶圆角；左/顶/右边线；底边与下层同色 → 口袋开口连入下层
+ */
+.wsChromeRowWorkspace .wsChromeTab,
+.wsChromeRowTitlebar .wsChromeTab,
+.wsChromeRowSessions .wsChromeTab,
+.wsChromeTabSession {
+  height: var(--ws-chrome-ws-h, 32px);
+  min-height: var(--ws-chrome-ws-h, 32px);
+  /* 只有顶圆角：底边与下层表面相连 */
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 0 14px;
+  min-width: 0;
+  max-width: 220px;
+  position: relative;
+  margin: 0 0 -1px; /* 压住行底部分隔线 */
+  gap: 8px;
+  align-items: center;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid transparent;
+  border-bottom-color: transparent;
+  overflow: visible;
+}
+
+.wsChromeRowSessions .wsChromeTab,
+.wsChromeTabSession {
+  height: var(--ws-chrome-sess-h, 32px);
+  min-height: var(--ws-chrome-sess-h, 32px);
+  padding: 0 4px 0 12px;
+  max-width: 240px;
+  gap: 0;
+}
+
+.wsChromeRowWorkspace .wsChromeTab svg,
+.wsChromeRowTitlebar .wsChromeTab svg,
+.wsChromeRowSessions .wsChromeTab svg,
+.wsChromeTabSession svg {
+  opacity: 0.55;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* 未激活悬停：仍贴在灰带上，略亮 */
+.wsChromeRowWorkspace .wsChromeTab:hover,
+.wsChromeRowTitlebar .wsChromeTab:hover,
+.wsChromeRowSessions .wsChromeTab:hover,
+.wsChromeTabSession:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.wsChromeRowWorkspace .wsChromeTab:hover svg,
+.wsChromeRowTitlebar .wsChromeTab:hover svg {
+  opacity: 0.75;
+}
+
+/*
+ * 项目激活：与内容卡白相融
+ * 会话激活：与正文白相融；白底叠在行底 #f3f3f3 线上 → 激活位无线
+ */
+.wsChromeRowWorkspace .wsChromeTab.isActive,
+.wsChromeRowTitlebar .wsChromeTab.isActive {
+  background: var(--shell-inset-bg, var(--bg-primary));
+  color: var(--text-primary);
+  font-weight: 400;
+  z-index: 2;
+  border-color: color-mix(in srgb, var(--border-subtle) 45%, transparent);
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
+.wsChromeRowSessions .wsChromeTab.isActive,
+.wsChromeTabSession.isActive {
+  background: var(--ws-chrome-merge, var(--shell-inset-bg, var(--bg-primary)));
+  color: var(--text-primary);
+  font-weight: 400;
+  z-index: 2;
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  border-bottom-color: transparent;
+  box-shadow: none;
+  margin-bottom: 0;
+}
+
+.wsChromeRowWorkspace .wsChromeTab.isActive::after,
+.wsChromeRowTitlebar .wsChromeTab.isActive::after,
+.wsChromeRowSessions .wsChromeTab.isActive::after,
+.wsChromeTabSession.isActive::after {
+  content: none;
+}
+
+.wsChromeRowWorkspace .wsChromeTab.isActive svg,
+.wsChromeRowTitlebar .wsChromeTab.isActive svg,
+.wsChromeRowSessions .wsChromeTab.isActive svg {
+  opacity: 0.9;
+  color: var(--text-primary);
+}
+
+/* +：可展开菜单的触发钮 */
+.wsChromeRowWorkspace .wsChromeTabAdd,
+.wsChromeRowTitlebar .wsChromeTabAdd,
+.wsChromeRowSessions .wsChromeTabAdd {
+  width: 32px;
+  height: 28px;
+  min-width: 32px;
+  max-width: none;
+  padding: 0;
+  justify-content: center;
+  border-radius: 6px;
+  margin: 0 0 2px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  align-self: flex-end;
+  position: relative;
+}
+
+.wsChromeRowWorkspace .wsChromeTabAdd:hover,
+.wsChromeRowTitlebar .wsChromeTabAdd:hover,
+.wsChromeRowSessions .wsChromeTabAdd:hover,
+.wsChromeRowWorkspace .wsChromeTabAdd[aria-expanded='true'],
+.wsChromeRowTitlebar .wsChromeTabAdd[aria-expanded='true'],
+.wsChromeRowSessions .wsChromeTabAdd[aria-expanded='true'] {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  box-shadow: none;
+  border-color: transparent;
+}
+
+/* 加号展开面板 */
+.wsChromeAddWrap {
+  position: relative;
+  align-self: flex-end;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.wsChromeAddMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  box-shadow:
+    0 4px 16px color-mix(in srgb, #000 8%, transparent),
+    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wsChromeAddMenu[data-placement='end'] {
+  left: auto;
+  right: 0;
+}
+
+.wsChromeAddItem {
+  appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.wsChromeAddItem:hover,
+.wsChromeAddItem:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  outline: none;
+}
+
+.wsChromeAddItem svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.wsChromeAddItemDesc {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+  font-weight: 400;
+}
+
+.wsChromeAddItemText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+/* 项目 tab 加宽 */
+.wsChromeRowWorkspace .wsChromeTab,
+.wsChromeRowTitlebar .wsChromeTab {
+  max-width: 280px;
+  min-width: 96px;
+  padding: 0 18px;
+}
+
+.wsChromeRowWorkspace .wsChromeTabLabel,
+.wsChromeRowTitlebar .wsChromeTabLabel {
+  max-width: 220px;
+}
+
+.wsChromeTabMain {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 2px 0 0;
+  cursor: pointer;
+  height: 100%;
+}
+
+.wsChromeTabMain .wsChromePin {
+  opacity: 0.55;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.wsChromeTabSession.isActive .wsChromeTabMain .wsChromePin {
+  opacity: 0.8;
+  color: var(--text-secondary);
+}
+
+.wsChromeTabMain svg {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.wsChromeTabClose {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  /* 默认隐藏；仅 hover / 激活显示 */
+  opacity: 0;
+  pointer-events: none;
+  margin-right: 6px;
+  margin-left: 4px;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.wsChromeTabSession .wsChromeTabClose,
+.wsChromeTab .wsChromeTabClose {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wsChromeTabSession:hover .wsChromeTabClose,
+.wsChromeTabSession.isActive .wsChromeTabClose,
+.wsChromeTab:hover .wsChromeTabClose,
+.wsChromeTab.isActive .wsChromeTabClose {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+.wsChromeTabClose:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}

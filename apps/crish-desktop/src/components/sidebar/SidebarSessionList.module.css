@@ -1,0 +1,478 @@
+.listScroll {
+  /* Scroll container inside sidebar scroll area */
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.emptyHint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.subtle {
+  color: var(--text-tertiary);
+  opacity: 0.85;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 6px;
+  margin-bottom: 8px;
+}
+
+.sectionLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding-right: 4px;
+}
+
+.sectionLabelLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sectionLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.sectionLabel:hover {
+  color: var(--text-primary);
+}
+
+.sectionLabel svg {
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.sectionLabel:hover svg {
+  color: var(--text-secondary);
+}
+
+.sectionLabel .chevCollapsed {
+  transform: rotate(-90deg);
+}
+
+.sectionLabelRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sectionNew,
+.sectionSort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+}
+
+.sectionLabelRow:hover .sectionNew,
+.sectionLabelRow:focus-within .sectionNew,
+.sectionLabelRow:hover .sectionSort,
+.sectionLabelRow:focus-within .sectionSort {
+  opacity: 1;
+}
+
+.sectionNew:hover,
+.sectionSort:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.pinnedDropZone {
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.pinnedDropZone.dragOver {
+  border-color: var(--accent-primary);
+  background-color: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+}
+
+.pinnedList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.folderGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 4px;
+}
+
+.folderHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding-right: 4px;
+}
+
+.folderHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.folderHeader:hover {
+  color: var(--text-primary);
+}
+
+.folderHeader svg {
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.folderHeader:hover svg {
+  color: var(--text-secondary);
+}
+
+.folderName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.folderCount {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 2px;
+}
+
+.folderNewSession {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+}
+
+.folderHeaderRow:hover .folderNewSession,
+.folderHeaderRow:focus-within .folderNewSession {
+  opacity: 1;
+}
+
+.folderNewSession:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.folderSessions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 10px;
+}
+
+.sessionItemWrap {
+  list-style: none;
+  min-height: var(--control-height, 32px);
+  box-sizing: border-box;
+}
+
+.sessionItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-radius: 8px;
+  min-height: var(--control-height, 32px);
+  padding: 0 8px 0 10px;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  font-weight: var(--font-weight-medium, 500) !important;
+  box-shadow: none;
+  transition: color 0.12s ease, background-color 0.12s ease;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessionItem:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500) !important;
+}
+
+.sessionItem.active {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500) !important;
+  box-shadow: none;
+}
+
+.sessionItem.branchSession {
+  position: relative;
+}
+
+.sessionItem.branchSession::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background-color: var(--accent-primary);
+}
+
+.sessionRenameInput {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--border-color, #d4d4d8);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
+  padding: 0 8px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.sessionRenameInput:focus {
+  border-color: color-mix(in srgb, var(--text-primary) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.sessionTextCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.sessionText {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sessionSearchSnippet {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular, 400);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+  max-width: 100%;
+}
+
+.sessionItem.hasSearchSnippet {
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  min-height: auto;
+}
+
+.sessionItem.hasSearchSnippet .sessionTrailing {
+  margin-top: 2px;
+}
+
+.sessionTrailing {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.sessionTime {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  transition: opacity 0.1s ease;
+}
+
+.sessionActionsBtn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s ease, color 0.1s ease;
+}
+
+.sessionItem:hover .sessionTime,
+.sessionItem:focus-within .sessionTime {
+  opacity: 0;
+}
+
+.sessionItem:hover .sessionActionsBtn,
+.sessionItem:focus-within .sessionActionsBtn,
+.sessionItem:focus-visible .sessionActionsBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sessionActionsBtn:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.sessionListWindowed {
+  position: relative;
+}
+
+.sessionListWindowed > .sessionItemWrap {
+  height: var(--control-height, 32px);
+  min-height: var(--control-height, 32px);
+  overflow: hidden;
+}
+
+.sessionListWindowed .sessionItem.hasSearchSnippet {
+  min-height: var(--control-height, 32px);
+  padding-top: 0;
+  padding-bottom: 0;
+  align-items: center;
+}
+
+.sessionItem.isRenaming {
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.sessionRunningSpinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--text-tertiary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.sessionItem.isRunning:not(.active) {
+  animation: session-running-pulse 2.2s ease-in-out infinite;
+}
+
+.sessionItemWrap.isRunning > .sessionItem.active {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent, #3b82f6) 55%, transparent);
+}
+
+@keyframes session-running-pulse {
+  0%, 100% {
+    background: transparent;
+  }
+  50% {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent);
+  }
+}
+
+.sessionWindowSpacer {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.sidebarDragGhost {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 8px 12px;
+  font-size: var(--font-size-base);
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+}

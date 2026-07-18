@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
+import styles from './InlineAgentPanel.module.css';
 import {
   selectActiveAgentId,
   selectPanelAgentId,
@@ -37,6 +38,7 @@ import {
 import { ComposerField } from './ChatComposer';
 import { ChatToolStack } from './ChatToolCallBlock';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
+import { Tooltip } from './settings/SettingsUI';
 
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
@@ -423,9 +425,15 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
   return (
     <div
-      className={`inline-agent inline-agent--dense ${open ? 'is-open' : ''} inline-agent--${live.status}${
-        sideFocused ? ' is-side-focused' : ''
-      }`}
+      className={`${styles.inlineAgent} ${styles.inlineAgentDense} ${open ? styles.isOpen : ''} ${
+        live.status === 'running'
+          ? styles.inlineAgentRunning
+          : live.status === 'failed'
+            ? styles.inlineAgentFailed
+            : live.status === 'stopped'
+              ? styles.inlineAgentStopped
+              : ''
+      }${sideFocused ? ` ${styles.sideFocused}` : ''}`}
       role="region"
       aria-label={regionAria}
       aria-labelledby={labelDomId}
@@ -435,10 +443,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       data-side-focused={sideFocused ? '1' : '0'}
       data-composer-dense="1"
     >
-      <div className="inline-agent-head-row">
+      <div className={styles.inlineAgentHeadRow}>
         <button
           type="button"
-          className="inline-agent-head"
+          className={styles.inlineAgentHead}
           aria-expanded={open}
           aria-controls={bodyDomId}
           id={labelDomId}
@@ -451,39 +459,51 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           ) : (
             <Lucide.Bot size={13} className="inline-agent-ico" aria-hidden />
           )}
-          <span className="inline-agent-label">
+          <span className={styles.inlineAgentLabel}>
             {displayLabel}
           </span>
           <span
-            className={`inline-agent-badge inline-agent-badge--${live.status}`}
+            className={`${styles.inlineAgentBadge} ${
+              live.status === 'running'
+                ? styles.inlineAgentBadgeRunning
+                : live.status === 'failed'
+                  ? styles.inlineAgentBadgeFailed
+                  : live.status === 'stopped'
+                    ? styles.inlineAgentBadgeStopped
+                    : ''
+            }`}
             aria-live="polite"
           >
             {statusLabel}
           </span>
           {sideFocused ? (
-            <span
-              className="inline-agent-badge inline-agent-badge--side"
-              title="已在侧栏聚焦"
-              aria-label="已在侧栏聚焦"
-            >
-              侧栏
-            </span>
+            <Tooltip content="已在侧栏聚焦">
+              <span
+                className={`${styles.inlineAgentBadge} ${styles.inlineAgentBadgeSide}`}
+                aria-label="已在侧栏聚焦"
+              >
+                侧栏
+              </span>
+            </Tooltip>
           ) : null}
           {pendingTools > 0 ? (
-            <span
-              className="inline-agent-badge inline-agent-badge--pending"
-              title="待审批工具"
-              aria-label={`待审批 ${pendingTools} 项`}
-            >
-              待批 {pendingTools}
-            </span>
+            <Tooltip content={`待审批 ${pendingTools} 项`}>
+              <span
+                className={`${styles.inlineAgentBadge} ${styles.inlineAgentBadgePending}`}
+                aria-label={`待审批 ${pendingTools} 项`}
+              >
+                待批 {pendingTools}
+              </span>
+            </Tooltip>
           ) : null}
           {live.mode ? (
-            <span className="inline-agent-mode" title={live.mode}>
-              {live.mode}
-            </span>
+            <Tooltip content={live.mode}>
+              <span className={styles.inlineAgentMode}>
+                {live.mode}
+              </span>
+            </Tooltip>
           ) : null}
-          <span className="inline-agent-meta">
+          <span className={styles.inlineAgentMeta}>
             {msgCount} 条
             {live.summary ? ` · ${live.summary.slice(0, 36)}` : ''}
           </span>
@@ -494,98 +514,103 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           />
         </button>
         {/* 折叠态也可：停止 / 侧栏 only（不依赖展开 Composer） */}
-        <div className="inline-agent-head-actions">
+        <div className={styles.inlineAgentHeadActions}>
           {running ? (
-            <button
-              type="button"
-              className="agent-card-btn agent-card-btn--danger inline-agent-stop-btn"
-              title={stopping ? '停止中…' : '停止子智能体'}
-              aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
-              aria-busy={stopping || undefined}
-              disabled={stopping}
-              onClick={handleStop}
-            >
-              <Lucide.Square size={11} fill="currentColor" aria-hidden />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={`agent-card-btn inline-agent-side-btn${sideFocused ? ' is-active' : ''}`}
-            title={sideOpenTitle}
-            aria-label={sideOpenAria}
-            aria-pressed={sideFocused}
-            disabled={!agentIdNorm}
-            onClick={openInSideOnly}
-          >
-            <Lucide.PanelRight size={13} aria-hidden />
-          </button>
-        </div>
-      </div>
-
-      {open ? (
-        <div className="inline-agent-body" id={bodyDomId} role="group" aria-label={`${displayTitle} 详情`}>
-          <div className="inline-agent-toolbar">
-            <button
-              type="button"
-              className="inline-agent-link"
-              data-open-target="side-panel"
-              data-side-reused={sideFocused ? '1' : '0'}
-              title={sideOpenTitle}
-              aria-label={sideOpenAria}
-              disabled={!agentIdNorm}
-              onClick={openInSideOnly}
-            >
-              {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开'}
-            </button>
-            {running ? (
+            <Tooltip content={stopping ? '停止中…' : '停止子智能体'}>
               <button
                 type="button"
-                className="inline-agent-link inline-agent-link--stop"
-                title="停止生成"
-                aria-label="停止生成"
+                className={`agent-card-btn agent-card-btn--danger ${styles.inlineAgentStopBtn}`}
+                aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
                 aria-busy={stopping || undefined}
                 disabled={stopping}
                 onClick={handleStop}
               >
-                {stopping ? '停止中…' : '停止'}
+                <Lucide.Square size={11} fill="currentColor" aria-hidden />
               </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip content={sideOpenTitle}>
+            <button
+              type="button"
+              className={`agent-card-btn ${styles.inlineAgentHeadActions} ${sideFocused ? 'is-active' : ''}`}
+              aria-label={sideOpenAria}
+              aria-pressed={sideFocused}
+              disabled={!agentIdNorm}
+              onClick={openInSideOnly}
+            >
+              <Lucide.PanelRight size={13} aria-hidden />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+
+      {open ? (
+        <div className={styles.inlineAgentBody} id={bodyDomId} role="group" aria-label={`${displayTitle} 详情`}>
+          <div className={styles.inlineAgentToolbar}>
+            <Tooltip content={sideOpenTitle}>
+              <button
+                type="button"
+                className={styles.inlineAgentLink}
+                data-open-target="side-panel"
+                data-side-reused={sideFocused ? '1' : '0'}
+                aria-label={sideOpenAria}
+                disabled={!agentIdNorm}
+                onClick={openInSideOnly}
+              >
+                {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开'}
+              </button>
+            </Tooltip>
+            {running ? (
+              <Tooltip content="停止生成">
+                <button
+                  type="button"
+                  className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkStop}`}
+                  aria-label="停止生成"
+                  aria-busy={stopping || undefined}
+                  disabled={stopping}
+                  onClick={handleStop}
+                >
+                  {stopping ? '停止中…' : '停止'}
+                </button>
+              </Tooltip>
             ) : null}
             {pendingTools > 0 ? (
-              <span className="inline-agent-toolbar-hint" role="status">
+              <span className={styles.inlineAgentToolbarHint} role="status">
                 有 {pendingTools} 项待确认
               </span>
             ) : null}
           </div>
 
           <div
-            className="inline-agent-stream"
+            className={styles.inlineAgentStream}
             ref={bodyRef}
             role="log"
             aria-relevant="additions"
             aria-busy={running || undefined}
           >
             {msgCount === 0 ? (
-              <div className="inline-agent-empty" role="status">
-                <p className="inline-agent-empty-p" style={{ margin: 0 }}>
+              <div className={styles.inlineAgentEmpty} role="status">
+                <p className={styles.inlineAgentEmptyP} style={{ margin: 0 }}>
                   {emptyStreamCopy}
                 </p>
                 {agentIdNorm ? (
-                  <button
-                    type="button"
-                    className="inline-agent-link"
-                    data-open-target="side-panel"
-                    style={{ marginTop: 6 }}
-                    title={sideOpenTitle}
-                    aria-label={sideOpenAria}
-                    onClick={openInSideOnly}
-                  >
-                    {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开完整视图'}
-                  </button>
+                  <Tooltip content={sideOpenTitle}>
+                    <button
+                      type="button"
+                      className={styles.inlineAgentLink}
+                      data-open-target="side-panel"
+                      style={{ marginTop: 6 }}
+                      aria-label={sideOpenAria}
+                      onClick={openInSideOnly}
+                    >
+                      {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开完整视图'}
+                    </button>
+                  </Tooltip>
                 ) : null}
               </div>
             ) : (
               messages.map((msg) => (
-                <div key={msg.id} className={`inline-agent-msg inline-agent-msg--${msg.sender}`}>
+                <div key={msg.id} className={`${styles.inlineAgentMsg} inline-agent-msg--${msg.sender}`}>
                   {msg.sender === 'user' ? (
                     <div className="agent-prompt-bubble">{msg.text}</div>
                   ) : (
@@ -659,7 +684,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
           {/* denser ComposerField：footer 渐变 + ≤3 行增高 + 主题半透壳 */}
           <div
-            className="chat-footer agent-card-composer agent-card-composer--dense inline-agent-composer-wrap inline-agent-composer-wrap--dense"
+            className={`chat-footer agent-card-composer agent-card-composer--dense ${styles.inlineAgentComposerWrap} ${styles.inlineAgentComposerWrapDense}`}
             data-composer="inline-agent-dense"
           >
             <ComposerField

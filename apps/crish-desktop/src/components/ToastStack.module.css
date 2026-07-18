@@ -1,0 +1,79 @@
+.toastStack {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  z-index: 10000;
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+
+.toastStack .toastAlert {
+  pointer-events: auto;
+  position: relative;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  width: max-content;
+  max-width: 100%;
+}
+
+.toastAlert {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: color-mix(in srgb, var(--bg-elevated, #2a2d3a) 92%, transparent);
+  color: var(--text-secondary, #c8cbd4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle, #ffffff) 8%, transparent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-size: var(--font-size-sm, 12px);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10000;
+  animation: slideInUp 0.18s ease-out;
+  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+}
+
+.toastUndoBtn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--text-primary, #e8eaf0);
+  font-weight: var(--font-weight-normal);
+  cursor: pointer;
+  font-size: var(--font-size-xs, 11px);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.toastUndoBtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary, #ffffff);
+}
+
+.toastUndoBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

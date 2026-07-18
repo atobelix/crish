@@ -1,0 +1,92 @@
+.chatBody {
+  background-color: var(--shell-inset-bg, var(--bg-primary));
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1 1 0%;
+  position: relative;
+}
+
+.chatDocFlow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 28px 20px 20px;
+  box-sizing: border-box;
+  background-color: var(--shell-inset-bg, var(--bg-primary));
+  color: var(--text-primary);
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+.chatFooter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 14px 4px;
+  border-top: none;
+  background: var(--chat-footer-fade);
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.chatFooter > * {
+  width: 100%;
+  max-width: min(var(--chat-col-max, 680px), 100%);
+}
+
+.modelBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-1, 2px) var(--space-2, 6px);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.modelBadge.readonly {
+  background-color: var(--bg-hover);
+  border-color: transparent;
+}
+
+.modelText {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+/* Empty Session Centered Layout Overrides */
+.chatBody[data-empty-kind="session-empty"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.chatBody[data-empty-kind="session-empty"] .chatDocFlow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 40px var(--shell-content-pad-x, 14px) 120px;
+}

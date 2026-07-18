@@ -3,6 +3,7 @@
  */
 import React, { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './SettingsExtensionsTab.module.css';
 import { clientApi, type PackageSource } from '../api/clientApi';
 import {
   EXTENSION_CATALOG,
@@ -574,7 +575,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                     {tool}
                   </span>
                   <label className="settings-list-control">
-                    <span className="ext-detail-meta" style={{ marginRight: 8 }}>
+                    <span className={`ext-detail-meta ${styles.detailMeta}`}>
                       {off ? '禁用' : '启用'}
                     </span>
                     <input
@@ -593,7 +594,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             })}
           </div>
         ) : installedItem ? (
-          <div className="ext-empty" role="status" style={{ padding: '12px 0' }}>
+          <div className={`ext-empty ${styles.emptyCompact}`} role="status">
             暂无上报工具 · 启动服务后刷新
           </div>
         ) : null}
@@ -610,7 +611,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         : undefined;
     return (
       <div className="ext-inline-panel">
-        <div className="ext-detail-md" style={{ fontFamily: 'var(--font-sans)' }}>
+        <div className={`ext-detail-md ${styles.detailMdSans}`}>
           {desc}
           {'\n\n'}
           {mode === 'config'

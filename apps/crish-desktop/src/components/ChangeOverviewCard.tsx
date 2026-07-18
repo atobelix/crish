@@ -5,6 +5,7 @@
  * 不做成彩色胶囊堆叠，避免喧宾夺主。
  */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import styles from './ChangeOverviewCard.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
@@ -268,7 +269,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
 
   return (
     <div
-      className="change-overview"
+      className={styles.changeOverview}
       role="region"
       aria-label="改动总览"
       aria-busy={busy || undefined}
@@ -279,10 +280,10 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
         }
       }}
     >
-      <div className="change-overview-bar">
+      <div className={styles.changeOverviewBar}>
         <button
           type="button"
-          className="change-overview-toggle"
+          className={styles.changeOverviewToggle}
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-controls={listId}
@@ -291,31 +292,31 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
           <Lucide.FileDiff
             size={15}
             strokeWidth={1.75}
-            className="change-overview-ico"
+            className={styles.changeOverviewIco}
             aria-hidden
           />
-          <span className="change-overview-title">
+          <span className={styles.changeOverviewTitle}>
             改动 · {files.length} 文件
           </span>
-          <span className="change-overview-stat" aria-hidden>
+          <span className={styles.changeOverviewStat} aria-hidden>
             <span className="add">+{additions}</span>
             <span className="del">−{deletions}</span>
           </span>
           {busy ? (
-            <span className="change-overview-title" role="status" aria-live="polite">
+            <span className={styles.changeOverviewTitle} role="status" aria-live="polite">
               应用中…
             </span>
           ) : null}
           <Lucide.ChevronDown
             size={14}
-            className={`change-overview-chev ${open ? 'open' : ''}`}
+            className={`${styles.changeOverviewChev} ${open ? styles.open : ''}`}
             aria-hidden
           />
         </button>
-        <div className="change-overview-actions" role="toolbar" aria-label="改动操作">
+        <div className={styles.changeOverviewActions} role="toolbar" aria-label="改动操作">
           <button
             type="button"
-            className="change-overview-review"
+            className={styles.changeOverviewReview}
             disabled={busy || safeCount === 0}
             title={
               safeCount === 0
@@ -336,7 +337,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
           {files.length > 1 ? (
             <button
               type="button"
-              className="change-overview-review"
+              className={styles.changeOverviewReview}
               disabled={busy}
               title="拒绝全部并从列表移除"
               aria-label={`拒绝全部 ${files.length} 个文件`}
@@ -347,7 +348,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
           ) : null}
           <button
             type="button"
-            className="change-overview-review"
+            className={styles.changeOverviewReview}
             disabled={busy}
             title="打开变更面板"
             aria-label="查看变更"
@@ -362,13 +363,13 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
       </div>
 
       {inlineErr ? (
-        <div className="files-action-hint" role="alert" aria-live="assertive">
-          <span className="files-action-hint-text" title={inlineErr}>
+        <div className={styles.filesActionHint} role="alert" aria-live="assertive">
+          <span className={styles.filesActionHintText} title={inlineErr}>
             {inlineErr}
           </span>
           <button
             type="button"
-            className="files-action-hint-dismiss"
+            className={styles.filesActionHintDismiss}
             title="关闭"
             aria-label="关闭错误"
             onClick={dismissErr}
@@ -381,7 +382,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
       {open ? (
         <ul
           id={listId}
-          className="change-overview-list"
+          className={styles.changeOverviewList}
           aria-label={`改动文件 ${files.length} 个`}
         >
           {files.map((f) => {
@@ -392,10 +393,10 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
             const add = f.additions || 0;
             const del = f.deletions || 0;
             return (
-              <li key={f.filePath} className="change-overview-row">
+              <li key={f.filePath} className={styles.changeOverviewRow}>
                 <button
                   type="button"
-                  className="change-overview-file"
+                  className={styles.changeOverviewFile}
                   title={f.filePath}
                   aria-label={
                     emptyLine
@@ -405,11 +406,11 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                   onClick={() => onOpenDiff(f)}
                 >
                   <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
-                  <span className="change-overview-name">{name}</span>
+                  <span className={styles.changeOverviewName}>{name}</span>
                   {parent ? (
-                    <span className="change-overview-path">{parent}</span>
+                    <span className={styles.changeOverviewPath}>{parent}</span>
                   ) : null}
-                  <span className="change-overview-stat sm" aria-hidden>
+                  <span className={`${styles.changeOverviewStat} ${styles.changeOverviewStatGlobalSm}`} aria-hidden>
                     {emptyLine ? (
                       <span className="del">无行级</span>
                     ) : (
@@ -420,10 +421,10 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                     )}
                   </span>
                 </button>
-                <div className="change-overview-file-actions">
+                <div className={styles.changeOverviewFileActions}>
                   <button
                     type="button"
-                    className="change-overview-mini-btn accept"
+                    className={`${styles.changeOverviewMiniBtn} ${styles.accept}`}
                     title={canApply ? '接受并写入磁盘' : '无法安全自动应用'}
                     aria-label={
                       canApply ? `接受 ${name}` : `无法自动应用 ${name}`
@@ -435,7 +436,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                   </button>
                   <button
                     type="button"
-                    className="change-overview-mini-btn"
+                    className={styles.changeOverviewMiniBtn}
                     title="从变更列表移除"
                     aria-label={`拒绝 ${name}`}
                     disabled={busy}

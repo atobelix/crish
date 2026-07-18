@@ -8,6 +8,8 @@ import {
   formatEngineStatusShort,
   formatEngineStatusTitle,
 } from './RuntimePanel';
+import styles from './RuntimeFloatPanel.module.css';
+import { Tooltip } from './settings/SettingsUI';
 
 interface RuntimeFloatPanelProps {
   open: boolean;
@@ -162,46 +164,47 @@ export const RuntimeFloatPanel: React.FC<RuntimeFloatPanelProps> = ({
 
   return (
     <div
-      className="runtime-float-root runtime-float-root--compact"
+      className={styles.runtimeFloatRoot}
       role="presentation"
     >
       <div
         ref={sheetRef}
-        className="runtime-float-sheet runtime-float-sheet--compact"
+        className={styles.runtimeFloatSheet}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={describedBy}
       >
-        <div className="runtime-float-header">
-          <div className="runtime-float-title">
+        <div className={styles.runtimeFloatHeader}>
+          <div className={styles.runtimeFloatTitle}>
             <Lucide.Activity size={16} strokeWidth={1.75} aria-hidden />
             <span id={titleId}>运行状态</span>
             {/* 紧凑引擎徽章：中文短标签 + 完整 aria */}
             <span
-              className="rt-engine-status"
+              className={styles.rtEngineStatus}
               role="status"
               aria-live="polite"
               aria-label={engineFull}
               title={engineTitle}
             >
               <span
-                className={`rt-dot ${engineOnline ? 'on' : 'off'}`}
+                className={`${styles.rtDot} ${engineOnline ? styles.on : styles.off}`}
                 aria-hidden
               />
-              <span className="rt-row-meta rt-engine-meta">{engineShort}</span>
+              <span className={`${styles.rtRowMeta} ${styles.rtEngineMeta}`}>{engineShort}</span>
             </span>
           </div>
-          <button
-            ref={closeBtnRef}
-            type="button"
-            className="header-btn"
-            title="关闭（Esc）"
-            aria-label="关闭运行状态"
-            onClick={onClose}
-          >
-            <Lucide.X size={16} strokeWidth={1.75} aria-hidden />
-          </button>
+          <Tooltip content="关闭 (Esc)">
+            <button
+              ref={closeBtnRef}
+              type="button"
+              className="header-btn"
+              aria-label="关闭运行状态"
+              onClick={onClose}
+            >
+              <Lucide.X size={16} strokeWidth={1.75} aria-hidden />
+            </button>
+          </Tooltip>
         </div>
 
         {/* 读屏描述：无 sr-only token，用 clip 隐藏，避免 thrash panels.css */}
@@ -227,7 +230,7 @@ export const RuntimeFloatPanel: React.FC<RuntimeFloatPanelProps> = ({
           {engineOnline ? '' : formatFloatOfflineChromeHint()}
         </span>
 
-        <div className="runtime-float-body">
+        <div className={styles.runtimeFloatBody}>
           <RuntimePanel wsId="float" onShowToast={handleShowToast} />
         </div>
       </div>

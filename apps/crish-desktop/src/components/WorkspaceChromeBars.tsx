@@ -14,6 +14,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import styles from './WorkspaceChromeBars.module.css';
 import * as Lucide from 'lucide-react';
 import {
   GENERAL_FOLDER,
@@ -321,12 +322,12 @@ export const WorkspaceStrip: React.FC<Props> = ({
 
   return (
     <div
-      className={`ws-chrome-row ws-chrome-row--workspace ${className || ''}`}
+      className={`${styles.wsChromeRow} ${styles.wsChromeRowWorkspace} ws-chrome-row ws-chrome-row--workspace ${className || ''}`}
       role="tablist"
       aria-label="工作区"
       data-tauri-drag-region
     >
-      <div className="ws-chrome-scroll" data-tauri-drag-region="false">
+      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`} data-tauri-drag-region="false">
         {s.workspaceTabs.map((tab) => {
           const active = tab.id === s.activeWsId;
           return (
@@ -335,7 +336,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
               type="button"
               role="tab"
               aria-selected={active}
-              className={`ws-chrome-tab ${active ? 'is-active' : ''}`}
+              className={`${styles.wsChromeTab} ${active ? styles.isActive + ' is-active' : ''} ws-chrome-tab`}
               title={tab.path || tab.label}
               onClick={() => s.selectWorkspace(tab)}
             >
@@ -344,14 +345,14 @@ export const WorkspaceStrip: React.FC<Props> = ({
               ) : (
                 <Lucide.MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
               )}
-              <span className="ws-chrome-tab-label">{tab.label}</span>
+              <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.label}</span>
             </button>
           );
         })}
-        <div className="ws-chrome-add-wrap" ref={add.wrapRef}>
+        <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
           <button
             type="button"
-            className="ws-chrome-tab ws-chrome-tab--add"
+            className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
             title="添加"
             aria-label="添加工作区"
             aria-haspopup="menu"
@@ -364,28 +365,28 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {add.open ? (
             <div
               id={add.menuId}
-              className="ws-chrome-add-menu"
+              className={`${styles.wsChromeAddMenu} ws-chrome-add-menu`}
               role="menu"
               aria-label="添加工作区"
             >
               <button
                 type="button"
                 role="menuitem"
-                className="ws-chrome-add-item"
+                className={`${styles.wsChromeAddItem} ws-chrome-add-item`}
                 onClick={() => {
                   add.setOpen(false);
                   s.onAdd();
                 }}
               >
                 <Lucide.FolderPlus size={16} strokeWidth={1.75} aria-hidden />
-                <span className="ws-chrome-add-item-text">
+                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
                   <span>添加本地项目</span>
                 </span>
               </button>
               <button
                 type="button"
                 role="menuitem"
-                className="ws-chrome-add-item"
+                className={`${styles.wsChromeAddItem} ws-chrome-add-item`}
                 onClick={() => {
                   add.setOpen(false);
                   s.selectWorkspace({
@@ -396,7 +397,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 }}
               >
                 <Lucide.MessagesSquare size={16} strokeWidth={1.75} aria-hidden />
-                <span className="ws-chrome-add-item-text">
+                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
                   <span>切换到「对话」</span>
                 </span>
               </button>
@@ -406,14 +407,14 @@ export const WorkspaceStrip: React.FC<Props> = ({
       </div>
       {showTrail ? (
         <div
-          className="ws-chrome-trail ws-chrome-trail--win"
+          className={`${styles.wsChromeTrail} ws-chrome-trail ws-chrome-trail--win`}
           role="toolbar"
           aria-label="顶栏操作"
           data-tauri-drag-region="false"
         >
           <button
             type="button"
-            className={`ws-chrome-trail-btn no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''}`}
+            className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
             title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
             aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
             onClick={toggleRightSidebar}
@@ -423,7 +424,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {onOpenRuntime ? (
             <button
               type="button"
-              className="ws-chrome-trail-btn no-drag"
+              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
               title="运行状态"
               aria-label="运行状态"
               onClick={onOpenRuntime}
@@ -434,7 +435,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {onOpenHelp ? (
             <button
               type="button"
-              className="ws-chrome-trail-btn no-drag"
+              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
               title="快捷键与帮助"
               aria-label="快捷键与帮助"
               onClick={onOpenHelp}
@@ -445,7 +446,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {onWinMinimize ? (
             <button
               type="button"
-              className="ws-chrome-trail-btn no-drag"
+              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
               title="最小化"
               aria-label="最小化窗口"
               onClick={onWinMinimize}
@@ -456,7 +457,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {onWinMaximize ? (
             <button
               type="button"
-              className="ws-chrome-trail-btn no-drag"
+              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
               title="最大化"
               aria-label="最大化或还原窗口"
               onClick={onWinMaximize}
@@ -467,7 +468,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           {onWinClose ? (
             <button
               type="button"
-              className="ws-chrome-trail-btn ws-chrome-trail-btn--close no-drag"
+              className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
               title="关闭"
               aria-label="关闭窗口"
               onClick={onWinClose}
@@ -489,34 +490,34 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
 
   return (
     <div
-      className={`ws-chrome-row ws-chrome-row--sessions ${className || ''}`}
+      className={`${styles.wsChromeRow} ${styles.wsChromeRowSessions} ws-chrome-row ws-chrome-row--sessions ${className || ''}`}
       role="tablist"
       aria-label="会话"
     >
-      <div className="ws-chrome-scroll">
+      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`}>
         {s.sessionTabs.map((tab) => {
           const active = tab.sessionId === s.activeSessionId;
           return (
             <div
               key={tab.sessionId}
-              className={`ws-chrome-tab ws-chrome-tab--session ${active ? 'is-active' : ''}${tab.pinned ? ' is-pinned' : ''}`}
+              className={`${styles.wsChromeTab} ${styles.wsChromeTabSession} ${active ? styles.isActive + ' is-active' : ''}${tab.pinned ? ' is-pinned' : ''} ws-chrome-tab ws-chrome-tab--session`}
               role="tab"
               aria-selected={active}
             >
               <button
                 type="button"
-                className="ws-chrome-tab-main"
+                className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
                 title={tab.title}
                 onClick={() => s.selectSession(tab.sessionId)}
               >
                 {tab.pinned ? (
-                  <Lucide.Pin size={12} strokeWidth={2} aria-hidden className="ws-chrome-pin" />
+                  <Lucide.Pin size={12} strokeWidth={2} aria-hidden className={`${styles.wsChromePin} ws-chrome-pin`} />
                 ) : null}
-                <span className="ws-chrome-tab-label">{tab.title}</span>
+                <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.title}</span>
               </button>
               <button
                 type="button"
-                className="ws-chrome-tab-close"
+                className={`${styles.wsChromeTabClose} ws-chrome-tab-close`}
                 title="关闭标签"
                 aria-label={`关闭会话标签 ${tab.title}`}
                 onClick={(e) => s.onCloseSession(tab.sessionId, e)}
@@ -526,10 +527,10 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
             </div>
           );
         })}
-        <div className="ws-chrome-add-wrap" ref={add.wrapRef}>
+        <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
           <button
             type="button"
-            className="ws-chrome-tab ws-chrome-tab--add"
+            className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
             title="新建"
             aria-label="新建对话"
             aria-haspopup="menu"
@@ -542,21 +543,21 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
           {add.open ? (
             <div
               id={add.menuId}
-              className="ws-chrome-add-menu"
+              className={`${styles.wsChromeAddMenu} ws-chrome-add-menu`}
               role="menu"
               aria-label="新建对话"
             >
               <button
                 type="button"
                 role="menuitem"
-                className="ws-chrome-add-item"
+                className={`${styles.wsChromeAddItem} ws-chrome-add-item`}
                 onClick={() => {
                   add.setOpen(false);
                   s.onNewSession();
                 }}
               >
                 <Lucide.MessageSquarePlus size={16} strokeWidth={1.75} aria-hidden />
-                <span className="ws-chrome-add-item-text">
+                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
                   <span>新建对话</span>
                 </span>
               </button>
@@ -564,10 +565,10 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
           ) : null}
         </div>
       </div>
-      <div className="ws-chrome-trail" role="toolbar" aria-label="右侧面板">
+      <div className={`${styles.wsChromeTrail} ws-chrome-trail`} role="toolbar" aria-label="右侧面板">
         <button
           type="button"
-          className={`ws-chrome-trail-btn ${!isRightSidebarCollapsed ? 'is-active' : ''}`}
+          className={`${styles.wsChromeTrailBtn} ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
           title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
           aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
           onClick={toggleRightSidebar}
@@ -584,7 +585,7 @@ export const WorkspaceChromeBars: React.FC<Props> = (props) => {
   if (props.variant === 'workspace') return <WorkspaceStrip {...props} />;
   if (props.variant === 'sessions') return <SessionStrip {...props} />;
   return (
-    <div className={`ws-chrome ${props.className || ''}`} role="navigation" aria-label="工作台标签">
+    <div className={`${styles.wsChrome} ws-chrome ${props.className || ''}`} role="navigation" aria-label="工作台标签">
       <WorkspaceStrip {...props} />
       <SessionStrip {...props} />
     </div>

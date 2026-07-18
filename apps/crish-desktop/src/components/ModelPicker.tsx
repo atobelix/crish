@@ -6,7 +6,8 @@
  */
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import './ModelPicker.css';
+import styles from './ModelPicker.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import {
   resolvePreferredModelSelection,
   setActiveProfileId as setStoredProfileId,
@@ -178,7 +179,7 @@ export const ModelPicker: React.FC<Props> = ({
   return (
     <div
       ref={rootRef}
-      className="mpick mpick--slim mpick--menu"
+      className={`${styles.mpick} ${styles.mpickSlim} ${styles.mpickMenu}`}
       role="menu"
       aria-label="切换模型"
       aria-busy={busy ? true : undefined}
@@ -187,27 +188,27 @@ export const ModelPicker: React.FC<Props> = ({
       {error ? (
         <button
           type="button"
-          className="mpick-error mpick-error--action"
+          className={`${styles.mpickError} ${styles.mpickErrorAction}`}
           onClick={() => {
             onClose();
             onOpenSettings();
           }}
         >
-          <span className="mpick-error-text">{error}</span>
-          <span className="mpick-error-link">设置</span>
+          <span className={styles.mpickErrorText}>{error}</span>
+          <span className={styles.mpickErrorLink}>设置</span>
         </button>
       ) : null}
 
-      <div className="mpick-think" role="group" aria-label="思考强度">
-        <span className="mpick-think-label">思考</span>
-        <div className="mpick-think-chips">
+      <div className={styles.mpickThink} role="group" aria-label="思考强度">
+        <span className={styles.mpickThinkLabel}>思考</span>
+        <div className={styles.mpickThinkChips}>
           {THINKING_OPTS.map((opt) => (
             <button
               key={opt.id}
               type="button"
               role="menuitemradio"
               aria-checked={thinking === opt.id}
-              className={`mpick-think-chip${thinking === opt.id ? ' is-on' : ''}`}
+              className={`${styles.mpickThinkChip}${thinking === opt.id ? ` ${styles.isOn}` : ''}`}
               disabled={busy}
               onClick={() => void setThinking(opt.id)}
             >
@@ -217,17 +218,17 @@ export const ModelPicker: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="mpick-section-label" aria-hidden>
+      <div className={styles.mpickSectionLabel} aria-hidden>
         模型
       </div>
-      <div className="mpick-scroll" role="none">
+      <div className={styles.mpickScroll} role="none">
         {flatModels.length === 0 ? (
-          <div className="mpick-empty" role="status">
-            <span className="mpick-empty-title">暂无可用模型</span>
-            <span className="mpick-empty-hint">到设置添加服务商并配置模型列表</span>
+          <div className={styles.mpickEmpty} role="status">
+            <span className={styles.mpickEmptyTitle}>暂无可用模型</span>
+            <span className={styles.mpickEmptyHint}>到设置添加服务商并配置模型列表</span>
             <button
               type="button"
-              className="mpick-link-btn"
+              className={styles.mpickLinkBtn}
               onClick={() => {
                 onClose();
                 onOpenSettings();
@@ -241,48 +242,49 @@ export const ModelPicker: React.FC<Props> = ({
             const selected =
               item.profileId === activeProfileId && item.model === activeModel;
             return (
-              <button
-                key={item.key}
-                id={`${uid}-opt-${item.key}`}
-                type="button"
-                role="menuitem"
-                className={`mpick-menu-item${selected ? ' is-selected' : ''}`}
-                disabled={busy}
-                aria-current={selected ? 'true' : undefined}
-                title={`${item.profileName} · ${item.model}`}
-                onClick={() => {
-                  if (busy) return;
-                  setStoredProfileId(item.profileId);
-                  onSelect(item.profileId, item.model);
-                  onClose();
-                }}
-              >
-                <span className="mpick-menu-item-main">
-                  <span className="mpick-menu-item-name">{item.label}</span>
-                  <span className="mpick-menu-item-meta">{item.profileName}</span>
-                </span>
-                {selected ? (
-                  <Lucide.Check size={14} className="mpick-check" aria-hidden />
-                ) : null}
-              </button>
+              <Tooltip key={item.key} content={`${item.profileName} · ${item.model}`}>
+                <button
+                  id={`${uid}-opt-${item.key}`}
+                  type="button"
+                  role="menuitem"
+                  className={`${styles.mpickMenuItem}${selected ? ` ${styles.isSelected}` : ''}`}
+                  disabled={busy}
+                  aria-current={selected ? 'true' : undefined}
+                  onClick={() => {
+                    if (busy) return;
+                    setStoredProfileId(item.profileId);
+                    onSelect(item.profileId, item.model);
+                    onClose();
+                  }}
+                >
+                  <span className={styles.mpickMenuItemMain}>
+                    <span className={styles.mpickMenuItemName}>{item.label}</span>
+                    <span className={styles.mpickMenuItemMeta}>{item.profileName}</span>
+                  </span>
+                  {selected ? (
+                    <Lucide.Check size={14} className={styles.mpickCheck} aria-hidden />
+                  ) : null}
+                </button>
+              </Tooltip>
             );
           })
         )}
       </div>
 
-      <div className="mpick-footer">
-        <button
-          type="button"
-          className="mpick-footer-btn"
-          onClick={() => {
-            onClose();
-            onOpenSettings();
-          }}
-          title="配置模型与密钥"
-        >
-          <Lucide.Settings size={14} aria-hidden />
-          去设置配置
-        </button>
+      <div className={styles.mpickFooter}>
+        <Tooltip content="配置模型与密钥">
+          <button
+            type="button"
+            className={styles.mpickFooterBtn}
+            onClick={() => {
+              onClose();
+              onOpenSettings();
+            }}
+          >
+            <Lucide.Settings size={14} aria-hidden />
+            去设置配置
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

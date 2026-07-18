@@ -10,6 +10,8 @@ import * as Lucide from 'lucide-react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SettingsTabType } from '../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../api/themeStore';
+import styles from './SettingsQuickMenu.module.css';
+import { Tooltip } from './settings/SettingsUI';
 
 interface Props {
   onShowToast?: (msg: string) => void;
@@ -203,36 +205,37 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   const isDark = theme === 'dark';
 
   return (
-    <div className="sb-quick-wrap" ref={rootRef} data-density="compact">
-      <button
-        ref={btnRef}
-        type="button"
-        className={`sidebar-footer-settings${open ? ' is-open' : ''}`}
-        title="快捷设置"
-        aria-label={triggerLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => {
-          if (open) {
-            // 再次点击触发钮关闭：焦点已在钮上，无需再 restore
-            restoreOnCloseRef.current = false;
-            setOpen(false);
-          } else {
-            setOpen(true);
-          }
-        }}
-      >
-        <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
-        <span>设置</span>
-        <Lucide.ChevronUp size={14} strokeWidth={1.75} className="sb-quick-chev" aria-hidden />
-      </button>
+    <div className={styles.sbQuickWrap} ref={rootRef} data-density="compact">
+      <Tooltip content="快捷设置">
+        <button
+          ref={btnRef}
+          type="button"
+          className={`${styles.sidebarFooterSettings}${open ? ` ${styles.isOpen}` : ''}`}
+          aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => {
+            if (open) {
+              // 再次点击触发钮关闭：焦点已在钮上，无需再 restore
+              restoreOnCloseRef.current = false;
+              setOpen(false);
+            } else {
+              setOpen(true);
+            }
+          }}
+        >
+          <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
+          <span>设置</span>
+          <Lucide.ChevronUp size={14} strokeWidth={1.75} className={styles.sbQuickChev} aria-hidden />
+        </button>
+      </Tooltip>
 
       {open && menuPos && (
         <div
           id={menuId}
           ref={menuRef}
-          className="sb-quick-menu"
+          className={styles.sbQuickMenu}
           role="menu"
           aria-label="快捷设置"
           aria-orientation="vertical"
@@ -245,58 +248,60 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           onKeyDown={onMenuKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="sb-quick-section" role="none">
-            <div className="sb-quick-label" id={themeGroupId}>
+          <div className={styles.sbQuickSection} role="none">
+            <div className={styles.sbQuickLabel} id={themeGroupId}>
               外观
             </div>
             <div
-              className="ui-segment ui-segment--inline sb-quick-segment"
+              className={`ui-segment ui-segment--inline ${styles.sbQuickSegment}`}
               role="group"
               aria-labelledby={themeGroupId}
             >
-              <button
-                type="button"
-                className={`ui-segment-item${isDark ? '' : ' active'}`}
-                role="menuitemradio"
-                aria-checked={!isDark}
-                tabIndex={-1}
-                title="浅色主题"
-                aria-label="浅色主题"
-                onClick={() => applyTheme('default')}
-              >
-                浅色
-              </button>
-              <button
-                type="button"
-                className={`ui-segment-item${isDark ? ' active' : ''}`}
-                role="menuitemradio"
-                aria-checked={isDark}
-                tabIndex={-1}
-                title="深色主题"
-                aria-label="深色主题"
-                onClick={() => applyTheme('dark')}
-              >
-                深色
-              </button>
+              <Tooltip content="浅色主题">
+                <button
+                  type="button"
+                  className={`ui-segment-item${isDark ? '' : ' active'}`}
+                  role="menuitemradio"
+                  aria-checked={!isDark}
+                  tabIndex={-1}
+                  aria-label="浅色主题"
+                  onClick={() => applyTheme('default')}
+                >
+                  浅色
+                </button>
+              </Tooltip>
+              <Tooltip content="深色主题">
+                <button
+                  type="button"
+                  className={`ui-segment-item${isDark ? ' active' : ''}`}
+                  role="menuitemradio"
+                  aria-checked={isDark}
+                  tabIndex={-1}
+                  aria-label="深色主题"
+                  onClick={() => applyTheme('dark')}
+                >
+                  深色
+                </button>
+              </Tooltip>
             </div>
           </div>
 
-          <div className="sb-quick-divider" role="separator" />
+          <div className={styles.sbQuickDivider} role="separator" />
 
           {QUICK_ENTRIES.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              className="sb-quick-item"
-              role="menuitem"
-              tabIndex={-1}
-              title={entry.title}
-              aria-label={entry.ariaLabel}
-              onClick={() => go(entry.tab)}
-            >
-              {entry.icon}
-              <span>{entry.label}</span>
-            </button>
+            <Tooltip key={entry.id} content={entry.title}>
+              <button
+                type="button"
+                className={styles.sbQuickItem}
+                role="menuitem"
+                tabIndex={-1}
+                aria-label={entry.ariaLabel}
+                onClick={() => go(entry.tab)}
+              >
+                {entry.icon}
+                <span>{entry.label}</span>
+              </button>
+            </Tooltip>
           ))}
 
         </div>

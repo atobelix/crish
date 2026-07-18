@@ -1,0 +1,46 @@
+.settingsChoiceGroup {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0;
+  padding: 0 !important;
+  gap: 8px !important;
+  box-shadow: none !important;
+}
+
+.segmentItem {
+  border-radius: 10px !important;
+  min-width: 48px;
+  min-height: 32px;
+  padding: 0 14px !important;
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent) !important;
+  box-shadow: none !important;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.segmentItem:hover {
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent) !important;
+  border-color: transparent !important;
+  color: var(--text-primary);
+}
+
+.segmentItem.active {
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-primary)) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+  font-weight: 500;
+  box-shadow: none !important;
+}
+
+.settingsDensitySegment .segmentItem {
+  min-width: 40px;
+  padding: 0 10px !important;
+}

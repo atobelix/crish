@@ -1,0 +1,559 @@
+/* Tool Stack */
+.toolStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 6px 0 12px;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--font-size-sm);
+}
+
+.toolStack > .toolRow + .toolRow {
+  margin-top: 2px;
+}
+
+/* Tool Row */
+.toolRow {
+  border: none !important;
+  border-radius: 10px;
+  background: transparent;
+  min-height: 0;
+  contain: layout style;
+  color: var(--text-secondary);
+  box-shadow: none !important;
+  outline: none;
+  margin: 2px 0;
+}
+
+.toolRow.isRunning .toolRowSummary {
+  color: var(--text-secondary);
+}
+
+.toolRow.isError {
+  box-shadow: none !important;
+  padding-left: 0;
+}
+
+.toolRow.isPending {
+  min-height: 0;
+  contain: none;
+  padding-left: 0;
+  box-shadow: none !important;
+}
+
+/* Approval tone */
+.toolRow.toolRowApproval {
+  min-height: 0;
+  contain: none;
+  padding-left: 0;
+  box-shadow: none !important;
+}
+
+.toolRowHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none !important;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-secondary);
+  min-height: 32px;
+  height: auto;
+  max-height: none;
+  font-weight: var(--font-weight-normal);
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+  box-shadow: none !important;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.toolRowHead.toolRowHeadStatic {
+  cursor: default;
+}
+
+.toolRowHeadMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.toolRowIcoSlot {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  color: var(--accent-green, #2dbe6c);
+  box-sizing: border-box;
+}
+
+.toolRowChevronSlot {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.toolRowChevronSlot.isToggle {
+  opacity: 0;
+}
+
+.toolRowHead:hover {
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  color: var(--text-secondary);
+}
+
+.toolRowHead:hover .toolRowSummary,
+.toolRowHead:hover .toolPathLink {
+  color: var(--text-primary);
+}
+
+.toolRowHead:hover .toolRowIcoSlot {
+  background: transparent;
+  border: none;
+  color: var(--accent-green, #2dbe6c);
+}
+
+.toolRowHead:hover .toolRowChevronSlot.isToggle {
+  opacity: 0.55;
+}
+
+.toolRowText {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.toolRowSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolRowChevron {
+  flex-shrink: 0;
+  opacity: 1;
+  transition: transform 0.15s ease;
+}
+
+.toolRowChevron.rot {
+  transform: rotate(90deg);
+}
+
+/* Tool Result Body */
+.toolResultBody {
+  margin: 4px 0 6px 22px;
+  padding: 8px 12px;
+  max-height: min(40vh, 320px);
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  position: relative;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.toolResultBody > * {
+  position: relative;
+  z-index: 1;
+}
+
+.toolResultPreCmd {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  opacity: 0.92;
+  margin: 0 0 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.toolResultPre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-weight: var(--font-weight-code, 400);
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  user-select: text;
+}
+
+.toolPathWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
+.toolPathActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-left: 0;
+  transition:
+    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease,
+    margin-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toolPathWrap:hover .toolPathActions,
+.toolPathWrap:focus-within .toolPathActions {
+  max-width: 56px;
+  opacity: 1;
+  margin-left: 4px;
+}
+
+.toolPathAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transform: translateX(4px);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toolPathWrap:hover .toolPathAction,
+.toolPathWrap:focus-within .toolPathAction {
+  transform: translateX(0);
+}
+
+.toolPathAction:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.toolPathLink {
+  display: inline;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: var(--font-weight-normal);
+}
+
+.toolPathLink:hover {
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: transparent;
+}
+
+.toolResultImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.toolResultImg {
+  max-width: min(100%, 420px);
+  max-height: 280px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  object-fit: contain;
+  background: var(--bg-secondary);
+}
+
+.toolResultLongHint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 3px 0 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  flex-wrap: wrap;
+}
+
+.toolResultLongActions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.toolResultHintBtn,
+.toolResultOpenFile {
+  border: 1px solid var(--hairline-strong, var(--border-color));
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.toolResultHintBtn:hover,
+.toolResultOpenFile:hover {
+  border-color: var(--hairline-strong, var(--border-color));
+  background: var(--bg-hover);
+}
+
+.toolResultOpenFile {
+  margin-top: 4px;
+  display: inline-flex;
+}
+
+.toolRowFileOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 4px 28px;
+  border: 1px solid var(--hairline, var(--border-subtle, var(--border-color)));
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.toolRowFileOpen:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong, var(--border-color));
+  text-decoration: none;
+}
+
+/* Git Diff Card */
+.gitDiffCard {
+  margin: 8px 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+
+.gitDiffCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
+  min-height: var(--card-header-min-height, 36px);
+  background-color: var(--bg-secondary);
+  border-bottom: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  gap: var(--card-header-gap, 6px);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.gitDiffCardHeader:hover {
+  background-color: var(--bg-hover);
+}
+
+.gitDiffFileInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.gitDiffFilename {
+  font-weight: var(--font-weight-code, 400);
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitDiffPreviewTag {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+}
+
+.gitDiffBadge {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-code, 400);
+  flex-shrink: 0;
+}
+
+.gitDiffAdd {
+  color: var(--accent-green);
+}
+
+.gitDiffDel {
+  color: var(--accent-red);
+}
+
+.gitDiffLinesContainer {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  min-width: 0;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.gitDiffLineRow {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-code, 400);
+  line-height: 1.5;
+  background: var(--bg-primary);
+  min-width: min-content;
+}
+
+.gitDiffLineRow.addition {
+  background-color: var(--accent-green-light);
+}
+
+.gitDiffLineRow.deletion {
+  background-color: var(--accent-red-light);
+}
+
+.lineNumCol {
+  width: 22px;
+  text-align: center;
+  user-select: none;
+  opacity: 0.55;
+  border-right: none;
+  padding: 2px 0;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-code, 400);
+}
+
+.gitDiffLineRow.addition .lineNumCol {
+  color: var(--accent-green);
+  background-color: transparent;
+}
+
+.gitDiffLineRow.deletion .lineNumCol {
+  color: var(--accent-red);
+  background-color: transparent;
+}
+
+.lineContent {
+  margin: 0;
+  padding: 2px 10px;
+  white-space: pre;
+  overflow-x: visible;
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-code, 400);
+}
+
+.gitDiffLineRow.addition .lineContent {
+  color: var(--accent-green);
+}
+
+.gitDiffLineRow.deletion .lineContent {
+  color: var(--accent-red);
+}
+
+.gitDiffMoreIndicator {
+  padding: 8px 12px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  text-align: center;
+  border-top: 1px solid var(--border-subtle);
+  user-select: none;
+  cursor: pointer;
+}
+
+.gitDiffMoreIndicator:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolRowLive {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+}

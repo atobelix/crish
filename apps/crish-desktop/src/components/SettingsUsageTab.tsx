@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
+import styles from './SettingsUsageTab.module.css';
 import {
   loadPrices,
   upsertPrice,
@@ -59,17 +60,9 @@ const EditablePriceRow: React.FC<{
     Number(inputVal) !== row.inputPerMTok || Number(outputVal) !== row.outputPerMTok;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+    <div className={styles.priceRow}>
       <span
-        style={{
-          flex: 2,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: '13px',
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-secondary)',
-        }}
+        className={styles.priceRowModel}
         title={row.model}
       >
         {row.model}
@@ -77,15 +70,13 @@ const EditablePriceRow: React.FC<{
       <input
         value={inputVal}
         onChange={(e) => setInputVal(e.target.value)}
-        className="settings-field-input"
-        style={{ flex: 1, height: '26px', fontSize: '12px', padding: '0 6px', width: '60px' }}
+        className={`settings-field-input ${styles.priceRowInput}`}
         placeholder="入"
       />
       <input
         value={outputVal}
         onChange={(e) => setOutputVal(e.target.value)}
-        className="settings-field-input"
-        style={{ flex: 1, height: '26px', fontSize: '12px', padding: '0 6px', width: '60px' }}
+        className={`settings-field-input ${styles.priceRowInput}`}
         placeholder="出"
       />
       <button
@@ -95,7 +86,6 @@ const EditablePriceRow: React.FC<{
         onClick={() => {
           onSave(Number(inputVal), Number(outputVal));
         }}
-        style={{ height: '26px', padding: '0 8px', fontSize: '11px' }}
       >
         保存
       </button>
@@ -103,7 +93,6 @@ const EditablePriceRow: React.FC<{
         type="button"
         className="ui-btn ui-btn-ghost ui-btn-sm danger"
         onClick={onDelete}
-        style={{ height: '26px', padding: '0 8px', fontSize: '11px' }}
       >
         删除
       </button>
@@ -199,8 +188,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const headerMeta = (
     <button
       type="button"
-      className="ui-btn ui-btn-secondary ui-btn-sm"
-      style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '6px' }}
+      className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.configBtn}`}
       onClick={() => setPricesModalOpen(true)}
     >
       <Lucide.DollarSign size={14} />
@@ -211,41 +199,15 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const pricingModal = pricesModalOpen
     ? createPortal(
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 30000,
-          }}
+          className={styles.modalOverlay}
           onClick={() => setPricesModalOpen(false)}
         >
           <div
-            style={{
-              width: '520px',
-              maxHeight: '80vh',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'var(--bg-primary, #ffffff)',
-              border: '1px solid var(--border-subtle, #e5e7eb)',
-              borderRadius: '12px',
-              padding: '20px',
-              boxShadow: 'var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.15))',
-            }}
+            className={styles.modalBox}
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '16px',
-                gap: '16px',
-              }}
-            >
-              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <div className={styles.modalHeader}>
+              <span className={styles.modalTitle}>
                 模型价格配置 (USD / 1M Tokens)
               </span>
               <input
@@ -253,23 +215,12 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                 placeholder="搜索模型..."
                 value={priceFilter}
                 onChange={(e) => setPriceFilter(e.target.value)}
-                className="settings-field-input"
-                style={{ width: '160px', height: '28px', fontSize: '12px' }}
+                className={`settings-field-input ${styles.modalFilterInput}`}
                 spellCheck={false}
               />
             </div>
 
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                marginBottom: '16px',
-                paddingRight: '4px',
-              }}
-            >
+            <div className={styles.modalList}>
               {filteredPrices.map((row) => (
                 <EditablePriceRow
                   key={row.model}
@@ -292,67 +243,47 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                 />
               ))}
               {filteredPrices.length === 0 && (
-                <div
-                  style={{
-                    padding: '24px 0',
-                    color: 'var(--text-tertiary)',
-                    fontSize: '13px',
-                    textAlign: 'center',
-                  }}
-                >
+                <div className={styles.modalEmptyState}>
                   无匹配的模型价格
                 </div>
               )}
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                borderTop: '1px solid var(--border-subtle)',
-                paddingTop: '16px',
-                alignItems: 'center',
-              }}
-            >
+            <div className={styles.modalAddRow}>
               <input
                 placeholder="添加模型 ID..."
                 value={priceDraft.model}
                 onChange={(e) => setPriceDraft((d) => ({ ...d, model: e.target.value }))}
-                className="settings-field-input"
-                style={{ flex: 2, height: '28px', fontSize: '12px' }}
+                className={`settings-field-input ${styles.modalAddInputFlex2}`}
                 spellCheck={false}
               />
               <input
                 placeholder="入 $/1M"
                 value={priceDraft.input}
                 onChange={(e) => setPriceDraft((d) => ({ ...d, input: e.target.value }))}
-                className="settings-field-input"
-                style={{ flex: 1, height: '28px', fontSize: '12px' }}
+                className={`settings-field-input ${styles.modalAddInputFlex1}`}
               />
               <input
                 placeholder="出 $/1M"
                 value={priceDraft.output}
                 onChange={(e) => setPriceDraft((d) => ({ ...d, output: e.target.value }))}
-                className="settings-field-input"
-                style={{ flex: 1, height: '28px', fontSize: '12px' }}
+                className={`settings-field-input ${styles.modalAddInputFlex1}`}
               />
               <button
                 type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
+                className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.modalAddBtn}`}
                 disabled={!canAttemptSave}
                 onClick={handleSavePrice}
-                style={{ height: '28px', padding: '0 12px', borderRadius: '6px' }}
               >
                 添加
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <div className={styles.modalFooter}>
               <button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
+                className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.modalCloseBtn}`}
                 onClick={() => setPricesModalOpen(false)}
-                style={{ borderRadius: '6px' }}
               >
                 关闭
               </button>
@@ -368,93 +299,44 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
       <SettingsSection title="历史统计">
         <SettingsCard>
           {/* Summary Cards */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '16px',
-              padding: '16px 20px',
-              borderBottom: '1px solid var(--border-subtle)',
-              background: 'var(--bg-subtle)',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>累计输入</span>
-              <span style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <div className={styles.statsGrid}>
+            <div className={styles.statItem}>
+              <span className={styles.statLabel}>累计输入</span>
+              <span className={styles.statValue}>
                 {formatTokenCount(history.totalInput)}{' '}
-                <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                  tokens
-                </span>
+                <span className={styles.statUnit}>tokens</span>
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>累计输出</span>
-              <span style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <div className={styles.statItem}>
+              <span className={styles.statLabel}>累计输出</span>
+              <span className={styles.statValue}>
                 {formatTokenCount(history.totalOutput)}{' '}
-                <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                  tokens
-                </span>
+                <span className={styles.statUnit}>tokens</span>
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>累计费用</span>
-              <span style={{ fontSize: '20px', fontWeight: 600, color: '#16a34a' }}>
+            <div className={styles.statItem}>
+              <span className={styles.statLabel}>累计费用</span>
+              <span className={styles.statValueCost}>
                 {formatUsd(history.totalCost)}
               </span>
             </div>
           </div>
 
           {/* Daily Trend Chart */}
-          <div
-            style={{
-              padding: '24px 20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                每日使用趋势
-              </span>
-              <div
-                className="ui-segment ui-segment--inline"
-                style={{
-                  display: 'flex',
-                  gap: '2px',
-                  padding: '2px',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: '6px',
-                }}
-              >
+          <div className={styles.chartSection}>
+            <div className={styles.chartHeader}>
+              <span className={styles.chartTitle}>每日使用趋势</span>
+              <div className={styles.chartSegment}>
                 <button
                   type="button"
-                  className={`ui-segment-item ${chartDays === 7 ? 'active' : ''}`}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: chartDays === 7 ? 'var(--bg-primary)' : 'transparent',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                  }}
+                  className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 7 ? ` ${styles.active}` : ''}`}
                   onClick={() => setChartDays(7)}
                 >
                   近 7 日
                 </button>
                 <button
                   type="button"
-                  className={`ui-segment-item ${chartDays === 14 ? 'active' : ''}`}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: chartDays === 14 ? 'var(--bg-primary)' : 'transparent',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                  }}
+                  className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 14 ? ` ${styles.active}` : ''}`}
                   onClick={() => setChartDays(14)}
                 >
                   近 14 日
@@ -462,17 +344,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
               </div>
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                height: '140px',
-                alignItems: 'flex-end',
-                justifyContent: 'space-between',
-                gap: '12px',
-                padding: '10px 0',
-                borderBottom: '1px dashed var(--border-subtle)',
-              }}
-            >
+            <div className={styles.chartBars}>
               {dayBars.map((d) => {
                 const total = d.input + d.output;
                 const heightPct = dayMax > 0 ? (total / dayMax) * 100 : 0;
@@ -483,109 +355,41 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                 return (
                   <div
                     key={d.day}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      height: '100%',
-                      justifyContent: 'flex-end',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
+                    className={styles.chartBarCol}
                     title={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
                   >
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'flex-end',
-                        alignItems: 'center',
-                      }}
-                    >
+                    <div className={styles.chartBarInner}>
                       {total > 0 ? (
                         <div
-                          style={{
-                            width: '14px',
-                            height: `${Math.max(4, heightPct)}%`,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                          }}
+                          className={styles.chartBarStack}
+                          style={{ height: `${Math.max(4, heightPct)}%` }}
                         >
                           <div
-                            style={{
-                              width: '100%',
-                              height: `${outPct}%`,
-                              background: 'var(--accent-chart-out, var(--accent-primary))',
-                              opacity: 0.85,
-                            }}
+                            className={styles.chartBarOut}
+                            style={{ height: `${outPct}%` }}
                           />
                           <div
-                            style={{
-                              width: '100%',
-                              height: `${inPct}%`,
-                              background: 'var(--accent-chart-in, var(--accent-secondary))',
-                            }}
+                            className={styles.chartBarIn}
+                            style={{ height: `${inPct}%` }}
                           />
                         </div>
                       ) : (
-                        <div
-                          style={{
-                            width: '14px',
-                            height: '4px',
-                            background: 'var(--border-subtle)',
-                            borderRadius: '2px',
-                          }}
-                        />
+                        <div className={styles.chartBarEmpty} />
                       )}
                     </div>
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        color: 'var(--text-tertiary)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {dateLabel}
-                    </span>
+                    <span className={styles.chartBarLabel}>{dateLabel}</span>
                   </div>
                 );
               })}
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '16px',
-                fontSize: '11px',
-                color: 'var(--text-tertiary)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    background: 'var(--accent-chart-in, var(--accent-secondary))',
-                    borderRadius: '2px',
-                  }}
-                />
+            <div className={styles.chartLegend}>
+              <div className={styles.chartLegendItem}>
+                <div className={styles.chartLegendDotIn} />
                 <span>输入 Token</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    background: 'var(--accent-chart-out, var(--accent-primary))',
-                    opacity: 0.85,
-                    borderRadius: '2px',
-                  }}
-                />
+              <div className={styles.chartLegendItem}>
+                <div className={styles.chartLegendDotOut} />
                 <span>输出 Token</span>
               </div>
             </div>
@@ -593,19 +397,9 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
 
           {/* Model Breakdown */}
           {history.models.length > 0 && (
-            <div
-              style={{
-                borderTop: '1px solid var(--border-subtle)',
-                padding: '16px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}
-            >
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                模型使用分布
-              </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className={styles.modelsSection}>
+              <span className={styles.modelsSectionTitle}>模型使用分布</span>
+              <div className={styles.modelsList}>
                 {history.models.map((m) => {
                   const t = m.input + m.output;
                   const maxM = history.models[0]
@@ -613,53 +407,19 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                     : 1;
                   const barWidth = Math.max(4, Math.round((t / maxM) * 100));
                   return (
-                    <div
-                      key={m.model}
-                      style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px' }}
-                    >
-                      <span
-                        style={{
-                          flex: '0 0 160px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: 'var(--text-secondary)',
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                        title={m.model}
-                      >
+                    <div key={m.model} className={styles.modelRow}>
+                      <span className={styles.modelName} title={m.model}>
                         {m.model}
                       </span>
-                      <div
-                        style={{
-                          flex: 1,
-                          height: '6px',
-                          background: 'var(--bg-tertiary)',
-                          borderRadius: '3px',
-                          overflow: 'hidden',
-                        }}
-                      >
+                      <div className={styles.modelBarTrack}>
                         <div
-                          style={{
-                            height: '100%',
-                            width: `${barWidth}%`,
-                            background: 'var(--accent-primary, #4f46e5)',
-                            borderRadius: '3px',
-                          }}
+                          className={styles.modelBarFill}
+                          style={{ width: `${barWidth}%` }}
                         />
                       </div>
-                      <span
-                        style={{
-                          flex: '0 0 100px',
-                          textAlign: 'right',
-                          color: 'var(--text-primary)',
-                          fontWeight: 500,
-                        }}
-                      >
+                      <span className={styles.modelTokens}>
                         {formatTokenCount(t)}{' '}
-                        <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                          tokens
-                        </span>
+                        <span className={styles.modelTokensUnit}>tokens</span>
                       </span>
                     </div>
                   );
@@ -669,25 +429,10 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
           )}
 
           {/* Bottom Actions */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '12px 20px',
-              borderTop: '1px solid var(--border-subtle)',
-              background: 'var(--bg-subtle)',
-            }}
-          >
+          <div className={styles.actionsBar}>
             <button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
-              style={{
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                borderRadius: '6px',
-              }}
+              className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
               onClick={() => setHistory(loadUsageSnapshot())}
             >
               <Lucide.RefreshCw size={12} /> 刷新数据
@@ -695,14 +440,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
             {(history.totalInput > 0 || history.totalOutput > 0) && (
               <button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm danger"
-                style={{
-                  fontSize: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  borderRadius: '6px',
-                }}
+                className={`ui-btn ui-btn-ghost ui-btn-sm danger ${styles.actionBtn}`}
                 onClick={() => {
                   if (
                     typeof window !== 'undefined' &&

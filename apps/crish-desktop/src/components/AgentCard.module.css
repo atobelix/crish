@@ -1,0 +1,584 @@
+.agentCard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.agentCardDense {
+  /* 侧栏默认 denser：子选择器共享 */
+}
+
+.agentCardEmbedded {
+  flex: 1;
+  min-height: 0;
+}
+
+.agentCardEmpty {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  padding: 20px 12px;
+}
+
+/* ① header：hairline 底部分隔 */
+.agentCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  flex-shrink: 0;
+  min-height: 28px;
+}
+
+.agentCardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.agentCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentCardBadge {
+  font-size: var(--font-size-xxs);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  line-height: 1.45;
+}
+
+.agentCardBadgeRunning {
+  border-color: color-mix(in srgb, var(--accent-green) 45%, var(--hairline, var(--border-subtle)));
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.agentCardBadgeFailed {
+  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--hairline, var(--border-subtle)));
+  color: var(--accent-red, var(--text-secondary));
+  background: transparent;
+}
+
+.agentCardBadgeStopped {
+  border-color: var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.agentCardMode {
+  display: none; /* 模式写入徽章 title，避免顶栏挤 */
+}
+
+.agentCardActions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.agentCardBtn {
+  border: none;
+  background: transparent;
+  padding: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.agentCardBtn:hover {
+  background: var(--bg-hover);
+}
+
+.agentCardBtn.isOn {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.agentCardBtnDanger {
+  color: var(--accent-red, #ff6b6b);
+}
+
+.agentCardBtnDanger:hover {
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}
+
+.agentCardSummary {
+  display: none; /* 减垂直噪点；摘要可见于消息流 */
+}
+
+/* ② body：更紧消息间距 */
+.agentCardBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px 8px;
+}
+
+.agentCardDense .agentCardBody {
+  padding: 4px 6px 6px;
+}
+
+.agentCardEmptyMsgs {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  padding: 14px 6px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.agentMsg {
+  margin-bottom: 6px;
+}
+
+.agentCardDense .agentMsg {
+  margin-bottom: 4px;
+}
+
+/* ③ prompt 气泡：hairline + 紧 pad */
+.agentPromptBubble {
+  display: inline-block;
+  max-width: 96%;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+.agentMsgPrompt {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.agentCardHeaderSlim {
+  padding: 3px 6px;
+  min-height: 28px;
+}
+
+.agentCardHeaderSlim .agentCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.agentLaunchList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  flex-shrink: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.agentLaunchListItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.agentLaunchListItem:hover {
+  background: var(--bg-hover);
+}
+
+.agentLaunchListTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentCardLaunch {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary);
+}
+
+.agentLaunchBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 人类协作任务表单（textarea/profile chips）已移除；仅保留浏览列表 */
+.agentLaunchList {
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agentLaunchListH {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  margin-bottom: 1px;
+  padding: 0 2px;
+}
+
+.agentLaunchItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 6px;
+  min-height: 28px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.agentLaunchItem:hover {
+  background: var(--bg-hover);
+  border-color: var(--hairline, var(--border-subtle));
+}
+
+.agentLaunchItemT {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ④ 侧栏内 agent 切换：hairline 分隔，无重灰底 */
+.agentTeamBoard {
+  flex-shrink: 0;
+  padding: 4px 6px 5px;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  background: transparent;
+  max-height: 40%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.agentTeamBoardHairline {
+  background: transparent;
+}
+
+.agentTeamBoardCompact {
+  padding: 3px 5px 4px;
+  max-height: 34%;
+}
+
+.agentTeamBoardHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  min-height: 14px;
+  flex-shrink: 0;
+}
+
+.agentTeamBoardLabel {
+  color: var(--text-tertiary);
+}
+
+.agentTeamBoardStat {
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.agentTeamBoardStatWarn {
+  color: var(--accent-orange, var(--text-secondary));
+}
+
+.agentTeamBoardCount {
+  margin-left: auto;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  padding: 0 5px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.agentTeamBoardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 3px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.agentTeamBoardCompact .agentTeamBoardGrid {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+/* ⑤ team card：hairline 边框 + 紧行 */
+.agentTeamCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 4px 6px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 0;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.agentTeamCard:hover {
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+.agentTeamCard.isActive {
+  border-color: var(--hairline-strong, var(--border-color));
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+  box-shadow: none;
+}
+
+.agentTeamCardRunning {
+  border-left: 2px solid var(--accent-green);
+}
+
+.agentTeamCardFailed {
+  border-left: 2px solid var(--accent-red);
+}
+
+.agentTeamCardStopped {
+  border-left: 2px solid var(--text-tertiary);
+}
+
+.agentTeamCardCompleted {
+  border-left: 2px solid var(--hairline-strong, var(--border-color));
+}
+
+.agentTeamCardTop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agentTeamCardTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentTeamBoardCompact .agentTeamCardTitle {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.agentTeamCardMode {
+  display: none;
+}
+
+.agentTeamCardSummary {
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agentTeamCardMetaLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agentTeamCardSummaryInline {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  -webkit-line-clamp: unset;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.agentTeamCardProgress {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 0;
+}
+
+.agentTeamCardBar {
+  height: 1.5px;
+  border-radius: 999px;
+  background: var(--hairline, var(--border-subtle));
+  overflow: hidden;
+}
+
+.agentTeamCardBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+  transition: width 0.2s ease;
+}
+
+.agentTeamCardBarFillRunning {
+  background: var(--accent-green);
+}
+
+.agentTeamCardBarFillFailed {
+  background: var(--accent-red);
+}
+
+.agentTeamCardBarFillCompleted {
+  background: var(--text-secondary);
+}
+
+.agentTeamCardBarFillStopped {
+  background: var(--text-tertiary);
+}
+
+.agentTeamCardTools {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 46%;
+}
+
+.agentMsgLive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.agentCardEmptyHint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  max-width: 260px;
+  text-align: center;
+  line-height: 1.4;
+  margin: 0 auto;
+}
+
+.agentCardEmptyHintPad {
+  padding: 16px 10px;
+}
+
+.agentCardEmptyP {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.agentCardEmptyPMuted {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.agentCardSendError {
+  font-size: var(--font-size-xxs);
+  color: var(--accent-red);
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-red) 7%, transparent);
+}
+
+.agentCardComposer {
+  width: 100%;
+  max-width: none;
+  padding: 10px 8px 8px;
+  flex-shrink: 0;
+  border-top: 1px solid transparent;
+  background: var(--chat-footer-fade);
+}
+
+.agentCardComposerDense {
+  padding: 8px 6px 6px;
+}
+
+.agentCardComposer :global(.input-container) {
+  max-width: min(var(--chat-col-max, 680px), 100%);
+  margin: 0 auto;
+  background: var(
+    --composer-shell-bg,
+    color-mix(in srgb, var(--bg-primary) 72%, transparent)
+  );
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+.agentCardComposer :global(.input-container):focus-within {
+  background: var(
+    --composer-shell-bg-focus,
+    color-mix(in srgb, var(--bg-primary) 88%, transparent)
+  );
+}

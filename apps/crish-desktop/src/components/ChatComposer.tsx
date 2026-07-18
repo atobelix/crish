@@ -5,9 +5,11 @@
  */
 import React, { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ChatComposer.module.css';
 import { slashMenuPick } from '../api/resolveSlashCommand';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
+import { Tooltip } from './settings/SettingsUI';
 import type { PermissionMode } from '../api/permissionModes';
 import type { ChatAttachment } from '../hooks/useChatStream';
 import {
@@ -150,7 +152,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
   return (
     <div
       ref={containerRef}
-      className={`input-container${dense ? ' input-container--dense' : ''}${className ? ` ${className}` : ''}`}
+      className={`${styles.container}${dense ? ` ${styles.containerDense}` : ''}${className ? ` ${className}` : ''}`}
       data-composer-field="1"
       data-composer-dense={dense ? '1' : '0'}
       data-composer-max-lines={resolvedLines}
@@ -167,7 +169,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
       <textarea
         id={textAreaId}
         ref={taRef}
-        className="composer-textarea"
+        className={styles.textarea}
         placeholder={resolvedPlaceholder}
         rows={1}
         value={value}
@@ -222,46 +224,49 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
           }
         }}
       />
-      <div className="chat-input-buttons">
+      <div className={styles.buttons}>
         {isProcessing ? (
           <>
+            <Tooltip content={sendTitle}>
+              <button
+                type="button"
+                className={`${styles.sendBtn} ${styles.queue}`}
+                aria-label={sendAria}
+                onClick={trySend}
+                disabled={sendDisabled}
+              >
+                {processingSendLabel}
+              </button>
+            </Tooltip>
+            {onStop ? (
+              <Tooltip content="停止生成">
+                <button
+                  type="button"
+                  className={`${styles.sendBtn} ${styles.stop}`}
+                  aria-label="停止生成"
+                  onClick={onStop}
+                >
+                  <Lucide.Square size={16} fill="currentColor" />
+                </button>
+              </Tooltip>
+            ) : null}
+          </>
+        ) : (
+          <Tooltip content={sendTitle}>
             <button
               type="button"
-              className="send-btn queue-btn"
-              title={sendTitle}
+              className={styles.sendBtn}
               aria-label={sendAria}
               onClick={trySend}
               disabled={sendDisabled}
             >
-              {processingSendLabel}
+              {disabled ? (
+                <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+              ) : (
+                <Lucide.CornerDownLeft size={16} />
+              )}
             </button>
-            {onStop ? (
-              <button
-                type="button"
-                className="send-btn send-btn--stop"
-                title="停止生成"
-                aria-label="停止生成"
-                onClick={onStop}
-              >
-                <Lucide.Square size={16} fill="currentColor" />
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <button
-            type="button"
-            className="send-btn"
-            title={sendTitle}
-            aria-label={sendAria}
-            onClick={trySend}
-            disabled={sendDisabled}
-          >
-            {disabled ? (
-              <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
-            ) : (
-              <Lucide.CornerDownLeft size={16} />
-            )}
-          </button>
+          </Tooltip>
         )}
       </div>
     </div>
@@ -442,13 +447,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             <div
               ref={slashRootRef}
               id={listboxId}
-              className="slash-commands-popover"
+              className={styles.slashPopover}
               role="listbox"
               aria-label="斜杠命令"
               aria-activedescendant={slashActiveDesc}
             >
               {filteredCommands.length === 0 ? (
-                <div className="slash-command-empty" role="presentation">
+                <div className={styles.slashEmpty} role="presentation">
                   无匹配命令
                 </div>
               ) : (
@@ -461,12 +466,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                       ref={active ? activeItemRef : undefined}
                       role="option"
                       aria-selected={active}
-                      className={`slash-command-item${active ? ' is-active' : ''}`}
+                      className={`${styles.slashItem}${active ? ` ${styles.isActive}` : ''}`}
                       onClick={() => applySlashSelection(c.cmd)}
                       onMouseEnter={() => setSlashSelectedIndex(i)}
                     >
-                      <span className="slash-command-cmd">{c.cmd}</span>
-                      <span className="slash-command-desc">{c.desc}</span>
+                      <span className={styles.slashCmd}>{c.cmd}</span>
+                      <span className={styles.slashDesc}>{c.desc}</span>
                     </div>
                   );
                 })
@@ -535,33 +540,34 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
       {attachments.length > 0 && (
         <div
-          className="chat-attach-strip"
+          className={styles.attachStrip}
           role="list"
           aria-label={`附件，共 ${attachments.length} 个`}
         >
           {attachments.map((a) => (
-            <span
-              key={a.name}
-              role="listitem"
-              className={`chat-attach-chip ${a.dataUrl ? 'chat-attach-chip--image' : ''}`}
-              title={a.name}
-            >
-              {a.dataUrl ? (
-                <img src={a.dataUrl} alt={a.name} className="chat-attach-thumb" />
-              ) : (
-                <Lucide.Paperclip size={14} className="chat-attach-icon" aria-hidden />
-              )}
-              <span className="chat-attach-name">{a.name}</span>
-              <button
-                type="button"
-                className="ui-btn ui-btn-ghost chat-attach-remove"
-                aria-label={`移除附件 ${a.name}`}
-                title={`移除 ${a.name}`}
-                onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
+            <Tooltip key={a.name} content={a.name}>
+              <span
+                role="listitem"
+                className={`${styles.attachChip} ${a.dataUrl ? styles.attachChipImage : ''}`}
               >
-                <Lucide.X size={14} aria-hidden />
-              </button>
-            </span>
+                {a.dataUrl ? (
+                  <img src={a.dataUrl} alt={a.name} className={styles.attachThumb} />
+                ) : (
+                  <Lucide.Paperclip size={14} className={styles.attachIcon} aria-hidden />
+                )}
+                <span className={styles.attachName}>{a.name}</span>
+                <Tooltip content={`移除 ${a.name}`}>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost chat-attach-remove"
+                    aria-label={`移除附件 ${a.name}`}
+                    onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
+                  >
+                    <Lucide.X size={14} aria-hidden />
+                  </button>
+                </Tooltip>
+              </span>
+            </Tooltip>
           ))}
         </div>
       )}
@@ -583,30 +589,31 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         }}
       />
 
-      <div className="footer-actions">
-        <div className="left-actions" style={{ position: 'relative' }}>
-          <button
-            ref={plusBtnRef}
-            type="button"
-            className={`plus-btn ${showPlusMenu ? 'is-open' : ''}`}
-            title="添加文件、技能、扩展…"
-            aria-label="打开添加菜单"
-            aria-haspopup="menu"
-            aria-expanded={showPlusMenu}
-            aria-controls={showPlusMenu ? plusMenuId : undefined}
-            onClick={() => {
-              if (showPlusMenu) {
-                setShowPlusMenu(false);
-                requestAnimationFrame(() => plusBtnRef.current?.focus());
-              } else {
-                setShowPlusMenu(true);
-                setSlashMenuOpen(false);
-                onCloseSiblingMenus?.();
-              }
-            }}
-          >
-            <Lucide.Plus size={16} aria-hidden />
-          </button>
+      <div className={styles.footerActions}>
+        <div className={styles.leftActions} style={{ position: 'relative' }}>
+          <Tooltip content="添加文件、技能、扩展…">
+            <button
+              ref={plusBtnRef}
+              type="button"
+              className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
+              aria-label="打开添加菜单"
+              aria-haspopup="menu"
+              aria-expanded={showPlusMenu}
+              aria-controls={showPlusMenu ? plusMenuId : undefined}
+              onClick={() => {
+                if (showPlusMenu) {
+                  setShowPlusMenu(false);
+                  requestAnimationFrame(() => plusBtnRef.current?.focus());
+                } else {
+                  setShowPlusMenu(true);
+                  setSlashMenuOpen(false);
+                  onCloseSiblingMenus?.();
+                }
+              }}
+            >
+              <Lucide.Plus size={16} aria-hidden />
+            </button>
+          </Tooltip>
           <ComposePlusMenu
             id={plusMenuId}
             open={showPlusMenu}
@@ -633,7 +640,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             }}
           />
         </div>
-        <div className="right-actions">{rightActions}</div>
+        <div className={styles.rightActions}>{rightActions}</div>
       </div>
     </>
   );

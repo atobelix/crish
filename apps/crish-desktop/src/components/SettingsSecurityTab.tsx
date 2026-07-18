@@ -3,11 +3,13 @@
  */
 import React, { useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './SettingsSecurityTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
@@ -246,19 +248,18 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
 
       <SettingsSection title="信任命令">
         <SettingsCard>
-          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', alignItems: 'center' }}>
-            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor={wlInputId} style={{ fontSize: '14px', color: 'var(--text-primary)' }}>添加命令</label>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>匹配后可自动放行</span>
+          <div className={styles.wlRow}>
+            <div className={styles.labelCol}>
+              <label htmlFor={wlInputId} className={styles.labelTitle}>添加命令</label>
+              <span className={styles.labelDesc}>匹配后可自动放行</span>
             </div>
-            <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
+            <div className={styles.inputGroup}>
               <input
                 id={wlInputId}
                 type="text"
                 placeholder="如 git status"
                 value={newWhitelistCmd}
                 onChange={(e) => setNewWhitelistCmd(e.target.value)}
-                className="settings-field-input settings-field-input--sm settings-field-input--grow"
                 title={inputRiskTitle}
                 spellCheck={false}
                 autoComplete="off"
@@ -266,7 +267,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 autoCapitalize="off"
                 aria-label="要信任的命令"
                 aria-invalid={draftBlocked || undefined}
-                style={{ flex: 1 }}
+                className={`settings-field-input settings-field-input--sm settings-field-input--grow ${styles.inputGrow}`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -277,62 +278,61 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   }
                 }}
               />
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                title={
-                  draftBlocked
-                    ? `不可添加：${draftRisk.message}`
-                    : draftTrimmed
-                      ? '加入白名单'
-                      : '请输入命令'
-                }
-                aria-label="添加命令"
-                disabled={!draftTrimmed || draftBlocked}
-                onClick={() => addWhitelist()}
-                style={{ borderRadius: '6px' }}
-              >
-                添加
-              </button>
-              {whitelist.length > 0 ? (
+              <Tooltip content={
+                draftBlocked
+                  ? `不可添加：${draftRisk.message}`
+                  : draftTrimmed
+                    ? '加入白名单'
+                    : '请输入命令'
+              }>
                 <button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  title={`清空全部 ${whitelist.length} 条（需确认）`}
-                  aria-label={`清空全部 ${whitelist.length} 条白名单`}
-                  onClick={clearWhitelist}
-                  style={{ borderRadius: '6px' }}
+                  className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                  aria-label="添加命令"
+                  disabled={!draftTrimmed || draftBlocked}
+                  onClick={() => addWhitelist()}
                 >
-                  清空
+                  添加
                 </button>
+              </Tooltip>
+              {whitelist.length > 0 ? (
+                <Tooltip content={`清空全部 ${whitelist.length} 条（需确认）`}>
+                  <button
+                    type="button"
+                    className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                    aria-label={`清空全部 ${whitelist.length} 条白名单`}
+                    onClick={clearWhitelist}
+                  >
+                    清空
+                  </button>
+                </Tooltip>
               ) : null}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '16px', padding: '16px 20px' }}>
-            <div style={{ width: '120px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>常用预设</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>点击一键加入信任</span>
+          <div className={styles.wlRowNoBorder}>
+            <div className={styles.labelCol}>
+              <span className={styles.labelTitle}>常用预设</span>
+              <span className={styles.labelDesc}>点击一键加入信任</span>
             </div>
-            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div className={styles.presetGroup}>
               {QUICK_WHITELIST_CMDS.map((cmd) => {
                 const already = whitelist.some(
                   (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase(),
                 );
                 return (
-                  <button
-                    key={cmd}
-                    type="button"
-                    className="settings-chip-btn"
-                    disabled={already}
-                    aria-pressed={already}
-                    aria-label={already ? `${cmd} 已添加` : `添加 ${cmd}`}
-                    title={already ? '已添加' : `添加 ${cmd}`}
-                    onClick={() => addWhitelist(cmd)}
-                    style={{ height: '28px', padding: '0 10px', fontSize: '12px', borderRadius: '6px' }}
-                  >
-                    {cmd}
-                  </button>
+                  <Tooltip key={cmd} content={already ? '已添加' : `添加 ${cmd}`}>
+                    <button
+                      type="button"
+                      className={`settings-chip-btn ${styles.presetChip}`}
+                      disabled={already}
+                      aria-pressed={already}
+                      aria-label={already ? `${cmd} 已添加` : `添加 ${cmd}`}
+                      onClick={() => addWhitelist(cmd)}
+                    >
+                      {cmd}
+                    </button>
+                  </Tooltip>
                 );
               })}
             </div>
@@ -354,18 +354,19 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
               return (
                 <SettingsRow
                   key={cmd}
-                  title={<span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{cmd}</span>}
+                  title={<span className={styles.cmdSpan}>{cmd}</span>}
                   desc={`${riskTag} · ${risk.message}`}
                   control={
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm danger"
-                      onClick={() => removeWhitelist(cmd)}
-                      title={`移除 ${cmd}`}
-                      aria-label={`移除 ${cmd}`}
-                    >
-                      <Lucide.Trash2 size={14} aria-hidden />
-                    </button>
+                    <Tooltip content={`移除 ${cmd}`}>
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                        onClick={() => removeWhitelist(cmd)}
+                        aria-label={`移除 ${cmd}`}
+                      >
+                        <Lucide.Trash2 size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
                   }
                 />
               );

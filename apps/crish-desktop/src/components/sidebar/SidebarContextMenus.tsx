@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import styles from './SidebarContextMenus.module.css';
 import * as Lucide from 'lucide-react';
 import type { SessionState } from '../../store/layoutStore';
 
@@ -226,7 +227,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       {showSessionMenu && contextMenu && (
         <div
           ref={menuRef}
-          className="context-menu open context-menu-compact"
+          className={`${styles.contextMenu} ${styles.open}`}
           style={{
             left: contextMenu.x,
             top: contextMenu.y,
@@ -239,7 +240,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
         >
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="open-current"
             onClick={() => onSessionAction('open-current')}
@@ -249,7 +250,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </button>
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="open-split"
             onClick={() => onSessionAction('open-split')}
@@ -259,7 +260,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </button>
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="open-new"
             onClick={() => onSessionAction('open-new')}
@@ -268,11 +269,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             <span>在新窗口打开</span>
           </button>
 
-          <div className="context-menu-divider" role="separator" />
+          <div className={styles.contextMenuDivider} role="separator" />
 
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="rename"
             onClick={() => onSessionAction('rename')}
@@ -282,7 +283,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </button>
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action={isPinned ? 'unpin' : 'pin'}
             onClick={() => onSessionAction(isPinned ? 'unpin' : 'pin')}
@@ -297,7 +298,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </button>
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="archive"
             onClick={() => onSessionAction('archive')}
@@ -307,7 +308,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </button>
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="branch"
             onClick={() => onSessionAction('branch')}
@@ -316,11 +317,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             <span>分叉</span>
           </button>
 
-          <div className="context-menu-divider" role="separator" />
+          <div className={styles.contextMenuDivider} role="separator" />
 
           <button
             type="button"
-            className="context-menu-item"
+            className={styles.contextMenuItem}
             role="menuitem"
             data-action="export"
             title="导出为 Markdown"
@@ -335,7 +336,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       {sortDropdownOpen && sortDropdownCoords && (
         <div
           ref={sortMenuRef}
-          className="sort-filter-menu open"
+          className={`${styles.sortFilterMenu} ${styles.open}`}
           style={{
             position: 'fixed',
             left: sortDropdownCoords.x,
@@ -347,28 +348,28 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           onMouseLeave={() => setFly(null)}
           onKeyDown={onMenuKeyDown}
         >
-          <div className="sort-filter-menu-title" id="sort-filter-title">
+          <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
             排序与过滤
           </div>
 
           <div
-            className={`sort-filter-row ${fly === 'sort' ? 'is-open' : ''}`}
+            className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
             onMouseEnter={() => setFly('sort')}
           >
-            <span className="sort-filter-row-label">排序方式</span>
+            <span className={styles.sortFilterRowLabel}>排序方式</span>
             <Lucide.ChevronRight
               size={14}
               strokeWidth={1.75}
-              className="sort-filter-chev"
+              className={styles.sortFilterChev}
               aria-hidden
             />
             {fly === 'sort' ? (
-              <div className="sort-filter-flyout" role="group" aria-label="排序方式">
+              <div className={styles.sortFilterFlyout} role="group" aria-label="排序方式">
                 <button
                   type="button"
                   role="menuitemradio"
                   aria-checked={sortType === 'active'}
-                  className={`sort-filter-option ${sortType === 'active' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${sortType === 'active' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetSortType('active');
                     onCloseSortDropdown();
@@ -379,7 +380,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}
@@ -388,7 +389,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                   type="button"
                   role="menuitemradio"
                   aria-checked={sortType === 'name'}
-                  className={`sort-filter-option ${sortType === 'name' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${sortType === 'name' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetSortType('name');
                     onCloseSortDropdown();
@@ -399,7 +400,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}
@@ -409,23 +410,23 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </div>
 
           <div
-            className={`sort-filter-row ${fly === 'group' ? 'is-open' : ''}`}
+            className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
             onMouseEnter={() => setFly('group')}
           >
-            <span className="sort-filter-row-label">分组方式</span>
+            <span className={styles.sortFilterRowLabel}>分组方式</span>
             <Lucide.ChevronRight
               size={14}
               strokeWidth={1.75}
-              className="sort-filter-chev"
+              className={styles.sortFilterChev}
               aria-hidden
             />
             {fly === 'group' ? (
-              <div className="sort-filter-flyout" role="group" aria-label="分组方式">
+              <div className={styles.sortFilterFlyout} role="group" aria-label="分组方式">
                 <button
                   type="button"
                   role="menuitemradio"
                   aria-checked={groupType === 'folder'}
-                  className={`sort-filter-option ${groupType === 'folder' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${groupType === 'folder' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetGroupType('folder');
                     onCloseSortDropdown();
@@ -436,7 +437,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}
@@ -445,7 +446,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                   type="button"
                   role="menuitemradio"
                   aria-checked={groupType === 'none'}
-                  className={`sort-filter-option ${groupType === 'none' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${groupType === 'none' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetGroupType('none');
                     onCloseSortDropdown();
@@ -456,7 +457,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}
@@ -466,23 +467,23 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           </div>
 
           <div
-            className={`sort-filter-row ${fly === 'filter' ? 'is-open' : ''}`}
+            className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
             onMouseEnter={() => setFly('filter')}
           >
-            <span className="sort-filter-row-label">列表范围</span>
+            <span className={styles.sortFilterRowLabel}>列表范围</span>
             <Lucide.ChevronRight
               size={14}
               strokeWidth={1.75}
-              className="sort-filter-chev"
+              className={styles.sortFilterChev}
               aria-hidden
             />
             {fly === 'filter' ? (
-              <div className="sort-filter-flyout" role="group" aria-label="列表范围">
+              <div className={styles.sortFilterFlyout} role="group" aria-label="列表范围">
                 <button
                   type="button"
                   role="menuitemradio"
                   aria-checked={filterType === 'all'}
-                  className={`sort-filter-option ${filterType === 'all' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${filterType === 'all' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetFilterType('all');
                     onCloseSortDropdown();
@@ -493,7 +494,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}
@@ -502,7 +503,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                   type="button"
                   role="menuitemradio"
                   aria-checked={filterType === 'pinned'}
-                  className={`sort-filter-option ${filterType === 'pinned' ? 'is-on' : ''}`}
+                  className={`${styles.sortFilterOption} ${filterType === 'pinned' ? styles.isOn : ''}`}
                   onClick={() => {
                     onSetFilterType('pinned');
                     onCloseSortDropdown();
@@ -513,7 +514,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
                     <Lucide.Check
                       size={16}
                       strokeWidth={2}
-                      className="sort-filter-check"
+                      className={styles.sortFilterCheck}
                       aria-hidden
                     />
                   ) : null}

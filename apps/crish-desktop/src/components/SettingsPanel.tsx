@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useId, lazy, Suspense } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './SettingsPanel.module.css';
 import { useLayoutStore } from '../store/layoutStore';
 import { isDemoMode } from '../api/appMode';
 import {
@@ -7,6 +8,7 @@ import {
   refreshProductCapabilities,
 } from '../api/capabilitiesStore';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { Tooltip } from './settings/SettingsUI';
 import type { SettingsTabType } from '../store/types';
 
 /**
@@ -427,7 +429,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div
       ref={rootRef}
-      className="settings-panel settings-panel--cover"
+      className={`${styles.settingsPanel} ${styles.settingsCover}`}
       data-density="compact"
       role="dialog"
       aria-modal="true"
@@ -435,97 +437,101 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       onWheel={handleRootWheel}
     >
       {/* 顶栏极简：仅拖拽区 + 关闭；键盘 Esc 关闭（搜索有词时先清空） */}
-      <header className="settings-cover-header settings-cover-header--slim" data-tauri-drag-region>
-        <div className="settings-cover-header-spacer" data-tauri-drag-region />
+      <header className={`${styles.coverHeader} ${styles.coverHeaderSlim}`} data-tauri-drag-region>
+        <div className={styles.coverHeaderSpacer} data-tauri-drag-region />
         <div
           className="settings-cover-win no-drag"
           role="group"
           aria-label="窗口控制"
           data-tauri-drag-region="false"
         >
-          <button
-            type="button"
-            className="win-btn no-drag"
-            title="最小化"
-            aria-label="最小化窗口"
-            data-tauri-drag-region="false"
-            onClick={() => {
-              void (async () => {
-                try {
-                  const mod = await import('@tauri-apps/api/window');
-                  await mod.getCurrentWindow().minimize();
-                } catch {
-                  /* browser */
-                }
-              })();
-            }}
-          >
-            <Lucide.Minus size={16} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="win-btn no-drag"
-            title="最大化"
-            aria-label="最大化或还原窗口"
-            data-tauri-drag-region="false"
-            onClick={() => {
-              void (async () => {
-                try {
-                  const mod = await import('@tauri-apps/api/window');
-                  const win = mod.getCurrentWindow();
-                  if (await win.isMaximized()) await win.unmaximize();
-                  else await win.maximize();
-                } catch {
-                  /* browser */
-                }
-              })();
-            }}
-          >
-            <Lucide.Square size={14} aria-hidden />
-          </button>
-          {onClose ? (
+          <Tooltip content="最小化">
             <button
               type="button"
-              className="win-btn close no-drag"
+              className="win-btn no-drag"
+              aria-label="最小化窗口"
               data-tauri-drag-region="false"
-              onClick={onClose}
-              title="关闭设置（Esc）"
-              aria-label="关闭设置"
-              aria-keyshortcuts="Escape"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const mod = await import('@tauri-apps/api/window');
+                    await mod.getCurrentWindow().minimize();
+                  } catch {
+                    /* browser */
+                  }
+                })();
+              }}
             >
-              <Lucide.X size={16} strokeWidth={1.75} aria-hidden />
+              <Lucide.Minus size={16} aria-hidden />
             </button>
+          </Tooltip>
+          <Tooltip content="最大化">
+            <button
+              type="button"
+              className="win-btn no-drag"
+              aria-label="最大化或还原窗口"
+              data-tauri-drag-region="false"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const mod = await import('@tauri-apps/api/window');
+                    const win = mod.getCurrentWindow();
+                    if (await win.isMaximized()) await win.unmaximize();
+                    else await win.maximize();
+                  } catch {
+                    /* browser */
+                  }
+                })();
+              }}
+            >
+              <Lucide.Square size={14} aria-hidden />
+            </button>
+          </Tooltip>
+          {onClose ? (
+            <Tooltip content="关闭设置 (Esc)">
+              <button
+                type="button"
+                className="win-btn close no-drag"
+                data-tauri-drag-region="false"
+                onClick={onClose}
+                aria-label="关闭设置"
+                aria-keyshortcuts="Escape"
+              >
+                <Lucide.X size={16} strokeWidth={1.75} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </header>
 
-      <div className="settings-cover-body" data-density="compact">
-        <nav className="settings-cover-nav" aria-label="设置导航" data-density="compact">
+      <div className={styles.coverBody} data-density="compact">
+        <nav className={styles.coverNav} aria-label="设置导航" data-density="compact">
           {onClose ? (
-            <button
-              type="button"
-              className="settings-nav-back no-drag"
-              onClick={onClose}
-              title="返回工作区（Esc）"
-              aria-label="返回应用，关闭设置"
-            >
-              <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
-              <span>返回应用</span>
-            </button>
+            <Tooltip content="返回应用 (Esc)">
+              <button
+                type="button"
+                className={`${styles.navBack} no-drag`}
+                onClick={onClose}
+                aria-label="返回应用，关闭设置"
+              >
+                <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+                <span>返回应用</span>
+              </button>
+            </Tooltip>
           ) : null}
 
-          <div className="settings-nav-search-wrap">
+          <div className={styles.searchWrap}>
             <Lucide.Search
               size={14}
               strokeWidth={1.75}
-              className="settings-nav-search-ico"
+              className={styles.searchIco}
               aria-hidden
             />
             <input
               ref={searchInputRef}
               id={searchId}
               type="search"
-              className="settings-nav-search"
+              className={styles.search}
               placeholder="搜索设置…"
               value={navQuery}
               onChange={(e) => setNavQuery(e.target.value)}
@@ -542,7 +548,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div
             id={tablistId}
             ref={tablistRef}
-            className="settings-nav-scroll"
+            className={styles.navScroll}
             role="tablist"
             aria-label="设置分类"
             aria-orientation="vertical"
@@ -558,34 +564,35 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               return (
                 <React.Fragment key={tab.id}>
                   {showGroup ? (
-                    <div className="settings-nav-group" role="presentation" aria-hidden="true">
+                    <div className={styles.navGroup} role="presentation" aria-hidden="true">
                       {tab.group}
                     </div>
                   ) : null}
-                  <button
-                    type="button"
-                    id={tabBtnId}
-                    role="tab"
-                    data-settings-tab-id={tab.id}
-                    aria-selected={isTabActive}
-                    aria-controls={isTabActive ? panelId : undefined}
-                    tabIndex={isRoving ? 0 : -1}
-                    title={tab.keywords.slice(0, 4).join(' · ')}
-                    aria-label={`${tab.group} · ${tab.label}`}
-                    onClick={() => selectTab(tab.id)}
-                    onFocus={() => setNavFocusId(tab.id)}
-                    className={`settings-sidebar-tab ${isTabActive ? 'active' : ''}`}
-                  >
-                    <span className="settings-sidebar-tab-ico" aria-hidden>
-                      <Icon size={16} strokeWidth={1.75} />
-                    </span>
-                    <span>{tab.label}</span>
-                  </button>
+                  <Tooltip content={tab.keywords.slice(0, 4).join(' · ')}>
+                    <button
+                      type="button"
+                      id={tabBtnId}
+                      role="tab"
+                      data-settings-tab-id={tab.id}
+                      aria-selected={isTabActive}
+                      aria-controls={isTabActive ? panelId : undefined}
+                      tabIndex={isRoving ? 0 : -1}
+                      aria-label={`${tab.group} · ${tab.label}`}
+                      onClick={() => selectTab(tab.id)}
+                      onFocus={() => setNavFocusId(tab.id)}
+                      className={`${styles.sidebarTab} ${isTabActive ? styles.active : ''}`}
+                    >
+                      <span className={styles.sidebarTabIco} aria-hidden>
+                        <Icon size={16} strokeWidth={1.75} />
+                      </span>
+                      <span>{tab.label}</span>
+                    </button>
+                  </Tooltip>
                 </React.Fragment>
               );
             })}
             {visibleTabs.length === 0 ? (
-              <div className="settings-nav-empty" role="status">
+              <div className={styles.navEmpty} role="status">
                 无匹配项
               </div>
             ) : null}
@@ -618,7 +625,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           id={panelId}
           role="tabpanel"
           tabIndex={0}
-          className="settings-cover-content"
+          className={styles.coverContent}
           aria-label={activeLabel}
           aria-labelledby={activeTabBtnId}
           data-settings-tab={safeActiveTab}

@@ -1,0 +1,114 @@
+.permPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.permPill:hover,
+.permPill.isOpen {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.permPill:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+.permPillDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.permPillLabel {
+  /* label text */
+}
+
+.permPillChev {
+  opacity: 0.5;
+  transition: transform 0.12s ease;
+}
+
+.permPill.isOpen .permPillChev {
+  transform: rotate(180deg);
+}
+
+.permMenu {
+  position: fixed;
+  z-index: 20040;
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-sizing: border-box;
+}
+
+.permMenuItem {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.1s ease, color 0.1s ease;
+  text-align: left;
+  white-space: nowrap;
+  font-family: inherit;
+  font-weight: var(--font-weight-normal);
+  position: relative;
+}
+
+.permMenuItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.permMenuItem.isSelected {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.permMenuItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+.permMenuTitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.permMenuCheck {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent-green);
+}

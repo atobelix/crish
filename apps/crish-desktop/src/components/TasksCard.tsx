@@ -7,7 +7,9 @@
  * - 解析规则只读委托 goalModeController，保证 /goal 与任务板同源
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import styles from './TasksCard.module.css';
 import * as Lucide from 'lucide-react';
+import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import {
   selectActiveSession,
@@ -141,16 +143,49 @@ export function formatGoalBannerStatus(opts: {
   };
 }
 
+class SimpleCache<K, V> {
+  private map = new Map<K, V>();
+  private keys: K[] = [];
+  private limit: number;
+  constructor(limit = 100) {
+    this.limit = limit;
+  }
+  get(key: K): V | undefined {
+    return this.map.get(key);
+  }
+  set(key: K, value: V): void {
+    if (this.map.has(key)) {
+      this.map.set(key, value);
+      return;
+    }
+    if (this.keys.length >= this.limit) {
+      const oldest = this.keys.shift();
+      if (oldest !== undefined) {
+        this.map.delete(oldest);
+      }
+    }
+    this.map.set(key, value);
+    this.keys.push(key);
+  }
+}
+
+const markdownChecklistCache = new SimpleCache<string, ChecklistItem[]>(200);
+
 /**
  * 解析 markdown 任务列表。
  * 与 goalModeController.parseChecklistTasks 同一规则，保证 /goal 与 TasksCard 进度一致。
  */
 export function parseMarkdownChecklist(text: string | undefined | null): ChecklistItem[] {
-  return parseChecklistTasks(text).map((t) => ({
+  if (!text) return [];
+  const cached = markdownChecklistCache.get(text);
+  if (cached) return cached;
+  const parsed = parseChecklistTasks(text).map((t) => ({
     id: t.id,
     text: t.text,
     done: t.done,
   }));
+  markdownChecklistCache.set(text, parsed);
+  return parsed;
 }
 
 /** 自后向前找最近一条含 checklist 的助手消息（流式中取最新正文） */
@@ -570,87 +605,92 @@ export const TasksCard: React.FC = () => {
   const listTitle = checklistSectionTitle(progressSource);
 
   return (
-    <div className="tasks-card">
-      <div className="card-subheader tasks-card-head">
-        <div className="tasks-card-head-left">
-          <span className="tasks-card-title" id="tasks-card-title">
+    <div className={styles.card}>
+      <div className={`card-subheader ${styles.cardHead}`}>
+        <div className={styles.cardHeadLeft}>
+          <span className={styles.cardTitle} id="tasks-card-title">
             AI 进度
           </span>
           {headCountLabel ? (
-            <span
-              className="tasks-card-count"
-              title="仅统计清单/目标，不含工具与备忘"
-              aria-live="polite"
-            >
-              {headCountLabel}
-            </span>
+            <Tooltip content="仅统计清单/目标，不含工具与备忘">
+              <span
+                className={styles.cardCount}
+                aria-live="polite"
+              >
+                {headCountLabel}
+              </span>
+            </Tooltip>
           ) : goalActive ? (
-            <span className="tasks-card-count" aria-live="polite">
+            <span className={styles.cardCount} aria-live="polite">
               目标进行中
             </span>
           ) : null}
         </div>
-        <div className="tasks-card-head-actions">
+        <div className={styles.cardHeadActions}>
           {agents.length > 0 ? (
+            <Tooltip content={agentLink.title || ''}>
+              <button
+                type="button"
+                className={styles.agentLink}
+                aria-label={agentLink.ariaLabel}
+                onClick={openAgentBoard}
+              >
+                {agentLink.text}
+              </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip content={isAddingTask ? '取消添加备忘' : '添加备忘'}>
             <button
               type="button"
-              className="tasks-agent-link"
-              title={agentLink.title}
-              aria-label={agentLink.ariaLabel}
-              onClick={openAgentBoard}
+              className="sub-btn"
+              aria-label={isAddingTask ? '取消添加备忘' : '添加备忘'}
+              aria-expanded={isAddingTask}
+              onClick={() => setIsAddingTask(!isAddingTask)}
             >
-              {agentLink.text}
+              <Lucide.Plus size={16} aria-hidden />
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="sub-btn"
-            title="添加备忘"
-            aria-label={isAddingTask ? '取消添加备忘' : '添加备忘'}
-            aria-expanded={isAddingTask}
-            onClick={() => setIsAddingTask(!isAddingTask)}
-          >
-            <Lucide.Plus size={16} aria-hidden />
-          </button>
+          </Tooltip>
         </div>
       </div>
 
-      <div className="tasks-card-body" aria-labelledby="tasks-card-title">
+      <div className={styles.cardBody} aria-labelledby="tasks-card-title">
         {showGoalBanner ? (
           <div
-            className={`tasks-goal-banner${goalActive ? '' : ' tasks-goal-banner--ended'}`}
+            className={`${styles.goalBanner}${goalActive ? '' : ` ${styles.goalBannerEnded}`}`}
             role="region"
             aria-label={goalActive ? '目标进行中' : '目标已结束'}
             aria-busy={goalActive && totalTrack === 0}
           >
-            <div className="tasks-goal-banner-top">
-              <Lucide.Target size={14} className="tasks-goal-icon" aria-hidden />
-              <span className="tasks-goal-label">目标</span>
-              <span
-                className="tasks-goal-iter"
-                title={
+            <div className={styles.goalBannerTop}>
+              <Lucide.Target size={14} className={styles.goalIcon} aria-hidden />
+              <span className={styles.goalLabel}>目标</span>
+              <Tooltip
+                content={
                   goalBannerStatus.title ||
-                  (goalActive ? `当前轮次 ${goalBannerStatus.text}` : undefined)
-                }
-                aria-label={
-                  goalActive
-                    ? `轮次 ${goalBannerStatus.text}`
-                    : goalBannerStatus.text
+                  (goalActive ? `当前轮次 ${goalBannerStatus.text}` : '')
                 }
               >
-                {goalActive ? `轮次 ${goalBannerStatus.text}` : goalBannerStatus.text}
-              </span>
+                <span
+                  className={styles.goalIter}
+                  aria-label={
+                    goalActive
+                      ? `轮次 ${goalBannerStatus.text}`
+                      : goalBannerStatus.text
+                  }
+                >
+                  {goalActive ? `轮次 ${goalBannerStatus.text}` : goalBannerStatus.text}
+                </span>
+              </Tooltip>
             </div>
-            <div
-              className="tasks-goal-text"
-              title={progressResolved.goalText || undefined}
-            >
-              {progressResolved.goalText || '（未设置目标）'}
-            </div>
+            <Tooltip content={progressResolved.goalText || '（未设置目标）'}>
+              <div className={styles.goalText}>
+                {progressResolved.goalText || '（未设置目标）'}
+              </div>
+            </Tooltip>
             {totalTrack > 0 ? (
-              <div className="tasks-goal-progress">
+              <div className={styles.goalProgress}>
                 <div
-                  className="tasks-progress-track"
+                  className={styles.progressTrack}
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -658,23 +698,25 @@ export const TasksCard: React.FC = () => {
                   aria-valuetext={progressAriaText}
                   aria-label="目标进度"
                 >
-                  <div className="tasks-progress-fill" style={{ width: `${pct}%` }} />
+                  <div className={styles.progressFill} style={{ width: `${pct}%` }} />
                 </div>
-                <span className="tasks-goal-pct" title={progressAriaText}>
-                  {goalBannerProgressLabel}
-                </span>
+                <Tooltip content={progressAriaText}>
+                  <span className={styles.goalPct}>
+                    {goalBannerProgressLabel}
+                  </span>
+                </Tooltip>
               </div>
             ) : null}
           </div>
         ) : null}
 
         {inPlanMode ? (
-          <div className="tasks-plan-banner" role="region" aria-label="计划模式">
-            <div className="tasks-plan-banner-t">
+          <div className={styles.planBanner} role="region" aria-label="计划模式">
+            <div className={styles.planBannerT}>
               计划模式 · 只规划不改文件
               {planApproved ? ' · 已批准' : ''}
             </div>
-            <div className="tasks-plan-banner-actions">
+            <div className={styles.planBannerActions}>
               <button
                 type="button"
                 className={`overview-chip ${planApproved ? 'active' : ''}`}
@@ -691,25 +733,25 @@ export const TasksCard: React.FC = () => {
           </div>
         ) : planApproved ? (
           <div
-            className="tasks-plan-status tasks-plan-status--solo"
+            className={`${styles.planStatus} ${styles.planStatusSolo}`}
             role="status"
           >
-            <span className="tasks-plan-status-dot is-yes" aria-hidden />
+            <span className={`${styles.planStatusDot} ${styles.isYes}`} aria-hidden />
             <span>计划已批准 · 可执行</span>
           </div>
         ) : null}
 
         {empty ? (
-          <div className="tasks-empty" role="status">
-            <div className="tasks-empty-title">暂无进度</div>
-            <div className="tasks-empty-sub">
+          <div className={styles.empty} role="status">
+            <div className={styles.emptyTitle}>暂无进度</div>
+            <div className={styles.emptySub}>
               AI 用 <code>- [ ]</code> 清单或 <code>/goal</code> 同步进度；工具调用与备忘不计进度。
             </div>
           </div>
         ) : null}
 
         {isAddingTask ? (
-          <div className="tasks-add-row">
+          <div className={styles.addRow}>
             <input
               className="settings-field-input"
               style={{ flex: 1 }}
@@ -739,13 +781,13 @@ export const TasksCard: React.FC = () => {
 
         {/* 无 goal 条时才单独显示进度条，避免与 goal 区重复 */}
         {!showGoalBanner && totalTrack > 0 ? (
-          <div className="tasks-progress-block">
-            <div className="tasks-progress-meta">
+          <div className={styles.progressBlock}>
+            <div className={styles.progressMeta}>
               <span>{standaloneProgressMeta.left}</span>
               <span>{standaloneProgressMeta.right}</span>
             </div>
             <div
-              className="tasks-progress-track"
+              className={styles.progressTrack}
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
@@ -753,42 +795,42 @@ export const TasksCard: React.FC = () => {
               aria-valuetext={progressAriaText}
               aria-label="清单进度"
             >
-              <div className="tasks-progress-fill" style={{ width: `${pct}%` }} />
+              <div className={styles.progressFill} style={{ width: `${pct}%` }} />
             </div>
           </div>
         ) : null}
 
         {checklist.length > 0 ? (
-          <section className="tasks-section" aria-label={listTitle}>
-            <div className="tasks-section-h">
+          <section className={styles.section} aria-label={listTitle}>
+            <div className={styles.sectionH}>
               <span>{listTitle}</span>
-              <span className="tasks-section-count">{sectionCountLabel}</span>
+              <span className={styles.sectionCount}>{sectionCountLabel}</span>
             </div>
-            <ul className="tasks-checklist">
+            <ul className={styles.checklist}>
               {checklist.map((item) => (
                 <li
                   key={item.id}
-                  className={`tasks-check-item ${item.done ? 'is-done' : ''}`}
+                  className={`${styles.checkItem} ${item.done ? styles.isDone : ''}`}
                   aria-label={formatChecklistItemAriaLabel(item)}
                 >
                   <span
-                    className={`tasks-check-mark ${item.done ? 'checked' : ''}`}
+                    className={`${styles.checkMark} ${item.done ? styles.checked : ''}`}
                     aria-hidden
                   >
                     {item.done ? <Lucide.Check size={12} strokeWidth={2.5} /> : null}
                   </span>
-                  <span className="tasks-check-text">{item.text}</span>
+                  <span className={styles.checkText}>{item.text}</span>
                 </li>
               ))}
             </ul>
           </section>
         ) : showEmptyChecklist ? (
-          <section className="tasks-section" aria-label={listTitle}>
-            <div className="tasks-section-h">
+          <section className={styles.section} aria-label={listTitle}>
+            <div className={styles.sectionH}>
               <span>{listTitle}</span>
-              <span className="tasks-section-count">0 项</span>
+              <span className={styles.sectionCount}>0 项</span>
             </div>
-            <p className="tasks-empty-sub" role="status" style={{ margin: '4px 0 0' }}>
+            <p className={styles.emptySub} role="status" style={{ margin: '4px 0 0' }}>
               {emptyChecklistHint}
             </p>
           </section>
@@ -796,40 +838,43 @@ export const TasksCard: React.FC = () => {
 
         {/* 当前工具仅一行，不计入进度、不列历史命令 */}
         {liveToolLine ? (
-          <div
-            className={`tasks-live-tool${liveToolLine.isApproval ? ' is-approval' : ''}`}
-            role="status"
-            aria-live="polite"
-            aria-label={`当前步骤：${liveToolLine.label}，${liveToolLine.statusLabel}（不计进度）`}
-            title="工具调用不计进度"
-          >
-            <span
-              className={`tasks-step-dot ${liveToolLine.isApproval ? 'err' : 'live'}`}
-              aria-hidden
-            />
-            <span className="tasks-live-tool-label" title={liveToolLine.label}>
-              {liveToolLine.label}
-            </span>
-            <span className="tasks-live-tool-meta">{liveToolLine.statusLabel}</span>
-          </div>
+          <Tooltip content="工具调用不计进度">
+            <div
+              className={`${styles.liveTool}${liveToolLine.isApproval ? ` ${styles.isApproval}` : ''}`}
+              role="status"
+              aria-live="polite"
+              aria-label={`当前步骤：${liveToolLine.label}，${liveToolLine.statusLabel}（不计进度）`}
+            >
+              <span
+                className={`${styles.stepDot} ${liveToolLine.isApproval ? styles.err : styles.live}`}
+                aria-hidden
+              />
+              <Tooltip content={liveToolLine.label}>
+                <span className={styles.liveToolLabel}>
+                  {liveToolLine.label}
+                </span>
+              </Tooltip>
+              <span className={styles.liveToolMeta}>{liveToolLine.statusLabel}</span>
+            </div>
+          </Tooltip>
         ) : null}
 
         {/* 仅有备忘时才出区；添加行已在上方，避免空「备忘」块 */}
         {memos.length > 0 ? (
-          <section className="tasks-section tasks-section--memo" aria-label="备忘">
-            <div className="tasks-section-h">
+          <section className={`${styles.section} ${styles.sectionMemo}`} aria-label="备忘">
+            <div className={styles.sectionH}>
               <span>备忘</span>
-              <span className="tasks-section-count">
+              <span className={styles.sectionCount}>
                 {doneMemo}/{memos.length} · 不计进度
               </span>
             </div>
-            <div className="tasks-memo-list">
+            <div className={styles.memoList}>
               {memos.map((t) => (
                 <div
                   key={t.id}
                   style={{ display: 'flex', alignItems: 'flex-start', gap: 4, minWidth: 0 }}
                 >
-                  <label className="tasks-memo-item" style={{ flex: 1, minWidth: 0 }}>
+                  <label className={styles.memoItem} style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="checkbox"
                       checked={t.done}
@@ -840,18 +885,19 @@ export const TasksCard: React.FC = () => {
                         )
                       }
                     />
-                    <span className={t.done ? 'is-done' : ''}>{t.text}</span>
+                    <span className={t.done ? styles.isDone : ''}>{t.text}</span>
                   </label>
-                  <button
-                    type="button"
-                    className="sub-btn"
-                    title="删除备忘"
-                    aria-label={`删除备忘：${t.text}`}
-                    onClick={() => removeMemo(t.id)}
-                    style={{ flexShrink: 0, padding: 2, opacity: 0.7 }}
-                  >
-                    <Lucide.X size={12} strokeWidth={2} aria-hidden />
-                  </button>
+                  <Tooltip content="删除备忘">
+                    <button
+                      type="button"
+                      className="sub-btn"
+                      aria-label={`删除备忘：${t.text}`}
+                      onClick={() => removeMemo(t.id)}
+                      style={{ flexShrink: 0, padding: 2, opacity: 0.7 }}
+                    >
+                      <Lucide.X size={12} strokeWidth={2} aria-hidden />
+                    </button>
+                  </Tooltip>
                 </div>
               ))}
             </div>

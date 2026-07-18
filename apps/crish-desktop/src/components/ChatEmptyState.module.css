@@ -1,0 +1,264 @@
+.chatEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1, 4px);
+  height: 100%;
+  width: 100%;
+  max-width: min(var(--chat-col-max, 520px), 100%);
+  margin-left: auto;
+  margin-right: auto;
+  align-self: center;
+  box-sizing: border-box;
+  padding: var(--space-6, 20px) var(--space-5, 16px);
+  background: transparent;
+}
+
+.noSession,
+.filterEmpty {
+  gap: var(--space-2, 6px);
+}
+
+.sessionEmpty {
+  height: auto;
+  flex: none;
+  padding: 0;
+  margin-bottom: 28px;
+  width: 100%;
+  max-width: var(--chat-col-max, 680px);
+  gap: var(--space-4, 12px);
+  text-align: center;
+}
+
+.sessionEmpty .chatEmptySub {
+  display: none;
+}
+
+.chatEmptyIconWrap {
+  display: none;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--space-3, 8px);
+  border-width: var(--hairline-width, 1px);
+  border-style: solid;
+  border-color: var(--hairline, var(--border-subtle, var(--border-color)));
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+.chatEmptyIcon {
+  display: none;
+}
+
+.chatEmptyTitle {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2, 6px);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.chatEmptyHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.chatEmptyTitleHero {
+  font-size: 34px; /* 增大字号，与 Kimi 类似的气度 */
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  margin-bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.chatEmptyProjectInline {
+  display: inline-block;
+  position: relative;
+  vertical-align: middle;
+}
+
+.chatEmptyProjectBtnInline {
+  font-size: 26px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.chatEmptyProjectBtnInline:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+
+.chatEmptyProjectText {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.chatEmptySub {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-5, 16px);
+  text-align: center;
+  max-width: 28em;
+  line-height: var(--line-height-body, 1.55);
+  display: none; /* Hide for cleaner look globally, user found it too noisy */
+}
+
+/* 主行动 / 项目 / 快捷：软填充 pill，无黑描边 */
+.chatEmptyAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 var(--space-1, 4px);
+  padding: var(--space-2, 6px) var(--space-5, 16px);
+  border: none;
+  border-radius: 999px;
+  background: var(--control-soft-bg, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: none;
+  min-height: var(--control-height, 32px);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.chatEmptyAction:hover {
+  background: var(--control-soft-bg-hover, var(--bg-hover));
+}
+
+.chatEmptyAction:focus-visible {
+  outline: none;
+  background: var(--control-soft-bg-active, var(--bg-active));
+}
+
+.chatEmptyComposerWrap {
+  width: 100%;
+  max-width: var(--chat-col-max, 680px);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* 让空态下的 input-container 更加高级，大圆角和柔和投影 */
+.chatEmptyComposerWrap :global(.input-container) {
+  border-radius: 20px !important; /* 更加圆润 */
+  border: 1px solid var(--border-color) !important;
+  background: var(--bg-card) !important; /* 卡片白 */
+  box-shadow: none !important; /* 去除阴影 */
+  padding: 14px 14px 10px 18px !important; /* 调整内边距，让大圆角看起来更均衡 */
+  transition: border-color var(--transition-fast) !important;
+}
+
+.chatEmptyComposerWrap :global(.input-container):focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important; /* 聚焦时仅 5% 加深，超轻微差异 */
+  box-shadow: none !important;
+}
+
+.chatEmptyPrompts {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  max-width: 600px;
+  justify-content: center;
+}
+
+.sessionEmpty .chatEmptyPrompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: var(--chat-col-max, 680px);
+  margin-top: 20px;
+}
+
+.quickPromptCard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: var(--space-2, 6px) var(--space-4, 12px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle, rgba(0,0,0,0.05));
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  font-family: var(--font-sans);
+  flex: 1 1 calc(50% - 12px);
+  min-width: 200px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  transition: all 0.2s ease;
+  min-height: var(--control-height-sm, 28px);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.sessionEmpty .quickPromptCard {
+  /* 重置全局 flex stretch 布局，改为 auto 宽度 pill */
+  flex: 0 0 auto;
+  min-width: unset;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 100px; /* 完整 pill */
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  box-shadow: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.quickPromptCard:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  /* 严禁 translateY 上下跳动 */
+}
+
+.sessionEmpty .quickPromptCard:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  /* 严禁 translateY 上下跳动 */
+}
+
+.quickPromptCard:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring, blue);
+}
+
+.quickPromptCard svg {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .chatEmptyState {
+    padding: var(--space-5, 16px) var(--space-4, 12px);
+  }
+}

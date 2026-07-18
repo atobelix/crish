@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import styles from './Sidebar.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSidebarSessions } from '../store/sessionStore';
 import * as Lucide from 'lucide-react';
@@ -587,7 +589,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   return (
     <aside
       ref={sidebarRef}
-      className={`sidebar crish-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${hoverExpanded ? 'temp-expanded' : ''}`}
+      className={`${styles.sidebar} crish-sidebar ${sidebarCollapsed ? styles.collapsed : ''} ${hoverExpanded ? styles.tempExpanded : ''}`}
       role="navigation"
       aria-label="侧栏导航"
       data-sidebar-filter={filterType}
@@ -620,7 +622,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
       {/* 折叠且非悬停时隐藏主 chrome，分隔条仍可键盘操作以展开 */}
       <div
-        className="sidebar-scroll"
+        className={styles.sidebarScroll}
         data-sidebar-chrome="scroll"
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
@@ -629,11 +631,11 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         {/* 新建 / 定时：中文文案即可见名；新建仅 createSession 空壳路径 */}
         <div role="group" aria-label="侧栏快捷操作：新建对话与定时任务">
           <SidebarNav
-            activeNav={activeNav}
-            onNewSession={handleNewSession}
-            onOpenScheduled={handleOpenScheduled}
-            searchInput={searchInput}
-            onSearchChange={onSearchChange}
+             activeNav={activeNav}
+             onNewSession={handleNewSession}
+             onOpenScheduled={handleOpenScheduled}
+             searchInput={searchInput}
+             onSearchChange={onSearchChange}
           />
         </div>
 
@@ -668,53 +670,55 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       </div>
 
       <div
-        className="sidebar-footer"
+        className={styles.sidebarFooter}
         role="contentinfo"
         aria-label="侧栏底栏"
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
       >
         {canUseDemoMode() && (
-          <button
-            type="button"
-            className={`sb-mode-chip ${isDemoMode() ? 'is-demo' : ''}`}
-            title="开发切换：正式 / 演示（正式包不会出现）"
-            aria-label={isDemoMode() ? '当前演示模式，点击切换为正式' : '当前正式模式，点击切换为演示'}
-            aria-pressed={isDemoMode()}
-            onClick={() => {
-              const next = getAppMode() === 'demo' ? 'normal' : 'demo';
-              switchAppMode(next);
-            }}
-          >
-            {isDemoMode() ? '演示' : '正式'}
-          </button>
-        )}
-        <div className="sidebar-footer-actions">
-          <SettingsQuickMenu onShowToast={onShowToast} />
-          {updateAvailable ? (
+          <Tooltip content="开发切换：正式 / 演示 (正式包不会出现)">
             <button
               type="button"
-              className="sidebar-footer-update is-visible"
-              title="有新版本，点击安装更新"
-              aria-label="安装更新"
+              className={`${styles.modeChip} ${isDemoMode() ? styles.isDemo : ''}`}
+              aria-label={isDemoMode() ? '当前演示模式，点击切换为正式' : '当前正式模式，点击切换为演示'}
+              aria-pressed={isDemoMode()}
               onClick={() => {
-                void (async () => {
-                  const { applyUpdateWhenIdle } = await import('../api/updateStore');
-                  const r = await applyUpdateWhenIdle();
-                  onShowToast?.(r.message);
-                  if (r.ok) setUpdateAvailableState(false);
-                })();
+                const next = getAppMode() === 'demo' ? 'normal' : 'demo';
+                switchAppMode(next);
               }}
             >
-              <Lucide.RefreshCw size={14} strokeWidth={1.75} aria-hidden />
-              <span className="sidebar-footer-update-label">更新</span>
+              {isDemoMode() ? '演示' : '正式'}
             </button>
+          </Tooltip>
+        )}
+        <div className={styles.footerActions}>
+          <SettingsQuickMenu onShowToast={onShowToast} />
+          {updateAvailable ? (
+            <Tooltip content="有新版本，点击安装更新">
+              <button
+                type="button"
+                className={`${styles.footerUpdate} ${styles.isVisible}`}
+                aria-label="安装更新"
+                onClick={() => {
+                  void (async () => {
+                    const { applyUpdateWhenIdle } = await import('../api/updateStore');
+                    const r = await applyUpdateWhenIdle();
+                    onShowToast?.(r.message);
+                    if (r.ok) setUpdateAvailableState(false);
+                  })();
+                }}
+              >
+                <Lucide.RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+                <span className={styles.footerUpdateLabel}>更新</span>
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
 
       <div
-        className="sidebar-resizer"
+        className={styles.sidebarResizer}
         id="sidebar-resizer"
         role="separator"
         aria-orientation="vertical"

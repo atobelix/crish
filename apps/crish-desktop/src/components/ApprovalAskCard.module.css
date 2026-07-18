@@ -1,0 +1,275 @@
+.approvalCard {
+  margin: 6px 0 8px;
+  padding: 10px 12px 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  border-left: 2px solid var(--accent-orange, #f59e0b);
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  box-sizing: border-box;
+  color: var(--text-primary);
+}
+
+.approvalCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.approvalCardBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.approvalCardStatus {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--accent-orange, #f59e0b);
+}
+
+.approvalCardZone {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.approvalCardElevated {
+  border-left-color: var(--accent-danger, #ef4444);
+}
+
+/* 后端 riskLevel 颜色控制 */
+.approvalCard[data-risk-level="critical"],
+.approvalCard[data-risk-level="high"] {
+  border-left-color: var(--accent-danger, #ef4444);
+}
+
+.approvalCard[data-risk-level="medium"] {
+  border-left-color: var(--accent-orange, #f59e0b);
+}
+
+.approvalCard[data-risk-level="low"] {
+  border-left-color: var(--accent-green, #22c55e);
+}
+
+.approvalCard.isConfirmArmed {
+  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 45%, var(--hairline, var(--border-subtle)));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-orange, #f59e0b) 18%, transparent);
+}
+
+.approvalCardHint {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  line-height: 1.35;
+}
+
+.approvalCardHintWarn {
+  color: var(--accent-orange, #f59e0b);
+}
+
+.approvalCardReason {
+  opacity: 0.9;
+  max-height: 3.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.approvalCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+
+.approvalCardChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  font-size: var(--font-size-xxs, 11px);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.approvalCardChipWarn {
+  color: var(--accent-orange, #f59e0b);
+  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 35%, var(--hairline, var(--border-subtle)));
+}
+
+.approvalCardChipDanger {
+  color: var(--accent-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--accent-danger, #ef4444) 35%, var(--hairline, var(--border-subtle)));
+}
+
+.approvalCardChipInfo {
+  color: var(--text-secondary);
+  border-color: var(--hairline-strong, var(--border-subtle));
+}
+
+.approvalCardChipNeutral {
+  color: var(--text-tertiary);
+}
+
+.approvalCardTitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.approvalCardDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.approvalCardCmdWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.approvalCardCmdLabel {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.approvalCardCmd {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 4px 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 4.5em;
+  overflow: auto;
+  opacity: 0.9;
+}
+
+.approvalCardNote {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.approvalCardInput {
+  width: 100%;
+  min-height: 40px;
+  max-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-sizing: border-box;
+  line-height: 1.35;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.approvalCardInput:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--border-color) 75%, var(--text-primary) 25%);
+  box-shadow: none;
+}
+
+.approvalCardCount {
+  align-self: flex-end;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.approvalCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.approvalCardBtn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.approvalCardBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.approvalCardBtn.deny:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+.approvalCardBtn.allow {
+  background: var(--text-primary);
+  border-color: transparent;
+  color: var(--bg-primary);
+}
+
+.approvalCardBtn.allow:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.approvalCardBtn.allow.isArmed {
+  outline: 1px solid var(--accent-orange, #f59e0b);
+  outline-offset: 1px;
+}
+
+.approvalCardBtn.ghost {
+  background: transparent;
+}
+
+.approvalCardBtn.disarm {
+  color: var(--text-tertiary);
+}
+
+.approvalCardBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+:global(.agent-card--dense) .approvalCard {
+  margin: 4px 0;
+  padding: 8px 8px 7px;
+  border-radius: 8px;
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+:global(.agent-card--dense) .approvalCardActions {
+  gap: 4px;
+}
+
+:global(.agent-card--dense) .approvalCardBtn {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: var(--font-size-xs);
+}

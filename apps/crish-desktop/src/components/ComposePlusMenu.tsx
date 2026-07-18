@@ -4,6 +4,8 @@
  */
 import React, { useEffect, useId, useRef } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ComposePlusMenu.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 
@@ -162,33 +164,33 @@ export const ComposePlusMenu: React.FC<Props> = ({
     <div
       ref={rootRef}
       id={menuId}
-      className="cplus-root cplus-root--slim"
+      className={`${styles.root} ${styles.slim}`}
       role="menu"
       aria-label="添加"
       data-cplus-density="compact"
     >
-      <div className="cplus-main" role="none">
+      <div className={styles.main} role="none">
         {items.map((item, idx) => (
-          <button
-            key={item.id}
-            ref={idx === 0 ? firstItemRef : undefined}
-            type="button"
-            className="cplus-item"
-            role="menuitem"
-            aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
-            title={item.hint || item.label}
-            onClick={item.onPick}
-          >
-            <span className="cplus-item-icon" aria-hidden>
-              {item.icon}
-            </span>
-            <span className="cplus-item-text">
-              <span className="cplus-item-title">{item.label}</span>
-              {item.hint ? (
-                <span className="cplus-item-desc">{item.hint}</span>
-              ) : null}
-            </span>
-          </button>
+          <Tooltip key={item.id} content={item.hint || item.label}>
+            <button
+              ref={idx === 0 ? firstItemRef : undefined}
+              type="button"
+              className={styles.item}
+              role="menuitem"
+              aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
+              onClick={item.onPick}
+            >
+              <span className={styles.icon} aria-hidden>
+                {item.icon}
+              </span>
+              <span className={styles.text}>
+                <span className={styles.title}>{item.label}</span>
+                {item.hint ? (
+                  <span className={styles.desc}>{item.hint}</span>
+                ) : null}
+              </span>
+            </button>
+          </Tooltip>
         ))}
       </div>
     </div>

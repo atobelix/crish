@@ -8,6 +8,8 @@
  */
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
+import styles from './ChatMsgFilterBar.module.css';
+import { Tooltip } from './settings/SettingsUI';
 
 export type ChatMsgFilterBarProps = {
   localMsgFilter: string;
@@ -68,17 +70,17 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
       : `共 ${totalCount} 条消息`;
 
   return (
-    <div className="chat-msg-filter-bar" role="search" aria-label="本会话消息筛选">
+    <div className={styles.bar} role="search" aria-label="本会话消息筛选">
       <Lucide.Search
         size={13}
-        className="chat-msg-filter-icon"
+        className={styles.icon}
         strokeWidth={1.75}
         aria-hidden
       />
       <input
         ref={inputRef}
         type="search"
-        className="chat-msg-filter-input"
+        className={styles.input}
         value={localMsgFilter}
         placeholder="筛选本会话消息…"
         aria-label="筛选本会话消息"
@@ -109,7 +111,7 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
       />
       <span
         id={countId}
-        className={`chat-msg-filter-count${noMatch ? ' is-empty' : ''}${!hasQuery ? ' is-muted' : ''}`}
+        className={`${styles.count}${noMatch ? ` ${styles.isEmpty}` : ''}${!hasQuery ? ` ${styles.isMuted}` : ''}`}
         title={countTitle}
         role="status"
         aria-live="polite"
@@ -119,27 +121,29 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
         {countText}
       </span>
       {hasDraft ? (
+        <Tooltip content="清除筛选（Esc）">
+          <button
+            type="button"
+            className={styles.clear}
+            aria-label="清除筛选"
+            aria-keyshortcuts="Escape"
+            tabIndex={-1}
+            onClick={clearQuery}
+          >
+            <Lucide.X size={13} strokeWidth={1.75} aria-hidden />
+          </button>
+        </Tooltip>
+      ) : null}
+      <Tooltip content={hasDraft ? '关闭并清除筛选' : '关闭筛选（Esc）'}>
         <button
           type="button"
-          className="chat-msg-filter-clear"
-          title="清除筛选（Esc）"
-          aria-label="清除筛选"
-          aria-keyshortcuts="Escape"
-          tabIndex={-1}
-          onClick={clearQuery}
+          className={`${styles.clear} ${styles.close}`}
+          aria-label="关闭筛选"
+          onClick={closeBar}
         >
-          <Lucide.X size={13} strokeWidth={1.75} aria-hidden />
+          <Lucide.ChevronUp size={13} strokeWidth={1.75} aria-hidden />
         </button>
-      ) : null}
-      <button
-        type="button"
-        className="chat-msg-filter-clear chat-msg-filter-close"
-        title={hasDraft ? '关闭并清除筛选' : '关闭筛选（Esc）'}
-        aria-label="关闭筛选"
-        onClick={closeBar}
-      >
-        <Lucide.ChevronUp size={13} strokeWidth={1.75} aria-hidden />
-      </button>
+      </Tooltip>
     </div>
   );
 };

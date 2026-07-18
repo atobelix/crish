@@ -26,6 +26,7 @@ import {
 import { networkUserMessage } from '../api/userFacingErrors';
 import { fetchEngineStatus } from '../api/engineConfig';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './FirstRunWizard.module.css';
 
 const DONE_KEY = 'crish_first_run_done_v1';
 
@@ -444,29 +445,29 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
   return (
     <div
-      className="first-run-root"
+      className={styles.firstRunRoot}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={subId}
     >
-      <div className="first-run-card">
-        <div className="first-run-brand">
-          <div className="first-run-logo" aria-hidden="true">
+      <div className={styles.firstRunCard}>
+        <div className={styles.firstRunBrand}>
+          <div className={styles.firstRunLogo} aria-hidden="true">
             C
           </div>
           <div>
-            <div className="first-run-title" id={titleId}>
+            <div className={styles.firstRunTitle} id={titleId}>
               欢迎使用 Crish
             </div>
-            <div className="first-run-sub" id={subId}>
+            <div className={styles.firstRunSub} id={subId}>
               {activeMeta.desc}
             </div>
           </div>
         </div>
 
         <div
-          className="first-run-steps"
+          className={styles.firstRunSteps}
           role="list"
           aria-label="设置步骤"
         >
@@ -477,10 +478,10 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               <div
                 key={s.id}
                 role="listitem"
-                className={`first-run-step ${isActive ? 'is-active' : ''} ${isDone ? 'is-done' : ''}`}
+                className={`${styles.firstRunStep} ${isActive ? styles.isActive : ''} ${isDone ? styles.isDone : ''}`}
                 aria-current={isActive ? 'step' : undefined}
               >
-                <span className="first-run-step-num" aria-hidden="true">
+                <span className={styles.firstRunStepNum} aria-hidden="true">
                   {isDone ? (
                     <Lucide.Check size={14} strokeWidth={2.5} />
                   ) : (
@@ -495,7 +496,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
         <p
           id={stepStatusId}
-          className="first-run-hint"
+          className={styles.firstRunHint}
           style={{ margin: 0 }}
           aria-live="polite"
         >
@@ -503,25 +504,25 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
         </p>
 
         <div
-          className="first-run-body"
+          className={styles.firstRunBody}
           ref={bodyRef}
           aria-labelledby={stepStatusId}
           aria-busy={busy || undefined}
         >
           {error ? (
-            <div className="first-run-error" role="alert" id={errorId}>
+            <div className={styles.firstRunError} role="alert" id={errorId}>
               {error}
             </div>
           ) : null}
 
           {step === 0 && (
             <>
-              <label className="first-run-label" htmlFor={providerId}>
+              <label className={styles.firstRunLabel} htmlFor={providerId}>
                 服务商
               </label>
               {hasProfiles ? (
                 <SettingsSelect
-                  className="first-run-select"
+                  className={styles.firstRunSelect}
                   value={profileId}
                   disabled={busy}
                   options={profiles.map((p) => ({
@@ -536,17 +537,17 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                   }}
                 />
               ) : (
-                <p className="first-run-hint" role="status">
+                <p className={styles.firstRunHint} role="status">
                   暂无服务商配置。可跳过向导，稍后在设置中添加。
                 </p>
               )}
-              <label className="first-run-label" htmlFor={keyId}>
+              <label className={styles.firstRunLabel} htmlFor={keyId}>
                 API 密钥
               </label>
               <input
                 id={keyId}
                 type="password"
-                className="first-run-input"
+                className={styles.firstRunInput}
                 placeholder="粘贴密钥"
                 value={apiKey}
                 autoComplete="off"
@@ -565,7 +566,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                   }
                 }}
               />
-              <p className="first-run-hint">
+              <p className={styles.firstRunHint}>
                 密钥仅保存在本机。不会预置模型 id，也不会采用远程演示默认。
               </p>
             </>
@@ -573,13 +574,13 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
           {step === 1 && (
             <>
-              <label className="first-run-label" htmlFor={modelIdField}>
+              <label className={styles.firstRunLabel} htmlFor={modelIdField}>
                 模型 id
               </label>
               {hasListedModels ? (
                 <>
                   <SettingsSelect
-                    className="first-run-select"
+                    className={styles.firstRunSelect}
                     value={modelInList ? modelId : ''}
                     disabled={busy}
                     placeholder="从本机列表选择…"
@@ -592,12 +593,12 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                       setError('');
                     }}
                   />
-                  <label className="first-run-label" htmlFor={modelCustomId}>
+                  <label className={styles.firstRunLabel} htmlFor={modelCustomId}>
                     或手填模型 id
                   </label>
                   <input
                     id={modelCustomId}
-                    className="first-run-input"
+                    className={styles.firstRunInput}
                     placeholder="例如 deepseek-chat、gpt-4o"
                     value={modelInList ? '' : modelId}
                     disabled={busy}
@@ -620,7 +621,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               ) : (
                 <input
                   id={modelIdField}
-                  className="first-run-input"
+                  className={styles.firstRunInput}
                   placeholder="输入模型 id（如 deepseek-chat）"
                   value={modelId}
                   disabled={busy}
@@ -640,7 +641,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                   }}
                 />
               )}
-              <p className="first-run-hint" role="status">
+              <p className={styles.firstRunHint} role="status">
                 {hasListedModels
                   ? '选用本机已有 id，或手填供应商文档中的 model id；也可跳过，在主界面底栏手填。'
                   : wizardEmptyModelCatalogHint(hasProfiles && Boolean(activeProfile))}
@@ -650,11 +651,11 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
           {step === 2 && (
             <>
-              <p className="first-run-hint" style={{ marginTop: 0 }}>
+              <p className={styles.firstRunHint} style={{ marginTop: 0 }}>
                 选择工作目录后，助手会在该项目下读写文件。也可跳过，无项目直接对话。
               </p>
               {hasProject ? (
-                <div className="first-run-project-ok" role="status">
+                <div className={styles.firstRunProjectOk} role="status">
                   <Lucide.FolderCheck size={16} aria-hidden="true" />
                   <span>
                     当前：{getActiveProject()?.name || getWorkspacePath()}
@@ -664,7 +665,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 <>
                   <button
                     type="button"
-                    className="first-run-btn secondary"
+                    className={`${styles.firstRunBtn} ${styles.secondary}`}
                     disabled={busy}
                     aria-busy={busy || undefined}
                     onClick={async () => {
@@ -686,13 +687,13 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                     <Lucide.FolderInput size={16} aria-hidden="true" />
                     选择文件夹
                   </button>
-                  <label className="first-run-label" htmlFor={pathId}>
+                  <label className={styles.firstRunLabel} htmlFor={pathId}>
                     或输入路径
                   </label>
                   <input
                     id={pathId}
-                    className="first-run-input"
-                    placeholder="例如 C:/Software/conex"
+                    className={styles.firstRunInput}
+                    placeholder="例如 C:/workspace/crish"
                     value={pathDraft}
                     disabled={busy}
                     spellCheck={false}
@@ -716,24 +717,24 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
           )}
 
           {step === 3 && (
-            <div className="first-run-ready">
+            <div className={styles.firstRunReady}>
               <Lucide.CheckCircle2
                 size={28}
                 style={{ color: 'var(--text-secondary)' }}
                 aria-hidden="true"
               />
               <div style={{ fontWeight: 600, fontSize: 15 }}>可以开始了</div>
-              <p className="first-run-hint" style={{ textAlign: 'center' }}>
+              <p className={styles.firstRunHint} style={{ textAlign: 'center' }}>
                 在主界面输入问题即可。随时可在设置中改模型、项目与权限。
               </p>
             </div>
           )}
         </div>
 
-        <div className="first-run-footer">
+        <div className={styles.firstRunFooter}>
           <button
             type="button"
-            className="first-run-link"
+            className={styles.firstRunLink}
             disabled={busy}
             onClick={finish}
           >
@@ -743,7 +744,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             {step > 0 && (
               <button
                 type="button"
-                className="first-run-btn ghost"
+                className={`${styles.firstRunBtn} ${styles.ghost}`}
                 disabled={busy}
                 onClick={goPrev}
               >
@@ -753,7 +754,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             {step < 3 ? (
               <button
                 type="button"
-                className="first-run-btn primary"
+                className={`${styles.firstRunBtn} ${styles.primary}`}
                 disabled={busy || (step === 0 && !hasProfiles)}
                 aria-busy={busy || undefined}
                 onClick={() => {
@@ -765,7 +766,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             ) : (
               <button
                 type="button"
-                className="first-run-btn primary"
+                className={`${styles.firstRunBtn} ${styles.primary}`}
                 onClick={finish}
               >
                 {wizardPrimaryCtaLabel(3, false)}
@@ -775,10 +776,10 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
         </div>
 
         {step === 1 ? (
-          <div className="first-run-model-alt" role="group" aria-label="模型其它方式">
+          <div className={styles.firstRunModelAlt} role="group" aria-label="模型其它方式">
             <button
               type="button"
-              className="first-run-link first-run-link--center"
+              className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
               disabled={busy}
               onClick={skipModelStep}
             >
@@ -787,7 +788,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             {onOpenSettings ? (
               <button
                 type="button"
-                className="first-run-link first-run-link--center"
+                className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
                 disabled={busy}
                 onClick={() => {
                   // 高级：扫描列表在设置页；不 toast

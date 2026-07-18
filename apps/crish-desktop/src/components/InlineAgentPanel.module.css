@@ -1,0 +1,261 @@
+.inlineAgent {
+  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border-radius: 8px;
+  margin: 4px 0 6px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.inlineAgent.inlineAgentDense {
+  border-radius: 7px;
+}
+
+.inlineAgent.sideFocused {
+  /* side focused styles if any */
+}
+
+/* 头行：折叠钮 + 停止/侧栏动作（折叠态也能停 / 侧栏 only） */
+.inlineAgentHeadRow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 26px;
+}
+
+.inlineAgentHead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  border: none;
+  background: transparent;
+  padding: 4px 6px 4px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-secondary);
+  min-height: 26px;
+  transition: background 0.12s;
+}
+
+.inlineAgentHead:hover {
+  background: var(--bg-hover);
+}
+
+.inlineAgentHead:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+.inlineAgentHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  padding: 2px 4px 2px 0;
+}
+
+.inlineAgentHeadActions :global(.agent-card-btn) {
+  width: 22px;
+  height: 22px;
+  justify-content: center;
+}
+
+.inlineAgentHeadActions :global(.agent-card-btn.is-active) {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.inlineAgentStopBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.inlineAgentLinkStop {
+  color: var(--danger-color, #c44);
+}
+
+.inlineAgentLinkStop:hover:not(:disabled) {
+  color: var(--danger-color, #c44);
+  text-decoration: underline;
+}
+
+.inlineAgentLinkStop:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.inlineAgentLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inlineAgentBadge {
+  font-size: var(--font-size-xxs);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.inlineAgentBadgeRunning {
+  border-color: color-mix(in srgb, var(--accent-green) 40%, var(--hairline, var(--border-subtle)));
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.inlineAgentBadgeFailed {
+  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--hairline, var(--border-subtle)));
+  color: var(--accent-red);
+  background: transparent;
+}
+
+.inlineAgentBadgeStopped {
+  border-color: var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.inlineAgentBadgePending {
+  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 50%, var(--hairline, var(--border-subtle)));
+  color: var(--accent-orange, var(--text-secondary));
+}
+
+.inlineAgentBadgeSide {
+  border-color: var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.inlineAgentMode {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.inlineAgentMeta {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inlineAgentBody {
+  border-top-width: var(--hairline-width, 1px);
+  border-top-style: solid;
+  border-top-color: var(--hairline, var(--border-subtle));
+  background: transparent;
+}
+
+.inlineAgentToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  min-height: 22px;
+  border-bottom-width: var(--hairline-width, 1px);
+  border-bottom-style: solid;
+  border-bottom-color: var(--hairline, var(--border-subtle));
+}
+
+.inlineAgentLink {
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 1px 0;
+  transition: color 0.12s;
+}
+
+.inlineAgentLink:hover {
+  text-decoration: underline;
+  color: var(--text-primary);
+}
+
+.inlineAgentLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+}
+
+.inlineAgentToolbarHint {
+  margin-left: auto;
+  font-size: var(--font-size-xxs);
+  color: var(--accent-orange, var(--text-tertiary));
+}
+
+.inlineAgentStream {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 5px 8px;
+}
+
+.inlineAgentEmpty {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 8px 2px;
+  text-align: center;
+}
+
+.inlineAgentMsg {
+  margin-bottom: 4px;
+}
+
+.inlineAgentMsg:last-child {
+  margin-bottom: 0;
+}
+
+/* 内联 agent 输入：复用 .chat-footer.agent-card-composer + ComposerField */
+.inlineAgentComposerWrap {
+  padding: var(--space-2, 6px);
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* denser 内联：再收 pad，配合 maxLines=3 */
+.inlineAgentComposerWrapDense {
+  padding: var(--space-1, 4px) var(--space-2, 5px) var(--space-2, 5px);
+}
+
+.inlineAgentComposerWrap > * {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.inlineAgentComposerWrap :global(.input-container),
+.inlineAgentComposerWrap :global(.input-container--dense) {
+  max-width: none;
+  margin: 0;
+}
+
+/* 侧栏审批卡：略收边距，不占满工具列 */
+.inlineAgent.inlineAgentDense :global(.approval-card) {
+  margin: 4px 0;
+  padding: 8px 8px 7px;
+  border-radius: 8px;
+  border-color: var(--hairline-strong, var(--border-color));
+}
+
+.inlineAgent.inlineAgentDense :global(.approval-card-actions) {
+  gap: 4px;
+}
+
+.inlineAgent.inlineAgentDense :global(.approval-card-btn) {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: var(--font-size-xs);
+}

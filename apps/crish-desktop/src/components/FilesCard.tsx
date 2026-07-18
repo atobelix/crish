@@ -4,6 +4,8 @@
  *  - 详情：图片/PDF/表格/文本；Markdown 可渲染/源码；长文件分段加载
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './FilesCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import * as Lucide from 'lucide-react';
 import { getWorkspacePath } from '../api/projectStore';
 import {
@@ -575,10 +577,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
   if (!root) {
     return (
-      <div className="files-card">
-        <div className="files-empty files-empty--compact">
-          <div className="files-empty-title">未选择项目</div>
-          <div className="files-empty-sub">在侧栏选择工作区后即可浏览</div>
+      <div className={styles.filesCard}>
+        <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
+          <div className={styles.filesEmptyTitle}>未选择项目</div>
+          <div className={styles.filesEmptySub}>在侧栏选择工作区后即可浏览</div>
         </div>
       </div>
     );
@@ -598,12 +600,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     !editing;
 
   return (
-    <div className="files-card">
+    <div className={styles.filesCard}>
       {/* 顶栏：导航 + 面包屑（非输入框 chrome） */}
-      <div className="files-bar" role="toolbar" aria-label="文件导航">
+      <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
         <button
           type="button"
-          className="files-nav-btn"
+          className={styles.filesNavBtn}
           title="上级目录"
           disabled={!cwd || cwd === root}
           onClick={() => goUp()}
@@ -612,7 +614,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         </button>
         <button
           type="button"
-          className="files-nav-btn"
+          className={styles.filesNavBtn}
           title="刷新"
           onClick={() => {
             clearActionHint();
@@ -624,7 +626,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         </button>
 
         <div
-          className="files-crumbs"
+          className={styles.filesCrumbs}
           ref={crumbsRef}
           title={
             selected || cwd ? `绝对路径：${selected || cwd}` : '项目根目录'
@@ -632,7 +634,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           aria-label="工作区相对路径"
         >
           {breadcrumbs.length === 0 ? (
-            <span className="files-bc-chip files-bc-chip--muted">项目</span>
+            <span className={`${styles.filesBcChip} ${styles.filesBcChipMuted || 'files-bc-chip--muted'}`}>项目</span>
           ) : (
             breadcrumbs.map((b, i) => {
               const isLast = i === breadcrumbs.length - 1;
@@ -640,12 +642,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               const flyOpen = bcFlyout?.path === b.path;
               return (
                 <React.Fragment key={`${b.path}-${i}`}>
-                  {i > 0 ? <span className="files-bc-sep">/</span> : null}
+                  {i > 0 ? <span className={styles.filesBcSep}>/</span> : null}
                   {canNav ? (
-                    <span className="files-bc-seg">
+                    <span className={styles.filesBcSeg}>
                       <button
                         type="button"
-                        className={`files-bc-chip ${i === 0 ? 'files-bc-chip--root' : ''}${flyOpen ? ' is-open' : ''}`}
+                        className={`${styles.filesBcChip} ${flyOpen ? styles.isOpen : ''}`}
                         title={i === 0 ? '项目根目录 · 点击列出内容' : `${b.path} · 点击列出该层`}
                         aria-haspopup="listbox"
                         aria-expanded={flyOpen}
@@ -664,11 +666,11 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                       </button>
                       {flyOpen && bcFlyout ? (
                         <div
-                          className="files-bc-flyout"
+                          className={styles.filesBcFlyout}
                           role="listbox"
                           aria-label={`${b.label} 目录`}
                         >
-                          <div className="files-bc-flyout-search">
+                          <div className={styles.filesBcFlyoutSearch}>
                             <Lucide.Search size={14} aria-hidden />
                             <input
                               ref={bcFilterRef}
@@ -685,11 +687,11 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                               }}
                             />
                           </div>
-                          <div className="files-bc-flyout-list">
+                          <div className={styles.filesBcFlyoutList}>
                             {bcFlyout.loading ? (
-                              <div className="files-bc-flyout-empty">加载中…</div>
+                              <div className={styles.filesBcFlyoutEmpty}>加载中…</div>
                             ) : bcFlyoutFiltered.length === 0 ? (
-                              <div className="files-bc-flyout-empty">
+                              <div className={styles.filesBcFlyoutEmpty}>
                                 {bcFlyout.filter.trim() ? '无匹配' : '空目录'}
                               </div>
                             ) : (
@@ -698,8 +700,8 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                                   key={ent.path}
                                   type="button"
                                   role="option"
-                                  className={`files-bc-flyout-item${
-                                    selected === ent.path ? ' is-active' : ''
+                                  className={`${styles.filesBcFlyoutItem} ${
+                                    selected === ent.path ? styles.isActive : ''
                                   }`}
                                   onClick={() => {
                                     if (ent.isDir) {
@@ -715,25 +717,25 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                                     <>
                                       <Lucide.ChevronRight
                                         size={13}
-                                        className="files-bc-flyout-chev"
+                                        className={styles.filesBcFlyoutChev}
                                         aria-hidden
                                       />
                                       <Lucide.Folder size={14} aria-hidden />
                                     </>
                                   ) : (
                                     <>
-                                      <span className="files-bc-flyout-chev is-leaf" />
+                                      <span className={`${styles.filesBcFlyoutChev} ${styles.isLeaf}`} />
                                       <FileIcon name={ent.name} />
                                     </>
                                   )}
-                                  <span className="files-bc-flyout-name">{ent.name}</span>
+                                  <span className={styles.filesBcFlyoutName}>{ent.name}</span>
                                 </button>
                               ))
                             )}
                           </div>
                           <button
                             type="button"
-                            className="files-bc-flyout-goto"
+                            className={styles.filesBcFlyoutGoto}
                             onClick={() => {
                               setBcFlyout(null);
                               setSelected(null);
@@ -749,7 +751,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     </span>
                   ) : (
                     <span
-                      className={`files-bc-chip ${isLast ? 'files-bc-chip--file' : ''}`}
+                      className={`${styles.filesBcChip} ${isLast ? styles.filesBcChipFile : ''}`}
                       title={b.path}
                     >
                       {b.label}
@@ -764,7 +766,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         {view === 'browse' && (filterMode || filter) ? (
           <input
             ref={filterInputRef}
-            className="files-path-filter"
+            className={styles.filesPathFilter}
             placeholder="筛选…"
             value={filter}
             autoFocus
@@ -780,7 +782,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         {view === 'browse' ? (
           <button
             type="button"
-            className={`files-nav-btn ${filterMode || filter ? 'is-on' : ''}`}
+            className={`${styles.filesNavBtn} ${filterMode || filter ? styles.isOn : ''}`}
             title={filterMode || filter ? '关闭筛选' : '筛选当前目录'}
             onClick={() => {
               if (filterMode || filter) {
@@ -797,15 +799,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         ) : null}
 
         {pendingCount > 0 ? (
-          <span className="files-pending-badge" title="待发送批注">
+          <span className={styles.filesPendingBadge} title="待发送批注">
             {pendingCount}
           </span>
         ) : null}
 
-        <div className="files-more-wrap" ref={moreRef}>
+        <div className={styles.filesMoreWrap} ref={moreRef}>
           <button
             type="button"
-            className="files-nav-btn"
+            className={styles.filesNavBtn}
             title="更多"
             aria-haspopup="menu"
             aria-expanded={moreOpen}
@@ -814,10 +816,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
             <Lucide.MoreHorizontal size={15} />
           </button>
           {moreOpen ? (
-            <div className="files-more-menu" role="menu">
+            <div className={styles.filesMoreMenu} role="menu">
               <button
                 type="button"
-                className="files-more-item"
+                className={styles.filesMoreItem}
                 role="menuitem"
                 onClick={() => {
                   copyPath('rel');
@@ -828,7 +830,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               </button>
               <button
                 type="button"
-                className="files-more-item"
+                className={styles.filesMoreItem}
                 role="menuitem"
                 onClick={() => {
                   copyPath('abs');
@@ -839,7 +841,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               </button>
               <button
                 type="button"
-                className="files-more-item"
+                className={styles.filesMoreItem}
                 role="menuitem"
                 onClick={() => {
                   const p = selected || cwd;
@@ -858,7 +860,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               {view === 'detail' && canEdit && !editing ? (
                 <button
                   type="button"
-                  className="files-more-item"
+                  className={styles.filesMoreItem}
                   onClick={() => {
                     setEditing(true);
                     setEditBuf(content);
@@ -876,21 +878,21 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
       {/* 选中文件后：名称 + 打开胶囊 + 编辑等 */}
       {selected ? (
-        <div className="files-context-bar">
-          <span className="files-context-name" title={selected}>
+        <div className={styles.filesContextBar}>
+          <span className={styles.filesContextName} title={selected}>
             {dirty ? (
-              <span className="files-dirty-dot" title="未保存" aria-label="未保存">
+              <span className={styles.filesDirtyDot} title="未保存" aria-label="未保存">
                 ·
               </span>
             ) : null}
             {pathBasename(selected)}
           </span>
-          <div className="files-context-actions">
+          <div className={styles.filesContextActions}>
             {isMd ? (
-              <div className="files-seg" role="group" aria-label="Markdown 显示">
+              <div className={styles.filesSeg} role="group" aria-label="Markdown 显示">
                 <button
                   type="button"
-                  className={`files-seg-btn ${mdMode === 'render' ? 'is-on' : ''}`}
+                  className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
                   aria-pressed={mdMode === 'render'}
                   title="渲染预览"
                   onClick={() => setMdMode('render')}
@@ -899,7 +901,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 </button>
                 <button
                   type="button"
-                  className={`files-seg-btn ${mdMode === 'source' ? 'is-on' : ''}`}
+                  className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
                   aria-pressed={mdMode === 'source'}
                   title="源码"
                   onClick={() => setMdMode('source')}
@@ -911,7 +913,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
             {canEdit && !editing ? (
               <button
                 type="button"
-                className="files-soft-btn"
+                className={styles.filesSoftBtn}
                 onClick={() => {
                   setEditing(true);
                   setEditBuf(content);
@@ -928,7 +930,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               <>
                 <button
                   type="button"
-                  className="files-soft-btn files-soft-btn--emphasis"
+                  className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
                   disabled={!dirty}
                   onClick={() => void saveFile()}
                 >
@@ -937,7 +939,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 </button>
                 <button
                   type="button"
-                  className="files-soft-btn"
+                  className={styles.filesSoftBtn}
                   onClick={() => {
                     setEditing(false);
                     setEditBuf(content);
@@ -950,10 +952,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               </>
             ) : null}
             {selected ? (
-              <div className="files-open-capsule" ref={openMenuRef}>
+              <div className={styles.filesOpenCapsule} ref={openMenuRef}>
                 <button
                   type="button"
-                  className="files-open-main"
+                  className={styles.filesOpenMain}
                   title={`${openDefaultLabel}（系统默认）`}
                   onClick={() => {
                     void openPathDefault(selected)
@@ -968,7 +970,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 </button>
                 <button
                   type="button"
-                  className="files-open-chev"
+                  className={styles.filesOpenChev}
                   title="选择打开方式"
                   aria-haspopup="menu"
                   aria-expanded={openMenuOpen}
@@ -980,10 +982,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   <Lucide.ChevronDown size={14} aria-hidden />
                 </button>
                 {openMenuOpen ? (
-                  <div className="files-open-menu" role="menu">
+                  <div className={styles.filesOpenMenu} role="menu">
                     <button
                       type="button"
-                      className="files-open-item"
+                      className={styles.filesOpenItem}
                       role="menuitem"
                       onClick={() => {
                         copyPath('abs');
@@ -995,7 +997,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     </button>
                     <button
                       type="button"
-                      className="files-open-item"
+                      className={styles.filesOpenItem}
                       role="menuitem"
                       onClick={() => {
                         void revealInOs(selected)
@@ -1010,13 +1012,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                       在文件管理器中显示
                     </button>
                     {fileOpeners.length > 0 ? (
-                      <div className="files-open-sep" role="separator" />
+                      <div className={styles.filesOpenSep} role="separator" />
                     ) : null}
                     {(openMenuMore ? fileOpeners : fileOpeners.slice(0, 6)).map((op) => (
                       <button
                         key={op.id}
                         type="button"
-                        className="files-open-item"
+                        className={styles.filesOpenItem}
                         role="menuitem"
                         title={op.path || op.displayName}
                         onClick={() => {
@@ -1028,7 +1030,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                           setOpenMenuOpen(false);
                         }}
                       >
-                        <span className="files-open-app-ico" aria-hidden>
+                        <span className={styles.filesOpenAppIco} aria-hidden>
                           {(op.displayName || '?').slice(0, 1)}
                         </span>
                         {op.displayName}
@@ -1037,7 +1039,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     {fileOpeners.length > 6 ? (
                       <button
                         type="button"
-                        className="files-open-item files-open-item--more"
+                        className={`${styles.filesOpenItem} ${styles.filesOpenItemMore}`}
                         role="menuitem"
                         onClick={() => setOpenMenuMore((v) => !v)}
                       >
@@ -1055,11 +1057,11 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
       {/* 操作级错误条（保存/复制/OS 打开）：仅失败，不 toast */}
       {actionHint ? (
-        <div className="files-action-hint" role="alert" aria-live="assertive">
-          <span className="files-action-hint-text">{actionHint}</span>
+        <div className={styles.filesActionHint} role="alert" aria-live="assertive">
+          <span className={styles.filesActionHintText}>{actionHint}</span>
           <button
             type="button"
-            className="files-action-hint-dismiss"
+            className={styles.filesActionHintDismiss}
             title="关闭"
             aria-label="关闭提示"
             onClick={() => clearActionHint()}
@@ -1069,32 +1071,32 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         </div>
       ) : null}
 
-      <div className="files-body files-body--split">
+      <div className={`${styles.filesBody} ${styles.filesBodySplit}`}>
         {/* 左：文件树（始终可见） */}
         <div
-          className="files-list files-list--pane"
+          className={`${styles.filesList} ${styles.filesListPane}`}
           ref={fileListContainerRef}
           style={{ overflowY: 'auto', position: 'relative' }}
         >
           {loading ? (
-            <div className="files-empty files-empty--compact">加载中…</div>
+            <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>加载中…</div>
           ) : error && !entries.length ? (
-            <div className="files-empty files-empty--compact files-empty--err" role="alert">
-              <div className="files-empty-title">无法读取目录</div>
-              <div className="files-empty-sub">{error}</div>
+            <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact} ${styles.filesEmptyErr}`} role="alert">
+              <div className={styles.filesEmptyTitle}>无法读取目录</div>
+              <div className={styles.filesEmptySub}>{error}</div>
             </div>
           ) : flatTree.length === 0 ? (
-            <div className="files-empty files-empty--compact">
+            <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
               {filter.trim() ? '无匹配项' : '空目录'}
             </div>
           ) : (
             <>
               {error ? (
-                <div className="files-inline-err" role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                  <span className="files-inline-err-text">{error}</span>
+                <div className={styles.filesInlineErr} role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                  <span className={styles.filesInlineErrText}>{error}</span>
                   <button
                     type="button"
-                    className="files-inline-err-dismiss"
+                    className={styles.filesInlineErrDismiss}
                     title="关闭"
                     aria-label="关闭错误"
                     onClick={() => setError('')}
@@ -1110,7 +1112,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   return (
                     <div
                       key={e.path}
-                      className={`files-row ${selected === e.path ? 'is-selected' : ''}`}
+                      className={`${styles.filesRow} ${selected === e.path ? styles.isSelected : ''}`}
                       style={{
                         position: 'absolute',
                         top: `${top}px`,
@@ -1160,7 +1162,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     >
                       <button
                         type="button"
-                        className={`files-row-twist ${e.isDir ? '' : 'is-leaf'}`}
+                        className={`${styles.filesRowTwist} ${e.isDir ? '' : styles.isLeaf}`}
                         onClick={(ev) => (e.isDir ? void toggleExpand(e.path, ev) : undefined)}
                         tabIndex={-1}
                       >
@@ -1173,15 +1175,15 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                         ) : null}
                       </button>
                       {e.isDir ? (
-                        <Lucide.Folder size={14} className="files-row-ico dir" />
+                        <Lucide.Folder size={14} className={`${styles.filesRowIco} ${styles.dir}`} />
                       ) : (
                         <FileIcon name={e.name} />
                       )}
-                      <span className="files-row-name" title={e.name}>
+                      <span className={styles.filesRowName} title={e.name}>
                         {e.name}
                       </span>
                       {!e.isDir && e.size != null ? (
-                        <span className="files-row-meta">{formatSize(e.size)}</span>
+                        <span className={styles.filesRowMeta}>{formatSize(e.size)}</span>
                       ) : null}
                     </div>
                   );
@@ -1191,19 +1193,19 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           )}
         </div>
         {/* 右：预览（点选文件后显示） */}
-        <div className="files-detail files-detail--pane">
+        <div className={`${styles.filesDetail} ${styles.filesDetailPane}`}>
           {!selected ? (
-            <div className="files-empty files-empty--compact">
-              <div className="files-empty-title">预览</div>
-              <div className="files-empty-sub">在左侧选择文件</div>
+            <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
+              <div className={styles.filesEmptyTitle}>预览</div>
+              <div className={styles.filesEmptySub}>在左侧选择文件</div>
             </div>
           ) : null}
           {selected && error && (content || assetUrl) ? (
-            <div className="files-inline-err files-inline-err--detail" role="alert" aria-live="polite">
-              <span className="files-inline-err-text">{error}</span>
+            <div className={`${styles.filesInlineErr} ${styles.filesInlineErrDetail}`} role="alert" aria-live="polite">
+              <span className={styles.filesInlineErrText}>{error}</span>
               <button
                 type="button"
-                className="files-inline-err-dismiss"
+                className={styles.filesInlineErrDismiss}
                 title="关闭"
                 aria-label="关闭错误"
                 onClick={() => setError('')}
@@ -1214,19 +1216,19 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           ) : null}
           {selected ? (
             <div
-              className="files-detail-body"
+              className={styles.filesDetailBody}
               ref={previewPaneRef}
               onScroll={onPreviewScroll}
             >
               {detailLoading ? (
-                <div className="files-empty files-empty--compact">读取中…</div>
+                <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>读取中…</div>
               ) : error && !content && !assetUrl ? (
-                <div className="files-empty files-empty--compact files-empty--err" role="alert">
-                  <div className="files-empty-title">无法预览</div>
-                  <div className="files-empty-sub">{error}</div>
+                <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact} ${styles.filesEmptyErr}`} role="alert">
+                  <div className={styles.filesEmptyTitle}>无法预览</div>
+                  <div className={styles.filesEmptySub}>{error}</div>
                 </div>
               ) : kind === 'image' && assetUrl ? (
-                <div className="files-preview-media">
+                <div className={styles.filesPreviewMedia}>
                   <img
                     src={assetUrl}
                     alt={pathBasename(selected || '')}
@@ -1238,12 +1240,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               ) : kind === 'pdf' && assetUrl ? (
                 <iframe
                   title="pdf"
-                  className="files-preview-pdf"
+                  className={styles.filesPreviewPdf}
                   src={assetUrl}
                 />
               ) : kind === 'table' && !editing ? (
-                <div className="files-table-wrap">
-                  <table className="files-table">
+                <div className={styles.filesTableWrap}>
+                  <table className={styles.filesTable}>
                     <tbody>
                       {parseCsvPreview(content).map((row, i) => (
                         <tr key={i}>
@@ -1257,20 +1259,20 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   {canLoadMore ? (
                     <button
                       type="button"
-                      className="files-load-more"
+                      className={styles.filesLoadMore}
                       disabled={loadingMore}
                       onClick={() => void loadMoreLines()}
                     >
                       {loadingMore ? '加载中…' : '继续加载更多行'}
                     </button>
                   ) : truncated ? (
-                    <div className="files-trunc">已达预览上限</div>
+                    <div className={styles.filesTrunc}>已达预览上限</div>
                   ) : null}
                 </div>
               ) : kind === 'text' || kind === 'table' ? (
                 editing ? (
                   <textarea
-                    className="files-editor"
+                    className={styles.filesEditor}
                     value={editBuf}
                     onChange={(e) => {
                       setEditBuf(e.target.value);
@@ -1279,9 +1281,9 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     spellCheck={false}
                   />
                 ) : isMd && mdMode === 'render' ? (
-                  <div className="files-md-wrap">
+                  <div className={styles.filesMdWrap}>
                     <div
-                      className="files-md-body md-rendered msg-assistant-text"
+                      className={`${styles.filesMdBody} md-rendered msg-assistant-text`}
                       dangerouslySetInnerHTML={{
                         __html: parseMarkdownToHtml(content || '（空文件）'),
                       }}
@@ -1289,7 +1291,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     {canLoadMore ? (
                       <button
                         type="button"
-                        className="files-load-more"
+                        className={styles.filesLoadMore}
                         disabled={loadingMore}
                         onClick={() => void loadMoreLines()}
                       >
@@ -1301,7 +1303,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   <>
                     <pre
                       ref={textRef}
-                      className="files-text-pre hljs"
+                      className={`${styles.filesTextPre} hljs`}
                       onMouseUp={onTextSelect}
                       onKeyUp={onTextSelect}
                       dangerouslySetInnerHTML={{
@@ -1315,7 +1317,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     {canLoadMore ? (
                       <button
                         type="button"
-                        className="files-load-more"
+                        className={styles.filesLoadMore}
                         disabled={loadingMore}
                         onClick={() => void loadMoreLines()}
                       >
@@ -1324,19 +1326,19 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                           : `继续加载（已 ${lineBudget} 行）`}
                       </button>
                     ) : truncated ? (
-                      <div className="files-trunc">已达预览上限</div>
+                      <div className={styles.filesTrunc}>已达预览上限</div>
                     ) : null}
                   </>
                 )
               ) : (
-                <div className="files-empty files-empty--compact">
+                <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
                   不支持内嵌预览
-                  <div className="files-empty-sub" title={selected || undefined}>
+                  <div className={styles.filesEmptySub} title={selected || undefined}>
                     {selected ? pathBasename(selected) : ''}
                   </div>
                   <button
                     type="button"
-                    className="files-soft-btn"
+                    className={styles.filesSoftBtn}
                     style={{ marginTop: 10 }}
                     onClick={() => {
                       void openPathDefault(selected!).catch((e) =>
@@ -1356,7 +1358,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
           {selected && selText && !editing ? (
             <div
-              className={`files-sel-bar ${selAnchor ? 'is-anchored' : ''}`}
+              className={`${styles.filesSelBar} ${selAnchor ? styles.isAnchored : ''}`}
               role="region"
               aria-label="选区批注"
               style={
@@ -1365,10 +1367,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   : undefined
               }
             >
-              <div className="files-sel-preview" title={selText}>
+              <div className={styles.filesSelPreview} title={selText}>
                 {selText.length > 80 ? `${selText.slice(0, 80)}…` : selText}
               </div>
-              <div className="files-sel-form">
+              <div className={styles.filesSelForm}>
                 <input
                   value={commentDraft}
                   onChange={(e) => setCommentDraft(e.target.value)}
@@ -1385,7 +1387,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 />
                 <button
                   type="button"
-                  className="files-soft-btn files-soft-btn--emphasis"
+                  className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
                   disabled={!commentDraft.trim()}
                   onClick={submitSelectionComment}
                 >
@@ -1393,7 +1395,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 </button>
                 <button
                   type="button"
-                  className="files-soft-btn"
+                  className={styles.filesSoftBtn}
                   onClick={() => {
                     setSelText('');
                     setCommentDraft('');
@@ -1403,7 +1405,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   取消
                 </button>
               </div>
-              <div className="files-sel-hint">随下一条消息发送 · Esc</div>
+              <div className={styles.filesSelHint}>随下一条消息发送 · Esc</div>
             </div>
           ) : null}
         </div>
@@ -1417,13 +1419,13 @@ function FileIcon({ name }: { name: string }) {
   const color = fileExtColor(name);
   const sw = 1.7;
   const sz = 14;
-  if (k === 'image') return <Lucide.Image size={sz} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
-  if (k === 'pdf') return <Lucide.FileText size={sz} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
-  if (k === 'table') return <Lucide.Table size={sz} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+  if (k === 'image') return <Lucide.Image size={sz} className={styles.filesRowIco} style={{ color }} strokeWidth={sw} />;
+  if (k === 'pdf') return <Lucide.FileText size={sz} className={styles.filesRowIco} style={{ color }} strokeWidth={sw} />;
+  if (k === 'table') return <Lucide.Table size={sz} className={styles.filesRowIco} style={{ color }} strokeWidth={sw} />;
   if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
-    return <Lucide.FileCode2 size={sz} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+    return <Lucide.FileCode2 size={sz} className={styles.filesRowIco} style={{ color }} strokeWidth={sw} />;
   }
-  return <Lucide.File size={sz} className="files-row-ico" style={{ color }} strokeWidth={sw} />;
+  return <Lucide.File size={sz} className={styles.filesRowIco} style={{ color }} strokeWidth={sw} />;
 }
 
 function formatSize(n: number): string {

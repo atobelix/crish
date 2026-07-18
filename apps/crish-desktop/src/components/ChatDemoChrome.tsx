@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { isDemoMode } from '../api/appMode';
+import styles from './ChatDemoChrome.module.css';
+import { Tooltip } from './settings/SettingsUI';
 
 interface ChatDemoChromeProps {
   handleGlobalTabClick: (cardId: string) => void;
@@ -28,46 +30,49 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
 
   return (
     <>
-      <div className="chat-context-ribbon">
+      <div className={styles.chatContextRibbon}>
         {prVisible && (
-          <button
-            type="button"
-            className="context-pill git"
-            title="在右侧查看代码变更"
-            onClick={() => {
-              handleGlobalTabClick('diff');
-              setActivePill(null);
-            }}
-          >
-            <Lucide.GitBranch size={14} />
-            <span>变更</span>
-          </button>
+          <Tooltip content="在右侧查看代码变更">
+            <button
+              type="button"
+              className={`${styles.contextPill} ${styles.active}`}
+              onClick={() => {
+                handleGlobalTabClick('diff');
+                setActivePill(null);
+              }}
+            >
+              <Lucide.GitBranch size={14} />
+              <span>变更</span>
+            </button>
+          </Tooltip>
         )}
-        <button
-          type="button"
-          className="context-pill"
-          title="终端"
-          onClick={() => handleGlobalTabClick('terminal')}
-        >
-          <Lucide.Terminal size={14} />
-          <span>终端</span>
-        </button>
-        {goalActive && (
+        <Tooltip content="终端">
           <button
             type="button"
-            className={`context-pill${activePill === 'goal' ? ' active' : ''}`}
-            title="目标（演示）"
-            onClick={() => setActivePill((p) => (p === 'goal' ? null : 'goal'))}
+            className={styles.contextPill}
+            onClick={() => handleGlobalTabClick('terminal')}
           >
-            <Lucide.Target size={14} />
-            <span>目标</span>
+            <Lucide.Terminal size={14} />
+            <span>终端</span>
           </button>
+        </Tooltip>
+        {goalActive && (
+          <Tooltip content="目标（演示）">
+            <button
+              type="button"
+              className={`${styles.contextPill} ${styles.goal}${activePill === 'goal' ? ` ${styles.active}` : ''}`}
+              onClick={() => setActivePill((p) => (p === 'goal' ? null : 'goal'))}
+            >
+              <Lucide.Target size={14} />
+              <span>目标</span>
+            </button>
+          </Tooltip>
         )}
       </div>
 
       {/* Goal 抽屉：仅演示 playground，无真实引擎目标能力 */}
       {activePill === 'goal' && goalActive && (
-        <div className="context-details-drawer">
+        <div className={styles.contextDetailsDrawer}>
           <div
             className="drawer-expand-content goal-drawer-content"
             style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px' }}
@@ -88,17 +93,18 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                   {goalPaused ? <Lucide.Play size={14} /> : <Lucide.Pause size={14} />}
                   {goalPaused ? '继续' : '暂停'}
                 </button>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost"
-                  title="停止"
-                  onClick={() => {
-                    setGoalActive(false);
-                    setActivePill(null);
-                  }}
-                >
-                  <Lucide.Square size={14} />
-                </button>
+                <Tooltip content="停止">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost"
+                    onClick={() => {
+                      setGoalActive(false);
+                      setActivePill(null);
+                    }}
+                  >
+                    <Lucide.Square size={14} />
+                  </button>
+                </Tooltip>
                 <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
                   <Lucide.X size={16} />
                 </button>

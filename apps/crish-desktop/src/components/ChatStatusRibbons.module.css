@@ -1,0 +1,377 @@
+/* Soft setup banner */
+.chatSoftHint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(var(--chat-col-max, 680px), 100%);
+  box-shadow: none;
+}
+
+.chatSoftHintIcon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.9;
+}
+
+.chatSoftHintText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatSoftHintAction {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.chatSoftHintAction:hover {
+  color: var(--text-primary);
+  text-decoration-thickness: 1.5px;
+}
+
+.chatSoftHintAction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color, #6c8cff) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.chatSoftHint[data-setup-hint='needs-key'] {
+  border-color: color-mix(
+    in srgb,
+    var(--accent-color, #6c8cff) 22%,
+    var(--hairline, var(--border-subtle))
+  );
+}
+
+.chatSoftHint[data-setup-hint='needs-model'] .chatSoftHintIcon {
+  color: var(--text-secondary);
+}
+
+.chatSoftHint[data-setup-hint='engine-down'] {
+  border-color: color-mix(
+    in srgb,
+    var(--danger-color, #c44) 22%,
+    var(--hairline, var(--border-subtle))
+  );
+}
+
+.chatSoftHint[data-setup-hint='engine-down'] .chatSoftHintIcon {
+  color: color-mix(in srgb, var(--danger-color, #c44) 70%, var(--text-tertiary));
+}
+
+.chatSoftHint[data-setup-hint='sync-engine'] {
+  border-color: color-mix(
+    in srgb,
+    var(--accent-color, #6c8cff) 12%,
+    var(--hairline, var(--border-subtle))
+  );
+}
+
+.chatSoftHint[data-setup-hint='sync-engine'] .chatSoftHintIcon {
+  color: var(--text-tertiary);
+  opacity: 0.85;
+}
+
+/* Plan mode ribbon */
+.planModeRibbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.planModeRibbon.slim {
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-radius: 8px;
+}
+
+.planModeRibbon.slim > svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.9;
+}
+
+.planModeRibbonText {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.35;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planModeRibbon.slim .planModeRibbonText {
+  white-space: nowrap;
+}
+
+.planModeRibbonText strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.planModeRibbonActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.planModeRibbonIconBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.planModeRibbonIconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.planModeRibbonIconBtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color, #6c8cff) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.planModeRibbonIconBtn.isDanger {
+  color: var(--danger-color, #c44);
+}
+
+.planModeRibbonIconBtn.isDanger:hover {
+  background: color-mix(in srgb, var(--danger-color, #c44) 12%, transparent);
+  color: var(--danger-color, #c44);
+}
+
+/* goal mode ribbon */
+.goalModeRibbon {
+  border-color: color-mix(in srgb, var(--accent-color, #6c8cff) 35%, var(--hairline, var(--border-subtle)));
+}
+
+.goalModeRibbonMeter {
+  flex-shrink: 0;
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-tertiary) 22%, transparent);
+  overflow: hidden;
+  align-self: center;
+}
+
+.goalModeRibbonMeterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent-color, #6c8cff) 75%, var(--text-primary));
+  min-width: 0;
+  transition: width 0.2s ease;
+}
+
+/* Scroll to bottom FAB */
+.chatScrollFab {
+  position: absolute;
+  right: 18px;
+  bottom: 148px;
+  z-index: 12;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  padding: 0;
+}
+
+.chatScrollFab:hover {
+  color: var(--text-primary);
+  border-color: var(--border-color) !important;
+}
+
+/* System notice ribbon */
+.runNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: min(var(--chat-col-max, 680px), 100%);
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.runNoticeMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.runNoticeKicker {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+}
+
+.runNoticeText {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.runNoticeDetail {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.runNoticeDismiss {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  display: inline-flex;
+}
+
+.runNoticeDismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Approval Dock */
+.approvalDock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: min(var(--chat-col-max, 680px), 100%);
+  margin: 0 auto 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-orange, #f59e0b) 30%, var(--hairline, var(--border-subtle)));
+  background: color-mix(in srgb, var(--accent-orange, #f59e0b) 5%, transparent);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.approvalDock.slim {
+  padding: 5px 10px;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.approvalDock:hover {
+  background: color-mix(in srgb, var(--accent-orange, #f59e0b) 9%, transparent);
+}
+
+.approvalDock:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-orange, #f59e0b) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.approvalDockDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-orange, #f59e0b);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange, #f59e0b) 45%, transparent);
+  animation: approval-dock-dot-pulse 1.8s ease-out infinite;
+}
+
+@keyframes approval-dock-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange, #f59e0b) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-orange, #f59e0b) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange, #f59e0b) 0%, transparent);
+  }
+}
+
+.approvalDockLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvalDockGoIcon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.approvalDock:hover .approvalDockGoIcon {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .approvalDockDot {
+    animation: none;
+  }
+  .goalModeRibbonMeterFill {
+    transition: none;
+  }
+}

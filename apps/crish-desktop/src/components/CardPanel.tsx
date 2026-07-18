@@ -189,7 +189,8 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
   heightRatio,
 }) => {
   /** 只订本工作区对象：其它 ws / 纯 sessions 流式更新不触发本面板 */
-  const ws = useLayoutStore((s) => s.workspaces.find((w) => w.id === wsId));
+  const wsSelector = React.useMemo(() => (s: any) => s.workspaces.find((w: any) => w.id === wsId), [wsId]);
+  const ws = useLayoutStore(wsSelector);
   const activeSession = useSessionStore(selectActiveSession);
   const draggedTab = useLayoutStore((s) => s.draggedTab);
   const closeTabInGroup = useLayoutStore((s) => s.closeTabInGroup);
@@ -416,7 +417,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
   /** 计算关闭某 tab 后应聚焦的 cardId / 哨兵 */
   const resolveFocusAfterClose = (cardId: string): string => {
     const cards = group.cards;
-    const idx = cards.findIndex((c) => c.id === cardId);
+    const idx = cards.findIndex((c: any) => c.id === cardId);
     if (idx < 0) return '__add__';
     const next = cards[idx + 1] ?? cards[idx - 1];
     if (next && next.id !== cardId) return next.id;
@@ -595,7 +596,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
             aria-label="面板标签"
             aria-orientation="horizontal"
           >
-            {group.cards.map((c, index) => {
+            {group.cards.map((c: any, index: number) => {
               const isToolTab = c.id !== 'chat';
               const selected = c.id === activeCardId;
               const label = getPanelTitle(c.id);
@@ -757,8 +758,8 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
           )}
           {!isEmptyGroup &&
             group.cards
-              .filter((c) => c.id !== 'chat')
-              .map((c) => {
+              .filter((c: any) => c.id !== 'chat')
+              .map((c: any) => {
                 const id = c.id;
                 const active = id === activeCardId;
                 const known = KNOWN_BODY_IDS.has(id);
@@ -811,7 +812,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
               })}
           {!isEmptyGroup &&
             activeCardId !== 'chat' &&
-            !group.cards.some((c) => c.id === activeCardId) &&
+            !group.cards.some((c: any) => c.id === activeCardId) &&
             !hasKnownBody && (
             <PanelBodyEmpty
               title={`无法显示「${activeTitle}」`}

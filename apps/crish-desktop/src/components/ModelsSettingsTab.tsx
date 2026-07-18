@@ -37,6 +37,7 @@ import {
   type ModelCapabilityKey,
 } from '../api/modelCatalog';
 
+import styles from './ModelsSettingsTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
@@ -731,18 +732,18 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       </SettingsSection>
 
       {/* Provider split layout */}
-      <div className="models-split">
+      <div className={`${styles.modelsSplit} models-split`}>
         {/* Left rail */}
-        <aside className="models-rail" aria-label="服务商列表">
+        <aside className={`${styles.modelsRail} models-rail`} aria-label="服务商列表">
           {/* Rail header */}
-          <div className="mrl-header">
+          <div className={`${styles.mrlHeader} mrl-header`}>
             <h3 className="settings-ui-section-title">AI 服务商</h3>
           </div>
 
           {/* Provider list */}
-          <div className="mrl-list" role="list">
+          <div className={`${styles.mrlList} mrl-list`} role="list">
             {profiles.length === 0 ? (
-              <div className="mrl-empty">还没有服务商</div>
+              <div className={`${styles.mrlEmpty} mrl-empty`}>还没有服务商</div>
             ) : (
               profiles.map((p) => {
                 const isActive = p.id === selectedId;
@@ -755,14 +756,14 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     key={p.id}
                     type="button"
                     role="listitem"
-                    className={`mrl-item${isActive ? ' is-active' : ''}`}
+                    className={`${styles.mrlItem} mrl-item ${isActive ? styles.isActive + ' is-active' : ''}`}
                     aria-current={isActive ? 'true' : undefined}
                     onClick={() => setSelectedId(p.id)}
                   >
-                    <div className="mrl-item-row-top">
-                      <span className="mrl-item-name" title={label}>{label}</span>
+                    <div className={`${styles.mrlItemRowTop} mrl-item-row-top`}>
+                      <span className={`${styles.mrlItemName} mrl-item-name`} title={label}>{label}</span>
                       <span
-                        className="mrl-item-dot"
+                        className={`${styles.mrlItemDot} mrl-item-dot`}
                         title={!keyOk ? '缺少密钥' : !enabled ? '已停用' : '已配置并启用'}
                         style={{
                           background: !keyOk ? '#e6a817' : !enabled ? 'var(--text-tertiary)' : '#22c55e',
@@ -778,13 +779,13 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         </aside>
 
         {/* Right detail */}
-        <section className="models-detail" aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}>
+        <section className={`${styles.modelsDetail} models-detail`} aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}>
           {!selected ? (
-            <div className="mrd-empty">
+            <div className={`${styles.mrdEmpty} mrd-empty`}>
               {profiles.length === 0 ? '从左侧添加服务商以开始' : '在左侧选择一个服务商'}
             </div>
           ) : (
-            <div className="mrd-body">
+            <div className={`${styles.mrdBody} mrd-body`}>
               {/* Detail header */}
               <div className="mrd-head">
                 <div className="mrd-head-left">
@@ -831,11 +832,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               </div>
 
               {/* Credentials */}
-              <div className="mrd-fields">
-                <div className="mrd-field">
-                  <label className="mrd-field-label">Base URL</label>
+              <div className={`${styles.mrdFields} mrd-fields`}>
+                <div className={`${styles.mrdField} mrd-field`}>
+                  <label className={`${styles.mrdFieldLabel} mrd-field-label`}>Base URL</label>
                   <input
-                    className="mrd-field-input"
+                    className={`${styles.mrdFieldInput} mrd-field-input`}
                     value={selected.baseUrl}
                     placeholder="https://api.example.com/v1"
                     spellCheck={false}
@@ -849,11 +850,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     }}
                   />
                 </div>
-                <div className="mrd-field">
-                  <label className="mrd-field-label">API Key</label>
-                  <div className="mrd-key-row">
+                <div className={`${styles.mrdField} mrd-field`}>
+                  <label className={`${styles.mrdFieldLabel} mrd-field-label`}>API Key</label>
+                  <div className={`${styles.mrdKeyRow} mrd-key-row`}>
                     <input
-                      className="mrd-field-input"
+                      className={`${styles.mrdFieldInput} mrd-field-input`}
                       type="password"
                       placeholder={hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'}
                       value={keyDraft}
@@ -874,9 +875,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               </div>
 
               {/* Model list header */}
-              <div className="mrd-models-head">
-                <span className="mrd-models-label">模型列表</span>
-                <div className="mrd-models-actions">
+              <div className={`${styles.mrdModelsHead} mrd-models-head`}>
+                <span className={`${styles.mrdModelsLabel} mrd-models-label`}>模型列表</span>
+                <div className={`${styles.mrdModelsActions} mrd-models-actions`}>
                   <button
                     type="button"
                     className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -906,7 +907,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       placeholder="搜索..."
                       value={modelFilter}
                       onChange={(e) => setModelFilter(e.target.value)}
-                      className="mrd-search"
+                      className={`${styles.mrdSearch} mrd-search`}
                       spellCheck={false}
                     />
                   </div>
@@ -925,27 +926,27 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
               {/* Manual add form */}
               {manualOpen && (
-                <div className="mrd-add-form">
-                  <div className="mrd-add-form-fields">
-                    <label className="mrd-add-label">
+                <div className={`${styles.mrdAddForm} mrd-add-form`}>
+                  <div className={`${styles.mrdAddFormFields} mrd-add-form-fields`}>
+                    <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                       <span>模型 ID *</span>
-                      <input className="mrd-field-input" placeholder="如 deepseek-chat" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} />
+                      <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="如 deepseek-chat" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} />
                     </label>
-                    <label className="mrd-add-label">
+                    <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                       <span>展示名称</span>
-                      <input className="mrd-field-input" placeholder="可选" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} />
+                      <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="可选" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} />
                     </label>
-                    <label className="mrd-add-label">
+                    <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                       <span>上下文长度</span>
-                      <input className="mrd-field-input" placeholder="128000" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} />
+                      <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="128000" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} />
                     </label>
                   </div>
-                  <div className="mrd-add-form-footer">
+                  <div className={`${styles.mrdAddFormFooter} mrd-add-form-footer`}>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {MODEL_CAPABILITY_OPTIONS.map((opt) => {
                         const on = !!addDraft.caps[opt.key];
                         return (
-                          <label key={opt.key} className={`mrd-cap-pill${on ? ' is-on' : ''}`}>
+                          <label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}>
                             <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setAddDraft((d) => ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }))} />
                             {opt.label}
                           </label>
@@ -961,7 +962,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               )}
 
               {/* Model rows */}
-              <div className="mrd-model-list">
+              <div className={`${styles.mrdModelList} mrd-model-list`}>
                 {modelsList.map((m) => {
                   const meta = getModelMeta(selected.id, m);
                   const off = meta.enabled === false;
@@ -978,7 +979,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   return (
                     <div
                       key={m}
-                      className={`mrd-model-row${off ? ' is-off' : ''}${isLive ? ' is-live' : ''}`}
+                      className={`${styles.mrdModelRow} mrd-model-row ${off ? styles.isOff + ' is-off' : ''} ${isLive ? styles.isLive + ' is-live' : ''}`}
                       onClick={(e) => {
                         const target = e.target as HTMLElement;
                         if (target.closest('.models-switch') || target.closest('.mrd-delete-btn')) {
@@ -989,19 +990,19 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       }}
                       style={{ cursor: 'pointer' }}
                     >
-                      <div className="mrd-model-info">
-                        <span className="mrd-model-name">{display}</span>
+                      <div className={`${styles.mrdModelInfo} mrd-model-info`}>
+                        <span className={`${styles.mrdModelName} mrd-model-name`}>{display}</span>
                         <div className="mrd-model-meta">
-                          {liveCtx && <span className="mrd-ctx-pill">{liveCtx}</span>}
-                          {meta.capabilities?.tools && <span className="mrd-cap-tag" title="支持工具调用"><Lucide.Wrench size={10} /></span>}
-                          {meta.capabilities?.vision && <span className="mrd-cap-tag" title="支持视觉"><Lucide.Eye size={10} /></span>}
-                          {meta.capabilities?.reasoning && <span className="mrd-cap-tag" title="支持思考"><Lucide.BrainCircuit size={10} /></span>}
+                          {liveCtx && <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>{liveCtx}</span>}
+                          {meta.capabilities?.tools && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持工具调用"><Lucide.Wrench size={10} /></span>}
+                          {meta.capabilities?.vision && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持视觉"><Lucide.Eye size={10} /></span>}
+                          {meta.capabilities?.reasoning && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持思考"><Lucide.BrainCircuit size={10} /></span>}
                         </div>
                       </div>
-                      <div className="mrd-model-actions">
-                        <label className="models-switch" title={off ? '已停用，点击启用' : '点击停用'}>
+                      <div className={`${styles.mrdModelActions} mrd-model-actions`}>
+                        <label className={`${styles.modelsSwitch} models-switch`} title={off ? '已停用，点击启用' : '点击停用'}>
                           <input type="checkbox" checked={!off} onChange={(e) => { setModelEnabled(selected.id, m, e.target.checked); refresh(); }} />
-                          <span className="models-switch-ui" />
+                          <span className={`${styles.modelsSwitchUi} models-switch-ui`} />
                         </label>
                         <button
                           type="button"
@@ -1025,30 +1026,30 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
                       {/* Expanded config sub-panel */}
                       {expanded && cfgDraft && (
-                        <div className="mrd-model-cfg" onClick={(e) => e.stopPropagation()}>
-                          <div className="mrd-cfg-fields">
-                            <label className="mrd-cfg-label">
+                        <div className={`${styles.mrdModelCfg} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>
+                          <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
+                            <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
                               <span>展示名称</span>
-                              <input className="mrd-field-input" value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} />
+                              <input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} />
                             </label>
-                            <label className="mrd-cfg-label">
+                            <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
                               <span>上下文长度</span>
-                              <input className="mrd-field-input" value={cfgDraft.contextLength} placeholder="如 1000000" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} />
+                              <input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.contextLength} placeholder="如 1000000" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} />
                             </label>
                           </div>
-                          <div className="mrd-cfg-footer">
-                            <div className="mrd-cap-group">
+                          <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>
+                            <div className={`${styles.mrdCapGroup} mrd-cap-group`}>
                               {MODEL_CAPABILITY_OPTIONS.map((opt) => {
                                 const on = !!cfgDraft.caps[opt.key];
                                 return (
-                                  <label key={opt.key} className={`mrd-cap-pill${on ? ' is-on' : ''}`}>
+                                  <label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}>
                                     <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }) : null)} />
                                     {opt.label}
                                   </label>
                                 );
                               })}
                             </div>
-                            <div className="mrd-cfg-actions">
+                            <div className={`${styles.mrdCfgActions} mrd-cfg-actions`}>
                               <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)} title="测试连通性">
                                 {testBusy === tKey ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
                               </button>
@@ -1063,10 +1064,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 })}
 
                 {modelsCount === 0 && (
-                  <div className="mrd-model-empty">暂无模型 · 点击右上角「+」手动添加</div>
+                  <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>暂无模型 · 点击右上角「+」手动添加</div>
                 )}
                 {modelsCount > 0 && modelsList.length === 0 && (
-                  <div className="mrd-model-empty">无匹配的「{modelFilter.trim()}」</div>
+                  <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>无匹配的「{modelFilter.trim()}」</div>
                 )}
               </div>
             </div>

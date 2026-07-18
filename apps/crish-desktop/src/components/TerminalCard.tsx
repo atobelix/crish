@@ -4,6 +4,8 @@
  * 按会话隔离缓冲；空会话有独立空态，不混用其它会话行。
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import styles from './TerminalCard.module.css';
+import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
 import { getSessionStoreState } from '../store/sessionStore';
 import * as Lucide from 'lucide-react';
@@ -18,10 +20,10 @@ import {
 /** 空态种类：无活动会话 / 本会话尚无输出 */
 type TermEmptyKind = 'no-session' | 'session-empty';
 
-/** 行样式：命令 / 错误 / 分隔 / 普通输出（仅用已有 CSS class，不 thrash panels.css） */
-function termLineClass(line: string): string {
-  if (line.startsWith('PS>') || line.startsWith('$')) return 'term-line is-cmd';
-  if (/^──\s/.test(line) || /^──/.test(line)) return 'term-line is-sep';
+/** 行样式类型检测 */
+function getLineType(line: string): 'cmd' | 'sep' | 'err' | 'normal' {
+  if (line.startsWith('PS>') || line.startsWith('$')) return 'cmd';
+  if (/^──\s/.test(line) || /^──/.test(line)) return 'sep';
   if (
     /失败|错误|error|Error|ERR!|FATAL|denied|拒绝|读取失败|异常|超时|\(exit\s/i.test(
       line,
@@ -29,9 +31,9 @@ function termLineClass(line: string): string {
     line.startsWith('✗') ||
     line.startsWith('[error]')
   ) {
-    return 'term-line is-err';
+    return 'err';
   }
-  return 'term-line';
+  return 'normal';
 }
 
 /** 顶栏行数：紧凑中文，0 行不展示 */
@@ -271,7 +273,7 @@ export const TerminalCard: React.FC = () => {
 
   return (
     <div
-      className="term-panel"
+      className={styles.panel}
       role="region"
       aria-labelledby={titleId}
       aria-label="终端 · 命令输出"
@@ -279,54 +281,57 @@ export const TerminalCard: React.FC = () => {
       data-empty-kind={emptyKind || undefined}
       data-line-count={lineCount}
     >
-      <div className="term-bar" role="toolbar" aria-label="终端工具栏">
-        <Lucide.Terminal size={15} className="term-bar-ico" strokeWidth={1.75} aria-hidden />
-        <div id={titleId} className="term-bar-meta" title={barTitle}>
-          <span className="term-bar-cwd">{cwdLabel}</span>
-          <span className="term-bar-sep" aria-hidden>
-            ·
-          </span>
-          <span className="term-bar-shell">PowerShell</span>
-          {running ? (
-            <>
-              <span className="term-bar-sep" aria-hidden>
-                ·
-              </span>
-              <span role="status" aria-live="polite">
-                执行中
-              </span>
-            </>
-          ) : null}
-          {lineCountLabel ? (
-            <>
-              <span className="term-bar-sep" aria-hidden>
-                ·
-              </span>
-              <span id={countId} role="status" aria-live="polite" aria-atomic="true">
-                {lineCountLabel}
-              </span>
-            </>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="files-nav-btn term-bar-btn"
-          title={clearTitle}
-          aria-label={clearTitle}
-          aria-disabled={lineCount === 0}
-          disabled={lineCount === 0}
-          onClick={() => {
-            clearOutput();
-            inputRef.current?.focus();
-          }}
-        >
-          <Lucide.Trash2 size={15} strokeWidth={1.75} aria-hidden />
-        </button>
+      <div className={styles.bar} role="toolbar" aria-label="终端工具栏">
+        <Lucide.Terminal size={15} className={styles.barIco} strokeWidth={1.75} aria-hidden />
+        <Tooltip content={barTitle}>
+          <div id={titleId} className={styles.barMeta}>
+            <span className={styles.barCwd}>{cwdLabel}</span>
+            <span className={styles.barSep} aria-hidden>
+              ·
+            </span>
+            <span className={styles.barShell}>PowerShell</span>
+            {running ? (
+              <>
+                <span className={styles.barSep} aria-hidden>
+                  ·
+                </span>
+                <span role="status" aria-live="polite">
+                  执行中
+                </span>
+              </>
+            ) : null}
+            {lineCountLabel ? (
+              <>
+                <span className={styles.barSep} aria-hidden>
+                  ·
+                </span>
+                <span id={countId} role="status" aria-live="polite" aria-atomic="true">
+                  {lineCountLabel}
+                </span>
+              </>
+            ) : null}
+          </div>
+        </Tooltip>
+        <Tooltip content={clearTitle}>
+          <button
+            type="button"
+            className={`files-nav-btn ${styles.barBtn}`}
+            aria-label={clearTitle}
+            aria-disabled={lineCount === 0}
+            disabled={lineCount === 0}
+            onClick={() => {
+              clearOutput();
+              inputRef.current?.focus();
+            }}
+          >
+            <Lucide.Trash2 size={15} strokeWidth={1.75} aria-hidden />
+          </button>
+        </Tooltip>
       </div>
       {/* 单滚动面：overflow 在 term-body；长行 overflow-wrap，不撑破侧栏 */}
       <div
         ref={bodyRef}
-        className="term-body"
+        className={styles.body}
         role="log"
         aria-label={
           activeSessionId ? '本会话终端输出' : '终端输出（未选择会话）'
@@ -338,14 +343,14 @@ export const TerminalCard: React.FC = () => {
       >
         {emptyKind && emptyCopy ? (
           <div
-            className="term-empty"
+            className={styles.empty}
             role="status"
             aria-live="polite"
             data-empty-kind={emptyKind}
           >
-            <div className="term-empty-title">{emptyCopy.title}</div>
-            <div className="term-empty-desc">{emptyCopy.desc}</div>
-            <div className="term-empty-hint" id={inputHintId}>
+            <div className={styles.emptyTitle}>{emptyCopy.title}</div>
+            <div className={styles.emptyDesc}>{emptyCopy.desc}</div>
+            <div className={styles.emptyHint} id={inputHintId}>
               {emptyKind === 'session-empty' ? (
                 <>
                   输入 <kbd>clear</kbd> 清空 · <kbd>Ctrl</kbd>+<kbd>L</kbd> 同上
@@ -356,25 +361,32 @@ export const TerminalCard: React.FC = () => {
             </div>
           </div>
         ) : (
-          terminalLines.map((line, i) => (
-            <div
-              key={`${activeSessionId || '_g'}:${i}:${line.length}`}
-              className={termLineClass(line)}
-              data-line-index={i}
-            >
-              {line}
-            </div>
-          ))
+          terminalLines.map((line, i) => {
+            const lineType = getLineType(line);
+            return (
+              <div
+                key={`${activeSessionId || '_g'}:${i}:${line.length}`}
+                className={`${styles.line} ${
+                  lineType === 'cmd' ? styles.isCmd :
+                  lineType === 'sep' ? styles.isSep :
+                  lineType === 'err' ? styles.isErr : ''
+                }`}
+                data-line-index={i}
+              >
+                {line}
+              </div>
+            );
+          })
         )}
         <div ref={outputEndRef} aria-hidden />
       </div>
-      <div className="term-input-row">
-        <span className="term-prompt" aria-hidden>
+      <div className={styles.inputRow}>
+        <span className={styles.prompt} aria-hidden>
           PS&gt;
         </span>
         <input
           ref={inputRef}
-          className="term-input"
+          className={styles.input}
           value={terminalInput}
           onChange={(e) => setTerminalInput(e.target.value)}
           onKeyDown={handleTerminalKeyDown}

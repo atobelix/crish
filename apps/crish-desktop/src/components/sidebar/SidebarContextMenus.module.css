@@ -1,0 +1,172 @@
+.contextMenu {
+  min-width: 160px;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 6px;
+  gap: 2px;
+  border-radius: 12px;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-lg);
+  display: none;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.contextMenu.open {
+  display: flex;
+}
+
+.contextMenuItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  min-height: 32px;
+  padding: 6px 10px;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+  cursor: pointer;
+  text-align: left;
+}
+
+.contextMenuItem:hover,
+.contextMenuItem:focus-visible {
+  background-color: var(--control-soft-bg-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.contextMenuItem:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+.contextMenuItem svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.contextMenuItem:hover svg,
+.contextMenuItem:focus-visible svg {
+  color: var(--text-secondary);
+}
+
+.contextMenuDivider {
+  margin: 2px 4px;
+  height: 1px;
+  background-color: var(--border-color);
+}
+
+/* Sort/Filter Dropdown Menu */
+.sortFilterMenu {
+  min-width: 200px;
+  padding: 8px;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+}
+
+.sortFilterMenu.open {
+  display: flex;
+}
+
+.sortFilterMenuTitle {
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.sortFilterRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: default;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  background: transparent;
+  border: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sortFilterRow:hover,
+.sortFilterRow.isOpen {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.sortFilterRowLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.sortFilterChev {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.sortFilterFlyout {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: -4px;
+  min-width: 148px;
+  padding: 6px;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 2;
+}
+
+.sortFilterOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortFilterOption:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.sortFilterOption.isOn {
+  color: var(--accent-green, #22c55e);
+  font-weight: 500;
+}
+
+.sortFilterCheck {
+  color: var(--accent-green, #22c55e);
+  flex-shrink: 0;
+}

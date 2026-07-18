@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ToastItem } from '../hooks/useToastQueue';
+import styles from './ToastStack.module.css';
 
 type Props = {
   toasts: ToastItem[];
@@ -11,14 +12,14 @@ export const ToastStack: React.FC<Props> = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="toast-stack" role="status" aria-live="polite">
+    <div className={styles.toastStack} role="status" aria-live="polite">
       {toasts.map((toast) => (
-        <div key={toast.id} className="toast-alert">
+        <div key={toast.id} className={styles.toastAlert}>
           <span>{toast.message}</span>
           {toast.onUndo ? (
             <button
               type="button"
-              className="toast-undo-btn"
+              className={styles.toastUndoBtn}
               onClick={() => {
                 toast.onUndo?.();
                 onDismiss(toast.id);

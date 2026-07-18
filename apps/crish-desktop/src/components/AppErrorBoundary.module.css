@@ -1,0 +1,69 @@
+.appErrorBoundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg-primary, #fafafa);
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.appErrorCard {
+  max-width: 420px;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-secondary, #fff);
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.appErrorTitle {
+  font-size: var(--font-size-lg, 16px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.appErrorMsg {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+  font-family: var(--font-mono, monospace);
+  max-height: 120px;
+  overflow: auto;
+}
+
+.appErrorActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* 面板/工作区内嵌：不占满视口，可撑满父级高度 */
+.appErrorBoundary.appErrorBoundaryCompact {
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  padding: 16px;
+  background: transparent;
+}
+
+.appErrorCard.appErrorCardCompact {
+  max-width: 360px;
+  padding: 16px 14px;
+  gap: 10px;
+}
+
+.appErrorBoundaryCompact .appErrorTitle {
+  font-size: var(--font-size-base, 14px);
+}
+
+.appErrorBoundaryCompact .appErrorMsg {
+  max-height: 80px;
+  font-size: var(--font-size-xs, 12px);
+}

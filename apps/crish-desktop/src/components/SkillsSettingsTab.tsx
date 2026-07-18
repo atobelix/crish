@@ -37,6 +37,7 @@ import { formatEngineDegradeToast } from '../hooks/useToastQueue';
 import { useLayoutStore } from '../store/layoutStore';
 import { closeSettings } from '../store/settingsUiStore';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from './settings/SettingsUI';
 
 type Props = {
@@ -561,7 +562,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     if (loading && skills.length === 0) {
       return (
         <div
-          className="skills-empty-inline"
+          className={`${styles.skillsEmptyInline} skills-empty-inline`}
           role="status"
           aria-live="polite"
           aria-busy="true"
@@ -575,7 +576,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     if (skills.length === 0) {
       return (
         <div
-          className="skills-empty-inline skills-empty-inline--cta"
+          className={`${styles.skillsEmptyInline} skills-empty-inline ${styles.skillsEmptyInlineCta} skills-empty-inline--cta`}
           role="status"
           aria-live="polite"
           title={EMPTY_INSTALL_HINT}
@@ -595,16 +596,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       );
     }
 
-    // 有技能但被筛选清空
+    // 有技能 but filtered out
     return (
       <div
-        className="skills-empty-inline"
+        className={`${styles.skillsEmptyInline} skills-empty-inline`}
         role="status"
         aria-live="polite"
         title={EMPTY_FILTER_HINT}
       >
         <div>无匹配 · 共 {skills.length} 个技能</div>
-        <div className="skills-discover-actions" style={{ justifyContent: 'flex-start' }}>
+        <div className={`${styles.skillsDiscoverActions} skills-discover-actions`} style={{ justifyContent: 'flex-start' }}>
           <button
             type="button"
             className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -623,14 +624,14 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     <SettingsPage
       title="技能"
       meta={
-        <div className="skills-tab-actions" role="toolbar" aria-label="技能操作">
+        <div className={`${styles.skillsTabActions} skills-tab-actions`} role="toolbar" aria-label="技能操作">
           <button
             type="button"
             className="ui-btn ui-btn-secondary ui-btn-sm"
             onClick={() =>
               setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
             }
-            title="导入本机技能或用 AI 创建"
+            title="导入本机技能 or AI"
             aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
             aria-expanded={createMode !== 'none'}
             aria-controls={createBoxId}
@@ -638,7 +639,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             <Lucide.Plus size={14} aria-hidden />
             {createMode !== 'none' ? '收起' : '新建'}
           </button>
-          <div className="skills-more-wrap">
+          <div className={`${styles.skillsMoreWrap} skills-more-wrap`}>
             <button
               type="button"
               className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -654,14 +655,14 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             {moreOpen ? (
               <div
                 id={moreMenuId}
-                className="skills-more-menu"
+                className={`${styles.skillsMoreMenu} skills-more-menu`}
                 role="menu"
                 aria-label="更多技能操作"
               >
                 <button
                   type="button"
                   role="menuitem"
-                  className="skills-more-item"
+                  className={`${styles.skillsMoreItem} skills-more-item`}
                   onClick={() => {
                     setMoreOpen(false);
                     void handleSyncAll();
@@ -673,7 +674,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 <button
                   type="button"
                   role="menuitem"
-                  className="skills-more-item"
+                  className={`${styles.skillsMoreItem} skills-more-item`}
                   onClick={() => {
                     setMoreOpen(false);
                     void refresh({ promptNew: true });
@@ -685,7 +686,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 <button
                   type="button"
                   role="menuitem"
-                  className="skills-more-item"
+                  className={`${styles.skillsMoreItem} skills-more-item`}
                   onClick={() => {
                     setMoreOpen(false);
                     void refresh();
@@ -697,7 +698,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 <button
                   type="button"
                   role="menuitem"
-                  className="skills-more-item"
+                  className={`${styles.skillsMoreItem} skills-more-item`}
                   onClick={() => {
                     const next = !enableCommands;
                     const prev = enableCommands;
@@ -724,7 +725,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 <button
                   type="button"
                   role="menuitem"
-                  className={`skills-more-item ${batchConfirm === 'enabled' ? 'is-active' : ''}`}
+                  className={`${styles.skillsMoreItem} skills-more-item ${batchConfirm === 'enabled' ? styles.isActive + ' is-active' : ''}`}
                   onClick={() => void runBatchActivation('enabled')}
                   disabled={batchBusy || filtered.length === 0}
                 >
@@ -735,7 +736,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 <button
                   type="button"
                   role="menuitem"
-                  className={`skills-more-item ${batchConfirm === 'disabled' ? 'is-active' : ''}`}
+                  className={`${styles.skillsMoreItem} skills-more-item ${batchConfirm === 'disabled' ? styles.isActive + ' is-active' : ''}`}
                   onClick={() => void runBatchActivation('disabled')}
                   disabled={batchBusy || filtered.length === 0}
                 >
@@ -751,7 +752,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     >
 
       {loadError ? (
-        <div className="skills-fs-warn" role="alert">
+        <div className={`${styles.skillsFsWarn} skills-fs-warn`} role="alert">
           <span title={loadError}>{loadError}</span>{' '}
           <button
             type="button"
@@ -767,22 +768,22 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
       {discoverCandidates && discoverCandidates.length > 0 ? (
         <section
-          className="skills-discover-panel"
+          className={`${styles.skillsDiscoverPanel} skills-discover-panel`}
           role="dialog"
           aria-modal="false"
           aria-labelledby={discoverTitleId}
           aria-busy={discoverBusy || undefined}
         >
-          <div className="skills-discover-title" id={discoverTitleId}>
+          <div className={`${styles.skillsDiscoverTitle} skills-discover-title`} id={discoverTitleId}>
             发现新技能 {discoverCandidates.length}
           </div>
-          <div className="skills-discover-list" role="group" aria-label="待导入技能">
+          <div className={`${styles.skillsDiscoverList} skills-discover-list`} role="group" aria-label="待导入技能">
             {discoverCandidates.map((s) => {
               const checked = discoverPick[s.id] !== false;
               return (
                 <label
                   key={s.id}
-                  className="skills-discover-item"
+                  className={`${styles.skillsDiscoverItem} skills-discover-item`}
                   title={s.description || s.name}
                 >
                   <input
@@ -794,12 +795,12 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     }
                     aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
                   />
-                  <span className="skills-discover-name">{s.name}</span>
+                  <span className={`${styles.skillsDiscoverName} skills-discover-name`}>{s.name}</span>
                 </label>
               );
             })}
           </div>
-          <div className="skills-discover-actions">
+          <div className={`${styles.skillsDiscoverActions} skills-discover-actions`}>
             <button
               type="button"
               className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -834,7 +835,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
       {createMode === 'paths' ? (
         <section
-          className="skills-create-box"
+          className={`${styles.skillsCreateBox} skills-create-box`}
           id={createBoxId}
           aria-label="新建技能"
         >
@@ -872,11 +873,11 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
       {createMode === 'manual' ? (
         <section
-          className="skills-create-box"
+          className={`${styles.skillsCreateBox} skills-create-box`}
           id={createBoxId}
           aria-label="手填项目技能"
         >
-          <div className="skills-create-row">
+          <div className={`${styles.skillsCreateRow} skills-create-row`}>
             <input
               id={createNameId}
               className="settings-field-input settings-field-input--sm"
@@ -930,9 +931,9 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       ) : null}
 
       {/* 单行筛选：作用域（全局+具体项目名）+ 搜索；状态筛选已撤，启停在列表本体 */}
-      <div className="skills-toolbar skills-toolbar--focus" role="group" aria-label="筛选">
+      <div className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`} role="group" aria-label="筛选">
         <SettingsSelect
-          className="skills-scope-select"
+          className={`${styles.skillsScopeSelect} skills-scope-select`}
           value={scopeFilter}
           options={scopeSelectOptions}
           onChange={handleScopeFilterChange}
@@ -941,7 +942,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         />
         <input
           id={searchId}
-          className="settings-field-input settings-field-input--sm skills-search"
+          className={`settings-field-input settings-field-input--sm ${styles.skillsSearch} skills-search`}
           placeholder="搜索技能…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -951,7 +952,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
       {!fsOk ? (
         <div
-          className="skills-fs-warn"
+          className={`${styles.skillsFsWarn} skills-fs-warn`}
           role="status"
           title="需桌面壳以扫描本机技能目录"
         >
@@ -959,8 +960,8 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         </div>
       ) : null}
 
-      <div className="skills-split">
-        <aside className="skills-rail" aria-labelledby={listLabelId}>
+      <div className={`${styles.skillsSplit} skills-split`}>
+        <aside className={`${styles.skillsRail} skills-rail`} aria-labelledby={listLabelId}>
           <div
             id={listLabelId}
             className="sr-only"
@@ -979,7 +980,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             技能列表
           </div>
           <div
-            className="skills-rail-list"
+            className={`${styles.skillsRailList} skills-rail-list`}
             role="listbox"
             aria-label="技能列表"
             aria-busy={loading || undefined}
@@ -989,8 +990,8 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             {grouped.map((g) => {
               const groupLabel = scopeGroupLabel(g.scope, activeScopeProjectName);
               return (
-              <div key={g.scope} className="skills-rail-group" role="group" aria-label={groupLabel}>
-                <div className="skills-rail-group-label">
+              <div key={g.scope} className={`${styles.skillsRailGroup} skills-rail-group`} role="group" aria-label={groupLabel}>
+                <div className={`${styles.skillsRailGroupLabel} skills-rail-group-label`}>
                   {groupLabel}
                   <span aria-label={`${g.items.length} 个`}>{g.items.length}</span>
                 </div>
@@ -1004,26 +1005,26 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       type="button"
                       role="option"
                       aria-selected={isSel}
-                      className={`skills-rail-item skills-rail-item--dense ${isSel ? 'is-active' : ''} act-${s.activation}`}
+                      className={`${styles.skillsRailItem} skills-rail-item ${styles.skillsRailItemDense} skills-rail-item--dense ${isSel ? styles.isActive + ' is-active' : ''} act-${s.activation}`}
                       onClick={() => setSelectedId(s.id)}
                       title={s.description || s.name}
                       aria-label={`${s.name}，${groupLabel}，${actLabel}${s.system ? '，系统' : ''}`}
                     >
-                      <span className="skills-rail-icon" aria-hidden>
+                      <span className={`${styles.skillsRailIcon} skills-rail-icon`} aria-hidden>
                         {s.system ? (
                           <Lucide.Package size={12} />
                         ) : (
                           <Lucide.Sparkles size={12} />
                         )}
                       </span>
-                      <span className="skills-rail-name">
+                      <span className={`${styles.skillsRailName} skills-rail-name`}>
                         {s.name}
                         {s.system ? (
-                          <em className="skills-sys-badge">系统</em>
+                          <em className={`${styles.skillsSysBadge} skills-sys-badge`}>系统</em>
                         ) : null}
                       </span>
                       <span
-                        className={`skills-act-dot act-${s.activation}`}
+                        className={`${styles.skillsActDot} skills-act-dot act-${s.activation}`}
                         title={actLabel}
                         aria-hidden
                       />
@@ -1036,11 +1037,11 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           </div>
 
           <details
-            className="skills-extra-details"
+            className={`${styles.skillsExtraDetails} skills-extra-details`}
             open={extraOpen || extraDirs.length > 0}
             onToggle={(e) => setExtraOpen((e.target as HTMLDetailsElement).open)}
           >
-            <summary className="skills-extra-summary">
+            <summary className={`${styles.skillsExtraSummary} skills-extra-summary`}>
               高级 · 额外目录
               {extraDirs.length > 0 ? `（${extraDirs.length}）` : ''}
             </summary>
@@ -1066,7 +1067,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                 </div>
               ))}
               <div className="settings-list-row">
-                <div className="skills-extra-add-row">
+                <div className={`${styles.skillsExtraAddRow} skills-extra-add-row`}>
                   <input
                     id={extraDirId}
                     className="settings-field-input settings-field-input--sm"
@@ -1106,39 +1107,39 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           </details>
         </aside>
 
-        <section className="skills-detail" aria-label="技能预览">
+        <section className={`${styles.skillsDetail} skills-detail`} aria-label="技能预览">
           {!selected ? (
-            <div className="skills-detail-empty" role="status">
+            <div className={`${styles.skillsDetailEmpty} skills-detail-empty`} role="status">
               {skills.length === 0 ? '新建技能后在此预览' : '选择左侧技能'}
             </div>
           ) : (
             <>
-              <div className="skills-detail-top">
-                <div className="skills-detail-main">
-                  <div className="skills-detail-name-row">
-                    <div className="skills-detail-name" title={selected.name}>
+              <div className={`${styles.skillsDetailTop} skills-detail-top`}>
+                <div className={`${styles.skillsDetailMain} skills-detail-main`}>
+                  <div className={`${styles.skillsDetailNameRow} skills-detail-name-row`}>
+                    <div className={`${styles.skillsDetailName} skills-detail-name`} title={selected.name}>
                       {selected.name}
                     </div>
-                    <div className="skills-detail-meta">
-                      <span className="skills-scope">
+                    <div className={`${styles.skillsDetailMeta} skills-detail-meta`}>
+                      <span className={`${styles.skillsScope} skills-scope`}>
                         {scopeGroupLabel(selected.scope, activeScopeProjectName)}
                       </span>
                       {selected.system ? (
-                        <span className="skills-tag">系统</span>
+                        <span className={`${styles.skillsTag} skills-tag`}>系统</span>
                       ) : null}
                       {selected.disableModelInvocation ? (
-                        <span className="skills-tag" title="禁止模型自动调用">
+                        <span className={`${styles.skillsTag} skills-tag`} title="禁止模型自动调用">
                           禁自动
                         </span>
                       ) : null}
                       {selected.tags.slice(0, 2).map((t) => (
-                        <span key={t} className="skills-tag">
+                        <span key={t} className={`${styles.skillsTag} skills-tag`}>
                           {t}
                         </span>
                       ))}
                     </div>
                   </div>
-                  <div className="skills-detail-cmd-row">
+                  <div className={`${styles.skillsDetailCmdRow} skills-detail-cmd-row`}>
                     <code className="settings-kbd" title={selectedSlash}>
                       {selectedSlash}
                     </code>
@@ -1151,7 +1152,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     >
                       <Lucide.Copy size={14} aria-hidden />
                     </button>
-                    <span className="skills-path-inline" title={selected.filePath}>
+                    <span className={`${styles.skillsPathInline} skills-path-inline`} title={selected.filePath}>
                       {selected.filePath}
                     </span>
                     <button
@@ -1169,7 +1170,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     </button>
                   </div>
                 </div>
-                <div className="skills-detail-controls">
+                <div className={`${styles.skillsDetailControls} skills-detail-controls`}>
                   <div
                     className="skills-activation"
                     role="group"
@@ -1205,12 +1206,12 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               </div>
 
               {showRaw ? (
-                <pre className="skills-raw" tabIndex={0} aria-label="技能原文">
+                <pre className={`${styles.skillsRaw} skills-raw`} tabIndex={0} aria-label="技能原文">
                   {selected.raw}
                 </pre>
               ) : (
                 <div
-                  className="skills-preview md-rendered msg-assistant-text"
+                  className={`${styles.skillsPreview} skills-preview md-rendered msg-assistant-text`}
                   dangerouslySetInnerHTML={{ __html: previewHtml }}
                   aria-label="技能预览"
                 />

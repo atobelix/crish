@@ -1,0 +1,333 @@
+.mcpTab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+}
+
+.mcpHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+  min-height: var(--control-height-sm);
+}
+
+.mcpStatusBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  min-width: 0;
+}
+
+.mcpStatusPill {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--text-tertiary);
+  background: transparent;
+  line-height: 1.5;
+  white-space: nowrap;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.mcpStatusPill.isOn {
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 35%, transparent);
+}
+
+.mcpStatusPill.kindOk {
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
+}
+
+.mcpStatusPill.kindWarn {
+  color: var(--accent-orange, #f59e0b);
+  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 30%, transparent);
+}
+
+.mcpStatusPill.kindErr {
+  color: var(--accent-red);
+  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+}
+
+.mcpToolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mcpSearch {
+  flex: 1 1 120px;
+  max-width: 180px;
+  min-width: 96px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-size: var(--font-size-xs);
+  padding: 0 var(--control-pad-x);
+}
+
+.mcpErrorLine {
+  font-size: var(--font-size-xs);
+  color: var(--accent-orange, #f59e0b);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: none;
+  background: transparent;
+  min-height: 0;
+}
+
+.mcpRow {
+  border: none;
+  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  padding: 2px 0;
+  background: transparent;
+}
+
+.mcpRow:last-child {
+  border-bottom: none;
+}
+
+.mcpRowMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  min-width: 0;
+}
+
+.mcpDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+
+.mcpDot.kindOk {
+  background: var(--accent-green);
+}
+
+.mcpDot.kindWarn {
+  background: var(--accent-orange, #f59e0b);
+}
+
+.mcpDot.kindErr {
+  background: var(--accent-red);
+}
+
+.mcpDot.kindIdle {
+  background: var(--border-color);
+}
+
+.mcpRowName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  max-width: 26%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpStateBadge {
+  font-size: var(--font-size-xxs, 11px);
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mcpStateBadge.kindOk {
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
+}
+
+.mcpStateBadge.kindWarn {
+  color: var(--accent-orange, #f59e0b);
+  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 30%, transparent);
+}
+
+.mcpStateBadge.kindErr {
+  color: var(--accent-red);
+  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+}
+
+.mcpStateBadge.kindIdle {
+  color: var(--text-tertiary);
+}
+
+.mcpRowMeta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpRowErr {
+  color: var(--accent-red);
+}
+
+.mcpRowActions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.mcpInlineCopy {
+  padding: 0;
+  height: auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mcpInlineCopy:hover {
+  color: var(--text-primary);
+}
+
+.mcpTools {
+  margin-top: 2px;
+  padding: 2px 0 2px 13px;
+  border-top: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+}
+
+.mcpTools ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.mcpTools li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.mcpTools code {
+  font-family: var(--font-mono);
+}
+
+.mcpToolsEmpty {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.mcpCardId {
+  margin-top: 6px;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.mcpCardId code {
+  font-family: var(--font-mono);
+}
+
+.mcpEmptyLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.mcpAddBox {
+  padding: 2px 0 6px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+}
+
+.mcpAddRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.mcpAddRow :global(.settings-field-input) {
+  flex: 1 1 88px;
+  min-width: 72px;
+  max-width: 160px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-size: var(--font-size-xs);
+  padding: 0 var(--control-pad-x);
+}
+
+.mcpAddRow .mcpAddType {
+  flex: 0 0 96px;
+  max-width: 96px;
+}
+
+.mcpAddRow .mcpAddUrl {
+  flex: 1 1 180px;
+  max-width: 280px;
+}
+
+.mcpAddGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.mcpAddGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.mcpAddFull {
+  grid-column: 1 / -1;
+}
+
+.mcpAddActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

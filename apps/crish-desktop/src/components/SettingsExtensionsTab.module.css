@@ -1,0 +1,11 @@
+.detailMeta {
+  margin-right: 8px;
+}
+
+.emptyCompact {
+  padding: 12px 0 !important;
+}
+
+.detailMdSans {
+  font-family: var(--font-sans) !important;
+}

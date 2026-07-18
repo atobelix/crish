@@ -1,6 +1,4 @@
-/* --- SettingsUI.css (Unified modern card-based settings layout) --- */
-
-.settings-ui-page {
+.settingsUiPage {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -9,19 +7,19 @@
   padding-bottom: 40px;
 }
 
-.settings-ui-page-head {
+.settingsUiPageHead {
   margin: 0;
   padding: 0;
 }
 
-.settings-ui-head-inline {
+.settingsUiHeadInline {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.settings-ui-page-title {
+.settingsUiPageTitle {
   margin: 0;
   font-size: var(--font-size-2xl, 24px);
   font-weight: var(--font-weight-semibold);
@@ -30,19 +28,19 @@
   line-height: 1.2;
 }
 
-.settings-ui-page-body {
+.settingsUiPageBody {
   display: flex;
   flex-direction: column;
   gap: 32px;
 }
 
-.settings-ui-section {
+.settingsUiSection {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.settings-ui-section-title {
+.settingsUiSectionTitle {
   margin: 0;
   padding: 0 4px;
   font-size: var(--font-size-sm);
@@ -51,14 +49,14 @@
   letter-spacing: 0.01em;
 }
 
-.settings-ui-section-content {
+.settingsUiSectionContent {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
 /* 统一的高级卡片容器，严格遵守极微弱灰度（<=4%），无厚重阴影，纯粹的圆角与 1px hairline */
-.settings-ui-card {
+.settingsUiCard {
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 16px);
@@ -67,7 +65,7 @@
   flex-direction: column;
 }
 
-.settings-ui-row {
+.settingsUiRow {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -82,21 +80,21 @@
   border-right: none;
 }
 
-.settings-ui-row:last-child {
+.settingsUiRow:last-child {
   border-bottom: none;
 }
 
-.settings-ui-row-clickable {
+.settingsUiRowClickable {
   cursor: pointer;
   width: 100%;
   transition: background var(--transition-fast);
 }
 
-.settings-ui-row-clickable:hover {
+.settingsUiRowClickable:hover {
   background: var(--bg-hover);
 }
 
-.settings-ui-row-icon {
+.settingsUiRowIcon {
   flex-shrink: 0;
   color: var(--text-secondary);
   display: flex;
@@ -104,7 +102,7 @@
   justify-content: center;
 }
 
-.settings-ui-row-body {
+.settingsUiRowBody {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -112,28 +110,28 @@
   gap: 4px;
 }
 
-.settings-ui-row-title {
+.settingsUiRowTitle {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   line-height: var(--line-height-ui);
 }
 
-.settings-ui-row-desc {
+.settingsUiRowDesc {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: var(--line-height-body);
 }
 
-.settings-ui-row-control {
+.settingsUiRowControl {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-/* Modern portal tooltip */
-.modern-select-tooltip {
+/* Modern select tooltip */
+.modernSelectTooltip {
   pointer-events: none;
   animation: tooltip-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -149,7 +147,7 @@
   }
 }
 
-.modern-select-tooltip-inner {
+.modernSelectTooltipInner {
   background: var(--bg-primary, #ffffff);
   border: 1px solid var(--border-subtle, #e5e7eb);
   color: var(--text-primary, #1f2937);
@@ -161,7 +159,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
-.modern-select-tooltip-arrow {
+.modernSelectTooltipArrow {
   position: absolute;
   bottom: -4px;
   left: 50%;
@@ -174,14 +172,20 @@
 }
 
 /* Dark mode theme support */
-html[data-theme="dark"] .modern-select-tooltip-inner {
+:global(html[data-theme="dark"]) .modernSelectTooltipInner {
   background: var(--bg-elevated, #1f2937);
   border-color: var(--border-subtle, #374151);
   color: var(--text-primary, #f9fafb);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-html[data-theme="dark"] .modern-select-tooltip-arrow {
+:global(html[data-theme="dark"]) .modernSelectTooltipArrow {
   background: var(--bg-elevated, #1f2937);
   border-color: var(--border-subtle, #374151);
+}
+
+.settingsUiRowLabel {
+  cursor: pointer;
+  display: block;
+  width: 100%;
 }

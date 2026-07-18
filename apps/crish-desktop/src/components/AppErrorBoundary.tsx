@@ -3,6 +3,7 @@
  * compact 模式用于工作区/面板内嵌，避免 min-height:100vh 撑破布局。
  */
 import React from 'react';
+import styles from './AppErrorBoundary.module.css';
 
 type Props = {
   children: React.ReactNode;
@@ -73,15 +74,15 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     return (
       <div
         className={
-          compact ? 'app-error-boundary app-error-boundary--compact' : 'app-error-boundary'
+          compact ? `${styles.appErrorBoundary} ${styles.appErrorBoundaryCompact}` : styles.appErrorBoundary
         }
       >
-        <div className={compact ? 'app-error-card app-error-card--compact' : 'app-error-card'}>
-          <div className="app-error-title">{title}</div>
-          <div className="app-error-msg" role="alert" title={msg}>
+        <div className={compact ? `${styles.appErrorCard} ${styles.appErrorCardCompact}` : styles.appErrorCard}>
+          <div className={styles.appErrorTitle}>{title}</div>
+          <div className={styles.appErrorMsg} role="alert" title={msg}>
             {msg}
           </div>
-          <div className="app-error-actions">
+          <div className={styles.appErrorActions}>
             {compact ? (
               <>
                 <button

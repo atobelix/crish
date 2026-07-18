@@ -40,6 +40,7 @@ import {
   type SessionSearchMatch,
 } from '../../api/sessionSearch';
 import { Tooltip } from '../settings/SettingsUI';
+import styles from './SidebarSessionList.module.css';
 
 /** 去重：同 id 只保留首次出现，避免 store 抖动产生幽灵双行 */
 function dedupeSessionsById(list: SessionState[]): SessionState[] {
@@ -286,7 +287,7 @@ const SessionRow = memo(function SessionRow({
   return (
     <li
       data-session-id={s.id}
-      className={`session-item-wrap ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? 'is-running' : ''}`}
+      className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''}`}
       style={{ minHeight: SIDEBAR_SESSION_ROW_HEIGHT }}
       role="presentation"
     >
@@ -303,7 +304,7 @@ const SessionRow = memo(function SessionRow({
         }
         // 活动行可聚焦；其余 -1，靠 ↑↓ 漫游（避免 Tab 扫过整表）
         tabIndex={sessionActive ? 0 : -1}
-        className={`session-item ${sessionActive ? 'active' : ''} ${isBranched ? 'branch-session' : ''} ${isRunning ? 'is-running' : ''} ${snippet ? 'has-search-snippet' : ''} ${isRenaming ? 'is-renaming' : ''}`}
+        className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${snippet ? styles.hasSearchSnippet : ''} ${isRenaming ? styles.isRenaming : ''}`}
         onClick={() => {
           if (isRenaming) return;
           selectThis();
@@ -353,7 +354,7 @@ const SessionRow = memo(function SessionRow({
         {isRenaming ? (
           <input
             ref={renameInputRef}
-            className="session-rename-input"
+            className={styles.sessionRenameInput}
             value={renameDraft}
             maxLength={48}
             aria-label="重命名会话"
@@ -373,20 +374,20 @@ const SessionRow = memo(function SessionRow({
         ) : (
           <>
             <Tooltip content={snippet ? `${displayText}\n${snippet}` : displayText}>
-              <span className="session-text-col">
-                <span className="session-text">{displayText}</span>
+              <span className={styles.sessionTextCol}>
+                <span className={styles.sessionText}>{displayText}</span>
                 {snippet ? (
-                  <span className="session-search-snippet" aria-hidden>
+                  <span className={styles.sessionSearchSnippet} aria-hidden>
                     {snippet}
                   </span>
                 ) : null}
               </span>
             </Tooltip>
-            <span className="session-trailing">
+            <span className={styles.sessionTrailing}>
               {isRunning ? (
                 <Tooltip content="处理中">
                   <span
-                    className="session-running-spinner"
+                    className={styles.sessionRunningSpinner}
                     role="status"
                     aria-label="处理中"
                   />
@@ -397,7 +398,7 @@ const SessionRow = memo(function SessionRow({
                   {timeLabel ? (
                     <Tooltip content={timeAbsolute || timeLabel}>
                       <time
-                        className="session-time"
+                        className={styles.sessionTime}
                         dateTime={timeDateTime}
                         aria-hidden
                         data-session-time={timeLabel}
@@ -410,7 +411,7 @@ const SessionRow = memo(function SessionRow({
                   <Tooltip content="更多操作">
                     <button
                       type="button"
-                      className="session-actions-btn"
+                      className={styles.sessionActionsBtn}
                       aria-label="更多操作"
                       aria-haspopup="menu"
                       tabIndex={-1}
@@ -468,7 +469,7 @@ function WindowedSessionUl({
   return (
     <ul
       ref={listRef}
-      className={`${className} session-list-windowed`}
+      className={`${className} ${styles.sessionListWindowed}`}
       role="listbox"
       aria-label={ariaLabel}
       data-windowed="1"
@@ -480,7 +481,7 @@ function WindowedSessionUl({
     >
       {safe.topPad > 0 ? (
         <li
-          className="session-window-spacer"
+          className={styles.sessionWindowSpacer}
           style={{ height: safe.topPad }}
           aria-hidden
         />
@@ -488,7 +489,7 @@ function WindowedSessionUl({
       {slice.map((s) => renderRow(s))}
       {safe.bottomPad > 0 ? (
         <li
-          className="session-window-spacer"
+          className={styles.sessionWindowSpacer}
           style={{ height: safe.bottomPad }}
           aria-hidden
         />
@@ -854,7 +855,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
           setActiveDragItem({ type: 'session', sessionId, folderName });
           if (el) {
             dragOverlay = el.cloneNode(true) as HTMLDivElement;
-            dragOverlay.className = 'sidebar-drag-ghost';
+            dragOverlay.className = styles.sidebarDragGhost || 'sidebar-drag-ghost';
             dragOverlay.style.cssText = `position:fixed;width:${elRect?.width ?? 180}px;`;
             document.body.appendChild(dragOverlay);
           }
@@ -868,8 +869,8 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         if (!hoveredEl) return;
         const pinnedZone = pinnedZoneRef.current;
         const overPinned = pinnedZone
-          ? hoveredEl.closest('.pinned-drop-zone') ||
-            hoveredEl.closest('.pinned-list') ||
+          ? hoveredEl.closest('.' + styles.pinnedDropZone) ||
+            hoveredEl.closest('.' + styles.pinnedList) ||
             hoveredEl === pinnedZone
           : false;
         setDragOverPinned(!!overPinned);
@@ -975,7 +976,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   return (
     <div
       ref={sessionListRef}
-      className="sb-list-scroll"
+      className={styles.listScroll}
       data-shell-hidden={shellHiddenCount}
       data-session-input={inputListedCount}
       data-session-visible={visibleSessions.length}
@@ -996,33 +997,33 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       {/* 全局空态：搜索无命中 / 列表无会话 — 避免分区空提示堆叠 */}
       {isSearchEmpty ? (
         <div
-          className="sb-empty-hint"
+          className={styles.emptyHint}
           role="status"
           data-empty="search"
           style={{ padding: '16px 12px', textAlign: 'center' }}
         >
           <div style={{ fontWeight: 500, marginBottom: 4 }}>无匹配会话</div>
-          <div className="subtle">试试其他关键词，或清空搜索</div>
+          <div className={styles.subtle}>试试其他关键词，或清空搜索</div>
         </div>
       ) : null}
       {isAllEmpty ? (
         <div
-          className="sb-empty-hint"
+          className={styles.emptyHint}
           role="status"
           data-empty="all"
           style={{ padding: '16px 12px', textAlign: 'center' }}
         >
           <div style={{ fontWeight: 500, marginBottom: 4 }}>暂无会话</div>
-          <div className="subtle">点击右上角 + 新建对话</div>
+          <div className={styles.subtle}>点击右上角 + 新建对话</div>
         </div>
       ) : null}
 
       {/* 1) 置顶 */}
       {!isSearchEmpty && !isAllEmpty ? (
-        <section className="sb-section" aria-label="置顶会话">
+        <section className={styles.section} aria-label="置顶会话">
           <button
             type="button"
-            className="sb-section-label"
+            className={styles.sectionLabel}
             onClick={onTogglePinned}
             aria-expanded={!pinnedCollapsed}
             aria-controls="sb-pinned-zone"
@@ -1031,7 +1032,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             <span>置顶</span>
             <Lucide.ChevronDown
               size={14}
-              className={pinnedCollapsed ? 'chev-collapsed' : ''}
+              className={pinnedCollapsed ? styles.chevCollapsed : ''}
               aria-hidden
             />
           </button>
@@ -1039,20 +1040,20 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             <div
               id="sb-pinned-zone"
               ref={pinnedZoneRef}
-              className={`pinned-drop-zone ${dragOverPinned ? 'drag-over' : ''}`}
+              className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
             >
               {pinnedSessions.length > 0 ? (
                 <ul
-                  className="session-list pinned-list"
+                  className={`${styles.pinnedList} ${styles.folderSessions}`}
                   role="listbox"
                   aria-label="置顶会话列表"
                 >
                   {pinnedSessions.map((s) => renderSessionItem(s))}
                 </ul>
               ) : (
-                <div className="sb-empty-hint subtle" role="status">
+                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
                   {filterType === 'pinned'
-                    ? '还没有置顶的对话'
+                    ? '还没有置顶 of 对话'
                     : '置顶的对话会出现在这里'}
                 </div>
               )}
@@ -1063,16 +1064,16 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
       {/* 2) 项目 — 仅「全部」范围显示，避免「仅置顶」时空项目噪音 */}
       {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
-        <section className="sb-section" aria-label="项目">
+        <section className={styles.section} aria-label="项目">
           <div
-            className="sb-section-label-row"
+            className={styles.sectionLabelRow}
             onClick={onToggleProjectsSection}
             style={{ cursor: 'pointer' }}
           >
-            <div className="sb-section-label-left">
+            <div className={styles.sectionLabelLeft}>
               <button
                 type="button"
-                className="sb-section-label"
+                className={styles.sectionLabel}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleProjectsSection();
@@ -1083,17 +1084,17 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 <Lucide.ChevronDown
                   size={14}
                   className={
-                    projectsSectionCollapsed ? 'chev-collapsed' : ''
+                    projectsSectionCollapsed ? styles.chevCollapsed : ''
                   }
                   aria-hidden
                 />
               </button>
             </div>
-            <div className="sb-section-label-right">
+            <div className={styles.sectionLabelRight}>
               <Tooltip content="添加本地项目">
                 <button
                   type="button"
-                  className="sb-section-new"
+                  className={styles.sectionNew}
                   aria-label="添加本地项目"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1113,13 +1114,13 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 return (
                   <div
                     key={p.id}
-                    className="folder-group"
+                    className={styles.folderGroup}
                     data-folder-name={p.id}
                   >
-                    <div className="folder-header-row">
+                    <div className={styles.folderHeaderRow}>
                       <button
                         type="button"
-                        className="folder-header"
+                        className={styles.folderHeader}
                         aria-expanded={open}
                         onClick={() => {
                           onToggleProjectCollapsed(p.id);
@@ -1130,17 +1131,11 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                         ) : (
                           <Lucide.Folder size={14} strokeWidth={1.75} aria-hidden />
                         )}
-                        <span className="folder-name">{p.name}</span>
+                        <span className={styles.folderName}>{p.name}</span>
                         {sess.length > 0 ? (
                           <span
-                            className="folder-count"
+                            className={styles.folderCount}
                             aria-label={`${sess.length} 个会话`}
-                            style={{
-                              marginLeft: 4,
-                              fontSize: 'var(--font-size-xs, 11px)',
-                              color: 'var(--text-tertiary)',
-                              fontWeight: 500,
-                            }}
                           >
                             {sess.length}
                           </span>
@@ -1149,7 +1144,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                       <Tooltip content="在此项目新建对话">
                         <button
                           type="button"
-                          className="folder-new-session"
+                          className={styles.folderNewSession}
                           aria-label={`在 ${p.name} 新建对话`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1164,7 +1159,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                     </div>
                     {open && sess.length > 0 ? (
                       <ul
-                        className="session-list folder-sessions"
+                        className={`${styles.pinnedList} ${styles.folderSessions}`}
                         role="listbox"
                         aria-label={`${p.name} 会话`}
                       >
@@ -1175,7 +1170,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 );
               })}
               {projects.length === 0 && (
-                <div className="sb-empty-hint subtle" role="status">
+                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
                   点击分区旁 + 添加本地项目
                 </div>
               )}
@@ -1186,16 +1181,16 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
       {/* 3) 对话（可窗口化） */}
       {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
-        <section className="sb-section" aria-label="对话">
+        <section className={styles.section} aria-label="对话">
           <div
-            className="sb-section-label-row"
+            className={styles.sectionLabelRow}
             onClick={onToggleGeneral}
             style={{ cursor: 'pointer' }}
           >
-            <div className="sb-section-label-left">
+            <div className={styles.sectionLabelLeft}>
               <button
                 type="button"
-                className="sb-section-label"
+                className={styles.sectionLabel}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleGeneral();
@@ -1205,14 +1200,14 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 <span>对话</span>
                 <Lucide.ChevronDown
                   size={14}
-                  className={generalCollapsed ? 'chev-collapsed' : ''}
+                  className={generalCollapsed ? styles.chevCollapsed : ''}
                   aria-hidden
                 />
               </button>
               <Tooltip content="排序与过滤">
                 <button
                   type="button"
-                  className="sb-section-sort"
+                  className={styles.sectionSort}
                   aria-label="排序与过滤"
                   aria-haspopup="menu"
                   onClick={(e) => {
@@ -1224,11 +1219,11 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 </button>
               </Tooltip>
             </div>
-            <div className="sb-section-label-right">
+            <div className={styles.sectionLabelRight}>
               <Tooltip content="新建对话">
                 <button
                   type="button"
-                  className="sb-section-new"
+                  className={styles.sectionNew}
                   aria-label="新建对话"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1247,12 +1242,12 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                   sessions={generalSessions}
                   range={generalRenderRange}
                   listRef={generalListRef}
-                  className="session-list folder-sessions"
+                  className={`${styles.pinnedList} ${styles.folderSessions}`}
                   renderRow={renderSessionItem}
                   ariaLabel="对话列表"
                 />
               ) : (
-                <div className="sb-empty-hint subtle" role="status">
+                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
                   不在项目中的对话会出现在这里
                 </div>
               )}

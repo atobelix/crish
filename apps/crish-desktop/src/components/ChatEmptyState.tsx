@@ -13,6 +13,7 @@
  * - CTA 文案只走 resolveChatEmptyActionLabel 中文标签
  */
 import React, { useId } from 'react';
+import styles from './ChatEmptyState.module.css';
 import * as Lucide from 'lucide-react';
 import {
   CHAT_EMPTY_QUICK_PROMPTS,
@@ -72,7 +73,7 @@ function EmptyIcon({ kind }: { kind: ChatEmptyKind }) {
   const common = {
     size: 22 as const,
     strokeWidth: 1.5 as const,
-    className: 'chat-empty-icon',
+    className: styles.chatEmptyIcon,
     'aria-hidden': true as const,
   };
   // 三态图标互不相同，辅助扫视（文案标题已区分）
@@ -105,8 +106,7 @@ function projectDisplayName(
 /** 将快捷 prompt 填入后聚焦主列输入框（避免全局 query 误伤其它 textarea） */
 function focusChatComposer(): void {
   const scope =
-    document.querySelector<HTMLElement>('.chat-body') ??
-    document.querySelector<HTMLElement>('.chat-doc-flow') ??
+    document.querySelector<HTMLElement>('[data-main-surface="chat"]') ??
     document.body;
   const ta =
     scope.querySelector<HTMLTextAreaElement>(
@@ -217,9 +217,16 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   const engineOkAttr =
     engineOk === false ? 'false' : engineOk === true ? 'true' : 'unknown';
 
+  const kindClass =
+    kind === 'no-session'
+      ? styles.noSession
+      : kind === 'filter-empty'
+      ? styles.filterEmpty
+      : styles.sessionEmpty;
+
   return (
     <div
-      className={`chat-empty-state chat-empty-state--${kind}`}
+      className={`${styles.chatEmptyState} ${kindClass}`}
       data-empty-kind={kind}
       data-primary-action={primaryAction ?? 'none'}
       data-show-project-bar={showProjectBar ? 'true' : 'false'}
@@ -236,20 +243,20 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       aria-describedby={describedBy}
     >
       {showIcon ? (
-        <div className="chat-empty-icon-wrap" aria-hidden>
+        <div className={styles.chatEmptyIconWrap} aria-hidden>
           <EmptyIcon kind={kind} />
         </div>
       ) : null}
 
       {kind === 'session-empty' ? (
-        <div className="chat-empty-hero">
-          <h3 id={titleId} className="chat-empty-title chat-empty-title--hero">
+        <div className={styles.chatEmptyHero}>
+          <h3 id={titleId} className={`${styles.chatEmptyTitle} ${styles.chatEmptyTitleHero}`}>
             我们该在
             {showProjectBar && onShowProjectPicker ? (
-              <div className="chat-empty-project-inline" data-empty-region="project-bar">
+              <div className={styles.chatEmptyProjectInline} data-empty-region="project-bar">
                 <button
                   type="button"
-                  className="chat-empty-project-btn chat-empty-project-btn--inline"
+                  className={`${styles.chatEmptyProjectBtnInline}`}
                   aria-expanded={showProjectPicker}
                   aria-haspopup="menu"
                   aria-label={
@@ -274,19 +281,19 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 ) : null}
               </div>
             ) : (
-              <span className="chat-empty-project-text"> {projectName} </span>
+              <span className={styles.chatEmptyProjectText}> {projectName} </span>
             )}
             中处理什么？
           </h3>
         </div>
       ) : (
-        <h3 id={titleId} className="chat-empty-title">
+        <h3 id={titleId} className={styles.chatEmptyTitle}>
           {copy.title}
         </h3>
       )}
 
       {copy.sub ? (
-        <p id={subId} className="chat-empty-sub">
+        <p id={subId} className={styles.chatEmptySub}>
           {copy.sub}
         </p>
       ) : null}
@@ -294,7 +301,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       {shellCue ? (
         <p
           id={cueId}
-          className="chat-empty-sub"
+          className={styles.chatEmptySub}
           data-empty-region="shell-cue"
           data-shell-cue-code={shellCue.code}
           style={{ marginTop: -12, marginBottom: 12, fontSize: 'var(--font-size-sm)' }}
@@ -306,7 +313,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       {showAction && actionLabel && actionFn ? (
         <button
           type="button"
-          className="chat-empty-action"
+          className={styles.chatEmptyAction}
           data-empty-action={primaryAction}
           aria-label={actionLabel}
           onClick={actionFn}
@@ -320,11 +327,11 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         </button>
       ) : null}
 
-      {composer && <div className="chat-empty-composer-wrap">{composer}</div>}
+      {composer && <div className={styles.chatEmptyComposerWrap}>{composer}</div>}
 
       {showPrompts && onSetChatInput ? (
         <div
-          className="chat-empty-prompts"
+          className={styles.chatEmptyPrompts}
           role="list"
           data-empty-region="quick-prompts"
           aria-label="快捷提示"
@@ -333,7 +340,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             <button
               key={item.label}
               type="button"
-              className="quick-prompt-card"
+              className={styles.quickPromptCard}
               role="listitem"
               data-quick-prompt={item.label}
               aria-label={`填入提示：${item.label}`}

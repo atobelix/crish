@@ -19,6 +19,7 @@ import {
 import { isDemoMode } from '../api/appMode';
 import { clientApi, type McpServer } from '../api/clientApi';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './McpSettingsTab.module.css';
 import { SettingsPage } from './settings/SettingsUI';
 
 type Props = {
@@ -359,7 +360,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     : EMPTY_LIVE_HINT_UNCONFIGURED;
 
   const toolbar = (
-    <div className="mcp-toolbar" role="toolbar" aria-label="扩展服务工具栏">
+    <div className={`${styles.mcpToolbar} mcp-toolbar`} role="toolbar" aria-label="扩展服务工具栏">
       <button
         type="button"
         className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -392,7 +393,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         </button>
       </div>
       <input
-        className="settings-field-input settings-field-input--sm mcp-search"
+        className={`settings-field-input settings-field-input--sm ${styles.mcpSearch} mcp-search`}
         placeholder="搜索名称、标识…"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
@@ -424,9 +425,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   const renderTools = (srv: McpServerInfo, panelId: string) => {
     const toolN = srv.toolCount ?? srv.tools.length;
     return (
-      <div className="mcp-tools" id={panelId} role="region" aria-label={`${srv.name} 的工具`}>
+      <div className={`${styles.mcpTools} mcp-tools`} id={panelId} role="region" aria-label={`${srv.name} 的工具`}>
         {srv.tools.length === 0 ? (
-          <div className="mcp-tools-empty" role="status">
+          <div className={`${styles.mcpToolsEmpty} mcp-tools-empty`} role="status">
             {toolN > 0 ? `工具 ${toolN}（未返回名称）` : '暂无工具'}
           </div>
         ) : (
@@ -436,7 +437,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                 <Lucide.Wrench size={12} aria-hidden />
                 <button
                   type="button"
-                  className="mcp-inline-copy"
+                  className={`${styles.mcpInlineCopy} mcp-inline-copy`}
                   title="复制工具名"
                   aria-label={`复制工具名 ${t}`}
                   onClick={() => void handleCopy(t)}
@@ -447,11 +448,11 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             ))}
           </ul>
         )}
-        <div className="mcp-card-id">
+        <div className={`${styles.mcpCardId} mcp-card-id`}>
           标识{' '}
           <button
             type="button"
-            className="mcp-inline-copy"
+            className={`${styles.mcpInlineCopy} mcp-inline-copy`}
             title="复制标识"
             aria-label={`复制标识 ${srv.id}`}
             onClick={() => void handleCopy(srv.id)}
@@ -466,7 +467,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   const renderFilterEmpty = (hasAny: boolean) => {
     if (loading) {
       return (
-        <div className="mcp-empty-line" role="status" aria-live="polite" aria-busy="true">
+        <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite" aria-busy="true">
           <span>加载中…</span>
         </div>
       );
@@ -474,7 +475,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     if (!hasAny) return null;
     if (!filterActive) return null;
     return (
-      <div className="mcp-empty-line" role="status" aria-live="polite" title={EMPTY_FILTER_HINT}>
+      <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite" title={EMPTY_FILTER_HINT}>
         <span>无匹配</span>
         <button
           type="button"
@@ -495,11 +496,11 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       <SettingsPage
         title="扩展服务"
         meta={
-          <div className="mcp-head-stats">
-            <span className="mcp-status-pill is-demo" aria-live="polite">
+          <div className={`${styles.mcpHeadStats} mcp-head-stats`}>
+            <span className={`${styles.mcpStatusPill} mcp-status-pill is-demo`} aria-live="polite">
               演示模式
             </span>
-            <span className="mcp-status-pill" aria-live="polite">
+            <span className={`${styles.mcpStatusPill} mcp-status-pill`} aria-live="polite">
               {demoEnabledCount} 个启用 / 共 {demoServers.length} 个
             </span>
           </div>
@@ -508,8 +509,8 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         {toolbar}
 
         {showAdd ? (
-          <div className="mcp-add-box" role="form" aria-label="注册演示服务">
-            <div className="mcp-add-row">
+          <div className={`${styles.mcpAddBox} mcp-add-box`} role="form" aria-label="注册演示服务">
+            <div className={`${styles.mcpAddRow} mcp-add-row`}>
               <input
                 className="settings-field-input settings-field-input--sm"
                 value={newName}
@@ -549,7 +550,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                 </>
               ) : (
                 <input
-                  className="settings-field-input settings-field-input--sm mcp-add-url"
+                  className={`settings-field-input settings-field-input--sm ${styles.mcpAddUrl} mcp-add-url`}
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                   placeholder="端点 URL"
@@ -580,7 +581,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         ) : null}
 
         <div
-          className="mcp-list"
+          className={`${styles.mcpList} mcp-list`}
           role="list"
           aria-labelledby={listLabelId}
           aria-label="服务列表"
@@ -590,31 +591,31 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             const on = demoEnabled[srv.id] !== false;
             const typeTitle = transportTitle(srv.type);
             return (
-              <div key={srv.id} className="mcp-row" role="listitem">
-                <div className="mcp-row-main">
+              <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
+                <div className={`${styles.mcpRowMain} mcp-row-main`}>
                   <span
-                    className={`mcp-dot kind-${on ? 'ok' : 'idle'}`}
+                    className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'}`}
                     aria-hidden
                     title={on ? '已启用' : '已禁用'}
                   />
                   <button
                     type="button"
-                    className="mcp-row-name mcp-inline-copy"
+                    className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
                     title={`复制标识 ${srv.id}`}
                     aria-label={`复制标识 ${srv.name}`}
                     onClick={() => void handleCopy(srv.id)}
                   >
                     {srv.name}
                   </button>
-                  <span className={`mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
+                  <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
                     {on ? '启用' : '禁用'}
                   </span>
-                  <span className="mcp-row-meta" title={typeTitle}>
+                  <span className={`${styles.mcpRowMeta} mcp-row-meta`} title={typeTitle}>
                     {transportLabel(srv.type)}
                     {srv.command ? ` · ${srv.command}` : ''}
                     {srv.url ? ` · ${srv.url}` : ''}
                   </span>
-                  <div className="mcp-row-actions">
+                  <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                     <input
                       type="checkbox"
                       className="settings-switch"
@@ -640,7 +641,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
 
           {!loading && demoServers.length === 0 ? (
             <div
-              className="mcp-empty-line"
+              className={`${styles.mcpEmptyLine} mcp-empty-line`}
               role="status"
               aria-live="polite"
               title={EMPTY_DEMO_HINT}
@@ -682,9 +683,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     <SettingsPage
       title="扩展服务"
       meta={
-        <div className="mcp-head-stats">
+        <div className={`${styles.mcpHeadStats} mcp-head-stats`}>
           <span
-            className={`mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
+            className={`${styles.mcpStatusPill} mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
             title={
               status?.configured
                 ? '引擎已配置扩展服务'
@@ -695,28 +696,28 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           </span>
           {status?.readiness ? (
             <span
-              className={`mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
+              className={`${styles.mcpStatusPill} mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
               title={`就绪：${mcpStateLabel(status.readiness)}`}
             >
               {mcpStateLabel(status.readiness)}
             </span>
           ) : null}
-          <span className="mcp-status-pill" title={`共 ${servers.length} 个服务`}>
+          <span className={`${styles.mcpStatusPill} mcp-status-pill`} title={`共 ${servers.length} 个服务`}>
             服务 {servers.length}
           </span>
           <span
-            className={`mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
+            className={`${styles.mcpStatusPill} mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
             title={canStartStop ? '可从界面启动/停止' : stopHint}
           >
             {canStartStop ? '启停可用' : '启停不可用'}
           </span>
           {filterActive ? (
-            <span className="mcp-status-pill" title="当前筛选结果数">
+            <span className={`${styles.mcpStatusPill} mcp-status-pill`} title="当前筛选结果数">
               显示 {filtered.length}
             </span>
           ) : null}
           {loading ? (
-            <span className="mcp-status-pill" aria-busy="true">
+            <span className={`${styles.mcpStatusPill} mcp-status-pill`} aria-busy="true">
               刷新中…
             </span>
           ) : null}
@@ -727,13 +728,13 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       {toolbar}
 
       {error ? (
-        <div className="mcp-error-line" role="alert" title={error}>
+        <div className={`${styles.mcpErrorLine} mcp-error-line`} role="alert" title={error}>
           {error}
         </div>
       ) : null}
 
       <div
-        className="mcp-list"
+        className={`${styles.mcpList} mcp-list`}
         role="list"
         aria-labelledby={listLabelId}
         aria-label="服务列表"
@@ -754,36 +755,36 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           const tpTitle = transportTitle(srv.transport);
 
           return (
-            <div key={srv.id} className="mcp-row" role="listitem">
-              <div className="mcp-row-main">
+            <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
+              <div className={`${styles.mcpRowMain} mcp-row-main`}>
                 <span
-                  className={`mcp-dot kind-${kind}`}
+                  className={`${styles.mcpDot} mcp-dot kind-${kind}`}
                   aria-hidden
                   title={mcpStateLabel(srv.state)}
                 />
                 <button
                   type="button"
-                  className="mcp-row-name mcp-inline-copy"
+                  className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
                   title={`复制标识 ${srv.id}`}
                   aria-label={`复制标识 ${srv.name}`}
                   onClick={() => void handleCopy(srv.id)}
                 >
                   {srv.name}
                 </button>
-                <span className={`mcp-state-badge kind-${kind}`} title={mcpStateLabel(srv.state)}>
+                <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`} title={mcpStateLabel(srv.state)}>
                   {mcpStateLabel(srv.state)}
                 </span>
-                <span className="mcp-row-meta" title={tpTitle}>
+                <span className={`${styles.mcpRowMeta} mcp-row-meta`} title={tpTitle}>
                   {tp ? `${tp} · ` : ''}
                   工具 {toolN}
                   {srv.lastError ? (
-                    <span className="mcp-row-err" title={srv.lastError}>
+                    <span className={`${styles.mcpRowErr} mcp-row-err`} title={srv.lastError}>
                       {' '}
                       · 错误
                     </span>
                   ) : null}
                 </span>
-                <div className="mcp-row-actions">
+                <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                   <button
                     type="button"
                     className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -849,7 +850,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
 
         {!loading && servers.length === 0 ? (
           <div
-            className="mcp-empty-line"
+            className={`${styles.mcpEmptyLine} mcp-empty-line`}
             role="status"
             aria-live="polite"
             title={liveEmptyHint}

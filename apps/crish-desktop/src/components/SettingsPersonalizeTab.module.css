@@ -1,0 +1,31 @@
+.colorInput {
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+}
+
+.adjustContainer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adjustSlider {
+  cursor: pointer;
+  accent-color: var(--text-primary);
+  width: 100px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.adjustLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+  font-weight: 600;
+}

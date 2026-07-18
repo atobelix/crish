@@ -17,6 +17,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 import { Tooltip } from './settings/SettingsUI';
+import styles from './PermissionModeMenu.module.css';
 import {
   PERMISSION_MODES,
   coercePermissionMode,
@@ -32,7 +33,7 @@ type Props = {
 };
 
 const ITEM_SEL =
-  'button.perm-menu-item:not(:disabled):not([aria-disabled="true"])';
+  'button[class*="permMenuItem"]:not(:disabled):not([aria-disabled="true"])';
 
 /** 紧凑菜单宽 */
 const MENU_WIDTH = 120;
@@ -194,42 +195,43 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        className={`perm-pill${open ? ' is-open' : ''}`}
-        title={pillTitle}
-        aria-label={triggerLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        data-density="compact"
-        data-perm-mode={mode}
-        onClick={() => {
-          if (open) {
-            // 再次点击 pill 关闭：焦点已在钮上，无需再 restore
-            restoreOnCloseRef.current = false;
-            setOpen(false);
-          } else {
-            setOpen(true);
-          }
-        }}
-      >
-        <span
-          className="perm-pill-dot"
-          aria-hidden
-          style={{ background: meta.accent }}
-        />
-        <span className="perm-pill-label">{meta.shortLabel}</span>
-        <Lucide.ChevronDown size={12} className="perm-pill-chev" aria-hidden />
-      </button>
+      <Tooltip content={pillTitle}>
+        <button
+          ref={btnRef}
+          type="button"
+          className={`${styles.permPill}${open ? ` ${styles.isOpen}` : ''}`}
+          aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          data-density="compact"
+          data-perm-mode={mode}
+          onClick={() => {
+            if (open) {
+              // 再次点击 pill 关闭：焦点已在钮上，无需再 restore
+              restoreOnCloseRef.current = false;
+              setOpen(false);
+            } else {
+              setOpen(true);
+            }
+          }}
+        >
+          <span
+            className={styles.permPillDot}
+            aria-hidden
+            style={{ background: meta.accent }}
+          />
+          <span className={styles.permPillLabel}>{meta.shortLabel}</span>
+          <Lucide.ChevronDown size={12} className={styles.permPillChev} aria-hidden />
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         createPortal(
           <div
             ref={menuRef}
             id={menuId}
-            className="perm-menu"
+            className={styles.permMenu}
             role="menu"
             aria-label="权限"
             aria-orientation="vertical"
@@ -252,7 +254,7 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
                   <button
                     id={itemId}
                     type="button"
-                    className={`perm-menu-item${active ? ' is-selected' : ''}`}
+                    className={`${styles.permMenuItem}${active ? ` ${styles.isSelected}` : ''}`}
                     role="menuitemradio"
                     aria-checked={active}
                     tabIndex={-1}
@@ -262,9 +264,9 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
                     }}
                     onClick={() => selectMode(m.id)}
                   >
-                    <span className="perm-menu-title">{m.label}</span>
+                    <span className={styles.permMenuTitle}>{m.label}</span>
                     {active ? (
-                      <Lucide.Check size={13} className="perm-menu-check" aria-hidden />
+                      <Lucide.Check size={13} className={styles.permMenuCheck} aria-hidden />
                     ) : null}
                   </button>
                 </Tooltip>

@@ -17,6 +17,7 @@ import {
 import { getWorkspacePath } from '../api/projectStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { SettingsSelect } from './SettingsSelect';
+import styles from './SettingsPersonalizeTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
@@ -326,22 +327,13 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
             <>
               <SettingsRow
                 title="自定义背景色"
-                desc="自适应计算次级背景、悬浮与激活色彩"
                 control={
                   <input
                     type="color"
                     value={personalization.customBg}
                     onChange={(e) => updatePersonalization({ customBg: e.target.value })}
                     disabled={!ready}
-                    style={{
-                      cursor: 'pointer',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '6px',
-                      width: '40px',
-                      height: '24px',
-                      padding: 0,
-                      background: 'transparent',
-                    }}
+                    className={styles.colorInput}
                   />
                 }
               />
@@ -354,15 +346,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
                     value={personalization.customFg}
                     onChange={(e) => updatePersonalization({ customFg: e.target.value })}
                     disabled={!ready}
-                    style={{
-                      cursor: 'pointer',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '6px',
-                      width: '40px',
-                      height: '24px',
-                      padding: 0,
-                      background: 'transparent',
-                    }}
+                    className={styles.colorInput}
                   />
                 }
               />
@@ -373,7 +357,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
             title="字号大小微调"
             desc={`基准字号为 14px，当前字号: ${14 + personalization.fontSizeAdjust}px`}
             control={
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className={styles.adjustContainer}>
                 <input
                   type="range"
                   min="-2"
@@ -382,15 +366,9 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
                   value={personalization.fontSizeAdjust}
                   onChange={(e) => updatePersonalization({ fontSizeAdjust: parseInt(e.target.value, 10) })}
                   disabled={!ready}
-                  style={{
-                    cursor: 'pointer',
-                    accentColor: 'var(--text-primary)',
-                    width: '100px',
-                    height: '4px',
-                    borderRadius: '2px',
-                  }}
+                  className={styles.adjustSlider}
                 />
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '40px', textAlign: 'right', fontWeight: 600 }}>
+                <span className={styles.adjustLabel}>
                   {personalization.fontSizeAdjust >= 0 ? '+' : ''}{personalization.fontSizeAdjust}px
                 </span>
               </div>
@@ -432,7 +410,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
           />
 
           <SettingsRow
-            title={<label htmlFor={tabLabelId} style={{ cursor: 'pointer', display: 'block', width: '100%' }}>合并右侧面板</label>}
+            title={<label htmlFor={tabLabelId} className="settings-ui-row-label">合并右侧面板</label>}
             desc="总览、文件等收成标签"
             control={
               <input

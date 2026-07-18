@@ -39,11 +39,13 @@ import {
 import { useLayoutStore } from '../store/layoutStore';
 import { setComposerSeed } from '../api/composerSeed';
 import { closeSettings } from '../store/settingsUiStore';
+import styles from './SettingsScheduleTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 import { SettingsSelect } from './SettingsSelect';
 
@@ -367,7 +369,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
         aria-busy={workflowsLoading || wfBusy}
         aria-label="定时任务"
       >
-        <div className="sched-settings-toolbar" role="toolbar" aria-label="筛选与新建" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div className={`sched-settings-toolbar ${styles.toolbar}`} role="toolbar" aria-label="筛选与新建">
           <div className="settings-choice-group" role="group" aria-label="任务筛选">
             {FILTER_OPTIONS.map((opt) => {
               const active = filter === opt.id;
@@ -597,42 +599,45 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
                       </span>
                     }
                     control={
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input
-                          type="checkbox"
-                          className="settings-switch"
-                          checked={enabled}
-                          disabled={wfBusy}
-                          title={enabled ? '暂停' : '启用'}
-                          aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
-                          onChange={() => {
-                            void handleToggle(w);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          title="立即执行"
-                          aria-label={`立即执行 ${w.name}`}
-                          disabled={wfBusy}
-                          onClick={() => {
-                            void handleTrigger(w);
-                          }}
-                        >
-                          <Lucide.Zap size={16} aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          title="删除"
-                          aria-label={`删除 ${w.name}`}
-                          disabled={wfBusy}
-                          onClick={() => {
-                            void handleDelete(w);
-                          }}
-                        >
-                          <Lucide.Trash2 size={16} aria-hidden />
-                        </button>
+                      <div className={styles.controlGroup}>
+                        <Tooltip content={enabled ? '暂停' : '启用'}>
+                          <input
+                            type="checkbox"
+                            className="settings-switch"
+                            checked={enabled}
+                            disabled={wfBusy}
+                            aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
+                            onChange={() => {
+                              void handleToggle(w);
+                            }}
+                          />
+                        </Tooltip>
+                        <Tooltip content="立即执行">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            aria-label={`立即执行 ${w.name}`}
+                            disabled={wfBusy}
+                            onClick={() => {
+                              void handleTrigger(w);
+                            }}
+                          >
+                            <Lucide.Zap size={16} aria-hidden />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="删除">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            aria-label={`删除 ${w.name}`}
+                            disabled={wfBusy}
+                            onClick={() => {
+                              void handleDelete(w);
+                            }}
+                          >
+                            <Lucide.Trash2 size={16} aria-hidden />
+                          </button>
+                        </Tooltip>
                       </div>
                     }
                   />

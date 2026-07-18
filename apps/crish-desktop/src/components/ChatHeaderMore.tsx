@@ -7,6 +7,7 @@
  * 无活动会话时不渲染导出项（无幽灵动作）。
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import styles from './ChatHeaderMore.module.css';
 import * as Lucide from 'lucide-react';
 import { emitUiEvent } from '../api/uiEvents';
 
@@ -15,7 +16,7 @@ export type ChatHeaderMoreProps = {
   canExport?: boolean;
 };
 
-const ITEM_SEL = 'button.chat-more-item:not(:disabled):not([aria-disabled="true"])';
+const ITEM_SEL = 'button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])';
 
 function listMenuItems(root: HTMLElement | null): HTMLButtonElement[] {
   if (!root) return [];
@@ -132,14 +133,14 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
 
   return (
     <div
-      className={`chat-header-more-wrap chat-more-wrap${open ? ' is-open' : ''}`}
+      className={`${styles.moreWrap} ${open ? styles.isOpen : ''}`}
       ref={wrapRef}
       data-density="compact"
     >
       <button
         ref={triggerRef}
         type="button"
-        className={`chat-header-more-btn${open ? ' is-open' : ''}`}
+        className={`${styles.moreBtn} ${open ? styles.isOpen : ''}`}
         title="更多操作"
         aria-label={triggerLabel}
         aria-haspopup="menu"
@@ -162,7 +163,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
         <div
           id={menuId}
           ref={menuRef}
-          className="chat-more-menu chat-header-more-menu"
+          className={styles.moreMenu}
           role="menu"
           aria-label="更多操作"
           aria-orientation="vertical"
@@ -173,7 +174,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
           <button
             id={searchItemId}
             type="button"
-            className="chat-more-item"
+            className={styles.moreItem}
             role="menuitem"
             tabIndex={-1}
             title="在本会话消息中搜索"
@@ -188,7 +189,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
             <button
               id={exportItemId}
               type="button"
-              className="chat-more-item"
+              className={styles.moreItem}
               role="menuitem"
               tabIndex={-1}
               title="导出当前会话为 Markdown"

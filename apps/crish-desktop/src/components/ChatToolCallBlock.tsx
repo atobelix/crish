@@ -3,6 +3,7 @@
  * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
  */
 import React, { Suspense, lazy, useState } from 'react';
+import styles from './ChatToolCallBlock.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
 import { ApprovalAskCard } from './ApprovalAskCard';
@@ -97,29 +98,29 @@ function findAgentForTool(
 
 function renderGitDiff(diff: FileDiff, onOpenDiff: (diff: FileDiff) => void) {
   return (
-    <div className="git-diff-card" key={diff.filePath}>
-      <div className="git-diff-card-header" onClick={() => onOpenDiff(diff)}>
-        <div className="git-diff-file-info">
+    <div className={styles.gitDiffCard} key={diff.filePath}>
+      <div className={styles.gitDiffCardHeader} onClick={() => onOpenDiff(diff)}>
+        <div className={styles.gitDiffFileInfo}>
           <Lucide.FileCode size={16} style={{ color: 'var(--accent-color)' }} />
-          <span className="git-diff-filename">{diff.filePath}</span>
-          <span className="git-diff-preview-tag">在右侧查看</span>
+          <span className={styles.gitDiffFilename}>{diff.filePath}</span>
+          <span className={styles.gitDiffPreviewTag}>在右侧查看</span>
         </div>
-        <div className="git-diff-badge">
-          <span className="git-diff-add">+{diff.additions}</span>
-          <span className="git-diff-del">-{diff.deletions}</span>
+        <div className={styles.gitDiffBadge}>
+          <span className={styles.gitDiffAdd}>+{diff.additions}</span>
+          <span className={styles.gitDiffDel}>-{diff.deletions}</span>
         </div>
       </div>
-      <div className="git-diff-lines-container">
+      <div className={styles.gitDiffLinesContainer}>
         {diff.changes.slice(0, 8).map((change, i) => (
-          <div key={i} className={`git-diff-line-row ${change.type}`}>
-            <div className="line-num-col">
+          <div key={i} className={`${styles.gitDiffLineRow} ${styles[change.type] || change.type}`}>
+            <div className={styles.lineNumCol}>
               {change.type === 'addition' ? '+' : change.type === 'deletion' ? '-' : ' '}
             </div>
-            <pre className="line-content">{change.content}</pre>
+            <pre className={styles.lineContent}>{change.content}</pre>
           </div>
         ))}
         {diff.changes.length > 8 && (
-          <div className="git-diff-more-indicator" onClick={() => onOpenDiff(diff)}>
+          <div className={styles.gitDiffMoreIndicator} onClick={() => onOpenDiff(diff)}>
             还有 {diff.changes.length - 8} 行 · 点击在右侧查看完整 diff
           </div>
         )}
@@ -180,27 +181,27 @@ function ToolResultBody({
   return (
     <div
       id={bodyId}
-      className="tool-result-body"
+      className={styles.toolResultBody}
       role="region"
       aria-label={`${statusZh}的工具输出`}
       data-empty={emptyBody ? 'true' : undefined}
     >
       {cmdLine ? (
-        <pre className="tool-result-pre tool-result-pre--cmd" aria-label="命令">
+        <pre className={`${styles.toolResultPre} ${styles.toolResultPreCmd}`} aria-label="命令">
           {cmdLine}
         </pre>
       ) : null}
       {emptyBody ? (
-        <pre className="tool-result-pre" aria-label="无输出">
+        <pre className={styles.toolResultPre} aria-label="无输出">
           {TOOL_EMPTY_OUTPUT_ZH}
         </pre>
       ) : null}
-      {!emptyBody && out ? <pre className="tool-result-pre">{out}</pre> : null}
+      {!emptyBody && out ? <pre className={styles.toolResultPre}>{out}</pre> : null}
       {budget.truncated ? (
-        <div className="tool-result-long-hint">
+        <div className={styles.toolResultLongHint}>
           <button
             type="button"
-            className="tool-result-hint-btn"
+            className={styles.toolResultHintBtn}
             onClick={(e) => {
               e.stopPropagation();
               setShowFullOutput(true);
@@ -211,10 +212,10 @@ function ToolResultBody({
         </div>
       ) : null}
       {longShell ? (
-        <div className="tool-result-long-hint">
+        <div className={styles.toolResultLongHint}>
           <button
             type="button"
-            className="tool-result-hint-btn"
+            className={styles.toolResultHintBtn}
             onClick={(e) => {
               e.stopPropagation();
               onOpenTerminal();
@@ -225,13 +226,13 @@ function ToolResultBody({
         </div>
       ) : null}
       {images.length > 0 && (
-        <div className="tool-result-images">
+        <div className={styles.toolResultImages}>
           {images.map((src, i) => (
             <img
               key={src}
               src={src}
               alt={`工具输出图片 ${i + 1}`}
-              className="tool-result-img"
+              className={styles.toolResultImg}
               loading="lazy"
             />
           ))}
@@ -284,7 +285,7 @@ function CompactToolRow({
     return (
       <div
         key={rowKey}
-        className="tool-row tool-row--approval is-pending"
+        className={`${styles.toolRow} ${styles.toolRowApproval} ${styles.isPending}`}
         data-tool-id={tc.id}
       >
         <ApprovalAskCard
@@ -311,14 +312,14 @@ function CompactToolRow({
       <Suspense
         key={String(rowKey)}
         fallback={
-          <div className="tool-row is-running">
-            <div className="tool-row-head tool-row-head--static">
-              <span className="tool-row-ico-slot" aria-hidden>
-                <span className="tool-row-live">
+          <div className={`${styles.toolRow} ${styles.isRunning}`}>
+            <div className={`${styles.toolRowHead} ${styles.toolRowHeadStatic}`}>
+              <span className={styles.toolRowIcoSlot} aria-hidden>
+                <span className={styles.toolRowLive}>
                   <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
                 </span>
               </span>
-              <span className="tool-row-summary">协作子任务…</span>
+              <span className={styles.toolRowSummary}>协作子任务…</span>
             </div>
           </div>
         }
@@ -368,10 +369,10 @@ function CompactToolRow({
     .join('，');
   const pathActions =
     pathClickable && filePath ? (
-      <span className="tool-path-actions" onClick={(e) => e.stopPropagation()}>
+      <span className={styles.toolPathActions} onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          className="tool-path-action"
+          className={styles.toolPathAction}
           title="在文件面板打开"
           onClick={() => onOpenPath(filePath)}
         >
@@ -379,7 +380,7 @@ function CompactToolRow({
         </button>
         <button
           type="button"
-          className="tool-path-action"
+          className={styles.toolPathAction}
           title="复制路径"
           onClick={() => {
             void navigator.clipboard.writeText(filePath);
@@ -394,10 +395,10 @@ function CompactToolRow({
   const renderSummary = () => {
     if (!pathClickable || !filePath || !pathLabel || !human.includes(pathLabel)) {
       return (
-        <span className="tool-row-summary" title={human}>
+        <span className={styles.toolRowSummary} title={human}>
           {human}
           {pathClickable && filePath && pathActions ? (
-            <span className="tool-path-wrap" style={{ marginLeft: 6 }}>
+            <span className={styles.toolPathWrap} style={{ marginLeft: 6 }}>
               {pathActions}
             </span>
           ) : null}
@@ -406,10 +407,10 @@ function CompactToolRow({
     }
     const idx = human.lastIndexOf(pathLabel);
     const link = (
-      <span className="tool-path-wrap">
+      <span className={styles.toolPathWrap}>
         <button
           type="button"
-          className="tool-path-link"
+          className={styles.toolPathLink}
           title={filePath}
           onClick={(e) => {
             e.stopPropagation();
@@ -423,13 +424,13 @@ function CompactToolRow({
     );
     if (idx < 0) {
       return (
-        <span className="tool-row-summary" title={filePath}>
+        <span className={styles.toolRowSummary} title={filePath}>
           {human} {link}
         </span>
       );
     }
     return (
-      <span className="tool-row-summary" title={filePath}>
+      <span className={styles.toolRowSummary} title={filePath}>
         {human.slice(0, idx)}
         {link}
         {human.slice(idx + pathLabel.length)}
@@ -449,7 +450,7 @@ function CompactToolRow({
     let inner: React.ReactNode;
     if (running) {
       inner = (
-        <span className="tool-row-live" aria-hidden>
+        <span className={styles.toolRowLive} aria-hidden>
           <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
         </span>
       );
@@ -483,7 +484,7 @@ function CompactToolRow({
       inner = <Lucide.CircleDot className={cls} size={sz} strokeWidth={sw} />;
     }
     return (
-      <span className="tool-row-ico-slot" aria-hidden>
+      <span className={styles.toolRowIcoSlot} aria-hidden>
         {inner}
       </span>
     );
@@ -491,7 +492,15 @@ function CompactToolRow({
 
   return (
     <div
-      className={`tool-row is-${tone}${isOpen ? ' is-open' : ' is-collapsed'}`}
+      className={`${styles.toolRow} ${
+        tone === 'running'
+          ? styles.isRunning
+          : tone === 'error'
+          ? styles.isError
+          : tone === 'pending'
+          ? styles.isPending
+          : ''
+      } ${isOpen ? styles.isOpen : styles.isCollapsed}`}
       key={rowKey}
       data-tool-id={tc.id}
       data-tool-label={human}
@@ -502,7 +511,7 @@ function CompactToolRow({
     >
       {/* 用 div 而非 button，避免路径操作按钮嵌套 button 报错 */}
       <div
-        className={`tool-row-head${canToggle ? '' : ' tool-row-head--static'}`}
+        className={`${styles.toolRowHead}${canToggle ? '' : ' ' + styles.toolRowHeadStatic}`}
         role={canToggle ? 'button' : undefined}
         tabIndex={canToggle ? 0 : undefined}
         aria-expanded={canToggle ? isOpen : undefined}
@@ -525,18 +534,18 @@ function CompactToolRow({
           }
         }}
       >
-        <span className="tool-row-head-main">
+        <span className={styles.toolRowHeadMain}>
           {toolIcon}
-          <span className="tool-row-text">
+          <span className={styles.toolRowText}>
             {/* 摘要行只保留人话意图；命令/±/状态放到展开体或 aria，避免一行堆太多标识 */}
             {renderSummary()}
           </span>
         </span>
-        <span className={`tool-row-chevron-slot ${canToggle ? 'is-toggle' : ''}`}>
+        <span className={`${styles.toolRowChevronSlot} ${canToggle ? styles.isToggle : ''}`}>
           {canToggle ? (
             <Lucide.ChevronRight
               size={12}
-              className={`tool-row-chevron ${isOpen ? 'rot' : ''}`}
+              className={`${styles.toolRowChevron} ${isOpen ? styles.rot : ''}`}
               aria-hidden
             />
           ) : null}
@@ -578,5 +587,5 @@ function renderToolStackItems(
 
 export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {
   const { items, msgId } = props;
-  return <div className="tool-stack">{renderToolStackItems(items, msgId, props)}</div>;
+  return <div className={styles.toolStack}>{renderToolStackItems(items, msgId, props)}</div>;
 };
