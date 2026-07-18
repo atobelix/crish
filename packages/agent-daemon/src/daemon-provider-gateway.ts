@@ -209,7 +209,7 @@ export class DaemonProviderGatewayController {
         selectedProviderId: this.lastPlan?.selectedRoute?.providerId ?? this.config.providerId,
         selectedEndpointSupport: this.lastPlan?.selectedRoute?.endpointSupport ?? this.config.endpoint,
         selectedStreamingSupport: this.lastPlan?.selectedRoute?.streamingSupport ?? streamingSupportFromConfig(this.config),
-        selectedCredentialSource: credentialSourceSnapshot(this.lastPlan),
+        ...(credentialSourceSnapshot(this.lastPlan) ? { selectedCredentialSource: credentialSourceSnapshot(this.lastPlan) } : {}),
         ...(this.lastPlan?.selectedRoute?.lastSuccess ? { lastSuccess: this.lastPlan.selectedRoute.lastSuccess as JsonObject } : {}),
         ...(this.lastPlan?.selectedRoute?.lastFailure ? { lastFailure: this.lastPlan.selectedRoute.lastFailure as JsonObject } : {}),
         ...(this.lastStatusAt ? { updatedAt: this.lastStatusAt } : {}),

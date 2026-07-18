@@ -937,13 +937,13 @@ export function validateProviderGatewayStatus(
   if ("selectedProviderId" in value) optionalString(value, "selectedProviderId", `${path}.selectedProviderId`, issues, { nonEmpty: true });
   if ("selectedEndpointSupport" in value) optionalEnum(value, "selectedEndpointSupport", `${path}.selectedEndpointSupport`, PROVIDER_ENDPOINTS, issues);
   if ("selectedStreamingSupport" in value) optionalString(value, "selectedStreamingSupport", `${path}.selectedStreamingSupport`, issues, { nonEmpty: true });
-  if ("selectedCredentialSource" in value && !isRecord(value.selectedCredentialSource)) {
+  if ("selectedCredentialSource" in value && value.selectedCredentialSource !== undefined && !isRecord(value.selectedCredentialSource)) {
     issues.push({ path: `${path}.selectedCredentialSource`, message: "Expected object" });
   }
-  if ("lastSuccess" in value && !isRecord(value.lastSuccess)) {
+  if ("lastSuccess" in value && value.lastSuccess !== undefined && !isRecord(value.lastSuccess)) {
     issues.push({ path: `${path}.lastSuccess`, message: "Expected object" });
   }
-  if ("lastFailure" in value && !isRecord(value.lastFailure)) {
+  if ("lastFailure" in value && value.lastFailure !== undefined && !isRecord(value.lastFailure)) {
     issues.push({ path: `${path}.lastFailure`, message: "Expected object" });
   }
   if ("updatedAt" in value) optionalString(value, "updatedAt", `${path}.updatedAt`, issues, { nonEmpty: true });
