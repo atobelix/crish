@@ -2,6 +2,7 @@
   "name": "crish",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Crish - Tauri Workbench and agent daemon runtime",
   "workspaces": [
     "apps/crish-desktop",
@@ -22,7 +23,7 @@
     "build:shared-types": "npm --workspace @crish/shared-types run build",
     "build:runtime": "npm --workspace @crish/agent-runtime run build",
     "build:orchestrator": "npm --workspace @crish/agent-orchestrator run build",
-    "build:packages": "npm run build:shared-types && npm run build:runtime && npm run build:orchestrator",
+    "build:packages": "npm run build:shared-types && npm --workspace @crish/shared-utils run build && npm --workspace @crish/decision-engine run build && npm run build:runtime && npm run build:orchestrator",
     "build:daemon": "npm run build:packages && npm --workspace @crish/agent-daemon run build",
     "build:daemon-binary": "node scripts/bundle-daemon.mjs",
     "build:product": "npm run build:daemon && npm run build:desktop && npm run build:daemon-binary",
@@ -40,12 +41,22 @@
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
     "test:desktop-helpers": "vitest run apps/crish-desktop/src/api apps/crish-desktop/src/store",
     "test": "vitest run",
-    "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\""
+    "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\"",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
   },
   "devDependencies": {
+    "@eslint/js": "^9.21.0",
     "@types/node": "^25.6.0",
     "esbuild": "^0.27.7",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.1",
     "tsc-alias": "^1.8.16",
+    "typescript-eslint": "^8.25.0",
     "tsx": "^4.22.4",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

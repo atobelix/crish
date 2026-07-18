@@ -79,6 +79,7 @@ reference/crish-desktop/
 # Agent runtime data
 .agent-runtime/
 .codex-tool-scratch/
+.firecrawl/
 
 # Rust build artifacts
 target-tauri-smoke/

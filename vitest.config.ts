@@ -7,6 +7,11 @@ export default defineConfig({
     include: [
       'packages/**/src/**/*.test.ts',
       'apps/crish-desktop/src/**/*.test.ts',
+      'apps/agent-workbench/src/**/*.test.ts',
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+    },
   },
 });

@@ -24,11 +24,33 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Lint check
+        run: npm run lint
       - name: Typecheck core packages (runtime/orchestrator/daemon/workbench/desktop)
         run: npm run check:core
       - name: Store type hygiene (no set as any in layoutStore)
         run: npm run check:store-types
-      - name: Unit tests (core packages)
-        run: npm run test:core
-      - name: Unit tests (desktop helpers)
-        run: npm run test:desktop-helpers
+      - name: Build packages
+        run: npm run build:packages
+      - name: Unit tests
+        run: npm run test
+
+  rust-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+      - name: Cargo check
+        run: cargo check --workspace
+      - name: Cargo clippy
+        run: cargo clippy --workspace -- -D warnings
