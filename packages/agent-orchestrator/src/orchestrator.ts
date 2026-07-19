@@ -1,5 +1,8 @@
 import type { JsonObject, AgentEvent, AgentMessage, DiagnosticRecord } from "@crish/shared-types";
-import { compactJsonObject, isRecord, clone, BoundedMap, RingBuffer } from "@crish/shared-utils";
+import {
+  compactJsonObject, isRecord, clone, BoundedMap, RingBuffer,
+  MAX_ORCHESTRATOR_SESSIONS, MAX_ORCHESTRATOR_RUNS, MAX_ORCHESTRATOR_PENDING_INPUTS, MAX_ORCHESTRATOR_DIAGNOSTICS, MAX_ORCHESTRATOR_EVENTS,
+} from "@crish/shared-utils";
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type AgentOrchestratorOptions,
@@ -46,18 +49,14 @@ import {
 } from "./event-scan-goal-strategy";
 import { summarizeOrchestratorSessionEvents } from "./session-summary";
 
-/** Session 注册表上限：daemon 长跑场景下防止无界增长，超限按 FIFO 淘汰最旧 session。 */
-const MAX_ORCHESTRATOR_SESSIONS = 1000;
-/** Run 记录上限：包含已完成 run，供历史查询，超限按 FIFO 淘汰。 */
-const MAX_ORCHESTRATOR_RUNS = 5000;
-/** Pending input 上限：典型场景下 pending input 数量很少，设为 500 作为安全上限。 */
-const MAX_ORCHESTRATOR_PENDING_INPUTS = 500;
+/** @deprecated Use MAX_ORCHESTRATOR_SESSIONS from @crish/shared-utils */
+const _UNUSED = 0;
 
 export class AgentOrchestrator {
   private readonly sessions = new BoundedMap<string, OrchestratorSessionRecord>(MAX_ORCHESTRATOR_SESSIONS);
   private readonly runs = new BoundedMap<string, OrchestratorRunRecord>(MAX_ORCHESTRATOR_RUNS);
   private readonly pendingInputs = new BoundedMap<string, PendingInputRecord>(MAX_ORCHESTRATOR_PENDING_INPUTS);
-  private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly activeRuns = new BoundedMap<string, ActiveRun>(MAX_ORCHESTRATOR_RUNS);
   private readonly eventStore: OrchestratorEventStore;
   private sequence = 0;
 
@@ -67,7 +66,7 @@ export class AgentOrchestrator {
    * 当 storeEvent 写入失败时，错误信息会被推入此数组，
    * 外部可通过 diagnostics() 查询。
    */
-  private readonly diagnosticsRing: DiagnosticRecord[] = new Array(100);
+  private readonly diagnosticsRing: DiagnosticRecord[] = new Array(MAX_ORCHESTRATOR_DIAGNOSTICS);
   private diagCursor = 0;
 
   constructor(private readonly options: AgentOrchestratorOptions) {
@@ -311,7 +310,7 @@ export class AgentOrchestrator {
     this.runs.set(run.id, run);
 
     const queue = new AsyncQueue<OrchestratorEvent>();
-    const active: ActiveRun = { run, queue, pendingEmits: new Set(), emitChain: Promise.resolve() };
+    const active: ActiveRun = { run, queue, pendingEmits: new BoundedMap<Promise<void>, true>(MAX_ORCHESTRATOR_EVENTS), emitChain: Promise.resolve() };
     this.activeRuns.set(run.id, active);
 
     this.emitToRun(active, "run-queued", { run: run as unknown as JsonObject });
@@ -391,7 +390,7 @@ export class AgentOrchestrator {
     // 注意：必须完整回放所有事件以恢复所有 session/run 状态，
     // bootstrapFromTail 只读尾部 1000 条会丢失早期 session，故不在此使用。
     let maxSequence = this.sequence;
-    const replayStates = new Map<string, RestoredRunReplayState>();
+    const replayStates = new BoundedMap<string, RestoredRunReplayState>(MAX_ORCHESTRATOR_SESSIONS);
     const stream = streamingEventIterable(this.eventStore);
     if (stream) {
       for await (const event of stream) {
@@ -645,7 +644,7 @@ export class AgentOrchestrator {
     try {
       for await (const runtimeEvent of engine.run(prompt)) {
         if (active.persistenceFailed) break;
-        events.push(runtimeEvent);
+        if (events.length < MAX_ORCHESTRATOR_EVENTS) events.push(runtimeEvent);
         if (strategy.onRoundEvent) {
           roundContext = strategy.onRoundEvent(runtimeEvent, roundContext);
         }
@@ -819,7 +818,7 @@ export class AgentOrchestrator {
     }, () => {
       active.pendingEmits.delete(task);
     });
-    active.pendingEmits.add(task);
+    active.pendingEmits.set(task, true);
   }
 
   private async persistAndBroadcast(active: ActiveRun, event: OrchestratorEvent): Promise<void> {
@@ -880,7 +879,7 @@ export class AgentOrchestrator {
 
   private async waitForPendingEmits(active: ActiveRun): Promise<void> {
     while (active.pendingEmits.size > 0) {
-      const first = active.pendingEmits.values().next().value;
+      const first = active.pendingEmits.keys()[0];
       if (first) await first.catch(() => undefined);
     }
   }
@@ -916,15 +915,15 @@ export class AgentOrchestrator {
   }
 
   private pushDiagnostic(record: DiagnosticRecord): void {
-    this.diagnosticsRing[this.diagCursor % 100] = record;
+    this.diagnosticsRing[this.diagCursor % MAX_ORCHESTRATOR_DIAGNOSTICS] = record;
     this.diagCursor++;
   }
 
   getRecentDiagnostics(): DiagnosticRecord[] {
-    const count = Math.min(this.diagCursor, 100);
+    const count = Math.min(this.diagCursor, MAX_ORCHESTRATOR_DIAGNOSTICS);
     const result: DiagnosticRecord[] = [];
     for (let i = 0; i < count; i++) {
-      const idx = (this.diagCursor - count + i) % 100;
+      const idx = (this.diagCursor - count + i) % MAX_ORCHESTRATOR_DIAGNOSTICS;
       if (this.diagnosticsRing[idx]) result.push(this.diagnosticsRing[idx]);
     }
     return result;
@@ -935,7 +934,7 @@ export class AgentOrchestrator {
     return this.eventStore.readAll(afterSequence, options);
   }
 
-  private applyStoredEvent(event: OrchestratorEvent, replayStates: Map<string, RestoredRunReplayState>): void {
+  private applyStoredEvent(event: OrchestratorEvent, replayStates: BoundedMap<string, RestoredRunReplayState>): void {
     const restoredSession = sessionRecordFromPayload(event);
     if (restoredSession) {
       this.sessions.set(restoredSession.id, restoredSession);
@@ -1042,6 +1041,9 @@ export class InMemoryOrchestratorEventStore implements OrchestratorEventStore {
   private readonly metadata = inMemoryEventLogMetadata();
 
   append(event: OrchestratorEvent): void {
+    if (this.events.length >= MAX_ORCHESTRATOR_EVENTS) {
+      this.events.shift();
+    }
     this.events.push(event);
   }
 
@@ -1122,7 +1124,7 @@ function goalStoppedReasonFromRun(run: OrchestratorRunRecord): NonNullable<Orche
   return "blocked";
 }
 
-function replayStateForRun(states: Map<string, RestoredRunReplayState>, runId: string): RestoredRunReplayState {
+function replayStateForRun(states: BoundedMap<string, RestoredRunReplayState>, runId: string): RestoredRunReplayState {
   const existing = states.get(runId);
   if (existing) return existing;
   const created: RestoredRunReplayState = {};
@@ -1646,7 +1648,7 @@ function eventStoreFailureDetail(failedEvent: OrchestratorEvent, cause: unknown)
 interface ActiveRun {
   run: OrchestratorRunRecord;
   queue: AsyncQueue<OrchestratorEvent>;
-  pendingEmits: Set<Promise<void>>;
+  pendingEmits: BoundedMap<Promise<void>, true>;
   emitChain: Promise<void>;
   engine?: RunEngine;
   lastProviderFailure?: JsonObject;

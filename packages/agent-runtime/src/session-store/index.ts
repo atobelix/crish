@@ -21,6 +21,7 @@ import {
   type SessionBranchContext,
 } from "../state-machine";
 import type { AgentMessage } from "@crish/shared-types";
+import { BoundedMap, MAX_BRANCHES, MAX_SHARDS_PER_BRANCH, MAX_MESSAGES_PER_SESSION } from "@crish/shared-utils";
 
 // ─── 消息分片 ─────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ export interface MessageRangeResult {
  * - 支持多分支，每个分支有独立的分片链
  */
 export class SessionStore {
-  private branches = new Map<string, SessionBranch>();
+  private branches = new BoundedMap<string, SessionBranch>(MAX_BRANCHES);
   private activeBranchId: string;
 
   constructor(private readonly sessionId: string) {
@@ -150,6 +151,7 @@ export class SessionStore {
     // 查找或创建当前 turn 的分片
     let shard = branch.shards.find((s) => s.endTurnIndex === turnIndex || s.startTurnIndex === turnIndex);
     if (!shard || shard.endTurnIndex < turnIndex) {
+      if (branch.shards.length >= MAX_SHARDS_PER_BRANCH) return;
       shard = {
         shardId: createShardId(),
         sessionId: this.sessionId,
@@ -164,6 +166,7 @@ export class SessionStore {
       branch.shards.push(shard);
     }
 
+    if (shard.messages.length >= MAX_MESSAGES_PER_SESSION) return;
     shard.messages.push(message);
     shard.messageCount++;
     shard.endTurnIndex = turnIndex;
@@ -302,7 +305,7 @@ export class SessionStore {
  * 确保分支操作的一致性和可追踪性。
  */
 export class BranchManager {
-  private branchMachines = new Map<string, ReturnType<typeof createSessionBranchMachine>>();
+  private branchMachines = new BoundedMap<string, ReturnType<typeof createSessionBranchMachine>>(MAX_BRANCHES);
 
   constructor(private readonly store: SessionStore) {
     // 为 main 分支创建状态机

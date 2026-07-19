@@ -1,11 +1,14 @@
+import { createReadStream } from "node:fs";
 import { mkdir, open as openFile, readFile, rename, stat as statFile, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { createInterface } from "node:readline";
 import type { AgentEvent, AgentMessage, ContextCompressionRecord } from "@crish/shared-types";
 import { SessionError } from "@crish/shared-types";
 import type { SessionEntry, SessionHeader, SessionPersistenceStore } from "./types";
-import { AsyncMutex, BoundedMap, errorMessage, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, errorMessage, isRecord, JsonlAppendBatcher, IN_MEMORY_SESSION_STORE_CAPACITY } from "@crish/shared-utils";
 
 const SESSION_FILE_VERSION = 1;
+const SMALL_FILE_THRESHOLD = 1024 * 1024; // 1MB
 export type SessionLeafPointerEntry = Extract<SessionEntry, { type: "leaf-pointer" }>;
 export type SessionMessageEntry = Extract<SessionEntry, { type: "message" }>;
 export type SessionCheckpointEntry = Extract<SessionEntry, { type: "checkpoint" }>;
@@ -33,7 +36,7 @@ export function createId(prefix = "id"): string {
  * 对齐 Pi 的 generateEntryId 模式：在极小概率的 UUID 碰撞下重试最多 100 次，
  * 仍碰撞则退化为带时间戳的随机 ID。prefix 用于区分条目类型。
  */
-function generateUniqueEntryId(prefix: string, usedIds: Set<string>): string {
+function generateUniqueEntryId(prefix: string, usedIds: { has(key: string): boolean }): string {
   for (let attempt = 0; attempt < 100; attempt++) {
     const id = createId(prefix);
     if (!usedIds.has(id)) {
@@ -131,16 +134,6 @@ export async function moveSessionLeaf(
     pointerEntry
   };
 }
-
-/**
- * InMemorySessionStore 的容量上限。
- *
- * 该 store 在 runtime.ts 中作为未提供持久化 store 时的默认 fallback，
- * 长会话或 daemon 长跑场景下 entries 会单调增长导致内存泄漏。
- * 使用 BoundedMap 以 entry.id 为 key 存储，超容量时按 FIFO 淘汰最旧条目，
- * 既保留按 id 去重的语义，又提供强制容量约束。
- */
-const IN_MEMORY_SESSION_STORE_CAPACITY = 500;
 
 export class InMemorySessionStore implements SessionPersistenceStore {
   header: SessionHeader | null = null;
@@ -304,13 +297,13 @@ export class JsonlSessionStore implements SessionPersistenceStore {
 export class SessionRecorder {
   private leafId: string | null;
   private appendQueue: Promise<void> = Promise.resolve();
-  private readonly usedIds: Set<string>;
+  private readonly usedIds: BoundedMap<string, true>;
 
   constructor(private readonly store: SessionPersistenceStore, initialLeafId: string | null = null) {
     this.leafId = initialLeafId;
-    this.usedIds = new Set();
+    this.usedIds = new BoundedMap<string, true>(IN_MEMORY_SESSION_STORE_CAPACITY);
     if (initialLeafId !== null) {
-      this.usedIds.add(initialLeafId);
+      this.usedIds.set(initialLeafId, true);
     }
   }
 
@@ -324,7 +317,7 @@ export class SessionRecorder {
         timestamp: nowIso(),
         message
       };
-      this.usedIds.add(entry.id);
+      this.usedIds.set(entry.id, true);
       this.leafId = entry.id;
       messageEntry = entry;
       await this.store.append(entry);
@@ -341,7 +334,7 @@ export class SessionRecorder {
         timestamp: nowIso(),
         event
       };
-      this.usedIds.add(entry.id);
+      this.usedIds.set(entry.id, true);
       await this.store.append(entry);
     });
   }
@@ -356,7 +349,7 @@ export class SessionRecorder {
         timestamp: nowIso(),
         record
       };
-      this.usedIds.add(entry.id);
+      this.usedIds.set(entry.id, true);
       this.leafId = entry.id;
       compactionEntry = entry;
       await this.store.append(entry);
@@ -375,7 +368,7 @@ export class SessionRecorder {
         label,
         metadata
       };
-      this.usedIds.add(entry.id);
+      this.usedIds.set(entry.id, true);
       this.leafId = entry.id;
       checkpointEntry = entry;
       await this.store.append(entry);
@@ -395,7 +388,7 @@ export class SessionRecorder {
         ...(reason !== undefined ? { reason } : {}),
         ...(metadata !== undefined ? { metadata } : {})
       };
-      this.usedIds.add(entry.id);
+      this.usedIds.set(entry.id, true);
       this.leafId = targetLeafId;
       pointerEntry = entry;
       await this.store.append(entry);
@@ -471,12 +464,24 @@ interface ParsedSessionFile {
 }
 
 async function readExistingSessionFile(filePath: string): Promise<ParsedSessionFile | null> {
-  const raw = await readFile(filePath, "utf8").catch((cause) => {
+  const st = await statFile(filePath).catch((cause) => {
     const error = cause as NodeJS.ErrnoException;
     if (error.code === "ENOENT") return null;
     throw cause;
   });
-  if (!raw?.trim()) return null;
+  if (!st) return null;
+  if (st.size === 0) return null;
+
+  if (st.size <= SMALL_FILE_THRESHOLD) {
+    return readSmallSessionFile(filePath);
+  }
+
+  return readLargeSessionFile(filePath, st.size);
+}
+
+async function readSmallSessionFile(filePath: string): Promise<ParsedSessionFile | null> {
+  const raw = await readFile(filePath, "utf8");
+  if (!raw.trim()) return null;
   const lines = raw.split(/\r?\n/);
   while (lines.at(-1) === "") lines.pop();
   const headerLineIndex = lines.findIndex((line) => line.trim().length > 0);
@@ -502,6 +507,57 @@ async function readExistingSessionFile(filePath: string): Promise<ParsedSessionF
   }
 
   return { header: migrated.header, entries, needsRewrite };
+}
+
+async function readLargeSessionFile(filePath: string, fileSize: number): Promise<ParsedSessionFile | null> {
+  const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 256 * 1024 });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+  let header: SessionHeader | null = null;
+  let needsRewrite = false;
+  let headerFound = false;
+  let lineIndex = -1;
+  const entries: SessionEntry[] = [];
+
+  for await (const line of rl) {
+    lineIndex++;
+    if (!headerFound) {
+      if (line.trim().length === 0) continue;
+      headerFound = true;
+      const migrated = parseSessionHeader(line, filePath);
+      header = migrated.header;
+      needsRewrite = migrated.needsRewrite || lineIndex > 0;
+      continue;
+    }
+
+    if (!line.trim()) {
+      needsRewrite = true;
+      continue;
+    }
+
+    const parsed = parseJsonLine(line);
+    if (isSessionEntry(parsed)) {
+      entries.push(parsed);
+    } else {
+      needsRewrite = true;
+    }
+  }
+
+  if (!header) return null;
+
+  // Check for missing trailing newline (read last byte)
+  const fd = await openFile(filePath, "r");
+  try {
+    const buf = Buffer.alloc(1);
+    const { bytesRead } = await fd.read(buf, 0, 1, fileSize - 1);
+    if (bytesRead === 1 && buf[0] !== 0x0a) {
+      needsRewrite = true;
+    }
+  } finally {
+    await fd.close();
+  }
+
+  return { header, entries, needsRewrite };
 }
 
 function parseSessionHeader(line: string, filePath: string): { header: SessionHeader; needsRewrite: boolean } {
@@ -613,11 +669,18 @@ async function writeSessionFileAtomically(filePath: string, header: SessionHeade
   await mkdir(directory, { recursive: true });
   const tempPath = join(directory, `.${basename(filePath)}.${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.tmp`);
   const lines = [header, ...entries].map((line) => JSON.stringify(line));
-  const contents = `${lines.join("\n")}\n`;
 
   const handle = await openFile(tempPath, "w");
   try {
-    await handle.writeFile(contents, "utf8");
+    const BATCH_SIZE_THRESHOLD = 65536;
+    let batch = "";
+    for (let i = 0; i < lines.length; i++) {
+      batch += lines[i] + "\n";
+      if (batch.length >= BATCH_SIZE_THRESHOLD || i === lines.length - 1) {
+        await handle.write(batch, null, "utf8");
+        batch = "";
+      }
+    }
     await handle.sync();
   } catch (cause) {
     await handle.close().catch(() => undefined);

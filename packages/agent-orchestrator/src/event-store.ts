@@ -4,7 +4,7 @@ import { createReadStream, type ReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline";
-import { AsyncMutex, isRecord, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, isRecord, JsonlAppendBatcher, LruMap, MAX_ORCHESTRATOR_EVENTS, MAX_ORCHESTRATOR_SESSIONS } from "@crish/shared-utils";
 import {
   ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION,
   ORCHESTRATOR_PROTOCOL_VERSION,
@@ -96,6 +96,14 @@ export interface ByteOffsetIndexFile {
   eventLogId: string;
   generation: number;
   entries: ByteOffsetIndexEntry[];
+}
+
+export interface SessionIndexEntry {
+  firstOffset: number;
+  lastOffset: number;
+  eventCount: number;
+  lastUpdated: number;
+  summary: MutableSessionEventSummary;
 }
 
 export type OrchestratorEventStoreFailureKind =
@@ -261,6 +269,18 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private lastIndexWriteError?: Error;
 
   /**
+   * LRU session index cache for hot session summary lookups.
+   * Populated from full event scans and incremental appends.
+   * When complete (sessionIndexComplete = true), listSessionSummaries reads from this cache.
+   */
+  private sessionIndex = new LruMap<string, SessionIndexEntry>(MAX_ORCHESTRATOR_SESSIONS);
+  /**
+   * 标记 sessionIndex 是否包含所有活跃 session 的摘要。
+   * 在 replaceEventCache (全量构建) 和 bootstrapFromTail 后设为 true。
+   */
+  private sessionIndexComplete = false;
+
+  /**
    * Known event ids for uniqueness enforcement on append.
    * Populated from the durable log (once) and every successful append.
    */
@@ -390,6 +410,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
         this.knownEventIds.add(event.id);
         this.appendCachedEvent(event);
+        this.updateSessionIndex(event, byteOffset, byteLength);
 
         // 标记索引为脏（延迟写入）
         this.indexDirty = true;
@@ -472,6 +493,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   async listSessionSummaries(): Promise<OrchestratorSessionEventSummary[]> {
     await this.flush();
+    if (this.sessionIndexComplete && this.sessionIndex.size > 0) {
+      const summaries: OrchestratorSessionEventSummary[] = [];
+      this.sessionIndex.forEachRecent((entry) => {
+        summaries.push(toOrchestratorSessionEventSummary(entry.summary));
+        return true;
+      });
+      summaries.sort((left, right) => compareSessionSummaries(left, right));
+      return summaries;
+    }
     if (!this.sessionSummaryCacheReady && !(await this.tryLoadSessionSummaryIndex())) {
       // Product session lists must be complete; tail bootstrap is diagnostic-only.
       await this.ensureEventCache();
@@ -822,6 +852,18 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     }
     this.sessionSummaryCacheReady = true;
 
+    // 从 summaries 构建 sessionIndex 缓存
+    for (const [sessionId, summary] of this.cachedSessionSummaries) {
+      this.sessionIndex.set(sessionId, {
+        firstOffset: 0,
+        lastOffset: 0,
+        eventCount: summary.eventCount,
+        lastUpdated: Date.now(),
+        summary,
+      });
+    }
+    this.sessionIndexComplete = true;
+
     // 持久化索引以加速后续启动
     await this.writeSessionSummaryIndex().catch((cause) => {
       this.indexWriteFailureCount++;
@@ -834,42 +876,63 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   /**
    * 读取日志尾部 N 条事件。
    *
-   * 使用反向读取策略：从文件末尾向前扫描，收集最近的事件。
-   * 避免全量读取大文件。
+   * 使用反向分块读取策略：从文件末尾向前以 64KB 块为单位扫描，
+   * 累积完整行直到收集到足够的事件。避免全量读取大文件。
+   * 相比一次性估算读取，分块读取能处理任意行长的文件。
    */
   private async readTailEvents(count: number): Promise<OrchestratorEvent[]> {
     const handle = await openFile(this.filePath, constants.O_RDONLY);
     try {
-      const stat = await handle.stat();
-      if (stat.size === 0) return [];
+      const { size } = await handle.stat();
+      if (size === 0) return [];
 
-      // 估算读取范围：假设每行平均 512 字节
-      const estimatedBytes = count * 512;
-      const readSize = Math.min(estimatedBytes + 4096, stat.size); // 额外 4KB 余量
-      const readOffset = Math.max(0, stat.size - readSize);
+      const CHUNK = 65536; // 64KB
+      let pos = size;
+      const collected: string[] = [];
+      let carry = "";
 
-      const buffer = Buffer.alloc(readSize);
-      const { bytesRead } = await handle.read(buffer, 0, readSize, readOffset);
+      // 从文件末尾向前分块读取
+      while (pos > 0 && collected.length < count) {
+        const readSize = Math.min(CHUNK, pos);
+        pos -= readSize;
+        const buf = Buffer.alloc(readSize);
+        const { bytesRead } = await handle.read(buf, 0, readSize, pos);
+        if (bytesRead === 0) break;
 
-      if (bytesRead === 0) return [];
+        const text = buf.toString("utf8", 0, bytesRead);
+        const parts = text.split("\n");
+        // 将前一块的 carry 接到当前块的最后一段（靠近末尾的一端）
+        parts[parts.length - 1] += carry;
+        carry = parts[0]; // 第一段可能不完整（前面无换行）
 
-      const content = buffer.toString("utf8", 0, bytesRead);
-      const lines = content.split(/\r?\n/).filter((l) => l.trim());
+        // 从后往前推入完整行（parts[1..n-1] 都是完整行）
+        for (let i = parts.length - 1; i >= 1; i--) {
+          if (parts[i]!.trim()) {
+            collected.push(parts[i]!);
+            if (collected.length >= count) break;
+          }
+        }
+      }
 
-      // 如果不是从文件开头读取，丢弃第一行（可能不完整）
-      const startIndex = readOffset > 0 ? 1 : 0;
-      // 跳过 header 行
-      const headerSkipped = readOffset === 0 ? 1 : 0;
-
+      // collected 是逆序（尾部在前），反转得到文件顺序
       const events: OrchestratorEvent[] = [];
-      for (let i = startIndex + headerSkipped; i < lines.length; i++) {
-        const parsed = parseJsonLine(lines[i]!);
+      let headerSeen = false;
+      for (let i = collected.length - 1; i >= 0; i--) {
+        const line = collected[i]!;
+        if (!headerSeen) {
+          const parsed = parseJsonLine(line);
+          if (parsed && isOrchestratorEvent(parsed)) {
+            headerSeen = true;
+            events.push(parsed);
+          }
+          continue;
+        }
+        const parsed = parseJsonLine(line);
         if (isOrchestratorEvent(parsed)) {
           events.push(parsed);
         }
       }
 
-      // 按序列号排序后取尾部 N 条
       events.sort((a, b) => a.sequence - b.sequence);
       return events.slice(-count);
     } finally {
@@ -1105,12 +1168,65 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     this.cachedEventsByRun = new Map();
     this.cachedSessionSummaries = new Map();
     this.knownEventIds = new Set();
+    this.sessionIndex = new LruMap<string, SessionIndexEntry>(MAX_ORCHESTRATOR_SESSIONS);
     for (const event of events) {
       this.knownEventIds.add(event.id);
       this.indexCachedEvent(event);
     }
+    // 全量构建后 sessionIndex 包含所有会话
+    for (const [sessionId, summary] of this.cachedSessionSummaries) {
+      this.sessionIndex.set(sessionId, {
+        firstOffset: 0,
+        lastOffset: 0,
+        eventCount: summary.eventCount,
+        lastUpdated: Date.now(),
+        summary,
+      });
+    }
+    this.sessionIndexComplete = true;
     this.eventIdsReady = true;
     this.sessionSummaryCacheReady = true;
+  }
+
+  /**
+   * 增量更新 sessionIndex LRU 缓存。
+   *
+   * 创建或更新 sessionId 对应的索引条目（含摘要与字节偏移）。
+   * 从 append 传入 byteOffset/byteLength 以记录文件偏移；
+   * 从 bootstrap 或 replaceEventCache 调用时不传偏移（设为 0）。
+   */
+  private updateSessionIndex(event: OrchestratorEvent, byteOffset?: number, byteLength?: number): void {
+    let entry = this.sessionIndex.get(event.sessionId);
+    if (entry) {
+      entry.eventCount++;
+      if (byteOffset !== undefined) {
+        if (entry.firstOffset === 0 && entry.lastOffset === 0) {
+          entry.firstOffset = byteOffset;
+        }
+        entry.lastOffset = byteOffset;
+      }
+      entry.lastUpdated = Date.now();
+      updateSessionSummary(new Map([[event.sessionId, entry.summary]]), event);
+      this.sessionIndex.set(event.sessionId, entry);
+    } else {
+      const summary: MutableSessionEventSummary = {
+        sessionId: event.sessionId,
+        lastUpdated: event.timestamp,
+        eventCount: 0,
+        runIds: new Set(),
+        runStates: new Map(),
+        pendingInputIds: new Set(),
+        pendingInputEventCount: 0,
+      };
+      updateSessionSummary(new Map([[event.sessionId, summary]]), event);
+      this.sessionIndex.set(event.sessionId, {
+        firstOffset: byteOffset ?? 0,
+        lastOffset: byteOffset ?? 0,
+        eventCount: 1,
+        lastUpdated: Date.now(),
+        summary,
+      });
+    }
   }
 
   private appendCachedEvent(event: OrchestratorEvent): void {
@@ -1124,10 +1240,12 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     } else if (this.sessionSummaryCacheReady) {
       updateSessionSummary(this.cachedSessionSummaries, event);
     }
+    // 增量更新 sessionIndex
+    this.updateSessionIndex(event);
   }
 
   private evictCachedEventsIfNeeded(): void {
-    const maxCached = this.options.maxCachedEvents ?? 10_000;
+    const maxCached = this.options.maxCachedEvents ?? MAX_ORCHESTRATOR_EVENTS;
     if (maxCached <= 0 || !this.cachedEvents) return;
     if (this.cachedEvents.length <= maxCached) return;
     // 保留最新的事件，淘汰最早的

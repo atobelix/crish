@@ -3,12 +3,9 @@ import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
-import { BoundedMap, isNodeError, JsonlAppendBatcher, RingBuffer } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, isNodeError, JsonlAppendBatcher, RingBuffer, IN_MEMORY_MEMORY_ENTRIES } from "@crish/shared-utils";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentTool } from "./types";
-
-/** InMemoryMemoryStore 条目上限：search 默认只返回最近 20 条，保留充裕余量。 */
-const MAX_IN_MEMORY_ENTRIES = 500;
 
 export type MemoryScope = "session" | "project" | "user";
 
@@ -36,8 +33,8 @@ export interface MemoryStore {
 }
 
 export class InMemoryMemoryStore implements MemoryStore {
-  private readonly entries = new RingBuffer<MemoryEntry>(MAX_IN_MEMORY_ENTRIES);
-  private readonly deletedIds = new BoundedMap<string, true>(MAX_IN_MEMORY_ENTRIES);
+  private readonly entries = new RingBuffer<MemoryEntry>(IN_MEMORY_MEMORY_ENTRIES);
+  private readonly deletedIds = new BoundedMap<string, true>(IN_MEMORY_MEMORY_ENTRIES);
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
     const now = nowIso();
@@ -75,7 +72,7 @@ export class JsonlMemoryStore implements MemoryStore {
    */
   private static readonly COMPACTION_MIN_DELETED_RECORDS = 100;
 
-  private appendQueue: Promise<void> = Promise.resolve();
+  private readonly mutex = new AsyncMutex();
   private appendBatcher: JsonlAppendBatcher | undefined;
   private cachedEntries: MemoryEntry[] | undefined;
   private cachedMtimeMs: number | undefined;
@@ -85,20 +82,23 @@ export class JsonlMemoryStore implements MemoryStore {
   constructor(private readonly filePath: string) {}
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
-    const now = nowIso();
-    const saved: MemoryEntry = {
-      ...entry,
-      id: createId("memory"),
-      createdAt: now,
-      updatedAt: now
-    };
-    if (this.cachedEntries !== undefined) {
-      this.cachedEntries.push(saved);
-      if (this.cachedStats) this.cachedStats.totalRecords++;
-    }
-    this.hasPendingLocalWrites = true;
-    await this.enqueueAppend(JSON.stringify(saved));
-    return saved;
+    return this.mutex.runExclusive(async () => {
+      const now = nowIso();
+      const saved: MemoryEntry = {
+        ...entry,
+        id: createId("memory"),
+        createdAt: now,
+        updatedAt: now
+      };
+      if (this.cachedEntries !== undefined) {
+        this.cachedEntries.push(saved);
+        if (this.cachedStats) this.cachedStats.totalRecords++;
+      }
+      this.hasPendingLocalWrites = true;
+      const batcher = await this.ensureAppendBatcher();
+      await batcher.append(JSON.stringify(saved));
+      return saved;
+    });
   }
 
   async search(options: MemorySearchOptions = {}): Promise<MemoryEntry[]> {
@@ -107,22 +107,25 @@ export class JsonlMemoryStore implements MemoryStore {
   }
 
   async delete(memoryId: string): Promise<boolean> {
-    const id = requireString({ memoryId }, "memoryId");
-    const entries = await this.readEntries();
-    if (!entries.some((entry) => entry.id === id)) {
-      return false;
-    }
-    if (this.cachedEntries !== undefined) {
-      this.cachedEntries = this.cachedEntries.filter((e) => e.id !== id);
-      if (this.cachedStats) {
-        this.cachedStats.deletedRecords++;
+    return this.mutex.runExclusive(async () => {
+      const id = requireString({ memoryId }, "memoryId");
+      const entries = await this.readEntries();
+      if (!entries.some((entry) => entry.id === id)) {
+        return false;
       }
-    }
-    this.hasPendingLocalWrites = true;
-    await this.enqueueAppend(JSON.stringify({ type: "delete", memoryId: id, deletedAt: nowIso() }));
-    // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
-    await this.maybeCompact();
-    return true;
+      if (this.cachedEntries !== undefined) {
+        this.cachedEntries = this.cachedEntries.filter((e) => e.id !== id);
+        if (this.cachedStats) {
+          this.cachedStats.deletedRecords++;
+        }
+      }
+      this.hasPendingLocalWrites = true;
+      const batcher = await this.ensureAppendBatcher();
+      await batcher.append(JSON.stringify({ type: "delete", memoryId: id, deletedAt: nowIso() }));
+      // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
+      await this.maybeCompact();
+      return true;
+    });
   }
 
   /**
@@ -132,9 +135,9 @@ export class JsonlMemoryStore implements MemoryStore {
    * 在关闭/卸载场景下应调用此方法确保句柄被释放。
    */
   async close(): Promise<void> {
-    const closeTask = this.appendQueue.then(() => this.releaseAppendHandle());
-    this.appendQueue = closeTask.catch(() => undefined);
-    await closeTask;
+    await this.mutex.runExclusive(async () => {
+      await this.releaseAppendHandle();
+    });
   }
 
   private async releaseAppendHandle(): Promise<void> {
@@ -223,15 +226,6 @@ export class JsonlMemoryStore implements MemoryStore {
     return this.cachedEntries;
   }
 
-  private async enqueueAppend(line: string): Promise<void> {
-    const appendTask = this.appendQueue.then(async () => {
-      const batcher = await this.ensureAppendBatcher();
-      await batcher.append(line);
-    });
-    this.appendQueue = appendTask.catch(() => undefined);
-    await appendTask;
-  }
-
   /**
    * 懒初始化 JsonlAppendBatcher。
    *
@@ -244,17 +238,6 @@ export class JsonlMemoryStore implements MemoryStore {
       this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath });
     }
     return this.appendBatcher;
-  }
-
-  /**
-   * 等待所有已入队的 append 落盘后再返回。
-   *
-   * remember()/delete() 在 invalidateEntriesCache 后调用此方法，
-   * 确保 pending 数据落盘，使后续读取看到完整文件内容。
-   */
-  private async flushPendingAppends(): Promise<void> {
-    await this.appendQueue;
-    await this.appendBatcher?.flush();
   }
 
   /**
@@ -291,30 +274,26 @@ export class JsonlMemoryStore implements MemoryStore {
    * 后续 append 必须重新打开新文件；同时重置缓存强制下次读取 compacted 文件。
    */
   private async compactEntries(): Promise<void> {
-    const compactTask = this.appendQueue.then(async () => {
-      // readEntries 内部会 flush pending tombstone，确保读到完整文件
-      const entries = await this.readEntries();
-      // 原子写入 tmp + rename 覆盖原文件
-      const tmpPath = `${this.filePath}.compact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      await mkdir(dirname(tmpPath), { recursive: true });
-      const content = entries.length > 0
-        ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
-        : "";
-      try {
-        await writeFile(tmpPath, content, "utf8");
-        await rename(tmpPath, this.filePath);
-      } catch (error) {
-        // rename 失败时清理 tmp 残留，避免污染工作区
-        await unlink(tmpPath).catch(() => undefined);
-        throw error;
-      }
-      // rename 成功后旧 appendBatcher 的 fd 指向被覆写的 inode，必须释放
-      await this.releaseAppendHandle();
-      // 重置缓存，强制下次 readEntries 读取 compacted 文件
-      this.invalidateEntriesCache();
-    });
-    this.appendQueue = compactTask.catch(() => undefined);
-    await compactTask;
+    // readEntries 内部会 flush pending tombstone，确保读到完整文件
+    const entries = await this.readEntries();
+    // 原子写入 tmp + rename 覆盖原文件
+    const tmpPath = `${this.filePath}.compact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    await mkdir(dirname(tmpPath), { recursive: true });
+    const content = entries.length > 0
+      ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+      : "";
+    try {
+      await writeFile(tmpPath, content, "utf8");
+      await rename(tmpPath, this.filePath);
+    } catch (error) {
+      // rename 失败时清理 tmp 残留，避免污染工作区
+      await unlink(tmpPath).catch(() => undefined);
+      throw error;
+    }
+    // rename 成功后旧 appendBatcher 的 fd 指向被覆写的 inode，必须释放
+    await this.releaseAppendHandle();
+    // 重置缓存，强制下次 readEntries 读取 compacted 文件
+    this.invalidateEntriesCache();
   }
 }
 

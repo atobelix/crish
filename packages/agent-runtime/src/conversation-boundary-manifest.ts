@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat as statFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { nowIso } from "./session";
-import { isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 
 export type ConversationBoundaryCheckpointSource = "runtime" | "tool" | "external" | "unknown";
@@ -128,7 +128,7 @@ export class ConversationBoundaryManifestService {
 
   private readonly manifestPath: string;
   private readonly now: () => string;
-  private appendQueue: Promise<void> = Promise.resolve();
+  private readonly mutex = new AsyncMutex();
   private appendBatcher: JsonlAppendBatcher | undefined;
   private cachedResult: ConversationBoundaryManifestReadResult | undefined;
   private cachedMtimeMs: number | undefined;
@@ -139,8 +139,8 @@ export class ConversationBoundaryManifestService {
   }
 
   async append(input: ConversationBoundaryManifestInput): Promise<ConversationBoundaryManifestRecord> {
-    const record = createConversationBoundaryManifestRecord(input, this.now);
-    const appendTask = this.appendQueue.then(async () => {
+    return this.mutex.runExclusive(async () => {
+      const record = createConversationBoundaryManifestRecord(input, this.now);
       const batcher = await this.ensureAppendBatcher();
       await batcher.append(serializeConversationBoundaryManifestRecord(record));
       // 同步持久化语义：调用方依赖 append 返回后数据已落盘（例如跨进程/跨实例读取）。
@@ -150,10 +150,8 @@ export class ConversationBoundaryManifestService {
       // "append 返回 → invalidateCache" 之间的竞态窗口，
       // 避免并发读取命中旧缓存。
       this.invalidateCache();
+      return record;
     });
-    this.appendQueue = appendTask.catch(() => undefined);
-    await appendTask;
-    return record;
   }
 
   /**
@@ -164,32 +162,30 @@ export class ConversationBoundaryManifestService {
    * 返回被软删除的记录数（未含已被先前 tombstone 标记的记录）。
    */
   async delete(options: ConversationBoundaryManifestListOptions = {}): Promise<number> {
-    const result = await this.readWithCache();
-    const matching = filterRecords(result.records, options);
-    if (matching.length === 0) return 0;
-    const tombstones = matching.map((record) =>
-      serializeConversationBoundaryTombstone({
-        type: "delete",
-        sessionId: record.sessionId,
-        runId: record.runId,
-        userMessageId: record.userMessageId,
-        eventSequence: record.eventSequence,
-        deletedAt: this.now()
-      })
-    );
-    const appendTask = this.appendQueue.then(async () => {
+    return this.mutex.runExclusive(async () => {
+      const result = await this.readWithCache();
+      const matching = filterRecords(result.records, options);
+      if (matching.length === 0) return 0;
+      const tombstones = matching.map((record) =>
+        serializeConversationBoundaryTombstone({
+          type: "delete",
+          sessionId: record.sessionId,
+          runId: record.runId,
+          userMessageId: record.userMessageId,
+          eventSequence: record.eventSequence,
+          deletedAt: this.now()
+        })
+      );
       const batcher = await this.ensureAppendBatcher();
       for (const line of tombstones) {
         await batcher.append(line);
       }
       await batcher.flush();
       this.invalidateCache();
+      // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
+      await this.maybeCompact();
+      return matching.length;
     });
-    this.appendQueue = appendTask.catch(() => undefined);
-    await appendTask;
-    // tombstone 落盘后再评估 compaction：基于最新文件统计决定是否重写。
-    await this.maybeCompact();
-    return matching.length;
   }
 
   /**
@@ -199,9 +195,9 @@ export class ConversationBoundaryManifestService {
    * 在关闭/卸载场景下应调用此方法确保句柄被释放。
    */
   async close(): Promise<void> {
-    const closeTask = this.appendQueue.then(() => this.releaseAppendHandle());
-    this.appendQueue = closeTask.catch(() => undefined);
-    await closeTask;
+    await this.mutex.runExclusive(async () => {
+      await this.releaseAppendHandle();
+    });
   }
 
   private async releaseAppendHandle(): Promise<void> {
@@ -321,30 +317,26 @@ export class ConversationBoundaryManifestService {
    * 后续 append 必须重新打开新文件；同时重置缓存强制下次读取 compacted 文件。
    */
   private async compactRecords(): Promise<void> {
-    const compactTask = this.appendQueue.then(async () => {
-      // readWithCache 内部会 flush pending tombstone，确保读到完整文件
-      const result = await this.readWithCache();
-      // 原子写入 tmp + rename 覆盖原文件
-      const tmpPath = `${this.manifestPath}.compact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      await mkdir(dirname(tmpPath), { recursive: true });
-      const content = result.records.length > 0
-        ? `${result.records.map((record) => serializeConversationBoundaryManifestRecord(record)).join("\n")}\n`
-        : "";
-      try {
-        await writeFile(tmpPath, content, "utf8");
-        await rename(tmpPath, this.manifestPath);
-      } catch (error) {
-        // rename 失败时清理 tmp 残留，避免污染工作区
-        await unlink(tmpPath).catch(() => undefined);
-        throw error;
-      }
-      // rename 成功后旧 appendBatcher 的 fd 指向被覆写的 inode，必须释放
-      await this.releaseAppendHandle();
-      // 重置缓存，强制下次 readWithCache 读取 compacted 文件
-      this.invalidateCache();
-    });
-    this.appendQueue = compactTask.catch(() => undefined);
-    await compactTask;
+    // readWithCache 内部会 flush pending tombstone，确保读到完整文件
+    const result = await this.readWithCache();
+    // 原子写入 tmp + rename 覆盖原文件
+    const tmpPath = `${this.manifestPath}.compact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    await mkdir(dirname(tmpPath), { recursive: true });
+    const content = result.records.length > 0
+      ? `${result.records.map((record) => serializeConversationBoundaryManifestRecord(record)).join("\n")}\n`
+      : "";
+    try {
+      await writeFile(tmpPath, content, "utf8");
+      await rename(tmpPath, this.manifestPath);
+    } catch (error) {
+      // rename 失败时清理 tmp 残留，避免污染工作区
+      await unlink(tmpPath).catch(() => undefined);
+      throw error;
+    }
+    // rename 成功后旧 appendBatcher 的 fd 指向被覆写的 inode，必须释放
+    await this.releaseAppendHandle();
+    // 重置缓存，强制下次 readWithCache 读取 compacted 文件
+    this.invalidateCache();
   }
 }
 

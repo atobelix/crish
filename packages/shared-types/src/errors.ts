@@ -1,14 +1,23 @@
 import type { JsonObject } from "./primitive-types";
 
 export class CrishError extends Error {
+  readonly code: string;
+  readonly category: "transient" | "permanent" | "security" | "protocol";
+  readonly retryable: boolean;
+  readonly metadata?: JsonObject;
+
   constructor(
     message: string,
-    public readonly code: string,
-    public readonly category: "transient" | "permanent" | "security" | "protocol",
-    public readonly retryable: boolean,
-    public readonly metadata?: JsonObject,
+    code: string,
+    category: "transient" | "permanent" | "security" | "protocol",
+    retryable: boolean,
+    metadata?: JsonObject,
   ) {
     super(message);
+    this.code = code;
+    this.category = category;
+    this.retryable = retryable;
+    this.metadata = metadata;
     this.name = "CrishError";
   }
 }

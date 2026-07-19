@@ -227,39 +227,84 @@ function extractFirstWord(raw: string): string {
   return (end === -1 ? trimmed : trimmed.slice(0, end)).toLowerCase();
 }
 
-/** 按 && / ; / | 切段（尊重引号） */
+/** 按 && / || / |& / | / ; / \n 切段（尊重引号、跳过 $(...) 子shell 和反引号） */
 function splitCommandSegments(command: string): string[] {
+  if (command.length > 100_000) command = command.slice(0, 100_000);
   const segments: string[] = [];
   let current = "";
   let quote: "'" | '"' | null = null;
   let escaped = false;
+  let parenDepth = 0;
+  let inSubshell = false;
+  let inBacktick = false;
 
   for (let i = 0; i < command.length; i += 1) {
     const ch = command[i]!;
     const next = command[i + 1];
-    if (quote) {
+
+    if (quote === "'") {
+      current += ch;
+      if (ch === "'") quote = null;
+      continue;
+    }
+
+    if (quote === '"') {
       current += ch;
       if (escaped) {
         escaped = false;
-      } else if (quote === '"' && (ch === "\\" || ch === "`")) {
+      } else if (ch === "\\" || ch === "`") {
         escaped = true;
-      } else if (ch === quote) {
+      } else if (ch === '"') {
         quote = null;
       }
       continue;
     }
+
     if (ch === "'" || ch === '"') {
       quote = ch;
       current += ch;
       continue;
     }
-    if (ch === "&" && next === "&") {
+
+    // $(...) 子shell
+    if (ch === "$" && next === "(") {
+      inSubshell = true;
+      parenDepth = 1;
+      current += ch + next;
+      i += 1;
+      continue;
+    }
+
+    if (inSubshell) {
+      current += ch;
+      if (ch === "(") parenDepth++;
+      else if (ch === ")") {
+        parenDepth--;
+        if (parenDepth === 0) inSubshell = false;
+      }
+      continue;
+    }
+
+    // 反引号
+    if (ch === "`" && !inBacktick) {
+      inBacktick = true;
+      current += ch;
+      continue;
+    }
+
+    if (inBacktick) {
+      current += ch;
+      if (ch === "`") inBacktick = false;
+      continue;
+    }
+
+    if ((ch === "|" && next === "|") || (ch === "|" && next === "&") || (ch === "&" && next === "&")) {
       if (current.trim()) segments.push(current.trim());
       current = "";
       i += 1;
       continue;
     }
-    if (ch === "|" || ch === ";") {
+    if (ch === "|" || ch === ";" || ch === "\n") {
       if (current.trim()) segments.push(current.trim());
       current = "";
       continue;

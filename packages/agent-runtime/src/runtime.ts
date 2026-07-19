@@ -2,7 +2,7 @@ import {
   type AgentEvent,
   type AgentMessage,
 } from "@crish/shared-types";
-import { RingBuffer } from "@crish/shared-utils";
+import { RingBuffer, STEER_INPUT_CAPACITY } from "@crish/shared-utils";
 import {
   type AgentRuntimeOptions,
   type AgentTool,
@@ -19,9 +19,6 @@ import { AgentSessionLoop } from "./agent-session-loop";
 import { ToolRegistry } from "./tools/tool-definition";
 
 export { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS };
-
-/** 待处理 steer 输入缓冲区容量上限；超容量覆盖最旧以提供背压保护。 */
-const STEER_INPUT_CAPACITY = 1000;
 
 /** Default product policy: TrustZone "ask" (project-mode semantics). No default-allow bypass. */
 function createDefaultPermissionPolicy(): RuntimePermissionPolicy {
