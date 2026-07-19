@@ -5,6 +5,8 @@
   gap: 0;
   flex: 1;
   min-height: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
 }
 
 .emptyHint {

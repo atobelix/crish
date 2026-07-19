@@ -283,7 +283,7 @@ select.settings-field-input {
   cursor: pointer;
   background: transparent;
   color: var(--text-tertiary);
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .settings-scope-toggle-btn.active {
@@ -6583,7 +6583,7 @@ html[data-theme="dark"] .ext-installed-mark {
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .models-row-card:hover {
@@ -6644,7 +6644,7 @@ html[data-theme="dark"] .ext-installed-mark {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .models-capability-pill.is-active {
@@ -7100,7 +7100,7 @@ html[data-theme="dark"] .ext-installed-mark {
   border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
   gap: 8px;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 .mrd-model-row:hover {
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
@@ -7206,7 +7206,7 @@ html[data-theme="dark"] .ext-installed-mark {
   font-size: var(--font-size-xxs);
   cursor: pointer;
   user-select: none;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .mrd-cap-pill:hover {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);

@@ -38,6 +38,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
 }
 
 .settingsUiSectionTitle {

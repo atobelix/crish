@@ -261,8 +261,10 @@
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
   box-sizing: border-box;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
 }
 .fileItem:hover {
   background: var(--bg-hover);
@@ -308,7 +310,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
   flex-shrink: 0;
   margin-right: 6px;
 }
@@ -444,6 +446,8 @@
   overflow: hidden;
   background: transparent;
   transition: border-color 0.15s ease, background-color 0.15s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
 }
 
 .accordionItem:hover {
@@ -557,7 +561,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
 .inlineIconBtn:hover {
@@ -584,7 +588,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
 .inlineActionBtn:hover {
@@ -700,6 +704,8 @@
   background: var(--bg-primary);
   user-select: text;
   box-sizing: border-box;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
 }
 
 .line {
@@ -879,7 +885,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
 .hoverActBtn:hover {
@@ -907,6 +913,8 @@
   flex-direction: column;
   gap: 8px;
   width: 100%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .gitGroupHeader {
@@ -935,7 +943,7 @@
   padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
 .groupActionBtn:hover {
@@ -993,7 +1001,7 @@
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .backBtn:hover {
@@ -1034,7 +1042,7 @@
   user-select: none;
   border: 1px solid transparent;
   border-bottom: none;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
   white-space: nowrap;
   position: relative;
 }
@@ -1066,7 +1074,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tabClose:hover {
@@ -1130,7 +1138,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
 .detailIconBtn:hover {
@@ -1163,7 +1171,7 @@
   cursor: pointer;
   border-top: 1px solid var(--hairline, var(--border-subtle));
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
   user-select: none;
   font-family: var(--font-sans);
 }
@@ -1187,7 +1195,7 @@
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-secondary, rgba(0, 0, 0, 0.015));
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   margin-top: 8px;
   gap: 8px;
 }
@@ -1242,7 +1250,7 @@
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .commitCloseBtn:hover {

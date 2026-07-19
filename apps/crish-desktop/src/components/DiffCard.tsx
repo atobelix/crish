@@ -4,7 +4,7 @@
  * 工具栏以图标为主，保持功能行紧凑。
  * 反馈策略：成功静默；失败 toast + 行内；空态/软提示仅行内。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
@@ -141,7 +141,7 @@ const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content
                 {l.num}
               </div>
               <div className={styles.gutterMarker}> </div>
-              <div className={styles.lineText}>{l.content}</div>
+              <div className={styles.lineText} style={{ whiteSpace: 'pre' }}>{l.content}</div>
             </div>
           ))}
         </pre>
@@ -257,7 +257,7 @@ const VirtualUnifiedDiffViewer: React.FC<VirtualUnifiedDiffViewerProps> = ({
                   {newLineNum}
                 </div>
                 <div className={styles.gutterMarker}>{marker}</div>
-                <div className={styles.lineText}>{change.content}</div>
+                <div className={styles.lineText} style={{ whiteSpace: 'pre' }}>{change.content}</div>
               </div>
             );
           })}
@@ -414,8 +414,9 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const session = useSessionField(selectActiveSession);
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
-  const [diffSearchQuery, setDiffSearchQuery] = useState('');
-  const searchActive = !!diffSearchQuery.trim();
+  const [rawDiffSearchQuery, setDiffSearchQuery] = useState('');
+  const diffSearchQuery = useDeferredValue(rawDiffSearchQuery);
+  const searchActive = !!rawDiffSearchQuery.trim();
   const [searchOpen, setSearchOpen] = useState(false);
   const [gitLoading, setGitLoading] = useState(false);
   const [applyBusy, setApplyBusy] = useState(false);
@@ -780,18 +781,17 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
 
       const statusMap = new Map(status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]));
 
+      const placeholders = status.files.slice(0, 45).map((gf) => ({
+        filePath: gf.path,
+        additions: 0,
+        deletions: 0,
+        changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
+        staged: gf.staged,
+        unstaged: gf.unstaged,
+        untracked: gf.untracked,
+        gitStatus: gf.status,
+      }));
       if (!silent) {
-        // 先用状态列表出结果（秒开），再补一行级 diff
-        const placeholders = status.files.slice(0, 45).map((gf) => ({
-          filePath: gf.path,
-          additions: 0,
-          deletions: 0,
-          changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
-          staged: gf.staged,
-          unstaged: gf.unstaged,
-          untracked: gf.untracked,
-          gitStatus: gf.status,
-        }));
         applyFiles(placeholders, 'git');
         setTurnKey('');
       }
@@ -963,8 +963,8 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Split View Lines Aligner 🌟 */
-  const getSplitPairs = (f: EnrichedFileDiff) => {
-    const lines = getComputedChanges(f);
+  const getSplitPairs = (f: EnrichedFileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+    const lines = inputLines ?? getComputedChanges(f);
     const pairs: Array<{
       left?: typeof lines[0];
       right?: typeof lines[0];
@@ -1076,8 +1076,8 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Unified View) 🌟 */
-  const getUnifiedRenderItems = (f: EnrichedFileDiff) => {
-    const computed = getComputedChanges(f);
+  const getUnifiedRenderItems = (f: EnrichedFileDiff, inputComputed?: ReturnType<typeof getComputedChanges>) => {
+    const computed = inputComputed ?? getComputedChanges(f);
     const q = diffSearchQuery.trim().toLowerCase();
     const changes = q ? computed.filter((item) => item.change.content.toLowerCase().includes(q)) : computed;
     const total = changes.length;
@@ -1147,8 +1147,8 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Split View) 🌟 */
-  const getSplitRenderItems = (f: EnrichedFileDiff) => {
-    const pairs = getSplitPairs(f);
+  const getSplitRenderItems = (f: EnrichedFileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+    const pairs = getSplitPairs(f, inputLines);
     const q = diffSearchQuery.trim().toLowerCase();
     if (q) {
       return pairs.map((p, i) => ({
@@ -1296,9 +1296,18 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     removeDiffFile(f.filePath);
   }, [removeDiffFile]);
 
-  // Computed count of staged vs unstaged for git mode
-  const stagedCount = useMemo(() => fileList.filter((f) => f.staged).length, [fileList]);
-  const unstagedCount = useMemo(() => fileList.filter((f) => !f.staged).length, [fileList]);
+  // Computed partitioned list of staged vs unstaged for git mode
+  const { stagedFiles, unstagedFiles } = useMemo(() => {
+    const staged: EnrichedFileDiff[] = [];
+    const unstaged: EnrichedFileDiff[] = [];
+    for (const f of fileList) {
+      if (f && f.staged) staged.push(f);
+      else if (f) unstaged.push(f);
+    }
+    return { stagedFiles: staged, unstagedFiles: unstaged };
+  }, [fileList]);
+  const stagedCount = stagedFiles.length;
+  const unstagedCount = unstagedFiles.length;
 
   /** 🌟 Collapsed / Expanding Diff Content Helper 🌟 */
   const renderInlineDiffContent = (f: EnrichedFileDiff) => {
@@ -1338,7 +1347,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
 
     if (diffViewMode === 'split') {
-      const renderItems = getSplitRenderItems(f);
+      const renderItems = getSplitRenderItems(f, computed);
       return (
         <VirtualSplitDiffViewer
           f={f}
@@ -1351,7 +1360,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
 
     // Unified view mode
-    const renderItems = getUnifiedRenderItems(f);
+    const renderItems = getUnifiedRenderItems(f, computed);
     return (
       <VirtualUnifiedDiffViewer
         f={f}
@@ -1711,7 +1720,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             type="search"
             className={styles.searchInput}
             placeholder="搜索/筛选行…"
-            value={diffSearchQuery}
+            value={rawDiffSearchQuery}
             disabled={!current}
             onChange={(e) => setDiffSearchQuery(e.target.value)}
           />
@@ -1791,7 +1800,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
                     <div className={styles.groupEmptyHint}>无已暂存的文件</div>
                   ) : (
                     <div className={styles.groupItemsContainer}>
-                      {fileList.filter((f) => f && f.staged).map(renderAccordionItem)}
+                      {stagedFiles.map(renderAccordionItem)}
                     </div>
                   )}
                 </div>
@@ -1811,7 +1820,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
                     <div className={styles.groupEmptyHint}>无未暂存的修改</div>
                   ) : (
                     <div className={styles.groupItemsContainer}>
-                      {fileList.filter((f) => f && !f.staged).map(renderAccordionItem)}
+                      {unstagedFiles.map(renderAccordionItem)}
                     </div>
                   )}
                 </div>

@@ -28,7 +28,10 @@ import {
   shouldShowFollowUpSuggestions,
   type FollowUpSuggestion,
 } from '../api/followUpSuggestions';
-import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { stripThoughtPlaceholders, escapeHtml } from '../api/markdownRender';
+import { parseMarkdownToHtmlAsync } from '../api/markdownRenderAsync';
+import { getMarkdownHtmlCache } from '../api/markdownCache';
+import { Priority } from '../workers';
 import { ChangeOverviewCard } from './ChangeOverviewCard';
 import type { PermissionMode } from '../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
@@ -620,15 +623,13 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                  );
                }
                return (
-                 <div className={styles.timelineText}>
-                   <div
-                     className={`${styles.assistantText} md-rendered`}
-                     dangerouslySetInnerHTML={{
-                       __html: parseMarkdownToHtml(fallback),
-                     }}
-                   />
-                 </div>
-               );
+                  <div className={styles.timelineText}>
+                    <AsyncMarkdownBlock
+                      text={fallback}
+                      priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
+                    />
+                  </div>
+                );
             }
             const textItems = timeline.filter((i) => i.kind === 'text');
             const lastTextKey = textItems.length
@@ -655,11 +656,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                 }
                 return (
                   <div key={item.key} className={styles.timelineText}>
-                    <div
-                      className={`${styles.assistantText} md-rendered`}
-                      dangerouslySetInnerHTML={{
-                        __html: parseMarkdownToHtml(bodyText),
-                      }}
+                    <AsyncMarkdownBlock
+                      text={bodyText}
+                      priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
                     />
                     {imgs.length > 0 && (
                       <div className={styles.inlineImages}>
@@ -849,3 +848,56 @@ export const ChatAssistantMessageRow = React.memo(
   ChatAssistantMessageRowInner,
   assistantRowPropsEqual,
 );
+
+// ─── Async Markdown ──────────────────────────────────────────────────────────
+
+function useAsyncMarkdownHtml(markdown: string, priority: Priority): { html: string; loading: boolean } {
+  const [html, setHtml] = useState('');
+  const [loading, setLoading] = useState(false);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!markdown) { setHtml(''); setLoading(false); return; }
+
+    const cached = getMarkdownHtmlCache(markdown);
+    if (cached !== undefined) {
+      setHtml(cached);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    cancelledRef.current = false;
+
+    parseMarkdownToHtmlAsync(markdown, priority).then((result) => {
+      if (!cancelledRef.current) {
+        setHtml(result);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelledRef.current) setLoading(false);
+    });
+
+    return () => { cancelledRef.current = true; };
+  }, [markdown, priority]);
+
+  return { html, loading };
+}
+
+function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priority }) {
+  const { html, loading } = useAsyncMarkdownHtml(text, priority);
+  if (!text) return null;
+  if (loading) {
+    return (
+      <div className={styles.assistantText} style={{ whiteSpace: 'pre-wrap' }}>
+        {escapeHtml(text)}
+      </div>
+    );
+  }
+  return (
+    <div
+      className={`${styles.assistantText} md-rendered`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}

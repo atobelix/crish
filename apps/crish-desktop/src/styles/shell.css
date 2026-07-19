@@ -128,7 +128,7 @@ samp,
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .header-btn:hover {
@@ -355,7 +355,7 @@ samp,
   align-items: center;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.1s;
+  transition: background-color 0.1s, color 0.1s;
 }
 
 .win-btn:hover {
@@ -436,7 +436,7 @@ body.is-resizing * {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .nav-item:hover {
@@ -561,7 +561,7 @@ body.is-resizing * {
   border: 1px dashed var(--border-color);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .pin-icon {
@@ -637,7 +637,7 @@ body.is-resizing * {
   text-decoration: none;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
   position: relative;
   gap: 8px;
   font-weight: var(--font-weight-medium) !important;
@@ -755,7 +755,7 @@ body.is-resizing * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .settings-btn:hover {
@@ -1940,7 +1940,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .card-action-btn:hover {
@@ -2087,7 +2087,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .sub-btn:hover {
@@ -2212,7 +2212,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
-  transition: all 0.1s;
+  transition: background-color 0.1s, color 0.1s;
 }
 
 .dropdown-close-btn:hover {
@@ -2234,7 +2234,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-secondary);
   cursor: pointer;
   gap: 8px;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
   user-select: none;
   position: relative;
 }
@@ -2261,7 +2261,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease;
   background-color: var(--bg-tertiary);
   flex-shrink: 0;
   position: relative;
@@ -2389,7 +2389,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: auto;
   min-height: 26px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
   font-family: var(--font-sans);
@@ -2478,7 +2478,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   pointer-events: none;
   z-index: 2000;
   border-radius: 2px;
-  transition: all 0.1s ease;
+  transition: opacity 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
 }
 
 /* [MIGRATED] .toast-stack and helper styles migrated to ToastStack.module.css */

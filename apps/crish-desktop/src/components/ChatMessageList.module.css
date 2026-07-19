@@ -6,6 +6,8 @@
   margin-right: auto;
   align-self: center;
   box-sizing: border-box;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .pinnedBar {

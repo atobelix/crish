@@ -60,7 +60,6 @@ function crishHttpProxyPlugin(): Plugin {
             }
 
             const headers: Record<string, string> = { ...(payload.headers || {}) };
-            // GET 不带 Content-Type，减少无意义 preflight（虽已是服务端出站）
             if (method === 'GET' || method === 'HEAD') {
               delete headers['Content-Type'];
               delete headers['content-type'];
@@ -116,6 +115,27 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-zustand': ['zustand', 'immer'],
+          'vendor-lucide': ['lucide-react'],
+          'vendor-highlight': ['highlight.js'],
+          'vendor-fonts': [
+            '@fontsource/inter',
+            '@fontsource/jetbrains-mono',
+            '@fontsource/ibm-plex-sans',
+            '@fontsource/ibm-plex-mono',
+          ],
+          'vendor-workers': [
+            './src/workers/render-worker.ts',
+            './src/workers/compute-worker.ts',
+            './src/workers/io-worker.ts',
+          ],
+        },
+      },
+    },
   },
   clearScreen: false,
   envPrefix: ['VITE_', 'TAURI_'],
