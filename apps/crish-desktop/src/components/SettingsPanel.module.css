@@ -236,27 +236,16 @@
   color: var(--text-primary);
 }
 
-.translucentCover,
-.translucentCover .coverHeader {
-  background: color-mix(in srgb, var(--bg-primary) 68%, transparent) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-.translucentCover .coverContent {
-  background: transparent !important;
-}
-
 .settingsCover {
   opacity: 0;
 }
-.settingsCover.is-entering,
-.settingsCover.is-open {
+.settingsCover:global(.is-entering),
+.settingsCover:global(.is-open) {
   opacity: 1;
   transition: opacity var(--transition-smooth);
   transition-behavior: allow-discrete;
 }
-.settingsCover.is-exiting {
+.settingsCover:global(.is-exiting) {
   opacity: 0;
   transition: opacity var(--transition-exit);
   transition-behavior: allow-discrete;

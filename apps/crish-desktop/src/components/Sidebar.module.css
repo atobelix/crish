@@ -13,6 +13,12 @@
   height: 100%;
 }
 
+:global(.is-resizing) .sidebar,
+:global(.resizing-active) .sidebar,
+:global(.window-resizing) .sidebar {
+  transition: none !important;
+}
+
 .sidebar.collapsed {
   width: 0px !important;
   border-right: none;

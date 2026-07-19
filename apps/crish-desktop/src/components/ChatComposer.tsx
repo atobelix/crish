@@ -152,7 +152,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
   return (
     <div
       ref={containerRef}
-      className={`${styles.container}${dense ? ` ${styles.containerDense}` : ''}${className ? ` ${className}` : ''}`}
+      className={`${styles.container} input-container${dense ? ` ${styles.containerDense}` : ''}${className ? ` ${className}` : ''}`}
       data-composer-field="1"
       data-composer-dense={dense ? '1' : '0'}
       data-composer-max-lines={resolvedLines}

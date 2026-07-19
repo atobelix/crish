@@ -308,39 +308,21 @@ function App() {
     };
   }, [productShell]);
 
-  const [resizeWidth, setResizeWidth] = useState<number | null>(null);
   useEffect(() => {
-    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastExecuted = 0;
 
     const handleResize = () => {
       document.body.classList.add('window-resizing');
-      const now = Date.now();
-      const currentWidth = window.innerWidth;
-
-      if (now - lastExecuted >= 80) {
-        setResizeWidth(currentWidth);
-        lastExecuted = now;
-      } else {
-        if (throttleTimer) clearTimeout(throttleTimer);
-        throttleTimer = setTimeout(() => {
-          setResizeWidth(currentWidth);
-          lastExecuted = Date.now();
-        }, 80 - (now - lastExecuted));
-      }
 
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        setResizeWidth(null);
         document.body.classList.remove('window-resizing');
-      }, 400);
+      }, 100);
     };
 
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (throttleTimer) clearTimeout(throttleTimer);
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, []);
@@ -779,8 +761,7 @@ function App() {
         aria-label="主工作区"
         style={{
           position: 'relative',
-          width: resizeWidth ? `${resizeWidth}px` : '100%',
-          margin: '0 auto',
+          width: '100%',
         }}
       >
         {sidebarCollapsed && (

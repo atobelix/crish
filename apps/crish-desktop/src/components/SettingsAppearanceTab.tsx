@@ -324,6 +324,22 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     [save, settings],
   );
 
+  const allValues = React.useMemo<Record<string, any>>(() => {
+    if (!settings) return {};
+    return {
+      theme: normalizeTheme(settings.theme),
+      uiSize: normalizeUiSize(uiSize),
+      shellChrome: parseShellChromeMode(shellChromeMode),
+      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
+      skinPreset: personalization.skin,
+      accentColor: personalization.customBg,
+      brightness: personalization.themeBrightnessAdjust ?? 0,
+      fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
+      transitionEnabled: personalization.themeAutoTimeTransition ?? false,
+      vibrantMode: personalization.themeBrightnessVibrant ?? false,
+    };
+  }, [settings, uiSize, shellChromeMode, personalization]);
+
   if (loadError && !settings) {
     return (
       <SettingsPage title="外观">
@@ -361,22 +377,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       </SettingsPage>
     );
   }
-
-  const allValues = React.useMemo<Record<string, any>>(() => {
-    if (!settings) return {};
-    return {
-      theme: normalizeTheme(settings.theme),
-      uiSize: normalizeUiSize(uiSize),
-      shellChrome: parseShellChromeMode(shellChromeMode),
-      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
-      skinPreset: personalization.skin,
-      accentColor: personalization.customBg,
-      brightness: personalization.themeBrightnessAdjust ?? 0,
-      fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
-      transitionEnabled: personalization.themeAutoTimeTransition ?? false,
-      vibrantMode: personalization.themeBrightnessVibrant ?? false,
-    };
-  }, [settings, uiSize, shellChromeMode, personalization]);
 
   const handleSave = (updates: Record<string, any>) => {
     if ('theme' in updates) void save({ theme: String(updates.theme) });

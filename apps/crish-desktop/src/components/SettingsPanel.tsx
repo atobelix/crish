@@ -436,7 +436,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div
       ref={rootRef}
-      className={`${styles.settingsPanel} ${styles.settingsCover}${safeActiveTab === 'appearance' ? ' ' + styles.translucentCover : ''} is-${state}`}
+      className={`${styles.settingsPanel} ${styles.settingsCover} is-${state}`}
       data-density="compact"
       role="dialog"
       aria-modal="true"

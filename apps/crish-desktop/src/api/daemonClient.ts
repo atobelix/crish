@@ -168,6 +168,7 @@ export class DesktopDaemonClient {
     this.connectPromise = this.attemptConnect()
       .catch((e) => {
         const err = e instanceof Error ? e : new Error(String(e));
+        console.warn('[DesktopDaemonClient] connect failed:', err.message);
         this.lastError = err;
         this.handleFailure(err);
         throw err;
@@ -335,6 +336,7 @@ export class DesktopDaemonClient {
   }
 
   private openSocket(url: string): Promise<void> {
+    this.suppressCloseReconnect = false;
     return new Promise((resolve, reject) => {
       let settled = false;
       let ws: WebSocket;
@@ -474,19 +476,17 @@ export class DesktopDaemonClient {
     this.stopHeartbeat();
     this.heartbeatMisses = 0;
     this.heartbeatTimer = setInterval(() => {
-      if (!this.isConnected()) return;
-      void this.request({ type: 'ping' }, 'pong', 6_000)
-        .then(() => {
-          this.heartbeatMisses = 0;
-        })
-        .catch(() => {
-          // 容忍更多次瞬时失败，长工具/审批等待时不轻易断链
-          this.heartbeatMisses += 1;
-          if (this.heartbeatMisses < HEARTBEAT_MISS_TOLERANCE) return;
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ type: 'ping' }));
+        this.heartbeatMisses = 0;
+      } else {
+        this.heartbeatMisses += 1;
+        if (this.heartbeatMisses >= HEARTBEAT_MISS_TOLERANCE) {
           this.lastError = new Error('Engine heartbeat failed');
           this.closeSocket();
           if (!this.explicitClose) this.scheduleReconnect();
-        });
+        }
+      }
     }, HEARTBEAT_MS);
   }
 

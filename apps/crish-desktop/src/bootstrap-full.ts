@@ -5,7 +5,7 @@ export async function bootstrapFull(): Promise<void> {
     // 1. 后台连接 daemon WebSocket
     (async () => {
       const { ensureDaemonConnected } = await import('./api/daemonChatBridge');
-      ensureDaemonConnected().catch(() => {});
+      await ensureDaemonConnected().catch(() => {});
     })(),
 
     // 2. 同步引擎配置

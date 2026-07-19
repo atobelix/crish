@@ -79,9 +79,9 @@ body.dragging-card * {
   cursor: grabbing !important;
 }
 
-/* Smooth window resize transition */
+/* Disable layout transition during window resize to prevent black gaps and maximize performance */
 .window-resizing .main-layout {
-  transition: width var(--transition-slide) !important;
+  transition: none !important;
 }
 
 /* Hide the source element in the list during drag */

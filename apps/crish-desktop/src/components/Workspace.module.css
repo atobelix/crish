@@ -97,6 +97,7 @@
   container-name: column-panel;
 }
 
+:global(.is-resizing) .column,
 :global(.resizing-active) .column,
 :global(.window-resizing) .column,
 .column[data-resizing="true"] {
