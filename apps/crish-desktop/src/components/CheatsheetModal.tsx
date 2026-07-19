@@ -1,15 +1,20 @@
 import * as Lucide from 'lucide-react';
 import styles from './CheatsheetModal.module.css';
 import { Tooltip } from './settings/SettingsUI';
+import { useAnimatedPresence } from '../hooks/useAnimatedPresence';
 
 interface CheatsheetModalProps {
   onClose: () => void;
+  isOpen?: boolean;
 }
 
-export function CheatsheetModal({ onClose }: CheatsheetModalProps) {
+export function CheatsheetModal({ onClose, isOpen = true }: CheatsheetModalProps) {
+  const { state, isMounted } = useAnimatedPresence({ visible: isOpen, exitDurationMs: 250 });
+  if (!isMounted) return null;
+
   return (
     <div
-      className={styles.cheatsheetOverlay}
+      className={`${styles.cheatsheetOverlay} ${styles[state]}`}
       role="presentation"
       onClick={onClose}
     >

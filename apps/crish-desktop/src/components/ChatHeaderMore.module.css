@@ -16,7 +16,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s, opacity 0.12s;
+  transition: background-color var(--transition-micro), color var(--transition-micro), opacity var(--transition-micro);
   padding: 0;
   opacity: 0.72;
 }
@@ -71,7 +71,7 @@
   font-family: inherit;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast);
   box-sizing: border-box;
 
   gap: 6px;
@@ -86,7 +86,7 @@
   height: 14px;
   flex-shrink: 0;
   color: var(--text-tertiary);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .moreItem:hover,

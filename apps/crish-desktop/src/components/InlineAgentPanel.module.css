@@ -37,7 +37,7 @@
   text-align: left;
   color: var(--text-secondary);
   min-height: 26px;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
 }
 
 .inlineAgentHead:hover {
@@ -56,7 +56,7 @@
   flex-shrink: 0;
   padding: 2px 6px;
   opacity: 0; /* Hidden by default */
-  transition: opacity var(--transition-fast, 150ms) ease;
+  transition: opacity var(--transition-fast);
 }
 
 /* Hover reveal actions on row hover */
@@ -67,7 +67,7 @@
 /* Hover reveal chevron on head row hover */
 .inlineAgentHead :global(.tool-row-chevron) {
   opacity: 0; /* Hidden by default */
-  transition: opacity var(--transition-fast, 150ms) ease, transform 0.15s ease;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
 .inlineAgentHeadRow:hover .inlineAgentHead :global(.tool-row-chevron) {
@@ -87,7 +87,7 @@
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 100ms ease-out, color 100ms ease-out, border-color 100ms ease-out, opacity 200ms ease;
+  transition: background var(--transition-micro), color var(--transition-micro), border-color var(--transition-micro), opacity var(--transition-fast);
 }
 .agentHeadBtn:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -216,7 +216,7 @@
   cursor: pointer;
   font-family: inherit;
   padding: 1px 0;
-  transition: color 0.12s;
+  transition: color var(--transition-micro);
 }
 
 .inlineAgentLink:hover {
@@ -367,7 +367,7 @@
 .thinkingChevron {
   flex-shrink: 0;
   opacity: 0.65;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .thinkingChevron.isOpen {

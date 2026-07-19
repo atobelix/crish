@@ -45,7 +45,7 @@
 .pinnedChevron {
   margin-left: auto;
   opacity: 0.55;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .pinnedChevron.isOpen {

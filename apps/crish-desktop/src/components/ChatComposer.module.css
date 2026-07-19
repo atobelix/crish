@@ -17,7 +17,7 @@
   min-height: calc(
     1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
   );
-  transition: border-color var(--transition-fast) ease;
+  transition: border-color var(--transition-fast);
   backdrop-filter: none;
   box-shadow: none;
   color: var(--text-primary);
@@ -200,7 +200,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.12s, background 0.12s;
+  transition: color var(--transition-micro), background var(--transition-micro);
   flex-shrink: 0;
   padding: 0;
 }
@@ -337,7 +337,7 @@
   justify-content: center;
   flex-shrink: 0;
   align-self: center;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-micro), color var(--transition-micro);
 }
 
 .plusBtn:hover {

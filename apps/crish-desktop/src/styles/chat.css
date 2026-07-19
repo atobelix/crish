@@ -51,7 +51,7 @@
   font-size: var(--font-size-xs, 12px);
   line-height: 1.25;
   outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  transition: border-color var(--transition-micro), box-shadow var(--transition-micro), background var(--transition-micro);
   box-sizing: border-box;
 }
 
@@ -176,7 +176,7 @@
   padding: 0 10px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-micro), color var(--transition-micro);
   border: 1px solid transparent;
 }
 .model-badge:hover,
@@ -191,7 +191,7 @@
   transform: rotate(180deg);
 }
 .model-badge svg {
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-micro);
   flex-shrink: 0;
 }
 .model-text {
@@ -226,7 +226,7 @@
   padding: 2px 5px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.12s;
+  transition: background-color var(--transition-micro);
   user-select: none;
   line-height: 1.35;
   font-size: var(--font-size-sm);
@@ -1002,7 +1002,7 @@
   min-height: 0;
 }
 .tool-row-head {
-  transition: color 0.12s ease, background 0.12s ease;
+  transition: color var(--transition-micro), background var(--transition-micro);
 }
 .tool-row-head-main,
 .tool-row-text {

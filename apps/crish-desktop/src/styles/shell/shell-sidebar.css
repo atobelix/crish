@@ -52,7 +52,7 @@ body.is-resizing * {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .nav-item:hover {
@@ -96,7 +96,7 @@ body.is-resizing * {
   cursor: pointer;
   border-radius: 4px;
   padding: 0 6px;
-  transition: background-color 0.15s;
+  transition: background-color var(--transition-fast);
 }
 
 .section-header.collapsible-header:hover {
@@ -124,7 +124,7 @@ body.is-resizing * {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -141,7 +141,7 @@ body.is-resizing * {
 .collapse-btn svg, .folder-collapse-btn svg {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
-  transition: transform 0.2s;
+  transition: transform var(--transition-fast);
 }
 
 .sort-btn {
@@ -177,7 +177,7 @@ body.is-resizing * {
   border: 1px dashed var(--border-color);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .pin-icon {
@@ -206,7 +206,7 @@ body.is-resizing * {
   color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
-  transition: background-color 0.15s;
+  transition: background-color var(--transition-fast);
   gap: 4px;
 }
 
@@ -253,7 +253,7 @@ body.is-resizing * {
   text-decoration: none;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   position: relative;
   gap: 8px;
   font-weight: var(--font-weight-medium) !important;
@@ -295,7 +295,7 @@ body.is-resizing * {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -371,7 +371,7 @@ body.is-resizing * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .settings-btn:hover {
@@ -410,7 +410,7 @@ body.is-resizing * {
     transparent 100%
   );
   opacity: 0.55;
-  transition: opacity 0.15s ease, width 0.15s ease, filter 0.15s ease;
+  transition: opacity var(--transition-fast), width var(--transition-fast), filter var(--transition-fast);
   pointer-events: none;
 }
 .sidebar-resizer:hover::after,

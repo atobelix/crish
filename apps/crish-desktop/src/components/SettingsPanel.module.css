@@ -111,7 +111,7 @@
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--transition-micro), border-color var(--transition-micro);
 }
 
 .search::placeholder {
@@ -200,7 +200,7 @@
   width: 100%;
   background: transparent;
   color: var(--text-secondary);
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-micro), color var(--transition-micro);
   box-sizing: border-box;
   min-height: 36px;
 }
@@ -253,11 +253,11 @@
 .settingsCover.is-entering,
 .settingsCover.is-open {
   opacity: 1;
-  transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--transition-smooth);
   transition-behavior: allow-discrete;
 }
 .settingsCover.is-exiting {
   opacity: 0;
-  transition: opacity 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--transition-exit);
   transition-behavior: allow-discrete;
 }

@@ -36,7 +36,7 @@
   color: var(--text-primary);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.1s ease;
+  transition: background var(--transition-micro);
 }
 
 .chat-more-item:hover:not(:disabled) {

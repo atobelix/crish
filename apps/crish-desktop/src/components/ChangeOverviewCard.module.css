@@ -75,7 +75,7 @@
 
 .changeOverviewChev {
   color: var(--text-tertiary);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
   flex-shrink: 0;
 }
 

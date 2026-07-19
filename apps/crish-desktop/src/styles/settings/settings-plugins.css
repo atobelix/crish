@@ -26,7 +26,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--transition-micro);
 }
 .settings-create-path:hover {
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
@@ -167,7 +167,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-green, #2dbe6c) 70%, var(--text-primary));
   min-width: 0;
-  transition: width 0.2s ease;
+  transition: width var(--transition-fast);
 }
 .settings-usage-bar-fill.is-out {
   background: color-mix(in srgb, var(--text-primary) 28%, transparent);

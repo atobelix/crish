@@ -6,7 +6,7 @@
   background-color: var(--bg-active);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height);
@@ -28,7 +28,7 @@
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height);
@@ -49,7 +49,7 @@
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height-sm);
@@ -88,7 +88,7 @@
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--transition-micro), background var(--transition-micro), box-shadow var(--transition-micro);
 }
 /* 设置密度：行内小控件 — 走 control-height-sm，避免 magic 28px + !important 堆叠 */
 .settings-field-input--sm {
@@ -209,7 +209,7 @@ select.settings-field-input {
   width: 100%;
   background: transparent;
   color: var(--text-secondary);
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-micro), color var(--transition-micro);
   box-sizing: border-box;
   min-height: 36px;
 }
@@ -283,7 +283,7 @@ select.settings-field-input {
   cursor: pointer;
   background: transparent;
   color: var(--text-tertiary);
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .settings-scope-toggle-btn.active {
@@ -308,7 +308,7 @@ select.settings-field-input {
   max-width: 200px;
   text-align: center;
   font-weight: var(--font-weight-normal);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
   box-shadow: none;
   white-space: nowrap;
   overflow: hidden;
@@ -965,7 +965,7 @@ select.settings-field-input {
   line-height: 1;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
 }
 .settings-segment-pill .ui-segment-item:hover,
 .settings-segment-rect .ui-segment-item:hover,
@@ -2096,7 +2096,7 @@ textarea.settings-dialog-textarea.settings-field-input,
   color: var(--text-primary);
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 textarea.settings-dialog-textarea:focus,
 textarea.settings-dialog-textarea:focus-visible {
@@ -2333,7 +2333,7 @@ textarea.settings-dialog-textarea:focus-visible {
   position: relative;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .settings-switch::after,
 .settings-toggle-row input[type="checkbox"]::after {
@@ -2345,7 +2345,7 @@ textarea.settings-dialog-textarea:focus-visible {
   background: var(--bg-elevated, #ffffff);
   top: 2px;
   left: 2px;
-  transition: transform 0.18s ease;
+  transition: transform var(--transition-fast);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
 }
 .settings-switch:checked,

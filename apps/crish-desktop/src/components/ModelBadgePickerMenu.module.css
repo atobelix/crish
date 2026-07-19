@@ -39,7 +39,7 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
   color: var(--text-primary);
 }
 
@@ -94,7 +94,7 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
   color: var(--text-secondary);
 }
 
@@ -140,7 +140,7 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }

@@ -23,7 +23,7 @@
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro), box-shadow var(--transition-micro);
   box-sizing: border-box;
 }
 

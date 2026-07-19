@@ -117,7 +117,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .global-approval-modal .modal-approve-btn:hover {
@@ -134,7 +134,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .global-approval-modal .modal-reject-btn:hover {
@@ -219,7 +219,7 @@
   padding: 2px 0;
   cursor: pointer;
   background: transparent;
-  transition: color 0.12s;
+  transition: color var(--transition-micro);
 }
 .inline-approval-btn:disabled {
   opacity: 0.5;

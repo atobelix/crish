@@ -183,7 +183,7 @@
   color: var(--text-primary);
   box-sizing: border-box;
   line-height: 1.35;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .approvalCardInput:focus {
@@ -216,7 +216,7 @@
   cursor: pointer;
   background: var(--bg-primary);
   color: var(--text-secondary);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
 }
 
 .approvalCardBtn:disabled {

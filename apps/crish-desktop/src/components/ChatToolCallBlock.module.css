@@ -76,7 +76,7 @@
   box-sizing: border-box;
   box-shadow: none !important;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--transition-micro), color var(--transition-micro);
 }
 
 .toolRowHead.toolRowHeadStatic {
@@ -120,7 +120,7 @@
   color: var(--text-tertiary);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-micro);
 }
 
 .toolRowChevronSlot.isToggle {
@@ -175,7 +175,7 @@
 .toolRowChevron {
   flex-shrink: 0;
   opacity: 1;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .toolRowChevron.rot {
@@ -409,7 +409,7 @@
   background-color: var(--bg-secondary);
   border-bottom: none;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: background-color var(--transition-fast);
   gap: var(--card-header-gap, 6px);
   min-width: 0;
   max-width: 100%;

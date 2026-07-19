@@ -202,7 +202,7 @@
   border-radius: inherit;
   background: color-mix(in srgb, var(--accent-color, #6c8cff) 75%, var(--text-primary));
   min-width: 0;
-  transition: width 0.2s ease;
+  transition: width var(--transition-fast);
 }
 
 /* Scroll to bottom FAB */

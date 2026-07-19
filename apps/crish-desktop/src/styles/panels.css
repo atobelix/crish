@@ -166,7 +166,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .mac-copy-btn:hover {
@@ -249,7 +249,7 @@
   right: 20px;
   z-index: 999;
   font-family: var(--font-sans);
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--transition-exit), opacity var(--transition-exit);
 }
 
 .floating-plan-panel.minimized {
@@ -320,7 +320,7 @@
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .quick-approve-btn:hover {

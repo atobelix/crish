@@ -39,7 +39,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
   z-index: 5;
 }
 

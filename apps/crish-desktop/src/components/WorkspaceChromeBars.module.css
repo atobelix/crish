@@ -172,7 +172,7 @@
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1.2;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background var(--transition-micro), color var(--transition-micro);
 }
 
 .wsChromeTab:hover {
@@ -470,7 +470,7 @@
   pointer-events: none;
   margin-right: 6px;
   margin-left: 4px;
-  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
 }
 
 .wsChromeTabSession .wsChromeTabClose,

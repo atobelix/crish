@@ -699,7 +699,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: background var(--transition-micro);
 }
 
 .filesOpenItem:hover {
@@ -1070,7 +1070,7 @@
   z-index: 5;
   width: min(320px, calc(100% - 16px));
   max-width: 320px;
-  transition: top 0.12s ease, left 0.12s ease;
+  transition: top var(--transition-micro), left var(--transition-micro);
   box-sizing: border-box;
 }
 

@@ -8,7 +8,7 @@
   overflow: hidden;
   padding: 0 !important; /* Flattened padding */
   opacity: 1;
-  transition: opacity var(--transition-fast, 0.15s) ease, outline var(--transition-fast, 0.15s) ease;
+  transition: opacity var(--transition-fast), outline var(--transition-fast);
 }
 
 .section[data-ws-split="true"]:not([data-ws-active="true"]) {
@@ -91,7 +91,7 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  transition: width 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width var(--transition-fast);
 }
 
 :global(.resizing-active) .column,
@@ -108,7 +108,7 @@
   top: 0;
   bottom: 0;
   z-index: 30;
-  transition: left 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: left var(--transition-fast);
 }
 
 .colSplitter::after {
@@ -129,7 +129,7 @@
     transparent 100%
   );
   opacity: 0.5;
-  transition: opacity 0.15s ease, width 0.15s ease;
+  transition: opacity var(--transition-fast), width var(--transition-fast);
   pointer-events: none;
 }
 
@@ -155,7 +155,7 @@
   left: 0;
   right: 0;
   z-index: 30;
-  transition: top 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: top var(--transition-fast);
 }
 
 :global(.resizing-active) .colSplitter,
@@ -183,7 +183,7 @@
     transparent 100%
   );
   opacity: 0.5;
-  transition: opacity 0.15s ease, height 0.15s ease;
+  transition: opacity var(--transition-fast), height var(--transition-fast);
   pointer-events: none;
 }
 

@@ -45,7 +45,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .mrlAddBtn:hover {
@@ -77,7 +77,7 @@
   border-radius: 10px;
   cursor: pointer;
   font-family: inherit;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
   box-sizing: border-box;
 }
 
@@ -290,7 +290,7 @@
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--transition-micro), background var(--transition-micro), box-shadow var(--transition-micro);
   width: 100%;
 }
 
@@ -364,7 +364,7 @@
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
   background: var(--bg-primary);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
   flex-wrap: wrap;
 }
 
@@ -439,7 +439,7 @@
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background-color 0.18s ease;
+  transition: background-color var(--transition-fast);
   outline: none;
 }
 
@@ -456,7 +456,7 @@
   border-radius: 50%;
   background-color: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  transition: left 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: left var(--transition-fast);
 }
 
 .modelRowToggle.active .toggleThumb {
@@ -590,7 +590,7 @@
   cursor: pointer;
   opacity: 0.72;
   pointer-events: auto;
-  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
 }
 
 .modelsMainRow .modelsIconBtn {
@@ -702,7 +702,7 @@
 }
 
 .modelsBillingChevron {
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-micro);
 }
 
 .modelsBillingChevron.isOpen {
@@ -859,7 +859,7 @@
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .mrdCapPill:hover {
@@ -941,7 +941,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .mrdAddModelBtn:hover {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);

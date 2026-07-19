@@ -46,7 +46,7 @@
   pointer-events: none;
   z-index: 9999;
   border-radius: var(--radius-sm);
-  transition: opacity 0.15s var(--transition-smooth), background-color 0.15s var(--transition-smooth), border-color 0.15s var(--transition-smooth);
+  transition: opacity var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 /* Tab insert position line — rendered via JS into document.body */
@@ -81,7 +81,7 @@ body.dragging-card * {
 
 /* Smooth window resize transition */
 .window-resizing .main-layout {
-  transition: width 0.35s var(--transition-smooth) !important;
+  transition: width var(--transition-slide) !important;
 }
 
 /* Hide the source element in the list during drag */

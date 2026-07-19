@@ -59,7 +59,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .cheatsheetCloseBtn:hover {
@@ -87,7 +87,7 @@
   gap: 12px;
   padding: 10px 8px;
   border-radius: var(--radius-md);
-  transition: background-color 0.12s;
+  transition: background-color var(--transition-micro);
 }
 
 .cheatsheetRow:hover {
@@ -125,4 +125,17 @@
 .cheatsheetFooterTip strong {
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
+}
+
+.cheatsheetOverlay {
+  opacity: 0;
+}
+.entering,
+.open {
+  opacity: 1;
+  transition: opacity var(--transition-smooth);
+}
+.exiting {
+  opacity: 0;
+  transition: opacity var(--transition-exit);
 }

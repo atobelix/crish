@@ -43,7 +43,7 @@
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .header-btn:hover {
@@ -75,7 +75,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .daemon-status-chip:hover {
@@ -215,7 +215,7 @@
   box-sizing: border-box;
   box-shadow: none !important;
   outline: none !important;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro);
 }
 
 .search-bar:focus-within {
@@ -270,7 +270,7 @@
   align-items: center;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color 0.1s, color 0.1s;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .win-btn:hover {

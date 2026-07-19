@@ -67,7 +67,7 @@
 
 .sectionLabel svg {
   color: var(--text-tertiary);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .sectionLabel:hover svg {
@@ -98,7 +98,7 @@
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
 
 .sectionLabelRow:hover .sectionNew,
@@ -117,7 +117,7 @@
 .pinnedDropZone {
   border: 1px dashed transparent;
   border-radius: 8px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .pinnedDropZone.dragOver {
@@ -168,7 +168,7 @@
 
 .folderHeader svg {
   color: var(--text-tertiary);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .folderHeader:hover svg {
@@ -203,7 +203,7 @@
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
 
 .folderHeaderRow:hover .folderNewSession,
@@ -243,7 +243,7 @@
   border: none;
   font-weight: var(--font-weight-medium, 500) !important;
   box-shadow: none;
-  transition: color 0.12s ease, background-color 0.12s ease;
+  transition: color var(--transition-micro), background-color var(--transition-micro);
   box-sizing: border-box;
   text-align: left;
   cursor: pointer;
@@ -367,7 +367,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  transition: opacity 0.1s ease;
+  transition: opacity var(--transition-micro);
 }
 
 .sessionActionsBtn {
@@ -387,7 +387,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.1s ease, color 0.1s ease;
+  transition: opacity var(--transition-micro), color var(--transition-micro);
 }
 
 .sessionItem:hover .sessionTime,

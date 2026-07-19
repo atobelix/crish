@@ -21,7 +21,7 @@
   font-weight: var(--font-weight-normal);
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--transition-micro), color var(--transition-micro);
   max-width: 200px;
   white-space: nowrap;
   overflow: hidden;

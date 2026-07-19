@@ -17,7 +17,7 @@
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-sm);
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-micro), color var(--transition-micro);
 }
 
 .sidebarFooterSettings:hover {
@@ -34,7 +34,7 @@
   margin-left: auto;
   opacity: 0.55;
   flex-shrink: 0;
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-micro);
 }
 
 .sidebarFooterSettings.isOpen .sbQuickChev {
@@ -109,7 +109,7 @@
   background: transparent;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background var(--transition-micro), color var(--transition-micro);
   text-align: left;
   white-space: nowrap;
   font-family: inherit;

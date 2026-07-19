@@ -143,7 +143,7 @@
   line-height: 1.4;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease;
+  transition: opacity var(--transition-micro), color var(--transition-micro);
 }
 .md-code-block:hover .md-code-copy,
 .md-code-block:focus-within .md-code-copy,

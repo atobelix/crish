@@ -167,7 +167,7 @@
   padding: 8px 10px;
   border-radius: 6px;
   background: var(--bg-secondary);
-  transition: background 0.12s ease;
+  transition: background var(--transition-micro);
   min-width: 0;
   box-sizing: border-box;
 }
@@ -217,7 +217,7 @@
   gap: 4px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.1s ease;
+  transition: opacity var(--transition-micro);
 }
 
 .row:hover .rowActions {

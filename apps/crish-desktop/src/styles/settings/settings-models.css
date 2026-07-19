@@ -374,7 +374,7 @@
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: transparent;
   position: relative;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro);
 }
 .models-switch-ui::after {
   content: "";
@@ -385,7 +385,7 @@
   height: 14px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--text-primary) 35%, transparent);
-  transition: transform 0.12s, background 0.12s;
+  transition: transform var(--transition-micro), background var(--transition-micro);
 }
 .models-switch input:checked + .models-switch-ui {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -494,7 +494,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  transition: border-color var(--transition-micro), color var(--transition-micro), background var(--transition-micro);
 }
 .models-cap-chip input {
   position: absolute;
@@ -578,7 +578,7 @@
   color: var(--text-tertiary);
 }
 .models-billing-chevron {
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-micro);
 }
 .models-billing-chevron.is-open {
   transform: rotate(180deg);
@@ -1098,7 +1098,7 @@
   border: 1px solid var(--models-border-soft);
   border-radius: 10px;
   background: transparent;
-  transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+  transition: border-color var(--transition-micro), background var(--transition-micro), opacity var(--transition-micro);
 }
 .models-main-row-top {
   display: grid;
@@ -1336,7 +1336,7 @@ html[data-theme="dark"] .models-pill--live {
   border: 1px solid var(--models-off-border);
   background: var(--models-off-track);
   box-sizing: border-box;
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .models-tab .models-switch-ui::after {
   content: "";
@@ -1348,7 +1348,7 @@ html[data-theme="dark"] .models-pill--live {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
-  transition: transform 0.14s ease, background 0.14s ease;
+  transition: transform var(--transition-fast), background var(--transition-fast);
 }
 /* 开：实心绿轨 + 白钮滑到右侧（对齐参考图） */
 .models-tab .models-switch input:checked + .models-switch-ui,
@@ -1647,7 +1647,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
   text-align: left;
   position: relative;
   overflow: hidden;
@@ -1775,7 +1775,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
-  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .models-row-card:hover {
@@ -1836,7 +1836,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
 .models-capability-pill.is-active {
@@ -1948,7 +1948,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .mrl-add-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -1981,7 +1981,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
 }
 .mrl-item:hover {
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
@@ -2048,7 +2048,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--transition-micro);
 }
 .mrl-add-item:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -2118,7 +2118,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: transparent;
   padding: 0;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color var(--transition-fast);
 }
 .mrd-toggle-btn:hover {
   color: var(--text-primary);
@@ -2169,7 +2169,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: 8px;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-fast);
   box-sizing: border-box;
 }
 .mrd-field-input:hover {
@@ -2215,7 +2215,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: 7px;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
   box-sizing: border-box;
 }
 .mrd-search:focus {
@@ -2262,7 +2262,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
   background: transparent;
 }
 .mrd-cap-pill:hover {
@@ -2292,7 +2292,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
   gap: 8px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .mrd-model-row:hover {
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
@@ -2398,7 +2398,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   font-size: var(--font-size-xxs);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 .mrd-cap-pill:hover {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
@@ -2429,7 +2429,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .mrd-add-model-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);

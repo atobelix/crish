@@ -182,7 +182,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   -webkit-app-region: no-drag;
   app-region: no-drag;
   border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 .app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn:hover {
   background-color: var(--sidebar-hover) !important;
@@ -529,7 +529,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   z-index: 1;
   overflow: visible;
   box-sizing: border-box;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 /* 会话 tab 内边距略紧（有关闭钮） */
 .app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
@@ -602,7 +602,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-tertiary);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-micro);
 }
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover .tab-close-btn,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-close-btn {
@@ -762,7 +762,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   gap: 0 !important;
   position: relative;
   min-width: 0;
-  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width var(--transition-smooth);
 }
 
 .resizing-active .workspace-column {
@@ -790,7 +790,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   border: none !important;
   border-right: 1px solid var(--border-subtle) !important;
   border-bottom: 1px solid var(--border-subtle) !important;
-  transition: height 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: height var(--transition-fast);
 }
 
 /* Suppress card transition during manual resize drag or window resizing */
@@ -934,7 +934,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-secondary);
   background-color: transparent;
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
   user-select: none;
   white-space: nowrap;
   border: none;
@@ -981,7 +981,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   padding: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-micro);
 }
 .card-tab.card-tab--tool:hover .tab-close-btn,
 .card-tab.card-tab--tool.active .tab-close-btn {
@@ -1034,7 +1034,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   width: var(--icon-size);
   height: var(--icon-size);
   color: var(--text-tertiary);
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-micro);
 }
 
 .card-tab.active .tab-icon-container svg {
@@ -1058,7 +1058,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
 }
 
 .card-tab:hover .tab-close-btn,
@@ -1123,7 +1123,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .card-action-btn:hover {
@@ -1170,7 +1170,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
     transparent 100%
   );
   opacity: 0.5;
-  transition: opacity 0.15s ease, width 0.15s ease;
+  transition: opacity var(--transition-fast), width var(--transition-fast);
   pointer-events: none;
 }
 .col-splitter:hover::after,
@@ -1218,7 +1218,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
     transparent 100%
   );
   opacity: 0.5;
-  transition: opacity 0.15s ease, height 0.15s ease;
+  transition: opacity var(--transition-fast), height var(--transition-fast);
   pointer-events: none;
 }
 .group-splitter:hover::after,
@@ -1270,7 +1270,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .sub-btn:hover {

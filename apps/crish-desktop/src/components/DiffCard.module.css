@@ -261,7 +261,7 @@
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: background-color var(--transition-micro), border-color var(--transition-micro), box-shadow var(--transition-micro);
   box-sizing: border-box;
   content-visibility: auto;
   contain-intrinsic-size: auto 80px;
@@ -310,7 +310,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro);
   flex-shrink: 0;
   margin-right: 6px;
 }
@@ -445,7 +445,7 @@
   border-radius: 8px;
   overflow: hidden;
   background: transparent;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
   content-visibility: auto;
   contain-intrinsic-size: auto 56px;
 }
@@ -467,7 +467,7 @@
   padding: 10px 14px !important;
   margin: 0 !important;
   width: 100% !important;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .accordionItem :global(.fileItem):hover,
@@ -529,7 +529,7 @@
   gap: 4px;
   width: 100%;
   color: var(--text-primary);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .inlineCompareSelect :global(.settings-select-value) {
@@ -561,7 +561,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .inlineIconBtn:hover {
@@ -588,7 +588,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .inlineActionBtn:hover {
@@ -654,7 +654,7 @@
   color: var(--text-primary);
   resize: none;
   box-sizing: border-box;
-  transition: border-color 0.25s ease;
+  transition: border-color var(--transition-exit);
 }
 
 .commitInput:focus {
@@ -834,7 +834,7 @@
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .fileNameLink:hover {
@@ -871,7 +871,7 @@
 }
 
 .fileStat {
-  transition: opacity 0.1s ease;
+  transition: opacity var(--transition-micro);
 }
 
 .hoverActBtn {
@@ -885,7 +885,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .hoverActBtn:hover {
@@ -943,7 +943,7 @@
   padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .groupActionBtn:hover {
@@ -1001,7 +1001,7 @@
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .backBtn:hover {
@@ -1042,7 +1042,7 @@
   user-select: none;
   border: 1px solid transparent;
   border-bottom: none;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
   white-space: nowrap;
   position: relative;
 }
@@ -1074,7 +1074,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .tabClose:hover {
@@ -1114,7 +1114,7 @@
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .compareSelect:hover {
@@ -1138,7 +1138,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .detailIconBtn:hover {
@@ -1171,7 +1171,7 @@
   cursor: pointer;
   border-top: 1px solid var(--hairline, var(--border-subtle));
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro), color var(--transition-micro);
   user-select: none;
   font-family: var(--font-sans);
 }
@@ -1195,7 +1195,7 @@
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-secondary, rgba(0, 0, 0, 0.015));
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
   margin-top: 8px;
   gap: 8px;
 }
@@ -1250,7 +1250,7 @@
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .commitCloseBtn:hover {

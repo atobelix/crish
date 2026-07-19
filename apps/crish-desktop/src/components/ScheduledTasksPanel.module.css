@@ -108,7 +108,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   line-height: 1.3;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--transition-micro), color var(--transition-micro);
 }
 
 .schedPresetChip:hover {
@@ -170,7 +170,7 @@
   font-size: var(--font-size-sm);
   outline: none;
   box-shadow: 0 0 0 1px var(--hairline, var(--border-subtle));
-  transition: box-shadow 0.12s ease;
+  transition: box-shadow var(--transition-micro);
 }
 
 .schedFieldInput:focus {
