@@ -4,6 +4,7 @@ import {
   encodeOutboundMessage,
   formatProtocolValidationError,
 } from "./protocol/protocol.js";
+import { BoundedMap, MAX_CLIENTS, MAX_PENDING_WS_MESSAGES } from "@crish/shared-utils";
 
 export interface ConnectedClient {
   ws: WebSocket;
@@ -37,14 +38,16 @@ const SEND_BACKPRESSURE_CLOSE_CODE = 1013;
 const SEND_FAILURE_CLOSE_CODE = 1011;
 
 export class DaemonClientRegistry {
-  private readonly clients = new Map<WebSocket, ConnectedClient>();
+  private readonly clients = new BoundedMap<WebSocket, ConnectedClient>(MAX_CLIENTS);
   private readonly maxBufferedBytes: number;
+  private readonly maxClients: number;
   private readonly failedTransports = new WeakSet<WebSocket>();
   private clientIdCounter = 0;
   private onDiagnostic?: (diagnostic: DaemonClientTransportDiagnostic) => void;
 
   constructor(options: DaemonClientRegistryOptions = {}) {
     this.maxBufferedBytes = Math.max(1, options.maxBufferedBytes ?? DEFAULT_MAX_BUFFERED_BYTES);
+    this.maxClients = MAX_CLIENTS;
     this.onDiagnostic = options.onDiagnostic;
   }
 
@@ -52,7 +55,11 @@ export class DaemonClientRegistry {
     this.onDiagnostic = handler;
   }
 
-  connect(ws: WebSocket): ConnectedClient {
+  connect(ws: WebSocket): ConnectedClient | null {
+    if (this.clients.size >= this.maxClients) {
+      ws.close(1013, "Too many clients");
+      return null;
+    }
     const client: ConnectedClient = {
       ws,
       id: `client-${++this.clientIdCounter}`,
@@ -168,11 +175,10 @@ export class DaemonClientRegistry {
     }
 
     client.pendingMessagesCount ??= 0;
-    const MAX_PENDING_MESSAGES = 200;
-    if (client.pendingMessagesCount >= MAX_PENDING_MESSAGES) {
+    if (client.pendingMessagesCount >= MAX_PENDING_WS_MESSAGES) {
       this.reportTransportFailure(ws, {
         code: "CLIENT_SEND_BACKPRESSURE",
-        message: `Client ${client.id} exceeded daemon WebSocket pending message queue limit (200)`,
+        message: `Client ${client.id} exceeded daemon WebSocket pending message queue limit (${MAX_PENDING_WS_MESSAGES})`,
         source: "client",
         severity: "warning",
         clientId: client.id,
@@ -180,7 +186,7 @@ export class DaemonClientRegistry {
           clientId: client.id,
           operation,
           pendingMessagesCount: client.pendingMessagesCount,
-          maxPendingMessages: MAX_PENDING_MESSAGES,
+          maxPendingMessages: MAX_PENDING_WS_MESSAGES,
         },
       });
       this.closeClient(ws, SEND_BACKPRESSURE_CLOSE_CODE, "Daemon send backpressure");

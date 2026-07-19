@@ -2,7 +2,7 @@ import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { AddressInfo } from "node:net";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentRuntimeOptions, McpServerDefinition } from "@crish/agent-runtime";
-import { errorMessage } from "@crish/shared-utils";
+import { errorMessage, TokenBucket } from "@crish/shared-utils";
 import {
   AgentOrchestrator,
   type OrchestratorEvent,
@@ -100,6 +100,8 @@ export class DaemonServer {
   private stopPromise?: Promise<void>;
   private workflowSchedulerTimer?: NodeJS.Timeout;
   private workflowSchedulerTickTask?: Promise<WorkflowSchedulerTickResult>;
+  private connectionLimiter = new TokenBucket(50, 50);
+  private byteLimiter = new TokenBucket(4 * 1024 * 1024, 4 * 1024 * 1024);
 
   constructor(
     config?: Partial<DaemonConfig>,
@@ -387,6 +389,9 @@ export class DaemonServer {
 
   private handleConnection(ws: WebSocket): void {
     const client = this.clients.connect(ws);
+    if (!client) {
+      return;
+    }
     this.lifecycle.recordClientConnected(client);
     console.log(`[Daemon] Client connected: ${client.id} (total: ${this.clients.size})`);
 
@@ -424,6 +429,12 @@ export class DaemonServer {
   }
 
   private async handleMessage(ws: WebSocket, data: RawData): Promise<void> {
+    const msgBytes = Buffer.byteLength(data.toString());
+    if (!this.connectionLimiter.tryConsume(1) || !this.byteLimiter.tryConsume(msgBytes)) {
+      ws.send(JSON.stringify({ type: "error", code: "RATE_LIMITED", message: "Too many requests" }));
+      return;
+    }
+
     const parsed = parseClientMessage(data);
     if (!parsed.ok) {
       const client = this.clients.get(ws);

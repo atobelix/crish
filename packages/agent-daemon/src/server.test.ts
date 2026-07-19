@@ -3160,6 +3160,8 @@ describe("DaemonClientRegistry", () => {
     const ws = fakeWs as unknown as WebSocket;
 
     const client = registry.connect(ws);
+    expect(client).not.toBeNull();
+    const connectedClient = client!;
 
     expect(registry.send(ws, { type: "pong" })).toBe(true);
     expect(closed).toEqual({
@@ -3171,7 +3173,7 @@ describe("DaemonClientRegistry", () => {
       code: "CLIENT_SEND_FAILED",
       source: "websocket",
       severity: "error",
-      clientId: client.id,
+      clientId: connectedClient.id,
     });
   });
 });
