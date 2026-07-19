@@ -8,6 +8,7 @@ mod daemon_discovery;
 mod fs_commands;
 mod host_openers;
 mod host_paths;
+mod perf;
 mod process;
 mod sidecar;
 
@@ -79,6 +80,19 @@ macro_rules! register_handlers {
             fs_commands::write_file_content,
             fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
+            perf::hash::perf_hash_compute,
+            perf::hash::perf_base64_encode,
+            perf::hash::perf_base64_decode,
+            perf::encoding::perf_encoding_detect,
+            perf::encoding::perf_encoding_decode,
+            perf::diff::perf_diff_parse,
+            perf::jsonl::perf_jsonl_read,
+            perf::jsonl::perf_jsonl_write,
+            perf::jsonl::perf_jsonl_append,
+            perf::fs::perf_fs_read_chunk,
+            perf::fs::perf_fs_file_info,
+            perf::fs::perf_fs_watch_start,
+            perf::fs::perf_fs_watch_stop,
         ]
     };
     (dev) => {
@@ -146,6 +160,19 @@ macro_rules! register_handlers {
             fs_commands::write_file_content,
             fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
+            perf::hash::perf_hash_compute,
+            perf::hash::perf_base64_encode,
+            perf::hash::perf_base64_decode,
+            perf::encoding::perf_encoding_detect,
+            perf::encoding::perf_encoding_decode,
+            perf::diff::perf_diff_parse,
+            perf::jsonl::perf_jsonl_read,
+            perf::jsonl::perf_jsonl_write,
+            perf::jsonl::perf_jsonl_append,
+            perf::fs::perf_fs_read_chunk,
+            perf::fs::perf_fs_file_info,
+            perf::fs::perf_fs_watch_start,
+            perf::fs::perf_fs_watch_stop,
             // 开发专用命令
             cli_bridge::workbench_dev_cli_probe,
             cli_bridge::workbench_dev_cli_task_snapshot,

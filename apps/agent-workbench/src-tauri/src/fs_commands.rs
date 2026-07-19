@@ -30,8 +30,8 @@ const ERR_UNSUPPORTED_ENCODING: &str = "unsupported_encoding";
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FileCommandError {
-    code: String,
-    message: String,
+    pub(crate) code: String,
+    pub(crate) message: String,
 }
 
 impl FileCommandError {
@@ -229,12 +229,12 @@ fn read_file_content_with_guard(
 }
 
 #[derive(Debug, Clone)]
-struct WorkspaceFsGuard {
+pub(crate) struct WorkspaceFsGuard {
     root: PathBuf,
 }
 
 impl WorkspaceFsGuard {
-    fn for_default_workspace() -> Result<Self, FileCommandError> {
+    pub(crate) fn for_default_workspace() -> Result<Self, FileCommandError> {
         let app_dir = host_paths::app_dir().map_err(|e| {
             FileCommandError::new(
                 ERR_INTERNAL,
@@ -245,14 +245,14 @@ impl WorkspaceFsGuard {
     }
 
     /// 优先使用前端传入的项目工作区根；未传则回退 monorepo 默认根。
-    fn from_optional_root(workspace_root: Option<&str>) -> Result<Self, FileCommandError> {
+    pub(crate) fn from_optional_root(workspace_root: Option<&str>) -> Result<Self, FileCommandError> {
         match workspace_root {
             Some(root) if !root.trim().is_empty() => Self::new(Path::new(root.trim())),
             _ => Self::for_default_workspace(),
         }
     }
 
-    fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
+    pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         let root = root.as_ref().canonicalize().map_err(|e| {
             FileCommandError::new(
                 ERR_INTERNAL,
@@ -262,7 +262,7 @@ impl WorkspaceFsGuard {
         Ok(Self { root })
     }
 
-    fn resolve_existing(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
+    pub(crate) fn resolve_existing(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
         let requested = Path::new(requested_path);
         let candidate = if requested.as_os_str().is_empty() {
             self.root.clone()
@@ -291,7 +291,7 @@ impl WorkspaceFsGuard {
     }
 
     /// 解析可写路径：文件可不存在，但必须落在工作区根下。
-    fn resolve_for_write(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
+    pub(crate) fn resolve_for_write(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
         let requested = Path::new(requested_path);
         if requested.as_os_str().is_empty() {
             return Err(FileCommandError::new(ERR_NOT_FILE, "Path is empty."));
