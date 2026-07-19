@@ -267,10 +267,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                         : '选择项目'
                   }
                   onClick={() => onShowProjectPicker((v) => !v)}
+                  onMouseEnter={() => onShowProjectPicker(true)}
                 >
-                  <Lucide.Folder size={18} strokeWidth={2} aria-hidden />
                   <span>{projectName}</span>
-                  <Lucide.ChevronDown size={16} style={{ opacity: 0.5 }} aria-hidden />
                 </button>
                 {showProjectPicker ? (
                   <ProjectPickerMenu
@@ -350,7 +349,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 focusChatComposer();
               }}
             >
-              <span>{item.label}</span>
+              <span className={styles.quickPromptLabel}>{item.label}</span>
+              <span className={styles.quickPromptDesc}>{item.prompt}</span>
+              <Lucide.ChevronRight size={14} className={styles.promptArrow} style={{ opacity: 0.4, flexShrink: 0, marginLeft: 'auto' }} />
             </button>
           ))}
         </div>

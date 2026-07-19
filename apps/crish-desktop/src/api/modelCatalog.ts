@@ -781,38 +781,46 @@ export async function testProviderModel(
     });
     return r;
   }
-  const client = getDesktopDaemonClient();
-  if (client.isConnected()) {
-    try {
-      const res = await client.request<{ ok: boolean; latencyMs?: number; error?: string }>(
-        {
-          type: 'probe-provider-chat',
-          profileId: fresh.id,
-          baseUrl: fresh.baseUrl,
-          apiKey: key,
-          model,
-        },
-        'provider-chat-probed'
-      );
-      if (res.ok) {
-        upsertModelMeta(fresh.id, model, {
-          lastTest: { ok: true, latencyMs: res.latencyMs, at: Date.now() },
-        });
-        return { ok: true, latencyMs: res.latencyMs };
-      } else {
-        const error = res.error || '连通失败';
-        upsertModelMeta(fresh.id, model, {
-          lastTest: { ok: false, latencyMs: res.latencyMs, at: Date.now(), error },
-        });
-        return { ok: false, latencyMs: res.latencyMs, error };
-      }
-    } catch (e: any) {
-      console.warn('Daemon test model failed, falling back...', e);
-    }
-  }
 
-  const started = performance.now();
-  try {
+  // Define timeout promise of 5 seconds
+  const timeoutPromise = new Promise<{ ok: boolean; latencyMs?: number; error?: string }>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('连接超时（超过 5 秒）'));
+    }, 5000);
+  });
+
+  const doTest = async (): Promise<{ ok: boolean; latencyMs?: number; error?: string }> => {
+    const client = getDesktopDaemonClient();
+    if (client.isConnected()) {
+      try {
+        const res = await client.request<{ ok: boolean; latencyMs?: number; error?: string }>(
+          {
+            type: 'probe-provider-chat',
+            profileId: fresh.id,
+            baseUrl: fresh.baseUrl,
+            apiKey: key,
+            model,
+          },
+          'provider-chat-probed'
+        );
+        if (res.ok) {
+          upsertModelMeta(fresh.id, model, {
+            lastTest: { ok: true, latencyMs: res.latencyMs, at: Date.now() },
+          });
+          return { ok: true, latencyMs: res.latencyMs };
+        } else {
+          const error = res.error || '连通失败';
+          upsertModelMeta(fresh.id, model, {
+            lastTest: { ok: false, latencyMs: res.latencyMs, at: Date.now(), error },
+          });
+          return { ok: false, latencyMs: res.latencyMs, error };
+        }
+      } catch (e: any) {
+        console.warn('Daemon test model failed, falling back...', e);
+      }
+    }
+
+    const started = performance.now();
     const res = await httpRequest(url, {
       method: 'POST',
       headers: {
@@ -838,8 +846,12 @@ export async function testProviderModel(
       lastTest: { ok: true, latencyMs, at: Date.now() },
     });
     return { ok: true, latencyMs };
-  } catch (e) {
-    const error = friendlyFetchError(e);
+  };
+
+  try {
+    return await Promise.race([doTest(), timeoutPromise]);
+  } catch (e: any) {
+    const error = e instanceof Error ? e.message : String(e);
     upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error },
     });

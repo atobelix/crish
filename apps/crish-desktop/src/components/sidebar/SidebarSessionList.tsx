@@ -539,6 +539,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   const [dragOverPinned, setDragOverPinned] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [renameDraft, setRenameDraft] = useState('');
+  const [expandedProjectFolders, setExpandedProjectFolders] = useState<Record<string, boolean>>({});
 
   const pinnedZoneRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
@@ -1127,19 +1128,11 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                         }}
                       >
                         {open ? (
-                          <Lucide.FolderOpen size={14} strokeWidth={1.75} aria-hidden />
+                          <Lucide.FolderOpen size={16} strokeWidth={1.75} aria-hidden />
                         ) : (
-                          <Lucide.Folder size={14} strokeWidth={1.75} aria-hidden />
+                          <Lucide.Folder size={16} strokeWidth={1.75} aria-hidden />
                         )}
                         <span className={styles.folderName}>{p.name}</span>
-                        {sess.length > 0 ? (
-                          <span
-                            className={styles.folderCount}
-                            aria-label={`${sess.length} 个会话`}
-                          >
-                            {sess.length}
-                          </span>
-                        ) : null}
                       </button>
                       <Tooltip content="在此项目新建对话">
                         <button
@@ -1163,7 +1156,53 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                         role="listbox"
                         aria-label={`${p.name} 会话`}
                       >
-                        {sess.map((s) => renderSessionItem(s, true))}
+                        {sess.length <= 6 ? (
+                          sess.map((s) => renderSessionItem(s, true))
+                        ) : (
+                          <>
+                            {/* Always render first 6 sessions */}
+                            {sess.slice(0, 6).map((s) => renderSessionItem(s, true))}
+                            
+                            {/* If expanded, render the remaining sessions, followed by a Collapse button */}
+                            {expandedProjectFolders[p.id] ? (
+                              <>
+                                {sess.slice(6).map((s) => renderSessionItem(s, true))}
+                                <li className={styles.sessionItemWrap}>
+                                  <button
+                                    type="button"
+                                    className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
+                                    style={{ color: 'var(--text-tertiary)' }}
+                                    onClick={() => {
+                                      setExpandedProjectFolders((prev) => ({
+                                        ...prev,
+                                        [p.id]: false,
+                                      }));
+                                    }}
+                                  >
+                                    收起
+                                  </button>
+                                </li>
+                              </>
+                            ) : (
+                              /* If collapsed, render the 7th row Show All button */
+                              <li className={styles.sessionItemWrap}>
+                                <button
+                                  type="button"
+                                  className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
+                                  style={{ color: 'var(--text-tertiary)' }}
+                                  onClick={() => {
+                                    setExpandedProjectFolders((prev) => ({
+                                      ...prev,
+                                      [p.id]: true,
+                                    }));
+                                  }}
+                                >
+                                  查看全部 ({sess.length})
+                                </button>
+                              </li>
+                            )}
+                          </>
+                        )}
                       </ul>
                     ) : null}
                   </div>

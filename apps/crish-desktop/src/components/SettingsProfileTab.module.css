@@ -12,7 +12,7 @@
   display: inline-block;
   max-width: min(360px, 48vw);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -22,13 +22,13 @@
 }
 
 .settingsListMeta {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
 }
 
 .settingsListEmpty {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
 }

@@ -364,54 +364,79 @@
   gap: 2px;
 }
 
-/* ⑤ team card：hairline 边框 + 紧行 */
+/* ⑤ team card：平铺无硬边框 + 紧行 */
 .agentTeamCard {
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-align: left;
-  padding: 4px 6px;
-  border: 1px solid var(--hairline, var(--border-subtle));
+  padding: 5px 8px;
+  border: 1px solid transparent; /* Removed all hard card-level borders */
   border-radius: 6px;
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
   font-family: inherit;
   min-width: 0;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .agentTeamCard:hover {
   background: var(--bg-hover);
-  border-color: var(--hairline-strong, var(--border-color));
 }
 
 .agentTeamCard.isActive {
-  border-color: var(--hairline-strong, var(--border-color));
-  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+  background: var(--sidebar-active); /* Premium, warm active background matching the sidebar */
   box-shadow: none;
 }
 
-.agentTeamCardRunning {
-  border-left: 2px solid var(--accent-green);
-}
-
-.agentTeamCardFailed {
-  border-left: 2px solid var(--accent-red);
-}
-
-.agentTeamCardStopped {
-  border-left: 2px solid var(--text-tertiary);
-}
-
+/* Visual state styles (clean and dot-driven, no left lines) */
+.agentTeamCardRunning,
+.agentTeamCardFailed,
+.agentTeamCardStopped,
 .agentTeamCardCompleted {
-  border-left: 2px solid var(--hairline-strong, var(--border-color));
+  border-left: 1px solid transparent;
+}
+
+/* Spinner and Status Dots */
+.statusDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusSpinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.spinnerSvg {
+  animation: rotateSpinner 1.2s linear infinite;
+  width: 12px;
+  height: 12px;
+}
+
+.spinnerCircle {
+  stroke-linecap: round;
+  fill: none;
+}
+
+@keyframes rotateSpinner {
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .agentTeamCardTop {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -581,4 +606,97 @@
     --composer-shell-bg-focus,
     color-mix(in srgb, var(--bg-primary) 88%, transparent)
   );
+}
+
+/* Skeleton Loader / Empty State */
+.skeletonContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 12px;
+  flex: 1;
+}
+
+.skeletonTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.skeletonBotIcon {
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.skeletonGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeletonCard {
+  background: color-mix(in srgb, var(--bg-hover) 35%, transparent);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  opacity: 0.85;
+}
+
+.skeletonCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skeletonDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-subtle);
+  animation: skeletonPulse 1.5s infinite ease-in-out;
+}
+
+.skeletonLineShort {
+  height: 8px;
+  width: 50px;
+  border-radius: 4px;
+  background: var(--border-subtle);
+  animation: skeletonPulse 1.5s infinite ease-in-out;
+}
+
+.skeletonLineLong {
+  height: 7px;
+  width: 85%;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation-delay: 0.15s;
+}
+
+.skeletonLineMedium {
+  height: 7px;
+  width: 60%;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation-delay: 0.3s;
+}
+
+@keyframes skeletonPulse {
+  0% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0.45;
+  }
 }

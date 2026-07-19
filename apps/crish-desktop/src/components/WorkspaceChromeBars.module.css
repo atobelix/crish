@@ -3,9 +3,9 @@
   --ws-chrome-tab-gap: 2px;
   --ws-chrome-ws-h: 32px;
   --ws-chrome-sess-h: 32px;
-  --ws-chrome-strip: color-mix(in srgb, var(--bg-secondary) 88%, #c8c4bc 12%);
+  --ws-chrome-strip: var(--bg-secondary);
   --ws-chrome-surface: var(--bg-primary);
-  --ws-chrome-pill: color-mix(in srgb, var(--bg-secondary) 70%, #d9d5cd 30%);
+  --ws-chrome-pill: color-mix(in srgb, var(--bg-secondary) 82%, var(--text-primary) 18%);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -25,7 +25,7 @@
   box-sizing: border-box;
 }
 
-/* L0→L1：项目行贴壳层底，tab 向下开口连内容卡 */
+/* L0鈫扡1锛氶」鐩璐村３灞傚簳锛宼ab 鍚戜笅寮€鍙ｈ繛鍐呭鍗?*/
 .wsChromeRowWorkspace,
 .wsChromeRowTitlebar {
   min-height: 38px;
@@ -38,14 +38,14 @@
   border-radius: 0 !important;
 }
 
-/* L1→L2：会话行是卡顶灰带，激活 tab 向下开口连正文 */
+/* L1鈫扡2锛氫細璇濊鏄崱椤剁伆甯︼紝婵€娲?tab 鍚戜笅寮€鍙ｈ繛姝ｆ枃 */
 .wsChromeRowSessions {
   --ws-chrome-sess-h: 32px;
-  /* 使用与 card-header 统一的微暖灰色，剔除偏色 */
+  /* 浣跨敤涓?card-header 缁熶竴鐨勫井鏆栫伆鑹诧紝鍓旈櫎鍋忚壊 */
   --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
-  /* 与 hairline 边框线色对齐 */
+  /* 涓?hairline 杈规绾胯壊瀵归綈 */
   --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
-  /* 激活标签 = 正文白，相融 */
+  /* 婵€娲绘爣绛?= 姝ｆ枃鐧斤紝鐩歌瀺 */
   --ws-chrome-merge: var(--shell-inset-bg, var(--bg-primary));
   min-height: 38px;
   padding-top: 8px;
@@ -54,16 +54,16 @@
   padding-right: var(--shell-content-pad-x, 14px);
   background: var(--ws-session-strip);
   border-top: none;
-  /* 线不用 border（易被圆角/子层影响），用伪元素画在底部 */
+  /* 绾夸笉鐢?border锛堟槗琚渾瑙?瀛愬眰褰卞搷锛夛紝鐢ㄤ吉鍏冪礌鐢诲湪搴曢儴 */
   border-bottom: none;
   align-items: flex-end;
   gap: 2px;
   position: relative;
   z-index: 1;
-  overflow: hidden; /* 参与内容卡圆角裁切 */
+  overflow: hidden; /* 鍙備笌鍐呭鍗″渾瑙掕鍒?*/
 }
 
-/* #f3f3f3 底线：整行一条；激活 tab 白底叠在上面，该段自然无线 */
+/* #f3f3f3 搴曠嚎锛氭暣琛屼竴鏉★紱婵€娲?tab 鐧藉簳鍙犲湪涓婇潰锛岃娈佃嚜鐒舵棤绾?*/
 .wsChromeRowSessions::after {
   content: '';
   position: absolute;
@@ -112,7 +112,7 @@
   flex-shrink: 0;
   margin-left: auto;
   color: var(--text-tertiary);
-  /* 与文件夹页签底对齐 */
+  /* 涓庢枃浠跺す椤电搴曞榻?*/
   align-self: flex-end;
   height: var(--ws-chrome-ws-h, 32px);
   padding-right: 2px;
@@ -140,17 +140,26 @@
 }
 
 .wsChromeTrailBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   color: var(--text-primary);
 }
 
-/* 通用：字重 normal；标签放宽，空间够就别挤 */
+.wsChromeTrailBtn:global(.is-active) {
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.wsChromeTrailBtn:global(.is-active):hover {
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+}
+
+/* 閫氱敤锛氬瓧閲?normal锛涙爣绛炬斁瀹斤紝绌洪棿澶熷氨鍒尋 */
 .wsChromeTab {
   appearance: none;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-family: inherit;
   font-weight: 400;
   display: inline-flex;
@@ -184,25 +193,23 @@
 }
 
 /*
- * 文件夹页签几何（相融的关键）：
- * - 未激活：无底/透明，贴在灰带上，字偏暗
- * - 激活：仅顶圆角；左/顶/右边线；底边与下层同色 → 口袋开口连入下层
- */
+ * 鏂囦欢澶归〉绛惧嚑浣曪紙鐩歌瀺鐨勫叧閿級锛? * - 鏈縺娲伙細鏃犲簳/閫忔槑锛岃创鍦ㄧ伆甯︿笂锛屽瓧鍋忔殫
+ * - 婵€娲伙細浠呴《鍦嗚锛涘乏/椤?鍙宠竟绾匡紱搴曡竟涓庝笅灞傚悓鑹?鈫?鍙ｈ寮€鍙ｈ繛鍏ヤ笅灞? */
 .wsChromeRowWorkspace .wsChromeTab,
 .wsChromeRowTitlebar .wsChromeTab,
 .wsChromeRowSessions .wsChromeTab,
 .wsChromeTabSession {
   height: var(--ws-chrome-ws-h, 32px);
   min-height: var(--ws-chrome-ws-h, 32px);
-  /* 只有顶圆角：底边与下层表面相连 */
+  /* 鍙湁椤跺渾瑙掞細搴曡竟涓庝笅灞傝〃闈㈢浉杩?*/
   border-radius: 8px 8px 0 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 400;
   padding: 0 14px;
   min-width: 0;
   max-width: 220px;
   position: relative;
-  margin: 0 0 -1px; /* 压住行底部分隔线 */
+  margin: 0 0 -1px; /* 鍘嬩綇琛屽簳閮ㄥ垎闅旂嚎 */
   gap: 8px;
   align-items: center;
   box-shadow: none;
@@ -231,12 +238,12 @@
   color: inherit;
 }
 
-/* 未激活悬停：仍贴在灰带上，略亮 */
+/* 鏈縺娲绘偓鍋滐細浠嶈创鍦ㄧ伆甯︿笂锛岀暐浜?*/
 .wsChromeRowWorkspace .wsChromeTab:hover,
 .wsChromeRowTitlebar .wsChromeTab:hover,
 .wsChromeRowSessions .wsChromeTab:hover,
 .wsChromeTabSession:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   color: var(--text-secondary);
   border-color: transparent;
 }
@@ -247,8 +254,7 @@
 }
 
 /*
- * 项目激活：与内容卡白相融
- * 会话激活：与正文白相融；白底叠在行底 #f3f3f3 线上 → 激活位无线
+ * 椤圭洰婵€娲伙細涓庡唴瀹瑰崱鐧界浉铻? * 浼氳瘽婵€娲伙細涓庢鏂囩櫧鐩歌瀺锛涚櫧搴曞彔鍦ㄨ搴?#f3f3f3 绾夸笂 鈫?婵€娲讳綅鏃犵嚎
  */
 .wsChromeRowWorkspace .wsChromeTab.isActive,
 .wsChromeRowTitlebar .wsChromeTab.isActive {
@@ -287,7 +293,7 @@
   color: var(--text-primary);
 }
 
-/* +：可展开菜单的触发钮 */
+/* +锛氬彲灞曞紑鑿滃崟鐨勮Е鍙戦挳 */
 .wsChromeRowWorkspace .wsChromeTabAdd,
 .wsChromeRowTitlebar .wsChromeTabAdd,
 .wsChromeRowSessions .wsChromeTabAdd {
@@ -309,17 +315,23 @@
 
 .wsChromeRowWorkspace .wsChromeTabAdd:hover,
 .wsChromeRowTitlebar .wsChromeTabAdd:hover,
-.wsChromeRowSessions .wsChromeTabAdd:hover,
-.wsChromeRowWorkspace .wsChromeTabAdd[aria-expanded='true'],
-.wsChromeRowTitlebar .wsChromeTabAdd[aria-expanded='true'],
-.wsChromeRowSessions .wsChromeTabAdd[aria-expanded='true'] {
+.wsChromeRowSessions .wsChromeTabAdd:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   box-shadow: none;
   border-color: transparent;
 }
 
-/* 加号展开面板 */
+.wsChromeRowWorkspace .wsChromeTabAdd[aria-expanded='true'],
+.wsChromeRowTitlebar .wsChromeTabAdd[aria-expanded='true'],
+.wsChromeRowSessions .wsChromeTabAdd[aria-expanded='true'] {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  box-shadow: none;
+  border-color: transparent;
+}
+
+/* 鍔犲彿灞曞紑闈㈡澘 */
 .wsChromeAddWrap {
   position: relative;
   align-self: flex-end;
@@ -335,8 +347,8 @@
   min-width: 200px;
   padding: 6px;
   border-radius: 12px;
-  background: var(--bg-elevated, #fff);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
   box-shadow:
     0 4px 16px color-mix(in srgb, #000 8%, transparent),
     0 0 0 1px color-mix(in srgb, #000 2%, transparent);
@@ -356,7 +368,7 @@
   background: transparent;
   text-align: left;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
   padding: 8px 10px;
   border-radius: 7px;
@@ -369,7 +381,7 @@
 
 .wsChromeAddItem:hover,
 .wsChromeAddItem:focus-visible {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   outline: none;
 }
 
@@ -394,7 +406,7 @@
   line-height: 1.25;
 }
 
-/* 项目 tab 加宽 */
+/* 椤圭洰 tab 鍔犲 */
 .wsChromeRowWorkspace .wsChromeTab,
 .wsChromeRowTitlebar .wsChromeTab {
   max-width: 280px;
@@ -453,7 +465,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  /* 默认隐藏；仅 hover / 激活显示 */
+  /* 榛樿闅愯棌锛涗粎 hover / 婵€娲绘樉绀?*/
   opacity: 0;
   pointer-events: none;
   margin-right: 6px;

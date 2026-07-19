@@ -24,7 +24,7 @@ import {
   getActiveModelId,
 } from '../api/providerProfiles';
 import {
-  formatContextLabelZh,
+  formatContextLabel,
   formatModelDisplayName,
   getModelMeta,
   MODEL_CAPABILITY_OPTIONS,
@@ -43,6 +43,7 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  Tooltip,
 } from './settings/SettingsUI';
 
 type Props = {
@@ -357,6 +358,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     caps: Record<ModelCapabilityKey, boolean>;
   } | null>(null);
 
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+
   const selected = useMemo(
     () => profiles.find((p) => p.id === selectedId) || null,
     [profiles, selectedId],
@@ -393,6 +397,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       setCfgDraft(null);
       setManualOpen(false);
       setAddDraft(emptyAddDraft());
+      setEditingName(false);
+      setNameDraft('');
     }
   }, [selectedId]);
 
@@ -788,8 +794,70 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             <div className={`${styles.mrdBody} mrd-body`}>
               {/* Detail header */}
               <div className="mrd-head">
-                <div className="mrd-head-left">
-                  <h3 className="mrd-title">{selectedLabel}</h3>
+                <div className="mrd-head-left" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {editingName && selected.id.startsWith('custom-') ? (
+                    <input
+                      className="mrd-title"
+                      value={nameDraft}
+                      autoFocus
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onBlur={() => {
+                        if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
+                          upsertProfile({ ...selected, name: nameDraft.trim() });
+                          refresh();
+                        }
+                        setEditingName(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          setEditingName(false);
+                        }
+                      }}
+                      style={{
+                        border: 'none',
+                        borderBottom: '1px dashed var(--accent-primary)',
+                        background: 'transparent',
+                        padding: '0',
+                        margin: '0',
+                        outline: 'none',
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        letterSpacing: '-0.015em',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'inherit',
+                        height: '27px',
+                        lineHeight: '27px',
+                      }}
+                    />
+                  ) : selected.id.startsWith('custom-') ? (
+                    <Tooltip content="点击重命名服务商">
+                      <h3
+                        className="mrd-title"
+                        onClick={() => {
+                          setEditingName(true);
+                          setNameDraft(selected.name);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          borderBottom: '1px dashed var(--border-subtle)',
+                          transition: 'border-color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--text-secondary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                        }}
+                      >
+                        {selectedLabel}
+                      </h3>
+                    </Tooltip>
+                  ) : (
+                    <h3 className="mrd-title">{selectedLabel}</h3>
+                  )}
                 </div>
                 <div className="mrd-head-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
@@ -832,74 +900,78 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               </div>
 
               {/* Credentials */}
-              <div className={`${styles.mrdFields} mrd-fields`}>
-                <div className={`${styles.mrdField} mrd-field`}>
-                  <label className={`${styles.mrdFieldLabel} mrd-field-label`}>Base URL</label>
-                  <input
-                    className={`${styles.mrdFieldInput} mrd-field-input`}
-                    value={selected.baseUrl}
-                    placeholder="https://api.example.com/v1"
-                    spellCheck={false}
-                    onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); refresh(); }}
-                    onBlur={() => {
-                      if (!selected) return;
-                      void saveProfileBaseUrl(selected.id, selected.baseUrl).then((r) => {
-                        if (!r.ok) notify(false, `地址保存失败：${r.error || '未知错误'}`);
-                        refresh();
-                      });
-                    }}
-                  />
-                </div>
-                <div className={`${styles.mrdField} mrd-field`}>
-                  <label className={`${styles.mrdFieldLabel} mrd-field-label`}>API Key</label>
-                  <div className={`${styles.mrdKeyRow} mrd-key-row`}>
+              {selected.id.startsWith('custom-') && (
+                <div className={`${styles.mrdFields} mrd-fields`}>
+                  <div className={`${styles.mrdField} mrd-field`}>
+                    <label className={`${styles.mrdFieldLabel} mrd-field-label`}>Base URL</label>
                     <input
                       className={`${styles.mrdFieldInput} mrd-field-input`}
-                      type="password"
-                      placeholder={hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'}
-                      value={keyDraft}
-                      onChange={(e) => setKeyDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }}
+                      value={selected.baseUrl}
+                      placeholder="https://api.example.com/v1"
+                      spellCheck={false}
+                      onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); refresh(); }}
+                      onBlur={() => {
+                        if (!selected) return;
+                        void saveProfileBaseUrl(selected.id, selected.baseUrl).then((r) => {
+                          if (!r.ok) notify(false, `地址保存失败：${r.error || '未知错误'}`);
+                          refresh();
+                        });
+                      }}
                     />
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-secondary ui-btn-sm"
-                      disabled={!keyDraft.trim()}
-                      onClick={() => void saveKey()}
-                      style={{ borderRadius: '7px', height: '34px', padding: '0 14px', flexShrink: 0 }}
-                    >
-                      保存
-                    </button>
+                  </div>
+                  <div className={`${styles.mrdField} mrd-field`}>
+                    <label className={`${styles.mrdFieldLabel} mrd-field-label`}>API Key</label>
+                    <div className={`${styles.mrdKeyRow} mrd-key-row`}>
+                      <input
+                        className={`${styles.mrdFieldInput} mrd-field-input`}
+                        type="password"
+                        placeholder={hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'}
+                        value={keyDraft}
+                        onChange={(e) => setKeyDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }}
+                      />
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-secondary ui-btn-sm"
+                        disabled={!keyDraft.trim()}
+                        onClick={() => void saveKey()}
+                        style={{ borderRadius: '7px', height: '34px', padding: '0 14px', flexShrink: 0 }}
+                      >
+                        保存
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Model list header */}
               <div className={`${styles.mrdModelsHead} mrd-models-head`}>
                 <span className={`${styles.mrdModelsLabel} mrd-models-label`}>模型列表</span>
                 <div className={`${styles.mrdModelsActions} mrd-models-actions`}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    disabled={checkBusy}
-                    onClick={runCheck}
-                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
-                    title="检查连通性"
-                  >
-                    {checkBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
-                    <span>检查连通性</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    disabled={scanBusy}
-                    onClick={runScan}
-                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
-                    title="自动获取服务商模型列表"
-                  >
-                    {scanBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.RefreshCw size={13} />}
-                    <span>自动获取</span>
-                  </button>
+                  <Tooltip content="检查服务商连通性">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      disabled={checkBusy}
+                      onClick={runCheck}
+                      style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      aria-label="检查连通性"
+                    >
+                      {checkBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="自动获取服务商模型列表">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      disabled={scanBusy}
+                      onClick={runScan}
+                      style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      aria-label="自动获取"
+                    >
+                      {scanBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.RefreshCw size={13} />}
+                    </button>
+                  </Tooltip>
                   <div style={{ position: 'relative' }}>
                     <Lucide.Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
                     <input
@@ -911,16 +983,17 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       spellCheck={false}
                     />
                   </div>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}
-                    style={{ height: '28px', padding: '0 8px', gap: '4px' }}
-                    title="添加模型"
-                  >
-                    <Lucide.Plus size={13} />
-                    <span>添加模型</span>
-                  </button>
+                  <Tooltip content="手动添加模型">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}
+                      style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      aria-label="添加模型"
+                    >
+                      <Lucide.Plus size={13} />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -972,14 +1045,16 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   const display = expanded && cfgDraft?.displayName?.trim()
                     ? cfgDraft.displayName.trim()
                     : formatModelDisplayName(selected.id, m, meta);
-                  const liveCtx = expanded && cfgDraft
-                    ? (() => { const n = parseInt(cfgDraft.contextLength.replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? formatContextLabelZh(n) : formatContextLabelZh(meta.contextLength); })()
-                    : formatContextLabelZh(meta.contextLength);
+                  const liveCtxVal = expanded && cfgDraft
+                    ? (() => { const n = parseInt(cfgDraft.contextLength.replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : meta.contextLength; })()
+                    : meta.contextLength;
+                  const liveCtxLabel = formatContextLabel(liveCtxVal);
+                  const showCtx = liveCtxLabel && liveCtxLabel !== '—';
 
                   return (
                     <div
                       key={m}
-                      className={`${styles.mrdModelRow} mrd-model-row ${off ? styles.isOff + ' is-off' : ''} ${isLive ? styles.isLive + ' is-live' : ''}`}
+                      className={`${styles.mrdModelRow} mrd-model-row ${off ? 'is-off' : ''} ${isLive ? 'is-live' : ''} ${expanded ? 'is-expanded' : ''}`}
                       onClick={(e) => {
                         const target = e.target as HTMLElement;
                         if (target.closest('.models-switch') || target.closest('.mrd-delete-btn')) {
@@ -993,17 +1068,26 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       <div className={`${styles.mrdModelInfo} mrd-model-info`}>
                         <span className={`${styles.mrdModelName} mrd-model-name`}>{display}</span>
                         <div className="mrd-model-meta">
-                          {liveCtx && <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>{liveCtx}</span>}
+                          {showCtx && <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>{liveCtxLabel}</span>}
                           {meta.capabilities?.tools && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持工具调用"><Lucide.Wrench size={10} /></span>}
                           {meta.capabilities?.vision && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持视觉"><Lucide.Eye size={10} /></span>}
                           {meta.capabilities?.reasoning && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持思考"><Lucide.BrainCircuit size={10} /></span>}
                         </div>
                       </div>
                       <div className={`${styles.mrdModelActions} mrd-model-actions`}>
-                        <label className={`${styles.modelsSwitch} models-switch`} title={off ? '已停用，点击启用' : '点击停用'}>
-                          <input type="checkbox" checked={!off} onChange={(e) => { setModelEnabled(selected.id, m, e.target.checked); refresh(); }} />
-                          <span className={`${styles.modelsSwitchUi} models-switch-ui`} />
-                        </label>
+                        <button
+                          type="button"
+                          className={`${styles.modelRowToggle} ${!off ? styles.active : ''}`}
+                          title={off ? '已停用，点击启用' : '点击停用'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModelEnabled(selected.id, m, off);
+                            refresh();
+                          }}
+                          aria-label={off ? '启用模型' : '停用模型'}
+                        >
+                          <span className={styles.toggleThumb} />
+                        </button>
                         <button
                           type="button"
                           className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -1026,7 +1110,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
                       {/* Expanded config sub-panel */}
                       {expanded && cfgDraft && (
-                        <div className={`${styles.mrdModelCfg} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>
+                        <div className={`${styles.modelConfigPanel} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>
                           <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
                             <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
                               <span>展示名称</span>
@@ -1050,6 +1134,30 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                               })}
                             </div>
                             <div className={`${styles.mrdCfgActions} mrd-cfg-actions`}>
+                              {meta.lastTest && (
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 500,
+                                    marginRight: '6px',
+                                    userSelect: 'none',
+                                    color: !meta.lastTest.ok
+                                      ? 'var(--accent-red, #ef4444)'
+                                      : (meta.lastTest.latencyMs || 0) < 400
+                                      ? 'var(--accent-green, #10b981)'
+                                      : (meta.lastTest.latencyMs || 0) < 1200
+                                      ? 'var(--accent-orange, #f59e0b)'
+                                      : 'var(--accent-red, #ef4444)'
+                                  }}
+                                  title={meta.lastTest.error || (meta.lastTest.ok ? '测试成功' : '测试失败')}
+                                >
+                                  {meta.lastTest.ok
+                                    ? `${meta.lastTest.latencyMs}ms`
+                                    : meta.lastTest.error?.includes('超时') || meta.lastTest.error?.includes('timeout')
+                                    ? '超时'
+                                    : '失败'}
+                                </span>
+                              )}
                               <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)} title="测试连通性">
                                 {testBusy === tKey ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
                               </button>

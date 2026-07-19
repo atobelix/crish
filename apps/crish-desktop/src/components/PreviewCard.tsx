@@ -439,33 +439,6 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         </Tooltip>
       </div>
 
-      {!blank && hostLabel ? (
-        <Tooltip content={activeUrl}>
-          <div
-            className={styles.statusStrip}
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span
-              className={`${styles.statusDot} ${
-                loading ? styles.isLoading : loadError ? styles.isErr : styles.isOk
-              }`}
-              aria-hidden
-            />
-            <span className={styles.statusHost}>{hostLabel}</span>
-            {!canEmbed ? (
-              <span className={styles.statusHint}>不可嵌入</span>
-            ) : loadError ? (
-              <span className={styles.statusHint}>加载失败</span>
-            ) : loading ? (
-              <span className={styles.statusHint}>加载中</span>
-            ) : (
-              <span className={styles.statusHint}>已就绪</span>
-            )}
-          </div>
-        </Tooltip>
-      ) : null}
 
       {showHist && (
         <div

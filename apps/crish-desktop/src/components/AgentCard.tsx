@@ -201,20 +201,26 @@ function AgentBrowsePad({
       <div className={styles.agentLaunchBody}>
         {agents.length === 0 ? (
           <div
-            className={`${styles.agentCardEmptyHint} ${styles.agentCardEmptyHintPad}`}
+            className={styles.skeletonContainer}
             role="status"
             aria-live="polite"
           >
-            <p className={styles.agentCardEmptyP} style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-              <Lucide.Bot size={16} strokeWidth={1.5} aria-hidden />
-              <span>暂无子智能体</span>
-            </p>
-            <p className={styles.agentCardEmptyP}>
-              子智能体由主对话里的 AI 自动拉起，无需人工委派。
-            </p>
-            <p className={`${styles.agentCardEmptyP} ${styles.agentCardEmptyPMuted}`}>
-              有协作时会出现在消息时间线；点开后仅在侧栏查看，不覆盖主对话。
-            </p>
+            <div className={styles.skeletonTitleRow}>
+              <Lucide.Bot size={13} className={styles.skeletonBotIcon} aria-hidden />
+              <span>暂无活跃协作</span>
+            </div>
+            <div className={styles.skeletonGrid}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={styles.skeletonCard}>
+                  <div className={styles.skeletonCardHeader}>
+                    <div className={styles.skeletonDot} />
+                    <div className={styles.skeletonLineShort} />
+                  </div>
+                  <div className={styles.skeletonLineLong} />
+                  <div className={styles.skeletonLineMedium} />
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className={styles.agentLaunchList} role="list" aria-label="本会话子智能体">

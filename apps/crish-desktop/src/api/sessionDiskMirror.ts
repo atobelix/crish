@@ -640,16 +640,89 @@ async function tryTauriMkdir(path: string): Promise<void> {
   }
 }
 
+async function tryMigrateOldSessions(newDir: string, pathApi: any): Promise<void> {
+  try {
+    const fs = await loadTauriFs();
+    if (!fs?.writeTextFile) return;
+
+    const newIndexPath = pathApi.join
+      ? await pathApi.join(newDir, 'index.json')
+      : `${newDir}/index.json`;
+      
+    // 检查新 index 是否已有内容
+    const existingNewIndex = await tryTauriRead(newIndexPath);
+    if (existingNewIndex && existingNewIndex.trim()) {
+      return; // 已经有索引，直接返回不重复迁移
+    }
+
+    if (!pathApi.appDataDir) return;
+    const currentAppData = await pathApi.appDataDir();
+    if (!currentAppData) return;
+
+    // 寻找 me.flowbit.crish 旧数据
+    const oldFlowbitDir = pathApi.join
+      ? await pathApi.join(currentAppData, '..', 'me.flowbit.crish', 'crish', 'sessions')
+      : `${String(currentAppData).replace(/[\\/]+$/, '')}/../me.flowbit.crish/crish/sessions`;
+
+    const oldIndexPath = pathApi.join
+      ? await pathApi.join(oldFlowbitDir, 'index.json')
+      : `${oldFlowbitDir}/index.json`;
+
+    const indexRaw = await tryTauriRead(oldIndexPath);
+    if (!indexRaw || !indexRaw.trim()) {
+      return; // 旧数据为空或不存在，退出
+    }
+
+    // 写入新 index
+    await fs.writeTextFile(newIndexPath, indexRaw);
+
+    // 解析出所有的会话并备份
+    try {
+      const indexData = JSON.parse(indexRaw);
+      if (indexData && Array.isArray(indexData.sessions)) {
+        for (const s of indexData.sessions) {
+        const bodyName = `${s.id}.jsonl`;
+        const oldBodyPath = pathApi.join
+          ? await pathApi.join(oldFlowbitDir, bodyName)
+          : `${oldFlowbitDir}/${bodyName}`;
+        const newBodyPath = pathApi.join
+          ? await pathApi.join(newDir, bodyName)
+          : `${newDir}/${bodyName}`;
+
+        const bodyRaw = await tryTauriRead(oldBodyPath);
+        if (bodyRaw) {
+          await fs.writeTextFile(newBodyPath, bodyRaw);
+        }
+        }
+      }
+    } catch {
+      /* ignore parse error */
+    }
+  } catch (e) {
+    /* ignore migration errors */
+  }
+}
+
 async function resolveMirrorDir(): Promise<string | null> {
   try {
     const pathApi = await loadTauriPath();
-    if (!pathApi?.appDataDir) return null;
-    const base = await pathApi.appDataDir();
+    if (!pathApi) return null;
+    
+    // 优先采用用户主目录下的 .crish 文件夹作为通用数据持久化路径，保障在 identifier 重构或修改打包名后历史对话不丢失
+    let base: string | null = null;
+    if (pathApi.homeDir) {
+      base = await pathApi.homeDir();
+    } else if (pathApi.appDataDir) {
+      base = await pathApi.appDataDir();
+    }
     if (!base) return null;
+    
     const join = pathApi.join
-      ? await pathApi.join(base, 'crish', 'sessions')
-      : `${String(base).replace(/[\\/]+$/, '')}/crish/sessions`;
+      ? await pathApi.join(base, '.crish', 'sessions')
+      : `${String(base).replace(/[\\/]+$/, '')}/.crish/sessions`;
+      
     await tryTauriMkdir(join);
+    void tryMigrateOldSessions(join, pathApi);
     return normalizeMirrorBaseDir(join);
   } catch {
     return null;

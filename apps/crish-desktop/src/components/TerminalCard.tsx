@@ -273,7 +273,7 @@ export const TerminalCard: React.FC = () => {
 
   return (
     <div
-      className={styles.panel}
+      className={`${styles.panel} term-card`}
       role="region"
       aria-labelledby={titleId}
       aria-label="终端 · 命令输出"

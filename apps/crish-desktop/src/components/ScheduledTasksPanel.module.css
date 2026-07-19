@@ -123,9 +123,9 @@
 
 /* 新建计划：竖排字段，软输入，无系统原生丑 select */
 .schedForm {
-  border: none;
+  border: 1px solid var(--border-color);
   border-radius: 14px;
-  background: var(--control-soft-bg, var(--bg-secondary));
+  background: transparent;
   padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
@@ -178,8 +178,9 @@
 }
 
 .schedFieldTextarea {
-  min-height: 72px;
-  resize: vertical;
+  min-height: 120px;
+  height: 120px;
+  resize: none;
   line-height: 1.45;
   padding-top: 10px;
 }

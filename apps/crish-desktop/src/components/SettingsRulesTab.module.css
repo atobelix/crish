@@ -21,12 +21,12 @@
 }
 
 .labelTitle {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text-primary);
 }
 
 .labelDesc {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 

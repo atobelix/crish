@@ -1,7 +1,7 @@
 /**
  * 设置 · 外观：主题、密度、字体与阅读相关选项；改完即生效，仅失败提示。
  */
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import type { Settings } from '../api/clientApi';
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
@@ -13,6 +13,14 @@ import {
 import { FontSettingsSection } from './FontSettingsSection';
 import { SettingsSelect } from './SettingsSelect';
 import styles from './SettingsAppearanceTab.module.css';
+import {
+  readStoredTheme,
+  readStoredPersonalization,
+  writeStoredPersonalization,
+  applyPersonalization,
+  type PersonalizationSettings,
+  getDynamicSolarAdjustments,
+} from '../api/themeStore';
 import {
   SettingsPage,
   SettingsSection,
@@ -86,8 +94,58 @@ function normalizeCodeIndent(raw: unknown): string {
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const hideThinkingId = useId();
+  const skinLabelId = useId();
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
+  const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() => readStoredTheme());
+  const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => readStoredPersonalization());
+
+  // 同步黑夜白天主题的变化
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvt = e as CustomEvent<{ theme: 'default' | 'dark' }>;
+      if (customEvt?.detail?.theme) {
+        setActiveTheme(customEvt.detail.theme);
+      }
+    };
+    window.addEventListener('crish-theme-changed', handler);
+    return () => {
+      window.removeEventListener('crish-theme-changed', handler);
+    };
+  }, []);
+
+  const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
+    const next = { ...personalization, ...updates };
+    setPersonalization(next);
+    writeStoredPersonalization(next);
+    applyPersonalization(next, activeTheme);
+  };
+
+  const skinOptions = useMemo(() => {
+    const list = activeTheme === 'dark'
+      ? [
+          { value: 'dark-cozy', label: '护眼暗灰' },
+          { value: 'deep-night', label: '深邃夜空' },
+          { value: 'dark-forest', label: '森林绿影' },
+          { value: 'aurora', label: '北欧极光' },
+          { value: 'cocoa', label: '可可暗香' },
+          { value: 'burgundy', label: '暗红丝绒' },
+          { value: 'cyber', label: '赛博星空' },
+          { value: 'obsidian', label: '黑曜石墨' },
+        ]
+      : [
+          { value: 'warm-gray', label: '护眼暖灰' },
+          { value: 'cream', label: '杏仁奶油' },
+          { value: 'paper', label: '极简纸质' },
+          { value: 'classic-gray', label: '经典浅灰' },
+          { value: 'sakura', label: '落樱微风' },
+          { value: 'matcha', label: '抹茶拿铁' },
+          { value: 'glacier', label: '冰川薄荷' },
+          { value: 'pearl', label: '金沙流光' },
+        ];
+
+    list.push({ value: 'custom', label: '自定义颜色' });
+    return list;
+  }, [activeTheme]);
   const uiSize = useLayoutStore((s) => s.uiSize);
   const setUiSize = useLayoutStore((s) => s.setUiSize);
   const shellChromeMode = useLayoutStore((s) => s.shellChromeMode);
@@ -96,6 +154,21 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (personalization.themeAutoTimeTransition) {
+      interval = setInterval(() => {
+        setTick((t) => t + 1);
+      }, 10000);
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [personalization.themeAutoTimeTransition]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +327,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   }
 
   const theme = normalizeTheme(settings.theme);
-  const hideThinking = Boolean(settings.hideThinkingBlock);
   const codeIndent = normalizeCodeIndent(settings.markdown?.codeBlockIndent);
   const density = normalizeUiSize(uiSize);
   const chrome = parseShellChromeMode(shellChromeMode);
@@ -338,8 +410,14 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
               }
             />
 
+          </SettingsCard>
+        </SettingsSection>
+
+        <SettingsSection title="代码排版">
+          <SettingsCard>
             <SettingsRow
-              title={<span id="settings-appearance-indent-label">代码缩进</span>}
+              title={<span id="settings-appearance-indent-label">代码块缩进</span>}
+              desc="配置编辑器与预览中代码块默认的缩进字符数"
               control={
                 <SettingsSelect
                   value={codeIndent}
@@ -355,21 +433,150 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                 />
               }
             />
+          </SettingsCard>
+        </SettingsSection>
+
+        <SettingsSection title="预设皮肤与字号">
+          <SettingsCard>
+            <SettingsRow
+              title={<span id={skinLabelId}>预设配色皮肤</span>}
+              desc={activeTheme === 'dark' ? '深色模式下可选的高阶主题预设' : '浅色模式下可选的高阶主题预设'}
+              control={
+                <SettingsSelect
+                  className="settings-personalize-select"
+                  value={personalization.skin}
+                  options={skinOptions}
+                  onChange={(v) => updatePersonalization({ skin: v })}
+                  disabled={saving}
+                  placeholder="选择预设…"
+                />
+              }
+            />
+
+            {personalization.skin === 'custom' && (
+              <>
+                <SettingsRow
+                  title="自定义背景色"
+                  control={
+                    <input
+                      type="color"
+                      value={personalization.customBg}
+                      onChange={(e) => updatePersonalization({ customBg: e.target.value })}
+                      disabled={saving}
+                      className={styles.colorInput}
+                    />
+                  }
+                />
+                <SettingsRow
+                  title="自定义文本色"
+                  desc="自适应计算副文本、边框与悬浮文本色"
+                  control={
+                    <input
+                      type="color"
+                      value={personalization.customFg}
+                      onChange={(e) => updatePersonalization({ customFg: e.target.value })}
+                      disabled={saving}
+                      className={styles.colorInput}
+                    />
+                  }
+                />
+              </>
+            )}
 
             <SettingsRow
-              title={<label htmlFor={hideThinkingId} className="settings-ui-row-label">隐藏思考过程</label>}
+              title="主题亮度微调"
+              desc={
+                personalization.themeAutoTimeTransition
+                  ? `已受智能时光过渡控制：${getDynamicSolarAdjustments().periodLabel}`
+                  : (personalization.themeBrightnessAdjust || 0) === 0
+                    ? '默认亮度（系统预设的温润中值配比）'
+                    : `当前微调: ${(personalization.themeBrightnessAdjust || 0) > 0 ? '更亮' : '更暗'} (${Math.abs(personalization.themeBrightnessAdjust || 0)} 档)`
+              }
+              control={
+                <div className={styles.adjustContainer}>
+                  <input
+                    type="range"
+                    min="-5"
+                    max="4"
+                    step="1"
+                    value={
+                      personalization.themeAutoTimeTransition
+                        ? getDynamicSolarAdjustments().brightnessAdjust
+                        : (personalization.themeBrightnessAdjust || 0)
+                    }
+                    onChange={(e) => updatePersonalization({ themeBrightnessAdjust: parseInt(e.target.value, 10) })}
+                    disabled={saving || Boolean(personalization.themeAutoTimeTransition)}
+                    className={styles.adjustSlider}
+                    style={{
+                      opacity: personalization.themeAutoTimeTransition ? 0.45 : 1,
+                      cursor: personalization.themeAutoTimeTransition ? 'not-allowed' : 'pointer',
+                    }}
+                  />
+                  <span className={styles.adjustLabel} style={{ opacity: personalization.themeAutoTimeTransition ? 0.5 : 1 }}>
+                    {personalization.themeAutoTimeTransition
+                      ? (getDynamicSolarAdjustments().brightnessAdjust > 0 ? '+' : '') + getDynamicSolarAdjustments().brightnessAdjust
+                      : ((personalization.themeBrightnessAdjust || 0) > 0 ? '+' : '') + (personalization.themeBrightnessAdjust || 0)
+                    }
+                  </span>
+                </div>
+              }
+            />
+
+            <SettingsRow
+              title="智能时光温感过渡"
+              desc="根据当地日出日落时间，自动柔和降低白天对比度与亮度并调温，最终自然过渡到深夜深色模式，极致呵护双眼。"
               control={
                 <input
-                  id={hideThinkingId}
+                  id="settings-theme-auto-time"
                   type="checkbox"
-                  className="settings-switch"
-                  checked={hideThinking}
+                  className="settings-switch settings-switch--appearance"
+                  style={{ cursor: 'pointer' }}
+                  checked={Boolean(personalization.themeAutoTimeTransition)}
                   disabled={saving}
-                  aria-label="隐藏思考过程"
                   onChange={(e) => {
-                    void save({ hideThinkingBlock: e.target.checked });
+                    updatePersonalization({ themeAutoTimeTransition: e.target.checked });
                   }}
                 />
+              }
+            />
+
+            <SettingsRow
+              title="氛围色彩融合"
+              desc="调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏"
+              control={
+                <input
+                  id="settings-theme-brightness-vibrant"
+                  type="checkbox"
+                  className="settings-switch settings-switch--appearance"
+                  style={{ cursor: 'pointer' }}
+                  checked={Boolean(personalization.themeBrightnessVibrant)}
+                  disabled={saving}
+                  onChange={(e) => {
+                    updatePersonalization({ themeBrightnessVibrant: e.target.checked });
+                  }}
+                />
+              }
+            />
+
+            <SettingsRow
+              title="界面字号微调"
+              desc={`基准字号为 14px，当前字号: ${14 + personalization.fontSizeAdjust}px`}
+              control={
+                <div className={styles.adjustContainer}>
+                  <input
+                    type="range"
+                    min="-2"
+                    max="4"
+                    step="1"
+                    value={personalization.fontSizeAdjust}
+                    onChange={(e) => updatePersonalization({ fontSizeAdjust: parseInt(e.target.value, 10) })}
+                    disabled={saving}
+                    className={styles.adjustSlider}
+                  />
+                  <span className={styles.adjustLabel}>
+                    {personalization.fontSizeAdjust >= 0 ? '+' : ''}{personalization.fontSizeAdjust}px
+                  </span>
+                </div>
               }
             />
           </SettingsCard>

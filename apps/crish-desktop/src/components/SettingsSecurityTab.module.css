@@ -22,12 +22,12 @@
 }
 
 .labelTitle {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text-primary);
 }
 
 .labelDesc {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
@@ -55,11 +55,11 @@
 .presetChip {
   height: 28px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   border-radius: 6px;
 }
 
 .cmdSpan {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }

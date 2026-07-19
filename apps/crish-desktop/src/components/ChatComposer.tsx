@@ -218,9 +218,18 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
         onKeyDown={(e) => {
           if (isComposing) return;
           if (onKeyDownExtra?.(e) === true) return;
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            trySend();
+          
+          const sendShortcut = typeof window !== 'undefined' ? localStorage.getItem('crish_send_shortcut') || 'enter' : 'enter';
+          if (sendShortcut === 'ctrlEnter') {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              trySend();
+            }
+          } else {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              trySend();
+            }
           }
         }}
       />
@@ -301,6 +310,7 @@ export type ChatComposerProps = {
   onOpenSchedule: () => void;
   onCloseSiblingMenus?: () => void;
   rightActions?: React.ReactNode;
+  className?: string;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -330,6 +340,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onOpenSchedule,
   onCloseSiblingMenus,
   rightActions,
+  className,
 }) => {
   const listboxId = useId();
   const plusMenuId = useId();
@@ -409,7 +420,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       : undefined;
 
   return (
-    <>
+    <div className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}>
       <ComposerField
         containerRef={fieldContainerRef}
         textAreaId={textAreaDomId}
@@ -589,7 +600,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         }}
       />
 
-      <div className={styles.footerActions}>
+      <div className={styles.footerActions} data-composer-footer="1">
         <div className={styles.leftActions} style={{ position: 'relative' }}>
           <Tooltip content="添加文件、技能、扩展…">
             <button
@@ -642,6 +653,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         </div>
         <div className={styles.rightActions}>{rightActions}</div>
       </div>
-    </>
+    </div>
   );
 };

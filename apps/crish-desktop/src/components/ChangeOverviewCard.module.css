@@ -194,7 +194,7 @@
   background: var(--bg-primary);
   color: var(--text-tertiary);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   padding: 3px 8px;
   border-radius: 6px;
   cursor: pointer;
@@ -220,7 +220,7 @@
   cursor: default;
 }
 
-/* 窄栏（对话列收窄 / 分栏）：隐藏长路径，动作换行不重叠 */
+/* 绐勬爮锛堝璇濆垪鏀剁獎 / 鍒嗘爮锛夛細闅愯棌闀胯矾寰勶紝鍔ㄤ綔鎹㈣涓嶉噸鍙?*/
 @container change-overview (max-width: 420px) {
   .changeOverviewPath {
     display: none;
@@ -266,11 +266,11 @@
     font-size: var(--font-size-xs);
   }
   .changeOverviewStat {
-    font-size: 10px;
+    font-size: var(--font-size-xxs);
   }
   .changeOverviewReview,
   .changeOverviewMiniBtn {
-    font-size: 10px;
+    font-size: var(--font-size-xxs);
     padding: 4px 6px;
   }
 }

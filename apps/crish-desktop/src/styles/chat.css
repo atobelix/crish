@@ -336,7 +336,7 @@
   height: 34px;
   border-radius: 50%;
   border: 1px solid var(--border-subtle) !important;
-  background: var(--bg-elevated);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -347,6 +347,7 @@
 }
 .chat-scroll-fab:hover {
   color: var(--text-primary);
+  background: var(--bg-hover);
   border-color: var(--border-color) !important;
 }
 
@@ -795,7 +796,7 @@
   border: 1px solid var(--hairline-strong, var(--border-color));
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   border-radius: 999px;
   padding: 6px 14px;
   cursor: pointer;

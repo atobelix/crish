@@ -49,22 +49,35 @@
 .modelBadge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: var(--space-1, 2px) var(--space-2, 6px);
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  font-size: var(--font-size-xs);
+  justify-content: space-between;
+  gap: 8px;
+  height: var(--control-height);
+  min-width: 165px;
+  max-width: 260px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: none; /* CRITICAL: DO NOT ADD BORDER TO MODEL BADGE. STIPULATED BY USER RULE TO AVOID OUTDATED BROWSER DEFAULTS */
+  background: transparent;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
+  box-sizing: border-box;
+  position: relative;
+  user-select: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.modelBadge.readonly {
-  background-color: var(--bg-hover);
-  border-color: transparent;
+.modelBadge:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.modelBadge.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .modelText {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
@@ -88,5 +101,51 @@
   max-width: 100%;
   overflow: auto;
   box-sizing: border-box;
-  padding: 40px var(--shell-content-pad-x, 14px) 120px;
+  padding: 100px var(--shell-content-pad-x, 14px) 140px;
+}
+
+.emptyComposer {
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important; /* Ensure shadows and borders are not clipped */
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  width: 100% !important;
+  max-width: var(--chat-col-max, 680px) !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+}
+
+/* Style the top textarea container inside emptyComposer (Large Rectangle) */
+.emptyComposer [data-composer-field="1"] {
+  border: 1px solid var(--border-color) !important;
+  border-radius: 20px !important; /* Fully rounded on all sides */
+  background: var(--composer-bg) !important;
+  background-color: var(--composer-bg) !important;
+  padding: 14px 18px 12px 18px !important;
+  box-shadow: none !important;
+  min-height: unset !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  transition: border-color var(--transition-fast) !important;
+}
+
+.emptyComposer [data-composer-field="1"]:focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%) !important;
+  box-shadow: none !important;
+}
+
+/* Style the bottom action footer bar inside emptyComposer (Small Rectangle) */
+.emptyComposer [data-composer-footer="1"] {
+  border: 1px solid var(--border-color) !important;
+  border-top: none !important; /* Open top to merge seamlessly with the bottom border of the white box */
+  border-radius: 0 0 12px 12px !important; /* Rounded corners only at the bottom */
+  background: var(--composer-footer-bg) !important; /* Adaptive background token */
+  width: calc(100% - 32px) !important; /* Narrower width, forming the "smaller" rectangle! */
+  margin: -1px auto 0 auto !important; /* Overlap by -1px to physically connect with absolutely no gap */
+  padding: 8px 14px !important; /* Restored original paper-gray padding exactly */
+  box-sizing: border-box !important;
 }

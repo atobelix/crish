@@ -210,17 +210,7 @@ export const RuntimeFloatPanel: React.FC<RuntimeFloatPanelProps> = ({
         {/* 读屏描述：无 sr-only token，用 clip 隐藏，避免 thrash panels.css */}
         <p
           id={descId}
-          style={{
-            position: 'absolute',
-            width: 1,
-            height: 1,
-            padding: 0,
-            margin: -1,
-            overflow: 'hidden',
-            clip: 'rect(0, 0, 0, 0)',
-            whiteSpace: 'nowrap',
-            border: 0,
-          }}
+          className="sr-only"
         >
           {formatFloatDialogDescription()}
         </p>

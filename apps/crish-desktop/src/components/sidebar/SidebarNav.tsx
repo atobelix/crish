@@ -22,7 +22,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     <div className={styles.topActions}>
       <button
         type="button"
-        className={`${styles.navItem} ${activeNav === 'chat' ? styles.isActive : ''}`}
+        className={styles.navItem}
         onClick={onNewSession}
       >
         {/* 自定义新建对话图标：匹配顶部侧边栏按钮的软圆角 (rx=4.5)，且右上角留出缺口避免与画笔重合 */}

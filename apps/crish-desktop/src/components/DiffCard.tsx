@@ -14,7 +14,20 @@ import {
   useSessionField,
 } from '../store/sessionStore';
 import * as Lucide from 'lucide-react';
-import { fetchGitDiff, fetchGitStatus, gitStatusUserMessage } from '../api/gitApi';
+import {
+  fetchGitDiff,
+  fetchGitStatus,
+  gitStatusUserMessage,
+  fetchGitBranches,
+  switchGitBranch,
+  commitGitChanges,
+  pushGitChanges,
+  stageGitPath,
+  unstageGitPath,
+  discardGitPath,
+  stageAllGit,
+  unstageAllGit,
+} from '../api/gitApi';
 import {
   applyFileDiffToDisk,
   applyFileDiffsToDisk,
@@ -29,6 +42,9 @@ import {
   mergeSessionDiffFiles,
   type DiffSourceMode,
 } from '../api/diffPanelHelpers';
+import { getWorkspacePath } from '../api/projectStore';
+import { openPathDefault } from '../api/hostOpenersApi';
+import { readTextFile } from '../api/workspaceFsApi';
 
 interface DiffCardProps {
   onShowToast: (message: string) => void;
@@ -40,67 +56,357 @@ function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
-function useVirtualScroll({
-  itemCount,
-  itemHeight,
-  containerRef,
-  overscan = 15,
-}: {
-  itemCount: number;
-  itemHeight: number;
-  containerRef: React.RefObject<HTMLElement | null>;
-  overscan?: number;
-}) {
+// Interriched properties for git-specific operations
+interface EnrichedFileDiff extends FileDiff {
+  staged?: boolean;
+  unstaged?: boolean;
+  untracked?: boolean;
+  gitStatus?: string;
+}
+
+// ============================================================================
+// 🌟 HIGH-PERFORMANCE VIRTUAL SCROLL COMPONENTS FOR INFINITE SCALABILITY 🌟
+// ============================================================================
+
+interface VirtualPlainCodeViewerProps {
+  content: string;
+  filePath: string;
+  styles: Record<string, string>;
+}
+
+const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content, filePath, styles }) => {
+  const lines = useMemo(() => {
+    return content.split('\n').map((line, idx) => ({
+      num: idx + 1,
+      content: line,
+    }));
+  }, [content]);
+
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
-    const handleScroll = () => {
-      setScrollTop(el.scrollTop);
-    };
-
-    const resizeObserver = new ResizeObserver((entries) => {
+    setContainerHeight(el.clientHeight || 400);
+    const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height);
+        setContainerHeight(entry.contentRect.height || 400);
       }
     });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    resizeObserver.observe(el);
+  const totalLines = lines.length;
+  const rowHeight = 20;
+  const totalHeight = totalLines * rowHeight;
 
-    setScrollTop(el.scrollTop);
-    setContainerHeight(el.getBoundingClientRect().height);
+  // Render 15 extra buffer lines above and below to prevent blank spaces during fast scrolls
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
+  const endIndex = Math.min(totalLines, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
 
-    return () => {
-      el.removeEventListener('scroll', handleScroll);
-      resizeObserver.disconnect();
-    };
-  }, [containerRef]);
+  const visibleLines = lines.slice(startIndex, endIndex);
+  const offsetTop = startIndex * rowHeight;
 
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const endIndex = Math.min(
-    itemCount - 1,
-    Math.floor((scrollTop + containerHeight) / itemHeight) + overscan
+  return (
+    <div
+      ref={containerRef}
+      className={styles.scrollParent}
+      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
+    >
+      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+        <pre
+          className={styles.linesContainer}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            transform: `translateY(${offsetTop}px)`,
+            margin: 0,
+            background: 'transparent',
+          }}
+          aria-label={`${basename(filePath)} 的源码`}
+        >
+          {visibleLines.map((l) => (
+            <div
+              key={l.num}
+              className={styles.line}
+              style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+            >
+              <div className={styles.gutterNum} data-num={l.num}>
+                {l.num}
+              </div>
+              <div className={styles.gutterMarker}> </div>
+              <div className={styles.lineText}>{l.content}</div>
+            </div>
+          ))}
+        </pre>
+      </div>
+    </div>
   );
+};
 
-  const totalHeight = itemCount * itemHeight;
-  const offsetY = startIndex * itemHeight;
-
-  return {
-    startIndex,
-    endIndex,
-    totalHeight,
-    offsetY,
-  };
+interface VirtualUnifiedDiffViewerProps {
+  f: EnrichedFileDiff;
+  renderItems: any[];
+  onExpandBlock: (filePath: string, startIndex: number) => void;
+  styles: Record<string, string>;
+  Lucide: any;
 }
 
+const VirtualUnifiedDiffViewer: React.FC<VirtualUnifiedDiffViewerProps> = ({
+  f,
+  renderItems,
+  onExpandBlock,
+  styles,
+  Lucide,
+}) => {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerHeight(el.clientHeight || 400);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height || 400);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const totalItems = renderItems.length;
+  const rowHeight = 22;
+  const totalHeight = totalItems * rowHeight;
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
+  const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
+
+  const visibleItems = renderItems.slice(startIndex, endIndex);
+  const offsetTop = startIndex * rowHeight;
+
+  return (
+    <div
+      ref={containerRef}
+      className={styles.scrollParent}
+      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
+    >
+      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+        <div
+          className={styles.linesContainer}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            transform: `translateY(${offsetTop}px)`,
+            background: 'transparent',
+          }}
+          aria-label={`${basename(f.filePath)} 的变更内容`}
+        >
+          {visibleItems.map((item, localIdx) => {
+            const idx = startIndex + localIdx;
+            if (item.isCollapsedPlaceholder) {
+              return (
+                <div
+                  key={`collapse-${item.startIndex}`}
+                  className={styles.collapseBar}
+                  onClick={() => onExpandBlock(f.filePath, item.startIndex)}
+                  style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px`, display: 'flex', alignItems: 'center' }}
+                >
+                  <Lucide.Maximize2 size={12} className={styles.collapseIcon} />
+                  <span>展开其余 {item.count} 行代码...</span>
+                </div>
+              );
+            }
+
+            const { change, oldLine, newLine, isHeader } = item.item;
+            if (isHeader) return null;
+
+            let lineClass = styles.lineNormal;
+            let marker = ' ';
+            if (change.type === 'addition') {
+              lineClass = styles.lineAddition;
+              marker = '+';
+            } else if (change.type === 'deletion') {
+              lineClass = styles.lineDeletion;
+              marker = '−';
+            }
+
+            const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
+            const newLineNum = newLine !== undefined ? String(newLine) : '';
+
+            return (
+              <div
+                key={idx}
+                className={`${styles.line} ${lineClass}`}
+                style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+              >
+                <div className={styles.gutterNum} data-num={oldLineNum}>
+                  {oldLineNum}
+                </div>
+                <div className={styles.gutterNum} data-num={newLineNum}>
+                  {newLineNum}
+                </div>
+                <div className={styles.gutterMarker}>{marker}</div>
+                <div className={styles.lineText}>{change.content}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface VirtualSplitDiffViewerProps {
+  f: EnrichedFileDiff;
+  renderItems: any[];
+  onExpandBlock: (filePath: string, startIndex: number) => void;
+  styles: Record<string, string>;
+  Lucide: any;
+}
+
+const VirtualSplitDiffViewer: React.FC<VirtualSplitDiffViewerProps> = ({
+  f,
+  renderItems,
+  onExpandBlock,
+  styles,
+  Lucide,
+}) => {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerHeight(el.clientHeight || 400);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height || 400);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const totalItems = renderItems.length;
+  const rowHeight = 22;
+  const totalHeight = totalItems * rowHeight;
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
+  const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
+
+  const visibleItems = renderItems.slice(startIndex, endIndex);
+  const offsetTop = startIndex * rowHeight;
+
+  return (
+    <div
+      ref={containerRef}
+      className={styles.scrollParent}
+      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
+    >
+      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+        <div
+          className={styles.linesContainer}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            transform: `translateY(${offsetTop}px)`,
+            background: 'transparent',
+          }}
+          aria-label={`${basename(f.filePath)} 的变更分栏内容`}
+        >
+          {visibleItems.map((item, localIdx) => {
+            const idx = startIndex + localIdx;
+            if (item.isCollapsedPlaceholder) {
+              return (
+                <div
+                  key={`collapse-${item.startIndex}`}
+                  className={styles.collapseBar}
+                  onClick={() => onExpandBlock(f.filePath, item.startIndex)}
+                  style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px`, display: 'flex', alignItems: 'center' }}
+                >
+                  <Lucide.Maximize2 size={12} className={styles.collapseIcon} />
+                  <span>展开其余 {item.count} 行代码...</span>
+                </div>
+              );
+            }
+
+            const pair = item.pair;
+            const left = pair.left;
+            const right = pair.right;
+
+            let leftClass = '';
+            let leftMarker = ' ';
+            let leftText = '';
+            let leftNum = '';
+            if (left) {
+              if (left.change.type === 'deletion') {
+                leftClass = styles.lineDeletion;
+                leftMarker = '−';
+              }
+              leftText = left.change.content;
+              leftNum = String(left.oldLine || '');
+            }
+
+            let rightClass = '';
+            let rightMarker = ' ';
+            let rightText = '';
+            let rightNum = '';
+            if (right) {
+              if (right.change.type === 'addition') {
+                rightClass = styles.lineAddition;
+                rightMarker = '+';
+              }
+              rightText = right.change.content;
+              rightNum = String(right.newLine || '');
+            }
+
+            return (
+              <div
+                key={idx}
+                className={styles.splitLine}
+                style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+              >
+                <div className={`${styles.splitColumn} ${leftClass}`} style={{ height: '100%', padding: 0 }}>
+                  <div className={styles.gutterNum} data-num={leftNum} style={{ height: '100%' }}>
+                    {leftNum}
+                  </div>
+                  <div className={styles.gutterMarker} style={{ height: '100%' }}>{leftMarker}</div>
+                  <div className={styles.lineText} style={{ height: '100%', overflow: 'hidden', whiteSpace: 'pre' }}>{leftText}</div>
+                </div>
+                <div className={`${styles.splitColumn} ${rightClass}`} style={{ height: '100%', padding: 0 }}>
+                  <div className={styles.gutterNum} data-num={rightNum} style={{ height: '100%' }}>
+                    {rightNum}
+                  </div>
+                  <div className={styles.gutterMarker} style={{ height: '100%' }}>{rightMarker}</div>
+                  <div className={styles.lineText} style={{ height: '100%', overflow: 'hidden', whiteSpace: 'pre' }}>{rightText}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
-  const diffScrollParentRef = useRef<HTMLDivElement>(null);
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
-  const diffFiles = useLayoutStore((s) => s.diffFiles);
+  const diffFiles = useLayoutStore((s) => s.diffFiles) as EnrichedFileDiff[];
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
   const removeDiffFile = useLayoutStore((s) => s.removeDiffFile);
@@ -109,6 +415,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');
   const [diffSearchQuery, setDiffSearchQuery] = useState('');
+  const searchActive = !!diffSearchQuery.trim();
   const [searchOpen, setSearchOpen] = useState(false);
   const [gitLoading, setGitLoading] = useState(false);
   const [applyBusy, setApplyBusy] = useState(false);
@@ -122,6 +429,252 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const softHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 丢弃过期 git 加载结果，避免连点后 loading 状态错乱 */
   const gitLoadSeqRef = useRef(0);
+
+  // 🌟 Git 多分支及行内直接提交相关状态 🌟
+  const [branches, setBranches] = useState<string[]>(['main']);
+  const [currentBranch, setCurrentBranch] = useState<string>('main');
+  const [commitMsg, setCommitMsg] = useState('');
+  const [commitLoading, setCommitLoading] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+
+  // 🌟 Individual file compare modes: { [filePath]: compareMode } 🌟
+  const [fileCompareModes, setFileCompareModes] = useState<Record<string, 'git' | 'session-merged' | `turn-${string}` | 'plain'>>({});
+
+  // Collapsed block state: { [filePath]: { [lineIndex]: isExpanded } }
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, Record<number, boolean>>>({});
+
+  // Plain Text states for full source code viewing
+  const [plainFileContents, setPlainFileContents] = useState<Record<string, string>>({});
+  const [plainLoading, setPlainLoading] = useState<Record<string, boolean>>({});
+
+  // Per-file staging/unstaging loading states for premium Optimistic UI
+  const [stagingPaths, setStagingPaths] = useState<Record<string, boolean>>({});
+
+  // Commit Panel visibility state (not permanent)
+  const [commitPanelOpen, setCommitPanelOpen] = useState(false);
+
+  /** 加载本地分支列表 */
+  const loadBranches = useCallback(async () => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    try {
+      const res = await fetchGitBranches(cwd);
+      setBranches(res.list);
+      setCurrentBranch(res.current);
+    } catch {
+      // 静默落回默认值
+    }
+  }, []);
+
+  useEffect(() => {
+    if (sourceMode === 'git') {
+      void loadBranches();
+    }
+  }, [sourceMode, loadBranches]);
+
+  /** 切换分支操作 */
+  const handleSwitchBranch = async (branch: string) => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    setGitLoading(true);
+    setPanelErr('');
+    dismissSoftHint();
+    try {
+      const res = await switchGitBranch(cwd, branch);
+      if (!res.ok) {
+        toastFail(res.error || '切换分支失败');
+        // REVERT the dropdown value back to what it actually is in Git!
+        await loadBranches();
+        return;
+      }
+      // 成功后，自动重刷分支及 git status 变更列表
+      await loadBranches();
+      await loadFromGit();
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '切换分支失败');
+      await loadBranches();
+    } finally {
+      setGitLoading(false);
+    }
+  };
+
+  /** 提交变更操作 */
+  const handleCommit = async () => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    const msg = commitMsg.trim();
+    if (!msg) {
+      toastFail('提交信息不能为空');
+      return;
+    }
+    setCommitLoading(true);
+    setPanelErr('');
+    dismissSoftHint();
+    try {
+      const stagedCount = fileList.filter((f) => f.staged).length;
+      // If there are staged files, commit only staged. Otherwise commit all (add -A)
+      const res = await commitGitChanges(cwd, msg, stagedCount > 0);
+      if (!res.ok) {
+        toastFail(res.error || '提交失败');
+        return;
+      }
+      setCommitMsg('');
+      showSoftHint('提交成功！');
+      // 提交成功后自动重拉工作区状态
+      await loadFromGit();
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '提交失败');
+    } finally {
+      setCommitLoading(false);
+    }
+  };
+
+  /** 推送变更操作 */
+  const handlePush = async () => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    setPushLoading(true);
+    setPanelErr('');
+    dismissSoftHint();
+    try {
+      const res = await pushGitChanges(cwd);
+      if (!res.ok) {
+        toastFail(res.error || '推送失败');
+        return;
+      }
+      showSoftHint('推送成功！');
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '推送失败');
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  /** 🌟 Git Staging, Unstaging and Discarding Operations (Optimistic UI) 🌟 */
+  const handleStageFile = async (filePath: string) => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+
+    // Optimistically update file state instantly
+    setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
+    setDiffFiles((prev) =>
+      prev.map((f) =>
+        f.filePath === filePath ? { ...f, staged: true, unstaged: false } : f
+      )
+    );
+
+    try {
+      const res = await stageGitPath(cwd, filePath);
+      if (!res.ok) {
+        toastFail(res.error || '暂存失败');
+        await loadFromGit(); // Revert on failure
+      } else {
+        await loadFromGit(true); // Quiet silent sync in background
+      }
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '暂存失败');
+      await loadFromGit();
+    } finally {
+      setStagingPaths((prev) => ({ ...prev, [filePath]: false }));
+    }
+  };
+
+  const handleUnstageFile = async (filePath: string) => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+
+    // Optimistically update file state instantly
+    setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
+    setDiffFiles((prev) =>
+      prev.map((f) =>
+        f.filePath === filePath ? { ...f, staged: false, unstaged: true } : f
+      )
+    );
+
+    try {
+      const res = await unstageGitPath(cwd, filePath);
+      if (!res.ok) {
+        toastFail(res.error || '取消暂存失败');
+        await loadFromGit(); // Revert on failure
+      } else {
+        await loadFromGit(true); // Quiet silent sync in background
+      }
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '取消暂存失败');
+      await loadFromGit();
+    } finally {
+      setStagingPaths((prev) => ({ ...prev, [filePath]: false }));
+    }
+  };
+
+  const handleDiscardChanges = async (filePath: string) => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    if (!window.confirm(`确定要放弃对 "${basename(filePath)}" 的所有本地未暂存修改吗？此操作不可逆。`)) {
+      return;
+    }
+    setApplyBusy(true);
+    try {
+      const res = await discardGitPath(cwd, filePath);
+      if (!res.ok) {
+        toastFail(res.error || '放弃修改失败');
+      } else {
+        await loadFromGit();
+      }
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '放弃修改失败');
+    } finally {
+      setApplyBusy(false);
+    }
+  };
+
+  const handleStageAll = async () => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    setApplyBusy(true);
+    // Optimistic UI for bulk operations
+    setDiffFiles((prev) =>
+      prev.map((f) => ({ ...f, staged: true, unstaged: false }))
+    );
+    try {
+      const res = await stageAllGit(cwd);
+      if (!res.ok) {
+        toastFail(res.error || '暂存全部失败');
+        await loadFromGit();
+      } else {
+        await loadFromGit(true);
+      }
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '暂存全部失败');
+      await loadFromGit();
+    } finally {
+      setApplyBusy(false);
+    }
+  };
+
+  const handleUnstageAll = async () => {
+    const cwd = getWorkspacePath();
+    if (!cwd) return;
+    setApplyBusy(true);
+    // Optimistic UI for bulk operations
+    setDiffFiles((prev) =>
+      prev.map((f) => ({ ...f, staged: false, unstaged: true }))
+    );
+    try {
+      const res = await unstageAllGit(cwd);
+      if (!res.ok) {
+        toastFail(res.error || '取消暂存全部失败');
+        await loadFromGit();
+      } else {
+        await loadFromGit(true);
+      }
+    } catch (err) {
+      toastFail(err instanceof Error ? err.message : '取消暂存全部失败');
+      await loadFromGit();
+    } finally {
+      setApplyBusy(false);
+    }
+  };
 
   const clearSoftHintTimer = useCallback(() => {
     if (softHintTimerRef.current) {
@@ -200,12 +753,15 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     [dismissSoftHint, onShowToast],
   );
 
-  const loadFromGit = useCallback(async () => {
+  /** 🌟 Highly Enriched Git Status Loading with Staged Properties 🌟 */
+  const loadFromGit = useCallback(async (silent = false) => {
     const seq = ++gitLoadSeqRef.current;
     setSourceMode('git');
-    setGitLoading(true);
-    dismissSoftHint();
-    setPanelErr('');
+    if (!silent) {
+      setGitLoading(true);
+      dismissSoftHint();
+      setPanelErr('');
+    }
     try {
       const status = await fetchGitStatus();
       if (seq !== gitLoadSeqRef.current) return;
@@ -215,31 +771,52 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         return;
       }
       if (status.files.length === 0) {
-        // 软空态：行内提示，不 toast（非失败）
         showSoftHint('工作区无未提交变更');
         setTurnKey('');
         setDiffFiles([]);
         setActiveDiffSource(null);
         return;
       }
-      // 先用状态列表出结果（秒开），再补一行级 diff；禁止 12 路串行拖死 UI
-      const placeholders = status.files.slice(0, 40).map((gf) => ({
-        filePath: gf.path,
-        additions: 0,
-        deletions: 0,
-        changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
-      }));
-      applyFiles(placeholders, 'git');
-      setTurnKey('');
+
+      const statusMap = new Map(status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]));
+
+      if (!silent) {
+        // 先用状态列表出结果（秒开），再补一行级 diff
+        const placeholders = status.files.slice(0, 45).map((gf) => ({
+          filePath: gf.path,
+          additions: 0,
+          deletions: 0,
+          changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
+          staged: gf.staged,
+          unstaged: gf.unstaged,
+          untracked: gf.untracked,
+          gitStatus: gf.status,
+        }));
+        applyFiles(placeholders, 'git');
+        setTurnKey('');
+      }
 
       const batch = await fetchGitDiff({});
       if (seq !== gitLoadSeqRef.current) return;
+
+      const enrich = (files: FileDiff[]) => files.map((f) => {
+        const key = f.filePath.replace(/\\/g, '/');
+        const gf = statusMap.get(key);
+        return {
+          ...f,
+          staged: gf ? gf.staged : false,
+          unstaged: gf ? gf.unstaged : true,
+          untracked: gf ? gf.untracked : false,
+          gitStatus: gf ? gf.status : 'M',
+        };
+      });
+
       if (batch.files.length > 0) {
-        applyFiles(batch.files, 'git');
+        applyFiles(enrich(batch.files), 'git');
         return;
       }
 
-      // 批 diff 为空：最多并行 4 个路径补样，其余保留状态占位
+      // 批 diff 为空：最多并行 8 个路径补样，其余保留状态占位
       const slice = status.files.slice(0, 8);
       const settled = await Promise.all(
         slice.map(async (gf) => {
@@ -254,8 +831,8 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       if (seq !== gitLoadSeqRef.current) return;
       const collected = settled.flat();
       if (collected.length > 0) {
-        // 合并：有 diff 的替换，其余保留占位
-        const byPath = new Map(collected.map((f) => [f.filePath.replace(/\\/g, '/'), f]));
+        const enrichedCollected = enrich(collected);
+        const byPath = new Map(enrichedCollected.map((f) => [f.filePath.replace(/\\/g, '/'), f]));
         const merged = placeholders.map((p) => {
           const key = p.filePath.replace(/\\/g, '/');
           return byPath.get(key) || {
@@ -265,14 +842,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         });
         applyFiles(merged, 'git');
       } else {
-        applyFiles(
-          placeholders.map((p) => ({
-            ...p,
-            changes: [{ type: 'normal' as const, content: '（已变更）暂无行级 diff' }],
-          })),
-          'git',
-        );
-        showSoftHint('已列出状态文件，暂无行级 diff');
+        applyFiles(placeholders, 'git');
       }
     } catch {
       if (seq === gitLoadSeqRef.current) toastFail('从 Git 载入失败');
@@ -292,11 +862,13 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     const files = mergeSessionDiffFiles(aiTurns);
     if (!files.length) {
       showSoftHint('本会话暂无 AI 改动');
+      setDiffFiles([]);
+      setActiveDiffSource(null);
       return;
     }
     applyFiles(files, 'session');
     setTurnKey('__all__');
-  }, [aiTurns, applyFiles, showSoftHint]);
+  }, [aiTurns, applyFiles, showSoftHint, setDiffFiles, setActiveDiffSource]);
 
   const onTurnSelect = (key: string) => {
     setTurnKey(key);
@@ -313,69 +885,116 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     applyFiles(turn.files, 'session');
   };
 
-  const filteredChanges = useMemo(() => {
-    if (!current) return [];
-    const q = diffSearchQuery.trim().toLowerCase();
-    if (!q) return current.changes;
-    return current.changes.filter((c) => c.content.toLowerCase().includes(q));
-  }, [current, diffSearchQuery]);
+  /** 🌟 Get compareMode for each individual file 🌟 */
+  const getFileCompareMode = (filePath: string) => {
+    return fileCompareModes[filePath] || (sourceMode === 'git' ? 'git' : 'session-merged');
+  };
 
-  const { startIndex, endIndex, totalHeight } = useVirtualScroll({
-    itemCount: filteredChanges.length,
-    itemHeight: 20,
-    containerRef: diffScrollParentRef,
-  });
-
-  const visibleChanges = useMemo(() => {
-    return filteredChanges.slice(startIndex, endIndex + 1);
-  }, [filteredChanges, startIndex, endIndex]);
-
-  const searchActive = diffSearchQuery.trim().length > 0;
-  const noSearchHits = Boolean(current && searchActive && filteredChanges.length === 0);
-
-  const currentCanApply = useMemo(
-    () => (current ? classifyFileDiff(current).ok : false),
-    [current],
-  );
-
-  const rejectCurrent = useCallback(() => {
-    if (!current) return;
-    removeDiffFile(current.filePath);
-    // 列表移除即反馈，不 toast 成功
-  }, [current, removeDiffFile]);
-
-  const acceptCurrent = useCallback(async () => {
-    if (!current || applyBusy) return;
-    const cls = classifyFileDiff(current);
-    if (!cls.ok) {
-      toastFail('无法安全自动应用，请在编辑器确认');
-      return;
+  const changeFileCompareMode = async (filePath: string, mode: any) => {
+    setFileCompareModes((prev) => ({ ...prev, [filePath]: mode }));
+    if (mode === 'plain') {
+      await loadPlainContent(filePath);
     }
-    setApplyBusy(true);
-    try {
-      const result = await applyFileDiffToDisk(current);
-      if (result.ok === true) {
-        removeDiffFile(current.filePath);
-        setPanelErr('');
-        // 应用成功：条目消失即反馈（成功静默）
-        return;
+  };
+
+  /** 🌟 Resolve Active Diff Source per File dynamically 🌟 */
+  const getFileDiffData = (f: EnrichedFileDiff) => {
+    const mode = getFileCompareMode(f.filePath);
+    if (mode === 'plain') {
+      return null;
+    }
+    if (mode === 'git') {
+      return f;
+    }
+    if (mode === 'session-merged') {
+      const mergedFiles = mergeSessionDiffFiles(aiTurns);
+      return mergedFiles.find((m) => m.filePath === f.filePath) || f;
+    }
+    if (mode.startsWith('turn-')) {
+      const turnId = mode.substring(5);
+      const turn = aiTurns.find((t) => t.msg.id === turnId);
+      if (turn) {
+        return turn.files.find((m) => m.filePath === f.filePath) || f;
       }
-      // 单文件失败：带文件名，与批量 formatApplyFailureToast 一致
-      const msg = formatApplyFailureToast(1, [
-        { filePath: current.filePath, result },
-      ]);
-      toastFail(msg || result.message || '无法安全自动应用，请在编辑器确认');
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      toastFail(
-        detail
-          ? `应用失败 · ${basename(current.filePath)}：${detail}`
-          : `应用失败 · ${basename(current.filePath)}`,
-      );
-    } finally {
-      setApplyBusy(false);
     }
-  }, [applyBusy, current, removeDiffFile, toastFail]);
+    return f;
+  };
+
+  const getComputedChanges = (f: EnrichedFileDiff) => {
+    const target = getFileDiffData(f);
+    if (!target) return [];
+    let oldLineNum = 0;
+    let newLineNum = 0;
+    
+    return target.changes.map((c, globalIdx) => {
+      let oldLine: number | undefined;
+      let newLine: number | undefined;
+      const isHeader = c.content.startsWith('@@') && c.type === 'normal';
+      
+      if (isHeader) {
+        const match = c.content.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+        if (match) {
+          oldLineNum = parseInt(match[1], 10) - 1;
+          newLineNum = parseInt(match[2], 10) - 1;
+        }
+      } else {
+        if (c.type === 'addition') {
+          newLineNum += 1;
+          newLine = newLineNum;
+        } else if (c.type === 'deletion') {
+          oldLineNum += 1;
+          oldLine = oldLineNum;
+        } else {
+          oldLineNum += 1;
+          newLineNum += 1;
+          oldLine = oldLineNum;
+          newLine = newLineNum;
+        }
+      }
+      
+      return {
+        change: c,
+        globalIdx,
+        oldLine,
+        newLine,
+        isHeader,
+      };
+    });
+  };
+
+  /** 🌟 Split View Lines Aligner 🌟 */
+  const getSplitPairs = (f: EnrichedFileDiff) => {
+    const lines = getComputedChanges(f);
+    const pairs: Array<{
+      left?: typeof lines[0];
+      right?: typeof lines[0];
+    }> = [];
+    let i = 0;
+    while (i < lines.length) {
+      const currentLine = lines[i];
+      if (currentLine.isHeader) {
+        i++;
+        continue;
+      }
+      if (currentLine.change.type === 'deletion') {
+        const nextLine = lines[i + 1];
+        if (nextLine && nextLine.change.type === 'addition') {
+          pairs.push({ left: currentLine, right: nextLine });
+          i += 2;
+        } else {
+          pairs.push({ left: currentLine });
+          i++;
+        }
+      } else if (currentLine.change.type === 'addition') {
+        pairs.push({ right: currentLine });
+        i++;
+      } else {
+        pairs.push({ left: currentLine, right: currentLine });
+        i++;
+      }
+    }
+    return pairs;
+  };
 
   const acceptAll = useCallback(async () => {
     if (!fileList.length || applyBusy) return;
@@ -390,7 +1009,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       for (const r of results) {
         if (r.result.ok) removeDiffFile(r.filePath);
       }
-      // 成功静默；仅失败 toast（含首个失败文件名）；空串不 toast
       if (failed > 0) {
         toastFail(formatApplyFailureToast(failed, results));
       } else {
@@ -413,7 +1031,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     setSearchOpen(false);
     setPanelErr('');
     dismissSoftHint();
-    // 清空即反馈，不 toast
   }, [dismissSoftHint, setActiveDiffSource, setDiffFiles]);
 
   const busy = applyBusy || gitLoading;
@@ -441,11 +1058,12 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       void loadFromGit();
       return;
     }
-    // AI：默认最近一轮有改动的回合
     if (!hasAiTurns) {
       showSoftHint('本会话暂无 AI 改动');
       setSourceMode('session');
       setTurnKey('');
+      setDiffFiles([]);
+      setActiveDiffSource(null);
       return;
     }
     const latest = aiTurns[0];
@@ -457,6 +1075,516 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
   };
 
+  /** 🌟 Collapsible Diff Context Algoritm (Unified View) 🌟 */
+  const getUnifiedRenderItems = (f: EnrichedFileDiff) => {
+    const computed = getComputedChanges(f);
+    const q = diffSearchQuery.trim().toLowerCase();
+    const changes = q ? computed.filter((item) => item.change.content.toLowerCase().includes(q)) : computed;
+    const total = changes.length;
+    const isVisible = new Array(total).fill(false);
+    
+    if (q) {
+      return changes.map((c, i) => ({
+        isCollapsedPlaceholder: false,
+        index: i,
+        item: c,
+      }));
+    }
+
+    const contextCount = 3;
+    for (let i = 0; i < total; i++) {
+      const type = changes[i].change.type;
+      const isHeader = changes[i].isHeader;
+      if (type === 'addition' || type === 'deletion' || isHeader) {
+        isVisible[i] = true;
+        for (let j = Math.max(0, i - contextCount); j < i; j++) {
+          if (changes[j].change.type === 'normal') isVisible[j] = true;
+        }
+        for (let j = i + 1; j <= Math.min(total - 1, i + contextCount); j++) {
+          if (changes[j].change.type === 'normal') isVisible[j] = true;
+        }
+      }
+    }
+
+    const fileKey = f.filePath;
+    const renderItems: any[] = [];
+    let collapsedStart = -1;
+
+    for (let i = 0; i < total; i++) {
+      const isExpanded = expandedBlocks[fileKey]?.[i] || false;
+      if (isVisible[i] || isExpanded) {
+        if (collapsedStart !== -1) {
+          const count = i - collapsedStart;
+          renderItems.push({
+            isCollapsedPlaceholder: true,
+            startIndex: collapsedStart,
+            count,
+          });
+          collapsedStart = -1;
+        }
+        renderItems.push({
+          isCollapsedPlaceholder: false,
+          index: i,
+          item: changes[i],
+        });
+      } else {
+        if (collapsedStart === -1) {
+          collapsedStart = i;
+        }
+      }
+    }
+
+    if (collapsedStart !== -1) {
+      const count = total - collapsedStart;
+      renderItems.push({
+        isCollapsedPlaceholder: true,
+        startIndex: collapsedStart,
+        count,
+      });
+    }
+
+    return renderItems;
+  };
+
+  /** 🌟 Collapsible Diff Context Algoritm (Split View) 🌟 */
+  const getSplitRenderItems = (f: EnrichedFileDiff) => {
+    const pairs = getSplitPairs(f);
+    const q = diffSearchQuery.trim().toLowerCase();
+    if (q) {
+      return pairs.map((p, i) => ({
+        isCollapsedPlaceholder: false,
+        index: i,
+        pair: p,
+      }));
+    }
+
+    const total = pairs.length;
+    const isVisible = new Array(total).fill(false);
+
+    const contextCount = 3;
+    for (let i = 0; i < total; i++) {
+      const p = pairs[i];
+      const hasDiff = (p.left && p.left.change.type !== 'normal') || (p.right && p.right.change.type !== 'normal');
+      const isHeader = (p.left && p.left.isHeader) || (p.right && p.right.isHeader);
+      
+      if (hasDiff || isHeader) {
+        isVisible[i] = true;
+        for (let j = Math.max(0, i - contextCount); j < i; j++) {
+          isVisible[j] = true;
+        }
+        for (let j = i + 1; j <= Math.min(total - 1, i + contextCount); j++) {
+          isVisible[j] = true;
+        }
+      }
+    }
+
+    const fileKey = f.filePath;
+    const renderItems: any[] = [];
+    let collapsedStart = -1;
+
+    for (let i = 0; i < total; i++) {
+      const isExpanded = expandedBlocks[fileKey]?.[i] || false;
+      if (isVisible[i] || isExpanded) {
+        if (collapsedStart !== -1) {
+          const count = i - collapsedStart;
+          renderItems.push({
+            isCollapsedPlaceholder: true,
+            startIndex: collapsedStart,
+            count,
+          });
+          collapsedStart = -1;
+        }
+        renderItems.push({
+          isCollapsedPlaceholder: false,
+          index: i,
+          pair: pairs[i],
+        });
+      } else {
+        if (collapsedStart === -1) {
+          collapsedStart = i;
+        }
+      }
+    }
+
+    if (collapsedStart !== -1) {
+      const count = total - collapsedStart;
+      renderItems.push({
+        isCollapsedPlaceholder: true,
+        startIndex: collapsedStart,
+        count,
+      });
+    }
+
+    return renderItems;
+  };
+
+  const handleExpandBlock = (fileKey: string, startIndex: number) => {
+    setExpandedBlocks((prev) => ({
+      ...prev,
+      [fileKey]: {
+        ...(prev[fileKey] || {}),
+        [startIndex]: true,
+      },
+    }));
+  };
+
+  /** 🌟 Load Plain Disk Content for Full Code View 🌟 */
+  const loadPlainContent = async (filePath: string) => {
+    if (plainFileContents[filePath] !== undefined) return;
+    setPlainLoading((prev) => ({ ...prev, [filePath]: true }));
+    try {
+      const res = await readTextFile(filePath, 1000000); // Request up to 1,000,000 lines
+      const content = res.content || '（空文件或读取失败）';
+      setPlainFileContents((prev) => ({ ...prev, [filePath]: content }));
+    } catch (err) {
+      setPlainFileContents((prev) => ({ ...prev, [filePath]: '读取源码失败：' + String(err) }));
+    } finally {
+      setPlainLoading((prev) => ({ ...prev, [filePath]: false }));
+    }
+  };
+
+  const handleCopyCodeOfFile = async (filePath: string) => {
+    try {
+      const res = await readTextFile(filePath);
+      if (res.content) {
+        // Warning confirmation for gigantic system copies
+        if (res.content.length > 3 * 1024 * 1024) {
+          if (!window.confirm(`该文件内容十分庞大 (${(res.content.length / 1024 / 1024).toFixed(2)} MB)，进行复制操作可能导致剪贴板短时间卡死。确定要复制吗？`)) {
+            return;
+          }
+        }
+        await navigator.clipboard.writeText(res.content);
+        onShowToast('最新源码已复制到剪贴板');
+      }
+    } catch (err) {
+      onShowToast('复制失败：' + String(err));
+    }
+  };
+
+  const acceptCurrentFile = async (f: EnrichedFileDiff) => {
+    if (applyBusy) return;
+    const cls = classifyFileDiff(f);
+    if (!cls.ok) {
+      toastFail('无法安全自动应用，请在编辑器确认');
+      return;
+    }
+    setApplyBusy(true);
+    try {
+      const result = await applyFileDiffToDisk(f);
+      if (result.ok === true) {
+        removeDiffFile(f.filePath);
+        setPanelErr('');
+        return;
+      }
+      const msg = formatApplyFailureToast(1, [
+        { filePath: f.filePath, result },
+      ]);
+      toastFail(msg || result.message || '无法安全自动应用，请在编辑器确认');
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      toastFail(
+        detail
+          ? `应用失败 · ${basename(f.filePath)}：${detail}`
+          : `应用失败 · ${basename(f.filePath)}`,
+      );
+    } finally {
+      setApplyBusy(false);
+    }
+  };
+
+  const rejectCurrentFile = useCallback((f: EnrichedFileDiff) => {
+    removeDiffFile(f.filePath);
+  }, [removeDiffFile]);
+
+  // Computed count of staged vs unstaged for git mode
+  const stagedCount = useMemo(() => fileList.filter((f) => f.staged).length, [fileList]);
+  const unstagedCount = useMemo(() => fileList.filter((f) => !f.staged).length, [fileList]);
+
+  /** 🌟 Collapsed / Expanding Diff Content Helper 🌟 */
+  const renderInlineDiffContent = (f: EnrichedFileDiff) => {
+    const compareMode = getFileCompareMode(f.filePath);
+
+    if (compareMode === 'plain') {
+      if (plainLoading[f.filePath]) {
+        return (
+          <div className={styles.detailLoading}>
+            <Lucide.Loader2 size={16} className="spin" />
+            <span>正在加载源码...</span>
+          </div>
+        );
+      }
+      
+      const fileContent = plainFileContents[f.filePath] || '';
+      return (
+        <VirtualPlainCodeViewer
+          content={fileContent}
+          filePath={f.filePath}
+          styles={styles}
+        />
+      );
+    }
+
+    const computed = getComputedChanges(f);
+    const q = diffSearchQuery.trim();
+    if (q && computed.filter(item => item.change.content.toLowerCase().includes(q.toLowerCase())).length === 0) {
+      return (
+        <div className={styles.empty} role="status" aria-live="polite" style={{ padding: '16px 10px' }}>
+          <div>无匹配行</div>
+          <div className={styles.emptySub}>
+            筛选「{q}」无结果
+          </div>
+        </div>
+      );
+    }
+
+    if (diffViewMode === 'split') {
+      const renderItems = getSplitRenderItems(f);
+      return (
+        <VirtualSplitDiffViewer
+          f={f}
+          renderItems={renderItems}
+          onExpandBlock={handleExpandBlock}
+          styles={styles}
+          Lucide={Lucide}
+        />
+      );
+    }
+
+    // Unified view mode
+    const renderItems = getUnifiedRenderItems(f);
+    return (
+      <VirtualUnifiedDiffViewer
+        f={f}
+        renderItems={renderItems}
+        onExpandBlock={handleExpandBlock}
+        styles={styles}
+        Lucide={Lucide}
+      />
+    );
+  };
+
+  /** 🌟 Accordion Block Render 🌟 */
+  const renderAccordionItem = (f: EnrichedFileDiff) => {
+    if (!f || !f.filePath) return null;
+    const active = current?.filePath === f.filePath;
+    const itemId = `diff-file-${f.filePath.replace(/[^\w.-]+/g, '_')}`;
+    
+    const cwd = getWorkspacePath();
+    const isAbsolute = f.filePath.startsWith('/') || f.filePath.includes(':');
+    const absolutePath = isAbsolute ? f.filePath : `${cwd}/${f.filePath}`;
+    const fileAiTurns = aiTurns.filter((t) => t.files.some((m) => m.filePath === f.filePath));
+
+    // 🌟 Separate Git vs AI turn comparison options logically 🌟
+    const compareOptions: { value: string; label: string; hint?: string }[] = [];
+    if (sourceMode === 'git') {
+      compareOptions.push({ value: 'git', label: 'Git 工作区改动' });
+    } else {
+      if (aiTurns.length > 0) {
+        compareOptions.push({ value: 'session-merged', label: 'AI 汇总改动' });
+      }
+      fileAiTurns.forEach((t) => {
+        compareOptions.push({
+          value: `turn-${t.msg.id}`,
+          label: `第 ${t.index + 1} 轮 AI 修改`,
+          hint: `${new Date(t.msg.timestamp).toLocaleTimeString()}`,
+        });
+      });
+    }
+    compareOptions.push({ value: 'plain', label: '当前源码全文 (无 Diff)' });
+
+    return (
+      <div key={f.filePath} className={`${styles.accordionItem} ${active ? styles.accordionActive : ''}`}>
+        <div className={styles.accordionHeaderRow}>
+          <Tooltip content={f.filePath}>
+            <button
+              id={itemId}
+              type="button"
+              role="option"
+              aria-selected={active}
+              className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
+              onClick={() => setActiveDiffSource(active ? null : f)}
+              aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
+            >
+              {/* Clickable hyperlinked name */}
+              <span
+                className={styles.fileNameLink}
+                role="link"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveDiffSource(active ? null : f);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setActiveDiffSource(active ? null : f);
+                  }
+                }}
+              >
+                {basename(f.filePath)}
+              </span>
+
+              <span className={styles.fileStat} aria-hidden>
+                <span className="add">+{f.additions}</span>
+                <span className="del">−{f.deletions}</span>
+              </span>
+            </button>
+          </Tooltip>
+
+          {/* Hover Git Stage/Unstage/Discard action controls */}
+          {sourceMode === 'git' && (
+            <div className={styles.hoverActions}>
+              {stagingPaths[f.filePath] ? (
+                <Lucide.Loader2 size={13} className={styles.spinner} />
+              ) : f.staged ? (
+                <Tooltip content="取消暂存此文件">
+                  <button
+                    type="button"
+                    className={styles.hoverActBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleUnstageFile(f.filePath);
+                    }}
+                  >
+                    <Lucide.Minus size={13} />
+                  </button>
+                </Tooltip>
+              ) : (
+                <>
+                  <Tooltip content="暂存此文件">
+                    <button
+                      type="button"
+                      className={styles.hoverActBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleStageFile(f.filePath);
+                      }}
+                    >
+                      <Lucide.Plus size={13} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="放弃此文件的所有本地修改">
+                    <button
+                      type="button"
+                      className={`${styles.hoverActBtn} ${styles.danger}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDiscardChanges(f.filePath);
+                      }}
+                    >
+                      <Lucide.Undo2 size={13} />
+                    </button>
+                  </Tooltip>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {active ? (
+          <div className={styles.inlineBody}>
+            {!classifyFileDiff(f).ok ? (
+              <div className={styles.applyHint} role="status">
+                此 diff 无法安全自动应用，请在编辑器确认
+              </div>
+            ) : null}
+
+            {/* Premium, unified inline toolbar inside the expanded file card */}
+            <div className={styles.inlineHeader}>
+              <div className={styles.compareSelectorWrap}>
+                <span className={styles.selectLabel}>对比维度:</span>
+                <SettingsSelect
+                  value={getFileCompareMode(f.filePath)}
+                  options={compareOptions}
+                  onChange={(val) => void changeFileCompareMode(f.filePath, val)}
+                  className={styles.inlineCompareSelect}
+                />
+              </div>
+
+              <div className={styles.inlineActions}>
+                <Tooltip content="在默认编辑器中打开该文件">
+                  <button
+                    type="button"
+                    className={styles.inlineIconBtn}
+                    onClick={() => void openPathDefault(absolutePath)}
+                    aria-label="在编辑器打开"
+                  >
+                    <Lucide.ExternalLink size={13} />
+                  </button>
+                </Tooltip>
+
+                <Tooltip content="复制最新文件源码">
+                  <button
+                    type="button"
+                    className={styles.inlineIconBtn}
+                    onClick={() => void handleCopyCodeOfFile(f.filePath)}
+                    aria-label="复制代码"
+                  >
+                    <Lucide.Copy size={13} />
+                  </button>
+                </Tooltip>
+
+                <Tooltip content="复制完整绝对路径">
+                  <button
+                    type="button"
+                    className={styles.inlineIconBtn}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(absolutePath);
+                      onShowToast('绝对路径已复制到剪贴板');
+                    }}
+                    aria-label="复制路径"
+                  >
+                    <Lucide.FileCode size={13} />
+                  </button>
+                </Tooltip>
+
+                <div className={styles.actionDivider} />
+
+                <Tooltip
+                  content={
+                    classifyFileDiff(f).ok
+                      ? '接受并写入磁盘'
+                      : '此 diff 无法安全自动应用'
+                  }
+                >
+                  <button
+                    type="button"
+                    className={`${styles.inlineActionBtn} ${styles.inlineActionAccept}`}
+                    disabled={applyBusy || !classifyFileDiff(f).ok}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void acceptCurrentFile(f);
+                    }}
+                  >
+                    <Lucide.Check size={14} aria-hidden />
+                  </button>
+                </Tooltip>
+
+                <Tooltip content="从列表拒绝（不回滚磁盘）">
+                  <button
+                    type="button"
+                    className={styles.inlineActionBtn}
+                    disabled={applyBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      rejectCurrentFile(f);
+                    }}
+                  >
+                    <Lucide.X size={14} aria-hidden />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+
+            {/* Render with collapsible context or plain text! */}
+            {renderInlineDiffContent(f)}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div
       className={styles.panel}
@@ -464,8 +1592,9 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       aria-busy={busy || undefined}
       data-source={sourceMode}
     >
-      <div className={styles.toolbar} role="toolbar" aria-label="变更工具栏">
-        <div className={styles.toolbarLeft}>
+      {/* 双排统一高度工具栏 */}
+      <div className={styles.toolbarContainer} role="toolbar" aria-label="变更工具栏">
+        <div className={styles.toolbarRow1}>
           <div className={styles.sourceSeg} role="group" aria-label="变更来源">
             <Tooltip content="当前对话中 AI 产生的改动">
               <button
@@ -490,161 +1619,130 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
               </button>
             </Tooltip>
           </div>
-          {fileList.length > 0 ? (
-            <Tooltip content={`${fileList.length} 个文件`}>
-              <span
-                className={styles.toolbarMeta}
-                aria-label={`${fileList.length} 个文件`}
-              >
-                {fileList.length} 文件
-              </span>
-            </Tooltip>
-          ) : null}
-        </div>
-        <div className={styles.toolbarActions}>
-          {sourceMode !== 'git' ? (
-            <div className={styles.turnSelectWrap}>
-              <SettingsSelect
-                className={styles.turnSettingsSelect}
-                value={turnKey}
-                placeholder={hasAiTurns ? '选择回合…' : '暂无 AI 改动'}
-                disabled={!hasAiTurns || applyBusy}
-                options={turnOptions}
-                onChange={(v) => {
-                  if (!v) return;
-                  onTurnSelect(v);
-                }}
-                maxHeight={260}
-              />
-            </div>
-          ) : (
-            <Tooltip content="工作区未提交变更">
-              <span className={`${styles.toolbarMeta} ${styles.toolbarMetaGit}`}>
-                工作区
-              </span>
-            </Tooltip>
-          )}
-          {fileList.length > 1 ? (
-            <Tooltip content="全部接受（可安全应用的文件）">
-              <button
-                type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
-                aria-label="全部接受可安全应用的文件"
-                disabled={applyBusy}
-                onClick={() => void acceptAll()}
-              >
-                <Lucide.CheckCheck size={15} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-          <Tooltip content="合并视图">
-            <button
-              type="button"
-              className={`${styles.iconBtn} ${styles.viewBtn} ${diffViewMode === 'unified' ? styles.isOn : ''}`}
-              aria-label="合并视图"
-              aria-pressed={diffViewMode === 'unified'}
-              onClick={() => setDiffViewMode('unified')}
-            >
-              <Lucide.List size={15} aria-hidden />
-            </button>
-          </Tooltip>
-          <Tooltip content="分栏视图">
-            <button
-              type="button"
-              className={`${styles.iconBtn} ${styles.viewBtn} ${diffViewMode === 'split' ? styles.isOn : ''}`}
-              aria-label="分栏视图"
-              aria-pressed={diffViewMode === 'split'}
-              onClick={() => setDiffViewMode('split')}
-            >
-              <Lucide.Columns2 size={15} aria-hidden />
-            </button>
-          </Tooltip>
-          <Tooltip content="筛选行">
-            <button
-              type="button"
-              className={`${styles.iconBtn} ${searchOpen || searchActive ? styles.isOn : ''}`}
-              aria-label="筛选 diff 行"
-              aria-pressed={searchOpen || searchActive}
-              disabled={!current}
-              onClick={() => setSearchOpen((v) => !v)}
-            >
-              <Lucide.Search size={15} aria-hidden />
-            </button>
-          </Tooltip>
-          {fileList.length > 0 ? (
-            <Tooltip content="清空列表">
+
+          <div className={styles.toolbarActions1}>
+            <Tooltip content={diffViewMode === 'unified' ? '切换至分栏视图 (Split View)' : '切换至合并视图 (Unified View)'}>
               <button
                 type="button"
                 className={styles.iconBtn}
-                aria-label="清空变更列表"
-                disabled={applyBusy}
-                onClick={clearList}
+                aria-label={diffViewMode === 'unified' ? '切换至分栏视图' : '切换至合并视图'}
+                onClick={() => setDiffViewMode(diffViewMode === 'unified' ? 'split' : 'unified')}
               >
-                <Lucide.Trash2 size={15} aria-hidden />
+                {diffViewMode === 'unified' ? (
+                  <Lucide.Columns2 size={14} aria-hidden />
+                ) : (
+                  <Lucide.List size={14} aria-hidden />
+                )}
               </button>
             </Tooltip>
-          ) : null}
-        </div>
-      </div>
 
-      {(searchOpen || searchActive) && current ? (
-        <div className={styles.searchRow}>
-          <div className={styles.search}>
-            <Lucide.Search size={14} aria-hidden />
-            <input
-              type="text"
-              placeholder="筛选 diff 行…"
-              aria-label="筛选 diff 行"
-              value={diffSearchQuery}
-              autoFocus
-              onChange={(e) => setDiffSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setDiffSearchQuery('');
-                  setSearchOpen(false);
-                }
-              }}
-            />
-            {searchActive ? (
-              <Tooltip content="清除筛选">
+            {sourceMode === 'git' && fileList.length > 0 && (
+              <Tooltip content={commitPanelOpen ? "隐藏提交面板" : "显示提交面板"}>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${commitPanelOpen ? styles.isOn : ''}`}
+                  aria-label="切换提交面板"
+                  onClick={() => setCommitPanelOpen((v) => !v)}
+                >
+                  <Lucide.GitCommit size={14} aria-hidden />
+                </button>
+              </Tooltip>
+            )}
+
+            <Tooltip content="筛选行">
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${searchOpen || searchActive ? styles.isOn : ''}`}
+                aria-label="筛选 diff 行"
+                aria-pressed={searchOpen || searchActive}
+                disabled={!current}
+                onClick={() => setSearchOpen((v) => !v)}
+              >
+                <Lucide.Search size={14} aria-hidden />
+              </button>
+            </Tooltip>
+            {fileList.length > 0 ? (
+              <Tooltip content="清空列表">
                 <button
                   type="button"
                   className={styles.iconBtn}
-                  style={{ width: 22, height: 22, flexShrink: 0 }}
-                  aria-label="清除筛选"
-                  onClick={() => setDiffSearchQuery('')}
+                  aria-label="清空变更列表"
+                  disabled={applyBusy}
+                  onClick={clearList}
                 >
-                  <Lucide.X size={12} aria-hidden />
+                  <Lucide.Trash2 size={14} aria-hidden />
                 </button>
               </Tooltip>
             ) : null}
           </div>
         </div>
+
+        {/* 第二排：AI改动回合 / Git 切换分支下拉框 */}
+        <div className={styles.toolbarRow2}>
+          {sourceMode === 'session' ? (
+            <SettingsSelect
+              className={styles.turnSettingsSelect}
+              disabled={busy}
+              value={turnKey}
+              options={turnOptions}
+              onChange={onTurnSelect}
+            />
+          ) : sourceMode === 'git' ? (
+            <div className={styles.branchSelectWrap}>
+              <Lucide.GitBranch size={13} className={styles.branchIcon} aria-hidden />
+              <SettingsSelect
+                className={styles.turnSettingsSelect}
+                disabled={busy}
+                value={currentBranch}
+                options={branches.map((b) => ({ value: b, label: b }))}
+                onChange={(val) => void handleSwitchBranch(val)}
+              />
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>载入变更源开始对比</div>
+          )}
+        </div>
+      </div>
+
+      {/* 行级筛选搜索框 */}
+      {searchOpen || searchActive ? (
+        <div className={styles.searchRow}>
+          <input
+            type="search"
+            className={styles.searchInput}
+            placeholder="搜索/筛选行…"
+            value={diffSearchQuery}
+            disabled={!current}
+            onChange={(e) => setDiffSearchQuery(e.target.value)}
+          />
+        </div>
       ) : null}
 
-      {/* 硬失败条：复用 files-action-hint 密度，避免 thrash panels.css */}
+      {/* 异常错误提示框: Styled beautifully with pre-wrapping preventing layout breaks! */}
       {panelErr ? (
-        <div className="files-action-hint" role="alert" aria-live="assertive">
-          <Tooltip content={panelErr}>
-            <span className="files-action-hint-text">
-              {panelErr}
-            </span>
-          </Tooltip>
-          <Tooltip content="关闭">
+        <div
+          className={styles.panelErrBanner}
+          role="alert"
+          aria-live="assertive"
+        >
+          <Lucide.AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div className={styles.panelErrText}>
+            {panelErr}
+          </div>
+          <Tooltip content="关闭错误">
             <button
               type="button"
-              className="files-action-hint-dismiss"
+              className={styles.panelErrDismiss}
               aria-label="关闭错误"
               onClick={dismissPanelErr}
             >
-              <Lucide.X size={12} aria-hidden />
+              <Lucide.X size={13} aria-hidden />
             </button>
           </Tooltip>
         </div>
       ) : null}
 
-      {/* 软提示：空结果等，不 toast；轻量 flex 复用既有 dismiss 控件 */}
+      {/* 软提示 */}
       {!panelErr && softHint ? (
         <div
           className={styles.applyHint}
@@ -666,212 +1764,168 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         </div>
       ) : null}
 
+      {/* Independent scrollable file container */}
       <div className={styles.bodyWrap}>
-        {!current && fileList.length > 0 ? (
+        {fileList.length > 0 ? (
+          /* 🌟 Overview File List View with Inline Expansion 🌟 */
           <div
-            className={styles.fileList}
+            className={`${styles.fileList} ${styles.isFullWidth}`}
             role="listbox"
             aria-label="变更文件列表"
           >
-            {fileList.map((f) => {
-              const active = false;
-              const itemId = `diff-file-${f.filePath.replace(/[^\w.-]+/g, '_')}`;
-              return (
-                <Tooltip key={f.filePath} content={f.filePath}>
-                  <button
-                    id={itemId}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
-                    onClick={() => setActiveDiffSource(f)}
-                    aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
-                  >
-                    <span className={styles.fileName}>{basename(f.filePath)}</span>
-                    <span className={styles.fileStat} aria-hidden>
-                      <span className="add">+{f.additions}</span>
-                      <span className="del">−{f.deletions}</span>
-                    </span>
-                  </button>
-                </Tooltip>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {current || fileList.length === 0 || gitLoading ? (
-          <div className={`${styles.body} ${diffViewMode === 'split' ? 'is-split' : ''}`} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}>
-            {gitLoading && !current ? (
-              <div className={styles.empty} role="status" aria-live="polite">
-                <Lucide.Loader2 size={22} className="spin" style={{ opacity: 0.45 }} aria-hidden />
-                <div>载入 Git 变更…</div>
-              </div>
-            ) : !current ? (
-              <div className={styles.empty} role="status" aria-live="polite">
-                <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
-                <div>暂无变更</div>
-                <div className={styles.emptySub}>
-                  上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。
+            {sourceMode === 'git' ? (
+              /* --- Git Mode with Staged / Unstaged Grouping --- */
+              <div className={styles.gitGroupList}>
+                {/* 1. Staged Changes Section */}
+                <div className={styles.gitGroupSection}>
+                  <div className={styles.gitGroupHeader}>
+                    <span className={styles.groupTitle}>已暂存的更改 ({stagedCount})</span>
+                    {stagedCount > 0 && (
+                      <button type="button" className={styles.groupActionBtn} onClick={handleUnstageAll}>
+                        <Lucide.MinusCircle size={13} style={{ marginRight: 3 }} />
+                        全部取消暂存
+                      </button>
+                    )}
+                  </div>
+                  {stagedCount === 0 ? (
+                    <div className={styles.groupEmptyHint}>无已暂存的文件</div>
+                  ) : (
+                    <div className={styles.groupItemsContainer}>
+                      {fileList.filter((f) => f && f.staged).map(renderAccordionItem)}
+                    </div>
+                  )}
                 </div>
-                <div className={styles.emptyActions}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
-                    disabled={!hasAiTurns || applyBusy}
-                    aria-label="查看 AI 改动"
-                    onClick={() => switchSource('session')}
-                  >
-                    AI 改动
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    disabled={gitLoading || applyBusy}
-                    aria-label="载入 Git 未提交变更"
-                    onClick={() => switchSource('git')}
-                  >
-                    <Lucide.GitBranch size={15} aria-hidden />
-                    Git
-                  </button>
+
+                {/* 2. Unstaged Changes Section */}
+                <div className={styles.gitGroupSection}>
+                  <div className={styles.gitGroupHeader}>
+                    <span className={styles.groupTitle}>未暂存的更改 ({unstagedCount})</span>
+                    {unstagedCount > 0 && (
+                      <button type="button" className={styles.groupActionBtn} onClick={handleStageAll}>
+                        <Lucide.PlusCircle size={13} style={{ marginRight: 3 }} />
+                        全部暂存
+                      </button>
+                    )}
+                  </div>
+                  {unstagedCount === 0 ? (
+                    <div className={styles.groupEmptyHint}>无未暂存的修改</div>
+                  ) : (
+                    <div className={styles.groupItemsContainer}>
+                      {fileList.filter((f) => f && !f.staged).map(renderAccordionItem)}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <>
-                <div className={styles.currentHeader}>
-                  <Tooltip content="返回文件列表">
-                    <button
-                      type="button"
-                      className={styles.backBtn}
-                      aria-label="返回文件列表"
-                      onClick={() => setActiveDiffSource(null)}
-                    >
-                      <Lucide.ChevronLeft size={16} strokeWidth={2.2} aria-hidden />
-                      <span>列表</span>
-                    </button>
-                  </Tooltip>
-                  <Tooltip content={current.filePath}>
-                    <div className={styles.currentPath}>
-                      {/* 窄栏时优先显示文件名，完整路径放 title */}
-                      <span className={styles.currentBasename}>{basename(current.filePath)}</span>
-                      <span className={styles.currentFullpath}>{current.filePath}</span>
-                    </div>
-                  </Tooltip>
-                  <div className={styles.applyActions}>
-                    <Tooltip
-                      content={
-                        currentCanApply
-                          ? '接受并写入磁盘'
-                          : '此 diff 无法安全自动应用'
-                      }
-                    >
-                      <button
-                        type="button"
-                        className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
-                        aria-label={
-                          currentCanApply
-                            ? `接受并写入 ${basename(current.filePath)}`
-                            : '无法安全自动应用'
-                        }
-                        disabled={applyBusy || !currentCanApply}
-                        onClick={() => void acceptCurrent()}
-                      >
-                        <Lucide.Check size={15} aria-hidden />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="从列表拒绝（不回滚磁盘）">
-                      <button
-                        type="button"
-                        className={styles.iconBtn}
-                        aria-label={`拒绝 ${basename(current.filePath)}`}
-                        disabled={applyBusy}
-                        onClick={rejectCurrent}
-                      >
-                        <Lucide.X size={15} aria-hidden />
-                      </button>
-                    </Tooltip>
-                    {fileList.length > 1 ? (
-                      <Tooltip content="批量接受列表中可安全应用的文件">
-                        <button
-                          type="button"
-                          className={`${styles.iconBtn} ${styles.iconBtnAccept}`}
-                          aria-label="全部接受可安全应用的文件"
-                          disabled={applyBusy}
-                          onClick={() => void acceptAll()}
-                        >
-                          <Lucide.CheckCheck size={15} aria-hidden />
-                        </button>
-                      </Tooltip>
-                    ) : null}
-                  </div>
-                </div>
-                {!currentCanApply ? (
-                  <div className={styles.applyHint} role="status">
-                    此 diff 无法安全自动应用，请在编辑器确认
-                  </div>
-                ) : null}
-                {noSearchHits ? (
-                  <div className={styles.empty} role="status" aria-live="polite">
-                    <div>无匹配行</div>
-                    <div className={styles.emptySub}>
-                      筛选「{diffSearchQuery.trim()}」无结果
-                    </div>
-                    <div className={styles.emptyActions}>
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        aria-label="清除筛选"
-                        onClick={() => setDiffSearchQuery('')}
-                      >
-                        清除筛选
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    ref={diffScrollParentRef}
-                    style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}
-                  >
-                    <pre
-                      className={styles.lines}
-                      style={{ margin: 0, padding: '8px 0 16px', overflowY: 'visible', position: 'relative', height: `${totalHeight}px` }}
-                      aria-label={`${basename(current.filePath)} 的变更内容${
-                        searchActive ? `（已筛选，${filteredChanges.length} 行）` : ''
-                      }`}
-                    >
-                      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
-                        {visibleChanges.map((c, index) => {
-                          const globalIdx = startIndex + index;
-                          const top = globalIdx * 20;
-                          return (
-                            <div
-                              key={globalIdx}
-                              className={`${styles.line} ${styles[`line${c.type.charAt(0).toUpperCase() + c.type.slice(1)}`]}`}
-                              style={{
-                                position: 'absolute',
-                                top: `${top}px`,
-                                left: 0,
-                                width: '100%',
-                                height: '20px',
-                                display: 'flex',
-                                alignItems: 'center'
-                              }}
-                            >
-                              <span className={styles.lineMark} aria-hidden>
-                                {c.type === 'addition' ? '+' : c.type === 'deletion' ? '−' : ' '}
-                              </span>
-                              <span className={styles.lineText}>{c.content}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </pre>
-                  </div>
-                )}
-              </>
+              /* --- AI Turn / Session Mode (Flat Accordion List) --- */
+              fileList.map(renderAccordionItem)
             )}
+          </div>
+        ) : !gitLoading ? (
+          /* Empty State */
+          <div className={styles.empty} role="status" aria-live="polite">
+            <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
+            <div>暂无变更</div>
+            <div className={styles.emptySub}>
+              上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。
+            </div>
+            <div className={styles.emptyActions}>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={!hasAiTurns || applyBusy}
+                aria-label="查看 AI 改动"
+                onClick={() => switchSource('session')}
+              >
+                AI 改动
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                disabled={gitLoading || applyBusy}
+                aria-label="载入 Git 未提交变更"
+                onClick={() => switchSource('git')}
+              >
+                <Lucide.GitBranch size={15} aria-hidden />
+                Git
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {gitLoading && fileList.length === 0 ? (
+          <div className={styles.empty} role="status" aria-live="polite">
+            <Lucide.Loader2 size={22} className="spin" style={{ opacity: 0.45 }} aria-hidden />
+            <div>载入 Git 变更…</div>
           </div>
         ) : null}
       </div>
+
+      {/* 🌟 Pinned Docked Commit Panel at the Bottom (Always Visible, Non-scrolling!) 🌟 */}
+      {sourceMode === 'git' && fileList.length > 0 && (
+        <>
+          {commitPanelOpen ? (
+            <div className={styles.commitPanel}>
+              <div className={styles.commitHeader}>
+                <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
+                <button type="button" className={styles.commitCloseBtn} onClick={() => setCommitPanelOpen(false)}>
+                  <Lucide.X size={13} />
+                </button>
+              </div>
+              <textarea
+                className={styles.commitInput}
+                placeholder={
+                  stagedCount > 0
+                    ? "输入提交信息… 将仅提交已暂存的更改 (Ctrl+Enter 提交)"
+                    : "输入提交信息… 将自动暂存全部更改并提交 (Ctrl+Enter 提交)"
+                }
+                value={commitMsg}
+                disabled={commitLoading || pushLoading}
+                onChange={(e) => setCommitMsg(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    void handleCommit();
+                  }
+                }}
+              />
+              <div className={styles.commitActions}>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  style={{ height: 28 }}
+                  disabled={commitLoading || pushLoading}
+                  onClick={() => void handleCommit()}
+                >
+                  <Lucide.GitCommit size={14} style={{ marginRight: 4 }} />
+                  {commitLoading ? '提交中…' : stagedCount > 0 ? '提交已暂存' : '暂存并提交'}
+                </button>
+                <Tooltip content="将本地提交推送至远程仓库">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    style={{ height: 28 }}
+                    disabled={commitLoading || pushLoading}
+                    onClick={() => void handlePush()}
+                  >
+                    <Lucide.CloudUpload size={14} style={{ marginRight: 4 }} />
+                    {pushLoading ? '推送中…' : '推送 (Push)'}
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          ) : (
+            /* Compact collapsed bottom docked status bar */
+            <div className={styles.commitTriggerBar} onClick={() => setCommitPanelOpen(true)}>
+              <Lucide.GitCommit size={14} className={styles.commitTriggerIcon} />
+              <span className={styles.commitTriggerText}>
+                输入提交信息… ({stagedCount} 个已暂存 / {unstagedCount} 个未暂存)
+              </span>
+              <Lucide.ChevronRight size={14} className={styles.commitTriggerArrow} />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

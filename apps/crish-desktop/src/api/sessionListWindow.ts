@@ -5,7 +5,7 @@
  * 搜索（行高可变）/ 拖拽（需全量 drop target）时由调用方禁用。
  */
 
-export const SIDEBAR_SESSION_ROW_HEIGHT = 30;
+export const SIDEBAR_SESSION_ROW_HEIGHT = 28;
 
 /** 超过此数量启用窗口化 */
 export const SIDEBAR_WINDOW_THRESHOLD = 48;

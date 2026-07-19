@@ -134,7 +134,7 @@ export const SettingsSelect: React.FC<Props> = ({
       ? createPortal(
           <div
             ref={menuRef}
-            className={`${styles.settingsSelectMenu} ${styles.settingsSelectMenuPortal}`}
+            className={`${styles.settingsSelectMenu} ${styles.settingsSelectMenuPortal} settings-select-menu settings-select-menu--portal`}
             role="listbox"
             id={listId}
             onWheel={(e) => e.stopPropagation()}
@@ -156,15 +156,15 @@ export const SettingsSelect: React.FC<Props> = ({
                 const active = opt.value === value;
                 return (
                   <React.Fragment key={opt.value}>
-                    {showGroup ? (
-                      <div className={styles.settingsSelectGroup}>{opt.group}</div>
-                    ) : null}
+                     {showGroup ? (
+                       <div className={styles.settingsSelectGroup}>{opt.group}</div>
+                     ) : null}
                     <Tooltip content={opt.hint} disabled={!opt.hint}>
                       <button
                         type="button"
                         role="option"
                         aria-selected={active}
-                        className={`${styles.settingsSelectItem}${active ? ` ${styles.isActive}` : ''}`}
+                        className={`${styles.settingsSelectItem} settings-select-item${active ? ` ${styles.isActive} is-active` : ''}`}
                         onClick={() => {
                           onChange(opt.value);
                           setOpen(false);

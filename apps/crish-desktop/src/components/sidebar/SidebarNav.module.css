@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 6px);
-  margin-bottom: 12px;
+  margin-bottom: 0; /* Removed margin-bottom so separation is determined by standard gap */
+  padding-left: 0; /* Remove sub-container padding-left */
+  padding-right: 0; /* Remove sub-container padding-right */
 }
 
 .navItem {
@@ -15,9 +17,9 @@
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-base, 14px) !important; /* locked explicitly to 14px */
   font-weight: var(--font-weight-medium);
-  padding: 0 12px;
+  padding: 0 8px; /* Internal padding set to 8px so icons start exactly at 10px + 8px = 18px from left */
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
@@ -33,7 +35,7 @@
 }
 
 .navItem:hover {
-  background: var(--control-soft-bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
   border-color: transparent;
 }
@@ -43,7 +45,7 @@
 }
 
 .navItem.isActive {
-  background: var(--control-soft-bg-active);
+  background: var(--sidebar-active);
   color: var(--text-primary);
   border-color: transparent;
   box-shadow: none;
@@ -65,7 +67,7 @@
   outline: none !important;
   background: transparent !important;
   font: inherit;
-  font-size: 14px !important;
+  font-size: var(--font-size-base) !important;
   color: var(--text-primary) !important;
   padding: 0 !important;
 }

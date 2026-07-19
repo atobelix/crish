@@ -27,7 +27,7 @@
 }
 
 .mrlLabel {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--text-tertiary);
@@ -82,13 +82,16 @@
 }
 
 .mrlItem:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .mrlItem.isActive {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
   border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.mrlItem.isActive:hover {
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
 }
 
 .mrlItemRowTop {
@@ -99,7 +102,7 @@
 }
 
 .mrlItemName {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   text-overflow: ellipsis;
@@ -108,7 +111,7 @@
 }
 
 .mrlItemTag {
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   padding: 1px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -127,7 +130,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
 
@@ -146,18 +149,18 @@
 }
 
 .mrlItemCount {
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   opacity: 0.75;
 }
 
 .mrlEmpty {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   padding: 20px 8px;
   text-align: center;
 }
 
-/* 右侧详情 Canvas */
+/* 鍙充晶璇︽儏 Canvas */
 .modelsDetail {
   flex: 1;
   min-width: 0;
@@ -186,7 +189,7 @@
 }
 
 .mrdTitle {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--text-primary);
@@ -194,7 +197,7 @@
 }
 
 .mrdPill {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   padding: 2px 8px;
   border-radius: 999px;
   font-weight: 500;
@@ -211,7 +214,7 @@
 }
 
 .mrdToggleBtn {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -227,8 +230,8 @@
 
 /* Sub-card Sections */
 .mrdCard {
-  background: var(--bg-elevated);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 16px 18px;
   display: flex;
@@ -237,7 +240,7 @@
 }
 
 .mrdCardTitle {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -257,7 +260,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 4px;
@@ -267,7 +270,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: #16a34a;
   background: color-mix(in srgb, #22c55e 10%, transparent);
   padding: 1px 6px;
@@ -278,11 +281,11 @@
   height: var(--control-height);
   min-height: var(--control-height);
   padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  background: var(--bg-primary);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -292,8 +295,8 @@
 }
 
 .mrdFieldInput:focus {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  background: var(--bg-primary);
   box-shadow: none;
   outline: none;
 }
@@ -317,7 +320,7 @@
 }
 
 .mrdModelsLabel {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -334,14 +337,15 @@
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   background: var(--bg-primary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-primary);
   outline: none;
   width: 140px;
 }
 
 .mrdSearch:focus {
-  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  outline: none;
 }
 
 .mrdModelList {
@@ -361,11 +365,11 @@
   border: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
   background: var(--bg-primary);
   transition: background-color 0.15s ease, border-color 0.15s ease;
+  flex-wrap: wrap;
 }
 
-.mrdModelRow:hover {
+.mrdModelRow:not(:global(.is-expanded)):hover {
   border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 60%, var(--bg-elevated));
 }
 
 .mrdModelRow.isLive {
@@ -385,7 +389,7 @@
 }
 
 .mrdModelName {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
   text-overflow: ellipsis;
@@ -394,7 +398,7 @@
 }
 
 .mrdCtxPill {
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   padding: 1px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -416,56 +420,47 @@
 }
 
 .mrdEmpty {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   padding: 40px 0;
   text-align: center;
 }
 
-/* Switch UI */
-.modelsSwitch {
+/* New Switch UI */
+.modelRowToggle {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   width: 32px;
   height: 18px;
-}
-
-.modelsSwitch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.modelsSwitchUi {
-  position: absolute;
+  border-radius: 999px;
+  border: none;
+  background-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
-  transition: 0.2s ease;
-  border-radius: 18px;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease;
+  outline: none;
 }
 
-.modelsSwitchUi:before {
+.modelRowToggle.active {
+  background-color: var(--accent-primary);
+}
+
+.toggleThumb {
   position: absolute;
-  content: "";
-  height: 14px;
-  width: 14px;
+  top: 2px;
   left: 2px;
-  bottom: 2px;
-  background-color: white;
-  transition: 0.2s ease;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: left 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.modelsSwitch input:checked + .modelsSwitchUi {
-  background-color: var(--accent-primary, #3b82f6);
-}
-
-.modelsSwitch input:checked + .modelsSwitchUi:before {
-  transform: translateX(14px);
+.modelRowToggle.active .toggleThumb {
+  left: 16px;
 }
 
 .modelsBtn.dangerText:hover:not(:disabled) {
@@ -477,7 +472,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   padding-bottom: 4px;
@@ -556,14 +551,14 @@
 }
 
 .modelsCtxBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
 }
 
 .modelsCtxInput {
   width: 72px;
   height: 28px;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 15%, transparent);
   border-radius: 6px;
   padding: 0 6px;
   font-size: var(--font-size-xs);
@@ -581,7 +576,7 @@
   box-shadow: none;
 }
 
-/* 次要操作：主列表始终可点（避免与配置面板抢位时点不到）；旧 model-row 仍 hover 显 */
+/* 娆¤鎿嶄綔锛氫富鍒楄〃濮嬬粓鍙偣锛堥伩鍏嶄笌閰嶇疆闈㈡澘鎶綅鏃剁偣涓嶅埌锛夛紱鏃?model-row 浠?hover 鏄?*/
 .modelsIconBtn {
   width: 28px;
   height: 28px;
@@ -625,7 +620,7 @@
   color: var(--accent-red);
 }
 
-/* 启停与测试稍优先：hover 时仍先露出 */
+/* 鍚仠涓庢祴璇曠◢浼樺厛锛歨over 鏃朵粛鍏堥湶鍑?*/
 .modelsIconBtnPrimary {
   opacity: 0.35;
   pointer-events: auto;
@@ -645,7 +640,7 @@
   flex: 1;
 }
 
-/* 计费单价：与模型列表彻底分区，默认折叠，不与行操作抢位 */
+/* 璁¤垂鍗曚环锛氫笌妯″瀷鍒楄〃褰诲簳鍒嗗尯锛岄粯璁ゆ姌鍙狅紝涓嶄笌琛屾搷浣滄姠浣?*/
 .modelsBilling {
   margin-top: 14px;
   padding-top: 14px;
@@ -846,37 +841,49 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 500;
   color: var(--text-secondary);
 }
 .mrdCapPill {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: 5px;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm, 6px);
   border: 1px solid var(--border-subtle);
-  font-size: 11px;
-  font-weight: 500;
+  background: var(--bg-primary, transparent);
   color: var(--text-secondary);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-normal, 400);
   cursor: pointer;
   user-select: none;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-  background: transparent;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
+
 .mrdCapPill:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
 }
+
 .mrdCapPill.isOn {
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
-  color: var(--accent-primary);
-  font-weight: 600;
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 25%, transparent) !important;
+  color: var(--accent-primary) !important;
+  font-weight: 500;
+}
+
+.mrdCapPill.isOn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent) !important;
 }
 
 /* Expanded config sub-panel */
-.mrdModelCfg {
+.modelConfigPanel {
   width: 100%;
+  flex-basis: 100%;
   padding: 12px 14px;
   margin-top: 8px;
   display: flex;
@@ -896,7 +903,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -905,34 +912,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 8px;
   padding-top: 4px;
 }
 .mrdCapGroup {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.mrdCapPill {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
-}
-.mrdCapPill:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  color: var(--text-primary);
-}
-.mrdCapPill.isOn {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 .mrdCfgActions {
   display: flex;
@@ -950,7 +937,7 @@
   border-radius: 7px;
   border: 1px dashed var(--border-subtle);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -966,6 +953,6 @@
 .mrdModelEmpty {
   padding: 20px 0;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }

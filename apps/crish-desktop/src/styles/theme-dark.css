@@ -4,7 +4,7 @@
  * Selectors are moved from index.css; do not rename component classes.
  */
 
-html[data-theme="dark"] body {
+:where(html[data-theme="dark"]) body {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
@@ -13,29 +13,16 @@ html[data-theme="dark"] body {
  * html[data-theme] 特异性已高于 .class；仅 flat-layout 等处有 !important 时才保留
  * Chat 契约类：msg-user-bubble / tool-row / chat-soft-hint / approval-card
  * 结构描边一律 --hairline（与 shell card-header / settings-list 行同 token） */
-html[data-theme="dark"] .app-header,
-html[data-theme="dark"] .card-header,
-html[data-theme="dark"] .workspace-card,
-html[data-theme="dark"] .sidebar,
-html[data-theme="dark"] .crish-sidebar,
-html[data-theme="dark"] .app-container,
-html[data-theme="dark"] .workspace-canvas,
-html[data-theme="dark"] .card-body,
-html[data-theme="dark"] .settings-cover,
-html[data-theme="dark"] .settings-panel {
-  background-color: var(--bg-primary);
-  border-color: var(--hairline, var(--border-subtle));
-  color: var(--text-primary);
-}
+
 
 /* 浮层菜单（单次定义）：elevated + hairline-strong，与 chat-more / pp / cplus 同档 */
-html[data-theme="dark"] .pp-menu,
-html[data-theme="dark"] .cplus-main,
-html[data-theme="dark"] .chat-more-menu,
-html[data-theme="dark"] .tabs-add-menu,
-html[data-theme="dark"] .files-more-menu,
-html[data-theme="dark"] .sb-quick-menu,
-html[data-theme="dark"] .settings-select-menu {
+:where(html[data-theme="dark"]) .pp-menu,
+:where(html[data-theme="dark"]) .cplus-main,
+:where(html[data-theme="dark"]) .chat-more-menu,
+:where(html[data-theme="dark"]) .tabs-add-menu,
+:where(html[data-theme="dark"]) .files-more-menu,
+:where(html[data-theme="dark"]) .sb-quick-menu,
+:where(html[data-theme="dark"]) .settings-select-menu {
   background-color: var(--bg-elevated);
   border-color: var(--hairline-strong, var(--border-color));
   color: var(--text-primary);
@@ -44,7 +31,7 @@ html[data-theme="dark"] .settings-select-menu {
 
 /* 输入壳保持半透，不强制实色底；可交互描边用 hairline-strong
  * 与 chat-composer.css --composer-shell-bg* 同契约，防白底回归 */
-html[data-theme="dark"] .input-container {
+:where(html[data-theme="dark"]) .input-container {
   --composer-shell-bg: color-mix(in srgb, var(--bg-primary) 72%, transparent);
   --composer-shell-bg-focus: color-mix(in srgb, var(--bg-primary) 88%, transparent);
   background: var(--composer-shell-bg);
@@ -52,13 +39,13 @@ html[data-theme="dark"] .input-container {
   color: var(--text-primary);
   box-shadow: none;
 }
-html[data-theme="dark"] .input-container:focus-within {
+:where(html[data-theme="dark"]) .input-container:focus-within {
   background: var(--composer-shell-bg-focus);
   border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .input-container .composer-textarea,
-html[data-theme="dark"] .input-container textarea {
+:where(html[data-theme="dark"]) .input-container .composer-textarea,
+:where(html[data-theme="dark"]) .input-container textarea {
   background: transparent !important;
   background-color: transparent !important;
   color: var(--text-primary);
@@ -66,77 +53,63 @@ html[data-theme="dark"] .input-container textarea {
 }
 
 /* flat-layout / chat 壳层：token 背景 + 结构 hairline（对齐 shell flat card-header） */
-html[data-theme="dark"] .workspace-card.flat-layout,
-html[data-theme="dark"] .workspace-card.flat-layout .card-body,
-html[data-theme="dark"] .workspace-card.flat-layout .card-header,
-html[data-theme="dark"] .chat-body,
-html[data-theme="dark"] .chat-doc-flow,
-html[data-theme="dark"] .breadcrumb-item {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  border-color: var(--hairline, var(--border-subtle));
-}
+
 /* footer / agent composer 用渐变 token，勿盖成整块实色 */
-html[data-theme="dark"] .chat-footer,
-html[data-theme="dark"] .agent-card-composer {
+:where(html[data-theme="dark"]) .chat-footer,
+:where(html[data-theme="dark"]) .agent-card-composer {
   background: var(--chat-footer-fade);
   color: var(--text-primary);
   border-color: transparent;
 }
-html[data-theme="dark"] .agent-card,
-html[data-theme="dark"] .agent-panel-shell,
-html[data-theme="dark"] .agent-card--launch {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-}
+
 
 /* 工作列底；.chat-flow 仅 user-select 钩子（panels），勿当布局容器铺色 */
-html[data-theme="dark"] .workspace-column {
+:where(html[data-theme="dark"]) .workspace-column {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .search-bar {
+:where(html[data-theme="dark"]) .search-bar {
   background-color: var(--bg-secondary);
   border-color: var(--hairline, var(--border-subtle));
   box-shadow: none;
 }
 
-html[data-theme="dark"] .search-bar:focus-within {
+:where(html[data-theme="dark"]) .search-bar:focus-within {
   background-color: var(--bg-secondary);
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: none;
   outline: none;
 }
 
-html[data-theme="dark"] .search-bar input {
+:where(html[data-theme="dark"]) .search-bar input {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] input,
-html[data-theme="dark"] textarea,
-html[data-theme="dark"] select {
+:where(html[data-theme="dark"]) input,
+:where(html[data-theme="dark"]) textarea,
+:where(html[data-theme="dark"]) select {
   color: var(--text-primary);
   background-color: var(--bg-secondary);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-html[data-theme="dark"] .session-item,
-html[data-theme="dark"] .card-tab,
-html[data-theme="dark"] .header-btn {
+:where(html[data-theme="dark"]) .session-item,
+:where(html[data-theme="dark"]) .card-tab,
+:where(html[data-theme="dark"]) .header-btn {
   color: var(--text-secondary);
 }
 
 /* Quiet active wins in .crish-sidebar; do not force !important on sessions */
-html[data-theme="dark"] .card-tab.active {
+:where(html[data-theme="dark"]) .card-tab.active {
   background-color: var(--bg-active);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .tool-result-body {
+:where(html[data-theme="dark"]) .tool-result-body {
   border-color: var(--border-color);
 }
 
@@ -146,9 +119,9 @@ html[data-theme="dark"] .tool-result-body {
  * 结构线 --hairline（settings-list-row 底部分隔，对齐 chat-msg-filter-bar）
  * 控件线 --hairline-strong；focus → text-tertiary + --focus-ring
  * 死类已清：settings-card-row / settings-btn-flat（UI 现用 list-row + btn-secondary） */
-html[data-theme="dark"] .settings-field-input,
-html[data-theme="dark"] textarea.settings-field-input,
-html[data-theme="dark"] select.settings-field-input {
+:where(html[data-theme="dark"]) .settings-field-input,
+:where(html[data-theme="dark"]) textarea.settings-field-input,
+:where(html[data-theme="dark"]) select.settings-field-input {
   background: transparent;
   background-color: transparent;
   color: var(--text-primary);
@@ -156,391 +129,391 @@ html[data-theme="dark"] select.settings-field-input {
 }
 
 /* 设置列表行：与 chat filter-bar / shell card-header 同 --hairline 结构线 */
-html[data-theme="dark"] .settings-list-row,
-html[data-theme="dark"] .settings-list--spaced .settings-list-row {
+:where(html[data-theme="dark"]) .settings-list-row,
+:where(html[data-theme="dark"]) .settings-list--spaced .settings-list-row {
   background: transparent;
   background-color: transparent;
   color: var(--text-primary);
   border-bottom-color: var(--hairline, var(--border-subtle));
   box-shadow: none;
 }
-html[data-theme="dark"] .settings-list--hairline {
+:where(html[data-theme="dark"]) .settings-list--hairline {
   background: transparent;
   border-color: var(--hairline, var(--border-subtle));
 }
 
-html[data-theme="dark"] .shortcut-key-btn {
+:where(html[data-theme="dark"]) .shortcut-key-btn {
   background: transparent;
   color: var(--text-primary);
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: none;
 }
 
-html[data-theme="dark"] .shortcut-key-btn.recording {
+:where(html[data-theme="dark"]) .shortcut-key-btn.recording {
   background: var(--bg-active);
   color: var(--text-primary);
   border-color: var(--border-color) !important;
 }
 
-html[data-theme="dark"] .settings-btn-primary {
+:where(html[data-theme="dark"]) .settings-btn-primary {
   border-color: var(--hairline-strong, var(--border-color));
   background-color: var(--bg-active);
   color: var(--text-primary);
 }
-html[data-theme="dark"] .settings-btn-secondary {
+:where(html[data-theme="dark"]) .settings-btn-secondary {
   border-color: transparent;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
 }
 
-html[data-theme="dark"] .custom-modal-backdrop > div {
+:where(html[data-theme="dark"]) .custom-modal-backdrop > div {
   background: var(--bg-elevated);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-html[data-theme="dark"] .ui-input,
-html[data-theme="dark"] .search-bar,
-html[data-theme="dark"] .ui-segment {
+:where(html[data-theme="dark"]) .ui-input,
+:where(html[data-theme="dark"]) .search-bar,
+:where(html[data-theme="dark"]) .ui-segment {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
 /* Soft hints：与 chat.css 同结构 hairline（非 strong 控件线） */
-html[data-theme="dark"] .chat-soft-hint {
+:where(html[data-theme="dark"]) .chat-soft-hint {
   background-color: transparent;
   color: var(--text-secondary);
   border-color: var(--hairline, var(--border-subtle));
   border-width: var(--hairline-width, 1px);
   box-shadow: none;
 }
-html[data-theme="dark"] .chat-soft-hint button {
+:where(html[data-theme="dark"]) .chat-soft-hint button {
   color: var(--text-primary);
   text-decoration-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
 }
 
-html[data-theme="dark"] .ui-segment-item.active {
+:where(html[data-theme="dark"]) .ui-segment-item.active {
   background-color: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: none;
 }
 
-html[data-theme="dark"] .ui-badge {
+:where(html[data-theme="dark"]) .ui-badge {
   background: var(--bg-active);
   color: var(--text-secondary);
 }
 
 /* focus 契约与 chat composer / settings.css 一致：text-tertiary 边 + --focus-ring */
-html[data-theme="dark"] .settings-field-input:focus,
-html[data-theme="dark"] .settings-nav-search:focus,
-html[data-theme="dark"] .ui-input:focus,
-html[data-theme="dark"] .mrd-field-input:focus,
-html[data-theme="dark"] .search-bar:focus-within {
+:where(html[data-theme="dark"]) .settings-field-input:focus,
+:where(html[data-theme="dark"]) .settings-nav-search:focus,
+:where(html[data-theme="dark"]) .ui-input:focus,
+:where(html[data-theme="dark"]) .mrd-field-input:focus,
+:where(html[data-theme="dark"]) .search-bar:focus-within {
   background-color: transparent !important;
   border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .settings-select.is-open .settings-select-trigger,
-html[data-theme="dark"] .settings-select-trigger:focus-visible {
+:where(html[data-theme="dark"]) .settings-select.is-open .settings-select-trigger,
+:where(html[data-theme="dark"]) .settings-select-trigger:focus-visible {
   background-color: var(--control-soft-bg-active, var(--bg-active)) !important;
   border-color: var(--border-color) !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .settings-field-input:focus-visible {
+:where(html[data-theme="dark"]) .settings-field-input:focus-visible {
   border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .search-bar:focus-within {
+:where(html[data-theme="dark"]) .search-bar:focus-within {
   background-color: var(--bg-hover);
 }
 
 /* status-badge：shell 仍保留类定义；model-chip 死类已不覆写 */
-html[data-theme="dark"] .status-badge.available,
-html[data-theme="dark"] .status-badge.unconfigured {
+:where(html[data-theme="dark"]) .status-badge.available,
+:where(html[data-theme="dark"]) .status-badge.unconfigured {
   background: var(--bg-active);
   color: var(--text-secondary);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-html[data-theme="dark"] .crish-sidebar {
+:where(html[data-theme="dark"]) .crish-sidebar {
   background: var(--bg-secondary);
 }
 
 /* 侧栏新建 / 排序控件 hover 可读 */
-html[data-theme="dark"] .sb-section-new,
-html[data-theme="dark"] .sb-section-sort,
-html[data-theme="dark"] .folder-new-session {
+:where(html[data-theme="dark"]) .sb-section-new,
+:where(html[data-theme="dark"]) .sb-section-sort,
+:where(html[data-theme="dark"]) .folder-new-session {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .sb-section-new:hover,
-html[data-theme="dark"] .sb-section-sort:hover,
-html[data-theme="dark"] .folder-new-session:hover {
+:where(html[data-theme="dark"]) .sb-section-new:hover,
+:where(html[data-theme="dark"]) .sb-section-sort:hover,
+:where(html[data-theme="dark"]) .folder-new-session:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .msg-assistant-text,
-html[data-theme="dark"] .msg-assistant-text p,
-html[data-theme="dark"] .chat-doc-flow p {
+:where(html[data-theme="dark"]) .msg-assistant-text,
+:where(html[data-theme="dark"]) .msg-assistant-text p,
+:where(html[data-theme="dark"]) .chat-doc-flow p {
   color: var(--text-primary);
 }
 
 /* assistant code surfaces — 暗色也用略抬的浅灰底，避免死黑终端感 */
-html[data-theme="dark"] {
+:where(html[data-theme="dark"]) {
   --md-code-bg: #2a2a2a;
   --md-code-border: var(--hairline, var(--border-subtle));
   --md-code-fg: #f0f0f0;
 }
 
-html[data-theme="dark"] .msg-assistant-text code,
-html[data-theme="dark"] .msg-assistant-text .md-inline-code,
-html[data-theme="dark"] .chat-doc-flow p code,
-html[data-theme="dark"] .md-rendered .md-inline-code {
+:where(html[data-theme="dark"]) .msg-assistant-text code,
+:where(html[data-theme="dark"]) .msg-assistant-text .md-inline-code,
+:where(html[data-theme="dark"]) .chat-doc-flow p code,
+:where(html[data-theme="dark"]) .md-rendered .md-inline-code {
   background: var(--bg-elevated, #2a2a2a);
   color: #f0f0f0;
   border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--hairline-strong, var(--border-color)) 70%, transparent);
 }
 
-html[data-theme="dark"] .msg-assistant-text pre,
-html[data-theme="dark"] .msg-assistant-text .md-code-block,
-html[data-theme="dark"] .md-rendered .md-code-block,
-html[data-theme="dark"] .md-rendered pre {
+:where(html[data-theme="dark"]) .msg-assistant-text pre,
+:where(html[data-theme="dark"]) .msg-assistant-text .md-code-block,
+:where(html[data-theme="dark"]) .md-rendered .md-code-block,
+:where(html[data-theme="dark"]) .md-rendered pre {
   background: var(--md-code-bg);
   border-color: var(--md-code-border);
   color: var(--md-code-fg);
 }
 
-html[data-theme="dark"] .msg-assistant-text .md-code-pre,
-html[data-theme="dark"] .md-rendered .md-code-pre,
-html[data-theme="dark"] .msg-assistant-text .md-code-block code,
-html[data-theme="dark"] .md-rendered .md-code-block code {
+:where(html[data-theme="dark"]) .msg-assistant-text .md-code-pre,
+:where(html[data-theme="dark"]) .md-rendered .md-code-pre,
+:where(html[data-theme="dark"]) .msg-assistant-text .md-code-block code,
+:where(html[data-theme="dark"]) .md-rendered .md-code-block code {
   background: transparent;
   color: inherit;
   border: none;
 }
 
-html[data-theme="dark"] .md-code-lang {
-  color: #b0b0b0;
-  opacity: 0.95;
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
-  border-color: var(--hairline-strong, var(--border-color));
+:where(html[data-theme="dark"]) .md-code-lang {
+  color: var(--text-tertiary);
+  opacity: 0.8;
+  background: transparent;
+  border: none;
 }
-html[data-theme="dark"] .md-task-box {
+:where(html[data-theme="dark"]) .md-task-box {
   border-color: color-mix(in srgb, var(--text-tertiary) 70%, var(--hairline-strong, var(--border-color)));
 }
-html[data-theme="dark"] .md-task-box.checked {
+:where(html[data-theme="dark"]) .md-task-box.checked {
   border-color: #4ade80;
   background: color-mix(in srgb, #4ade80 16%, transparent);
 }
-html[data-theme="dark"] .md-task-box.checked::after {
+:where(html[data-theme="dark"]) .md-task-box.checked::after {
   border-color: #4ade80;
 }
-html[data-theme="dark"] tbody .md-tr-alt .md-td {
+:where(html[data-theme="dark"]) tbody .md-tr-alt .md-td {
   background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
 }
 
-html[data-theme="dark"] .md-code-copy {
+:where(html[data-theme="dark"]) .md-code-copy {
   background: var(--bg-secondary, #242424);
   border-color: var(--hairline-strong, var(--border-color));
   color: #d0d0d0;
 }
-html[data-theme="dark"] .md-code-copy:hover {
+:where(html[data-theme="dark"]) .md-code-copy:hover {
   background: var(--bg-hover, #333333);
   color: var(--text-primary, #f2f2f2);
 }
 
 /* 暗色表格同 ChatGPT 气质：无灰底表头、无网格框 */
-html[data-theme="dark"] table,
-html[data-theme="dark"] th,
-html[data-theme="dark"] td,
-html[data-theme="dark"] .md-table,
-html[data-theme="dark"] .md-th,
-html[data-theme="dark"] .md-td {
+:where(html[data-theme="dark"]) table,
+:where(html[data-theme="dark"]) th,
+:where(html[data-theme="dark"]) td,
+:where(html[data-theme="dark"]) .md-table,
+:where(html[data-theme="dark"]) .md-th,
+:where(html[data-theme="dark"]) .md-td {
   border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
   background: transparent;
 }
 
-html[data-theme="dark"] th,
-html[data-theme="dark"] .md-th {
+:where(html[data-theme="dark"]) th,
+:where(html[data-theme="dark"]) .md-th {
   background: transparent;
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .md-table-wrap {
+:where(html[data-theme="dark"]) .md-table-wrap {
   border: none;
   background: transparent;
   box-shadow: none;
 }
 
 /* settings-back-btn 死类已清；仅覆写在用的 settings-nav-back */
-html[data-theme="dark"] .settings-nav-back {
+:where(html[data-theme="dark"]) .settings-nav-back {
   background: transparent;
   color: var(--text-primary);
   border-color: transparent;
 }
 
 /* settings cover 壳层 — 与 chat-body 同 primary 底 + hairline 分界 */
-html[data-theme="dark"] .settings-cover,
-html[data-theme="dark"] .settings-panel--cover,
-html[data-theme="dark"] .settings-cover-header,
-html[data-theme="dark"] .settings-cover-content {
+:where(html[data-theme="dark"]) .settings-cover,
+:where(html[data-theme="dark"]) .settings-panel--cover,
+:where(html[data-theme="dark"]) .settings-cover-header,
+:where(html[data-theme="dark"]) .settings-cover-content {
   background: var(--bg-primary);
   color: var(--text-primary);
   border-color: var(--hairline, var(--border-subtle));
 }
 
-html[data-theme="dark"] .settings-cover-nav {
+:where(html[data-theme="dark"]) .settings-cover-nav {
   background: transparent;
   border-right-color: var(--hairline, var(--border-subtle));
 }
 
-html[data-theme="dark"] .settings-sidebar-tab.active {
+:where(html[data-theme="dark"]) .settings-sidebar-tab.active {
   background: var(--bg-active);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .settings-dialog {
+:where(html[data-theme="dark"]) .settings-dialog {
   background: var(--bg-elevated);
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: var(--shadow-2xl);
 }
-html[data-theme="dark"] .settings-dialog-head,
-html[data-theme="dark"] .settings-dialog-foot {
+:where(html[data-theme="dark"]) .settings-dialog-head,
+:where(html[data-theme="dark"]) .settings-dialog-foot {
   border-color: var(--hairline, var(--border-subtle));
 }
 
 /* settings-select-menu / sb-quick-menu 已并入顶部浮层菜单块；此处仅 trigger */
-html[data-theme="dark"] .settings-select-trigger {
+:where(html[data-theme="dark"]) .settings-select-trigger {
   background: transparent;
   border-color: var(--hairline-strong, var(--border-color));
 }
 
 /* 开关：token 混色，禁止硬编码；settings-toggle-row 死类已清 */
-html[data-theme="dark"] .settings-switch {
+:where(html[data-theme="dark"]) .settings-switch {
   background: color-mix(in srgb, var(--text-tertiary) 45%, var(--bg-tertiary));
 }
 
-html[data-theme="dark"] .settings-switch:checked {
+:where(html[data-theme="dark"]) .settings-switch:checked {
   background: var(--accent-green);
 }
 
-html[data-theme="dark"] .settings-switch::after {
+:where(html[data-theme="dark"]) .settings-switch::after {
   background: var(--bg-elevated);
 }
 
-html[data-theme="dark"] .settings-select-item.is-active {
+:where(html[data-theme="dark"]) .settings-select-item.is-active {
   background: var(--bg-active);
   color: var(--text-primary);
 }
 
 /* highlight.js dark — 全 token 可读对比（浅色 chat-markdown 用偏暗色，此处整体抬亮） */
-html[data-theme="dark"] .hljs {
+:where(html[data-theme="dark"]) .hljs {
   color: var(--md-code-fg, #e8e8e8);
   background: transparent;
 }
-html[data-theme="dark"] .hljs-comment,
-html[data-theme="dark"] .hljs-quote {
+:where(html[data-theme="dark"]) .hljs-comment,
+:where(html[data-theme="dark"]) .hljs-quote {
   color: #8b8b8b;
   font-style: italic;
 }
-html[data-theme="dark"] .hljs-keyword,
-html[data-theme="dark"] .hljs-selector-tag,
-html[data-theme="dark"] .hljs-literal {
+:where(html[data-theme="dark"]) .hljs-keyword,
+:where(html[data-theme="dark"]) .hljs-selector-tag,
+:where(html[data-theme="dark"]) .hljs-literal {
   color: #c4b5fd;
 }
-html[data-theme="dark"] .hljs-string,
-html[data-theme="dark"] .hljs-doctag,
-html[data-theme="dark"] .hljs-template-variable {
+:where(html[data-theme="dark"]) .hljs-string,
+:where(html[data-theme="dark"]) .hljs-doctag,
+:where(html[data-theme="dark"]) .hljs-template-variable {
   color: #5eead4;
 }
-html[data-theme="dark"] .hljs-number,
-html[data-theme="dark"] .hljs-regexp {
+:where(html[data-theme="dark"]) .hljs-number,
+:where(html[data-theme="dark"]) .hljs-regexp {
   color: #fdba74;
 }
-html[data-theme="dark"] .hljs-title,
-html[data-theme="dark"] .hljs-section,
-html[data-theme="dark"] .hljs-name {
+:where(html[data-theme="dark"]) .hljs-title,
+:where(html[data-theme="dark"]) .hljs-section,
+:where(html[data-theme="dark"]) .hljs-name {
   color: #93c5fd;
 }
-html[data-theme="dark"] .hljs-built_in,
-html[data-theme="dark"] .hljs-type {
+:where(html[data-theme="dark"]) .hljs-built_in,
+:where(html[data-theme="dark"]) .hljs-type {
   color: #fde047;
 }
-html[data-theme="dark"] .hljs-attr,
-html[data-theme="dark"] .hljs-attribute {
+:where(html[data-theme="dark"]) .hljs-attr,
+:where(html[data-theme="dark"]) .hljs-attribute {
   color: #f9a8d4;
 }
-html[data-theme="dark"] .hljs-meta,
-html[data-theme="dark"] .hljs-symbol {
+:where(html[data-theme="dark"]) .hljs-meta,
+:where(html[data-theme="dark"]) .hljs-symbol {
   color: #a3a3a3;
 }
-html[data-theme="dark"] .hljs-addition {
+:where(html[data-theme="dark"]) .hljs-addition {
   color: #4ade80;
 }
-html[data-theme="dark"] .hljs-deletion {
+:where(html[data-theme="dark"]) .hljs-deletion {
   color: #f87171;
 }
 
 /* ── 面板壳层 / 标签（菜单已并入顶部 hairline-strong 块，勿重复） ── */
-html[data-theme="dark"] .card-tab.card-tab--tool.active {
+:where(html[data-theme="dark"]) .card-tab.card-tab--tool.active {
   background-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .chat-header-more-btn:hover,
-html[data-theme="dark"] .chat-header-more-btn.is-open,
-html[data-theme="dark"] .tabs-add-btn:hover,
-html[data-theme="dark"] .card-action-btn:hover {
+:where(html[data-theme="dark"]) .chat-header-more-btn:hover,
+:where(html[data-theme="dark"]) .chat-header-more-btn.is-open,
+:where(html[data-theme="dark"]) .tabs-add-btn:hover,
+:where(html[data-theme="dark"]) .card-action-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
 /* 拖动线已用渐变纺锤，勿再铺整块 hover 底 */
-html[data-theme="dark"] .col-splitter:hover,
-html[data-theme="dark"] .col-splitter.active,
-html[data-theme="dark"] .group-splitter:hover,
-html[data-theme="dark"] .group-splitter.active,
-html[data-theme="dark"] .sidebar-resizer:hover,
-html[data-theme="dark"] .sidebar-resizer.active {
+:where(html[data-theme="dark"]) .col-splitter:hover,
+:where(html[data-theme="dark"]) .col-splitter.active,
+:where(html[data-theme="dark"]) .group-splitter:hover,
+:where(html[data-theme="dark"]) .group-splitter.active,
+:where(html[data-theme="dark"]) .sidebar-resizer:hover,
+:where(html[data-theme="dark"]) .sidebar-resizer.active {
   background-color: transparent;
 }
 
 /* 右侧工具条顶栏：与 shell card-header 同 hairline 底部分界 */
-html[data-theme="dark"] .diff-toolbar,
-html[data-theme="dark"] .files-bar,
-html[data-theme="dark"] .tasks-card-head {
+:where(html[data-theme="dark"]) .diff-toolbar,
+:where(html[data-theme="dark"]) .files-bar,
+:where(html[data-theme="dark"]) .tasks-card-head {
   background: var(--bg-primary);
   border-color: var(--hairline, var(--border-subtle));
   border-width: var(--hairline-width, 1px);
 }
 
 /* 侧栏 agent 切换板：与 chat / settings 行分界同 --hairline */
-html[data-theme="dark"] .agent-team-board,
-html[data-theme="dark"] .agent-team-board--hairline {
+:where(html[data-theme="dark"]) .agent-team-board,
+:where(html[data-theme="dark"]) .agent-team-board--hairline {
   background: transparent;
   border-bottom-color: var(--hairline, var(--border-subtle));
 }
-html[data-theme="dark"] .agent-team-board-count,
-html[data-theme="dark"] .agent-team-card {
+:where(html[data-theme="dark"]) .agent-team-board-count,
+:where(html[data-theme="dark"]) .agent-team-card {
   border-color: var(--hairline, var(--border-subtle));
   background: transparent;
 }
-html[data-theme="dark"] .agent-team-card:hover {
+:where(html[data-theme="dark"]) .agent-team-card:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
 /* 特异性：html[data-theme] + class 已高于 .tab-insert-line，无需 !important */
-html[data-theme="dark"] .tab-insert-line {
+:where(html[data-theme="dark"]) .tab-insert-line {
   background: var(--text-secondary);
 }
 
 /* 右侧面板壳：与 shell hairline 结构线对齐（单次定义） */
-html[data-theme="dark"] .rt-panel,
-html[data-theme="dark"] .overview-card,
-html[data-theme="dark"] .tasks-card,
-html[data-theme="dark"] .files-card,
-html[data-theme="dark"] .diff-panel {
+:where(html[data-theme="dark"]) .rt-panel,
+:where(html[data-theme="dark"]) .overview-card,
+:where(html[data-theme="dark"]) .tasks-card,
+:where(html[data-theme="dark"]) .files-card,
+:where(html[data-theme="dark"]) .diff-panel {
   background: var(--bg-primary);
   color: var(--text-primary);
   border-color: var(--hairline, var(--border-subtle));
@@ -553,38 +526,38 @@ html[data-theme="dark"] .diff-panel {
  * ══════════════════════════════════════════════════════════════ */
 
 /* 用户气泡：相对 chat 底抬一层，避免 tertiary 与 primary 糊成一片 */
-html[data-theme="dark"] .msg-user-bubble {
+:where(html[data-theme="dark"]) .msg-user-bubble {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
   color: var(--text-primary);
   border: var(--hairline-width, 1px) solid var(--hairline-strong, var(--border-color));
   box-shadow: none;
 }
-html[data-theme="dark"] .msg-user-text {
+:where(html[data-theme="dark"]) .msg-user-text {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .msg-user-meta .msg-time,
-html[data-theme="dark"] .msg-time {
+:where(html[data-theme="dark"]) .msg-user-meta .msg-time,
+:where(html[data-theme="dark"]) .msg-time {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .msg-icon-btn {
+:where(html[data-theme="dark"]) .msg-icon-btn {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .msg-icon-btn:hover,
-html[data-theme="dark"] .msg-icon-btn.is-pinned-active {
+:where(html[data-theme="dark"]) .msg-icon-btn:hover,
+:where(html[data-theme="dark"]) .msg-icon-btn.is-pinned-active {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 /* 消息行 / 搜索命中：暗底上可辨的浅强调，非亮蓝块 */
-html[data-theme="dark"] .msg-row {
+:where(html[data-theme="dark"]) .msg-row {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .msg-row.msg-search-hit {
+:where(html[data-theme="dark"]) .msg-row.msg-search-hit {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   outline: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
   outline-offset: 0;
 }
-html[data-theme="dark"] .msg-row-pin-flash {
+:where(html[data-theme="dark"]) .msg-row-pin-flash {
   animation-name: msg-pin-flash-dark;
 }
 @keyframes msg-pin-flash-dark {
@@ -595,275 +568,275 @@ html[data-theme="dark"] .msg-row-pin-flash {
     background: transparent;
   }
 }
-html[data-theme="dark"] .msg-pin-badge {
+:where(html[data-theme="dark"]) .msg-pin-badge {
   color: var(--text-secondary);
   border-color: var(--hairline-strong, var(--border-color));
   background: transparent;
 }
 
 /* 工具行：暗色同样无分割线、中灰摘要、圆槽图标 */
-html[data-theme="dark"] .tool-row {
+:where(html[data-theme="dark"]) .tool-row {
   background: transparent;
   color: var(--text-tertiary);
   border: none !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .tool-row + .tool-row {
+:where(html[data-theme="dark"]) .tool-row + .tool-row {
   border: none !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] .tool-row-head {
+:where(html[data-theme="dark"]) .tool-row-head {
   color: var(--text-tertiary);
   border: none !important;
 }
-html[data-theme="dark"] .tool-row-summary,
-html[data-theme="dark"] .tool-path-link {
+:where(html[data-theme="dark"]) .tool-row-summary,
+:where(html[data-theme="dark"]) .tool-path-link {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .tool-row-cmd {
+:where(html[data-theme="dark"]) .tool-row-cmd {
   color: var(--text-tertiary);
   opacity: 0.95;
 }
-html[data-theme="dark"] .tool-row-head:hover {
+:where(html[data-theme="dark"]) .tool-row-head:hover {
   color: var(--text-secondary);
   /* 与亮色一致：hover 约 2% 灰度，默认仍透明 */
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
-html[data-theme="dark"] .tool-row-head:hover .tool-row-summary,
-html[data-theme="dark"] .tool-row-head:hover .tool-path-link {
+:where(html[data-theme="dark"]) .tool-row-head:hover .tool-row-summary,
+:where(html[data-theme="dark"]) .tool-row-head:hover .tool-path-link {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .tool-row.is-running .tool-row-summary {
+:where(html[data-theme="dark"]) .tool-row.is-running .tool-row-summary {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .tool-row.is-error {
+:where(html[data-theme="dark"]) .tool-row.is-error {
   box-shadow: none !important;
 }
-html[data-theme="dark"] .tool-row-ico-slot {
+:where(html[data-theme="dark"]) .tool-row-ico-slot {
   background: transparent;
   border: none;
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .tool-result-body {
+:where(html[data-theme="dark"]) .tool-result-body {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .tool-result-pre {
+:where(html[data-theme="dark"]) .tool-result-pre {
   color: var(--text-secondary);
   background: transparent;
 }
 /* 工具图标/统计：暗色也统一灰度 */
-html[data-theme="dark"] .tool-row-type-ico,
-html[data-theme="dark"] .tool-row-type-ico.ico-read,
-html[data-theme="dark"] .tool-row-type-ico.ico-search,
-html[data-theme="dark"] .tool-row-type-ico.ico-edit,
-html[data-theme="dark"] .tool-row-type-ico.ico-shell,
-html[data-theme="dark"] .tool-row-type-ico.ico-list,
-html[data-theme="dark"] .tool-row-type-ico.ico-web {
+:where(html[data-theme="dark"]) .tool-row-type-ico,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-read,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-search,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-edit,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-shell,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-list,
+:where(html[data-theme="dark"]) .tool-row-type-ico.ico-web {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .tool-row-terminal-mark.is-ok,
-html[data-theme="dark"] .tool-row-terminal-mark.is-fail {
+:where(html[data-theme="dark"]) .tool-row-terminal-mark.is-ok,
+:where(html[data-theme="dark"]) .tool-row-terminal-mark.is-fail {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .tool-row-diff-add,
-html[data-theme="dark"] .tool-row-diff-stat .add,
-html[data-theme="dark"] .tool-row-diff-del,
-html[data-theme="dark"] .tool-row-diff-stat .del {
+:where(html[data-theme="dark"]) .tool-row-diff-add,
+:where(html[data-theme="dark"]) .tool-row-diff-stat .add,
+:where(html[data-theme="dark"]) .tool-row-diff-del,
+:where(html[data-theme="dark"]) .tool-row-diff-stat .del {
   color: var(--text-tertiary);
 }
 
 /* 审批卡 / dock / 内联：hairline 可见 + 橙强调；按钮反色可读
  * tool-row--pending 死类已清（现用 is-pending + tool-row--approval） */
-html[data-theme="dark"] .tool-row--approval,
-html[data-theme="dark"] .tool-row.is-pending {
+:where(html[data-theme="dark"]) .tool-row--approval,
+:where(html[data-theme="dark"]) .tool-row.is-pending {
   background: transparent;
 }
-html[data-theme="dark"] .tool-row.is-pending .tool-row-summary {
+:where(html[data-theme="dark"]) .tool-row.is-pending .tool-row-summary {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-card {
+:where(html[data-theme="dark"]) .approval-card {
   background: color-mix(in srgb, var(--accent-orange) 6%, transparent);
   border-color: color-mix(in srgb, var(--accent-orange) 28%, var(--border-color));
   border-left-color: var(--accent-orange);
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-card-badge,
-html[data-theme="dark"] .approval-card-desc {
+:where(html[data-theme="dark"]) .approval-card-badge,
+:where(html[data-theme="dark"]) .approval-card-desc {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .approval-card-title {
+:where(html[data-theme="dark"]) .approval-card-title {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-card-status {
+:where(html[data-theme="dark"]) .approval-card-status {
   color: var(--accent-orange);
 }
-html[data-theme="dark"] .approval-card-cmd,
-html[data-theme="dark"] .approval-card-cmd-label {
+:where(html[data-theme="dark"]) .approval-card-cmd,
+:where(html[data-theme="dark"]) .approval-card-cmd-label {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .approval-card-input {
+:where(html[data-theme="dark"]) .approval-card-input {
   background: var(--bg-secondary);
   border-color: var(--hairline-strong, var(--border-color));
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-card-btn {
+:where(html[data-theme="dark"]) .approval-card-btn {
   background: var(--bg-elevated);
   border-color: var(--hairline-strong, var(--border-color));
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .approval-card-btn.deny:hover:not(:disabled) {
+:where(html[data-theme="dark"]) .approval-card-btn.deny:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--text-tertiary);
 }
-html[data-theme="dark"] .approval-card-btn.allow {
+:where(html[data-theme="dark"]) .approval-card-btn.allow {
   background: var(--text-primary);
   border-color: transparent;
   color: var(--bg-primary);
 }
-html[data-theme="dark"] .approval-card-btn.ghost {
+:where(html[data-theme="dark"]) .approval-card-btn.ghost {
   background: transparent;
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .approval-dock {
+:where(html[data-theme="dark"]) .approval-dock {
   background: color-mix(in srgb, var(--accent-orange) 8%, transparent);
   border-color: color-mix(in srgb, var(--accent-orange) 32%, var(--border-color));
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-dock:hover {
+:where(html[data-theme="dark"]) .approval-dock:hover {
   background: color-mix(in srgb, var(--accent-orange) 12%, transparent);
 }
-html[data-theme="dark"] .approval-dock-label {
+:where(html[data-theme="dark"]) .approval-dock-label {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .approval-dock-summary,
-html[data-theme="dark"] .approval-dock-go,
-html[data-theme="dark"] .approval-dock-go-icon {
+:where(html[data-theme="dark"]) .approval-dock-summary,
+:where(html[data-theme="dark"]) .approval-dock-go,
+:where(html[data-theme="dark"]) .approval-dock-go-icon {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .inline-approval {
+:where(html[data-theme="dark"]) .inline-approval {
   background: transparent;
   border-top-color: transparent;
 }
-html[data-theme="dark"] .inline-approval-kicker {
+:where(html[data-theme="dark"]) .inline-approval-kicker {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .inline-approval-summary {
+:where(html[data-theme="dark"]) .inline-approval-summary {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .inline-approval-cmd {
+:where(html[data-theme="dark"]) .inline-approval-cmd {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .inline-approval-btn.deny {
+:where(html[data-theme="dark"]) .inline-approval-btn.deny {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .inline-approval-btn.allow,
-html[data-theme="dark"] .tool-row-approve-btn.allow {
+:where(html[data-theme="dark"]) .inline-approval-btn.allow,
+:where(html[data-theme="dark"]) .tool-row-approve-btn.allow {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .inline-approval-btn.allow-remember,
-html[data-theme="dark"] .tool-row-approve-btn.deny {
+:where(html[data-theme="dark"]) .inline-approval-btn.allow-remember,
+:where(html[data-theme="dark"]) .tool-row-approve-btn.deny {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .run-notice,
-html[data-theme="dark"] .plan-mode-ribbon {
+:where(html[data-theme="dark"]) .run-notice,
+:where(html[data-theme="dark"]) .plan-mode-ribbon {
   background: transparent;
   border-color: var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .run-notice-text,
-html[data-theme="dark"] .plan-mode-ribbon-text {
+:where(html[data-theme="dark"]) .run-notice-text,
+:where(html[data-theme="dark"]) .plan-mode-ribbon-text {
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .plan-mode-ribbon-text strong,
-html[data-theme="dark"] .plan-mode-ribbon-status {
+:where(html[data-theme="dark"]) .plan-mode-ribbon-text strong,
+:where(html[data-theme="dark"]) .plan-mode-ribbon-status {
   color: var(--text-primary);
 }
-html[data-theme="dark"] .goal-mode-ribbon {
+:where(html[data-theme="dark"]) .goal-mode-ribbon {
   border-color: color-mix(in srgb, var(--text-primary) 22%, var(--border-color));
 }
-html[data-theme="dark"] .global-approval-modal {
+:where(html[data-theme="dark"]) .global-approval-modal {
   background: var(--bg-elevated);
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: var(--shadow-lg);
   color: var(--text-primary);
 }
-html[data-theme="dark"] .global-approval-modal .command-display-box {
+:where(html[data-theme="dark"]) .global-approval-modal .command-display-box {
   background: var(--bg-secondary);
   border-color: var(--hairline-strong, var(--border-color));
 }
-html[data-theme="dark"] .global-approval-modal .modal-approve-btn,
-html[data-theme="dark"] .global-approval-modal .modal-reject-btn {
+:where(html[data-theme="dark"]) .global-approval-modal .modal-approve-btn,
+:where(html[data-theme="dark"]) .global-approval-modal .modal-reject-btn {
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .global-approval-modal .modal-approve-btn:hover,
-html[data-theme="dark"] .global-approval-modal .modal-reject-btn:hover {
+:where(html[data-theme="dark"]) .global-approval-modal .modal-approve-btn:hover,
+:where(html[data-theme="dark"]) .global-approval-modal .modal-reject-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 /* 思考 / 过滤条 / 固定条：与 tool-row 同气质；msg-thinking-plain 死类已清 */
-html[data-theme="dark"] .msg-thinking-fold {
+:where(html[data-theme="dark"]) .msg-thinking-fold {
   background: transparent;
   border-color: transparent;
 }
-html[data-theme="dark"] .msg-thinking-fold-label,
-html[data-theme="dark"] .msg-thinking-fold-sum,
-html[data-theme="dark"] .msg-thinking-fold-body,
-html[data-theme="dark"] .msg-thinking-sec {
+:where(html[data-theme="dark"]) .msg-thinking-fold-label,
+:where(html[data-theme="dark"]) .msg-thinking-fold-sum,
+:where(html[data-theme="dark"]) .msg-thinking-fold-body,
+:where(html[data-theme="dark"]) .msg-thinking-sec {
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .chat-msg-filter-bar {
+:where(html[data-theme="dark"]) .chat-msg-filter-bar {
   background: transparent;
   border-bottom-color: var(--hairline, var(--border-subtle));
 }
-html[data-theme="dark"] .chat-msg-filter-input {
+:where(html[data-theme="dark"]) .chat-msg-filter-input {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   border-color: transparent;
   color: var(--text-primary);
 }
-html[data-theme="dark"] .chat-msg-filter-input:focus {
+:where(html[data-theme="dark"]) .chat-msg-filter-input:focus {
   background: var(--bg-secondary);
   border-color: var(--text-tertiary);
   box-shadow: var(--focus-ring);
 }
-html[data-theme="dark"] .chat-header-more-wrap .chat-more-menu,
-html[data-theme="dark"] .chat-header-more-wrap .chat-header-more-menu {
+:where(html[data-theme="dark"]) .chat-header-more-wrap .chat-more-menu,
+:where(html[data-theme="dark"]) .chat-header-more-wrap .chat-header-more-menu {
   background: var(--bg-elevated, var(--bg-secondary));
   border-color: var(--hairline-strong, var(--border-color));
 }
-html[data-theme="dark"] .chat-pinned-bar {
+:where(html[data-theme="dark"]) .chat-pinned-bar {
   background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: none;
 }
-html[data-theme="dark"] .chat-pinned-jump:hover {
+:where(html[data-theme="dark"]) .chat-pinned-jump:hover {
   background: var(--bg-hover);
 }
-html[data-theme="dark"] .chat-pinned-role {
+:where(html[data-theme="dark"]) .chat-pinned-role {
   background: var(--bg-tertiary);
   color: var(--text-tertiary);
 }
-html[data-theme="dark"] .msg-plan-approve-chip {
+:where(html[data-theme="dark"]) .msg-plan-approve-chip {
   background: transparent;
   border-color: var(--hairline-strong, var(--border-color));
   color: var(--text-primary);
 }
-html[data-theme="dark"] .msg-plan-approve-chip:hover {
+:where(html[data-theme="dark"]) .msg-plan-approve-chip:hover {
   background: var(--bg-hover);
   border-color: var(--text-tertiary);
 }
 /* change-overview：与 chat 时间线同结构 hairline（非灰底卡） */
-html[data-theme="dark"] .change-overview {
+:where(html[data-theme="dark"]) .change-overview {
   background: transparent;
   border-color: var(--hairline, var(--border-subtle));
 }
-html[data-theme="dark"] .chat-msg-window-older-btn {
+:where(html[data-theme="dark"]) .chat-msg-window-older-btn {
   background: transparent;
   border-color: var(--hairline-strong, var(--border-color));
   color: var(--text-secondary);
 }
-html[data-theme="dark"] .chat-msg-window-older-btn:hover {
+:where(html[data-theme="dark"]) .chat-msg-window-older-btn:hover {
   color: var(--text-primary);
   border-color: var(--text-tertiary);
 }

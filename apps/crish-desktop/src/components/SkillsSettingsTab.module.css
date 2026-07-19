@@ -26,7 +26,7 @@
 }
 
 .skillsFsWarn {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--accent-orange, #f59e0b);
   white-space: nowrap;
   overflow: hidden;
@@ -114,7 +114,7 @@
 
 .skillsTabTitle {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -139,7 +139,7 @@
   flex-shrink: 0;
 }
 
-/* 技能筛选：作用域下拉 + 搜索，不堆第二行 segment */
+/* 鎶€鑳界瓫閫夛細浣滅敤鍩熶笅鎷?+ 鎼滅储锛屼笉鍫嗙浜岃 segment */
 .skillsToolbarFocus {
   display: flex;
   flex-wrap: nowrap;
@@ -198,7 +198,7 @@
 }
 
 .skillsMoreItem:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .skillsMoreItem:disabled {
@@ -250,7 +250,7 @@
 }
 
 .skillsCreateTitle {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -796,7 +796,7 @@
   word-break: break-word;
 }
 
-/* 技能侧栏额外目录：单行表单，无 inline style */
+/* 鎶€鑳戒晶鏍忛澶栫洰褰曪細鍗曡琛ㄥ崟锛屾棤 inline style */
 .skillsExtraSection {
   padding: 6px 6px 8px;
   border-top: 1px solid var(--border-subtle);

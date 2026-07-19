@@ -235,7 +235,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
         <div
           id={menuId}
           ref={menuRef}
-          className={styles.sbQuickMenu}
+          className={`${styles.sbQuickMenu} sb-quick-menu`}
           role="menu"
           aria-label="快捷设置"
           aria-orientation="vertical"
@@ -253,7 +253,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
               外观
             </div>
             <div
-              className={`ui-segment ui-segment--inline ${styles.sbQuickSegment}`}
+              className={`ui-segment ui-segment--inline ${styles.sbQuickSegment} sb-quick-segment`}
               role="group"
               aria-labelledby={themeGroupId}
             >
@@ -292,7 +292,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             <Tooltip key={entry.id} content={entry.title}>
               <button
                 type="button"
-                className={styles.sbQuickItem}
+                className={`${styles.sbQuickItem} sb-quick-item`}
                 role="menuitem"
                 tabIndex={-1}
                 aria-label={entry.ariaLabel}

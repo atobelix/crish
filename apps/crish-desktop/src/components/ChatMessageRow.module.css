@@ -380,7 +380,7 @@
   align-items: center;
   gap: 4px;
   align-self: flex-start;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   line-height: 1;
   color: var(--text-tertiary);
   margin-bottom: 4px;

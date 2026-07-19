@@ -25,12 +25,21 @@
 .settingsSelectCustomInput {
   width: 100%;
   height: 28px;
-  font-size: 12px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-  borderRadius: 6px;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0 8px;
   background: var(--bg-primary);
   color: var(--text-primary);
   box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+
+.settingsSelectCustomInput:focus {
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  outline: none;
+  box-shadow: none;
 }
 
 .customActionBtn {

@@ -229,3 +229,14 @@
 .sidebarTab.active svg {
   color: var(--text-primary);
 }
+
+.translucentCover,
+.translucentCover .coverHeader {
+  background: color-mix(in srgb, var(--bg-primary) 68%, transparent) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.translucentCover .coverContent {
+  background: transparent !important;
+}

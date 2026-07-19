@@ -2,22 +2,22 @@
   --composer-line-height: 1.45;
   --composer-min-lines: 2;
   --composer-max-lines: 10;
-  --composer-shell-bg: var(--bg-primary);
-  --composer-shell-bg-focus: var(--bg-primary);
+  --composer-shell-bg: var(--composer-bg);
+  --composer-shell-bg-focus: var(--composer-bg);
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   background: var(--composer-shell-bg);
   background-color: var(--composer-shell-bg);
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  border-radius: var(--radius-lg);
-  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border-color); /* Explicit premium border */
+  border-radius: 20px; /* Fully rounded top rectangle */
+  padding: 10px 14px;
   gap: 8px;
   min-height: calc(
     1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
   );
-  transition: border-color 0.12s ease;
+  transition: border-color var(--transition-fast) ease;
   backdrop-filter: none;
   box-shadow: none;
   color: var(--text-primary);
@@ -27,23 +27,25 @@
 .container:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(in srgb, var(--border-color) 75%, var(--text-primary) 25%) !important;
+  border-color: color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%) !important;
   box-shadow: none !important;
   outline: none;
 }
 
 .containerDense {
   --composer-line-height: 1.4;
-  padding: 3px 4px 3px 7px;
-  gap: 3px;
-  border-radius: calc(var(--radius-lg, 12px) - 2px);
+  padding: 6px 10px;
+  gap: 4px;
+  border-radius: var(--radius-lg, 12px);
   background: var(--composer-shell-bg);
   background-color: var(--composer-shell-bg);
+  border: 1px solid var(--border-color); /* Premium outline for dense sub-agent fields */
 }
 
 .containerDense:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
+  border-color: color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%) !important;
 }
 
 .textarea {
@@ -304,7 +306,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 4px;
+  border: 1px solid var(--border-color);
+  border-top: none; /* Open top to merge seamlessly with the bottom border of the white box */
+  border-radius: 0 0 12px 12px; /* Rounded corners only at the bottom */
+  background: var(--composer-footer-bg); /* Adaptable, premium background token */
+  width: calc(100% - 32px); /* Narrower width, forming the smaller rectangle */
+  margin: -1px auto 0 auto; /* Overlap by -1px to physically connect with absolutely no gap */
+  padding: 4px 14px; /* Sleeker, tighter vertical padding */
+  box-sizing: border-box;
   min-height: 28px;
 }
 
@@ -331,10 +340,14 @@
   transition: background 0.12s, color 0.12s;
 }
 
-.plusBtn:hover,
+.plusBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .plusBtn.isOpen,
 .plusBtn.isOn {
-  background: var(--bg-active, var(--bg-hover));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -353,8 +366,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--bg-elevated, #fff);
-  border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-elevated);
+  border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: 12px;
   box-shadow:
     0 4px 16px color-mix(in srgb, #000 8%, transparent),
@@ -411,7 +424,7 @@
 }
 
 .slashDesc {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -430,4 +443,11 @@
   color: var(--text-tertiary);
   text-align: center;
   user-select: none;
+}
+
+.composerWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
 }

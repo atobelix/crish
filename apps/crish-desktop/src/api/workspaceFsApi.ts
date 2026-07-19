@@ -95,7 +95,7 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
 /** 首屏预览行数；长文件可再分段加载 */
 export const FILE_PREVIEW_CHUNK_LINES = 400;
 /** 后端硬上限对齐 fs_commands MAX_TEXT_FILE_LINES */
-export const FILE_PREVIEW_MAX_LINES = 5000;
+export const FILE_PREVIEW_MAX_LINES = 1000000;
 
 /**
  * 下一段预览行预算（纯函数，供 UI 与单测共用）。

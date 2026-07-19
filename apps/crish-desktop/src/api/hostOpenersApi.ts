@@ -53,6 +53,7 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
     available: raw.available !== false,
     reason: raw.reason,
     path,
+    iconDataUrl: (raw as any).iconDataUrl || (raw as any).icon_data_url || null,
   };
 }
 

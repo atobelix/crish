@@ -38,6 +38,27 @@ import {
 import { fileExtColor, highlightCode, langFromFilename } from '../api/codeHighlight';
 import { parseMarkdownToHtml } from '../api/markdownRender';
 
+function getOpenerIcon(op: HostOpener, size = 14) {
+  if (op.iconDataUrl) {
+    return (
+      <img
+        src={op.iconDataUrl}
+        width={size}
+        height={size}
+        alt=""
+        style={{ flexShrink: 0, objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <Lucide.AppWindow
+      size={size}
+      aria-hidden
+      style={{ flexShrink: 0, color: 'var(--text-secondary)' }}
+    />
+  );
+}
+
 function useVirtualScroll({
   itemCount,
   itemHeight,
@@ -341,13 +362,19 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
   }, []);
 
   useEffect(() => {
-    if (!moreOpen) return;
+    if (!moreOpen && !openMenuOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+      const t = e.target as Node;
+      if (moreOpen && moreRef.current && !moreRef.current.contains(t)) {
+        setMoreOpen(false);
+      }
+      if (openMenuOpen && openMenuRef.current && !openMenuRef.current.contains(t)) {
+        setOpenMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
-  }, [moreOpen]);
+  }, [moreOpen, openMenuOpen]);
 
   useEffect(
     () => () => {
@@ -574,6 +601,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
   }, [bcFlyout]);
+
+  const defaultEditor = useMemo(() => {
+    return fileOpeners.find((op) => op.kind === 'editor' && op.id !== 'system-file-manager');
+  }, [fileOpeners]);
 
   if (!root) {
     return (
@@ -811,15 +842,18 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
             title="更多"
             aria-haspopup="menu"
             aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((v) => !v)}
+            onClick={() => {
+              setMoreOpen((v) => !v);
+              setOpenMenuOpen(false);
+            }}
           >
             <Lucide.MoreHorizontal size={15} />
           </button>
           {moreOpen ? (
-            <div className={styles.filesMoreMenu} role="menu">
+            <div className={`${styles.filesMoreMenu} files-more-menu`} role="menu">
               <button
                 type="button"
-                className={styles.filesMoreItem}
+                className={`${styles.filesMoreItem} files-more-item`}
                 role="menuitem"
                 onClick={() => {
                   copyPath('rel');
@@ -830,7 +864,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               </button>
               <button
                 type="button"
-                className={styles.filesMoreItem}
+                className={`${styles.filesMoreItem} files-more-item`}
                 role="menuitem"
                 onClick={() => {
                   copyPath('abs');
@@ -977,15 +1011,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   onClick={() => {
                     setOpenMenuOpen((v) => !v);
                     setOpenMenuMore(false);
+                    setMoreOpen(false);
                   }}
                 >
                   <Lucide.ChevronDown size={14} aria-hidden />
                 </button>
                 {openMenuOpen ? (
-                  <div className={styles.filesOpenMenu} role="menu">
+                  <div className={`${styles.filesOpenMenu} files-open-menu`} role="menu">
                     <button
                       type="button"
-                      className={styles.filesOpenItem}
+                      className={`${styles.filesOpenItem} files-open-item`}
                       role="menuitem"
                       onClick={() => {
                         copyPath('abs');
@@ -997,7 +1032,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     </button>
                     <button
                       type="button"
-                      className={styles.filesOpenItem}
+                      className={`${styles.filesOpenItem} files-open-item`}
                       role="menuitem"
                       onClick={() => {
                         void revealInOs(selected)
@@ -1018,7 +1053,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                       <button
                         key={op.id}
                         type="button"
-                        className={styles.filesOpenItem}
+                        className={`${styles.filesOpenItem} files-open-item`}
                         role="menuitem"
                         title={op.path || op.displayName}
                         onClick={() => {
@@ -1030,16 +1065,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                           setOpenMenuOpen(false);
                         }}
                       >
-                        <span className={styles.filesOpenAppIco} aria-hidden>
-                          {(op.displayName || '?').slice(0, 1)}
-                        </span>
+                        {getOpenerIcon(op, 14)}
                         {op.displayName}
                       </button>
                     ))}
                     {fileOpeners.length > 6 ? (
                       <button
                         type="button"
-                        className={`${styles.filesOpenItem} ${styles.filesOpenItemMore}`}
+                        className={`${styles.filesOpenItem} files-open-item ${styles.filesOpenItemMore}`}
                         role="menuitem"
                         onClick={() => setOpenMenuMore((v) => !v)}
                       >

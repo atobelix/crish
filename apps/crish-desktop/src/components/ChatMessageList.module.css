@@ -29,7 +29,7 @@
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   padding: 7px 10px;
   cursor: pointer;
   border-radius: 10px;
@@ -81,7 +81,7 @@
   padding: 5px 8px;
   border-radius: 7px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 
 .pinnedJump:hover {

@@ -285,7 +285,7 @@ function CompactToolRow({
     return (
       <div
         key={rowKey}
-        className={`${styles.toolRow} ${styles.toolRowApproval} ${styles.isPending}`}
+        className={`${styles.toolRow} ${styles.toolRowApproval} ${styles.isPending} tool-row tool-row-approval is-pending`}
         data-tool-id={tc.id}
       >
         <ApprovalAskCard
@@ -312,7 +312,7 @@ function CompactToolRow({
       <Suspense
         key={String(rowKey)}
         fallback={
-          <div className={`${styles.toolRow} ${styles.isRunning}`}>
+          <div className={`${styles.toolRow} ${styles.isRunning} tool-row is-running`}>
             <div className={`${styles.toolRowHead} ${styles.toolRowHeadStatic}`}>
               <span className={styles.toolRowIcoSlot} aria-hidden>
                 <span className={styles.toolRowLive}>
@@ -494,13 +494,13 @@ function CompactToolRow({
     <div
       className={`${styles.toolRow} ${
         tone === 'running'
-          ? styles.isRunning
+          ? `${styles.isRunning} is-running`
           : tone === 'error'
-          ? styles.isError
+          ? `${styles.isError} is-error`
           : tone === 'pending'
-          ? styles.isPending
+          ? `${styles.isPending} is-pending`
           : ''
-      } ${isOpen ? styles.isOpen : styles.isCollapsed}`}
+      } ${isOpen ? `${styles.isOpen} is-open` : `${styles.isCollapsed} is-collapsed`} tool-row`}
       key={rowKey}
       data-tool-id={tc.id}
       data-tool-label={human}
@@ -511,7 +511,7 @@ function CompactToolRow({
     >
       {/* 用 div 而非 button，避免路径操作按钮嵌套 button 报错 */}
       <div
-        className={`${styles.toolRowHead}${canToggle ? '' : ' ' + styles.toolRowHeadStatic}`}
+        className={`${styles.toolRowHead}${canToggle ? '' : ' ' + styles.toolRowHeadStatic} tool-row-head${canToggle ? '' : ' tool-row-head-static'}`}
         role={canToggle ? 'button' : undefined}
         tabIndex={canToggle ? 0 : undefined}
         aria-expanded={canToggle ? isOpen : undefined}
@@ -587,5 +587,5 @@ function renderToolStackItems(
 
 export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {
   const { items, msgId } = props;
-  return <div className={styles.toolStack}>{renderToolStackItems(items, msgId, props)}</div>;
+  return <div className={`${styles.toolStack} tool-stack`}>{renderToolStackItems(items, msgId, props)}</div>;
 };

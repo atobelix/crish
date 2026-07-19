@@ -8,7 +8,7 @@
 }
 
 .emptyHint {
-  font-size: var(--font-size-xs);
+  font-size: 13px !important; /* Minimum font size set to 13px */
   color: var(--text-tertiary);
   padding: 12px 10px;
   text-align: center;
@@ -22,16 +22,17 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding-left: 6px;
-  margin-bottom: 8px;
+  gap: 6px !important; /* Elegant 6px gap between section titles and contents */
+  padding-left: 0; /* Remove sub-container padding-left */
+  padding-right: 0; /* Remove sub-container padding-right */
+  margin-bottom: 8px !important; /* Pulled slightly closer to 8px */
 }
 
 .sectionLabelRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
+  min-height: 24px;
   padding-right: 4px;
 }
 
@@ -44,7 +45,7 @@
 }
 
 .sectionLabel {
-  font-size: var(--font-size-xs);
+  font-size: 13px !important; /* Minimum font size set to 13px */
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   cursor: pointer;
@@ -54,7 +55,7 @@
   user-select: none;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 8px; /* Internal padding set to 8px so text starts at exactly 10px + 8px = 18px from left */
   text-align: left;
 }
 
@@ -131,15 +132,15 @@
 .folderGroup {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  margin-bottom: 4px;
+  gap: 4px !important; /* Vertical gap between folder header (e.g. conex) and its session list items */
+  margin-bottom: 8px !important; /* Pulled slightly closer to 8px */
 }
 
 .folderHeaderRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
+  min-height: 24px;
   padding-right: 4px;
 }
 
@@ -149,13 +150,13 @@
   gap: 6px;
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-base, 14px) !important; /* locked explicitly to 14px */
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-secondary);
   cursor: pointer;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 8px; /* Internal padding set to 8px so folder icons start exactly at 10px + 8px = 18px from left */
   text-align: left;
 }
 
@@ -180,7 +181,7 @@
 }
 
 .folderCount {
-  font-size: 10px;
+  font-size: 13px !important; /* Minimum font size set to 13px */
   color: var(--text-tertiary);
   background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
   padding: 1px 4px;
@@ -216,13 +217,14 @@
 .folderSessions {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 3px !important; /* Standard 3px vertical gap between individual conversation capsule items */
   padding-left: 10px;
+  padding-right: 8px;
 }
 
 .sessionItemWrap {
   list-style: none;
-  min-height: var(--control-height, 32px);
+  min-height: 28px;
   box-sizing: border-box;
 }
 
@@ -231,9 +233,9 @@
   align-items: center;
   width: 100%;
   border-radius: 8px;
-  min-height: var(--control-height, 32px);
-  padding: 0 8px 0 10px;
-  font-size: var(--font-size-base);
+  min-height: 28px;
+  padding: 2px 8px 2px 10px;
+  font-size: var(--font-size-base, 14px) !important; /* locked explicitly to 14px */
   color: var(--text-secondary);
   background: transparent;
   border: none;
@@ -245,14 +247,22 @@
   cursor: pointer;
 }
 
+.sessionItem {
+  /* ... */
+}
+
+.sessionItemFoldBtn {
+  font-size: 13px !important;
+}
+
 .sessionItem:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500) !important;
 }
 
 .sessionItem.active {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--sidebar-active);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500) !important;
   box-shadow: none;
@@ -263,36 +273,30 @@
 }
 
 .sessionItem.branchSession::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10%;
-  bottom: 10%;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background-color: var(--accent-primary);
+  display: none;
 }
 
 .sessionRenameInput {
   flex: 1;
   min-width: 0;
   width: 100%;
-  height: 26px;
-  border: 1px solid var(--border-color, #d4d4d8);
-  border-radius: 6px;
-  background: var(--bg-primary, #fff);
+  height: 100%;
+  border: none;
+  background: transparent;
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium, 500);
-  padding: 0 8px;
+  font-weight: var(--font-weight-medium, 500) !important;
+  padding: 0;
   outline: none;
   box-sizing: border-box;
+  line-height: 1.35;
 }
 
 .sessionRenameInput:focus {
-  border-color: color-mix(in srgb, var(--text-primary) 35%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .sessionTextCol {
@@ -310,11 +314,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  font-size: 14px !important; /* Main conversation text locked explicitly to 14px */
 }
 
 .sessionSearchSnippet {
   display: block;
-  font-size: var(--font-size-xs);
+  font-size: 13px !important; /* Minimum font size set to 13px */
   font-weight: var(--font-weight-regular, 400);
   color: var(--text-tertiary);
   overflow: hidden;
@@ -350,7 +355,7 @@
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  font-size: var(--font-size-xs);
+  font-size: 13px !important; /* Minimum font size set to 13px */
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   flex-shrink: 0;
@@ -405,21 +410,23 @@
 }
 
 .sessionListWindowed > .sessionItemWrap {
-  height: var(--control-height, 32px);
-  min-height: var(--control-height, 32px);
+  height: 28px;
+  min-height: 28px;
   overflow: hidden;
 }
 
 .sessionListWindowed .sessionItem.hasSearchSnippet {
-  min-height: var(--control-height, 32px);
+  min-height: 28px;
   padding-top: 0;
   padding-bottom: 0;
   align-items: center;
 }
 
 .sessionItem.isRenaming {
-  padding: 0 6px;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  padding: 4px 8px 4px 10px;
+  background: transparent;
+  outline: 1.5px solid var(--accent-primary, #3b82f6);
+  outline-offset: -1.5px;
 }
 
 .sessionRunningSpinner {

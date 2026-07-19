@@ -622,23 +622,27 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
       {/* 折叠且非悬停时隐藏主 chrome，分隔条仍可键盘操作以展开 */}
       <div
+        className={styles.sidebarTop}
+        aria-hidden={chromeHidden || undefined}
+        inert={chromeHidden ? true : undefined}
+        role="group"
+        aria-label="侧栏快捷操作：新建对话与定时任务"
+      >
+        <SidebarNav
+           activeNav={activeNav}
+           onNewSession={handleNewSession}
+           onOpenScheduled={handleOpenScheduled}
+           searchInput={searchInput}
+           onSearchChange={onSearchChange}
+        />
+      </div>
+
+      <div
         className={styles.sidebarScroll}
         data-sidebar-chrome="scroll"
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
       >
-
-        {/* 新建 / 定时：中文文案即可见名；新建仅 createSession 空壳路径 */}
-        <div role="group" aria-label="侧栏快捷操作：新建对话与定时任务">
-          <SidebarNav
-             activeNav={activeNav}
-             onNewSession={handleNewSession}
-             onOpenScheduled={handleOpenScheduled}
-             searchInput={searchInput}
-             onSearchChange={onSearchChange}
-          />
-        </div>
-
         <SidebarSessionList
           sessions={sessions}
           activeSessionId={activeSessionId}

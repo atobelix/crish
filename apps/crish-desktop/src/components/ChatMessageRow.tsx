@@ -303,7 +303,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
 
   return (
     <div
-      className={`${styles.row} ${styles.rowUser}${isSearchHit ? ` ${styles.searchHit}` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      className={`${styles.row} ${styles.rowUser} msg-row msg-row-user${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
@@ -533,7 +533,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 
   return (
     <div
-      className={`${styles.row} ${styles.rowAssistant} ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit}` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      className={`${styles.row} ${styles.rowAssistant} msg-row msg-row-assistant ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
       data-msg-id={msg.id}
       data-role="assistant"
       data-pinned={isPinned ? 'true' : undefined}

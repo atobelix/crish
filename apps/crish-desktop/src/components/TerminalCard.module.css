@@ -5,6 +5,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  max-width: 100%;
   background: var(--terminal-bg);
   color: var(--terminal-fg);
   box-sizing: border-box;
@@ -149,6 +150,7 @@
 .barCwd {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--terminal-fg);
   font-weight: var(--font-weight-medium, 500);
   max-width: 40%;

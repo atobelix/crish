@@ -14,9 +14,13 @@
   transition: background 0.12s, color 0.12s;
 }
 
-.permPill:hover,
-.permPill.isOpen {
+.permPill:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.permPill.isOpen {
+  background: var(--bg-active);
   color: var(--text-primary);
 }
 
@@ -49,9 +53,7 @@
 .permMenu {
   position: fixed;
   z-index: 20040;
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  backdrop-filter: var(--backdrop-blur);
-  -webkit-backdrop-filter: var(--backdrop-blur);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);

@@ -1,7 +1,7 @@
 /* Conex desktop entry styles — domain splits live under ./styles/ */
 @import './styles/tokens.css';
-@import './styles/theme-dark.css';
 @import './styles/shell.css';
 @import './styles/chat.css';
 @import './styles/settings.css';
 @import './styles/panels.css';
+@import './styles/theme-dark.css';

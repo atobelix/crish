@@ -425,15 +425,15 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
   return (
     <div
-      className={`${styles.inlineAgent} ${styles.inlineAgentDense} ${open ? styles.isOpen : ''} ${
+      className={`${styles.inlineAgent} ${styles.inlineAgentDense} ${open ? `${styles.isOpen} is-open` : ''} ${
         live.status === 'running'
-          ? styles.inlineAgentRunning
+          ? `${styles.inlineAgentRunning} is-running`
           : live.status === 'failed'
-            ? styles.inlineAgentFailed
-            : live.status === 'stopped'
-              ? styles.inlineAgentStopped
-              : ''
-      }${sideFocused ? ` ${styles.sideFocused}` : ''}`}
+          ? `${styles.inlineAgentFailed} is-failed`
+          : live.status === 'stopped'
+          ? `${styles.inlineAgentStopped} is-stopped`
+          : ''
+      }${sideFocused ? ` ${styles.sideFocused} side-focused` : ''} inline-agent inline-agent-dense inline-agent-panel`}
       role="region"
       aria-label={regionAria}
       aria-labelledby={labelDomId}

@@ -1,4 +1,4 @@
-/* SettingsUsageTab.module.css — extracted from inline styles in SettingsUsageTab.tsx */
+/* SettingsUsageTab.module.css 鈥?extracted from inline styles in SettingsUsageTab.tsx */
 
 /* ----- Price row ----- */
 .priceRow {
@@ -14,7 +14,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-family: var(--font-mono);
   color: var(--text-secondary);
 }
@@ -22,7 +22,7 @@
 .priceRowInput {
   flex: 1;
   height: 26px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   padding: 0 6px;
   width: 60px;
 }
@@ -30,7 +30,7 @@
 .priceRowBtn {
   height: 26px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
 }
 
 /* ----- Config button (page header meta) ----- */
@@ -73,7 +73,7 @@
 }
 
 .modalTitle {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -81,7 +81,7 @@
 .modalFilterInput {
   width: 160px;
   height: 28px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 
 .modalList {
@@ -97,7 +97,7 @@
 .modalEmptyState {
   padding: 24px 0;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   text-align: center;
 }
 
@@ -111,18 +111,18 @@
 
 .modalAddInput {
   height: 28px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 
 .modalAddInputFlex2 {
   height: 28px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   flex: 2;
 }
 
 .modalAddInputFlex1 {
   height: 28px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   flex: 1;
 }
 
@@ -159,24 +159,24 @@
 }
 
 .statLabel {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .statValue {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .statValueCost {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: #16a34a;
 }
 
 .statUnit {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   color: var(--text-secondary);
 }
@@ -196,7 +196,7 @@
 }
 
 .chartTitle {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -205,22 +205,29 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border-radius: 6px;
 }
 
 .chartSegmentBtn {
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.chartSegmentBtn:hover {
+  color: var(--text-primary);
 }
 
 .chartSegmentBtn.active {
-  background: var(--bg-primary);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
 }
 
 .chartBars {
@@ -281,7 +288,7 @@
 }
 
 .chartBarLabel {
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   white-space: nowrap;
 }
@@ -290,7 +297,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 16px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
 
@@ -331,7 +338,7 @@
 }
 
 .modelsSectionTitle {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -346,7 +353,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 .modelName {
@@ -381,7 +388,7 @@
 }
 
 .modelTokensUnit {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 400;
   color: var(--text-secondary);
 }
@@ -396,7 +403,7 @@
 }
 
 .actionBtn {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   display: flex;
   align-items: center;
   gap: 4px;

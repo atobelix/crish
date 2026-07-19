@@ -55,7 +55,7 @@
   gap: 16px;
 }
 
-/* 统一的高级卡片容器，严格遵守极微弱灰度（<=4%），无厚重阴影，纯粹的圆角与 1px hairline */
+/* 缁熶竴鐨勯珮绾у崱鐗囧鍣紝涓ユ牸閬靛畧鏋佸井寮辩伆搴︼紙<=4%锛夛紝鏃犲帤閲嶉槾褰憋紝绾补鐨勫渾瑙掍笌 1px hairline */
 .settingsUiCard {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -153,7 +153,7 @@
   color: var(--text-primary, #1f2937);
   padding: 6px 12px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.4;
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);

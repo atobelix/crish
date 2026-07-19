@@ -1,5 +1,5 @@
 /**
- * 设置 · 个性化：权限、回答风格与界面偏好；成功静默，仅失败提示。
+ * 设置 · 通用设置：系统选项、回答风格、消息快捷键与界面偏好；成功静默，仅失败提示。
  */
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import type { ResponseStyle, Settings } from '../api/clientApi';
@@ -8,41 +8,25 @@ import {
   normalizeResponseStyle,
   RESPONSE_STYLE_OPTIONS,
 } from '../api/clientApi';
-import {
-  coercePermissionMode,
-  PERMISSION_MODES,
-  transitionPermissionMode,
-  type PermissionMode,
-} from '../api/permissionModes';
 import { getWorkspacePath } from '../api/projectStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { SettingsSelect } from './SettingsSelect';
-import styles from './SettingsPersonalizeTab.module.css';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
 } from './settings/SettingsUI';
-import {
-  readStoredTheme,
-  readStoredPersonalization,
-  writeStoredPersonalization,
-  applyPersonalization,
-  type PersonalizationSettings,
-} from '../api/themeStore';
 
 type Props = {
   onShowToast: (msg: string) => void;
 };
 
-/** 回答风格：中文说明（本页本地；值仍走 clientApi normalize，不改 clientApi） */
+/** 回答风格：中文说明 */
 const RESPONSE_STYLE_META: ReadonlyArray<{
   value: ResponseStyle;
   label: string;
-  /** 下拉副文案 */
   hint: string;
-  /** 行简述 */
   description: string;
 }> = [
   {
@@ -85,7 +69,6 @@ function styleMeta(id: ResponseStyle) {
   );
 }
 
-/** 选项中文标签 */
 function styleLabel(id: ResponseStyle): string {
   return (
     RESPONSE_STYLE_OPTIONS.find((o) => o.value === id)?.label ||
@@ -96,8 +79,6 @@ function styleLabel(id: ResponseStyle): string {
 
 export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const permissionModeRaw = useLayoutStore((s) => s.permissionMode);
-  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
   const tabModeEnabled = useLayoutStore((s) => s.tabModeEnabled);
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
@@ -107,55 +88,19 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
 
-  const permLabelId = useId();
+  const [sendShortcut, setSendShortcut] = useState<string>(
+    () => (typeof window !== 'undefined' ? localStorage.getItem('crish_send_shortcut') || 'enter' : 'enter')
+  );
+
   const styleLabelId = useId();
   const tabLabelId = useId();
-  const skinLabelId = useId();
-
-  const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() => readStoredTheme());
-  const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => readStoredPersonalization());
-
-  // 同步黑夜白天主题的变化
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const customEvt = e as CustomEvent<{ theme: 'default' | 'dark' }>;
-      if (customEvt?.detail?.theme) {
-        setActiveTheme(customEvt.detail.theme);
-      }
-    };
-    window.addEventListener('crish-theme-changed', handler);
-    return () => {
-      window.removeEventListener('crish-theme-changed', handler);
-    };
-  }, []);
-
-  const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
-    const next = { ...personalization, ...updates };
-    setPersonalization(next);
-    writeStoredPersonalization(next);
-    applyPersonalization(next, activeTheme);
-  };
-
-  const skinOptions = useMemo(() => {
-    const list = activeTheme === 'dark'
-      ? [
-          { value: 'dark-cozy', label: '护眼暗灰' },
-          { value: 'deep-night', label: '深邃夜空' },
-          { value: 'dark-forest', label: '森林绿影' },
-        ]
-      : [
-          { value: 'warm-gray', label: '护眼暖灰' },
-          { value: 'cream', label: '杏仁奶油' },
-          { value: 'paper', label: '极简纸质' },
-          { value: 'classic-gray', label: '经典浅灰' },
-        ];
-    
-    list.push({ value: 'custom', label: '自定义颜色' });
-    return list;
-  }, [activeTheme]);
-
-  // 非法权限值回落 ask
-  const permissionMode = coercePermissionMode(permissionModeRaw);
+  const hideThinkingId = useId();
+  const shortcutLabelId = useId();
+  
+  const quietId = useId();
+  const collapseId = useId();
+  const skillId = useId();
+  const analyticsId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -182,10 +127,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
     };
   }, [cwd, onShowToast, setAppSettings, setTabModeEnabled, loadTick]);
 
-  /**
-   * 本机写入；成功静默（列表/头栏即时反馈）。
-   * @returns 是否写入成功；失败已 toast
-   */
   const save = useCallback(
     async (updates: Partial<Settings>): Promise<boolean> => {
       if (!settings) return false;
@@ -194,7 +135,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
         const merged = await clientApi.saveSettingsEx(cwd, 'global', updates);
         setSettings(merged);
         setAppSettings(merged);
-        // 成功静默：不 toast「已保存」
         return true;
       } catch (err) {
         onShowToast('保存失败：' + String(err));
@@ -214,39 +154,23 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
     () =>
       RESPONSE_STYLE_META.map((m) => ({
         value: m.value,
-        // 标签与 clientApi 对齐（中文）
         label: styleLabel(m.value),
         hint: m.hint,
       })),
     [],
   );
 
-  const permissionOptions = useMemo(
-    () =>
-      PERMISSION_MODES.map((m) => ({
-        value: m.id,
-        label: m.label,
-        hint: m.matrixHint,
-      })),
-    [],
+  const shortcutOptions = useMemo(
+    () => [
+      { value: 'enter', label: 'Enter 发送，Shift+Enter 换行', hint: '默认' },
+      { value: 'ctrlEnter', label: 'Ctrl+Enter 发送，Enter 换行', hint: '防止误触' },
+    ],
+    []
   );
-
-  const onPermissionChange = (v: string) => {
-    try {
-      const next = transitionPermissionMode(permissionMode, v);
-      // 已是目标模式：跳过写 store
-      if (next === permissionMode) return;
-      setPermissionMode(next as PermissionMode);
-      // 权限走 layoutStore（LS），成功静默
-    } catch (err) {
-      onShowToast('权限切换失败：' + String(err));
-    }
-  };
 
   const onResponseStyle = (v: string) => {
     if (!settings) return;
     const next = normalizeResponseStyle(v);
-    // 已是目标档：跳过写盘
     if (next === responseStyle) return;
     void save({ responseStyle: next });
   };
@@ -264,11 +188,16 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
     })();
   };
 
-
+  const onShortcutChange = (v: string) => {
+    setSendShortcut(v);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('crish_send_shortcut', v);
+    }
+  };
 
   if (loadError && !settings) {
     return (
-      <SettingsPage title="个性化">
+      <SettingsPage title="通用设置">
         <SettingsSection title="错误">
           <SettingsCard>
             <SettingsRow
@@ -294,7 +223,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
 
   if (!settings) {
     return (
-      <SettingsPage title="个性化">
+      <SettingsPage title="通用设置">
         <SettingsSection>
           <SettingsCard>
             <SettingsRow title={<span className="settings-list-empty">加载中…</span>} />
@@ -304,96 +233,16 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
     );
   }
 
+  const quietStartup = Boolean(settings.quietStartup);
+  const collapseChangelog = Boolean(settings.collapseChangelog);
+  const enableSkillCommands = Boolean(settings.enableSkillCommands);
+  const enableAnalytics = Boolean(settings.enableAnalytics);
+  const hideThinking = Boolean(settings.hideThinkingBlock);
+
   return (
-    <SettingsPage title="个性化">
-      <SettingsSection title="外观与字号">
+    <SettingsPage title="通用设置">
+      <SettingsSection title="对话偏好">
         <SettingsCard>
-          <SettingsRow
-            title={<span id={skinLabelId}>外观主题皮肤</span>}
-            desc={activeTheme === 'dark' ? '深色模式下可选的预设皮肤' : '浅色模式下可选的预设皮肤'}
-            control={
-              <SettingsSelect
-                className="settings-personalize-select"
-                value={personalization.skin}
-                options={skinOptions}
-                onChange={(v) => updatePersonalization({ skin: v })}
-                disabled={!ready}
-                placeholder="选择预设…"
-              />
-            }
-          />
-
-          {personalization.skin === 'custom' && (
-            <>
-              <SettingsRow
-                title="自定义背景色"
-                control={
-                  <input
-                    type="color"
-                    value={personalization.customBg}
-                    onChange={(e) => updatePersonalization({ customBg: e.target.value })}
-                    disabled={!ready}
-                    className={styles.colorInput}
-                  />
-                }
-              />
-              <SettingsRow
-                title="自定义文本色"
-                desc="自适应计算副文本、边框与悬浮文本色"
-                control={
-                  <input
-                    type="color"
-                    value={personalization.customFg}
-                    onChange={(e) => updatePersonalization({ customFg: e.target.value })}
-                    disabled={!ready}
-                    className={styles.colorInput}
-                  />
-                }
-              />
-            </>
-          )}
-
-          <SettingsRow
-            title="字号大小微调"
-            desc={`基准字号为 14px，当前字号: ${14 + personalization.fontSizeAdjust}px`}
-            control={
-              <div className={styles.adjustContainer}>
-                <input
-                  type="range"
-                  min="-2"
-                  max="4"
-                  step="1"
-                  value={personalization.fontSizeAdjust}
-                  onChange={(e) => updatePersonalization({ fontSizeAdjust: parseInt(e.target.value, 10) })}
-                  disabled={!ready}
-                  className={styles.adjustSlider}
-                />
-                <span className={styles.adjustLabel}>
-                  {personalization.fontSizeAdjust >= 0 ? '+' : ''}{personalization.fontSizeAdjust}px
-                </span>
-              </div>
-            }
-          />
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection title="对话与界面">
-        <SettingsCard>
-          <SettingsRow
-            title={<span id={permLabelId}>权限模式</span>}
-            desc="工具调用前要不要先问你"
-            control={
-              <SettingsSelect
-                className="settings-personalize-select"
-                value={permissionMode}
-                options={permissionOptions}
-                onChange={onPermissionChange}
-                disabled={!ready}
-                placeholder="选择…"
-              />
-            }
-          />
-
           <SettingsRow
             title={<span id={styleLabelId}>回答风格</span>}
             desc={style.description}
@@ -404,14 +253,50 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
                 options={responseStyleOptions}
                 onChange={onResponseStyle}
                 disabled={!ready}
-                placeholder="选择…"
+                placeholder="选择风格…"
               />
             }
           />
 
           <SettingsRow
+            title={<span id={shortcutLabelId}>发送消息快捷键</span>}
+            desc="选择对话输入框中的消息发送组合按键"
+            control={
+              <SettingsSelect
+                className="settings-personalize-select"
+                value={sendShortcut}
+                options={shortcutOptions}
+                onChange={onShortcutChange}
+                disabled={!ready}
+                placeholder="选择快捷键…"
+              />
+            }
+          />
+
+          <SettingsRow
+            title={<label htmlFor={hideThinkingId} className="settings-ui-row-label">默认折叠思考过程</label>}
+            desc="在对话流中默认隐藏或折叠深度思考模型的大段推理内容"
+            control={
+              <input
+                id={hideThinkingId}
+                type="checkbox"
+                className="settings-switch settings-switch--personalize"
+                checked={hideThinking}
+                disabled={!ready}
+                onChange={(e) => {
+                  void save({ hideThinkingBlock: e.target.checked });
+                }}
+              />
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="界面偏好">
+        <SettingsCard>
+          <SettingsRow
             title={<label htmlFor={tabLabelId} className="settings-ui-row-label">合并右侧面板</label>}
-            desc="总览、文件等收成标签"
+            desc="将总览、文件树等多个侧栏板块收纳合并为统一的右侧标签页栏"
             control={
               <input
                 id={tabLabelId}
@@ -426,9 +311,80 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
               />
             }
           />
+
+          <SettingsRow
+            title={<label htmlFor={collapseId} className="settings-ui-row-label">默认折叠更新日志</label>}
+            desc="进入工作台时，默认收起右侧的系统版本更新日志抽屉"
+            control={
+              <input
+                id={collapseId}
+                type="checkbox"
+                className="settings-switch settings-switch--personalize"
+                checked={collapseChangelog}
+                disabled={!ready}
+                onChange={(e) => {
+                  void save({ collapseChangelog: e.target.checked });
+                }}
+              />
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="系统与遥测">
+        <SettingsCard>
+          <SettingsRow
+            title={<label htmlFor={skillId} className="settings-ui-row-label">启用行内斜杠命令</label>}
+            desc="允许在对话输入框中通过键入 / 触发快速执行的指令与技能菜单"
+            control={
+              <input
+                id={skillId}
+                type="checkbox"
+                className="settings-switch settings-switch--personalize"
+                checked={enableSkillCommands}
+                disabled={!ready}
+                onChange={(e) => {
+                  void save({ enableSkillCommands: e.target.checked });
+                }}
+              />
+            }
+          />
+
+          <SettingsRow
+            title={<label htmlFor={quietId} className="settings-ui-row-label">启用静默启动日志</label>}
+            desc="启动客户端时，自动隐藏环境加载、初始化等冗余调试信息"
+            control={
+              <input
+                id={quietId}
+                type="checkbox"
+                className="settings-switch settings-switch--personalize"
+                checked={quietStartup}
+                disabled={!ready}
+                onChange={(e) => {
+                  void save({ quietStartup: e.target.checked });
+                }}
+              />
+            }
+          />
+
+          <SettingsRow
+            title={<label htmlFor={analyticsId} className="settings-ui-row-label">分享匿名产品分析</label>}
+            desc="传输安全脱敏、完全不包含任何代码或隐私的遥测数据以帮助改进本软件"
+            control={
+              <input
+                id={analyticsId}
+                type="checkbox"
+                className="settings-switch settings-switch--personalize"
+                checked={enableAnalytics}
+                disabled={!ready}
+                onChange={(e) => {
+                  void save({ enableAnalytics: e.target.checked });
+                }}
+              />
+            }
+          />
         </SettingsCard>
       </SettingsSection>
     </SettingsPage>
   );
 };
-

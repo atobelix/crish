@@ -1,5 +1,5 @@
 .inlineAgent {
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--hairline, var(--border-subtle)) 40%, transparent);
   border-radius: 8px;
   margin: 4px 0 6px;
   background: transparent;

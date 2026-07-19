@@ -91,24 +91,23 @@
   font-weight: 600;
   padding: 4px 14px;
   border-radius: var(--radius-md, 12px);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: none;
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
   cursor: pointer;
 }
 
 .chatEmptyProjectBtnInline:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-color);
+  background: var(--control-soft-bg-hover);
 }
 
 .chatEmptyProjectText {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--control-soft-bg);
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 24px;
@@ -162,87 +161,87 @@
   box-sizing: border-box;
 }
 
-/* 让空态下的 input-container 更加高级，大圆角和柔和投影 */
-.chatEmptyComposerWrap :global(.input-container) {
-  border-radius: 20px !important; /* 更加圆润 */
-  border: 1px solid var(--border-color) !important;
-  background: var(--bg-card) !important; /* 卡片白 */
-  box-shadow: none !important; /* 去除阴影 */
-  padding: 14px 14px 10px 18px !important; /* 调整内边距，让大圆角看起来更均衡 */
-  transition: border-color var(--transition-fast) !important;
-}
-
-.chatEmptyComposerWrap :global(.input-container):focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important; /* 聚焦时仅 5% 加深，超轻微差异 */
-  box-shadow: none !important;
-}
+/* emptyComposer style migrated to ChatCard.module.css emptyComposer */
 
 .chatEmptyPrompts {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
-  max-width: 600px;
-  justify-content: center;
+  max-width: var(--chat-col-max, 680px);
+  margin: 20px auto 0 auto;
+  box-sizing: border-box;
 }
 
 .sessionEmpty .chatEmptyPrompts {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
   gap: 8px;
   width: 100%;
   max-width: var(--chat-col-max, 680px);
   margin-top: 20px;
+  box-sizing: border-box;
 }
 
 .quickPromptCard {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: var(--space-2, 6px) var(--space-4, 12px);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle, rgba(0,0,0,0.05));
-  border-radius: 12px;
+  padding: 12px 18px;
+  background: transparent !important;
+  border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
+  border-radius: 12px !important;
   cursor: pointer;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   font-family: var(--font-sans);
-  flex: 1 1 calc(50% - 12px);
-  min-width: 200px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  transition: all 0.2s ease;
-  min-height: var(--control-height-sm, 28px);
+  width: 100%;
+  min-width: unset;
+  box-shadow: none !important;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  min-height: var(--control-height-sm, 36px);
   line-height: var(--line-height-ui, 1.35);
+  box-sizing: border-box;
 }
 
 .sessionEmpty .quickPromptCard {
-  /* 重置全局 flex stretch 布局，改为 auto 宽度 pill */
-  flex: 0 0 auto;
-  min-width: unset;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 100px; /* 完整 pill */
-  padding: 8px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 12px 18px;
+  background: transparent !important;
+  border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
+  border-radius: 12px !important;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  box-shadow: none !important;
+  width: 100%;
+  box-sizing: border-box;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.quickPromptCard:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-  /* 严禁 translateY 上下跳动 */
+.quickPromptLabel {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-right: 12px;
+  flex-shrink: 0;
 }
 
+.quickPromptDesc {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.quickPromptCard:hover,
 .sessionEmpty .quickPromptCard:hover {
-  background: var(--bg-hover);
+  background: var(--control-soft-bg-hover) !important;
   border-color: var(--border-color);
   color: var(--text-primary);
   /* 严禁 translateY 上下跳动 */
@@ -254,8 +253,10 @@
 }
 
 .quickPromptCard svg {
-  display: none;
+  display: block;
 }
+
+
 
 @media (max-width: 720px) {
   .chatEmptyState {

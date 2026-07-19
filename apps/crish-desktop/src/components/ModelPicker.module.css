@@ -1,4 +1,4 @@
-/* 模型选择：紧凑展开面板（思考强度 + 扁平列表，无下拉/无手填 id） */
+/* 妯″瀷閫夋嫨锛氱揣鍑戝睍寮€闈㈡澘锛堟€濊€冨己搴?+ 鎵佸钩鍒楄〃锛屾棤涓嬫媺/鏃犳墜濉?id锛?*/
 .mpick {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -7,7 +7,7 @@
   max-height: min(360px, 52vh);
   display: flex;
   flex-direction: column;
-  background: var(--bg-elevated, var(--bg-primary));
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
@@ -35,7 +35,7 @@
 }
 
 .mpickThinkLabel {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 500;
   color: var(--text-secondary);
   padding-left: 2px;
@@ -54,7 +54,7 @@
   color: var(--text-secondary);
   border-radius: 7px;
   padding: 6px 4px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   line-height: 1.2;
@@ -130,7 +130,7 @@
 }
 
 .mpickMenuItemMeta {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -158,7 +158,7 @@
 }
 
 .mpickEmptyHint {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.4;
   max-width: 20em;
 }
@@ -208,7 +208,7 @@
 
 .mpickErrorLink {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   text-decoration: underline;
 }
 
@@ -240,20 +240,18 @@
   color: var(--text-primary);
 }
 
-/* 兼容旧类名（若别处引用） */
+/* 鍏煎鏃х被鍚嶏紙鑻ュ埆澶勫紩鐢級 */
 .mpickSlim .mpickProviderActions,
 .mpickSlim .mpickModelActions {
   display: none !important;
 }
 
-:global(html[data-theme='dark']) .mpick {
-  background: var(--bg-elevated);
-}
+/* dark theme uses same glassmorphism base */
 
 .mpickSectionLabel {
   flex-shrink: 0;
   padding: 6px 12px 2px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 500;
   color: var(--text-tertiary);
 }

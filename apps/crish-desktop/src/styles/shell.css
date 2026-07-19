@@ -324,7 +324,7 @@ samp,
   box-shadow: none !important;
   width: 100%;
   font-family: var(--font-sans);
-  font-size: 13px !important;
+  font-size: var(--font-size-sm) !important;
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   padding: 0 !important;
@@ -868,8 +868,8 @@ body.is-resizing * {
  * ═══════════════════════════════════════════════════════════════════════════ */
 .app-container[data-shell-chrome="classic"],
 .app-container[data-shell-chrome="inset"] {
-  /* 壳层略偏暖灰，内容卡更白，形成「大矩形底 + 内圆角卡」 */
-  --shell-chrome-bg: color-mix(in srgb, var(--bg-secondary) 78%, #b8b4ac 22%);
+  /* 壳层纯暖色调，不混任何冷灰 */
+  --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --shell-inset-radius: 14px;
   --shell-inset-pad: 5px;
@@ -977,7 +977,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   /* 与右侧项目 tab 字高视觉中心对齐（tab 贴底 h≈30） */
   align-items: flex-end;
   height: 100%;
-  padding: 0 6px 0 6px;
+  padding: 0 10px 0 11px; /* Left rail padding set to 11px so button aligns with the 18px sidebar line */
   box-sizing: border-box;
   min-width: 0;
   -webkit-app-region: drag;
@@ -998,6 +998,17 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   box-sizing: border-box;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn:hover {
+  background-color: var(--sidebar-hover) !important;
+  color: var(--text-primary) !important;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn:active,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn.active {
+  background-color: var(--sidebar-active) !important;
+  color: var(--text-primary) !important;
 }
 .app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn svg {
   width: 16px;
@@ -1049,8 +1060,8 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   border-radius: var(--shell-card-r);
   overflow: hidden !important;
   isolation: isolate;
-  /* 无描边：靠圆角 + 极轻阴影与壳层分层，避免卡外一圈灰线 */
-  border: none;
+  /* 增加精致的极细微描边，靠圆角 + 极微描边与极轻阴影完美融合 */
+  border: 1px solid var(--border-subtle);
   outline: none;
   box-shadow:
     0 1px 2px color-mix(in srgb, #000 2.5%, transparent),
@@ -1140,7 +1151,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   margin-bottom: -1px;
   box-shadow: none;
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   gap: 6px;
 }
 .app-container[data-shell-chrome="classic"] .workspace-card .card-tab:hover {
@@ -1214,7 +1225,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   outline: none !important;
   background: transparent !important;
   font: inherit;
-  font-size: 14px !important;
+  font-size: var(--font-size-base) !important;
   color: var(--text-primary) !important;
   padding: 0 !important;
 }
@@ -1404,14 +1415,16 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: 18px;
   margin-left: 2px;
   border-radius: 4px;
-  display: none;
+  display: inline-flex;
   color: var(--text-tertiary);
-  opacity: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover .tab-close-btn,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-close-btn {
-  display: inline-flex;
   opacity: 0.85;
+  pointer-events: auto;
 }
 
 /* + 与左侧一致 */
@@ -1710,18 +1723,18 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   overflow-y: hidden;
   height: 100%;
   /* 横向滚动条贴近内容，中键滚动在 JS 中禁用 */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
 }
 
 .tabs-bar::-webkit-scrollbar {
-  height: var(--panel-h-scrollbar-size, 3px);
+  display: none;
+  height: 0;
 }
 .tabs-bar::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  border-radius: 999px;
+  display: none;
 }
 .tabs-bar::-webkit-scrollbar-track {
   background: transparent;
@@ -1776,20 +1789,28 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   letter-spacing: 0.01em;
 }
 .card-tab.card-tab--tool .tab-close-btn {
-  display: none;
+  display: inline-flex;
   position: static;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
   margin: 0 0 0 2px;
   padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 .card-tab.card-tab--tool:hover .tab-close-btn,
 .card-tab.card-tab--tool.active .tab-close-btn {
-  display: inline-flex;
+  opacity: 1;
+  pointer-events: auto;
+}
+.card-tab.active {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
 }
 .card-tab.card-tab--tool.active {
-  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background-color: var(--bg-primary) !important;
   color: var(--text-primary);
 }
 .card-tab.card-tab--tool.active .tab-icon-container svg {
@@ -1849,17 +1870,18 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   border-radius: 6px;
   cursor: pointer;
   color: var(--text-tertiary);
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 1;
-  pointer-events: auto;
-  transition: background 0.12s ease, color 0.12s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .card-tab:hover .tab-close-btn,
 .card-tab.active .tab-close-btn {
-  display: inline-flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tab-close-btn:hover {
@@ -2254,7 +2276,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   position: absolute;
   width: 3.5px;
   height: 7px;
-  border: solid #ffffff;
+  border: solid var(--text-on-accent);
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
   top: 2px;
@@ -2304,7 +2326,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   gap: 2px;
   padding: 3px;
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-radius: 999px;
   border: none;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
@@ -2333,18 +2355,18 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 .ui-segment-item.active {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-card);
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
   font-weight: var(--font-weight-normal);
 }
 
 /* 分段选中：中性 pill，不用整片绿 */
 .settings-row .ui-segment-item.active,
 .sb-quick-segment .ui-segment-item.active {
-  background: var(--bg-primary);
+  background: var(--bg-card);
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
 }
 
 /* Legacy aliases */
@@ -2352,7 +2374,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   gap: 2px;
   padding: 3px;
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-radius: var(--radius-md);
   margin: 0 4px 4px;
 }
@@ -2392,9 +2414,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex-direction: column;
   gap: 4px;
   z-index: 10000;
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  backdrop-filter: var(--backdrop-blur);
-  -webkit-backdrop-filter: var(--backdrop-blur);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
@@ -2487,7 +2507,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 .sort-filter-menu-title {
   padding: 6px 10px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 500;
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
@@ -2543,8 +2563,8 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 28px;
+  padding: 4px 10px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -2610,17 +2630,18 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  border-radius: 2px;
-  transition: background 0.15s ease;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: 999px;
+  transition: background 0.12s ease;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-primary) 10%, transparent) transparent;
 }
 
 /* --- COLLAPSED & OVERLAY SIDEBAR STATES --- */
@@ -2808,7 +2829,7 @@ body.dragging-card * {
 
 .ui-btn-primary {
   background: var(--accent-color);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 .ui-btn-primary:hover {
   background: var(--accent-hover);
@@ -3043,19 +3064,19 @@ select.ui-input {
 }
 
 .nav-item-primary {
-  background: var(--text-primary);
-  color: #fff !important;
+  background: var(--control-soft-bg-active, var(--sidebar-active));
+  color: var(--text-primary) !important;
   border-radius: 10px !important;
   font-weight: var(--font-weight-normal) !important;
   padding: 9px 12px !important;
 }
 .nav-item-primary .nav-icon,
 .nav-item-primary svg {
-  color: #fff !important;
+  color: var(--text-primary) !important;
 }
 .nav-item-primary:hover {
-  background: #000 !important;
-  color: #fff !important;
+  background: var(--control-soft-bg-hover, var(--sidebar-hover)) !important;
+  color: var(--text-primary) !important;
 }
 
 .sidebar-footer {
@@ -3217,7 +3238,7 @@ select.ui-input {
   cursor: pointer;
 }
 .sidebar-footer-update-label {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1;
 }
 .sidebar-footer-update.is-visible {
@@ -3438,7 +3459,7 @@ body {
   height: 30px !important;
   padding: 0 var(--space-3, 8px);
   border-radius: 10px;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   background: transparent;
@@ -3500,13 +3521,13 @@ body {
 .crish-sidebar .session-item,
 .crish-sidebar .folder-header-row,
 .crish-sidebar .folder-header {
-  font-size: 14px !important;
+  font-size: var(--font-size-base) !important;
 }
 .crish-sidebar .sb-section-label,
 .crish-sidebar .session-search-snippet,
 .crish-sidebar .session-item-meta,
 .crish-sidebar .sidebar-footer-settings {
-  font-size: 13px !important;
+  font-size: var(--font-size-sm) !important;
 }
 #crish-main {
   padding-bottom: 0 !important;
@@ -3721,9 +3742,7 @@ body {
 .tabs-add-menu,
 .context-menu,
 .perm-menu {
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent) !important;
-  backdrop-filter: var(--backdrop-blur) !important;
-  -webkit-backdrop-filter: var(--backdrop-blur) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
   box-shadow: var(--shadow-lg) !important;
@@ -3769,9 +3788,7 @@ body {
 .sort-filter-flyout,
 .cplus-main,
 .pp-menu {
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent) !important;
-  backdrop-filter: var(--backdrop-blur) !important;
-  -webkit-backdrop-filter: var(--backdrop-blur) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 10px !important;
   box-shadow: var(--shadow-lg) !important;
@@ -3795,8 +3812,8 @@ body {
   justify-content: flex-start !important;
   gap: 8px !important;
   width: 100% !important;
-  min-height: 32px !important;
-  padding: 7px 10px !important;
+  min-height: 28px !important;
+  padding: 4px 10px !important;
   border-radius: 6px !important;
   font-size: var(--font-size-sm) !important;
   color: var(--text-primary) !important;
@@ -3907,10 +3924,20 @@ body {
 .md-rendered .md-code-block,
 .md-rendered pre,
 .msg-assistant-text .md-code-pre,
-.md-rendered .md-code-pre,
+.md-rendered .md-code-pre {
+  background: color-mix(in srgb, var(--text-primary) 1.2%, transparent) !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+  overflow-x: visible !important;
+}
+
 .msg-assistant-text .md-code-block code,
-.md-rendered .md-code-block code {
-  background: color-mix(in srgb, var(--text-primary) 2.2%, transparent) !important;
+.md-rendered .md-code-block code,
+.msg-assistant-text .md-code-pre code,
+.md-rendered .md-code-pre code {
+  background: transparent !important;
   border: none !important;
   color: var(--text-primary) !important;
   white-space: pre-wrap !important;
@@ -3924,5 +3951,10 @@ body {
 .md-rendered pre *,
 .md-rendered .md-code-block * {
   font-weight: var(--font-weight-code, 400) !important;
+}
+
+/* Ensure checkmark is positioned relative to its specific option button */
+.sort-filter-option {
+  position: relative !important;
 }
 

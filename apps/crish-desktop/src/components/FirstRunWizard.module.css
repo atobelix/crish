@@ -40,11 +40,11 @@
   align-items: center;
   justify-content: center;
   font-weight: var(--font-weight-normal);
-  font-size: 16px;
+  font-size: var(--font-size-base);
 }
 
 .firstRunTitle {
-  font-size: 16px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
 }
@@ -113,7 +113,7 @@
   margin-top: 4px;
 }
 
-/* 向导下拉：SettingsSelect 全宽软触发 */
+/* 鍚戝涓嬫媺锛歋ettingsSelect 鍏ㄥ杞Е鍙?*/
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -193,7 +193,7 @@
   padding-bottom: 4px;
 }
 
-/* 模型步次级路径：稍后手填 / 打开设置（无 toast） */
+/* 妯″瀷姝ユ绾ц矾寰勶細绋嶅悗鎵嬪～ / 鎵撳紑璁剧疆锛堟棤 toast锛?*/
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;

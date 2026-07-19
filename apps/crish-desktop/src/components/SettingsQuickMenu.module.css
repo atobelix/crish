@@ -26,7 +26,7 @@
 }
 
 .sidebarFooterSettings.isOpen {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-primary);
 }
 
@@ -44,9 +44,7 @@
 .sbQuickMenu {
   position: fixed;
   z-index: 5000;
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  backdrop-filter: var(--backdrop-blur);
-  -webkit-backdrop-filter: var(--backdrop-blur);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
@@ -74,11 +72,18 @@
 
 .sbQuickSegment {
   width: 100%;
+  background: var(--bg-primary) !important;
 }
 
 .sbQuickSegment :global(.ui-segment-item) {
   flex: 1;
   border-radius: 999px;
+}
+
+.sbQuickSegment :global(.ui-segment-item.active) {
+  background-color: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle) !important;
 }
 
 .sbQuickDivider {

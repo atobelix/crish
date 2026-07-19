@@ -23,7 +23,7 @@
 }
 
 .adjustLabel {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   min-width: 40px;
   text-align: right;

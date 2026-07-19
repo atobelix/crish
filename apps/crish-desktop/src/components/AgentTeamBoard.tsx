@@ -10,6 +10,45 @@ import type { SessionAgent } from '../store/layoutStore';
 import { openAgentInSidePanel } from '../api/openAgentPanel';
 import { humanizeAgentSummary } from '../api/toolPresentation';
 
+function AgentStatusDot({ status }: { status: SessionAgent['status'] }) {
+  if (status === 'running') {
+    return (
+      <span className={styles.statusSpinner} aria-hidden="true" title="正在运行">
+        <svg className={styles.spinnerSvg} viewBox="0 0 24 24">
+          <circle
+            className={styles.spinnerCircle}
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="var(--text-tertiary)"
+            strokeWidth="3"
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="40, 10"
+          />
+        </svg>
+      </span>
+    );
+  }
+  let dotColor = 'var(--text-tertiary)'; // default/stopped
+  let label = '已停止';
+  if (status === 'completed') {
+    dotColor = '#10b981'; // green dot
+    label = '已完成';
+  } else if (status === 'failed') {
+    dotColor = '#f97316'; // orange dot
+    label = '有错误';
+  }
+  return (
+    <span
+      className={styles.statusDot}
+      style={{ backgroundColor: dotColor }}
+      title={label}
+      aria-hidden="true"
+    />
+  );
+}
+
 export interface AgentTeamBoardProps {
   agents: SessionAgent[];
   /** 当前聚焦 agent（高亮） */
@@ -344,45 +383,32 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
       >
         <div className={styles.agentTeamBoardHead}>
           <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
-          <span className={styles.agentTeamBoardLabel}>{headLabel}</span>
-          {boardStats.runningN > 0 ? (
-            <Tooltip content={`${boardStats.runningN} 个运行中`}>
-              <span
-                className={styles.agentTeamBoardStat}
-                aria-label={`${boardStats.runningN} 个运行中`}
-              >
-                {boardStats.runningN} 运行
+          <span className={styles.agentTeamBoardLabel}>
+            {compact ? '子智能体' : '协作智能体'} ({boardStats.total})
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {boardStats.runningN > 0 ? (
+              <span className={styles.statusSpinner} title="有正在运行的子智能体">
+                <svg className={styles.spinnerSvg} viewBox="0 0 24 24">
+                  <circle
+                    className={styles.spinnerCircle}
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="var(--text-tertiary)"
+                    strokeWidth="3"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray="40, 10"
+                  />
+                </svg>
               </span>
-            </Tooltip>
-          ) : null}
-          {boardStats.failedN > 0 ? (
-            <Tooltip content={`${boardStats.failedN} 个失败`}>
-              <span
-                className={`${styles.agentTeamBoardStat} ${styles.agentTeamBoardStatWarn}`}
-                aria-label={`${boardStats.failedN} 个失败`}
-              >
-                {boardStats.failedN} 失败
-              </span>
-            </Tooltip>
-          ) : null}
-          {boardStats.pendingN > 0 ? (
-            <Tooltip content={`${boardStats.pendingN} 项待批`}>
-              <span
-                className={`${styles.agentTeamBoardStat} ${styles.agentTeamBoardStatWarn}`}
-                aria-label={`${boardStats.pendingN} 项待批`}
-              >
-                {boardStats.pendingN} 待批
-              </span>
-            </Tooltip>
-          ) : null}
-          <Tooltip content={`共 ${boardStats.total} 个协作`}>
-            <span
-              className={styles.agentTeamBoardCount}
-              aria-label={`共 ${boardStats.total} 个协作`}
-            >
-              {boardStats.total}
-            </span>
-          </Tooltip>
+            ) : boardStats.pendingN > 0 || boardStats.failedN > 0 ? (
+              <span className={styles.statusDot} style={{ backgroundColor: '#f97316' }} title="有待审批或失败的协作" />
+            ) : (
+              <span className={styles.statusDot} style={{ backgroundColor: '#10b981' }} title="所有协作已完成" />
+            )}
+          </div>
         </div>
         <div className={styles.agentTeamBoardGrid} role="presentation">
           {sorted.map((a) => {
@@ -428,13 +454,8 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                   }${dur ? `，${dur}` : ''}。在侧栏打开`}
                 >
                   <div className={styles.agentTeamCardTop}>
+                    <AgentStatusDot status={a.status} />
                     <span className={styles.agentTeamCardTitle}>{title}</span>
-                    <span
-                      className={`${styles.agentCardBadge} ${styles['agentCardBadge' + a.status.charAt(0).toUpperCase() + a.status.slice(1)] || ''}`}
-                      aria-hidden
-                    >
-                      {STATUS_LABEL[a.status]}
-                    </span>
                   </div>
                   {/* compact：单行摘要+工具/时长，提高侧栏信息密度 */}
                   {compact ? (

@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './ChatHeaderMore.module.css';
 import * as Lucide from 'lucide-react';
 import { emitUiEvent } from '../api/uiEvents';
+import { Tooltip } from './settings/SettingsUI';
 
 export type ChatHeaderMoreProps = {
   /** 有活动会话时可导出；false 时隐藏导出项，避免幽灵禁用项 */
@@ -137,28 +138,29 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
       ref={wrapRef}
       data-density="compact"
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`${styles.moreBtn} ${open ? styles.isOpen : ''}`}
-        title="更多操作"
-        aria-label={triggerLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (open) {
-            // 再次点击触发钮关闭：焦点已在钮上，无需再 restore
-            restoreOnCloseRef.current = false;
-            setOpen(false);
-          } else {
-            setOpen(true);
-          }
-        }}
-      >
-        <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
-      </button>
+      <Tooltip content="更多操作">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`${styles.moreBtn} ${open ? styles.isOpen : ''}`}
+          aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (open) {
+              // 再次点击触发钮关闭：焦点已在钮上，无需再 restore
+              restoreOnCloseRef.current = false;
+              setOpen(false);
+            } else {
+              setOpen(true);
+            }
+          }}
+        >
+          <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+        </button>
+      </Tooltip>
       {open ? (
         <div
           id={menuId}
@@ -171,34 +173,36 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
           onKeyDown={onMenuKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <button
-            id={searchItemId}
-            type="button"
-            className={styles.moreItem}
-            role="menuitem"
-            tabIndex={-1}
-            title="在本会话消息中搜索"
-            aria-label="搜索本会话消息"
-            onClick={runSearch}
-          >
-            <Lucide.Search size={14} strokeWidth={1.75} aria-hidden />
-            <span>搜索本会话</span>
-          </button>
-          {/* 无活动会话时不渲染导出：避免禁用幽灵项 */}
-          {canExport ? (
+          <Tooltip content="在本会话消息中搜索">
             <button
-              id={exportItemId}
+              id={searchItemId}
               type="button"
               className={styles.moreItem}
               role="menuitem"
               tabIndex={-1}
-              title="导出当前会话为 Markdown"
-              aria-label="导出当前会话为 Markdown"
-              onClick={runExport}
+              aria-label="搜索本会话消息"
+              onClick={runSearch}
             >
-              <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
-              <span>导出 Markdown</span>
+              <Lucide.Search size={14} strokeWidth={1.75} aria-hidden />
+              <span>搜索本会话</span>
             </button>
+          </Tooltip>
+          {/* 无活动会话时不渲染导出：避免禁用幽灵项 */}
+          {canExport ? (
+            <Tooltip content="导出当前会话为 Markdown">
+              <button
+                id={exportItemId}
+                type="button"
+                className={styles.moreItem}
+                role="menuitem"
+                tabIndex={-1}
+                aria-label="导出当前会话为 Markdown"
+                onClick={runExport}
+              >
+                <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
+                <span>导出 Markdown</span>
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}

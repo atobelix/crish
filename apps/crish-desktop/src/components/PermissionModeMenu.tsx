@@ -231,7 +231,7 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
           <div
             ref={menuRef}
             id={menuId}
-            className={styles.permMenu}
+            className={`${styles.permMenu} perm-menu`}
             role="menu"
             aria-label="权限"
             aria-orientation="vertical"
@@ -254,7 +254,7 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
                   <button
                     id={itemId}
                     type="button"
-                    className={`${styles.permMenuItem}${active ? ` ${styles.isSelected}` : ''}`}
+                    className={`${styles.permMenuItem} perm-menu-item${active ? ` is-selected` : ''}`}
                     role="menuitemradio"
                     aria-checked={active}
                     tabIndex={-1}

@@ -127,10 +127,10 @@ const TAB_META: TabMeta[] = [
   },
   {
     id: 'personalize',
-    label: '个性化',
-    icon: Lucide.Paintbrush,
+    label: '通用设置',
+    icon: Lucide.SlidersHorizontal,
     group: '个人',
-    keywords: ['个性化', '偏好', '交互', '标签页', 'personalize', 'preference'],
+    keywords: ['通用设置', '偏好', '交互', '标签页', 'personalize', 'preference', 'general'],
   },
   {
     id: 'models',
@@ -429,7 +429,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div
       ref={rootRef}
-      className={`${styles.settingsPanel} ${styles.settingsCover}`}
+      className={`${styles.settingsPanel} ${styles.settingsCover}${safeActiveTab === 'appearance' ? ' ' + styles.translucentCover : ''}`}
       data-density="compact"
       role="dialog"
       aria-modal="true"
@@ -651,7 +651,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           )}
 
           {safeActiveTab === 'personalize' && (
-            <Suspense key="tab-personalize-suspense" fallback={<SettingsTabSuspenseFallback tabName="个性化" />}>
+            <Suspense key="tab-personalize-suspense" fallback={<SettingsTabSuspenseFallback tabName="通用设置" />}>
               <AppErrorBoundary key="tab-personalize" compact title={`${activeLabel}加载失败`}>
                 <SettingsPersonalizeTab onShowToast={onShowToast} />
               </AppErrorBoundary>

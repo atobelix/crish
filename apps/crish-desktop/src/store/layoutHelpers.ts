@@ -1177,6 +1177,11 @@ export function seedSessions(): {
       disk.folderOrder && disk.folderOrder.length > 0
         ? Array.from(new Set([...disk.folderOrder, ...fromSessions, GENERAL_FOLDER]))
         : [GENERAL_FOLDER, ...fromSessions.filter((f) => f !== GENERAL_FOLDER)];
+    // 强制触发一次磁盘镜像落盘，以便在切换 app identifier 时，旧数据能够自动安全落地到通用 ~/.crish/sessions 目录中
+    import('../api/sessionDiskMirror').then(({ mirrorSessionsToDisk }) => {
+      void mirrorSessionsToDisk(sessions, active, folders);
+    }).catch(() => undefined);
+
     return {
       sessions,
       activeSessionId: active,

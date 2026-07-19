@@ -35,6 +35,8 @@ import {
   resolveDisplayModelId,
   resolvePreferredModelSelection,
 } from '../api/providerProfiles';
+import { ChevronDown } from 'lucide-react';
+import { ModelBadgePickerMenu } from './ModelBadgePickerMenu';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatEmptyState } from './ChatEmptyState';
 import { Tooltip } from './settings/SettingsUI';
@@ -796,16 +798,35 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
                 : '服务商与模型（可在设置中更改）'
             }
           >
-            <div
-              className={`${styles.modelBadge} ${styles.readonly}`}
-            >
-              <span className={styles.modelText}>
-                {getModelDisplayName(
-                  resolveDisplayModelId(engineModel) ||
-                    engineModel ||
-                    (needsModelSetup ? '填写模型' : '无可用模型'),
-                )}
-              </span>
+              <div
+                ref={modelSelectorRef}
+                className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
+                onClick={() => setShowModelDropdown((v) => !v)}
+                style={{ cursor: 'pointer', position: 'relative' }}
+              >
+                <span
+                  className={styles.modelText}
+                  style={{
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    textAlign: 'left',
+                  }}
+                >
+                  {getModelDisplayName(
+                    resolveDisplayModelId(engineModel) ||
+                      engineModel ||
+                      (needsModelSetup ? '填写模型' : '无可用模型'),
+                  )}
+                </span>
+                <ChevronDown size={14} style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }} />
+              {showModelDropdown && (
+                <ModelBadgePickerMenu
+                  activeModel={engineModel}
+                  onClose={() => setShowModelDropdown(false)}
+                />
+              )}
             </div>
           </Tooltip>
         ) : null
@@ -867,7 +888,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
             onSetChatInput={setChatInput}
             onCreateSession={handleCreateSessionFromEmpty}
             onClearFilter={() => setLocalMsgFilter('')}
-            composer={emptyKind === 'session-empty' ? composerElement : undefined}
+            composer={emptyKind === 'session-empty' ? React.cloneElement(composerElement, { className: styles.emptyComposer }) : undefined}
           />
         ) : (
           <ChatMessageList

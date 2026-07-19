@@ -126,60 +126,7 @@
     animation: none;
   }
 }
-.statusStrip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  padding: 2px var(--card-header-pad-x, 8px);
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  background: var(--bg-primary);
-  flex-shrink: 0;
-  min-width: 0;
-  box-sizing: border-box;
-}
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-tertiary);
-}
-.statusDot.isOk {
-  background: var(--accent-green, #2dbe6c);
-}
-.statusDot.isLoading {
-  background: var(--text-tertiary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 25%, transparent);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .statusDot.isLoading {
-    animation: statusPulseKeyframe 1.2s ease-in-out infinite;
-  }
-}
-@keyframes statusPulseKeyframe {
-  50% {
-    opacity: 0.45;
-  }
-}
-.statusDot.isErr {
-  background: var(--accent-red, #ef4444);
-}
-.statusHost {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-xxs);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--text-secondary);
-}
-.statusHint {
-  flex-shrink: 0;
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-}
+
 .frame {
   flex: 1;
   min-height: 0;
@@ -420,10 +367,7 @@
   .urlForm {
     padding: 0 6px;
   }
-  .statusStrip {
-    padding-left: 6px;
-    padding-right: 6px;
-  }
+
   .histPanelFloat {
     left: 4px;
     right: 4px;

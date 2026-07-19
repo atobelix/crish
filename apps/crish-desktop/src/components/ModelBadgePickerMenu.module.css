@@ -1,0 +1,156 @@
+.mbMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 170px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, #000 8%, transparent),
+    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
+  padding: 4px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.mbEmpty {
+  padding: 12px 10px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.mbRowContainer {
+  position: relative;
+  width: 100%;
+}
+
+.mbRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s;
+  color: var(--text-primary);
+}
+
+.mbRow:hover,
+.mbRow.isHovered {
+  background: var(--bg-hover);
+}
+
+.mbRowText {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mbChevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.mbSubMenu {
+  position: absolute;
+  top: -4px;
+  right: calc(100% + 4px);
+  width: 190px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, #000 8%, transparent),
+    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
+  padding: 4px;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.mbSubRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s;
+  color: var(--text-secondary);
+}
+
+.mbSubRow:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.mbSubRow.isSelected {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.mbSubRowText {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mbCheck {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.mbDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 4px;
+}
+
+.mbManageBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.mbManageBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.mbManageIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}

@@ -621,3 +621,115 @@ export function gitStatusBadgeClass(code: GitFileStatusCode): string {
       return 'git-badge mod';
   }
 }
+
+/** 获取当前本地分支及分支列表 */
+export async function fetchGitBranches(cwd: string): Promise<{ current: string; list: string[] }> {
+  const r = await runLocalGit(cwd, 'branch --no-color', GIT_LOCAL_TIMEOUT_MS);
+  if (!r || !r.ok) {
+    return { current: 'main', list: ['main'] };
+  }
+  const lines = r.stdout.split('\n');
+  let current = '';
+  const list: string[] = [];
+  for (let line of lines) {
+    line = line.trim();
+    if (!line) continue;
+    if (line.startsWith('*')) {
+      const name = line.substring(1).trim();
+      current = name;
+      list.push(name);
+    } else {
+      list.push(line);
+    }
+  }
+  if (!current && list.length > 0) {
+    current = list[0];
+  }
+  return { current: current || 'main', list: list.length > 0 ? list : ['main'] };
+}
+
+/** 切换本地分支 */
+export async function switchGitBranch(cwd: string, branch: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await runLocalGit(cwd, `checkout "${branch.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  if (!r) return { ok: false, error: '本地 Git 切换分支失败（执行异常）' };
+  if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '本地 Git 切换分支失败' };
+  return { ok: true };
+}
+
+/** 提交变更（支持仅提交已暂存 changes） */
+export async function commitGitChanges(
+  cwd: string,
+  message: string,
+  onlyStaged = false,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!onlyStaged) {
+    // 暂存所有修改
+    const addRes = await runLocalGit(cwd, 'add -A', GIT_LOCAL_TIMEOUT_MS);
+    if (!addRes || !addRes.ok) {
+      return { ok: false, error: addRes?.stderr || '暂存变更失败 (git add 失败)' };
+    }
+  }
+  // 提交
+  const commitRes = await runLocalGit(cwd, `commit -m "${message.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  if (!commitRes || !commitRes.ok) {
+    return { ok: false, error: commitRes?.stderr || '创建提交失败 (git commit 失败)' };
+  }
+  return { ok: true };
+}
+
+/** 暂存单个文件 */
+export async function stageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await runLocalGit(cwd, `add -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  if (!res || !res.ok) {
+    return { ok: false, error: res?.stderr || '暂存文件失败' };
+  }
+  return { ok: true };
+}
+
+/** 取消暂存单个文件 */
+export async function unstageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await runLocalGit(cwd, `reset HEAD -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  if (!res || !res.ok) {
+    return { ok: false, error: res?.stderr || '取消暂存文件失败' };
+  }
+  return { ok: true };
+}
+
+/** 放弃单个文件修改 */
+export async function discardGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await runLocalGit(cwd, `checkout -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  if (!res || !res.ok) {
+    // If checkout fails (e.g. untracked file), try git clean -f to delete it
+    const resClean = await runLocalGit(cwd, `clean -f -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+    if (!resClean || !resClean.ok) {
+      return { ok: false, error: res?.stderr || resClean?.stderr || '放弃修改失败' };
+    }
+  }
+  return { ok: true };
+}
+
+/** 暂存所有变更 */
+export async function stageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await runLocalGit(cwd, 'add -A', GIT_LOCAL_TIMEOUT_MS);
+  if (!res || !res.ok) {
+    return { ok: false, error: res?.stderr || '暂存全部失败' };
+  }
+  return { ok: true };
+}
+
+/** 取消暂存所有变更 */
+export async function unstageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await runLocalGit(cwd, 'reset HEAD', GIT_LOCAL_TIMEOUT_MS);
+  if (!res || !res.ok) {
+    return { ok: false, error: res?.stderr || '取消暂存全部失败' };
+  }
+  return { ok: true };
+}
+
+/** 推送提交至远程仓库 */
+export async function pushGitChanges(cwd: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await runLocalGit(cwd, 'push', GIT_STATUS_TIMEOUT_MS);
+  if (!r) return { ok: false, error: '推送失败（执行异常）' };
+  if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '推送失败，可能存在冲突或网络连接问题' };
+  return { ok: true };
+}

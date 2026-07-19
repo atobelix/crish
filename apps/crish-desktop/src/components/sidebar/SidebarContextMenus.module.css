@@ -4,9 +4,9 @@
   padding: 6px;
   gap: 2px;
   border-radius: 12px;
-  background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-lg);
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-lg) !important;
   display: none;
   flex-direction: column;
   box-sizing: border-box;
@@ -36,8 +36,8 @@
 
 .contextMenuItem:hover,
 .contextMenuItem:focus-visible {
-  background-color: var(--control-soft-bg-hover);
-  color: var(--text-primary);
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
   outline: none;
 }
 
@@ -67,8 +67,8 @@
 .sortFilterMenu {
   min-width: 200px;
   padding: 8px;
-  background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
   display: none;
@@ -83,7 +83,7 @@
 
 .sortFilterMenuTitle {
   padding: 6px 10px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   font-weight: 500;
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
@@ -109,7 +109,7 @@
 
 .sortFilterRow:hover,
 .sortFilterRow.isOpen {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-hover);
 }
 
 .sortFilterRowLabel {
@@ -158,7 +158,7 @@
 }
 
 .sortFilterOption:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-hover);
 }
 
 .sortFilterOption.isOn {

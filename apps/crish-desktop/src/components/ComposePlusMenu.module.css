@@ -13,8 +13,8 @@
 }
 .main {
   width: 220px;
-  background: var(--bg-elevated, #fff);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow:
     0 4px 16px color-mix(in srgb, #000 8%, transparent),
