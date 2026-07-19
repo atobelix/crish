@@ -391,7 +391,7 @@ samp,
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width var(--transition-smooth);
+  transition: width var(--transition-spring);
   z-index: 10;
   position: relative;
   overflow: hidden;
@@ -2471,16 +2471,6 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   opacity: 0.7;
 }
 
-.drop-indicator {
-  position: fixed;
-  background-color: rgba(55, 65, 81, 0.15);
-  border: 2px solid var(--accent-color);
-  pointer-events: none;
-  z-index: 2000;
-  border-radius: 2px;
-  transition: opacity 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
-}
-
 /* [MIGRATED] .toast-stack and helper styles migrated to ToastStack.module.css */
 
 /* Collapsible Section Header chevron rotations */
@@ -2648,7 +2638,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .sidebar.collapsed {
   width: 0px !important;
   border-right: none;
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--transition-spring);
 }
 
 .sidebar.collapsed.temp-expanded {
@@ -2686,10 +2676,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 /* The main drop zone indicator (side/top/bottom strips) — positioned via JS */
 .drop-indicator {
   position: fixed;
+  background-color: rgba(55, 65, 81, 0.15);
+  border: 2px solid var(--accent-color);
   pointer-events: none;
   z-index: 9999;
-  border-radius: 6px;
-  transition: opacity 0.1s ease;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s var(--transition-smooth), background-color 0.15s var(--transition-smooth), border-color 0.15s var(--transition-smooth);
 }
 
 /* Tab insert position line — rendered via JS into document.body */
@@ -2697,7 +2689,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   position: fixed;
   width: 2px;
   border-radius: 2px;
-  background: #333333;
+  background: var(--text-primary);
   pointer-events: none;
   z-index: 10001;
   box-shadow: none;
@@ -2708,7 +2700,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   position: fixed;
   pointer-events: none;
   z-index: 10000;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -2717,65 +2709,14 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 /* Cursor override while dragging */
-body.dragging-card {
-  cursor: grabbing !important;
-}
+body.dragging-card,
 body.dragging-card * {
   cursor: grabbing !important;
 }
 
 /* Smooth window resize transition */
 .window-resizing .main-layout {
-  transition: width 0.35s cubic-bezier(0.1, 0.9, 0.2, 1) !important;
-}
-
-
-/* ── Drag & Drop Indicators ─────────────────────────────────────────────── */
-
-/* The main drop zone indicator (side/top/bottom strips) — positioned via JS */
-.drop-indicator {
-  position: fixed;
-  pointer-events: none;
-  z-index: 9999;
-  border-radius: 6px;
-  transition: opacity 0.1s ease;
-}
-
-/* Tab insert position line — rendered via JS into document.body */
-.tab-insert-line {
-  position: fixed;
-  width: 2px;
-  border-radius: 2px;
-  background: #333333;
-  pointer-events: none;
-  z-index: 10001;
-  box-shadow: none;
-}
-
-/* Drag preview overlay — cloned card following cursor */
-.drag-overlay-preview-card {
-  position: fixed;
-  pointer-events: none;
-  z-index: 10000;
-  border-radius: 0;
-  overflow: hidden;
-}
-
-.drag-overlay-preview-card * {
-  pointer-events: none !important;
-}
-
-/* Cursor override while dragging */
-body.dragging-card {
-  cursor: grabbing !important;
-}
-body.dragging-card * {
-  cursor: grabbing !important;
-}
-
-/* Smooth window resize transition */
-.window-resizing .main-layout {
-  transition: width 0.35s cubic-bezier(0.1, 0.9, 0.2, 1) !important;
+  transition: width 0.35s var(--transition-smooth) !important;
 }
 
 /* Hide the source element in the list during drag */

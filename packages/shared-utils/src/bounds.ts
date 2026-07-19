@@ -1,0 +1,48 @@
+export const MAX_SESSIONS = 200;
+export const MAX_MESSAGES_PER_SESSION = 500;
+export const MAX_AGENTS_PER_SESSION = 40;
+export const MAX_MESSAGES_PER_AGENT = 2000;
+export const MAX_TERMINAL_LINES_PER_SESSION = 500;
+export const MAX_TERMINAL_SESSIONS = 50;
+export const MAX_FOLDERS = 20;
+export const MAX_SESSION_TITLE_LENGTH = 200;
+
+export const MAX_WORKSPACES = 10;
+export const MAX_DIFF_FILES = 50;
+export const MAX_DIFF_CHANGES_PER_FILE = 10000;
+
+export const MAX_WS_MESSAGE_BYTES = 4 * 1024 * 1024;
+export const MAX_CONCURRENT_RUNS = 50;
+export const MAX_CONCURRENT_PROVIDER_REQUESTS = 16;
+export const MAX_CONCURRENT_PROVIDER_PER_ROUTE = 3;
+export const MAX_CLIENTS = 1000;
+export const MAX_PENDING_WS_MESSAGES = 200;
+export const MAX_RECONNECT_ATTEMPTS = 20;
+
+export const MAX_ORCHESTRATOR_EVENTS = 10000;
+export const MAX_ORCHESTRATOR_SESSIONS = 200;
+export const MAX_ORCHESTRATOR_RUNS = 2000;
+export const MAX_ORCHESTRATOR_PENDING_INPUTS = 200;
+export const MAX_ORCHESTRATOR_DIAGNOSTICS = 100;
+
+export const MARKDOWN_CACHE_ENTRIES = 500;
+export const MARKDOWN_CACHE_BUDGET_BYTES = 16 * 1024 * 1024;
+export const HIGHLIGHT_CACHE_ENTRIES = 200;
+export const HIGHLIGHT_CACHE_BUDGET_BYTES = 8 * 1024 * 1024;
+export const DIFF_CACHE_ENTRIES = 50;
+export const DIFF_CACHE_BUDGET_BYTES = 4 * 1024 * 1024;
+export const ENCODING_CACHE_ENTRIES = 100;
+export const ENCODING_CACHE_BUDGET_BYTES = 1 * 1024 * 1024;
+export const URL_CACHE_ENTRIES = 500;
+export const URL_CACHE_BUDGET_BYTES = 1 * 1024 * 1024;
+
+export const IN_MEMORY_SESSION_STORE_CAPACITY = 500;
+export const IN_MEMORY_MEMORY_ENTRIES = 500;
+export const STEER_INPUT_CAPACITY = 1000;
+
+export const TOTAL_MEMORY_BUDGET = 200 * 1024 * 1024;
+
+/** Session store 分支数上限 */
+export const MAX_BRANCHES = 50;
+/** 每个分支的分片数上限 */
+export const MAX_SHARDS_PER_BRANCH = 100;

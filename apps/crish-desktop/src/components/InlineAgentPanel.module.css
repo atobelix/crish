@@ -52,20 +52,58 @@
 .inlineAgentHeadActions {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 2px 4px 2px 0;
+  padding: 2px 6px;
+  opacity: 0; /* Hidden by default */
+  transition: opacity var(--transition-fast, 150ms) ease;
 }
 
-.inlineAgentHeadActions :global(.agent-card-btn) {
-  width: 22px;
-  height: 22px;
+/* Hover reveal actions on row hover */
+.inlineAgentHeadRow:hover .inlineAgentHeadActions {
+  opacity: 1;
+}
+
+/* Hover reveal chevron on head row hover */
+.inlineAgentHead :global(.tool-row-chevron) {
+  opacity: 0; /* Hidden by default */
+  transition: opacity var(--transition-fast, 150ms) ease, transform 0.15s ease;
+}
+
+.inlineAgentHeadRow:hover .inlineAgentHead :global(.tool-row-chevron) {
+  opacity: 1;
+}
+
+/* Beautiful action buttons in subagent head row */
+.agentHeadBtn {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms) ease;
+  padding: 0;
 }
 
-.inlineAgentHeadActions :global(.agent-card-btn.is-active) {
-  background: var(--bg-active);
+.agentHeadBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.agentHeadBtn.isActive {
+  background: var(--bg-active);
+  color: var(--accent-blue, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-blue, var(--border-color)) 15%, transparent);
+}
+
+.agentHeadBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .inlineAgentStopBtn:disabled {
@@ -259,3 +297,101 @@
   padding: 4px 8px;
   font-size: var(--font-size-xs);
 }
+
+/* Strips border, outline, background, and shadows of the composer when rendered inline */
+.noOutlineComposer {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
+}
+
+.noOutlineComposer :global(.input-container),
+.noOutlineComposer :global(.input-container--dense) {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
+}
+
+/* Positions subagent user prompts on the left in a subtle speech container */
+.inlineAgentMsg:global(.inline-agent-msg--user) {
+  display: flex;
+  justify-content: flex-start;
+  margin: 6px 0 10px;
+}
+
+.inlineAgentMsg:global(.inline-agent-msg--user) :global(.agent-prompt-bubble) {
+  display: inline-block;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  padding: 6px 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  max-width: 85%;
+  text-align: left;
+  line-height: var(--line-height-body, 1.5);
+}
+
+/* Premium Thinking Fold Styles matching main agent details */
+.thinkingFold {
+  margin: 4px 0 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  max-width: 100%;
+}
+
+.thinkingFoldSum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  user-select: none;
+  padding: 0;
+  min-height: 20px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.thinkingFoldSum::-webkit-details-marker {
+  display: none;
+}
+
+.thinkingChevron {
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+
+.thinkingChevron.isOpen {
+  transform: rotate(90deg);
+}
+
+.thinkingFoldLabel {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+.thinkingFoldBody {
+  margin: 4px 0 0;
+  padding: 0 0 0 18px; /* Indent under chevron */
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.9;
+  user-select: text;
+  -webkit-user-select: text;
+}
+

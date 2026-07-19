@@ -1,0 +1,1504 @@
+
+
+================================================================================
+  Crish UI 系统性全面改进方案
+  版本: v1.0
+  基于实际代码验证状态生成（不含任何 .md 文档引用）
+================================================================================
+
+目  录
+──────────────────────────────────────────────────────────────────────────────
+零、 已完成改动的验证报告（对照AI实施计划的6个章节）
+一、 CSS 工程基础重构（Phase 1 — 逻辑顺序：所有上层改动的前置依赖）
+二、 设计令牌系统全面规范化（Phase 2 — 逻辑顺序：依赖 Phase 1 完成）
+三、 Settings JSON Schema 渲染器扩展与设置页迁移（Phase 3）
+四、 子智能体面板视觉精细化（Phase 4）
+五、 弹窗/菜单原生 CSS 过渡动画系统（Phase 5）
+六、 微交互与视觉品质提升（Phase 6）
+七、 实施顺序的总依赖关系图
+八、 附录：完整改动文件清单
+
+================================================================================
+
+零、已完成改动的验证报告（对照AI实施计划的6个章节）
+──────────────────────────────────────────────────────────────────────────────
+
+  本报告基于对以下文件的完整逐行阅读验证：
+  - tokens.css (434行)
+  - settings.css (7258行)
+  - shell.css (3960行)
+  - ChatToolCallBlock.tsx (601行) + .module.css (559行)
+  - InlineAgentPanel.tsx (753行) + .module.css (397行)
+  - ChatComposer.tsx (657行)
+  - ChatMessageRow.module.css (359行)
+  - SettingsSchemaRenderer.tsx (30+行)
+  - SettingsPersonalizeTab.tsx (213行)
+  - SettingsAppearanceTab.tsx
+
+  【章1】JSON Schema 设置系统
+  ──────────────────────────────────
+  SettingsSchemaRenderer.tsx       已存在（pre-existed），非本次创建
+  SettingsPersonalizeTab.tsx       已100%使用 SchemaRenderer（pre-existed）
+  SettingsAppearanceTab.tsx        未迁移——仍使用手动 JSX，0% SchemaRenderer 化
+  > 结论：计划描述的"创建"和"重写 PersonalizeTab"是冗余描述。实际待做：
+    AppearanceTab 迁移 + SchemaRenderer 类型系统扩展。
+
+  【章2】排版尺度与圆角
+  ──────────────────────────────────
+  --font-size-md == --font-size-base 的重复：
+    :root块: base=13px, md=14px → 已正确分离（pre-existed）
+    [data-ui-size="small"]块: base=13px, md=13px → 仍重复
+    [data-ui-size="large"]块: base=15px, md=15px → 仍重复
+  > 结论：计划的诊断（"md和base都等于14px"）与代码不符。实际问题存在于
+    两个密度区块而非根区块。计划的修复方案（修改根区块）方向错误。
+    根区块不需要改，需要改的是 small 和 large 密度区块。
+
+  圆角"防套圈"数学嵌套    未被实现——无新的半径令牌添加
+  > 结论：未完成。
+
+  【章3】工具调用块弱化
+  ──────────────────────────────────
+  .toolStack 样式（ChatToolCallBlock.module.css:2-14）：
+    background: transparent; border: none; box-shadow: none;
+    已完全透明，无灰底包裹。
+  > 结论：用户需求已满足（可能已预先存在或被其他改动覆盖）。
+    当前状态：多个工具调用在一起时无灰底背景块包裹，已弱化。
+
+  【章4】子智能体交互 — 部分完成，存在问题
+  ──────────────────────────────────
+  已完成：
+    - Hover reveal（Chevron + 操作按钮）：opacity 0 → 1, 150ms ease 过渡
+    - agentHeadBtn 基本样式定义（24x24, 透明底, hover 变色）
+
+  未完成/存在问题：
+    - agent-card-btn 孤儿类名未修复（InlineAgentPanel.tsx:536）
+      仍使用裸全局类 `agent-card-btn agent-card-btn--danger`
+      该类名在整个项目中无 CSS 定义（仅 --danger 修饰符有定义在 chat.css:404）
+
+    - 侧边栏冗余声明未去除：
+      * sideOpenTitle: "已在侧栏打开（点击重聚焦，不覆盖主对话）"
+      * sideOpenTitle: "在侧栏打开（不覆盖主对话）"
+      * sideOpenAria: 附带"已在侧栏打开" / "在侧栏打开子智能体"
+      * regionAria: 条件附加"，已在侧栏"
+      * 工具栏文字按钮："在侧栏打开"（line 574）
+      * 空状态按钮："在侧栏打开完整视图"（line 620）
+      用户要求：只保留侧边栏图标一个标识，去掉以上所有重复文本
+
+    - 侧边栏图标样式问题：agentHeadBtn 使用 1px solid transparent
+      边框，仅 .isActive 时才可见边框颜色。非活跃状态下完全透明，
+      视觉上不可见。需要改进。
+
+    - 子智能体工作区有 dialog 边框：
+      .inlineAgent { border: var(--hairline-width) solid color-mix(...) 40%; border-radius: 8px; }
+      虽然只有 40% 透明度的 hairline，但仍存在边框。用户要求完全不添加对话框。
+
+  【章5】内联子智能体 Composer 与聊天流 — 部分完成，存在问题
+  ──────────────────────────────────
+  已完成：
+    - noOutlineComposer 类存在（InlineAgentPanel.module.css:302-315）
+    - ComposerField 接受 className 并应用到容器
+    - 用户消息左对齐（flex-start）
+
+  未完成/存在问题：
+    - agent-prompt-bubble 仍在显示（InlineAgentPanel.tsx:629）
+      CSS 有样式定义（:global(.agent-prompt-bubble), CSS:324-335）
+      用户要求：class="agent-prompt-bubble" 不用显示
+
+    - 思考内容与主界面不一致：
+      SubagentThinkingFold（InlineAgentPanel.tsx:46-68）使用原生
+      <details>/<summary> 元素 + 纯文本渲染
+      主聊天的 thinkingFold 使用 CSS 类 .thinkingFold/.thinkingFoldSum/
+      .thinkingChevron/.thinkingFoldBody（ChatMessageRow.module.css:286-359）
+      CSS 类已在两个文件中分别定义但样式不完全一致。
+      用户要求：子智能体的思考内容应该和主界面一模一样
+
+  【章6】原生 CSS 过渡动画
+  ──────────────────────────────────
+  @starting-style          0 处出现 —— 完全未实现
+  transition-behavior      0 处出现 —— 完全未实现
+  allow-discrete           0 处出现 —— 完全未实现
+  > 结论：完全未做。统一浮动菜单系统（shell.css:3670-3901）有 97 个 !important，
+    目前靠 React 条件渲染控制显示/隐藏，无任何 CSS 过渡动效。
+
+  ============================================================
+  技术债务全貌（计划完全未覆盖）
+  ============================================================
+  !important 总计        ~588 处（shell.css 272 + settings.css 62 + 各组件 ~254）
+  版本标记段            15 个（polish-v1~v5 + fresh-v2 + v3 + FB）
+  重复 CSS 选择器块      127 处（.models-summary 被定义 4 次等）
+  巨型单体 CSS 文件      2 个（settings.css 188KB / shell.css 109KB）
+  CSS Module 混用策略     组件同时使用 .module.css 和全局类名
+  裸 hex 颜色值          6 处（accent-orange/blue/violet 及其 -light 变体）
+  字阶重复值             2 处密度区块中的 --font-size-md == --font-size-base
+
+
+================================================================================
+一、CSS 工程基础重构（Phase 1）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：Phase 1 是所有后续改动的物理前置条件。在巨型单体文件、
+  大量 !important 标记和重复选择器存在的情况下，任何样式新增或修改
+  都会进一步恶化特异性战争和选择器冲突。必须先做文件拆分和清理。
+
+  ============================================================
+  1.1 settings.css 文件拆分（188KB → 模块化）
+  ============================================================
+
+  当前状态：
+    C:\Software\conex\apps\crish-desktop\src\styles\settings.css
+    大小：187,959 bytes
+    行数：~7258 行
+    版本标记段：15 个（v3, fresh-v2, polish-v3~v5, polish-v1 x8）
+
+  拆分方案 —— 按功能域拆分为以下 7 个文件：
+
+    styles/settings/
+      settings-base.css          (~800行)  按钮系统、表单字段、导航侧栏、
+                                           列表行、开关、分段控制、芯片、对话框
+      settings-models.css        (~900行)  模型管理：模型列表/连接/密钥/余额
+      settings-plugins.css       (~500行)  插件管理：MCP 配置、技能管理
+      settings-usage.css         (~350行)  用量统计：图表、每日统计、比率条
+      settings-extensions.css    (~450行)  扩展中心：卡片网格、安装/卸载
+      settings-advanced.css      (~400行)  高级设置：规则/日程/安全/快捷方式
+      settings-floating-menu.css (~250行)  统一浮动菜单系统（从 shell.css 移入）
+
+  导入方式：
+    在 index.css 中添加：
+      @import './settings/settings-base.css';
+      @import './settings/settings-models.css';
+      @import './settings/settings-plugins.css';
+      @import './settings/settings-usage.css';
+      @import './settings/settings-extensions.css';
+      @import './settings/settings-advanced.css';
+      @import './settings/settings-floating-menu.css';
+    替换原来的单文件：
+      /* @import './settings.css'; */                    ← 删除此行
+
+  执行方式：
+    1. 创建目录 styles/settings/
+    2. 将原始 settings.css 按注释段边界（版本标记行）切分为独立文件
+    3. 每个文件开头添加统一的 @layer 声明：
+         @layer settings-base { ... }
+         @layer settings-models { ... }
+       (CSS Cascade Layers 确保层叠顺序可预测，无需 !important 对抗)
+    4. 更新 index.css 的导入列表
+    5. 删除原始 settings.css
+    6. 运行 tsc + lint 验证
+
+  ============================================================
+  1.2 shell.css 文件拆分（109KB → 模块化）
+  ============================================================
+
+  当前状态：
+    C:\Software\conex\apps\crish-desktop\src\styles\shell.css
+    大小：109,495 bytes
+    行数：~3960 行
+    包含：全局重置、应用壳布局、侧边栏、工作区、标签页、
+          下拉菜单、上下文菜单、拖放、滚动条、窗口控件、
+          统一浮动菜单（3670-3901行）
+
+  拆分方案 —— 按功能域拆分为以下 6 个文件：
+
+    styles/shell/
+      shell-reset.css           (~150行)  CSS 重置、:root 基础
+      shell-layout.css          (~800行)  应用壳、头部、侧边栏、工作区、窗口控件
+      shell-sidebar.css         (~700行)  侧边栏：导航项、会话列表、文件夹、resizer
+      shell-workspace.css       (~600行)  工作区：列、卡片、标签页、分割器、拖放
+      shell-menus.css           (~500行)  下拉菜单、上下文菜单、统一浮动菜单系统
+      shell-scrollbar.css       (~150行)  滚动条样式（全局覆盖）
+      shell-dragdrop.css        (~200行)  拖放指示器与预览卡片
+      shell-polish.css          (~400行)  末尾追加的各类"polish"修正（需先去重合并）
+
+  导入方式：
+    在 index.css 中添加：
+      @import './shell/shell-reset.css';
+      @import './shell/shell-layout.css';
+      @import './shell/shell-sidebar.css';
+      @import './shell/shell-workspace.css';
+      @import './shell/shell-menus.css';
+      @import './shell/shell-scrollbar.css';
+      @import './shell/shell-dragdrop.css';
+      @import './shell/shell-polish.css';  // 待后续重构消除
+
+  注意：shell-menus.css 需要单独使用 @layer shell-menus 包裹，
+  确保统一浮动菜单系统的 97 个 !important 在此层内隔离。
+
+  ============================================================
+  1.3 重复 CSS 选择器块去重（settings.css 中 127+ 处）
+  ============================================================
+
+  最严重的重复（按出现次数排序）：
+
+  6 次重复：
+    .models-tab         2490, 3625, 4240, 4558, 4865, 5154
+
+  4 次重复：
+    .models-summary      1661, 3630, 4392, 4619
+    .models-summary-row  1671, 3640, 4398, 4624
+    .models-action-hint  1708, 3684, 4423, 4639
+    .models-conn         1724, 3729, 4337, 4610
+    .models-main-row     1779, 3773, 4441, 4647
+    .models-btn          3185, 4533, 4838 (3次但定义跨段)
+
+  3 次重复：
+    .sched-settings-form        442, 3422, 6120
+    .sched-settings-row-name    512, 3500, 6178
+    .sched-settings-row-schedule 522, 3526, 6186
+    .settings-field-input       77, 3190, 3389
+    .models-split               4254, 4583, 6648
+    .models-rail                4262, 4590, 6658, 6677
+
+  清理方法：
+    1. 在拆分完成后的 settings-models.css 中，将 6 处 .models-tab
+       定义合并为一个完整块
+    2. 将 4 处 .models-summary 合并。最终版本"polish-v4"（行4555+）
+       的设计意图是"透明背景、无边框的干净分区"，
+       应将此作为最终合并版本，删除前3个旧版定义
+    3. 将 4 处 .models-main-row 合并。规则是：第1处（1779）
+       有填充背景，第2处（3773）改为透明 + 细边框。
+       合并为最终版本（3773），删除 1779 的旧版
+    4. 同理处理所有 3 次重复的选择器
+
+  执行原则：
+    保留最新版本标记段（polish-v5 > polish-v4 > fresh-v2 > v3）的样式定义，
+    删除旧版块中已被覆盖的重复选择器。每做完一个文件，运行 stylelint 验证。
+
+  ============================================================
+  1.4 版本标记段合并与清理
+  ============================================================
+
+  当前 settings.css 中的 15 个版本标记：
+
+    行347    Settings Design System v3
+    行2489   Models settings tab v3
+    行2562   Skills settings tab v3
+    行3025   Settings polish FB
+    行3624   models-tab fresh-v2
+    行4237   models-tab polish-v3
+    行4555   models-tab polish-v4
+    行4862   models-tab polish-v5-toggle
+    行5189   polish-v1 (shortcuts)
+    行5349   polish-v1 (personalize)
+    行5453   polish-v1 (security)
+    行5615   polish-v1 (usage)
+    行5839   polish-v1 (rules)
+    行6020   polish-v1 (schedule)
+    行6207   polish-v1 (extensions)
+
+  处理方式：
+    这些版本标记段本质上反映了"在文件末尾追加修正规则"的开发模式。
+    在文件拆分完成后，每个功能域文件内的版本段应按以下方式处理：
+
+    1. 识别"存活规则"（latest version），即 polish-v5 > polish-v4 >
+       fresh-v2 > v3 的优先级链中，最高版本段里仍在使用的属性
+    2. 识别"死亡规则"（已被更高版本完全覆盖的旧版选择器），如
+       .models-summary 的 1661 行版本（有背景填充）已被 3630/
+       4392/4619 覆盖为透明——这些旧定义直接删除
+    3. 移除所有版本标记注释行（如 /* models-tab polish-v4 */）
+    4. 对存活规则重新组织：按选择器分组而非按"版本+追加时间"分组
+
+  示例——.models-summary 的合并：
+
+    [删除] 行1661-1707: v3 原始定义（有背景填充 + 边框）
+    [删除] 行3630-3683: fresh-v2 覆盖（开始变透明）
+    [保留+重组] 行4392-4422: polish-v4（透明、无边框、干净分区）
+    [合并到保留] 行4619-4638: 额外适应会话使用的 transparent 定义
+    [结果] 单一定义块，无版本注释，完整覆盖所有场景
+
+  ============================================================
+  1.5 !important 系统性消除计划
+  ============================================================
+
+  当前总计 ~588 处（stylelint 已配置 declaration-no-important: true 阻止新增）
+
+  按文件分布（从高到低）：
+
+    shell.css                   272  → 拆分后分布在 8 个 shell 子文件中
+    settings.css                 62  → 拆分后分布在 7 个 settings 子文件中
+    ChatCard.module.css          32
+    theme-dark.css               27
+    SidebarSessionList.module.css 18
+    SettingsAppearanceTab.module.css 17
+    DiffCard.module.css          14
+    FilesCard.module.css         12
+    ChatComposer.module.css      10
+    chat.css                     10
+    其余 ~20 个文件              <10 per file
+
+  消除策略（按 !important 的必要性分类）：
+
+    类别A —— CSS 特异性战争：由于全局类名和 CSS Module 混合使用导致
+           的选择器优先级冲突，这才是绝大多数 !important 的根源。
+      解决方案：在文件拆分后，利用 @layer 重新建立层叠优先级。
+        例：@layer reset, layout, components, overrides;
+        将 polish 修正放入 overrides 层，无需 !important 即可自然覆盖。
+
+    类别B —— 第三方/浏览器 UA 样式覆盖：例如 autofill 背景色、
+           WebKit scrollbar 样式等。
+      解决方案：保留 !important（这是它们的设计用途），或使用
+            更高的特异性选择器（如 html[data-theme] 前缀）。
+
+    类别C —— 内联样式对抗：JavaScript 动态设置的 style 属性。
+      解决方案：重构为 CSS 自定义属性驱动，在 JS 中设置 --var 而非 style。
+
+    类别D —— 误用：完全可以通过层级或选择器特异性解决的。
+      解决方案：直接移除 !important。
+
+  执行计划（分 3 轮进行）：
+    第1轮：拆分后的 shell-*.css 和 settings-*.css 文件
+           采用 @layer 消除类别A/D 的 !important
+           目标：从 334 处减至 50 处以下（仅保留类别B）
+    第2轮：组件 CSS Module 文件（ChatCard 32 处、Sidebar 18 处等）
+           采用选择器重构消除类别A/D 的 !important
+           目标：从 ~254 处减至 80 处以下
+    第3轮：theme-dark.css 的 27 处
+           合并到各组件文件的 @media (prefers-color-scheme: dark)
+           或 [data-theme="dark"] 选择器中，消除硬覆盖
+           目标：减至 10 处以下（仅保留必要的强制覆盖）
+
+  注意：
+    .stylelintrc.cjs 已配置 `declaration-no-important: true` 阻止新增。
+    第1-3轮每次改动后运行 stylelint 验证。
+
+  ============================================================
+  1.6 CSS Module 与全局类名混用策略规范化
+  ============================================================
+
+  当前问题:
+    大量组件同时使用 `styles.className`（CSS Module 局部作用域）
+    和 `"global-class-name"`（全局类名，如 "agent-card-btn"）。
+    这种混用导致：
+    - 无法从代码确定选择器的实际特异性
+    - 全局类名污染导致意料之外的样式覆盖
+    - 孤儿类名（如 agent-card-btn）在代码审查中难以发现
+
+  规范化方案：
+    1. 全局 CSS 类名仅用于以下用途：
+       - 布局结构（.sidebar, .workspace-card, .card-header 等）
+       - 主题/密度变体（html[data-theme], html[data-ui-size]）
+       - 工具类（.tool-row, .tool-stack 等跨组件共享的样式）
+    2. 所有组件特有的视觉样式，统一迁移到 .module.css 文件中
+    3. 对于需要跨组件共享的样式，定义在 tokens.css 中作为 CSS 自定义
+       属性（如 --tool-row-height），由组件 CSS Module 引用
+    4. 所有全局类名必须在 styles/ 目录下某文件中明确定义，
+       不允许组件内使用未定义在全局样式文件中的裸类名
+
+
+================================================================================
+二、设计令牌系统全面规范化（Phase 2）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：Phase 1 完成后，CSS 文件已模块化，!important 已大幅消减。
+  Phase 2 在此基础上重整整个设计令牌体系，确保所有后续 UI 改动都
+  从统一的令牌源取值。
+
+  ============================================================
+  2.1 修复密度区块中的字阶重复值
+  ============================================================
+
+  当前状态（tokens.css 确证）：
+
+    :root / html[data-theme="default|light"] (行122-123):
+      --font-size-base: calc(13px + var(--font-size-adjust));   ← 正确
+      --font-size-md:   calc(14px + var(--font-size-adjust));   ← 正确
+
+    [data-ui-size="small"] (行320-321):
+      --font-size-base: calc(13px + var(--font-size-adjust, 0px));  ← 13px
+      --font-size-md:   calc(13px + var(--font-size-adjust, 0px));  ← 13px ❌重复
+
+    [data-ui-size="large"] (行383-384):
+      --font-size-base: calc(15px + var(--font-size-adjust, 0px));  ← 15px
+      --font-size-md:   calc(15px + var(--font-size-adjust, 0px));  ← 15px ❌重复
+
+  修复方案：
+    在 [data-ui-size="small"] 块中：
+      --font-size-md: calc(12px + var(--font-size-adjust, 0px));
+      （因为 small 模式的整体字阶应等比缩小，base=13px → md=12px 符合等比逻辑）
+
+    在 [data-ui-size="large"] 块中：
+      --font-size-md: calc(16px + var(--font-size-adjust, 0px));
+      （large 模式的 base=15px → md=16px 保持应有的级差）
+
+  完整验证后的字阶表（所有 3 个密度块统一修正）：
+
+    令牌名             small         default       large
+    ─────────────────────────────────────────────────────
+    --font-size-xxs  calc(9px+adj)  calc(10px+adj) calc(11px+adj)
+    --font-size-xs   calc(10px+adj) calc(11px+adj) calc(12px+adj)
+    --font-size-sm   calc(11px+adj) calc(12px+adj) calc(13px+adj)
+    --font-size-base calc(12px+adj) calc(13px+adj) calc(14px+adj)
+    --font-size-md   calc(13px+adj) calc(14px+adj) calc(15px+adj)
+    --font-size-lg   calc(15px+adj) calc(16px+adj) calc(18px+adj)
+    --font-size-xl   calc(17px+adj) calc(18px+adj) calc(20px+adj)
+
+  注意：当前 root 块中的 --font-size-base 值已经是 13px，
+        --font-size-md 已经是 14px（正确状态），只需修改
+        [data-ui-size="small"] 和 [data-ui-size="large"] 两个密度块。
+
+  ============================================================
+  2.2 裸 hex 颜色值转为 HSL + color-mix 体系统一
+  ============================================================
+
+  当前 tokens.css 中 6 处裸 hex 色值：
+
+    --accent-orange:       #f59e0b          → hsl(38, 92%, 50%)
+    --accent-orange-light: #fffbeb          → hsl(38, 100%, 96%)
+    --accent-blue:         #3b82f6          → hsl(217, 91%, 60%)
+    --accent-blue-light:   #eff6ff          → hsl(217, 70%, 96%)
+    --accent-violet:       #8b5cf6          → hsl(258, 90%, 66%)
+    --accent-violet-light: #f5f3ff          → hsl(258, 40%, 97%)
+
+  转换理由：
+    1. HSL 格式与项目中其他颜色令牌（如 --bg-primary、
+       --text-primary 等）保持一致
+    2. 使用 HSL 后，accent hover/soft 变体可通过 color-mix()
+       自动生成，无需手动指定 --accent-*-hover/soft
+       例：--accent-blue-hover: color-mix(in srgb, var(--accent-blue) 90%, black);
+           --accent-blue-soft: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+
+  执行：
+    修改 tokens.css 中对应行（行51-63），将 6 个 hex 值替换为 hsl() 格式。
+    深色主题块中的对应值也需同步转换。
+    此改动无视觉差异——HSL 值与原始 hex 在 sRGB 色域下等效。
+
+  ============================================================
+  2.3 建立静态圆角嵌套系统
+  ============================================================
+
+  当前 tokens.css 中的圆角令牌（行163-166）：
+    --radius-sm: 8px;     ← 偏大，8px 通常用于中等卡片
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+
+  问题：
+    1. 缺少小元素圆角（chip、开关滑块等需要 4px 级别）
+    2. 缺少超大圆角（search bar、右键菜单等需要 28px+ 级别）
+    3. --radius-sm=8px 对 sidebar 列表项 hover 来说偏大
+
+  修复后的完整圆角体系（新增 3 个令牌 + 调整现有值）：
+
+    --radius-xs:  3px;    ← 新增：内联标签、小 Chip、开关滑块
+    --radius-sm:  5px;    ← 改为 5px：普通按钮、文件列表 hover 项
+    --radius-md:  7px;    ← 改为 7px：消息气泡、代码块面板
+    --radius-lg:  9px;    ← 改为 9px：工作区面板容器
+    --radius-xl:  11px;   ← 改为 11px：输入容器、右键菜单
+    --radius-2xl: 14px;   ← 新增：模态对话框、大型弹出面板
+    --radius-full: 999px; ← 新增：全圆角 pill 组件（search bar、tooltip）
+
+  嵌套公式（静态值，不依赖 CSS calc()）：
+    确保内部元素的圆角 = 外部容器圆角 - 间隙值（--space-xs = 4px），
+    避免"圆角套直角"的视觉 Bug。
+
+    例：radius-lg 容器(9px) → 内部卡片 radius-sm(5px) = 9 - 4 ✓
+        radius-xl 容器(11px) → 内部元素 radius-md(7px) = 11 - 4 ✓
+
+  所有密度块需同步定义对应值（small 密度各减 1px，large 密度各加 1px）。
+
+  ============================================================
+  2.4 补充语义色彩令牌
+  ============================================================
+
+  当前仅有 accent 色但缺少语义映射，需新增：
+
+    --color-success:        var(--accent-green);       ← 成功状态
+    --color-success-bg:     var(--accent-green-light);
+    --color-success-border: var(--accent-green-muted);
+    --color-warning:        var(--accent-orange);      ← 警告状态
+    --color-warning-bg:     var(--accent-orange-light);
+    --color-error:          var(--accent-red);         ← 错误/危险状态
+    --color-error-bg:       var(--accent-red-light);
+    --color-info:           var(--accent-blue);        ← 信息提示状态
+    --color-info-bg:        var(--accent-blue-light);
+
+  用途：
+    在全项目中使用 --color-error 替代裸的 --accent-red，
+    用 --color-success 替代裸的 --accent-green。
+    这样未来要统一调整"报错色"只需要改一个映射，不需要搜索全项目。
+
+  ============================================================
+  2.5 动效令牌扩展
+  ============================================================
+
+  当前 tokens.css 中仅有 3 条过渡曲线（行277-288）：
+
+    --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  需新增：
+
+    /* 微交互 —— 按钮 hover、图标变色等 */
+    --transition-micro: 100ms ease-out;
+
+    /* 弹性入场 —— 面板展开、模态弹出等需要物理感的大动作 */
+    --transition-enter: 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    /* 弹性出场 —— 关闭/折叠动作，比入场快一点 */
+    --transition-exit:  250ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* 位移专用 —— 仅用于 transform 过渡，不触发 layout/paint */
+    --transition-slide: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* 应用方式：transition: transform var(--transition-slide); */
+
+
+================================================================================
+三、Settings JSON Schema 渲染器扩展与设置页迁移（Phase 3）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：Phase 1-2 完成后，CSS 基础设施干净、令牌体系完整。
+  Phase 3 在此基础上扩展 SchemaRenderer 并完成所有设置页迁移。
+
+  ============================================================
+  3.1 扩展 SettingsSchemaRenderer 支持新字段类型
+  ============================================================
+
+  当前状态：
+    文件：C:\Software\conex\apps\crish-desktop\src\components\settings\SettingsSchemaRenderer.tsx
+    已有类型：boolean, select, string
+    已有子组件：SettingsSection, SettingsCard, SettingsRow
+
+  需新增的字段类型：
+
+    A. 'range' —— 范围滑块（用于亮度、温度、字体大小等）
+       SchemaProperty 扩展：
+         type: 'range';
+         min?: number;
+         max?: number;
+         step?: number;
+         unit?: string;             // 显示单位，如 '%', 'px'
+         showValue?: boolean;       // 是否在滑块后显示数值
+       UI 实现：<input type="range"> + 当前值显示
+       引用令牌：--control-height, --range-track-bg, --range-thumb-bg
+
+    B. 'color' —— 颜色选择器（用于自定义主题色）
+       SchemaProperty 扩展：
+         type: 'color';
+         defaultColor?: string;     // 默认颜色值
+       UI 实现：原生 <input type="color"> + 复选色块预览
+       引用令牌：--color-swatch-size
+
+    C. 'preset-grid' —— 皮肤/主题预设网格
+       SchemaProperty 扩展：
+         type: 'preset-grid';
+         presets: { id: string; name: string; preview: string }[];
+       UI 实现：CSS Grid 排列预设色块，选中项有勾选标识
+       引用令牌：--preset-card-size, --preset-card-radius
+
+    D. 'font-selector' —— 字体选择器
+       SchemaProperty 扩展：
+         type: 'font-selector';
+         category: 'sans' | 'mono'; // 字体类别
+         previewText?: string;
+       UI 实现：下拉选择 + 字体名称预览（使用实际字体渲染）
+       引用令牌：--font-preview-size
+
+    E. 'toggle-group' —— 分段切换组（用于 theme/density 等）
+       SchemaProperty 扩展：
+         type: 'toggle-group';
+         options: { value: string; label: string; icon?: string }[];
+       UI 实现：水平分段按钮组，参考现有的 .ui-segment 样式
+
+  实现注意事项：
+    - 所有新类型都复用 SettingsSection/SettingsCard/SettingsRow 包装
+    - 新增的 CSS 样式使用 .module.css 局部作用域，不写入全局文件
+    - 每个新类型都是一个独立的子渲染函数（renderRangeField、
+      renderColorField 等），便于测试和维护
+    - SettingsSchemaRendererProps 接口不变（schema/values/onSave/ready）
+
+  ============================================================
+  3.2 SettingsAppearanceTab 完整迁移到 SchemaRenderer
+  ============================================================
+
+  当前状态（确证）：
+    文件：SettingsAppearanceTab.tsx
+    NOT 使用 SettingsSchemaRenderer —— 零使用
+    所有设置项均为手动 JSX（<SettingsRow> + <input>/<select> 等）
+    包含以下非标准字段类型：
+      - 主题切换（dark/default）        → 可用 'toggle-group' 渲染
+      - UI 密度（small/default/large）  → 可用 'toggle-group' 渲染
+      - Shell Chrome 模式（classic/inset） → 可用 'select' 渲染
+      - 代码缩进宽度                     → 可用 'select' 渲染
+      - 皮肤预设（多色块网格）           → 需要 'preset-grid' 新类型
+      - 自定义颜色选择器                 → 需要 'color' 新类型
+      - 亮度滑块                        → 需要 'range' 新类型
+      - 时间过渡开关                     → 可用 'boolean' 渲染
+      - 活力模式开关                     → 可用 'boolean' 渲染
+      - 字体大小滑块                     → 需要 'range' 新类型
+      - 字体设置区域（FontSettingsSection） → 需要 'font-selector' 新类型
+
+  迁移方案：
+
+    Step 1: 定义 appearanceSchema: SchemaSection[] 数组
+      将所有 11 个设置项映射为 schema 条目，包括新类型。
+      保持与现有 Settings 接口的 key 名称一致，确保
+      values/onSave 即时兼容。
+
+    Step 2: 替换手动 JSX
+      删除所有手写的 <SettingsRow> + 表单控件代码块，
+      替换为单行：
+        <SettingsSchemaRenderer
+          schema={appearanceSchema}
+          values={settings}
+          onSave={handleSave}
+          ready={!!settings}
+        />
+
+    Step 3: 删除对应的 CSS
+      当 SettingsAppearanceTab 完全迁移后，原有手动 JSX 所依赖的
+      全局 CSS 选择器（如 .settings-row--appearance 等）可以在
+      SettingsAppearanceTab.module.css 中标记为待清理。
+      这些选择器在 settings.css 中的版本标记段（polish-v1 x8）
+      可在 Phase 1 中去重合并时一并处理。
+
+    Step 4: 验证
+      打开设置 → 外观页，逐项验证：
+        - 主题切换正常切换并持久化
+        - 密度切换正常切换并持久化
+        - 颜色选择器正常保存
+        - 亮度滑块拖拽保存
+        - 字体选择器正常切换
+
+  ============================================================
+  3.3 其他设置页的 SchemaRenderer 迁移评估
+  ============================================================
+
+  SettingsPersonalizeTab    已 100% 迁移 → 无需操作
+  SettingsAppearanceTab     待迁移（见 3.2）
+  ModelsSettingsTab         含大量自定义交互（模型卡片、密钥管理、连接测试）
+                            不完全适合 SchemaRenderer，保持现状
+  SkillsSettingsTab         含技能创建/编辑自定义交互，保持现状
+  SettingsExtensionsTab     含扩展卡片网格，可部分迁移其中的开关设置项，
+                            但核心布局保持现状
+  SettingsShortcutsTab      快捷键映射为 key-value 对，可用 'string' 类型迁移
+  SettingsUsageTab          纯数据展示（图表/统计），无表单交互，保持现状
+  SettingsAdvancedTab       部分表单（规则/安全设置）可部分迁移
+  ScheduleSettingsTab       含自定义日程创建器，保持现状
+
+  结论：
+    3.2 完成后，短期仅迁移 SettingsShortcutsTab 中部分简单字段。
+    其余设置页的 SchemaRenderer 迁移作为长期优化，不在此方案中包含。
+
+
+================================================================================
+四、子智能体面板视觉精细化（Phase 4）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：用户明确指出的子智能体界面问题。Phase 1-3 完成后
+  CSS 基础设施干净，此阶段改动不会引入新的特异性冲突。
+
+  ============================================================
+  4.1 去除 agent-prompt-bubble 的显示
+  ============================================================
+
+  当前状态（确证）：
+    InlineAgentPanel.tsx:629
+      <div className="agent-prompt-bubble">{msg.text}</div>
+
+    InlineAgentPanel.module.css:324-335
+      :global(.agent-prompt-bubble) {
+        display: inline-block;
+        background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 6px 10px;
+        max-width: 85%;
+        text-align: left;
+        font-size: var(--font-size-sm);
+        color: var(--text-secondary);
+      }
+
+  用户要求："class='agent-prompt-bubble' 这个不用显示"
+
+  修改方案：
+    方案A（完全隐藏）：
+      在 InlineAgentPanel.module.css 中将 :global(.agent-prompt-bubble)
+      的 display 改为 none。这会使子智能体中的用户 prompt 完全不显示。
+
+    方案B（移除气泡样式但保留文字）：
+      删除 <div className="agent-prompt-bubble"> 包裹，直接渲染
+      {msg.text}。文字保留但去掉气泡的灰底/边框/内边距。
+
+    根据用户的完整上下文（"子agent界面应该是和主界面的那些样式都是一样的，
+    对于prompt气泡可以放在左侧，这样就把用户的气泡位置区分开了"），
+    用户的意图是保留文字显示、去掉气泡装饰、通过左对齐来区分。
+    → 选择方案B。
+
+  具体改动：
+
+    [MODIFY] InlineAgentPanel.tsx:629
+      原代码：
+        <div className="agent-prompt-bubble">{msg.text}</div>
+      改为：
+        <div className={styles.inlineAgentUserPrompt}>{msg.text}</div>
+
+    [MODIFY] InlineAgentPanel.module.css:324-335
+      删除 :global(.agent-prompt-bubble) { ... } 整个规则块
+
+    [ADD] InlineAgentPanel.module.css 新增：
+      .inlineAgentUserPrompt {
+        color: var(--text-secondary);
+        font-size: var(--font-size-sm);
+        text-align: left;
+        padding: 0;
+        max-width: 85%;
+        line-height: 1.55;
+      }
+
+  ============================================================
+  4.2 去除内联子智能体工作区的对话框边框
+  ============================================================
+
+  当前状态（确证）：
+    InlineAgentPanel.module.css: 存在 .inlineAgent 定义：
+      border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--hairline, var(--border-subtle)) 40%, transparent);
+      border-radius: 8px;
+
+  用户要求："子agent工作区域不用加上对话框"
+
+  修改方案：
+    将 .inlineAgent 的 border 和 border-radius 设为 0/none：
+
+    [MODIFY] InlineAgentPanel.module.css .inlineAgent:
+      border: none;
+      border-radius: 0;
+
+  注意：
+    右侧边栏中打开的子智能体（InlineAgentSidePanel）保留其边框，
+    因为它在独立的侧边栏面板中，需要视觉边界。只影响内联（聊天流中）的版本。
+
+  ============================================================
+  4.3 侧边栏冗余声明去除 —— 只保留侧边栏图标
+  ============================================================
+
+  当前存在 6 处冗余的侧边栏状态声明（确证行号）：
+
+    1. sideOpenTitle 变量（行443-444）：
+       "已在侧栏打开（点击重聚焦，不覆盖主对话）"
+       "在侧栏打开（不覆盖主对话）"
+
+    2. sideOpenAria 变量（行446-447）：
+       "已在侧栏打开「displayTitle」，点击重聚焦"
+       "在侧栏打开子智能体「displayTitle」"
+
+    3. regionAria 变量（行448）：
+       条件附加 "，已在侧栏"
+
+    4. 工具栏文字按钮（行574）：
+       <button>在侧栏打开</button>
+
+    5. 空状态文字按钮（行620）：
+       <button>在侧栏打开完整视图</button>
+
+    6. 空状态提示文本（行434, 439）：
+       "暂无消息（运行失败）。可在下方重试，或在侧栏查看详情。"
+       "暂无消息。可在下方继续对话，或在侧栏打开完整视图。"
+
+  用户要求：只保留侧边栏图标一个标识，去掉以上所有重复文本。
+
+  修改方案（InlineAgentPanel.tsx）：
+
+    A. 保持侧边栏图标按钮不变（行546-553的 <button.agentHeadBtn>）
+       它已经在 hover 时通过 opacity 过渡显示，功能完整。
+
+    B. 删除工具栏"在侧栏打开"文字按钮（行567-577）
+       原代码：
+         <button type="button" className={styles.inlineAgentLink}>
+           <Lucide.PanelRight size={13} />
+           <span>在侧栏打开</span>
+         </button>
+       改为：完全移除该按钮。侧边栏图标按钮已经提供了此功能。
+
+    C. 简化 sideOpenTitle / sideOpenAria / regionAria
+       sideOpenTitle 合并为一个：
+         sideFocused ? "重聚焦子智能体" : "在侧栏打开子智能体"
+       sideOpenAria 合并为一个：
+         sideFocused
+           ? `重聚焦子智能体「${displayTitle}」`
+           : `在侧栏打开子智能体「${displayTitle}」`
+       regionAria 去掉"已在侧栏"条件附加：
+         原：`${displayTitle}，${statusLabel}${sideFocused ? '，已在侧栏' : ''}`
+         改：`${displayTitle}，${statusLabel}`
+
+    D. 简化空状态文本
+       行434："暂无消息（运行失败）。可在下方重试。"（去掉侧栏引用）
+       行439："暂无消息。可在下方继续对话。"（去掉侧栏引用）
+
+    E. 删除空状态"在侧栏打开完整视图"按钮（行617-624）
+       原代码：<button>在侧栏打开完整视图</button>
+       改为：完全移除。
+
+  ============================================================
+  4.4 修复侧边栏图标（agentHeadBtn）样式问题
+  ============================================================
+
+  当前状态（确证，InlineAgentPanel.module.css:78-107）：
+    .agentHeadBtn:
+      24x24px, inline-flex centered
+      background: transparent
+      border: 1px solid transparent        ← 问题：未激活时完全不可见
+      color: var(--text-secondary)
+
+    .agentHeadBtn.isActive:
+      background: var(--bg-active)
+      color: var(--accent-blue)
+      border-color: color-mix(... accent blue tint)
+
+  问题诊断：
+    1. 未激活时，按钮 border 为透明、background 为透明 ——
+       在默认状态下，用户根本找不到这个按钮在哪里，
+       直到 hover 整行才看到（因为父容器有 opacity: 0 → 1 过渡）
+    2. hover reveal 的时机太晚：必须先 hover 到摘要行，
+       然后才能看到按钮，然后才能点击 —— 两步操作
+    3. 点击区域 24x24 但视觉上不可见，容易误触
+
+  修改方案：
+
+    [MODIFY] InlineAgentPanel.module.css .agentHeadBtn:
+      /* 保持 24x24，但给一个微弱的默认可见状态 */
+      .agentHeadBtn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--control-height-xs, 24px);
+        height: var(--control-height-xs, 24px);
+        background: var(--bg-secondary);              /* ← 改为有背景 */
+        border: 1px solid var(--border-subtle);       /* ← 改为可见边框 */
+        border-radius: var(--radius-sm, 5px);
+        color: var(--text-tertiary);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background var(--transition-micro, 150ms ease),
+                    color var(--transition-micro, 150ms ease),
+                    border-color var(--transition-micro, 150ms ease),
+                    opacity var(--transition-smooth, 200ms ease);
+      }
+
+      .agentHeadBtn:hover:not(:disabled) {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        border-color: var(--border-color);
+      }
+
+      .agentHeadBtn.isActive {
+        background: var(--accent-blue-light);         /* 浅蓝底 */
+        color: var(--accent-blue);                    /* 蓝色图标 */
+        border-color: color-mix(in srgb, var(--accent-blue) 30%, transparent);
+      }
+
+      .agentHeadBtn:disabled,
+      .agentHeadBtn[aria-disabled="true"] {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+  效果：
+    - 未激活时：微弱的灰色方形按钮，用户知道这里有东西
+    - Hover 时：变亮，提示可点击
+    - 侧栏打开时：蓝色高亮，表示"已在侧栏"
+    - 配合父容器 hover reveal 的 opacity 过渡，
+      整个操作区域的可见性提升两档
+
+  ============================================================
+  4.5 修复 agent-card-btn 孤儿类名
+  ============================================================
+
+  当前状态（确证）：
+    InlineAgentPanel.tsx:536-542:
+      <button
+        type="button"
+        className={`agent-card-btn agent-card-btn--danger ${styles.inlineAgentStopBtn}`}
+        ...
+      >
+        <Lucide.Square size={11} fill="currentColor" aria-hidden />
+      </button>
+
+    CSS 定义：
+      chat.css:404: .agent-card-btn--danger { color: var(--danger-color, #c44); }
+      全局搜索：agent-card-btn（无修饰符）→ 0 处 CSS 定义
+
+  修改方案：
+
+    [MODIFY] InlineAgentPanel.tsx:536
+      原 className:
+        `agent-card-btn agent-card-btn--danger ${styles.inlineAgentStopBtn}`
+      改为：
+        `${styles.agentHeadBtn} ${styles.inlineAgentStopBtn}`
+
+    [MODIFY] InlineAgentPanel.module.css
+      在 .inlineAgentStopBtn 中添加 danger 色：
+        .inlineAgentStopBtn {
+          color: var(--color-error, var(--accent-red));
+        }
+        .inlineAgentStopBtn:hover:not(:disabled) {
+          background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+          color: var(--accent-red);
+        }
+
+    [NOTE] chat.css:404 的 .agent-card-btn--danger 规则：
+      保留但添加迁移标记注释：
+        /* [DEPRECATED] 迁移至 InlineAgentPanel.module.css .inlineAgentStopBtn */
+      后续全项目搜索确认无其他引用后可删除。
+
+  ============================================================
+  4.6 子智能体思考内容与主智能体完全一致
+  ============================================================
+
+  当前状态（确证）：
+    主聊天思考块（ChatMessageRow.tsx 使用）：
+      CSS 类定义在 ChatMessageRow.module.css:286-359
+      .thinkingFold / .thinkingFoldSum / .thinkingChevron / .thinkingFoldBody
+      - 使用 <details> 原生元素
+      - 支持 markdown 渲染
+      - 有 isLive 状态（流式生成中）
+      - chevron 旋转动画 0.15s ease
+
+    子智能体思考块（InlineAgentPanel.tsx:46-68 SubagentThinkingFold）：
+      CSS 类定义在 InlineAgentPanel.module.css:338-396
+      同样使用 .thinkingFold ... 类名
+      但 TSX 实现是原生 <details>/<summary> + 纯文本 {thinkingText.trim()}
+      与主聊天的实现路径不一致
+
+  问题：
+    - 样式定义在两个文件中虽然类名相同，但具体 CSS 属性有差异
+    - TSX 结构不同（子智能体版本更简单，缺少 isLive 动画等）
+    - 纯文本 vs Markdown 渲染
+
+  修改方案 —— 两步走：
+
+    Step 1: 统一 CSS 样式
+      对比 ChatMessageRow.module.css 和 InlineAgentPanel.module.css
+      中 .thinkingFold 系列类的 CSS 属性，使 InlineAgentPanel.module.css
+      中的定义与 ChatMessageRow.module.css 完全一致。
+
+      关键对齐项：
+        - .thinkingFold: margin、padding、border、background 完全一致
+        - .thinkingFoldSum: cursor、list-style、font-size、color、gap 完全一致
+        - .thinkingChevron: opacity 0.65, transition transform 0.15s ease
+        - .thinkingChevron.isOpen: transform rotate(90deg)
+        - .thinkingFoldBody: max-height 限制（折叠态4行，展开态24行）、
+          font-size sm、line-height 1.5、opacity 0.9、overflow-y auto
+        - .thinkingFold.isLive: 流式进行中的呼吸/脉冲动画
+
+    Step 2: 统一 TSX 结构
+      修改 InlineAgentPanel.tsx 中的 SubagentThinkingFold 组件（行46-68），
+      使其与主聊天的 thinking fold 结构一致。
+
+      主聊天期待的结构（从 ChatMessageRow 推测）：
+        <details className={styles.thinkingFold} open={isLive}>
+          <summary className={styles.thinkingFoldSum}>
+            <ChevronRight className={`${styles.thinkingChevron} ${open ? styles.isOpen : ''}`} />
+            <span className={styles.thinkingFoldLabel}>思考</span>
+            {isLive && <LivePulseIndicator />}
+          </summary>
+          <div className={styles.thinkingFoldBody}>
+            <MarkdownRenderer content={thinkingText} />
+          </div>
+        </details>
+
+      当前 SubagentThinkingFold 需要改为上述结构，并：
+        - 使用 InlineAgentPanel.module.css 中的 CSS Module 类名
+        - 添加 isLive 状态支持（已有的 running 状态可用）
+        - thinkingText 使用与主聊天相同的 Markdown 渲染器
+
+  ============================================================
+  4.7 子智能体用户 prompt 气泡左对齐
+  ============================================================
+
+  当前状态（确证）：
+    已完成 —— CSS 使用 flex-start 左对齐。
+    在 4.1 中移除气泡包裹后，仍保持左对齐。
+
+
+================================================================================
+五、弹窗/菜单原生 CSS 过渡动画系统（Phase 5）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：Phase 4 完成后子智能体界面干净。Phase 5 解决所有弹窗/
+  浮层/菜单"瞬间消失"的生硬体验——使用现代 CSS 原生能力，零依赖。
+
+  ============================================================
+  5.1 技术基础 —— @starting-style + transition-behavior
+  ============================================================
+
+  核心理念：
+    避免引入 framer-motion（~32KB gzipped）和 Radix UI（~15-20 个包）。
+    利用 CSS 原生特性实现弹出层的进入/退出动画：
+
+    @starting-style {
+      /* 元素刚刚插入 DOM 时的初始状态 */
+      .popover { opacity: 0; transform: translateY(8px); }
+    }
+    .popover {
+      /* 稳定状态 */
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity var(--transition-smooth),
+                  transform var(--transition-spring);
+    }
+    .popover.closing {
+      /* 关闭状态 */
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    配合 transition-behavior: allow-discrete 使 display:none → display:block
+    的切换也能触发过渡动画（Chrome 117+ / Edge 117+ / Tauri WebView2 兼容）。
+
+  方案架构：
+    a. 所有弹窗/浮层使用条件 CSS 类（.is-open / .is-closing）驱动状态
+    b. React 端使用单层状态机管理进入/退出时序：
+       - 打开：设置 is-open → 等一帧（requestAnimationFrame） → 浏览器自动过渡
+       - 关闭：设置 is-closing → 等待过渡结束（ontransitionend）→ 移除 DOM
+    c. 封装为 useAnimatedPresence hook 供所有弹窗组件复用
+
+  ============================================================
+  5.2 useAnimatedPresence Hook 实现
+  ============================================================
+
+  文件：src/hooks/useAnimatedPresence.ts（新建）
+
+  接口：
+    interface UseAnimatedPresenceOptions {
+      visible: boolean;
+      exitDurationMs?: number;
+      onExited?: () => void;
+    }
+
+    interface UseAnimatedPresenceReturn {
+      state: 'entering' | 'open' | 'exiting' | 'closed';
+      ref: React.RefCallback<HTMLElement>;
+    }
+
+  实现逻辑：
+    1. visible 从 false → true：
+       设置 state = 'entering'（此时 DOM 插入，@starting-style 触发入场动画）
+       下一次 rAF 后设置 state = 'open'（过渡完成后稳定状态）
+    2. visible 从 true → false：
+       设置 state = 'exiting'（触发退场动画）
+       等待 transitionend 事件（或 exitDurationMs 超时回退）
+       设置 state = 'closed'（DOM 删除）
+    3. ref 用于在 DOM 元素上绑定 transitionend 监听
+
+  CSS 使用指南（每个弹窗组件）：
+    .popover {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    .popover.is-entering,
+    .popover.is-open {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity var(--transition-smooth),
+                  transform var(--transition-spring);
+    }
+    .popover.is-exiting {
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity var(--transition-exit),
+                  transform var(--transition-exit);
+    }
+
+  ============================================================
+  5.3 统一浮动菜单系统动画化
+  ============================================================
+
+  目标文件：拆分后的 styles/shell/shell-menus.css（即原 shell.css:3670-3901）
+  当前状态：无任何过渡动画，97 个 !important 占位。
+
+  改动方案：
+
+    A. 清理 97 个 !important
+       在 @layer shell-menus 层内，这些 !important 中的绝大多数（类别A）
+       通过层优先级自然解决。仅保留类别B（浏览器 UA 样式覆盖）：
+        - compact menu item 的 display/flex 相关（避免被浏览器默认重置）
+        - 滚动条相关（WebKit 伪元素覆盖）
+       预估清理后仅剩 ~15-20 个 !important。
+
+    B. 添加入场/出场动画
+       .floating-menu-container {
+         opacity: 0;
+         transform: scale(0.96);
+         transform-origin: top left;
+       }
+       .floating-menu-container.is-open {
+         opacity: 1;
+         transform: scale(1);
+         transition: opacity var(--transition-micro),
+                     transform var(--transition-spring);
+       }
+       .floating-menu-container.is-exiting {
+         opacity: 0;
+         transform: scale(0.96);
+         transition: opacity var(--transition-exit),
+                     transform var(--transition-exit);
+       }
+
+    C. React 端集成 useAnimatedPresence
+       在统一浮动菜单的渲染组件上使用 useAnimatedPresence hook：
+         const { state, ref } = useAnimatedPresence({
+           visible: isMenuOpen,
+           exitDurationMs: 250,
+         });
+         if (state === 'closed') return null;
+         return (
+           <div ref={ref} className={`floating-menu-container is-${state}`}>
+             {/* menu items */}
+           </div>
+         );
+
+  ============================================================
+  5.4 模态弹窗动画化
+  ============================================================
+
+  涉及的弹窗组件：
+    - SettingsPanel            (z-index: 13000, full-screen overlay)
+    - CheatsheetModal          (快捷键手册)
+    - ToastStack 中的 toast 通知
+
+  动画方案：
+
+    遮罩层（Overlay）：
+      .overlay {
+        opacity: 0;
+        background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+        backdrop-filter: blur(0);
+      }
+      .overlay.is-entering, .overlay.is-open {
+        opacity: 1;
+        backdrop-filter: blur(6px);
+        transition: opacity var(--transition-smooth),
+                    backdrop-filter var(--transition-smooth);
+      }
+      .overlay.is-exiting {
+        opacity: 0;
+        backdrop-filter: blur(0);
+        transition: opacity var(--transition-exit),
+                    backdrop-filter var(--transition-exit);
+      }
+
+    弹窗内容（以 SettingsPanel 为例）：
+      .settings-panel {
+        opacity: 0;
+        transform: scale(0.96) translateY(16px);
+      }
+      .settings-panel.is-entering, .settings-panel.is-open {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        transition: opacity var(--transition-enter),
+                    transform var(--transition-enter);
+      }
+      .settings-panel.is-exiting {
+        opacity: 0;
+        transform: scale(0.96) translateY(8px);
+        transition: opacity var(--transition-exit),
+                    transform var(--transition-exit);
+      }
+
+    Toast 通知（滑入/滑出）：
+      .toast-item {
+        transform: translateX(120%);
+      }
+      .toast-item.is-entering, .toast-item.is-open {
+        transform: translateX(0);
+        transition: transform var(--transition-spring);
+      }
+      .toast-item.is-exiting {
+        transform: translateX(120%);
+        transition: transform var(--transition-exit);
+      }
+
+
+================================================================================
+六、微交互与视觉品质提升（Phase 6）
+──────────────────────────────────────────────────────────────────────────────
+
+  逻辑说明：Phase 1-5 完成后，整个 UI 系统的骨架干净、令牌统一、
+  动画完整。Phase 6 在顶部追加精致的微交互和视觉细节。
+
+  ============================================================
+  6.1 面板展开/折叠弹簧动画
+  ============================================================
+
+  当前状态：工作区面板（Workspace.tsx）展开/折叠使用即时尺寸变化。
+
+  改动方案：
+    对 Workspace.tsx 中的列宽和面板高变化，应用 CSS transition：
+
+    .workspace-column {
+      transition: width var(--transition-spring),
+                  flex-basis var(--transition-spring);
+    }
+    .workspace-card-group {
+      transition: height var(--transition-spring),
+                  flex-basis var(--transition-spring);
+    }
+
+  注意：
+    - resize 拖拽过程中保持 `transition: none`（已有 .resizing-active 类处理）
+    - 只有通过点击/键盘触发的尺寸变化才使用过渡
+
+  ============================================================
+  6.2 骨架屏加载态（Skeleton Shimmer）
+  ============================================================
+
+  应用于场景：
+    - 聊天消息流在首次加载/历史加载时
+    - Settings tab 的 Suspense fallback
+    - 子智能体初始化加载时
+
+  CSS 实现：
+    @keyframes skeleton-shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .skeleton-line {
+      height: var(--font-size-base);
+      border-radius: var(--radius-xs);
+      background: linear-gradient(
+        90deg,
+        var(--bg-secondary) 25%,
+        var(--bg-hover) 37%,
+        var(--bg-secondary) 63%
+      );
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.6s ease-in-out infinite;
+    }
+
+  替换现有的 SettingsTabSuspenseFallback（当前过于简陋）：
+    使用 4-6 条不同宽度的 skeleton-line 模拟真实表单布局。
+
+  ============================================================
+  6.3 代码块面包屑（File Directory Breadcrumbs）
+  ============================================================
+
+  当前状态：Markdown 渲染的代码块仅显示语言标签，无文件路径信息。
+
+  改动方案：
+    在代码块标题栏左侧添加面包屑路径。
+
+    CSS：
+      .code-block-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .code-block-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        font-size: var(--font-size-xxs);
+        color: var(--text-tertiary);
+      }
+      .code-block-breadcrumb-segment {
+        padding: 1px 3px;
+        border-radius: var(--radius-xs);
+      }
+      .code-block-breadcrumb-segment:hover {
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+      }
+
+    TSX 结构（Markdown 渲染器中）：
+      <div class="code-block-header">
+        <div class="code-block-breadcrumb">
+          <span>packages</span>
+          <span class="separator">/</span>
+          <span>client</span>
+          <span class="separator">/</span>
+          <span class="filename">src</span>
+          <span class="separator">/</span>
+          <span class="filename">component.tsx</span>
+        </div>
+        <span class="code-block-lang">typescript</span>
+        <button class="code-block-copy">复制</button>
+      </div>
+
+  依赖：需要后端/agent-runtime 在生成代码块时通过 metadata 附带文件路径。
+
+  ============================================================
+  6.4 零抖动 Hover 策略（Zero-Jolt Policy）
+  ============================================================
+
+  规则：严禁任何元素在 Hover 时使用垂直位移。
+  替代方案：仅使用以下属性表达 Hover 状态 ——
+    1. background 亮度变化（color-mix 3-5%）
+    2. border-color 阶调微调
+    3. box-shadow 扩散（shadow-sm → shadow-md）
+
+  执行方式：
+    全项目搜索 `transform: translateY` 在 hover 选择器中的使用，
+    逐一替换为上述替代方案。
+
+  ============================================================
+  6.5 工具调用运行态动画（Live Pulse Indicator）
+  ============================================================
+
+  应用场景：子智能体运行时、命令执行中、工具调用处理中
+
+  CSS 实现（已在 ChatToolCallBlock.module.css 有基础实现，增强）：
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    .live-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+
+  应用到：摘要行状态角标、工具运行头部、子智能体标签旁的绿点呼吸。
+
+  ============================================================
+  6.6 空状态引导插图
+  ============================================================
+
+  当前状态：空状态仅有文字 + 图标（如 ChatEmptyState, InlineAgentEmpty）
+
+  改进方案：
+    在不引入图片资源的前提下，使用纯 CSS/Lucide 图标组合构建
+    简洁的空状态场景。参考 Linear 的做法 —— 大图标 + 标题 + 描述 +
+    主要 CTA 按钮的组合布局。
+
+    所有空状态组件统一使用以下结构：
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 200px;
+        gap: var(--space-sm);
+        padding: var(--space-xl);
+        text-align: center;
+      }
+      .empty-state-icon {
+        color: var(--text-tertiary);
+        opacity: 0.6;
+        margin-bottom: var(--space-xs);
+      }
+      .empty-state-title {
+        font-size: var(--font-size-lg);
+        font-weight: var(--font-weight-medium);
+        color: var(--text-secondary);
+      }
+      .empty-state-desc {
+        font-size: var(--font-size-sm);
+        color: var(--text-tertiary);
+        max-width: 320px;
+      }
+      .empty-state-action {
+        margin-top: var(--space-md);
+      }
+
+
+================================================================================
+七、实施顺序的总依赖关系图
+──────────────────────────────────────────────────────────────────────────────
+
+  采用"逻辑依赖顺序"而非优先级顺序。每个 Phase 内部的改动
+  可并行执行，Phase 之间严格串行。
+
+  Phase 1 ─── Build Foundation
+  │
+  ├─ 1.1 settings.css 拆分（7文件）
+  ├─ 1.2 shell.css 拆分（8文件）          ⚡ 1.1/1.2可并行
+  ├─ 1.3 重复选择器去重（127处）         ← 依赖 1.1 完成
+  ├─ 1.4 版本标记段合并（15个）          ← 依赖 1.1 完成
+  ├─ 1.5 !important 消除第1轮（settings+shell） ← 依赖 1.3/1.4
+  └─ 1.6 CSS Module 混用策略规范化        ← 依赖 1.1-1.5
+      │
+      ▼
+  Phase 2 ─── Token Rationalization
+  │
+  ├─ 2.1 字阶重复值修复（small/large密度块） ← 依赖 1.1
+  ├─ 2.2 hex→HSL 统一（6处）              ← 依赖 1.1
+  ├─ 2.3 静态圆角嵌套系统                 ← 可独立
+  ├─ 2.4 语义色彩令牌新增                 ← 可独立
+  └─ 2.5 动效令牌扩展                     ← 可独立
+      │
+      ▼
+  Phase 3 ─── Schema Renderer Extension
+  │
+  ├─ 3.1 SchemaRenderer 新类型扩展（5种）   ← 依赖 1.5/2.3
+  └─ 3.2 SettingsAppearanceTab 完整迁移     ← 依赖 3.1
+      │
+      ▼
+  Phase 4 ─── Subagent Visual Refinement
+  │
+  ├─ 4.1 去除 agent-prompt-bubble          ← 依赖 2.3
+  ├─ 4.2 去除内联子智能体对话框边框          ← 可独立
+  ├─ 4.3 侧边栏冗余声明去除（6处）           ← 可独立
+  ├─ 4.4 修复 agentHeadBtn 样式             ← 依赖 2.3
+  ├─ 4.5 修复 agent-card-btn 孤儿类名       ← 可独立
+  ├─ 4.6 思考内容统一（CSS+TSX双修复）       ← 依赖 2.5
+  └─ 4.7 prompt 左对齐                     ← 已完成（验证即可）
+      │
+      ▼
+  Phase 5 ─── Animation System
+  │
+  ├─ 5.1 @starting-style 技术基础          ← 依赖 2.5
+  ├─ 5.2 useAnimatedPresence Hook          ← 依赖 5.1
+  ├─ 5.3 统一浮动菜单动画化（97 !important清理+动画） ← 依赖 1.5/5.2
+  └─ 5.4 模态弹窗动画化（SettingsPanel等）   ← 依赖 5.2
+      │
+      ▼
+  Phase 6 ─── Micro-interactions & Polish
+  │
+  ├─ 6.1 面板弹簧动画                     ← 依赖 2.5
+  ├─ 6.2 骨架屏（Settings/聊天/子智能体）   ← 依赖 2.3
+  ├─ 6.3 代码块面包屑                     ← 可独立
+  ├─ 6.4 Zero-Jolt Hover 策略            ← 可独立
+  ├─ 6.5 Live Pulse Indicator 增强       ← 依赖 2.5
+  └─ 6.6 空状态统一                       ← 依赖 2.3
+
+
+================================================================================
+八、附录：完整改动文件清单
+──────────────────────────────────────────────────────────────────────────────
+
+  新建文件（9个）：
+    src/styles/settings/settings-base.css
+    src/styles/settings/settings-models.css
+    src/styles/settings/settings-plugins.css
+    src/styles/settings/settings-usage.css
+    src/styles/settings/settings-extensions.css
+    src/styles/settings/settings-advanced.css
+    src/styles/settings/settings-floating-menu.css
+    src/styles/shell/shell-reset.css
+    src/styles/shell/shell-layout.css
+    src/styles/shell/shell-sidebar.css
+    src/styles/shell/shell-workspace.css
+    src/styles/shell/shell-menus.css
+    src/styles/shell/shell-scrollbar.css
+    src/styles/shell/shell-dragdrop.css
+    src/styles/shell/shell-polish.css
+    src/hooks/useAnimatedPresence.ts
+
+  删除文件（2个）：
+    src/styles/settings.css                → 拆分为 7 个文件后删除
+    src/styles/shell.css                   → 拆分为 8 个文件后删除
+
+  修改文件：
+    src/styles/tokens.css                  (2.1 字阶修复, 2.2 hex→HSL,
+                                           2.3 圆角系统, 2.4 语义色, 2.5 动效)
+    src/styles/index.css                   (导入拆分后的新文件)
+    src/components/settings/SettingsSchemaRenderer.tsx  (3.1 新类型扩展)
+    src/components/SettingsAppearanceTab.tsx             (3.2 迁移到SchemaRenderer)
+    src/components/InlineAgentPanel.tsx                  (4.1-4.7 全部子智能体改动)
+    src/components/InlineAgentPanel.module.css           (4.1-4.7 CSS)
+    src/components/ChatToolCallBlock.module.css           (6.5 Live Pulse 增强)
+    src/components/SettingsPanel.tsx                     (5.4 模态动画集成)
+    src/components/ChatMessageRow.module.css             (4.6 思考样式对齐参考)
+
+  影响范围统计：
+    新建文件: 17 个
+    删除文件: 2 个
+    修改文件: 9 个
+    涉及总行数: ~20,000 行（原始 CSS 中 ~16,000 行重组，新增 ~4,000 行）
+
+================================================================================

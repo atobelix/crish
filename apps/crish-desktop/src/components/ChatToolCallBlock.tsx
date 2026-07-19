@@ -7,6 +7,7 @@ import styles from './ChatToolCallBlock.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
 import { ApprovalAskCard } from './ApprovalAskCard';
+import { Tooltip } from './settings/SettingsUI';
 import { isEditToolName, isShellToolName } from '../api/toolFeedback';
 import {
   extractImageRefs,
@@ -370,24 +371,26 @@ function CompactToolRow({
   const pathActions =
     pathClickable && filePath ? (
       <span className={styles.toolPathActions} onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className={styles.toolPathAction}
-          title="在文件面板打开"
-          onClick={() => onOpenPath(filePath)}
-        >
-          <Lucide.PanelRightOpen size={14} />
-        </button>
-        <button
-          type="button"
-          className={styles.toolPathAction}
-          title="复制路径"
-          onClick={() => {
-            void navigator.clipboard.writeText(filePath);
-          }}
-        >
-          <Lucide.Copy size={14} />
-        </button>
+        <Tooltip content="在文件面板打开">
+          <button
+            type="button"
+            className={styles.toolPathAction}
+            onClick={() => onOpenPath(filePath)}
+          >
+            <Lucide.PanelRightOpen size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content="复制路径">
+          <button
+            type="button"
+            className={styles.toolPathAction}
+            onClick={() => {
+              void navigator.clipboard.writeText(filePath);
+            }}
+          >
+            <Lucide.Copy size={14} />
+          </button>
+        </Tooltip>
       </span>
     ) : null;
 
@@ -395,46 +398,53 @@ function CompactToolRow({
   const renderSummary = () => {
     if (!pathClickable || !filePath || !pathLabel || !human.includes(pathLabel)) {
       return (
-        <span className={styles.toolRowSummary} title={human}>
-          {human}
-          {pathClickable && filePath && pathActions ? (
-            <span className={styles.toolPathWrap} style={{ marginLeft: 6 }}>
-              {pathActions}
-            </span>
-          ) : null}
-        </span>
+        <Tooltip content={human}>
+          <span className={styles.toolRowSummary}>
+            {human}
+            {pathClickable && filePath && pathActions ? (
+              <span className={styles.toolPathWrap} style={{ marginLeft: 6 }}>
+                {pathActions}
+              </span>
+            ) : null}
+          </span>
+        </Tooltip>
       );
     }
     const idx = human.lastIndexOf(pathLabel);
     const link = (
       <span className={styles.toolPathWrap}>
-        <button
-          type="button"
-          className={styles.toolPathLink}
-          title={filePath}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenPath(filePath);
-          }}
-        >
-          {pathLabel}
-        </button>
+        <Tooltip content={filePath}>
+          <button
+            type="button"
+            className={styles.toolPathLink}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenPath(filePath);
+            }}
+          >
+            {pathLabel}
+          </button>
+        </Tooltip>
         {pathActions}
       </span>
     );
     if (idx < 0) {
       return (
-        <span className={styles.toolRowSummary} title={filePath}>
-          {human} {link}
-        </span>
+        <Tooltip content={filePath}>
+          <span className={styles.toolRowSummary}>
+            {human} {link}
+          </span>
+        </Tooltip>
       );
     }
     return (
-      <span className={styles.toolRowSummary} title={filePath}>
-        {human.slice(0, idx)}
-        {link}
-        {human.slice(idx + pathLabel.length)}
-      </span>
+      <Tooltip content={filePath}>
+        <span className={styles.toolRowSummary}>
+          {human.slice(0, idx)}
+          {link}
+          {human.slice(idx + pathLabel.length)}
+        </span>
+      </Tooltip>
     );
   };
 

@@ -685,6 +685,11 @@
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  background-color: var(--bg-secondary);
+  padding: 8px 12px;
+  margin: 8px 0;
 }
 .md-rendered pre,
 .md-rendered .md-code-block {

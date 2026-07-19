@@ -43,6 +43,30 @@ import { Tooltip } from './settings/SettingsUI';
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
 
+const SubagentThinkingFold: React.FC<{ thinkingText: string }> = ({ thinkingText }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <details
+      className={styles.thinkingFold}
+      open={isOpen}
+      onToggle={(e) => setIsOpen(e.currentTarget.open)}
+    >
+      <summary className={styles.thinkingFoldSum}>
+        <Lucide.ChevronRight
+          size={14}
+          className={`${styles.thinkingChevron} ${isOpen ? styles.isOpen : ''}`}
+        />
+        <span className={styles.thinkingFoldLabel}>
+          思考
+        </span>
+      </summary>
+      <div className={styles.thinkingFoldBody}>
+        {thinkingText.trim()}
+      </div>
+    </details>
+  );
+};
+
 interface InlineAgentPanelProps {
   agent: SessionAgent;
   parentSessionId: string;
@@ -476,16 +500,6 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           >
             {statusLabel}
           </span>
-          {sideFocused ? (
-            <Tooltip content="已在侧栏聚焦">
-              <span
-                className={`${styles.inlineAgentBadge} ${styles.inlineAgentBadgeSide}`}
-                aria-label="已在侧栏聚焦"
-              >
-                侧栏
-              </span>
-            </Tooltip>
-          ) : null}
           {pendingTools > 0 ? (
             <Tooltip content={`待审批 ${pendingTools} 项`}>
               <span
@@ -532,7 +546,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           <Tooltip content={sideOpenTitle}>
             <button
               type="button"
-              className={`agent-card-btn ${styles.inlineAgentHeadActions} ${sideFocused ? 'is-active' : ''}`}
+              className={`${styles.agentHeadBtn} ${sideFocused ? styles.isActive : ''}`}
               aria-label={sideOpenAria}
               aria-pressed={sideFocused}
               disabled={!agentIdNorm}
@@ -557,7 +571,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                 disabled={!agentIdNorm}
                 onClick={openInSideOnly}
               >
-                {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开'}
+                在侧栏打开
               </button>
             </Tooltip>
             {running ? (
@@ -603,7 +617,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                       aria-label={sideOpenAria}
                       onClick={openInSideOnly}
                     >
-                      {sideFocused ? '已在侧栏 · 重聚焦' : '在侧栏打开完整视图'}
+                      在侧栏打开完整视图
                     </button>
                   </Tooltip>
                 ) : null}
@@ -619,12 +633,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                       msg.thinking.trim() &&
                       msg.thinking !== '正在处理…' &&
                       !looksLikeShellDump(msg.thinking) ? (
-                        <details className="msg-thinking-fold">
-                          <summary className="msg-thinking-fold-sum">
-                            <span className="msg-thinking-fold-label">思考</span>
-                          </summary>
-                          <div className="msg-thinking-fold-body">{msg.thinking.slice(0, 3000)}</div>
-                        </details>
+                        <SubagentThinkingFold thinkingText={msg.thinking} />
                       ) : null}
                       {(() => {
                         const timeline = buildAssistantTimeline(msg);
@@ -716,6 +725,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                     : '继续与内联子智能体对话'
               }
               dense
+              className={styles.noOutlineComposer}
             />
           </div>
         </div>

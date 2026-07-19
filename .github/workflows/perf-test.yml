@@ -1,0 +1,137 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [main, master, 'refactor/**']
+  pull_request:
+    branches: [main, master, 'refactor/**']
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build:packages
+
+      - name: Run benchmarks
+        run: npx tsx packages/shared-utils/src/bench/run-benchmarks.ts
+
+      - name: Run memory benchmarks
+        run: node --expose-gc --import tsx packages/shared-utils/src/bench/run-mem-benchmarks.ts
+
+      - name: Compare with baselines
+        run: npx tsx scripts/compare-benchmarks.ts --threshold 0.2
+
+      - name: Check acceptance criteria
+        run: npx tsx scripts/acceptance-criteria.ts
+
+      - name: Generate performance report
+        run: npx tsx scripts/generate-perf-report.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: perf-report/
+
+  stress-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: benchmark
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Run stress tests
+        run: npx tsx tests/stress/run-all-stress.ts
+
+  comment:
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: perf-report
+          path: perf-report
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            let report = null;
+            try {
+              const raw = fs.readFileSync(path.join(process.env.GITHUB_WORKSPACE, 'perf-report', 'report.json'), 'utf8');
+              report = JSON.parse(raw);
+            } catch {
+              console.log('No perf report found');
+              return;
+            }
+
+            const benchPassed = report.benchmarks.filter(b => b.passed).length;
+            const benchFailed = report.benchmarks.filter(b => !b.passed).length;
+            const memPassed = report.memTests.filter(t => t.passed).length;
+            const memFailed = report.memTests.filter(t => !t.passed).length;
+            const regressions = report.summary.regressions || [];
+
+            let comment = `## 性能测试报告\n\n`;
+            comment += `**Commit:** ${report.commit}\n`;
+            comment += `**环境:** ${report.environment.os} / Node ${report.environment.nodeVersion}\n\n`;
+
+            comment += `### 基准测试\n`;
+            comment += `- 通过: ${benchPassed}\n`;
+            comment += `- 失败: ${benchFailed}\n`;
+            comment += `- 总计: ${report.benchmarks.length}\n\n`;
+
+            if (benchFailed > 0) {
+              comment += `#### 失败的基准测试\n`;
+              for (const b of report.benchmarks.filter(b => !b.passed)) {
+                comment += `- ${b.name}: ${b.avgMs}ms (目标: ${b.targetMs}ms)\n`;
+              }
+              comment += `\n`;
+            }
+
+            comment += `### 内存测试\n`;
+            comment += `- 通过: ${memPassed}\n`;
+            comment += `- 失败: ${memFailed}\n\n`;
+
+            if (regressions.length > 0) {
+              comment += `### 性能退化\n`;
+              for (const r of regressions) {
+                const flag = r.changePercent > 50 ? ' :rotating_light:' : ' :warning:';
+                comment += `- ${r.name}: ${r.previousAvgMs}ms → ${r.currentAvgMs}ms (${r.changePercent}%)${flag}\n`;
+              }
+              comment += `\n`;
+            }
+
+            if (report.summary.failed > 0 || regressions.length > 0) {
+              comment += `**结论: 需要关注** - ${report.summary.failed} 项失败, ${regressions.length} 个退化\n`;
+            } else {
+              comment += `**结论: 通过**\n`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

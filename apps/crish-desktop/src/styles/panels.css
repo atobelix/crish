@@ -590,10 +590,13 @@ button.overview-live-row:hover {
   border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
 .diff-file-list {
-  border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-right: none;
+  background-color: var(--bg-secondary);
 }
 .diff-file-item {
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-bottom: none;
+  margin-bottom: 2px;
+  border-radius: var(--radius-sm);
   padding: var(--space-2, 6px) var(--space-3, 8px);
   min-height: var(--row-height-sm, var(--control-height-sm, 28px));
   box-sizing: border-box;
@@ -628,10 +631,12 @@ button.overview-live-row:hover {
 
 @container diff-panel (max-width: 380px) {
   .diff-file-list {
-    border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+    border-bottom: none;
+    background-color: var(--bg-secondary);
   }
   .diff-file-item {
-    border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+    border-right: none;
+    margin-right: 2px;
   }
 }
 

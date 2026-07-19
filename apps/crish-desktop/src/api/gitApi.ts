@@ -314,8 +314,11 @@ async function runLocalGit(
 ): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
   try {
     const { runTerminalShell } = await import('./terminalShellApi');
-    const { escapeShellArg } = await import('./shellEscape');
-    const cmd = ['git', '-C', cwd, ...gitArgs].map(escapeShellArg).join(' ');
+    // 不逐参数 escapeShellArg：workbench_run_shell 经 base64 → [scriptblock]::Create，
+    // PowerShell 脚本块解析器中 "git" "-C" "path" 多段引号为非法语法。
+    // 仅在参数含空格时加引号，其余保持原样即可适配 bash / PowerShell 双平台。
+    const q = (a: string) => (a.includes(' ') ? `"${a}"` : a);
+    const cmd = `git -C ${q(cwd)} ${gitArgs.map(q).join(' ')}`;
     const res = await runTerminalShell({ command: cmd, cwd, timeoutMs });
     if (res.status !== 'ok') return null;
     return {

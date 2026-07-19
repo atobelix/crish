@@ -3189,15 +3189,15 @@ pre,
 /* 输入框去除背景色填充，依靠浅色边框区分激活状态 */
 .settings-field-input {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--text-primary) 6%, transparent) !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 .settings-field-input:focus,
 .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  background: transparent;
+  box-shadow: none;
 }
 .settings-select-trigger {
   border: 1px solid var(--border-subtle);
@@ -3208,9 +3208,9 @@ pre,
 .settings-select-trigger:focus,
 .settings-select-trigger:focus-visible,
 .settings-select-trigger[aria-expanded='true'] {
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent) !important;
-  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent) !important;
-  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent);
+  box-shadow: none;
 }
 .settings-select-menu,
 .settings-select-menu--portal {
@@ -3443,15 +3443,6 @@ textarea.settings-dialog-textarea:focus-visible {
   gap: var(--space-2, 6px);
   padding: var(--space-2, 6px) var(--space-3, 8px) var(--space-3, 8px);
 }
-.settings-btn-primary,
-.settings-btn-secondary {
-  height: var(--control-height, 32px);
-  min-height: var(--control-height, 32px);
-  padding: 0 var(--space-4, 12px);
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-.settings-btn-flat,
 .settings-secondary-btn,
 .shortcut-key-btn {
   height: var(--control-height-sm, 28px);

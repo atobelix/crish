@@ -1,0 +1,9 @@
+[
+  { "name": "lru.cache.10k.hits", "avgMs": 2.7, "ops": 370, "p95Ms": 3.5 },
+  { "name": "bounded-map.set.10k", "avgMs": 1.4, "ops": 728, "p95Ms": 2.0 },
+  { "name": "jsonl.append.1000", "avgMs": 3.6, "ops": 278, "p95Ms": 5.0 },
+  { "name": "deep-equal.1k.props", "avgMs": 0.6, "ops": 1735, "p95Ms": 0.8 },
+  { "name": "async-mutex.contention.100", "avgMs": 0.3, "ops": 3037, "p95Ms": 0.5 },
+  { "name": "ring-buffer.10k.rw", "avgMs": 0.3, "ops": 3232, "p95Ms": 0.5 },
+  { "name": "object.clone.1k", "avgMs": 0.6, "ops": 1687, "p95Ms": 0.8 }
+]

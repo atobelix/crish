@@ -8,7 +8,7 @@
  */
 
 import { isProductShell, isTauriShell } from './productMode';
-import { tryInvokeTauri } from './tauriInvoke';
+import { invokeResult, tryInvokeTauri } from './tauriInvoke';
 
 export type DaemonConnState =
   | 'disconnected'
@@ -308,16 +308,21 @@ export class DesktopDaemonClient {
 
   private async tryRestartSidecar(): Promise<void> {
     if (!isTauriShell() && !isProductShell()) {
-      // Browser dev: optional nudge if endpoint API exists
       const ep = await tryInvokeTauri<{ available?: boolean }>('workbench_daemon_endpoint');
-      if (!ep) return;
+      if (!ep) {
+        this.lastError = new Error('workbench_daemon_endpoint unavailable (not in Tauri shell?)');
+        return;
+      }
     }
-    const res = await tryInvokeTauri('workbench_restart_daemon');
-    if (!res) return;
-    // 非阻塞等待 ready：旧实现 await 450ms + 8×200ms 轮询，总阻塞 ~2s。
-    // 改为最多轮询 4 次 × 200ms = 800ms，且不阻塞 attemptConnect 的 openSocket——
-    // restart 信号已发出，sidecar 会自行启动；openSocket 失败会走 scheduleReconnect。
-    for (let i = 0; i < 4; i++) {
+    const result = await invokeResult('workbench_restart_daemon');
+    if (result.status !== 'ok') {
+      const msg = result.status === 'error' ? result.message : 'restart command missing';
+      this.lastError = new Error(`Sidecar restart failed: ${msg}`);
+      console.warn('[DesktopDaemonClient]', this.lastError.message);
+      return;
+    }
+    // 轮询等待 sidecar 就绪：15 × 200ms = 3s（Windows 冷启动通常 1-2s）
+    for (let i = 0; i < 15; i++) {
       const shell = await fetchShellEndpoint();
       if (shell.available && shell.url) {
         this.url = shell.url;
@@ -325,6 +330,8 @@ export class DesktopDaemonClient {
       }
       await new Promise((r) => setTimeout(r, 200));
     }
+    this.lastError = new Error('Sidecar restart timed out after 3s polling');
+    console.warn('[DesktopDaemonClient]', this.lastError.message);
   }
 
   private openSocket(url: string): Promise<void> {

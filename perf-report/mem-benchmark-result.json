@@ -1,0 +1,194 @@
+{
+  "timestamp": "2026-07-19T10:21:05.535Z",
+  "environment": {
+    "os": "win32 x64",
+    "nodeVersion": "v24.11.0"
+  },
+  "tests": [
+    {
+      "name": "cache.eviction.no-leak",
+      "expectedMaxHeapDelta": 1048576,
+      "expectedMaxEventListenerLeak": 0,
+      "samples": [
+        {
+          "heapUsedBefore": 7277104,
+          "heapUsedAfter": 7252376,
+          "heapDelta": -24728,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7246752,
+          "heapUsedAfter": 7444888,
+          "heapDelta": 198136,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7257832,
+          "heapUsedAfter": 7264368,
+          "heapDelta": 6536,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        }
+      ],
+      "avgHeapDelta": 59981,
+      "maxHeapDelta": 198136,
+      "avgListenerDelta": 0,
+      "maxListenerDelta": 0,
+      "passed": true
+    },
+    {
+      "name": "lru-map.no-leak",
+      "expectedMaxHeapDelta": 1048576,
+      "expectedMaxEventListenerLeak": 0,
+      "samples": [
+        {
+          "heapUsedBefore": 7280544,
+          "heapUsedAfter": 7296792,
+          "heapDelta": 16248,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7288720,
+          "heapUsedAfter": 7302928,
+          "heapDelta": 14208,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7298576,
+          "heapUsedAfter": 7314136,
+          "heapDelta": 15560,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        }
+      ],
+      "avgHeapDelta": 15339,
+      "maxHeapDelta": 16248,
+      "avgListenerDelta": 0,
+      "maxListenerDelta": 0,
+      "passed": true
+    },
+    {
+      "name": "ring-buffer.no-leak",
+      "expectedMaxHeapDelta": 204800,
+      "expectedMaxEventListenerLeak": 0,
+      "samples": [
+        {
+          "heapUsedBefore": 7310472,
+          "heapUsedAfter": 7346968,
+          "heapDelta": 36496,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7343704,
+          "heapUsedAfter": 7354024,
+          "heapDelta": 10320,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7344960,
+          "heapUsedAfter": 7355424,
+          "heapDelta": 10464,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        }
+      ],
+      "avgHeapDelta": 19093,
+      "maxHeapDelta": 36496,
+      "avgListenerDelta": 0,
+      "maxListenerDelta": 0,
+      "passed": true
+    },
+    {
+      "name": "async-mutex.no-leak",
+      "expectedMaxHeapDelta": 51200,
+      "expectedMaxEventListenerLeak": 0,
+      "samples": [
+        {
+          "heapUsedBefore": 7360640,
+          "heapUsedAfter": 7397384,
+          "heapDelta": 36744,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7393208,
+          "heapUsedAfter": 7397680,
+          "heapDelta": 4472,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7393360,
+          "heapUsedAfter": 7397800,
+          "heapDelta": 4440,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        }
+      ],
+      "avgHeapDelta": 15219,
+      "maxHeapDelta": 36744,
+      "avgListenerDelta": 0,
+      "maxListenerDelta": 0,
+      "passed": true
+    },
+    {
+      "name": "jsonl-batcher.no-leak",
+      "expectedMaxHeapDelta": 204800,
+      "expectedMaxEventListenerLeak": 0,
+      "samples": [
+        {
+          "heapUsedBefore": 7396856,
+          "heapUsedAfter": 7512712,
+          "heapDelta": 115856,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7511392,
+          "heapUsedAfter": 7513968,
+          "heapDelta": 2576,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        },
+        {
+          "heapUsedBefore": 7513088,
+          "heapUsedAfter": 7533344,
+          "heapDelta": 20256,
+          "listenerCountBefore": 5,
+          "listenerCountAfter": 5,
+          "listenerDelta": 0
+        }
+      ],
+      "avgHeapDelta": 46229,
+      "maxHeapDelta": 115856,
+      "avgListenerDelta": 0,
+      "maxListenerDelta": 0,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0
+  }
+}

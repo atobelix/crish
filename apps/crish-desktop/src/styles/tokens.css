@@ -7,13 +7,13 @@ html[data-theme="light"] {
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: hsl(35, 12%, 95.0%);     /* 主背景色：极简护眼暖灰 */
-  --bg-secondary: hsl(35, 12%, 92.0%);   /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
-  --bg-tertiary: hsl(35, 12%, 89.0%);    /* 三级背景：配置卡片等下凹底色 */
+  --bg-primary: hsl(35, 12%, 94.0%);     /* 主背景色：极简护眼暖灰 */
+  --bg-secondary: hsl(35, 12%, 91.5%);   /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
+  --bg-tertiary: hsl(35, 12%, 88.5%);    /* 三级背景：配置卡片等下凹底色 */
   --bg-hover: color-mix(in srgb, var(--control-mix-color) 4%, transparent);      /* 悬浮态 */
   --bg-active: color-mix(in srgb, var(--control-mix-color) 8%, transparent);     /* 激活态 */
-  --bg-card: hsl(35, 10%, 96.5%);       /* 卡片底色：温润暖白 */
-  --bg-elevated: hsl(35, 8%, 98.5%);   /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
+  --bg-card: hsl(35, 10%, 98.0%);       /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
+  --bg-elevated: hsl(35, 8%, 100.0%);   /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
   --bg-workspace: var(--bg-primary);
   --card-header-bg: var(--bg-secondary);
   --text-primary: #111111;
@@ -77,10 +77,12 @@ html[data-theme="light"] {
   --terminal-cmd: var(--text-primary);
   --terminal-bar-fill: rgba(0, 0, 0, 0.03);
 
+  --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-xl: 20px;
+  --radius-xxl: 24px;
 
   /* Premium Smooth Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -93,17 +95,17 @@ html[data-theme="light"] {
   --bg-glass: rgba(255, 255, 255, 0.75);
   --backdrop-blur: blur(16px);
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --transition-smooth: 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
   --dropdown-padding: 6px;
   --dropdown-gap: 2px;
-  --dropdown-radius: 12px;
+  --dropdown-radius: var(--radius-md);
   --item-padding: 8px 12px;
-  --item-radius: 8px;
+  --item-radius: var(--radius-sm);
   --item-font-size: var(--font-size-base);
 
   --header-height: 44px;
@@ -114,20 +116,20 @@ html[data-theme="light"] {
    * xxs/xs 仅用于时间、角标等极密元信息，慎用
    */
   --font-size-adjust: 0px;
-  --font-size-xxs: calc(11px + var(--font-size-adjust));
-  --font-size-xs: calc(12px + var(--font-size-adjust));
-  --font-size-sm: calc(13px + var(--font-size-adjust));
-  --font-size-base: calc(14px + var(--font-size-adjust));
-  --font-size-md: var(--font-size-base);
-  --font-size-lg: calc(15px + var(--font-size-adjust));
-  --font-size-xl: calc(17px + var(--font-size-adjust));
+  --font-size-xxs: calc(10px + var(--font-size-adjust));
+  --font-size-xs: calc(11px + var(--font-size-adjust));
+  --font-size-sm: calc(12px + var(--font-size-adjust));
+  --font-size-base: calc(13px + var(--font-size-adjust));
+  --font-size-md: calc(14px + var(--font-size-adjust));
+  --font-size-lg: calc(16px + var(--font-size-adjust));
+  --font-size-xl: calc(18px + var(--font-size-adjust));
 
   /*
    * 字重阶梯：
    */
   --font-weight-code: 400;
   --font-weight-normal: 400;
-  --font-weight-medium: var(--font-weight-normal);
+  --font-weight-medium: 500;
   --font-weight-content: 600;
   --font-weight-semibold: var(--font-weight-content);
 
@@ -161,11 +163,11 @@ html[data-theme="light"] {
    * ui-size gear 会整体缩放，组件勿再写 5/7/9 等零散 px
    */
   --space-1: 4px;
-  --space-2: 6px;
-  --space-3: 8px;
-  --space-4: 12px;
-  --space-5: 16px;
-  --space-6: 20px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 
   /*
    * 行高：中文 UI 略抬 body，避免汉字行贴；控件/标签用 tight|ui
@@ -230,13 +232,13 @@ html[data-theme="light"] {
  * 禁止组件再写独立 color-mix 百分比描边 */
 html[data-theme="dark"] {
   /* Premium Dark Theme (Neutral/Vercel style) */
-  --bg-primary: hsl(0, 0%, 6%);
-  --bg-secondary: hsl(0, 0%, 8.5%);
-  --bg-tertiary: hsl(0, 0%, 10%);
+  --bg-primary: hsl(0, 0%, 5%);
+  --bg-secondary: hsl(0, 0%, 8%);
+  --bg-tertiary: hsl(0, 0%, 11%);
   --bg-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   --bg-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
-  --bg-card: hsl(0, 0%, 6%);
-  --bg-elevated: hsl(0, 0%, 8.5%);
+  --bg-card: hsl(0, 0%, 11%);
+  --bg-elevated: hsl(0, 0%, 15%);
   --text-primary: #f0f0f0;
   --text-secondary: #a3a3a3;
   --text-tertiary: #737373;
@@ -395,10 +397,10 @@ html[data-theme="dark"] {
   --control-pad-y: 7px;
 
   --space-1: 4px;
-  --space-2: 7px;
-  --space-3: 10px;
-  --space-4: 14px;
-  --space-5: 18px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
 
   --line-height-tight: 1.28;

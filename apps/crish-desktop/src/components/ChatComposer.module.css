@@ -27,7 +27,7 @@
 .container:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%) !important;
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%) !important;
   box-shadow: none !important;
   outline: none;
 }
@@ -45,7 +45,7 @@
 .containerDense:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%) !important;
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%) !important;
 }
 
 .textarea {
