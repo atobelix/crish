@@ -19,6 +19,7 @@ import go from 'highlight.js/lib/languages/go';
 import java from 'highlight.js/lib/languages/java';
 import c from 'highlight.js/lib/languages/c';
 import cpp from 'highlight.js/lib/languages/cpp';
+import { LruCache, HIGHLIGHT_CACHE_ENTRIES, HIGHLIGHT_CACHE_BUDGET_BYTES, memoryManager } from '@crish/shared-utils/browser';
 
 let registered = false;
 
@@ -95,17 +96,16 @@ export function langFromFilename(name: string): string {
   return EXT_LANG[ext] || '';
 }
 
-const HIGHLIGHT_CACHE_LIMIT = 1000;
-const highlightCache = new Map<string, string>();
+const estimateSize = (key: string, value: string): number =>
+  (key.length + value.length) * 2;
 
-function cleanCacheIfNeeded() {
-  if (highlightCache.size > HIGHLIGHT_CACHE_LIMIT) {
-    const keys = Array.from(highlightCache.keys()).slice(0, 100);
-    for (const key of keys) {
-      highlightCache.delete(key);
-    }
-  }
-}
+const highlightCache = new LruCache<string, string>(
+  HIGHLIGHT_CACHE_ENTRIES,
+  HIGHLIGHT_CACHE_BUDGET_BYTES,
+  estimateSize,
+);
+
+memoryManager.register(highlightCache);
 
 export function highlightCode(code: string, langHint?: string): string {
   ensureLangs();
@@ -113,9 +113,8 @@ export function highlightCode(code: string, langHint?: string): string {
   const lang = (langHint || '').toLowerCase().replace(/^\./, '').trim();
   
   const cacheKey = `${lang}:${raw}`;
-  if (highlightCache.has(cacheKey)) {
-    return highlightCache.get(cacheKey)!;
-  }
+  const cached = highlightCache.get(cacheKey);
+  if (cached !== undefined) return cached;
 
   let html = '';
   try {
@@ -129,7 +128,6 @@ export function highlightCode(code: string, langHint?: string): string {
     html = escapeHtml(raw);
   }
 
-  cleanCacheIfNeeded();
   highlightCache.set(cacheKey, html);
   return html;
 }

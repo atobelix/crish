@@ -4,7 +4,35 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>crish-desktop</title>
+    <title>Crish · AI 工作台</title>
+    <!-- 内联骨架屏 CSS (0.3KB gzip) -->
+    <style>
+      .skel-shimmer {
+        background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+        background-size: 200% 100%;
+        animation: skel-shimmer 1.5s infinite;
+        border-radius: 6px;
+      }
+      @keyframes skel-shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      .skel-app {
+        display: flex; height: 100vh; width: 100%; overflow: hidden;
+      }
+      .skel-sidebar {
+        width: 260px; height: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+      }
+      .skel-sidebar-header { height: 36px; width: 100%; }
+      .skel-sidebar-item { height: 44px; width: 100%; }
+      .skel-main { flex: 1; height: 100%; display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+      .skel-toolbar { height: 32px; width: 100%; }
+      .skel-body { flex: 1; width: 100%; }
+      html[data-theme='dark'] .skel-shimmer {
+        background: linear-gradient(90deg, #2a2a2a 25%, #333 50%, #2a2a2a 75%);
+        background-size: 200% 100%;
+      }
+    </style>
     <!-- 首屏前应用主题/字体栈，避免闪白；与 themeStore / fontStore 同源 key -->
     <script>
       (function () {
@@ -24,7 +52,6 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'default');
         }
-        /* 字体：仅打标记，完整栈由 fontStore bootstrap 设置（避免内联维护双份栈） */
         try {
           var fr = localStorage.getItem('crish_fonts');
           if (!fr) {
@@ -44,7 +71,22 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 骨架屏：Suspense 替换目标 -->
+      <div class="skel-app" id="skel-app">
+        <div class="skel-sidebar">
+          <div class="skel-shimmer skel-sidebar-header"></div>
+          <div class="skel-shimmer skel-sidebar-item"></div>
+          <div class="skel-shimmer skel-sidebar-item"></div>
+          <div class="skel-shimmer skel-sidebar-item"></div>
+          <div class="skel-shimmer skel-sidebar-item"></div>
+        </div>
+        <div class="skel-main">
+          <div class="skel-shimmer skel-toolbar"></div>
+          <div class="skel-shimmer skel-body"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

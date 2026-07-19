@@ -309,13 +309,13 @@ export function parseGitPorcelainStatus(
 /** 本机 git 命令（经 workbench_run_shell，不经 daemon 审批） */
 async function runLocalGit(
   cwd: string,
-  gitArgs: string,
+  gitArgs: string[],
   timeoutMs = GIT_LOCAL_TIMEOUT_MS,
 ): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
   try {
     const { runTerminalShell } = await import('./terminalShellApi');
-    // Windows PowerShell / bash 均支持 git -C
-    const cmd = `git -C "${cwd.replace(/"/g, '\\"')}" ${gitArgs}`;
+    const { escapeShellArg } = await import('./shellEscape');
+    const cmd = ['git', '-C', cwd, ...gitArgs].map(escapeShellArg).join(' ');
     const res = await runTerminalShell({ command: cmd, cwd, timeoutMs });
     if (res.status !== 'ok') return null;
     return {
@@ -334,7 +334,7 @@ async function runLocalGit(
  * 失败返回 null 以便回落引擎。
  */
 export async function fetchGitStatusLocal(cwd: string): Promise<GitStatusResult | null> {
-  const r = await runLocalGit(cwd, 'status --porcelain=v1 -b --untracked-files=normal', GIT_LOCAL_TIMEOUT_MS);
+  const r = await runLocalGit(cwd, ['status', '--porcelain=v1', '-b', '--untracked-files=normal'], GIT_LOCAL_TIMEOUT_MS);
   if (!r) return null;
   if (r.timedOut) {
     return { found: false, files: [], reason: 'timeout', detail: '本机 git status 超时' };
@@ -366,9 +366,9 @@ async function fetchGitDiffLocal(params: {
   const parts = ['diff', '--no-color', '--no-ext-diff'];
   if (staged) parts.push('--cached');
   if (path) {
-    parts.push('--', `"${path.replace(/"/g, '\\"')}"`);
+    parts.push('--', path);
   }
-  const r = await runLocalGit(cwd, parts.join(' '), GIT_LOCAL_TIMEOUT_MS);
+  const r = await runLocalGit(cwd, parts, GIT_LOCAL_TIMEOUT_MS);
   if (!r || r.timedOut) return null;
   if (!r.ok && /not a git repository/i.test(r.stderr || '')) {
     return { found: false, files: [] };
@@ -624,7 +624,7 @@ export function gitStatusBadgeClass(code: GitFileStatusCode): string {
 
 /** 获取当前本地分支及分支列表 */
 export async function fetchGitBranches(cwd: string): Promise<{ current: string; list: string[] }> {
-  const r = await runLocalGit(cwd, 'branch --no-color', GIT_LOCAL_TIMEOUT_MS);
+  const r = await runLocalGit(cwd, ['branch', '--no-color'], GIT_LOCAL_TIMEOUT_MS);
   if (!r || !r.ok) {
     return { current: 'main', list: ['main'] };
   }
@@ -650,7 +650,7 @@ export async function fetchGitBranches(cwd: string): Promise<{ current: string; 
 
 /** 切换本地分支 */
 export async function switchGitBranch(cwd: string, branch: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await runLocalGit(cwd, `checkout "${branch.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  const r = await runLocalGit(cwd, ['checkout', branch], GIT_LOCAL_TIMEOUT_MS);
   if (!r) return { ok: false, error: '本地 Git 切换分支失败（执行异常）' };
   if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '本地 Git 切换分支失败' };
   return { ok: true };
@@ -664,13 +664,13 @@ export async function commitGitChanges(
 ): Promise<{ ok: boolean; error?: string }> {
   if (!onlyStaged) {
     // 暂存所有修改
-    const addRes = await runLocalGit(cwd, 'add -A', GIT_LOCAL_TIMEOUT_MS);
+    const addRes = await runLocalGit(cwd, ['add', '-A'], GIT_LOCAL_TIMEOUT_MS);
     if (!addRes || !addRes.ok) {
       return { ok: false, error: addRes?.stderr || '暂存变更失败 (git add 失败)' };
     }
   }
   // 提交
-  const commitRes = await runLocalGit(cwd, `commit -m "${message.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  const commitRes = await runLocalGit(cwd, ['commit', '-m', message], GIT_LOCAL_TIMEOUT_MS);
   if (!commitRes || !commitRes.ok) {
     return { ok: false, error: commitRes?.stderr || '创建提交失败 (git commit 失败)' };
   }
@@ -679,7 +679,8 @@ export async function commitGitChanges(
 
 /** 暂存单个文件 */
 export async function stageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, `add -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  const normalizedPath = path.replace(/\\/g, '/');
+  const res = await runLocalGit(cwd, ['add', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
   if (!res || !res.ok) {
     return { ok: false, error: res?.stderr || '暂存文件失败' };
   }
@@ -688,7 +689,8 @@ export async function stageGitPath(cwd: string, path: string): Promise<{ ok: boo
 
 /** 取消暂存单个文件 */
 export async function unstageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, `reset HEAD -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  const normalizedPath = path.replace(/\\/g, '/');
+  const res = await runLocalGit(cwd, ['reset', 'HEAD', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
   if (!res || !res.ok) {
     return { ok: false, error: res?.stderr || '取消暂存文件失败' };
   }
@@ -697,10 +699,11 @@ export async function unstageGitPath(cwd: string, path: string): Promise<{ ok: b
 
 /** 放弃单个文件修改 */
 export async function discardGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, `checkout -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+  const normalizedPath = path.replace(/\\/g, '/');
+  const res = await runLocalGit(cwd, ['checkout', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
   if (!res || !res.ok) {
     // If checkout fails (e.g. untracked file), try git clean -f to delete it
-    const resClean = await runLocalGit(cwd, `clean -f -- "${path.replace(/"/g, '\\"')}"`, GIT_LOCAL_TIMEOUT_MS);
+    const resClean = await runLocalGit(cwd, ['clean', '-f', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
     if (!resClean || !resClean.ok) {
       return { ok: false, error: res?.stderr || resClean?.stderr || '放弃修改失败' };
     }
@@ -710,7 +713,7 @@ export async function discardGitPath(cwd: string, path: string): Promise<{ ok: b
 
 /** 暂存所有变更 */
 export async function stageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, 'add -A', GIT_LOCAL_TIMEOUT_MS);
+  const res = await runLocalGit(cwd, ['add', '-A'], GIT_LOCAL_TIMEOUT_MS);
   if (!res || !res.ok) {
     return { ok: false, error: res?.stderr || '暂存全部失败' };
   }
@@ -719,7 +722,7 @@ export async function stageAllGit(cwd: string): Promise<{ ok: boolean; error?: s
 
 /** 取消暂存所有变更 */
 export async function unstageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, 'reset HEAD', GIT_LOCAL_TIMEOUT_MS);
+  const res = await runLocalGit(cwd, ['reset', 'HEAD'], GIT_LOCAL_TIMEOUT_MS);
   if (!res || !res.ok) {
     return { ok: false, error: res?.stderr || '取消暂存全部失败' };
   }
@@ -728,7 +731,7 @@ export async function unstageAllGit(cwd: string): Promise<{ ok: boolean; error?:
 
 /** 推送提交至远程仓库 */
 export async function pushGitChanges(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await runLocalGit(cwd, 'push', GIT_STATUS_TIMEOUT_MS);
+  const r = await runLocalGit(cwd, ['push'], GIT_STATUS_TIMEOUT_MS);
   if (!r) return { ok: false, error: '推送失败（执行异常）' };
   if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '推送失败，可能存在冲突或网络连接问题' };
   return { ok: true };

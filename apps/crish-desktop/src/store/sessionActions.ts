@@ -3,6 +3,7 @@
  * 仍挂在同一 useLayoutStore（Phase 1）；对外请用 sessionStore.ts 的 useSessionStore 门面。
  */
 
+import { MAX_MESSAGES_PER_SESSION, MAX_MESSAGES_PER_AGENT, MAX_FOLDERS } from '@crish/shared-utils/browser';
 import { isDemoMode } from '../api/appMode';
 import {
   GENERAL_FOLDER,
@@ -363,6 +364,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
         }
       }
 
+      if (sess.messages.length >= MAX_MESSAGES_PER_SESSION) sess.messages.shift();
       sess.messages.push(newMsg);
       // 活动触达写 ISO，侧栏相对时间可老化；勿写「刚刚」字面量
       const ts =
@@ -415,7 +417,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
       reindexSessionsById(state);
       // 合并远程会话后补齐侧栏分组顺序
       for (const s of state.sessions) {
-        if (s.folder && !state.folderOrder.includes(s.folder)) {
+        if (s.folder && !state.folderOrder.includes(s.folder) && state.folderOrder.length < MAX_FOLDERS) {
           state.folderOrder.push(s.folder);
         }
       }
@@ -563,7 +565,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
       if (!sess) return;
       if (!getMessageById(sess.messages, messageId)) return;
       if (!sess.pinnedMessageIds) sess.pinnedMessageIds = [];
-      if (!sess.pinnedMessageIds.includes(messageId)) {
+      if (!sess.pinnedMessageIds.includes(messageId) && sess.pinnedMessageIds.length < MAX_MESSAGES_PER_SESSION) {
         sess.pinnedMessageIds.push(messageId);
       }
     }),
@@ -638,6 +640,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
       if (existing) {
         Object.assign(existing, message);
       } else {
+        if (ag.messages.length >= MAX_MESSAGES_PER_AGENT) ag.messages.shift();
         ag.messages.push(message);
       }
     }),
@@ -810,7 +813,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
         // 连点刷屏仅靠 reuse 路径剪 peer
         state.sessions.unshift(sess);
         reindexSessionsById(state);
-        if (!state.folderOrder.includes(sess.folder)) {
+        if (!state.folderOrder.includes(sess.folder) && state.folderOrder.length < MAX_FOLDERS) {
           state.folderOrder.unshift(sess.folder);
         }
         if (activate) {

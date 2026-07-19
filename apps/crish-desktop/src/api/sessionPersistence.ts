@@ -494,21 +494,38 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
   if (!id) return [];
   const raw = localStorage.getItem(BODY_PREFIX + id);
   if (!raw) return [];
-  // 优先 JSONL；兼容早期 JSON 数组
+  let msgs: SessionMessage[];
   if (raw.trimStart().startsWith('[')) {
     const parsed = safeParseJson<unknown>(raw, null);
-    return parseSessionMessages(parsed);
+    msgs = parseSessionMessages(parsed);
+  } else {
+    msgs = jsonlToMessages(raw);
   }
-  return jsonlToMessages(raw);
+  persistedMessageCounts.set(id, msgs.length);
+  return msgs;
 }
 
 export function saveSessionBody(sessionId: string, messages: SessionMessage[]): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
+  const msgs = messages || [];
+  const prevCount = persistedMessageCounts.get(id) ?? 0;
+
   try {
-    localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(messages || []));
+    if (prevCount === 0 || msgs.length < prevCount) {
+      localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(msgs));
+    } else if (msgs.length > prevCount) {
+      const newMsgs = msgs.slice(prevCount);
+      const existing = localStorage.getItem(BODY_PREFIX + id) ?? '';
+      const append = newMsgs.map((m) => JSON.stringify(m)).join('\n');
+      const sep = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+      localStorage.setItem(BODY_PREFIX + id, existing + sep + append);
+    }
+    persistedMessageCounts.set(id, msgs.length);
   } catch {
-    /* quota */
+    const fallback = msgs.slice(-100);
+    localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(fallback));
+    persistedMessageCounts.set(id, fallback.length);
   }
 }
 
@@ -517,6 +534,7 @@ export function deleteSessionBody(sessionId: string): void {
   if (!id) return;
   localStorage.removeItem(BODY_PREFIX + id);
   localStorage.removeItem(AGENTS_PREFIX + id);
+  persistedMessageCounts.delete(id);
 }
 
 export function loadSessionAgents(sessionId: string): SessionAgent[] {
@@ -690,6 +708,11 @@ export function hydrateSessionsFromDisk(): {
 }
 
 /** 持久化完整会话列表与正文 */
+/**
+ * 持久化游标：记录每个 session 已落盘的消息条数，用于支持增量追加。
+ */
+const persistedMessageCounts = new Map<string, number>();
+
 /**
  * 上次持久化时已知的会话 id 集合。
  * 用于在 persistAllSessions 中跳过「无删除」场景的孤儿扫描——

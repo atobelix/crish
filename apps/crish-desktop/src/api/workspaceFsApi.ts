@@ -38,6 +38,10 @@ export function getFsRoot(): string {
   return getWorkspacePath() || '';
 }
 
+const WINDOWS_RESERVED_NAME_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
+const BIDI_OVERRIDE_RE = /[\u202A-\u202E\u2066-\u2069]/;
+const MAX_PATH_LENGTH = 4096;
+
 /** Windows 盘符 / UNC / POSIX 绝对路径 */
 export function isAbsoluteFsPath(path: string): boolean {
   const p = (path || '').trim();
@@ -55,7 +59,25 @@ export function isAbsoluteFsPath(path: string): boolean {
 export function resolveWorkspacePath(path: string): string {
   const p = (path || '').trim();
   if (!p) return p;
-  if (isAbsoluteFsPath(p)) return p;
+  // 拒绝 NUL 字节
+  if (p.includes('\0')) return '';
+  // 拒绝路径过长
+  if (p.length > MAX_PATH_LENGTH) return '';
+  // 拒绝 Unicode bidi 覆盖字符
+  if (BIDI_OVERRIDE_RE.test(p)) return '';
+  // 拒绝 Windows 保留设备名
+  const lastSegment = p.replace(/[\\/]$/, '').split(/[\\/]/).pop() || '';
+  if (WINDOWS_RESERVED_NAME_RE.test(lastSegment)) return '';
+  // 拒绝路径遍历 (.. 作为路径组件)
+  const norm = p.replace(/\\/g, '/');
+  if (/(^|\/)\.\.($|\/)/.test(norm)) return '';
+  if (isAbsoluteFsPath(p)) {
+    // 绝对路径必须在工作区根目录下
+    const root = getFsRoot().trim().replace(/\\/g, '/').replace(/\/+$/, '');
+    if (!root) return '';
+    if (!norm.toLowerCase().startsWith(root.toLowerCase())) return '';
+    return p;
+  }
   const root = getFsRoot().trim();
   if (!root) return p;
   // 去掉前导 ./ 或 .\

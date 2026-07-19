@@ -3,6 +3,7 @@
  * 可在 immer draft 上原地修改 WorkspaceState / Diff / Terminal 缓冲。
  */
 
+import { MAX_DIFF_FILES } from '@crish/shared-utils/browser';
 import { isDemoMode } from '../api/appMode';
 import { hydrateSessionsFromDisk } from '../api/sessionPersistence';
 import { GENERAL_FOLDER } from '../api/projectStore';
@@ -805,7 +806,7 @@ export function isRedundantGroupSplit(params: {
 
 // ── Diff list（layoutStore setActiveDiffSource / pushDiffFile 共用）──────────
 
-export const DIFF_LIST_MAX = 40;
+export const DIFF_LIST_MAX = MAX_DIFF_FILES;
 
 /** 按 path 去重 upsert，并截断列表长度（原地修改） */
 export function upsertDiffFile(

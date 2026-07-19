@@ -35,6 +35,7 @@ import type {
   CardGroupState,
   SettingsTabType,
 } from './types';
+import { MAX_TERMINAL_SESSIONS, MAX_DIFF_FILES } from '@crish/shared-utils/browser';
 import {
   appendTerminalLine,
   collapseToolColumnToTabs,
@@ -439,7 +440,7 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   /** 本轮工具产生的多文件 diff（H2）；H3 可接 git-diff */
   diffFiles: FileDiff[];
   setActiveDiffSource: (diff: FileDiff | null) => void;
-  setDiffFiles: (files: FileDiff[]) => void;
+  setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
   pushDiffFile: (diff: FileDiff) => void;
   /** 从变更列表移除（拒绝 / 已应用后清理） */
   removeDiffFile: (filePath: string) => void;
@@ -537,7 +538,10 @@ export const useLayoutStore = create<LayoutStore>()(
       }
     }),
     setDiffFiles: (files) => set((state) => {
-      state.diffFiles = Array.isArray(files) ? files : [];
+      const next = typeof files === 'function'
+        ? (files as (prev: FileDiff[]) => FileDiff[])(state.diffFiles)
+        : files;
+      state.diffFiles = Array.isArray(next) ? next : [];
       state.activeDiffSource = state.diffFiles[0] || null;
     }),
     pushDiffFile: (diff) => set((state) => {
@@ -660,14 +664,14 @@ export const useLayoutStore = create<LayoutStore>()(
         taskName: `Cron: ${label}`,
         elapsedSeconds: 0,
       };
-      state.manuallyTriggeredWorkers.push(newWorker);
-      state.activeWorkers.push(newWorker);
+      if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
+      if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
     }),
     killWorker: (id: string, _taskName: string) => set((state) => {
       if (!id) return;
       state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
       state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
-      if (!state.killedWorkerIds.includes(id)) {
+      if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
         state.killedWorkerIds.push(id);
       }
       // Deduct token usage as a simulated result of termination

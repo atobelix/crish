@@ -108,6 +108,14 @@ export interface FileDiff {
   /** 删除行统计 */
   deletions: number;
   changes: DiffChange[];
+  /** Git 暂存状态（乐观 UI 更新用） */
+  staged?: boolean;
+  /** Git 未暂存状态 */
+  unstaged?: boolean;
+  /** 是否未跟踪文件 */
+  untracked?: boolean;
+  /** Git 状态字母标识（M/A/D/?? 等） */
+  gitStatus?: string;
 }
 
 // ── CronJob 形态（layout scheduledTasks / RuntimePanel；与 clientApi 结构兼容）──

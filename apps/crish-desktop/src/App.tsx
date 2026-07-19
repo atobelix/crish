@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
-import { useLayoutStore, initLayoutStorePersistence } from './store/layoutStore';
+import { useLayoutStore } from './store/layoutStore';
 import { getSessionById } from './store/sessionStore';
 import {
   archiveSession,
@@ -14,55 +14,40 @@ import {
 } from './api/storeAccess';
 import { matchShortcutActions } from './api/shortcutBindings';
 import type { SettingsTabType } from './store/types';
-import { clientApi } from './api/clientApi';
-import { ensureDaemonConnected } from './api/daemonChatBridge';
-import { bootstrapDesktopBackend, getDesktopDaemonClient } from './api/daemonClient';
-import { isProductShell } from './api/productMode';
 
-import { isDemoMode } from './api/appMode';
-import {
-  FirstRunWizard,
-  shouldShowFirstRunWizard,
-} from './components/FirstRunWizard';
-import { Sidebar } from './components/Sidebar';
-import { Workspace } from './components/Workspace';
-import { WorkspaceChromeBars } from './components/WorkspaceChromeBars';
-import { AppErrorBoundary } from './components/AppErrorBoundary';
-import { ToastStack } from './components/ToastStack';
-import { formatBranchUndoToast, useToastQueue } from './hooks/useToastQueue';
-import * as Lucide from 'lucide-react';
-
-import { RuntimeFloatPanel } from './components/RuntimeFloatPanel';
+import { isDemoModeFast, isProductShellFast } from './createSsrGlobals';
+import { PlatformAdaptationCtx, usePlatformAdaptation } from '@crish/shared-utils/browser';
 import { emitUiEvent, onUiEvent } from './api/uiEvents';
 import { createDebounced } from './api/debouncedValue';
 import { getActiveModelId, getActiveProfileId } from './api/providerProfiles';
-import { IconSidebarLeft, IconSidebarRight } from './components/SidebarToggleIcons';
-import { CheatsheetModal } from './components/CheatsheetModal';
-import {
-  listProjects,
-  rebindSessionFoldersToProjects,
-  rememberProjectFolderAlias,
-} from './api/projectStore';
 import { collapseToolColumnPreserve } from './store/layoutHelpers';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { formatBranchUndoToast, useToastQueue } from './hooks/useToastQueue';
+import { shouldShowFirstRunWizard } from './components/FirstRunWizard';
 
-/** 浏览器标签 / 任务栏标题（中文产品壳；html 内默认 crish-desktop 仅作占位） */
+// ── 关键路径组件：同步导入，与 App 同 chunk ──
+import { Sidebar } from './components/Sidebar';
+import { Workspace } from './components/Workspace';
+
+// ── 非关键路径组件：代码分割，按需加载 ──
+const WorkspaceChromeBars = lazy(() => import('./components/WorkspaceChromeBars').then((m) => ({ default: m.WorkspaceChromeBars })));
+const ToastStack = lazy(() => import('./components/ToastStack').then((m) => ({ default: m.ToastStack })));
+const RuntimeFloatPanel = lazy(() => import('./components/RuntimeFloatPanel').then((m) => ({ default: m.RuntimeFloatPanel })));
+const CheatsheetModal = lazy(() => import('./components/CheatsheetModal').then((m) => ({ default: m.CheatsheetModal })));
+const FirstRunWizard = lazy(() => import('./components/FirstRunWizard').then((m) => ({ default: m.FirstRunWizard })));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })).catch((err) => { console.error('[crish] SettingsPanel lazy load failed', err); throw err; }));
+const IconSidebarLeft = lazy(() => import('./components/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarLeft })));
+const IconSidebarRight = lazy(() => import('./components/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarRight })));
+const LucideHelpCircle = lazy(() => import('lucide-react').then((m) => ({ default: m.HelpCircle })));
+const LucideGauge = lazy(() => import('lucide-react').then((m) => ({ default: m.Gauge })));
+const LucideMinus = lazy(() => import('lucide-react').then((m) => ({ default: m.Minus })));
+const LucideSquare = lazy(() => import('lucide-react').then((m) => ({ default: m.Square })));
+const LucideX = lazy(() => import('lucide-react').then((m) => ({ default: m.X })));
+
+/** 浏览器标签 / 任务栏标题 */
 const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
 
-const SettingsPanel = lazy(() =>
-  import('./components/SettingsPanel')
-    .then((m) => {
-      if (!m.SettingsPanel) {
-        throw new Error('SettingsPanel 导出缺失');
-      }
-      return { default: m.SettingsPanel };
-    })
-    .catch((err) => {
-      console.error('[crish] SettingsPanel lazy load failed', err);
-      throw err;
-    }),
-);
-
-/** Devtools / internal globals attached to window (no `as any`) */
+/** Devtools / internal globals attached to window */
 type CrishWindow = Window & {
   useLayoutStore?: typeof useLayoutStore;
   AUTO_FOLD_DELAY?: number;
@@ -72,7 +57,22 @@ if (typeof window !== 'undefined') {
   (window as CrishWindow).useLayoutStore = useLayoutStore;
 }
 
+/** 最小骨架 fallback：内联尺寸防布局抖动 */
+function SkeletonFallback({ height, width }: { height?: number | string; width?: number | string }) {
+  return (
+    <div
+      className="skel-shimmer"
+      style={{ height: height || '100%', width: width || '100%', borderRadius: 6 }}
+      aria-hidden="true"
+    />
+  );
+}
+
 function App() {
+  const platformAdaptation = usePlatformAdaptation({
+    autoApplyRender: true,
+    autoStartEngine: true,
+  });
   const workspaceIdsStr = useLayoutStore((s) => s.workspaces.map((w) => w.id).join(','));
   const workspaceIds = useMemo(() => workspaceIdsStr ? workspaceIdsStr.split(',') : [], [workspaceIdsStr]);
   const activeWorkspaceId = useLayoutStore(
@@ -119,11 +119,8 @@ function App() {
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
-  /** 跳过链接聚焦展开（无全局 sr-only CSS） */
   const [skipLinkFocused, setSkipLinkFocused] = useState(false);
-  /** 搜索框即时输入 */
   const [sessionSearchInput, setSessionSearchInput] = useState('');
-  /** 防抖后的查询，供侧栏过滤（避免每键全量扫 sessions） */
   const [sessionSearch, setSessionSearch] = useState('');
   const searchDebounceRef = useRef(
     createDebounced<string>((q) => setSessionSearch(q), 220),
@@ -132,14 +129,25 @@ function App() {
     searchDebounceRef.current.schedule(sessionSearchInput);
     return () => searchDebounceRef.current.cancel();
   }, [sessionSearchInput]);
-  const productShell = isProductShell();
+  const productShell = isProductShellFast();
   const [showFirstRun, setShowFirstRun] = useState(
-    () => !isDemoMode() && shouldShowFirstRunWizard(),
+    () => !isDemoModeFast() && shouldShowFirstRunWizard(),
   );
+
+  const [engineReady, setEngineReady] = useState(false);
+
+  // 延迟初始化 engineReady：避免 import daemonClient 阻塞首帧
+  useEffect(() => {
+    import('./api/daemonClient').then(({ getDesktopDaemonClient }) => {
+      const client = getDesktopDaemonClient();
+      if (client.hasEverConnected() || client.isConnected()) {
+        setEngineReady(true);
+      }
+    });
+  }, []);
 
   const pickWorkspaceFolder = async () => {
     try {
-      // Optional desktop plugin (not always installed in browser/dev); avoid Function()
       const dialogSpec = '@tauri-apps/plugin-dialog';
       const mod = (await import(/* @vite-ignore */ dialogSpec).catch(() => null)) as {
         open?: (opts: { directory: boolean; multiple: boolean }) => Promise<string | string[] | null>;
@@ -152,22 +160,13 @@ function App() {
           return;
         }
       }
-    } catch {
-      /* fall through */
-    }
-    // No native dialog: open polished in-chat project picker instead of window.prompt
+    } catch {}
     emitUiEvent('open-project-picker');
   };
-  /** Product: block main chrome until engine has connected at least once. */
-  const [engineReady, setEngineReady] = useState(
-    () => !productShell || getDesktopDaemonClient().hasEverConnected() || getDesktopDaemonClient().isConnected(),
-  );
 
-  // Sidebar hover overlay state & handlers
   const [isHoveredExpanded, setIsHoveredExpanded] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 工具自动折叠默认值（原面板菜单已移除；仍供内部读取）
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const w = window as CrishWindow;
@@ -176,7 +175,6 @@ function App() {
     }
   }, []);
 
-  // 文档标题 + 中文 a11y 语言（不改 index.html 编译产物时也能在运行时收口）
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.lang = 'zh-CN';
@@ -185,26 +183,27 @@ function App() {
     }
   }, []);
 
-  // 会话 index / JSONL 防抖落盘 + 磁盘镜像回灌（demo 模式 no-op）
-  // 注意：壳层不在此 createSession，避免冷启动幽灵空壳会话
-  useEffect(() => initLayoutStorePersistence(), []);
+  useEffect(() => {
+    import('./store/layoutStore').then(({ initLayoutStorePersistence }) => initLayoutStorePersistence());
+  }, []);
 
-  // 修复幽灵 proj-* folder：把旧项目 id 绑回当前路径对应项目（对话「丢了」主因）
   useEffect(() => {
     const rebind = () => {
       try {
-        const projects = listProjects();
-        for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
-        useLayoutStore.setState((state) => {
-          const n = rebindSessionFoldersToProjects(state.sessions, projects);
-          if (n > 0) {
-            for (const s of state.sessions) {
-              if (s.folder && !state.folderOrder.includes(s.folder)) {
-                state.folderOrder.push(s.folder);
+        import('./api/projectStore').then(({ listProjects, rebindSessionFoldersToProjects, rememberProjectFolderAlias }) => {
+          const projects = listProjects();
+          for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
+          useLayoutStore.setState((state) => {
+            const n = rebindSessionFoldersToProjects(state.sessions, projects);
+            if (n > 0) {
+              for (const s of state.sessions) {
+                if (s.folder && !state.folderOrder.includes(s.folder)) {
+                  state.folderOrder.push(s.folder);
+                }
               }
+              console.info('[crish] rebound session folders', n);
             }
-            console.info('[crish] rebound session folders', n);
-          }
+          });
         });
       } catch (e) {
         console.warn('[crish] session folder rebind failed', e);
@@ -218,14 +217,12 @@ function App() {
     };
   }, []);
 
-  // 按项目路径保存/恢复右侧工作区布局（localStorage + session 防覆盖）
   useEffect(() => {
     let cancelled = false;
     let cleanup: (() => void) | undefined;
     void import('./api/workspaceLayoutStore').then(({ initWorkspaceLayoutSync }) => {
       if (cancelled) return;
       cleanup = initWorkspaceLayoutSync({
-        // 布局恢复是预期行为，不 toast 刷屏
         onRestored: () => {},
       });
     });
@@ -233,15 +230,14 @@ function App() {
       cancelled = true;
       cleanup?.();
     };
-  }, [handleShowToast]);
+  }, []);
 
-  // Initial load theme & settings sync
   useEffect(() => {
-    // 同步本地主题/字体（settings 异步前就已在 main/html 里 bootstrap）
     void import('./api/themeStore').then(({ bootstrapTheme }) => bootstrapTheme());
     void import('./api/fontStore').then(({ bootstrapFonts }) => bootstrapFonts());
     const initApp = async () => {
       try {
+        const { clientApi } = await import('./api/clientApi');
         const settings = await clientApi.getSettings();
         if (settings) {
           setAppSettings(settings);
@@ -255,16 +251,12 @@ function App() {
             const { setFontPreferences, normalizeFontPrefs } = await import('./api/fontStore');
             await setFontPreferences(normalizeFontPrefs(settings.fonts));
           }
-          // tabMode：Settings 与 layoutStore 双写；默认 true（合并右侧标签）
-          // hydrate 时以 Settings 为准；true 时折叠已有堆叠 group
           if (typeof settings.tabModeEnabled === 'boolean') {
             useLayoutStore.getState().setTabModeEnabled(settings.tabModeEnabled);
           } else {
             useLayoutStore.getState().setTabModeEnabled(true);
           }
-          // hideThinkingBlock / responseStyle 已在 appSettings，下游订阅生效
         }
-        // 模型/密钥走 providerProfiles，不再 seed 假 clientApi providers
       } catch (err) {
         console.error("Failed to load settings or providers on startup", err);
       }
@@ -272,47 +264,50 @@ function App() {
     initApp();
   }, []);
 
-  // Engine keep-alive from first frame. Product: gate UI until first connect (no flicker chip after).
   useEffect(() => {
-    const client = bootstrapDesktopBackend();
-    if (client.isConnected() || client.hasEverConnected()) {
-      setEngineReady(true);
-    }
-    const unsub = client.onState((s) => {
-      if (s === 'connected' || client.hasEverConnected()) {
+    const initEngine = async () => {
+      const { bootstrapDesktopBackend, getDesktopDaemonClient } = await import('./api/daemonClient');
+      const client = bootstrapDesktopBackend();
+      if (client.isConnected() || client.hasEverConnected()) {
         setEngineReady(true);
       }
-    });
-    void ensureDaemonConnected().then((res) => {
-      if (res.ok || client.hasEverConnected()) setEngineReady(true);
-      else if (!productShell) {
-        console.warn('[crish-desktop] engine offline after boot wait (keep-alive continues)');
-      }
-      if (res.ok) {
-        // 正式版：把本地活动服务商配置写回引擎
-        void import('./api/providerProfiles').then(({ syncActiveProfileToEngine }) => {
-          void syncActiveProfileToEngine();
-        });
-        // Best-effort daemon session list merge (does not wipe local messages)
-        void import('./api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
-          void syncSessionsFromDaemon(
-            () => useLayoutStore.getState().sessions,
-            (sessions) => useLayoutStore.getState().setSessions(sessions),
-          );
-        });
-      }
-    });
-    // 防止引擎长时间不可达时整窗空白：超时后仍进入主界面（引擎保持后台重连）
-    const gateTimer = window.setTimeout(() => {
-      setEngineReady(true);
-    }, productShell ? 12_000 : 0);
+      const unsub = client.onState((s) => {
+        if (s === 'connected' || client.hasEverConnected()) {
+          setEngineReady(true);
+        }
+      });
+      const { ensureDaemonConnected } = await import('./api/daemonChatBridge');
+      void ensureDaemonConnected().then((res) => {
+        if (res.ok || client.hasEverConnected()) setEngineReady(true);
+        else if (!productShell) {
+          console.warn('[crish-desktop] engine offline after boot wait (keep-alive continues)');
+        }
+        if (res.ok) {
+          void import('./api/providerProfiles').then(({ syncActiveProfileToEngine }) => {
+            void syncActiveProfileToEngine();
+          });
+          void import('./api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
+            void syncSessionsFromDaemon(
+              () => useLayoutStore.getState().sessions,
+              (sessions) => useLayoutStore.getState().setSessions(sessions),
+            );
+          });
+        }
+      });
+      const gateTimer = window.setTimeout(() => {
+        setEngineReady(true);
+      }, productShell ? 12_000 : 0);
+      return () => {
+        unsub();
+        window.clearTimeout(gateTimer);
+      };
+    };
+    const cleanupPromise = initEngine();
     return () => {
-      unsub();
-      window.clearTimeout(gateTimer);
+      cleanupPromise.then(cleanup => cleanup?.());
     };
   }, [productShell]);
 
-  // Resize Throttling (80ms) + Debounce (400ms) with elastic transition support
   const [resizeWidth, setResizeWidth] = useState<number | null>(null);
   useEffect(() => {
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -372,11 +367,9 @@ function App() {
     };
   }, []);
 
-  // 密度 / 字号 / 壳形态：同步到 <html> 与 body
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-ui-size', uiSize);
-    // 壳层密度别名：小=紧凑 · 中=默认 · 大=宽松（子组件自有 density 时以局部为准）
     const density =
       uiSize === 'small' ? 'compact' : uiSize === 'large' ? 'comfortable' : 'default';
     root.setAttribute('data-density', density);
@@ -387,14 +380,12 @@ function App() {
     document.body.setAttribute('data-shell-chrome', chrome);
   }, [uiSize, shellChromeMode]);
 
-  // 演示/正式模式写到 body，便于 CSS 与辅助技术区分
   useEffect(() => {
-    const mode = isDemoMode() ? 'demo' : 'normal';
+    const mode = isDemoModeFast() ? 'demo' : 'normal';
     document.body.setAttribute('data-app-mode', mode);
     document.documentElement.setAttribute('data-app-mode', mode);
   }, []);
 
-  // 全局快捷键：设置页可改绑；Esc 优先关盖层；双击 Esc 分叉
   useEffect(() => {
     let lastEscTime = 0;
     const openTab = (tab: SettingsTabType) => {
@@ -456,7 +447,6 @@ function App() {
         return;
       }
 
-      // 可编辑区：仅允许系统级（设置 / 侧栏 / 运行浮层），避免劫持输入
       const actions = matchShortcutActions(e);
       if (actions.length === 0) return;
 
@@ -540,15 +530,17 @@ function App() {
     setSidebarCollapsed,
   ]);
 
-  // Connect and subscribe to WebSocket Telemetry
   useEffect(() => {
-    const unsubscribe = clientApi.subscribeTelemetry((data) => {
-      syncTelemetryData(data);
-    });
-    return () => unsubscribe();
+    const unsubPromise = import('./api/clientApi').then(({ clientApi }) =>
+      clientApi.subscribeTelemetry((data) => {
+        syncTelemetryData(data);
+      })
+    );
+    return () => {
+      unsubPromise.then(unsub => unsub());
+    };
   }, []);
 
-  // Native folder pick → projectStore (no trust wall)
   useEffect(() => {
     return onUiEvent('pick-workspace', () => {
       void pickWorkspaceFolder();
@@ -564,16 +556,15 @@ function App() {
         if (await win.isMaximized()) await win.unmaximize();
         else await win.maximize();
       } else await win.close();
-    } catch {
-      /* browser host */
-    }
+    } catch {}
   };
 
-  const appModeClass = isDemoMode() ? 'app-mode-demo' : 'app-mode-normal';
+  const appModeClass = isDemoModeFast() ? 'app-mode-demo' : 'app-mode-normal';
   const shellDensity =
     uiSize === 'small' ? 'compact' : uiSize === 'large' ? 'comfortable' : 'default';
 
   return (
+    <PlatformAdaptationCtx.Provider value={platformAdaptation}>
     <div
       className={`app-container ${appModeClass}`}
       data-ui-size={uiSize}
@@ -581,6 +572,7 @@ function App() {
       data-shell-chrome={shellChromeMode || 'classic'}
       data-engine-ready={engineReady ? 'true' : 'false'}
       data-first-run={showFirstRun ? 'true' : 'false'}
+      data-perf-level={platformAdaptation.hardwareReady ? String(platformAdaptation.level) : undefined}
     >
       <a
         href="#crish-main"
@@ -618,24 +610,24 @@ function App() {
       </a>
 
       {showFirstRun && (
-        <FirstRunWizard
-          onDone={() => {
-            setShowFirstRun(false);
-            // 向导完成：不 toast、不建空会话；通知底栏按 providerProfiles 本地状态刷新
-            const model = getActiveModelId();
-            const profileId = getActiveProfileId();
-            if (model && profileId) {
-              emitUiEvent('model-changed', { profileId, model });
-            }
-          }}
-          onOpenSettings={() => {
-            setShowFirstRun(false);
-            // 高级扫描在设置页；不 toast 引导、不预建会话
-            openSettings('models');
-          }}
-        />
+        <Suspense fallback={<SkeletonFallback height={400} />}>
+          <FirstRunWizard
+            onDone={() => {
+              setShowFirstRun(false);
+              const model = getActiveModelId();
+              const profileId = getActiveProfileId();
+              if (model && profileId) {
+                emitUiEvent('model-changed', { profileId, model });
+              }
+            }}
+            onOpenSettings={() => {
+              setShowFirstRun(false);
+              openSettings('models');
+            }}
+          />
+        </Suspense>
       )}
-      {/* classic：完整顶栏搜索；inset：项目行作顶栏（无圆角，类 Terminal） */}
+
       {shellChromeMode !== 'inset' ? (
         <header
           className="app-header"
@@ -653,7 +645,9 @@ function App() {
               aria-controls="crish-sidebar"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             >
-              <IconSidebarLeft size={15} aria-hidden="true" />
+              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                <IconSidebarLeft size={15} aria-hidden="true" />
+              </Suspense>
             </button>
           </div>
           <div className="app-header-right no-drag" role="toolbar" aria-label="顶栏操作">
@@ -665,7 +659,9 @@ function App() {
               aria-pressed={!isRightSidebarCollapsed}
               onClick={toggleRightSidebar}
             >
-              <IconSidebarRight size={15} aria-hidden="true" />
+              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                <IconSidebarRight size={15} aria-hidden="true" />
+              </Suspense>
             </button>
             <button
               type="button"
@@ -675,7 +671,9 @@ function App() {
               aria-label="快捷键与帮助"
               aria-haspopup="dialog"
             >
-              <Lucide.HelpCircle size={16} aria-hidden="true" />
+              <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                <LucideHelpCircle size={16} aria-hidden="true" />
+              </Suspense>
             </button>
             <button
               type="button"
@@ -685,7 +683,9 @@ function App() {
               aria-pressed={runtimeFloatOpen}
               onClick={() => setRuntimeFloatOpen((v) => !v)}
             >
-              <Lucide.Gauge size={16} strokeWidth={1.75} aria-hidden="true" />
+              <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                <LucideGauge size={16} strokeWidth={1.75} aria-hidden="true" />
+              </Suspense>
             </button>
             <div
               className="window-controls no-drag"
@@ -701,7 +701,9 @@ function App() {
                 data-tauri-drag-region="false"
                 onClick={() => void winCtl('minimize')}
               >
-                <Lucide.Minus size={16} aria-hidden="true" />
+                <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                  <LucideMinus size={16} aria-hidden="true" />
+                </Suspense>
               </button>
               <button
                 type="button"
@@ -711,7 +713,9 @@ function App() {
                 data-tauri-drag-region="false"
                 onClick={() => void winCtl('toggleMaximize')}
               >
-                <Lucide.Square size={14} aria-hidden="true" />
+                <Suspense fallback={<SkeletonFallback width={14} height={14} />}>
+                  <LucideSquare size={14} aria-hidden="true" />
+                </Suspense>
               </button>
               <button
                 type="button"
@@ -721,7 +725,9 @@ function App() {
                 data-tauri-drag-region="false"
                 onClick={() => void winCtl('close')}
               >
-                <Lucide.X size={16} aria-hidden="true" />
+                <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                  <LucideX size={16} aria-hidden="true" />
+                </Suspense>
               </button>
             </div>
           </div>
@@ -733,7 +739,6 @@ function App() {
           aria-label="项目顶栏"
           data-tauri-drag-region
         >
-          {/* 左格 = 侧栏同宽：侧栏钮落在「功能列」；右格与主内容卡左缘对齐 */}
           <div className="ws-titlebar-rail" data-tauri-drag-region>
             <button
               type="button"
@@ -744,27 +749,30 @@ function App() {
               aria-controls="crish-sidebar"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             >
-              <IconSidebarLeft size={15} aria-hidden="true" />
+              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                <IconSidebarLeft size={15} aria-hidden="true" />
+              </Suspense>
             </button>
           </div>
           <div className="ws-titlebar-main" data-tauri-drag-region>
             <AppErrorBoundary compact title="工作区标签出错">
-              <WorkspaceChromeBars
-                variant="workspace"
-                className="ws-chrome-row--titlebar"
-                onAddProject={() => emitUiEvent('pick-workspace')}
-                onOpenRuntime={() => setRuntimeFloatOpen((v) => !v)}
-                onOpenHelp={() => setShowCheatsheet(true)}
-                onWinMinimize={() => void winCtl('minimize')}
-                onWinMaximize={() => void winCtl('toggleMaximize')}
-                onWinClose={() => void winCtl('close')}
-              />
+              <Suspense fallback={<SkeletonFallback height={32} />}>
+                <WorkspaceChromeBars
+                  variant="workspace"
+                  className="ws-chrome-row--titlebar"
+                  onAddProject={() => emitUiEvent('pick-workspace')}
+                  onOpenRuntime={() => setRuntimeFloatOpen((v) => !v)}
+                  onOpenHelp={() => setShowCheatsheet(true)}
+                  onWinMinimize={() => void winCtl('minimize')}
+                  onWinMaximize={() => void winCtl('toggleMaximize')}
+                  onWinClose={() => void winCtl('close')}
+                />
+              </Suspense>
             </AppErrorBoundary>
           </div>
         </div>
       )}
 
-      {/* Main content body with Sidebar and workspaces side by side */}
       <main
         id="crish-main"
         className="main-layout"
@@ -808,59 +816,60 @@ function App() {
           }}
         >
           <AppErrorBoundary compact title="侧栏出错">
-            <Sidebar
-              onShowToast={handleShowToast}
-              hoverExpanded={sidebarCollapsed && isHoveredExpanded}
-              onHoverLeave={handleSidebarHoverLeave}
-              onHoverEnter={handleSidebarHoverEnter}
-              onOpenRuntime={() => setRuntimeFloatOpen(true)}
-              searchQuery={sessionSearch}
-              searchInput={sessionSearchInput}
-              onSearchChange={setSessionSearchInput}
-            />
+            <Suspense fallback={<SkeletonFallback height="100%" />}>
+              <Sidebar
+                onShowToast={handleShowToast}
+                hoverExpanded={sidebarCollapsed && isHoveredExpanded}
+                onHoverLeave={handleSidebarHoverLeave}
+                onHoverEnter={handleSidebarHoverEnter}
+                onOpenRuntime={() => setRuntimeFloatOpen(true)}
+                searchQuery={sessionSearch}
+                searchInput={sessionSearchInput}
+                onSearchChange={setSessionSearchInput}
+              />
+            </Suspense>
           </AppErrorBoundary>
         </div>
 
-        {/* 圆角只包会话行 + 正文；项目行已在整窗顶栏 */}
         <div
           className={`workspaces-column${shellChromeMode === 'inset' ? ' workspaces-column--inset' : ''}`}
           role="region"
           aria-label="工作台内容"
         >
           <div className="workspaces-stack" role="region" aria-label="会话与面板">
-            {/*
-             * inset：会话条挂在聊天列顶（与右侧工具标签同排 = 第二行），
-             * 不再在 stack 顶单独占满宽一行，避免右侧总览再起「第三行」。
-             */}
             <div className="workspaces-container" role="region" aria-label="工作区面板">
               <AppErrorBoundary compact title="工作区出错">
-                {workspaceIds.map((id) => (
-                  <Workspace key={id} wsId={id} onShowToast={handleShowToast} />
-                ))}
+                <Suspense fallback={<SkeletonFallback height={400} />}>
+                  {workspaceIds.map((id) => (
+                    <Workspace key={id} wsId={id} onShowToast={handleShowToast} />
+                  ))}
+                </Suspense>
               </AppErrorBoundary>
             </div>
           </div>
         </div>
       </main>
 
-      <RuntimeFloatPanel
-        open={runtimeFloatOpen}
-        onClose={() => setRuntimeFloatOpen(false)}
-        onShowToast={handleShowToast}
-      />
+      <Suspense fallback={null}>
+        <RuntimeFloatPanel
+          open={runtimeFloatOpen}
+          onClose={() => setRuntimeFloatOpen(false)}
+          onShowToast={handleShowToast}
+        />
+      </Suspense>
 
       <div role="region" aria-label="通知" aria-live="polite">
-        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        <Suspense fallback={null}>
+          <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        </Suspense>
       </div>
 
-      {/* Centered Lightweight Approval Dialog and Floating Plan Panel removed for clean UI */}
-      
-      {/* Centered Cheatsheet Modal Overlay */}
       {showCheatsheet && (
-        <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
+        <Suspense fallback={<SkeletonFallback height={300} />}>
+          <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
+        </Suspense>
       )}
 
-      {/* 设置：全覆盖；z-index 与 settings.css(.settings-cover=13000) 双保险；ErrorBoundary 展示真实错误 */}
       {showSettingsOverlay && (
         <div
           className="settings-cover"
@@ -900,6 +909,7 @@ function App() {
         </div>
       )}
     </div>
+    </PlatformAdaptationCtx.Provider>
   );
 }
 

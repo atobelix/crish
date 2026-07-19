@@ -14,7 +14,7 @@ import {
 export { clearMarkdownHtmlCache, markdownHtmlCacheSize };
 
 /** HTML 属性/正文转义；null/非字符串安全降级 */
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   if (s == null || s === '') return '';
   return String(s)
     .replace(/&/g, '&amp;')
@@ -189,7 +189,7 @@ export function stripThoughtPlaceholders(text: string): string {
   const en = RE_ROUND_SUMMARY_EN;
   return softTrimMarkdown(
     source
-      .replace(/^(正在思考中[….\s]*|正在处理[….\s]*)+/gm, '')
+      .replace(/^(正在思考中[….\s]{0,50}|正在处理[….\s]{0,50}){1,50}/gm, '')
       // heading：## 本轮总结 / ## 本轮工作总结 · / ## 本回合小结：
       .replace(new RegExp(`^#{1,6}\\s*${zh}\\s*[:：·.\\-—–]*\\s*$`, 'gm'), '')
       // 粗体：**本轮总结** / **本轮总结：**
@@ -743,7 +743,7 @@ function buildCodeFenceHtml(bodyRaw: string, langClean: string): string {
 function extractCodeFences(text: string): { text: string; fences: string[] } {
   const fences: string[] = [];
   // 闭合 fence：允许 info string（非换行）
-  let out = text.replace(/```([^\n`]*)\r?\n([\s\S]*?)```/g, (_, info, code) => {
+  let out = text.replace(/```([^\n`]{0,500})\r?\n([\s\S]{0,50000}?)```/g, (_, info, code) => {
     const i = fences.length;
     const langClean = langFromFenceInfo(info);
     fences.push(buildCodeFenceHtml(code, langClean));
@@ -777,10 +777,13 @@ export function parseMarkdownToHtml(raw: string): string {
   return setMarkdownHtmlCache(source, html);
 }
 
+const MAX_MARKDOWN_INPUT = 100_000;
+
 function parseMarkdownToHtmlUncached(raw: string): string {
   if (raw == null || raw === '') return '';
-  const source = typeof raw === 'string' ? raw : String(raw);
+  let source = typeof raw === 'string' ? raw : String(raw);
   if (!source.trim()) return '';
+  if (source.length > MAX_MARKDOWN_INPUT) source = source.slice(0, MAX_MARKDOWN_INPUT);
   // 统一换行，避免 \r 干扰列表/表格行匹配
   let text = stripThoughtPlaceholders(source.replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   if (!text) return '';
@@ -839,19 +842,19 @@ function parseMarkdownToHtmlUncached(raw: string): string {
 
   // 尖括号目标优先：![alt](<url>) / [t](<url>)，允许 url 内含 `)`（CommonMark）
   text = text.replace(
-    /!\[([^\]]*)\]\(\s*<([^>\n]*)>\s*(?:(["'])[\s\S]*?\3\s*)?\)/g,
+    /!\[([^\]]{0,2000})\]\(\s*<([^>\n]{0,2000})>\s*(?:(["'])[\s\S]{0,2000}?\3\s*)?\)/g,
     (_m, alt: string, dest: string) => renderImgFromDest(alt, dest),
   );
   text = text.replace(
-    /\[([^\]]+)\]\(\s*<([^>\n]*)>\s*(?:(["'])[\s\S]*?\3\s*)?\)/g,
+    /\[([^\]]{1,2000})\]\(\s*<([^>\n]{0,2000})>\s*(?:(["'])[\s\S]{0,2000}?\3\s*)?\)/g,
     (_m, t: string, dest: string) => renderLinkFromDest(t, dest),
   );
 
   // 普通目标：[^)]+ 可含零宽/BOM（再经 sanitize）；避免 [^)\s] 漏匹配
-  text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, rawDest: string) =>
+  text = text.replace(/!\[([^\]]{0,2000})\]\(([^)]{1,10000})\)/g, (_m, alt: string, rawDest: string) =>
     renderImgFromDest(alt, rawDest),
   );
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, rawDest: string) =>
+  text = text.replace(/\[([^\]]{1,2000})\]\(([^)]{1,10000})\)/g, (_m, t: string, rawDest: string) =>
     renderLinkFromDest(t, rawDest),
   );
 
