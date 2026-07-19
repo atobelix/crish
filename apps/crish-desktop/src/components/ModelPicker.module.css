@@ -20,9 +20,6 @@
   max-height: min(340px, 50vh);
 }
 
-.mpickSlim {
-  /* Slim variant styling rules if any */
-}
 
 .mpickThink {
   display: flex;

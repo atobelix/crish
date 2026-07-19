@@ -735,40 +735,6 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: none !important;
 }
 
-/* [Migrated to Workspace.module.css]
-.workspace-section {
-  position: relative;
-  height: 100%;
-  flex: 1;
-  min-width: 250px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0 !important;
-}
-
-.workspace-canvas {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  display: flex;
-  gap: 0 !important;
-}
-
-.workspace-column {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  gap: 0 !important;
-  position: relative;
-  min-width: 0;
-  transition: width var(--transition-smooth);
-}
-
-.resizing-active .workspace-column {
-  transition: none !important;
-}
-*/
 .resizing-active iframe,
 .resizing-active webview {
   pointer-events: none !important;
@@ -1138,104 +1104,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   stroke-linejoin: round;
 }
 
-/* [Migrated to Workspace.module.css]
-.col-splitter {
-  width: 5px;
-  cursor: col-resize;
-  background: transparent;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 30;
-}
-.col-splitter:hover,
-.col-splitter.active {
-  background: transparent;
-}
-.col-splitter::after {
-  content: '';
-  position: absolute;
-  top: 12%;
-  bottom: 12%;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  border-radius: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
-    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
-    transparent 100%
-  );
-  opacity: 0.5;
-  transition: opacity var(--transition-fast), width var(--transition-fast);
-  pointer-events: none;
-}
-.col-splitter:hover::after,
-.col-splitter.active::after {
-  width: 1.5px;
-  opacity: 1;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
-    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
-    transparent 100%
-  );
-}
-
-.group-splitter {
-  height: 5px;
-  cursor: row-resize;
-  background: transparent;
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 30;
-}
-.group-splitter:hover,
-.group-splitter.active {
-  background: transparent;
-}
-.group-splitter::after {
-  content: '';
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-  border-radius: 1px;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
-    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
-    transparent 100%
-  );
-  opacity: 0.5;
-  transition: opacity var(--transition-fast), height var(--transition-fast);
-  pointer-events: none;
-}
-.group-splitter:hover::after,
-.group-splitter.active::after {
-  height: 1.5px;
-  opacity: 1;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
-    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
-    transparent 100%
-  );
-}
-*/
-
+/* Splitter/resizer styles migrated to Workspace.module.css */
 /* --- CARD SUBHEADERS --- */
 .card-subheader {
   height: var(--control-height);

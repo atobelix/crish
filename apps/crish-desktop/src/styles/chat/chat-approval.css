@@ -2,10 +2,6 @@
  * (ChatStatusRibbons 所有权：ribbon / dock / soft-hint) */
 
 /* ── Soft setup banner：hairline only，页内引导（禁止 toast） ── */
-/* [MIGRATED] .chat-soft-hint setup banner styles migrated to ChatStatusRibbons.module.css */
-
-/* [MIGRATED] .plan-mode-ribbon and .goal-mode-ribbon styles migrated to ChatStatusRibbons.module.css */
-
 /* --- CENTERED PERMISSION DIALOG OVERLAYS --- */
 .global-approval-backdrop {
   position: fixed;
@@ -146,10 +142,6 @@
 .tool-row--approval {
   margin: 4px 0 8px;
 }
-/* [MIGRATED] .approval-card styles migrated to ApprovalAskCard.module.css */
-
-/* [MIGRATED] .run-notice and .approval-dock styles migrated to ChatStatusRibbons.module.css */
-
 /* 审批区：独立于 footer 快捷栏；靠左，避免与「回到最新」FAB 重叠 */
 .inline-approval {
   display: flex;
@@ -292,4 +284,4 @@
   cursor: default;
 }
 
-/* [MIGRATED] .approval-card-cmd-wrap, .approval-card-input and helper styles migrated to ApprovalAskCard.module.css */
+

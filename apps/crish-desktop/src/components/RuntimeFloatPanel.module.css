@@ -84,9 +84,6 @@
   white-space: nowrap;
 }
 
-.rtEngineMeta {
-  /* specific to engine status text */
-}
 
 .runtimeFloatBody {
   max-height: min(360px, calc(100vh - var(--header-height, 44px) - 96px));

@@ -30,8 +30,6 @@
   box-sizing: border-box;
 }
 
-/* [Migrated to ChatMessageList.module.css & ChatMessageRow.module.css] */
-
 .chat-msg-filter-icon {
   flex-shrink: 0;
   color: var(--text-tertiary);
@@ -160,8 +158,6 @@
 }
 
 
-
-/* [MIGRATED] .chat-context-ribbon and .context-pill styles migrated to ChatDemoChrome.module.css */
 
 
 .model-badge {
@@ -302,8 +298,6 @@
   align-self: center;
 }
 
-/* [MIGRATED] .chat-header-more styles migrated to ChatHeaderMore.module.css */
-
 /* Composer：与消息列同宽居中；顶缘透明度渐变，不要整块白底 */
 .chat-footer {
   display: flex;
@@ -352,8 +346,6 @@
 }
 
 /* 工具调用：流式列表，无分割线、无套娃 */
-/* [MIGRATED] .tool-stack, .tool-row, and .tool-result styles migrated to ChatToolCallBlock.module.css */
-/* [MIGRATED] .first-run- styles migrated to FirstRunWizard.module.css */
 
 /* Panel dropdown — hairline elevated surface；外壳可交互档 strong */
 .panel-dropdown {
@@ -381,9 +373,6 @@
   background: var(--bg-hover);
 }
 
-/* [MIGRATED] .tool-result-long-hint and helper styles migrated to ChatToolCallBlock.module.css */
-
-/* [MIGRATED] .inline-agent styles migrated to InlineAgentPanel.module.css */
 /* 工具行栈：与主对话同节奏，禁止压扁导致图标不圆 */
 .agent-tool-stack {
   margin: 2px 0;
@@ -517,7 +506,6 @@
   flex: 1;
   min-width: 0;
 }
-/* [MIGRATED] .sb-quick-wrap and sidebar-footer-settings styles migrated to SettingsQuickMenu.module.css */
 .sidebar-footer-update {
   width: var(--control-height);
   height: var(--control-height);
@@ -535,8 +523,6 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* [Migrated to ChatMessageRow.module.css] */
-
 /* Soft setup banner → chat/chat-approval.css（ChatStatusRibbons 所有权） */
 .model-picker-error {
   margin: 4px 8px 8px;
@@ -585,8 +571,6 @@
   color: var(--text-primary);
 }
 /* Empty chat — 更克制：少图标装饰、短文案、大留白 */
-/* [MIGRATED] .chat-empty-state and .quick-prompt-card styles migrated to ChatEmptyState.module.css */
-
 /* is-active-project: transparent only — no loud highlight (session row owns attention) */
 .folder-header.is-active-project {
   background: transparent;
@@ -599,8 +583,6 @@
 }
 
 /* Compact runtime float 选择器已收口到 panels.css（.runtime-float-*） */
-/* [MIGRATED] .pp- styles migrated to ProjectPickerMenu.module.css */
-
 
 /* light/dark 共用：聊天列壳层统一中性 token，避免暗色白岛 */
 .chat-body,
@@ -696,8 +678,6 @@
   overflow-x: auto;
 }
 
-/* [MIGRATED] .perm- styles migrated to PermissionModeMenu.module.css */
-
 /* 工具图标：统一尺寸 + 圆角描边风格（cap/join round） */
 .tool-row-type-ico,
 .tool-row-type-ico.ico-read,
@@ -750,10 +730,6 @@
 }
 
 /* ---- Change overview：hairline 列表，非灰底卡；按卡片宽度自适应 ---- */
-/* [MIGRATED] change-overview styles migrated to ChangeOverviewCard.module.css */
-
-/* [MIGRATED] .sched-in-chat and helper styles migrated to ScheduledTasksPanel.module.css */
-
 
 /* 短思考：不折叠；与折叠思考同策略 — 无背景/边框，tertiary 克制 */
 .msg-thinking-plain {
@@ -1228,7 +1204,6 @@
 }
 
 /* --- 6. Empty shell：列宽居中 + 密度 + 中文行高 + hairline chip --- */
-/* [MIGRATED] .chat-empty-state overrides migrated to ChatEmptyState.module.css */
 /* 过滤无命中空壳：与 session empty 同列宽/行高契约 */
 .chat-msg-filter-empty {
   gap: var(--space-3, 8px);
@@ -1265,7 +1240,5 @@
     padding: var(--space-5, 16px) var(--space-4, 12px);
   }
 }
-
-/* [MIGRATED] Centered layout for Empty Chat Session migrated to ChatCard.module.css and ChatEmptyState.module.css */
 
 

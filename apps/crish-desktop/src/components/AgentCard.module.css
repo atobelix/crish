@@ -7,9 +7,6 @@
   color: var(--text-primary);
 }
 
-.agentCardDense {
-  /* 侧栏默认 denser：子选择器共享 */
-}
 
 .agentCardEmbedded {
   flex: 1;

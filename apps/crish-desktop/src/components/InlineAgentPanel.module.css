@@ -10,9 +10,6 @@
   border-radius: 0;
 }
 
-.inlineAgent.sideFocused {
-  /* side focused styles if any */
-}
 
 /* 头行：折叠钮 + 停止/侧栏动作（折叠态也能停 / 侧栏 only） */
 .inlineAgentHeadRow {

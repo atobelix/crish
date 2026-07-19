@@ -217,6 +217,7 @@ function tabMatchesQuery(tab: TabMeta, q: string): boolean {
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
+  isOpen,
   wsId: _wsId,
   onShowToast,
   onClose,

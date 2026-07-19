@@ -241,7 +241,7 @@
 }
 
 .dot.warn {
-  background: var(--accent-yellow);
+  background: var(--accent-orange);
 }
 
 .dot.off {

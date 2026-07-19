@@ -1,6 +1,4 @@
 /* --- panels.css (preview / diff / tasks / terminal / overview / runtime) — split from index.css (selectors preserved) --- */
-/* [PLAN, PREVIEW, DIFF, TASKS, TERMINAL body styles migrated to their respective *.module.css files] */
-
 .filepath-text {
   text-decoration: underline;
   cursor: pointer;
@@ -495,22 +493,12 @@
   font-weight: var(--font-weight-code, 400);
 }
 
-/* [Migrated to PreviewCard.module.css] */
-
-/* [MIGRATED] files container queries migrated to FilesCard.module.css */
-
 /* Runtime floating sheet — header 对齐 card-header tokens；单滚动面在 .rt-panel */
-/* [MIGRATED] .runtime-float- styles migrated to RuntimeFloatPanel.module.css */
-
 /* Demo context ribbon quieter in footer */
 .app-mode-normal .chat-context-ribbon .context-pill.git,
 .app-mode-normal .chat-context-ribbon .context-pill.server {
   display: none;
 }
-/* [Migrated to DiffCard.module.css] */
-
-/* [Migrated to FilesCard.module.css] */
-
 
 /* 右侧总览：极简，无重复标题、无空上下文、无神秘图标条 */
 /* [Migrated to OverviewCard.module.css]
@@ -584,7 +572,6 @@ button.overview-live-row:hover {
 .mac-terminal-header {
   border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
-/* [Migrated files styles to FilesCard.module.css] */
 .diff-toolbar,
 .diff-current-header {
   border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
@@ -672,7 +659,6 @@ button.overview-live-row:hover {
   padding: 0 var(--panel-pad-x, 12px);
   line-height: var(--line-height-ui, 1.35);
 }
-/* [Migrated files styles to FilesCard.module.css] */
 .checklist-item {
   gap: var(--space-2, 6px);
   line-height: var(--line-height-ui, 1.35);
@@ -696,8 +682,6 @@ button.overview-live-row:hover {
 
 
 /* 4) Empty states：密度 token + 中文行高；非居中大灰块 */
-/* [Migrated files empty styles to FilesCard.module.css] */
-
 .diff-empty {
   padding: var(--space-6, 20px) var(--panel-pad-x, 12px);
   gap: var(--space-2, 6px);
@@ -715,7 +699,6 @@ button.overview-live-row:hover {
 }
 
 /* 5) Files / Diff / Tasks 控件层：可交互描边 + 热区密度 */
-/* [Migrated files control layer styles to FilesCard.module.css] */
 .diff-toolbar-actions {
   gap: var(--space-1, 4px);
 }

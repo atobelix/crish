@@ -238,9 +238,6 @@
   background: var(--accent-color);
   transition: width var(--transition-fast);
 }
-.section {
-  /* tasks-section is basically a wrapper section */
-}
 .sectionMemo {
   opacity: 0.92;
 }
