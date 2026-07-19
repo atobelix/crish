@@ -6,7 +6,7 @@
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width var(--transition-smooth);
+  transition: width var(--transition-spring-layout);
   z-index: 10;
   position: relative;
   overflow: hidden;

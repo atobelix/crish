@@ -1,8 +1,13 @@
+import { initPerformanceAttributes } from './api/performanceEngine';
+
 let coreReady = false;
 export function isCoreReady(): boolean { return coreReady; }
 
 export async function bootstrapCore(): Promise<void> {
   const start = performance.now();
+
+  // Initialize performance tier attributes synchronously
+  initPerformanceAttributes();
 
   await Promise.all([
     // 1. 硬件检测 + 轻量模式配置（不阻塞渲染）

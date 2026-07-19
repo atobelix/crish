@@ -10,7 +10,7 @@ export interface UseAnimatedPresenceOptions {
 export function useAnimatedPresence({ visible, exitDurationMs = 250 }: UseAnimatedPresenceOptions) {
   const [state, setState] = useState<TransitionState>(visible ? 'open' : 'closed');
   const prevVisibleRef = useRef(visible);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {

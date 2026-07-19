@@ -421,3 +421,69 @@
   text-decoration: line-through;
   color: var(--text-tertiary);
 }
+
+/* Premium Hover & Sweep Keyframes */
+.checkItem {
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.checkItem:hover {
+  background-color: var(--bg-hover);
+}
+
+.checkMark {
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.checkItem:hover .checkMark {
+  border-color: color-mix(in srgb, var(--text-primary) 20%, var(--border-subtle));
+}
+
+@keyframes checkmarkSweep {
+  0% {
+    stroke-dashoffset: 18;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.checkMark.checked svg polyline,
+.checkMark.checked svg path {
+  stroke-dasharray: 18;
+  stroke-dashoffset: 18;
+  animation: checkmarkSweep 180ms ease-out forwards;
+}
+
+/* Completion subtle shimmer glow */
+.checkItem.isDone {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes completedShimmer {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
+}
+
+.checkItem.isDone::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent-green, #22c55e) 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: completedShimmer 1.5s ease-out forwards;
+  pointer-events: none;
+}
+

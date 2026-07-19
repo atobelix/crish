@@ -101,16 +101,32 @@ html[data-theme="light"] {
   --radius-2xl: 14px;
   --radius-full: 999px;
 
-  /* Premium Smooth Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
-  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  /* Premium Soft Low-Presence Shadows */
+  --shadow-sm: 
+    0 1px 2px rgba(15, 15, 15, 0.015),
+    0 1px 1px rgba(15, 15, 15, 0.01);
+  --shadow-md: 
+    0 2px 4px rgba(15, 15, 15, 0.01),
+    0 4px 12px rgba(15, 15, 15, 0.015),
+    0 1px 1px rgba(15, 15, 15, 0.005);
+  --shadow-lg: 
+    0 4px 8px rgba(15, 15, 15, 0.01),
+    0 12px 24px rgba(15, 15, 15, 0.015),
+    0 24px 48px rgba(15, 15, 15, 0.01),
+    0 1px 2px rgba(15, 15, 15, 0.005);
+  --shadow-drag: 
+    0 8px 16px rgba(15, 15, 15, 0.02),
+    0 20px 40px rgba(15, 15, 15, 0.025),
+    0 1px 3px rgba(15, 15, 15, 0.01);
+  --shadow-2xl: 
+    0 12px 24px rgba(15, 15, 15, 0.025),
+    0 32px 64px rgba(15, 15, 15, 0.035),
+    0 1px 3px rgba(15, 15, 15, 0.01);
 
   /* Materials & Animations */
   --bg-glass: rgba(255, 255, 255, 0.75);
   --backdrop-blur: blur(16px);
+  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
   --transition-micro: 100ms ease-out;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -321,11 +337,27 @@ html[data-theme="dark"] {
 
 
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
-  --shadow-drag: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  /* Premium Soft Dark Shadows */
+  --shadow-sm: 
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    0 1px 1px rgba(0, 0, 0, 0.1);
+  --shadow-md: 
+    0 2px 4px rgba(0, 0, 0, 0.15),
+    0 6px 16px rgba(0, 0, 0, 0.2),
+    0 1px 1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 
+    0 4px 8px rgba(0, 0, 0, 0.2),
+    0 16px 32px rgba(0, 0, 0, 0.25),
+    0 32px 64px rgba(0, 0, 0, 0.15),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-drag: 
+    0 8px 16px rgba(0, 0, 0, 0.25),
+    0 24px 48px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+  --shadow-2xl: 
+    0 12px 24px rgba(0, 0, 0, 0.3),
+    0 32px 64px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.15);
 
   --terminal-bg: hsl(0, 0%, 5%);
   --terminal-fg: var(--text-primary);
@@ -486,4 +518,38 @@ html[data-theme="dark"] {
   background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
   color: inherit;
 }
+
+/* --- Conex System Performance Tiers --- */
+
+/* HIGH SPEC TIER: Snappy, brisk, and premium transitions */
+html[data-perf-tier="high"] {
+  --backdrop-blur: blur(16px);
+  --bg-glass: rgba(255, 255, 255, 0.75);
+  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+}
+html[data-perf-tier="high"][data-theme="dark"] {
+  --bg-glass: rgba(10, 10, 10, 0.75);
+}
+
+/* BALANCED SPEC TIER: Snappy layout transitions */
+html[data-perf-tier="balanced"] {
+  --backdrop-blur: blur(0px); /* Disable expensive GPU filters */
+  --bg-glass: var(--bg-elevated); /* solid background fallback */
+  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+}
+
+/* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
+html[data-perf-tier="eco"] {
+  --backdrop-blur: blur(0px);
+  --bg-glass: var(--bg-elevated);
+  --transition-spring-layout: 0ms !important;
+  --transition-micro: 0ms !important;
+  --transition-fast: 0ms !important;
+  --transition-smooth: 0ms !important;
+  --transition-enter: 0ms !important;
+  --transition-exit: 0ms !important;
+  --transition-spring: 0ms !important;
+  --transition-slide: 0ms !important;
+}
+
 

@@ -91,7 +91,10 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  transition: width var(--transition-fast);
+  transition: width var(--transition-spring-layout);
+  /* Container Query Boundary for sub-cards */
+  container-type: inline-size;
+  container-name: column-panel;
 }
 
 :global(.resizing-active) .column,

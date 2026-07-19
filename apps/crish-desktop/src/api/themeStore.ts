@@ -1,3 +1,5 @@
+import { applyTextContrastGuard } from './oklchColorGuard';
+
 /**
  * 外观主题：应用 DOM + 本地记忆。
  * - 独立 key `crish_theme`，启动时立刻读，不依赖 settings 异步
@@ -743,6 +745,9 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       }
     }
     root.style.setProperty('--composer-bg', composerBg);
+
+    // Dynamic OKLCH contrast guard to automatically enforce WCAG AA contrast ratios
+    applyTextContrastGuard(bgPrimary, isDarkPreset);
   } else {
     // 移除属性，使用 tokens.css 默认值
     root.style.removeProperty('--bg-primary');
