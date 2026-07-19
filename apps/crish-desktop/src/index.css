@@ -2,6 +2,11 @@
 @import './styles/tokens.css';
 @import './styles/shell.css';
 @import './styles/chat.css';
-@import './styles/settings.css';
+@import './styles/settings/settings-base.css';
+@import './styles/settings/settings-models.css';
+@import './styles/settings/settings-plugins.css';
+@import './styles/settings/settings-usage.css';
+@import './styles/settings/settings-extensions.css';
+@import './styles/settings/settings-advanced.css';
 @import './styles/panels.css';
 @import './styles/theme-dark.css';

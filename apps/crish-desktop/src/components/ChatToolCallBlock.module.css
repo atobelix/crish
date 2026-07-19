@@ -557,3 +557,17 @@
   align-items: center;
   margin-right: 2px;
 }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.liveIndicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}

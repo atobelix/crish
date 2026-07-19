@@ -20,6 +20,7 @@ import {
   applyPersonalization,
   type PersonalizationSettings,
   getDynamicSolarAdjustments,
+  SKIN_PRESETS,
 } from '../api/themeStore';
 import {
   SettingsPage,
@@ -28,6 +29,8 @@ import {
   SettingsRow,
   Tooltip,
 } from './settings/SettingsUI';
+import { SettingsSchemaRenderer } from './settings/SettingsSchemaRenderer';
+import type { SchemaSection } from './settings/SettingsSchemaRenderer';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -76,6 +79,40 @@ const CHROME_OPTS: {
   },
 ];
 
+const skinPresets = Object.entries(SKIN_PRESETS).map(([id, config]) => ({
+  id,
+  name: config.name,
+  preview: config.bgPrimary,
+}));
+
+const appearanceSchema: SchemaSection[] = [
+  {
+    title: '主题与外观',
+    properties: [
+      { key: 'theme', type: 'toggle-group', title: '主题模式', desc: '切换浅色/深色主题', toggleOptions: [{ value: 'default', label: '浅色' }, { value: 'dark', label: '深色' }] },
+      { key: 'uiSize', type: 'toggle-group', title: 'UI 密度', desc: '控制界面元素的紧凑程度', toggleOptions: [{ value: 'small', label: '紧凑' }, { value: 'medium', label: '默认' }, { value: 'large', label: '宽松' }] },
+      { key: 'shellChrome', type: 'select', title: '窗口风格', desc: '选择应用窗口的边框样式', options: [{ value: 'classic', label: '经典' }, { value: 'inset', label: '工作台' }] },
+      { key: 'codeIndent', type: 'select', title: '代码缩进', desc: '设置代码块中的缩进宽度', options: [{ value: '  ', label: '2 空格' }, { value: '    ', label: '4 空格' }, { value: '\t', label: 'Tab' }] },
+    ],
+  },
+  {
+    title: '颜色与皮肤',
+    properties: [
+      { key: 'skinPreset', type: 'preset-grid', title: '皮肤预设', desc: '快速切换配色方案', presets: skinPresets },
+      { key: 'accentColor', type: 'color', title: '自定义颜色', desc: '自定义界面强调颜色' },
+      { key: 'brightness', type: 'range', title: '亮度微调', desc: '调整界面整体亮度', min: -5, max: 4, step: 1, showValue: true },
+      { key: 'fontSize', type: 'range', title: '界面字号', desc: '调整界面基础字号', min: 12, max: 18, step: 1, unit: 'px', showValue: true },
+    ],
+  },
+  {
+    title: '高级',
+    properties: [
+      { key: 'transitionEnabled', type: 'boolean', title: '智能时光温感过渡', desc: '根据当地日出日落时间，自动调节亮度与色温' },
+      { key: 'vibrantMode', type: 'boolean', title: '氛围色彩融合', desc: '调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏' },
+    ],
+  },
+];
+
 /** 非法值回落标准 */
 function normalizeUiSize(raw: unknown): UiSize {
   if (raw === 'small' || raw === 'large' || raw === 'medium') return raw;
@@ -94,7 +131,6 @@ function normalizeCodeIndent(raw: unknown): string {
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const skinLabelId = useId();
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
   const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() => readStoredTheme());
   const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => readStoredPersonalization());
@@ -326,261 +362,48 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     );
   }
 
-  const theme = normalizeTheme(settings.theme);
-  const codeIndent = normalizeCodeIndent(settings.markdown?.codeBlockIndent);
-  const density = normalizeUiSize(uiSize);
-  const chrome = parseShellChromeMode(shellChromeMode);
+  const allValues = React.useMemo<Record<string, any>>(() => {
+    if (!settings) return {};
+    return {
+      theme: normalizeTheme(settings.theme),
+      uiSize: normalizeUiSize(uiSize),
+      shellChrome: parseShellChromeMode(shellChromeMode),
+      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
+      skinPreset: personalization.skin,
+      accentColor: personalization.customBg,
+      brightness: personalization.themeBrightnessAdjust ?? 0,
+      fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
+      transitionEnabled: personalization.themeAutoTimeTransition ?? false,
+      vibrantMode: personalization.themeBrightnessVibrant ?? false,
+    };
+  }, [settings, uiSize, shellChromeMode, personalization]);
+
+  const handleSave = (updates: Record<string, any>) => {
+    if ('theme' in updates) void save({ theme: String(updates.theme) });
+    if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
+    if ('shellChrome' in updates) applyChrome(updates.shellChrome as ShellChromeMode);
+    if ('codeIndent' in updates && settings) {
+      const next = normalizeCodeIndent(updates.codeIndent);
+      if (next !== normalizeCodeIndent(settings.markdown?.codeBlockIndent)) {
+        void save({ markdown: { ...(settings.markdown || {}), codeBlockIndent: next } });
+      }
+    }
+    if ('skinPreset' in updates) updatePersonalization({ skin: updates.skinPreset });
+    if ('accentColor' in updates) updatePersonalization({ customBg: updates.accentColor });
+    if ('brightness' in updates) updatePersonalization({ themeBrightnessAdjust: updates.brightness as number });
+    if ('fontSize' in updates) updatePersonalization({ fontSizeAdjust: (updates.fontSize as number) - 14 });
+    if ('transitionEnabled' in updates) updatePersonalization({ themeAutoTimeTransition: updates.transitionEnabled as boolean });
+    if ('vibrantMode' in updates) updatePersonalization({ themeBrightnessVibrant: updates.vibrantMode as boolean });
+  };
 
   return (
     <SettingsPage title="外观">
-        <SettingsSection title="主题与阅读">
-          <SettingsCard>
-            <SettingsRow
-              title={<span id="settings-appearance-theme-label">主题</span>}
-              control={
-                <div
-                  className={styles.settingsChoiceGroup}
-                  role="group"
-                  aria-labelledby="settings-appearance-theme-label"
-                >
-                  {THEME_OPTS.map((opt) => (
-                    <Tooltip key={opt.id} content={opt.hint}>
-                      <button
-                        type="button"
-                        className={`${styles.segmentItem}${theme === opt.id ? ` ${styles.active}` : ''}`}
-                        disabled={saving}
-                        aria-pressed={theme === opt.id}
-                        onClick={() => applyTheme(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    </Tooltip>
-                  ))}
-                </div>
-              }
-            />
-
-            <SettingsRow
-              title={<span id="settings-appearance-density-label">密度</span>}
-              control={
-                <div
-                  className={`${styles.settingsChoiceGroup} ${styles.settingsDensitySegment}`}
-                  role="group"
-                  aria-labelledby="settings-appearance-density-label"
-                >
-                  {DENSITY_OPTS.map((opt) => (
-                    <Tooltip key={opt.id} content={opt.hint}>
-                      <button
-                        type="button"
-                        className={`${styles.segmentItem}${density === opt.id ? ` ${styles.active}` : ''}`}
-                        disabled={saving}
-                        aria-pressed={density === opt.id}
-                        onClick={() => applyDensity(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    </Tooltip>
-                  ))}
-                </div>
-              }
-            />
-
-            <SettingsRow
-              title={<span id="settings-appearance-chrome-label">界面形态</span>}
-              control={
-                <div
-                  className={styles.settingsChoiceGroup}
-                  role="group"
-                  aria-labelledby="settings-appearance-chrome-label"
-                >
-                  {CHROME_OPTS.map((opt) => (
-                    <Tooltip key={opt.id} content={opt.hint}>
-                      <button
-                        type="button"
-                        className={`${styles.segmentItem}${chrome === opt.id ? ` ${styles.active}` : ''}`}
-                        disabled={saving}
-                        aria-pressed={chrome === opt.id}
-                        onClick={() => applyChrome(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    </Tooltip>
-                  ))}
-                </div>
-              }
-            />
-
-          </SettingsCard>
-        </SettingsSection>
-
-        <SettingsSection title="代码排版">
-          <SettingsCard>
-            <SettingsRow
-              title={<span id="settings-appearance-indent-label">代码块缩进</span>}
-              desc="配置编辑器与预览中代码块默认的缩进字符数"
-              control={
-                <SettingsSelect
-                  value={codeIndent}
-                  disabled={saving}
-                  options={[...INDENT_OPTS]}
-                  onChange={(v) => {
-                    const next = normalizeCodeIndent(v);
-                    if (next === codeIndent) return;
-                    void save({
-                      markdown: { ...(settings.markdown || {}), codeBlockIndent: next },
-                    });
-                  }}
-                />
-              }
-            />
-          </SettingsCard>
-        </SettingsSection>
-
-        <SettingsSection title="预设皮肤与字号">
-          <SettingsCard>
-            <SettingsRow
-              title={<span id={skinLabelId}>预设配色皮肤</span>}
-              desc={activeTheme === 'dark' ? '深色模式下可选的高阶主题预设' : '浅色模式下可选的高阶主题预设'}
-              control={
-                <SettingsSelect
-                  className="settings-personalize-select"
-                  value={personalization.skin}
-                  options={skinOptions}
-                  onChange={(v) => updatePersonalization({ skin: v })}
-                  disabled={saving}
-                  placeholder="选择预设…"
-                />
-              }
-            />
-
-            {personalization.skin === 'custom' && (
-              <>
-                <SettingsRow
-                  title="自定义背景色"
-                  control={
-                    <input
-                      type="color"
-                      value={personalization.customBg}
-                      onChange={(e) => updatePersonalization({ customBg: e.target.value })}
-                      disabled={saving}
-                      className={styles.colorInput}
-                    />
-                  }
-                />
-                <SettingsRow
-                  title="自定义文本色"
-                  desc="自适应计算副文本、边框与悬浮文本色"
-                  control={
-                    <input
-                      type="color"
-                      value={personalization.customFg}
-                      onChange={(e) => updatePersonalization({ customFg: e.target.value })}
-                      disabled={saving}
-                      className={styles.colorInput}
-                    />
-                  }
-                />
-              </>
-            )}
-
-            <SettingsRow
-              title="主题亮度微调"
-              desc={
-                personalization.themeAutoTimeTransition
-                  ? `已受智能时光过渡控制：${getDynamicSolarAdjustments().periodLabel}`
-                  : (personalization.themeBrightnessAdjust || 0) === 0
-                    ? '默认亮度（系统预设的温润中值配比）'
-                    : `当前微调: ${(personalization.themeBrightnessAdjust || 0) > 0 ? '更亮' : '更暗'} (${Math.abs(personalization.themeBrightnessAdjust || 0)} 档)`
-              }
-              control={
-                <div className={styles.adjustContainer}>
-                  <input
-                    type="range"
-                    min="-5"
-                    max="4"
-                    step="1"
-                    value={
-                      personalization.themeAutoTimeTransition
-                        ? getDynamicSolarAdjustments().brightnessAdjust
-                        : (personalization.themeBrightnessAdjust || 0)
-                    }
-                    onChange={(e) => updatePersonalization({ themeBrightnessAdjust: parseInt(e.target.value, 10) })}
-                    disabled={saving || Boolean(personalization.themeAutoTimeTransition)}
-                    className={styles.adjustSlider}
-                    style={{
-                      opacity: personalization.themeAutoTimeTransition ? 0.45 : 1,
-                      cursor: personalization.themeAutoTimeTransition ? 'not-allowed' : 'pointer',
-                    }}
-                  />
-                  <span className={styles.adjustLabel} style={{ opacity: personalization.themeAutoTimeTransition ? 0.5 : 1 }}>
-                    {personalization.themeAutoTimeTransition
-                      ? (getDynamicSolarAdjustments().brightnessAdjust > 0 ? '+' : '') + getDynamicSolarAdjustments().brightnessAdjust
-                      : ((personalization.themeBrightnessAdjust || 0) > 0 ? '+' : '') + (personalization.themeBrightnessAdjust || 0)
-                    }
-                  </span>
-                </div>
-              }
-            />
-
-            <SettingsRow
-              title="智能时光温感过渡"
-              desc="根据当地日出日落时间，自动柔和降低白天对比度与亮度并调温，最终自然过渡到深夜深色模式，极致呵护双眼。"
-              control={
-                <input
-                  id="settings-theme-auto-time"
-                  type="checkbox"
-                  className="settings-switch settings-switch--appearance"
-                  style={{ cursor: 'pointer' }}
-                  checked={Boolean(personalization.themeAutoTimeTransition)}
-                  disabled={saving}
-                  onChange={(e) => {
-                    updatePersonalization({ themeAutoTimeTransition: e.target.checked });
-                  }}
-                />
-              }
-            />
-
-            <SettingsRow
-              title="氛围色彩融合"
-              desc="调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏"
-              control={
-                <input
-                  id="settings-theme-brightness-vibrant"
-                  type="checkbox"
-                  className="settings-switch settings-switch--appearance"
-                  style={{ cursor: 'pointer' }}
-                  checked={Boolean(personalization.themeBrightnessVibrant)}
-                  disabled={saving}
-                  onChange={(e) => {
-                    updatePersonalization({ themeBrightnessVibrant: e.target.checked });
-                  }}
-                />
-              }
-            />
-
-            <SettingsRow
-              title="界面字号微调"
-              desc={`基准字号为 14px，当前字号: ${14 + personalization.fontSizeAdjust}px`}
-              control={
-                <div className={styles.adjustContainer}>
-                  <input
-                    type="range"
-                    min="-2"
-                    max="4"
-                    step="1"
-                    value={personalization.fontSizeAdjust}
-                    onChange={(e) => updatePersonalization({ fontSizeAdjust: parseInt(e.target.value, 10) })}
-                    disabled={saving}
-                    className={styles.adjustSlider}
-                  />
-                  <span className={styles.adjustLabel}>
-                    {personalization.fontSizeAdjust >= 0 ? '+' : ''}{personalization.fontSizeAdjust}px
-                  </span>
-                </div>
-              }
-            />
-          </SettingsCard>
-        </SettingsSection>
+        <SettingsSchemaRenderer
+          schema={appearanceSchema}
+          values={allValues}
+          onSave={handleSave}
+          ready={!saving}
+        />
 
         <SettingsSection title="字体">
           <SettingsCard>

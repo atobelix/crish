@@ -870,44 +870,44 @@ function App() {
         </Suspense>
       )}
 
-      {showSettingsOverlay && (
-        <div
-          className="settings-cover"
-          role="dialog"
-          aria-modal="true"
-          aria-label="设置"
-          style={{ zIndex: 13000 }}
+      <div
+        className="settings-cover"
+        role="dialog"
+        aria-modal="true"
+        aria-label="设置"
+        style={{ zIndex: 13000 }}
+        hidden={!showSettingsOverlay}
+      >
+        <AppErrorBoundary
+          title="设置加载失败"
+          onReset={() => {
+            setShowSettingsOverlay(false);
+            window.setTimeout(() => setShowSettingsOverlay(true), 50);
+          }}
         >
-          <AppErrorBoundary
-            title="设置加载失败"
-            onReset={() => {
-              setShowSettingsOverlay(false);
-              window.setTimeout(() => setShowSettingsOverlay(true), 50);
-            }}
+          <Suspense
+            fallback={
+              <div
+                className="settings-suspense-fallback"
+                aria-busy="true"
+                aria-label="正在加载设置"
+                role="status"
+              >
+                <div className="settings-suspense-skel settings-suspense-skel--nav" aria-hidden="true" />
+                <div className="settings-suspense-skel settings-suspense-skel--main" aria-hidden="true" />
+              </div>
+            }
           >
-            <Suspense
-              fallback={
-                <div
-                  className="settings-suspense-fallback"
-                  aria-busy="true"
-                  aria-label="正在加载设置"
-                  role="status"
-                >
-                  <div className="settings-suspense-skel settings-suspense-skel--nav" aria-hidden="true" />
-                  <div className="settings-suspense-skel settings-suspense-skel--main" aria-hidden="true" />
-                </div>
-              }
-            >
-              <SettingsPanel
-                wsId={activeWorkspaceId}
-                onShowToast={handleShowToast}
-                onClose={() => setShowSettingsOverlay(false)}
-                initialTab={settingsActiveTab || 'profile'}
-              />
-            </Suspense>
-          </AppErrorBoundary>
-        </div>
-      )}
+            <SettingsPanel
+              isOpen={showSettingsOverlay}
+              wsId={activeWorkspaceId}
+              onShowToast={handleShowToast}
+              onClose={() => setShowSettingsOverlay(false)}
+              initialTab={settingsActiveTab || 'profile'}
+            />
+          </Suspense>
+        </AppErrorBoundary>
+      </div>
     </div>
     </PlatformAdaptationCtx.Provider>
   );

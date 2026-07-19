@@ -8,11 +8,20 @@ import {
 
 export interface SchemaProperty {
   key: string;
-  type: 'boolean' | 'select' | 'string';
+  type: 'boolean' | 'select' | 'string' | 'range' | 'color' | 'preset-grid' | 'font-selector' | 'toggle-group';
   title: string;
   desc?: string;
   options?: { value: string; label: string; hint?: string }[];
   placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  showValue?: boolean;
+  presets?: { id: string; name: string; preview: string }[];
+  category?: 'sans' | 'mono';
+  previewText?: string;
+  toggleOptions?: { value: string; label: string; icon?: string }[];
 }
 
 export interface SchemaSection {
@@ -114,13 +123,108 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                     }}
                   />
                 );
+              } else if (prop.type === 'range') {
+                const numVal = Number(val ?? prop.min ?? 0);
+                control = (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      id={domId}
+                      type="range"
+                      min={prop.min ?? 0}
+                      max={prop.max ?? 100}
+                      step={prop.step ?? 1}
+                      value={numVal}
+                      disabled={!ready}
+                      onChange={(e) => void onSave({ [prop.key]: Number(e.target.value) })}
+                      style={{ cursor: 'pointer', accentColor: 'var(--text-primary)', height: 4, width: 100 }}
+                    />
+                    {prop.showValue && (
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', minWidth: 40, textAlign: 'right', fontWeight: 600 }}>
+                        {numVal}{prop.unit ?? ''}
+                      </span>
+                    )}
+                  </div>
+                );
+              } else if (prop.type === 'color') {
+                control = (
+                  <input
+                    id={domId}
+                    type="color"
+                    value={String(val || '#000000')}
+                    disabled={!ready}
+                    onChange={(e) => void onSave({ [prop.key]: e.target.value })}
+                    style={{ cursor: 'pointer', border: '1px solid var(--border-color)', borderRadius: 6, width: 40, height: 24, padding: 0, background: 'transparent' }}
+                  />
+                );
+              } else if (prop.type === 'preset-grid') {
+                control = (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 8 }}>
+                    {(prop.presets || []).map((preset) => {
+                      const isSelected = val === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          disabled={!ready}
+                          onClick={() => void onSave({ [prop.key]: preset.id })}
+                          style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                            padding: 8, borderRadius: 8, cursor: 'pointer',
+                            border: isSelected ? '2px solid var(--accent-color, #888)' : '1px solid var(--border-color)',
+                            background: 'var(--bg-card)', color: 'var(--text-primary)',
+                            position: 'relative', transition: 'border-color 0.15s',
+                          }}
+                        >
+                          {preset.preview && (
+                            <div style={{ width: 32, height: 32, borderRadius: 6, background: preset.preview }} />
+                          )}
+                          <span style={{ fontSize: 'var(--font-size-xs)', textAlign: 'center', lineHeight: 1.3 }}>{preset.name}</span>
+                          {isSelected && (
+                            <span style={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'var(--accent-color, #888)' }}>✓</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              } else if (prop.type === 'font-selector') {
+                control = (
+                  <SettingsSelect
+                    className="settings-personalize-select"
+                    value={String(val || '')}
+                    options={prop.options || []}
+                    onChange={(v) => void onSave({ [prop.key]: v })}
+                    disabled={!ready}
+                    placeholder={prop.placeholder || '请选择…'}
+                  />
+                );
+              } else if (prop.type === 'toggle-group') {
+                control = (
+                  <div className="ui-segment">
+                    {(prop.toggleOptions || []).map((opt) => {
+                      const isActive = String(val) === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`ui-segment-item${isActive ? ' active' : ''}`}
+                          disabled={!ready}
+                          aria-pressed={isActive}
+                          onClick={() => void onSave({ [prop.key]: opt.value })}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
               }
 
               return (
                 <SettingsRow
                   key={prop.key}
                   title={
-                    prop.type === 'boolean' || prop.type === 'string' ? (
+                    prop.type === 'boolean' || prop.type === 'string' || prop.type === 'range' || prop.type === 'color' ? (
                       <label htmlFor={domId} className="settings-ui-row-label">
                         {prop.title}
                       </label>

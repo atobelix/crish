@@ -10,6 +10,7 @@ import {
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { Tooltip } from './settings/SettingsUI';
 import type { SettingsTabType } from '../store/types';
+import { useAnimatedPresence } from '../hooks/useAnimatedPresence';
 
 /**
  * 设置 tab 懒加载：设置页是低频入口，11 个 tab（含 873 行 SkillsSettingsTab /
@@ -65,6 +66,7 @@ interface SettingsPanelProps {
   onShowToast: (msg: string) => void;
   onClose?: () => void;
   initialTab?: SettingsTabType;
+  isOpen?: boolean;
 }
 
 /**
@@ -226,6 +228,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
   const [navQuery, setNavQuery] = useState('');
   const [navFocusId, setNavFocusId] = useState<TabType | null>(null);
+
+  const { state, isMounted } = useAnimatedPresence({ visible: isOpen ?? true, exitDurationMs: 300 });
 
   const baseId = useId();
   const tablistId = `${baseId}-tablist`;
@@ -419,6 +423,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     [visibleTabs, safeActiveTab, selectTab],
   );
 
+  if (!isMounted) return null;
+
   const filterStatusText =
     navQuery.trim().length > 0
       ? visibleTabs.length === 0
@@ -429,7 +435,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div
       ref={rootRef}
-      className={`${styles.settingsPanel} ${styles.settingsCover}${safeActiveTab === 'appearance' ? ' ' + styles.translucentCover : ''}`}
+      className={`${styles.settingsPanel} ${styles.settingsCover}${safeActiveTab === 'appearance' ? ' ' + styles.translucentCover : ''} is-${state}`}
       data-density="compact"
       role="dialog"
       aria-modal="true"

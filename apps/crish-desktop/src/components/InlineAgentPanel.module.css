@@ -1,13 +1,13 @@
 .inlineAgent {
-  border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--hairline, var(--border-subtle)) 40%, transparent);
-  border-radius: 8px;
+  border: none;
+  border-radius: 0;
   margin: 4px 0 6px;
   background: transparent;
   overflow: hidden;
 }
 
 .inlineAgent.inlineAgentDense {
-  border-radius: 7px;
+  border-radius: 0;
 }
 
 .inlineAgent.sideFocused {
@@ -81,34 +81,35 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: all var(--transition-fast, 150ms) ease;
-  padding: 0;
+  flex-shrink: 0;
+  transition: background 100ms ease-out, color 100ms ease-out, border-color 100ms ease-out, opacity 200ms ease;
 }
-
 .agentHeadBtn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+  border-color: var(--border-color);
 }
-
 .agentHeadBtn.isActive {
-  background: var(--bg-active);
-  color: var(--accent-blue, var(--text-primary));
-  border-color: color-mix(in srgb, var(--accent-blue, var(--border-color)) 15%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--accent-blue);
+  border-color: color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
-
 .agentHeadBtn:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.inlineAgentStopBtn:disabled {
-  opacity: 0.5;
-  cursor: default;
+.inlineAgentStopBtn {
+  color: var(--accent-red, #c44);
+}
+.inlineAgentStopBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  color: var(--accent-red);
 }
 
 .inlineAgentLinkStop {
@@ -321,22 +322,18 @@
   margin: 6px 0 10px;
 }
 
-.inlineAgentMsg:global(.inline-agent-msg--user) :global(.agent-prompt-bubble) {
-  display: inline-block;
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 8px);
-  padding: 6px 10px;
-  font-size: var(--font-size-sm);
+.inlineAgentUserPrompt {
   color: var(--text-secondary);
-  max-width: 85%;
+  font-size: var(--font-size-sm);
   text-align: left;
-  line-height: var(--line-height-body, 1.5);
+  padding: 0;
+  max-width: 85%;
+  line-height: 1.55;
 }
 
 /* Premium Thinking Fold Styles matching main agent details */
 .thinkingFold {
-  margin: 4px 0 8px;
+  margin: 0 0 6px;
   padding: 0;
   border: none;
   background: transparent;
@@ -350,12 +347,12 @@
   gap: 6px;
   cursor: pointer;
   list-style: none;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  font-weight: var(--font-weight-normal);
+  font-weight: 400;
   user-select: none;
   padding: 0;
-  min-height: 20px;
+  min-height: 24px;
   background: transparent;
   border: none;
   font-family: inherit;
@@ -379,19 +376,28 @@
 
 .thinkingFoldLabel {
   color: var(--text-tertiary);
-  font-weight: var(--font-weight-normal);
+  font-weight: 400;
 }
 
 .thinkingFoldBody {
   margin: 4px 0 0;
-  padding: 0 0 0 18px; /* Indent under chevron */
-  font-size: var(--font-size-xs);
+  padding: 0 0 0 18px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: calc(var(--font-size-sm) * 1.5 * 4);
+  overflow-y: auto;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
   opacity: 0.9;
   user-select: text;
-  -webkit-user-select: text;
+}
+
+.thinkingFold.isOpen .thinkingFoldBody {
+  max-height: calc(var(--font-size-sm) * 1.5 * 24);
 }
 

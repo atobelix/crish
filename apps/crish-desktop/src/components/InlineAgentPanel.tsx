@@ -9,6 +9,7 @@
  * - 卸载安全：取消 follow-up 流，迟到 setState 不写回
  */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
@@ -43,18 +44,19 @@ import { Tooltip } from './settings/SettingsUI';
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
 
-const SubagentThinkingFold: React.FC<{ thinkingText: string }> = ({ thinkingText }) => {
-  const [isOpen, setIsOpen] = useState(false);
+const SubagentThinkingFold: React.FC<{ thinkingText: string; isLive?: boolean }> = ({ thinkingText, isLive = false }) => {
+  const [open, setOpen] = useState(false);
+  const isExpanded = open || isLive;
   return (
     <details
-      className={styles.thinkingFold}
-      open={isOpen}
-      onToggle={(e) => setIsOpen(e.currentTarget.open)}
+      className={`${styles.thinkingFold} ${isExpanded ? styles.isOpen : ''}`}
+      open={isExpanded}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary className={styles.thinkingFoldSum}>
-        <Lucide.ChevronRight
+        <ChevronRight
           size={14}
-          className={`${styles.thinkingChevron} ${isOpen ? styles.isOpen : ''}`}
+          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`}
         />
         <span className={styles.thinkingFoldLabel}>
           思考
@@ -431,21 +433,19 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   /** 空消息列表：按状态中文文案 */
   const emptyStreamCopy = useMemo(() => {
     if (running) return '子智能体执行中，产出将显示在此…';
-    if (live.status === 'failed') return '暂无消息（运行失败）。可在下方重试，或在侧栏查看详情。';
+    if (live.status === 'failed') return '暂无消息（运行失败）。可在下方重试。';
     if (live.status === 'stopped') return '暂无消息（已停止）。可继续发送以开启新一轮。';
     if (live.summary?.trim()) {
       return `暂无消息记录。摘要：${live.summary.trim().slice(0, 80)}`;
     }
-    return '暂无消息。可在下方继续对话，或在侧栏打开完整视图。';
+    return '暂无消息。可在下方继续对话。';
   }, [running, live.status, live.summary]);
 
-  const sideOpenTitle = sideFocused
-    ? '已在侧栏打开（点击重聚焦，不覆盖主对话）'
-    : '在侧栏打开（不覆盖主对话）';
+  const sideOpenTitle = sideFocused ? '重聚焦子智能体' : '在侧栏打开子智能体';
   const sideOpenAria = sideFocused
-    ? `已在侧栏打开「${displayTitle}」，点击重聚焦`
+    ? `重聚焦子智能体「${displayTitle}」`
     : `在侧栏打开子智能体「${displayTitle}」`;
-  const regionAria = `${displayTitle}，${statusLabel}${sideFocused ? '，已在侧栏' : ''}`;
+  const regionAria = `${displayTitle}，${statusLabel}`;
 
   return (
     <div
@@ -533,7 +533,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
             <Tooltip content={stopping ? '停止中…' : '停止子智能体'}>
               <button
                 type="button"
-                className={`agent-card-btn agent-card-btn--danger ${styles.inlineAgentStopBtn}`}
+                className={`${styles.agentHeadBtn} ${styles.inlineAgentStopBtn}`}
                 aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
                 aria-busy={stopping || undefined}
                 disabled={stopping}
@@ -561,19 +561,6 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       {open ? (
         <div className={styles.inlineAgentBody} id={bodyDomId} role="group" aria-label={`${displayTitle} 详情`}>
           <div className={styles.inlineAgentToolbar}>
-            <Tooltip content={sideOpenTitle}>
-              <button
-                type="button"
-                className={styles.inlineAgentLink}
-                data-open-target="side-panel"
-                data-side-reused={sideFocused ? '1' : '0'}
-                aria-label={sideOpenAria}
-                disabled={!agentIdNorm}
-                onClick={openInSideOnly}
-              >
-                在侧栏打开
-              </button>
-            </Tooltip>
             {running ? (
               <Tooltip content="停止生成">
                 <button
@@ -607,33 +594,19 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                 <p className={styles.inlineAgentEmptyP} style={{ margin: 0 }}>
                   {emptyStreamCopy}
                 </p>
-                {agentIdNorm ? (
-                  <Tooltip content={sideOpenTitle}>
-                    <button
-                      type="button"
-                      className={styles.inlineAgentLink}
-                      data-open-target="side-panel"
-                      style={{ marginTop: 6 }}
-                      aria-label={sideOpenAria}
-                      onClick={openInSideOnly}
-                    >
-                      在侧栏打开完整视图
-                    </button>
-                  </Tooltip>
-                ) : null}
               </div>
             ) : (
               messages.map((msg) => (
                 <div key={msg.id} className={`${styles.inlineAgentMsg} inline-agent-msg--${msg.sender}`}>
                   {msg.sender === 'user' ? (
-                    <div className="agent-prompt-bubble">{msg.text}</div>
+                    <div className={styles.inlineAgentUserPrompt}>{msg.text}</div>
                   ) : (
                     <>
                       {msg.thinking &&
                       msg.thinking.trim() &&
                       msg.thinking !== '正在处理…' &&
                       !looksLikeShellDump(msg.thinking) ? (
-                        <SubagentThinkingFold thinkingText={msg.thinking} />
+                        <SubagentThinkingFold thinkingText={msg.thinking} isLive={running} />
                       ) : null}
                       {(() => {
                         const timeline = buildAssistantTimeline(msg);
