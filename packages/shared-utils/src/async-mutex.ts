@@ -26,7 +26,7 @@
  * - 支持 AbortSignal 取消排队中的任务
  */
 export class AsyncMutex {
-  private readonly queue: Array<() => void> = [];
+  private readonly queue: Array<{ waiter: () => void; cleanup?: () => void }> = [];
   private locked = false;
 
   /** 锁是否被持有。 */
@@ -65,26 +65,28 @@ export class AsyncMutex {
 
     // 排队等待
     return new Promise<() => void>((resolve, reject) => {
-      const waiter = () => {
-        if (signal?.aborted) {
-          reject(new Error("AbortError: mutex acquire aborted while waiting"));
-          return;
-        }
-        this.locked = true;
-        resolve(() => this.release());
+      const entry: { waiter: () => void; cleanup?: () => void } = {
+        waiter: () => {
+          if (signal?.aborted) {
+            reject(new Error("AbortError: mutex acquire aborted while waiting"));
+            return;
+          }
+          this.locked = true;
+          resolve(() => this.release());
+        },
       };
-      this.queue.push(waiter);
-
       if (signal) {
         const onAbort = () => {
-          const idx = this.queue.indexOf(waiter);
+          const idx = this.queue.indexOf(entry);
           if (idx >= 0) {
             this.queue.splice(idx, 1);
             reject(new Error("AbortError: mutex acquire aborted while waiting"));
           }
         };
         signal.addEventListener("abort", onAbort, { once: true });
+        entry.cleanup = () => signal.removeEventListener("abort", onAbort);
       }
+      this.queue.push(entry);
     });
   }
 
@@ -92,8 +94,9 @@ export class AsyncMutex {
     if (!this.locked) return;
     const next = this.queue.shift();
     if (next) {
-      // 直接把锁交给下一个等待者（保持 locked = true）
-      next();
+      // 先把 cleanup 执行完再归还锁，确保 release 前 listener 已移除
+      next.cleanup?.();
+      next.waiter();
     } else {
       this.locked = false;
     }
@@ -106,7 +109,7 @@ export class AsyncMutex {
  * 允许最多 `maxConcurrency` 个任务并发执行。适合限流场景（如限制并发 fsync 数）。
  */
 export class AsyncSemaphore {
-  private readonly queue: Array<() => void> = [];
+  private readonly queue: Array<{ waiter: () => void; cleanup?: () => void }> = [];
   private active = 0;
   private readonly max: number;
 
@@ -145,26 +148,28 @@ export class AsyncSemaphore {
     }
 
     return new Promise<() => void>((resolve, reject) => {
-      const waiter = () => {
-        if (signal?.aborted) {
-          reject(new Error("AbortError: semaphore acquire aborted while waiting"));
-          return;
-        }
-        this.active += 1;
-        resolve(() => this.release());
+      const entry: { waiter: () => void; cleanup?: () => void } = {
+        waiter: () => {
+          if (signal?.aborted) {
+            reject(new Error("AbortError: semaphore acquire aborted while waiting"));
+            return;
+          }
+          this.active += 1;
+          resolve(() => this.release());
+        },
       };
-      this.queue.push(waiter);
-
       if (signal) {
         const onAbort = () => {
-          const idx = this.queue.indexOf(waiter);
+          const idx = this.queue.indexOf(entry);
           if (idx >= 0) {
             this.queue.splice(idx, 1);
             reject(new Error("AbortError: semaphore acquire aborted while waiting"));
           }
         };
         signal.addEventListener("abort", onAbort, { once: true });
+        entry.cleanup = () => signal.removeEventListener("abort", onAbort);
       }
+      this.queue.push(entry);
     });
   }
 
@@ -172,8 +177,8 @@ export class AsyncSemaphore {
     if (this.active === 0) return;
     const next = this.queue.shift();
     if (next) {
-      // 直接把 slot 交给下一个等待者（保持 active 不变）
-      next();
+      next.cleanup?.();
+      next.waiter();
     } else {
       this.active -= 1;
     }

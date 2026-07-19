@@ -16,6 +16,26 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./browser": {
+      "development": {
+        "types": "./src/browser-index.ts",
+        "import": "./src/browser-index.ts",
+        "default": "./src/browser-index.ts"
+      },
+      "types": "./dist/browser-index.d.ts",
+      "import": "./dist/browser-index.js",
+      "default": "./dist/browser-index.js"
+    },
+    "./node": {
+      "development": {
+        "types": "./src/node-index.ts",
+        "import": "./src/node-index.ts",
+        "default": "./src/node-index.ts"
+      },
+      "types": "./dist/node-index.d.ts",
+      "import": "./dist/node-index.js",
+      "default": "./dist/node-index.js"
     }
   },
   "files": [
@@ -25,6 +45,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build:types": "node -e \"require('node:fs').rmSync('../../node_modules/.cache/shared-utils.tsbuildinfo', { force: true })\" && tsc -p tsconfig.build.json --emitDeclarationOnly --declarationMap false && tsc-alias -p tsconfig.build.json --resolve-full-paths",
     "build:js": "esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap",
-    "build": "npm run clean && npm run build:types && npm run build:js"
+    "build:js:browser": "esbuild src/browser-index.ts --bundle --platform=browser --format=esm --target=es2022 --packages=external --outfile=dist/browser-index.js --sourcemap",
+    "build:js:node": "esbuild src/node-index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/node-index.js --sourcemap",
+    "build": "npm run clean && npm run build:types && npm run build:js && npm run build:js:browser && npm run build:js:node"
   }
 }

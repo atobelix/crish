@@ -4,10 +4,12 @@
  */
 export class BoundedArray<T> {
   private readonly buffer: T[];
+  private readonly capacity: number;
   private head = 0;
   private count = 0;
 
-  constructor(private readonly capacity: number) {
+  constructor(capacity: number) {
+    this.capacity = capacity;
     this.buffer = new Array(capacity);
   }
 
