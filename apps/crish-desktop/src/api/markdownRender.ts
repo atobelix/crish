@@ -719,7 +719,13 @@ function langFromFenceInfo(info: string): string {
   return aliases[lower] || lower;
 }
 
-function buildCodeFenceHtml(bodyRaw: string, langClean: string): string {
+/** 从 fence info string 提取 file="…" 属性值 */
+function extractFilePathFromFenceInfo(info: string): string {
+  const m = String(info || '').match(/\bfile=(?:"([^"]*)"|(\S+))/);
+  return m ? (m[1] ?? m[2] ?? '') : '';
+}
+
+function buildCodeFenceHtml(bodyRaw: string, langClean: string, filePath?: string): string {
   const body = bodyRaw.replace(/\n$/, '');
   let inner: string;
   try {
@@ -732,8 +738,19 @@ function buildCodeFenceHtml(bodyRaw: string, langClean: string): string {
     ? `<span class="md-code-lang" data-lang="${escapeHtml(langClean)}" aria-label="${escapeHtml(langClean)}">${escapeHtml(langClean)}</span>`
     : '';
   const blockAttr = langClean ? ` data-lang="${escapeHtml(langClean)}"` : '';
+  // 文件路径面包屑
+  let breadcrumb = '';
+  if (filePath) {
+    const segments = filePath.split('/');
+    const parts = segments.map((s, i) => {
+      const isLast = i === segments.length - 1;
+      const cls = isLast ? 'md-code-breadcrumb-file' : 'md-code-breadcrumb-segment';
+      return `<span class="${cls}">${escapeHtml(s)}</span>`;
+    });
+    breadcrumb = `<span class="md-code-breadcrumb">${parts.join('<span class="md-code-breadcrumb-separator">/</span>')}</span>`;
+  }
   /* 不把正文塞进 data-copy（长代码会撑破属性/误显）；点击时从相邻 pre 取文本 */
-  return `<div class="md-code-block"${blockAttr}>${langBadge}<button type="button" class="md-code-copy" title="复制" aria-label="复制代码">复制</button><pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
+  return `<div class="md-code-block"${blockAttr}>${breadcrumb}${langBadge}<button type="button" class="md-code-copy" title="复制" aria-label="复制代码">复制</button><pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
 }
 
 /**
@@ -746,7 +763,8 @@ function extractCodeFences(text: string): { text: string; fences: string[] } {
   let out = text.replace(/```([^\n`]{0,500})\r?\n([\s\S]{0,50000}?)```/g, (_, info, code) => {
     const i = fences.length;
     const langClean = langFromFenceInfo(info);
-    fences.push(buildCodeFenceHtml(code, langClean));
+    const filePath = extractFilePathFromFenceInfo(info);
+    fences.push(buildCodeFenceHtml(code, langClean, filePath));
     return `\n%%FENCE${i}%%\n`;
   });
   // 文末未闭合：```lang\n…（无收尾 ```）— 流式时仍渲染为代码块
@@ -755,7 +773,8 @@ function extractCodeFences(text: string): { text: string; fences: string[] } {
     if (/(^|\n)```/.test(code)) return full;
     const i = fences.length;
     const langClean = langFromFenceInfo(info);
-    fences.push(buildCodeFenceHtml(code, langClean));
+    const filePath = extractFilePathFromFenceInfo(info);
+    fences.push(buildCodeFenceHtml(code, langClean, filePath));
     return `\n%%FENCE${i}%%\n`;
   });
   return { text: out, fences };

@@ -1,6 +1,13 @@
 /* Conex desktop entry styles — domain splits live under ./styles/ */
 @import './styles/tokens.css';
-@import './styles/shell.css';
+@import './styles/shell/shell-reset.css';
+@import './styles/shell/shell-layout.css';
+@import './styles/shell/shell-sidebar.css';
+@import './styles/shell/shell-workspace.css';
+@import './styles/shell/shell-menus.css';
+@import './styles/shell/shell-scrollbar.css';
+@import './styles/shell/shell-dragdrop.css';
+@import './styles/shell/shell-polish.css';
 @import './styles/chat.css';
 @import './styles/settings/settings-base.css';
 @import './styles/settings/settings-models.css';

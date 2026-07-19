@@ -1,0 +1,91 @@
+
+/* --- COLLAPSED & OVERLAY SIDEBAR STATES --- */
+.sidebar.collapsed {
+  width: 0px !important;
+  border-right: none;
+  transition: transform var(--transition-spring);
+}
+
+.sidebar.collapsed.temp-expanded {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  width: var(--sidebar-width) !important;
+  z-index: 200;
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.08);
+  border-right: 1px solid var(--border-color);
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.sidebar.collapsed:not(.temp-expanded) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  width: var(--sidebar-width) !important;
+  transform: translateX(-100%);
+  border-right: none;
+  pointer-events: none;
+}
+
+.preview-body {
+  background-color: var(--bg-primary);
+}
+
+/* ── Drag & Drop Indicators ─────────────────────────────────────────────── */
+
+/* The main drop zone indicator (side/top/bottom strips) — positioned via JS */
+.drop-indicator {
+  position: fixed;
+  background-color: rgba(55, 65, 81, 0.15);
+  border: 2px solid var(--accent-color);
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s var(--transition-smooth), background-color 0.15s var(--transition-smooth), border-color 0.15s var(--transition-smooth);
+}
+
+/* Tab insert position line — rendered via JS into document.body */
+.tab-insert-line {
+  position: fixed;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--text-primary);
+  pointer-events: none;
+  z-index: 10001;
+  box-shadow: none;
+}
+
+/* Drag preview overlay — cloned card following cursor */
+.drag-overlay-preview-card {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.drag-overlay-preview-card * {
+  pointer-events: none !important;
+}
+
+/* Cursor override while dragging */
+body.dragging-card,
+body.dragging-card * {
+  cursor: grabbing !important;
+}
+
+/* Smooth window resize transition */
+.window-resizing .main-layout {
+  transition: width 0.35s var(--transition-smooth) !important;
+}
+
+/* Hide the source element in the list during drag */
+.drag-ghost-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

@@ -1,0 +1,418 @@
+
+/* --- FLOATING MENUS & DROPDOWNS --- */
+.panel-dropdown {
+  position: absolute;
+  width: 220px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px !important;
+  display: none;
+  flex-direction: column;
+  gap: 2px !important;
+  z-index: 1000;
+}
+
+.panel-dropdown.open {
+  display: flex;
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+  padding: 6px 8px 8px;
+  border-bottom: none;
+  margin-bottom: 2px;
+}
+
+.dropdown-header svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-tertiary);
+}
+
+.dropdown-close-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.dropdown-close-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dropdown-close-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: var(--item-padding) !important;
+  border-radius: var(--item-radius);
+  font-size: var(--item-font-size) !important;
+  color: var(--text-secondary);
+  cursor: pointer;
+  gap: 8px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  position: relative;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dropdown-item input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+/* Soft filled checkbox — no harsh outline */
+.custom-chk {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s ease;
+  background-color: var(--bg-tertiary);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.custom-chk.checked {
+  background-color: var(--accent-color);
+}
+
+.custom-chk.checked::after {
+  content: "";
+  position: absolute;
+  width: 3.5px;
+  height: 7px;
+  border: solid var(--text-on-accent);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  top: 2px;
+  left: 5px;
+}
+
+.dropdown-item .shortcut {
+  margin-left: auto;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  background-color: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Soft group separator — spacing over hard rules */
+.dropdown-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 2px;
+  margin-top: 4px;
+}
+
+.dropdown-group + .dropdown-group {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.dropdown-pref {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 6px 4px;
+}
+
+.dropdown-pref-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-tertiary);
+  padding-left: 2px;
+}
+
+/* Segmented control — modern track + soft green active (三选滑块感) */
+.ui-segment {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-secondary);
+  border-radius: 999px;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.ui-segment-item {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-sans);
+  height: auto;
+  min-height: 28px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.ui-segment-item:hover {
+  color: var(--text-primary);
+}
+
+.ui-segment-item.active {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
+  font-weight: var(--font-weight-normal);
+}
+
+/* 分段选中：中性 pill，不用整片绿 */
+.settings-row .ui-segment-item.active,
+.sb-quick-segment .ui-segment-item.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
+}
+
+/* Legacy aliases */
+.size-selector {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin: 0 4px 4px;
+}
+
+.size-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: var(--font-size-xs);
+  height: auto;
+  min-height: 26px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
+  font-family: var(--font-sans);
+}
+
+.size-btn:hover {
+  color: var(--text-primary);
+}
+
+.size-btn.active {
+  background-color: var(--bg-primary);
+  border-color: transparent;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: var(--font-weight-normal);
+}
+
+/* Custom Context Menu — 与 SettingsSelect 浮层同档 */
+.context-menu {
+  position: fixed;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10000;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  min-width: 200px;
+  user-select: none;
+}
+
+.context-menu.open {
+  display: flex;
+}
+
+.context-menu-item {
+  width: 100%;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--item-font-size);
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background: var(--control-soft-bg-hover);
+  color: var(--text-primary);
+}
+
+.context-menu-item svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+/* Floating overlay drop zones */
+.drag-overlay-preview {
+  position: fixed;
+  background-color: var(--accent-light);
+  border: 2px dashed var(--accent-color);
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.7;
+}
+
+/* [MIGRATED] .toast-stack and helper styles migrated to ToastStack.module.css */
+
+/* Collapsible Section Header chevron rotations */
+.collapsible-header.collapsed .collapse-btn svg,
+.folder-header.collapsed .folder-collapse-btn svg {
+  transform: rotate(-90deg) !important;
+}
+
+/* 排序与过滤：级联菜单（参考现代桌面设置/侧栏） */
+.sort-filter-menu {
+  min-width: 200px;
+  padding: 8px;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+}
+.sort-filter-menu.open {
+  display: flex;
+}
+.sort-filter-menu-title {
+  padding: 6px 10px 8px;
+  font-size: var(--font-size-xxs);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+.sort-filter-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: default;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  background: transparent;
+  border: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.sort-filter-row:hover,
+.sort-filter-row.is-open {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.sort-filter-row-label {
+  flex: 1;
+  text-align: left;
+}
+.sort-filter-chev {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.sort-filter-flyout {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: -4px;
+  min-width: 148px;
+  padding: 6px;
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 2;
+}
+.sort-filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sort-filter-option:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.sort-filter-option.is-on {
+  color: var(--accent-green, #22c55e);
+  font-weight: 500;
+}
+.sort-filter-check {
+  color: var(--accent-green, #22c55e);
+  flex-shrink: 0;
+}
+
+/* 兼容旧 class（若仍有引用） */
+.sort-dropdown {
+  display: none;
+}

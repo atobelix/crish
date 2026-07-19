@@ -1,0 +1,91 @@
+/* --- shell.css (layout / header / sidebar / workspace / shared chrome) — split from index.css (selectors preserved) --- */
+@starting-style {
+  .compact-menu-container.is-open,
+  .large-menu-container.is-open {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+/* --- BASICS --- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  /* Windows ClearType: do not force grayscale antialiased (fringing) */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  font-optical-sizing: auto;
+  font-kerning: normal;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.5;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  font-feature-settings: "kern" 1, "liga" 1;
+  font-variant-ligatures: common-ligatures;
+}
+
+/* 全局等宽表面：强制 400，避免继承 UI 500 显粗 */
+code,
+pre,
+kbd,
+samp,
+.font-mono,
+[class*='diff-line'],
+[class*='diff-code'],
+[class*='git-diff-line'],
+.terminal-output-text,
+.tool-result-pre,
+.md-code-block,
+.md-code-pre,
+.md-inline-code {
+  font-weight: var(--font-weight-code, 400);
+}
+
+/* 通用图标按钮热区：高 32，图标约 16 */
+.icon-btn,
+.header-btn,
+.files-nav-btn,
+.preview-nav-btn,
+.win-btn,
+.card-action-btn,
+.plus-btn,
+.mpick-icon-btn {
+  min-width: var(--control-height);
+  height: var(--control-height);
+  box-sizing: border-box;
+}
+.icon-btn svg,
+.header-btn svg,
+.files-nav-btn svg,
+.preview-nav-btn svg,
+.plus-btn svg,
+.card-action-btn svg,
+.mpick-icon-btn svg,
+.files-icon-btn svg,
+.session-actions-btn svg,
+.cplus-item-icon svg,
+.rt-row-ico {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  flex-shrink: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

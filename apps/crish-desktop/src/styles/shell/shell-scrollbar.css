@@ -1,0 +1,52 @@
+/* Branch session dashed connector graphics */
+.session-item.branch-session {
+  padding-left: 20px !important;
+  position: relative;
+}
+
+.session-item.branch-session::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 50%;
+  width: 6px;
+  border-left: 1px dashed var(--border-color);
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.session-item.branch-session .branch-icon-wrap {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.session-item.branch-session .branch-connector-icon {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+/* --- PREMIUM SLEEK SCROLLBARS --- */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: 999px;
+  transition: background 0.12s ease;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-primary) 10%, transparent) transparent;
+}

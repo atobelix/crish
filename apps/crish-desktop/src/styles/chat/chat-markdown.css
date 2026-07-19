@@ -158,6 +158,39 @@
   outline: none;
   box-shadow: none;
 }
+/* 文件路径面包屑：代码块标题左侧 */
+.md-code-breadcrumb {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: calc(100% - 88px);
+}
+.md-code-breadcrumb-segment {
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+.md-code-breadcrumb-separator {
+  opacity: 0.4;
+}
+.md-code-breadcrumb-file {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.md-code-block:has(.md-code-breadcrumb) > pre,
+.md-code-block:has(.md-code-breadcrumb) .md-code-pre {
+  padding-top: 32px;
+}
 .md-ul-nested,
 .md-ol-nested {
   margin: 0.2em 0 0.15em;

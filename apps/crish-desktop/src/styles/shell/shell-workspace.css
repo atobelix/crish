@@ -1,0 +1,1347 @@
+/* --- WORKSPACE CONTAINER --- */
+/* 列：inset = 顶栏项目行（无圆角）+ 下方圆角卡（会话+正文） */
+.workspaces-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+/* 内容栈：会话行 + 面板（圆角卡本体） */
+.workspaces-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+.workspaces-container {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  /* 默认透明；由 stack 填主色，避免角上露出 secondary 直角 */
+  background-color: transparent;
+}
+
+/*
+ * 三级相融标签（Obsidian 文件夹页签）
+ *
+ *   L0 壳层灰 ── 项目行
+ *        激活项目 tab 底边打开 → 连入 L1 内容卡白
+ *   L1 内容卡 ── 会话行（卡顶灰带）
+ *        激活会话 tab 底边打开 → 连入 L2 正文白
+ *   L2 正文
+ *
+ * 关键键：激活 tab 只有顶圆角，底边与下层同色「抹掉」分隔线，形成口袋相连。
+ */
+/* [MIGRATED] ws-chrome styles migrated to WorkspaceChromeBars.module.css */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 壳层 chrome（data-shell-chrome）
+ * classic / inset 共用：外层壳色 + 内层圆角内容卡（一色外框、一色内区）
+ * inset 额外：无独立顶栏、双行工作台标签、窗控在项目行
+ * ═══════════════════════════════════════════════════════════════════════════ */
+.app-container[data-shell-chrome="classic"],
+.app-container[data-shell-chrome="inset"] {
+  /* 壳层纯暖色调，不混任何冷灰 */
+  --shell-chrome-bg: var(--bg-secondary);
+  --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
+  --shell-inset-radius: 14px;
+  --shell-inset-pad: 5px;
+  --shell-inset-gap: 0;
+  /* 内容列水平内边距：项目 tab 与会话 tab 共用，保证竖直对齐 */
+  --shell-content-pad-x: 14px;
+  --ws-chrome-strip: color-mix(in srgb, var(--shell-chrome-bg) 40%, var(--shell-inset-bg));
+  --ws-chrome-surface: var(--shell-inset-bg);
+  --ws-chrome-pill: color-mix(in srgb, var(--shell-chrome-bg) 42%, var(--shell-inset-bg));
+  background: var(--shell-chrome-bg);
+}
+/* 暗色：外层更深、内卡略抬，避免暖灰混色发脏 */
+html[data-theme="dark"] .app-container[data-shell-chrome="classic"],
+html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
+.app-container[data-theme="dark"][data-shell-chrome="classic"],
+.app-container[data-theme="dark"][data-shell-chrome="inset"] {
+  --shell-chrome-bg: color-mix(in srgb, var(--bg-secondary) 88%, #000 12%);
+  --shell-inset-bg: var(--bg-primary);
+  --ws-chrome-strip: color-mix(in srgb, var(--shell-chrome-bg) 55%, var(--shell-inset-bg));
+  --ws-chrome-pill: color-mix(in srgb, var(--shell-chrome-bg) 50%, var(--shell-inset-bg));
+}
+
+/* —— 共用：侧栏跟壳色 —— */
+.app-container[data-shell-chrome="classic"] .sidebar-wrapper,
+.app-container[data-shell-chrome="classic"] .crish-sidebar,
+.app-container[data-shell-chrome="classic"] .sidebar,
+.app-container[data-shell-chrome="inset"] .sidebar-wrapper,
+.app-container[data-shell-chrome="inset"] .crish-sidebar,
+.app-container[data-shell-chrome="inset"] .sidebar {
+  background: var(--shell-chrome-bg) !important;
+}
+.app-container[data-shell-chrome="inset"] .sidebar-wrapper {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0;
+}
+.app-container[data-shell-chrome="inset"] .crish-sidebar,
+.app-container[data-shell-chrome="inset"] .sidebar {
+  background: transparent !important;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* —— 共用：主区 + 圆角内容卡 —— */
+.app-container[data-shell-chrome="classic"] .main-layout,
+.app-container[data-shell-chrome="inset"] .main-layout {
+  background: var(--shell-chrome-bg);
+  box-sizing: border-box;
+  gap: 0;
+}
+/* classic：仅底边留白；右侧贴齐（无 right padding） */
+.app-container[data-shell-chrome="classic"] .main-layout {
+  padding: 0 0 var(--shell-inset-pad) 0;
+}
+/*
+ * inset 排版网格（对齐关系）：
+ *
+ *  ┌─ rail (= sidebar-width) ─┬─ main (= 内容卡同列) ──────────────┐
+ *  │ [侧栏钮]                  │ [conex][对话][+]     [窗控]        │  顶栏无圆角
+ *  ├──────────────────────────┼───────────────────────────────────┤
+ *  │ 侧栏搜索/列表              │ ┌ 圆角卡：会话行 + 正文 ─────────┐ │
+ *  │                          │ │ [你好啊][新会话]…                │ │
+ *  │                          │ └─────────────────────────────────┘ │
+ *  └──────────────────────────┴───────────────────────────────────┘
+ *  项目 tab 与会话 tab 共用 --shell-content-pad-x，左缘对齐。
+ */
+.app-container[data-shell-chrome="inset"] {
+  --shell-content-pad-x: 14px;
+}
+.app-container[data-shell-chrome="inset"] .main-layout {
+  /* 右 padding 去掉；只留底边让圆角卡浮起 */
+  padding: 0 0 var(--shell-inset-pad) 0;
+}
+/* 项目顶栏：两列网格；底边贴内容卡，供激活项目 tab 向下开口相融 */
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  align-items: end;
+  flex-shrink: 0;
+  min-height: 42px;
+  background: var(--shell-chrome-bg);
+  border-radius: 0;
+  /* 无底部分隔：激活项目 tab 直接连入下方白卡 */
+  border-bottom: none;
+  padding: 0 var(--shell-inset-pad) 0 0;
+  gap: 0;
+  box-sizing: border-box;
+  /* 整条顶栏可拖窗口；交互控件单独 no-drag */
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host.is-sidebar-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host .no-drag,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host button,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host .ws-chrome-trail,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host a,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-rail {
+  display: flex;
+  /* 与右侧项目 tab 字高视觉中心对齐（tab 贴底 h≈30） */
+  align-items: flex-end;
+  height: 100%;
+  padding: 0 10px 0 11px; /* Left rail padding set to 11px so button aligns with the 18px sidebar line */
+  box-sizing: border-box;
+  min-width: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  margin: 0 0 1px 0;
+  padding: 0;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn:hover {
+  background-color: var(--sidebar-hover) !important;
+  color: var(--text-primary) !important;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn:active,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn.active {
+  background-color: var(--sidebar-active) !important;
+  color: var(--text-primary) !important;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-main {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  height: 100%;
+  padding-left: 0;
+  padding-right: 0;
+  box-sizing: border-box;
+}
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host .ws-chrome-row--titlebar,
+.app-container[data-shell-chrome="inset"] .ws-titlebar-host .ws-chrome-row--workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border-radius: 0 !important;
+  padding-left: var(--shell-content-pad-x, 14px);
+  padding-right: 6px;
+  padding-top: 8px;
+  padding-bottom: 0;
+  min-height: 0;
+  align-items: flex-end;
+}
+/*
+ * 内容卡圆角（四角必须真正圆，不能只给外壳 radius）：
+ * - stack 本体：圆角 + overflow 裁切
+ * - 顶层会话条 / 底层面板：各自补顶/底圆角（opaque 子层常会盖掉父级曲线，显出灰直角）
+ * - 不用 clip-path（WebView2 上易把阴影/边裁成方）
+ * - 不用 0 0 0 1px ring（角上易显方块）
+ */
+.app-container[data-shell-chrome="classic"] .workspaces-column,
+.app-container[data-shell-chrome="inset"] .workspaces-column {
+  background: transparent !important;
+  border-radius: 0;
+  /* 列本身不铺色，避免在卡外侧画出方角；阴影留给 stack */
+  overflow: visible;
+}
+.app-container[data-shell-chrome="classic"] .workspaces-stack,
+.app-container[data-shell-chrome="inset"] .workspaces-stack {
+  --shell-card-r: var(--shell-inset-radius);
+  background-color: var(--shell-inset-bg);
+  border-radius: var(--shell-card-r);
+  overflow: hidden !important;
+  isolation: isolate;
+  /* 增加精致的极细微描边，靠圆角 + 极微描边与极轻阴影完美融合 */
+  border: 1px solid var(--border-subtle);
+  outline: none;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 2.5%, transparent),
+    0 4px 14px color-mix(in srgb, #000 3.5%, transparent);
+  min-width: 0;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+/*
+ * 会话条改挂聊天列顶后，stack 内只有 container：
+ * 四角由 stack 裁切；container 铺满。
+ */
+.app-container[data-shell-chrome="classic"] .workspaces-stack > .workspaces-container,
+.app-container[data-shell-chrome="inset"] .workspaces-stack > .workspaces-container {
+  border-radius: 0;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.app-container[data-shell-chrome="inset"] .workspaces-column--inset {
+  margin-top: 0;
+  gap: 0;
+  background: transparent !important;
+}
+/* 内部填色层一律透明或同色，禁止 bg-secondary / 直角 border 在角上冒出来 */
+.app-container[data-shell-chrome="classic"] .workspaces-container,
+.app-container[data-shell-chrome="inset"] .workspaces-container {
+  background: transparent !important;
+  min-width: 0;
+  overflow: hidden;
+}
+.app-container[data-shell-chrome="classic"] .workspace-section,
+.app-container[data-shell-chrome="inset"] .workspace-section,
+.app-container[data-shell-chrome="classic"] .workspace-canvas,
+.app-container[data-shell-chrome="inset"] .workspace-canvas,
+.app-container[data-shell-chrome="classic"] .workspace-column,
+.app-container[data-shell-chrome="inset"] .workspace-column {
+  background: transparent !important;
+  border-radius: 0;
+}
+/* section/canvas 参与底角裁切；column 保持默认以免夹断分栏把手 */
+.app-container[data-shell-chrome="classic"] .workspace-section,
+.app-container[data-shell-chrome="inset"] .workspace-section,
+.app-container[data-shell-chrome="classic"] .workspace-canvas,
+.app-container[data-shell-chrome="inset"] .workspace-canvas {
+  overflow: hidden;
+}
+/* 卡面直角边框会在底角/侧角画「灰直角」，壳层模式下去掉底边与末列右边 */
+.app-container[data-shell-chrome="classic"] .workspace-card,
+.app-container[data-shell-chrome="inset"] .workspace-card {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border-bottom: none !important;
+}
+.app-container[data-shell-chrome="classic"] .workspace-column:last-child .workspace-card,
+.app-container[data-shell-chrome="inset"] .workspace-column:last-child .workspace-card {
+  border-right: none !important;
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-header,
+.app-container[data-shell-chrome="classic"] .workspace-card .tabs-bar {
+  background: var(--shell-inset-bg);
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-header {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+/* inset 工具列 header 样式见下方「第二行」统一块，勿在此铺白底 */
+/* classic 工具列：略分色灰带 + 文件夹页签 */
+.app-container[data-shell-chrome="classic"] .workspace-card .card-header {
+  align-items: flex-end;
+  padding-top: 6px;
+  padding-bottom: 0;
+  min-height: 36px;
+  background: color-mix(in srgb, var(--shell-chrome-bg, var(--bg-secondary)) 22%, var(--shell-inset-bg, var(--bg-primary)));
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-tab {
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 14px;
+  min-width: 0;
+  margin-bottom: -1px;
+  box-shadow: none;
+  font-weight: 400;
+  font-size: var(--font-size-sm);
+  gap: 6px;
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-tab:hover {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-tab.active {
+  background: var(--shell-inset-bg, var(--bg-primary));
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  border-bottom-color: transparent;
+  box-shadow: none;
+  font-weight: 400;
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+}
+.app-container[data-shell-chrome="classic"] .workspace-card .card-tab.active::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: -2px;
+  height: 3px;
+  background: var(--shell-inset-bg, var(--bg-primary));
+  pointer-events: none;
+}
+.app-container[data-shell-chrome="classic"] .workspace-card.flat-layout .card-body,
+.app-container[data-shell-chrome="classic"] .workspace-card .card-body,
+.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout .card-body,
+.app-container[data-shell-chrome="inset"] .workspace-card .card-body {
+  background: var(--shell-inset-bg);
+}
+.app-container[data-shell-chrome="classic"] .workspace-card.flat-layout,
+.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout {
+  border-right-color: color-mix(in srgb, var(--border-subtle) 70%, transparent) !important;
+}
+.app-container[data-shell-chrome="classic"] .app-boot-banner,
+.app-container[data-shell-chrome="inset"] .app-boot-banner {
+  background: var(--shell-chrome-bg);
+  border-bottom-color: transparent;
+}
+
+/* classic：顶栏贴壳色，与内容卡分层 */
+.app-container[data-shell-chrome="classic"] .app-header {
+  background-color: var(--shell-chrome-bg);
+  border-bottom-color: transparent;
+}
+.app-container[data-shell-chrome="classic"] .search-bar {
+  background: color-mix(in srgb, var(--shell-inset-bg) 48%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+}
+
+/* inset：独立顶栏取消，窗控在工作区行右侧 */
+.app-container[data-shell-chrome="inset"] .app-header {
+  display: none !important;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-trail--win {
+  gap: 0;
+  margin-left: 8px;
+  padding-left: 4px;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-trail-btn--close:hover {
+  background: color-mix(in srgb, #e81123 18%, transparent);
+  color: #c50f1f;
+}
+.sb-nav-item input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  font: inherit;
+  font-size: var(--font-size-base) !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
+}
+.sb-nav-item input[type="search"]::placeholder {
+  color: var(--text-secondary) !important;
+  opacity: 0.9;
+}
+.sb-nav-item input[type="search"]::-webkit-search-cancel-button,
+.sb-nav-item input[type="search"]::-webkit-search-results-button,
+.sb-nav-item input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none !important;
+}
+.sidebar-wrapper.collapsed .sb-nav-item {
+  display: none !important;
+}
+/*
+ * inset 第二行：左会话条 + 右工具 card-header 共用同一套几何
+ * （灰带 / 高度 / 页签 / 底线 / + 钮）— 看起来是一整条，不是两套样式。
+ */
+.app-container[data-shell-chrome="inset"] {
+  --ws-chrome-merge: var(--shell-inset-bg);
+  --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
+  --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
+  --ws-row2-min-h: 36px;
+  --ws-row2-pad-t: 6px;
+  --ws-row2-pad-x: 12px; /* 左右第二行同内边距 */
+  --ws-row2-tab-h: 30px;
+  --ws-row2-tab-radius: 8px 8px 0 0;
+  --ws-row2-tab-font: 13px;
+  --ws-row2-gap: 2px;
+}
+
+/* —— 行容器：左 sessions / 右 card-header 完全同参 —— */
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions,
+.app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header {
+  --ws-chrome-merge: var(--shell-inset-bg);
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ws-row2-gap);
+  box-sizing: border-box;
+  min-height: var(--ws-row2-min-h);
+  height: auto;
+  padding: var(--ws-row2-pad-t) var(--ws-row2-pad-x) 0;
+  margin: 0;
+  background: var(--ws-session-strip) !important;
+  border: none !important;
+  border-bottom: none !important;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 2;
+  user-select: none;
+}
+/* 底部分隔线：左右各画一段，色/厚一致 → 跨列连成一条 */
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions::after,
+.app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions::after,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ws-session-line);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 滚动区：tabs-bar ≈ ws-chrome-scroll */
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header .tabs-bar {
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+  gap: var(--ws-row2-gap);
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  min-height: var(--ws-row2-tab-h);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header .tabs-bar::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+/* —— 页签：左 session tab ≈ 右 card-tab —— */
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
+.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab {
+  height: var(--ws-row2-tab-h) !important;
+  min-height: var(--ws-row2-tab-h) !important;
+  max-height: var(--ws-row2-tab-h);
+  padding: 0 12px 0 12px !important;
+  min-width: 96px !important;
+  max-width: 220px;
+  margin: 0 0 -1px !important;
+  border-radius: var(--ws-row2-tab-radius) !important;
+  border: 1px solid transparent !important;
+  border-bottom-color: transparent !important;
+  background: transparent !important;
+  color: var(--text-tertiary) !important;
+  font-size: var(--ws-row2-tab-font) !important;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+  gap: 6px !important;
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+/* 会话 tab 内边距略紧（有关闭钮） */
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
+.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session {
+  padding: 0 4px 0 12px !important;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab:hover,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover {
+  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent) !important;
+  color: var(--text-secondary) !important;
+  border-color: transparent !important;
+}
+/* 激活：正文同色，盖住底线 */
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab.is-active,
+.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session.is-active,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active {
+  background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--border-subtle) 35%, transparent) !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+  font-weight: 400 !important;
+  z-index: 2;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab.is-active::after,
+.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session.is-active::after,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--ws-chrome-merge, var(--shell-inset-bg));
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 工具 tab 图标：与左会话字重同阶，略淡 */
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-icon-container {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.55;
+  color: inherit;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-icon-container svg {
+  width: 14px;
+  height: 14px;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-icon-container {
+  opacity: 0.9;
+  color: var(--text-primary);
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-label {
+  font-size: var(--ws-row2-tab-font);
+  font-weight: 400;
+  line-height: 1;
+  color: inherit;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-close-btn {
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  color: var(--text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover .tab-close-btn,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-close-btn {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+
+/* + 与左侧一致 */
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-wrap {
+  align-self: flex-end;
+  margin: 0 0 2px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn:hover,
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn[aria-expanded='true'] {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+/* 右侧收起钮：与顶栏 trail 同尺寸，贴底对齐 */
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right {
+  display: flex;
+  align-items: flex-end;
+  align-self: flex-end;
+  gap: 2px;
+  margin: 0 0 2px;
+  padding: 0;
+  height: var(--ws-row2-tab-h);
+  flex-shrink: 0;
+  z-index: 2;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right .card-action-btn {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  box-shadow: none;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right .card-action-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-primary);
+}
+/* 列间竖线用第二行线色，避免灰带中间一道深色把左右切成两套 */
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome {
+  border-right-color: var(--ws-session-line, #f3f3f3) !important;
+}
+/* 项目：未激活贴壳灰；激活 = 卡白并向下开口盖线 */
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab {
+  background: transparent;
+  color: var(--text-tertiary);
+  border-color: transparent;
+  border-radius: 8px 8px 0 0;
+  box-shadow: none;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab:hover,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab:hover {
+  background: color-mix(in srgb, var(--shell-inset-bg) 28%, transparent);
+  color: var(--text-secondary);
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab.is-active,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab.is-active {
+  background: var(--ws-chrome-merge);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--border-subtle) 50%, transparent);
+  border-bottom-color: transparent;
+  box-shadow: none;
+  margin-bottom: 0;
+  z-index: 4;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab.is-active::after,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: -2px;
+  height: 4px;
+  background: var(--ws-chrome-merge);
+  pointer-events: none;
+  z-index: 5;
+}
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab--add,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab--add,
+.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab--add {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+/* 正文：与激活 tab 完全同色，禁止任何顶部分割线 */
+.app-container[data-shell-chrome="inset"] .workspaces-container,
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body,
+.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout .card-body,
+.app-container[data-shell-chrome="inset"] .workspace-card .card-body {
+  background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
+  border-top: none !important;
+  box-shadow: none;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout {
+  border-top: none !important;
+}
+
+/* 聊天列：无第三行面包屑；背景与激活 tab 一致 */
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body {
+  border-top: none !important;
+  background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
+}
+.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-header {
+  display: none !important;
+}
+
+/* [Migrated to Workspace.module.css]
+.workspace-section {
+  position: relative;
+  height: 100%;
+  flex: 1;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.workspace-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  gap: 0 !important;
+}
+
+.workspace-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 0 !important;
+  position: relative;
+  min-width: 0;
+  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.resizing-active .workspace-column {
+  transition: none !important;
+}
+*/
+.resizing-active iframe,
+.resizing-active webview {
+  pointer-events: none !important;
+}
+
+/* --- FLAT WORKSPACE CARDS --- */
+.workspace-card {
+  position: relative;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0; /* narrow side panels: children can shrink / container-query */
+  /* 供 card-header / tabs 在极窄列用 @container 收密度 */
+  container-type: inline-size;
+  container-name: workspace-card;
+  border-radius: 0 !important; /* Flattened border radius */
+  box-shadow: none; /* Flattened shadow */
+  border: none !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  transition: height 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Suppress card transition during manual resize drag or window resizing */
+.resizing-active .workspace-card,
+.window-resizing .workspace-card {
+  transition: none !important;
+}
+
+/* Remove right border on last column's cards */
+.workspace-column:last-child .workspace-card {
+  border-right: none !important;
+}
+
+/* Remove bottom border on last card of any column */
+.workspace-card:last-child {
+  border-bottom: none !important;
+}
+
+.workspace-card.dragging {
+  z-index: 1000 !important;
+  box-shadow: var(--shadow-drag);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+/* Flat layout：主对话列 hairline 分界（用 border-color，比 subtle 更可辨；暗色 token 已抬对比） */
+.workspace-card.flat-layout {
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border-color) !important;
+}
+
+.workspace-card.flat-layout .card-header {
+  background-color: var(--card-header-bg, var(--bg-primary));
+  /* 与消息区 / settings 行分界同 --hairline；flat 下需压过通用 border 规则 */
+  border-bottom: 1px solid var(--hairline, var(--border-subtle)) !important;
+  position: relative;
+  z-index: 3;
+  /* 勿叠灰底块，与 chat hairline 一致 */
+  box-shadow: none;
+  /* ChatHeaderMore 下拉不被裁切 */
+  overflow: visible;
+}
+
+.workspace-card.flat-layout .card-body {
+  background-color: var(--bg-primary);
+  /* 主对话自己管理滚动；避免 card-body + chat-doc-flow 双滚动导致内容溢出顶栏 */
+  overflow: hidden;
+  min-height: 0;
+  box-shadow: none;
+}
+
+/* --- CARD HEADERS & TABS --- readable bar; density via tokens */
+.card-header {
+  height: auto;
+  min-height: var(--card-header-min-height, 36px);
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--card-header-gap, 6px);
+  padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
+  user-select: none;
+  background-color: var(--card-header-bg, var(--bg-primary));
+  flex-shrink: 0;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  /* 默认裁切长标题；下拉菜单走 fixed 或 .chat-breadcrumb-header 例外 */
+  overflow: hidden;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--card-header-gap, 6px);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 70%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* chat 面包屑含 ⋯ 菜单：勿裁切下拉；占满顶栏左侧 */
+.card-header-left.chat-breadcrumb-header {
+  overflow: visible;
+  max-width: none;
+  flex: 1 1 auto;
+}
+/* 含面包屑的顶栏：允许下拉溢出 card-header 边界 */
+.card-header:has(.chat-breadcrumb-header) {
+  overflow: visible;
+}
+
+.card-header-left svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--tab-gap, 3px);
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 100%;
+  /* 横向滚动条贴近内容，中键滚动在 JS 中禁用 */
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.tabs-bar::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+.tabs-bar::-webkit-scrollbar-thumb {
+  display: none;
+}
+.tabs-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.card-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--tab-pad-x, 16px);
+  border-radius: 8px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
+  border: none;
+  height: var(--control-height-sm, 32px);
+  min-height: 30px;
+  min-width: 96px;
+  flex: 0 0 auto;
+}
+
+/* 右侧工具标签：放宽，别挤 */
+.card-tab.card-tab--tool {
+  padding: 0 var(--tab-tool-pad-right, 16px) 0 var(--tab-tool-pad-left, 12px);
+  min-width: 100px;
+  max-width: none;
+  width: auto;
+  justify-content: flex-start;
+  gap: 8px;
+  height: var(--control-height-sm, 32px);
+  min-height: 30px;
+  border-radius: 8px;
+  position: relative;
+  flex: 0 0 auto;
+}
+.card-tab.card-tab--tool .tab-label {
+  display: inline;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: inherit;
+  line-height: 1.2;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+.card-tab.card-tab--tool .tab-close-btn {
+  display: inline-flex;
+  position: static;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0 0 0 2px;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.card-tab.card-tab--tool:hover .tab-close-btn,
+.card-tab.card-tab--tool.active .tab-close-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+.card-tab.active {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+.card-tab.card-tab--tool.active {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary);
+}
+.card-tab.card-tab--tool.active .tab-icon-container svg {
+  color: var(--text-primary);
+}
+
+.card-tab.dragging-tab-hidden {
+  opacity: 0 !important;
+  width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+.card-tab:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.card-tab.active {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.tab-icon-container {
+  position: relative;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tab-icon-container svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--text-tertiary);
+  transition: opacity 0.12s ease;
+}
+
+.card-tab.active .tab-icon-container svg {
+  color: var(--text-secondary);
+}
+
+/* 关闭钮：标签右侧独立热区，不盖住图标 */
+.tab-close-btn {
+  position: static;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  flex-shrink: 0;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.card-tab:hover .tab-close-btn,
+.card-tab.active .tab-close-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tab-close-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-close-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  color: var(--text-secondary);
+}
+
+.card-drag-handle {
+  flex: 1;
+  height: 100%;
+  cursor: grab;
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
+}
+
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 0;
+  min-width: 0;
+}
+/* 极窄侧栏：压缩顶栏 padding，动作区不挤占 tabs 横向滚动 */
+@container workspace-card (max-width: 320px) {
+  .card-header {
+    padding-left: max(4px, calc(var(--card-header-pad-x, 8px) - 2px));
+    padding-right: max(4px, calc(var(--card-header-pad-x, 8px) - 2px));
+    gap: max(4px, calc(var(--card-header-gap, 6px) - 2px));
+  }
+  .card-header-left {
+    max-width: none;
+  }
+  .card-action-btn {
+    width: var(--control-height-sm, 28px);
+    height: var(--control-height-sm, 28px);
+  }
+}
+
+.card-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  width: var(--control-height-sm, 28px);
+  height: var(--control-height-sm, 28px);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.card-action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.card-action-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* [Migrated to Workspace.module.css]
+.col-splitter {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+}
+.col-splitter:hover,
+.col-splitter.active {
+  background: transparent;
+}
+.col-splitter::after {
+  content: '';
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  transition: opacity 0.15s ease, width 0.15s ease;
+  pointer-events: none;
+}
+.col-splitter:hover::after,
+.col-splitter.active::after {
+  width: 1.5px;
+  opacity: 1;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
+    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    transparent 100%
+  );
+}
+
+.group-splitter {
+  height: 5px;
+  cursor: row-resize;
+  background: transparent;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+.group-splitter:hover,
+.group-splitter.active {
+  background: transparent;
+}
+.group-splitter::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  transition: opacity 0.15s ease, height 0.15s ease;
+  pointer-events: none;
+}
+.group-splitter:hover::after,
+.group-splitter.active::after {
+  height: 1.5px;
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
+    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    transparent 100%
+  );
+}
+*/
+
+/* --- CARD SUBHEADERS --- */
+.card-subheader {
+  height: var(--control-height);
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex; /* React displays it when relevant */
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.card-subheader .subheader-left,
+.card-subheader .subheader-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border-radius: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sub-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.sub-btn svg {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.url-bar {
+  flex: 1;
+  max-width: 320px;
+  margin: 0 8px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  height: var(--control-height-sm);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.url-bar input {
+  border: none;
+  outline: none;
+  background: none;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+.url-bar .lock-icon {
+  width: 9px;
+  height: 9px;
+  color: var(--text-tertiary);
+}
+
+.branch-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
+.branch-text {
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+}
+
+/* --- PANEL CUSTOM CONTENT BODIES --- */
+.card-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0; /* flex chain: allow Diff/预览等面板在窄栏内收缩 */
+  overflow: auto;
+  position: relative;
+  background-color: var(--shell-inset-bg, var(--bg-primary));
+  display: flex;
+  flex-direction: column;
+}
+/* 侧栏 agent / 工具面板全高：由内部滚动，避免 card-body 双滚动条 */
+.card-body:has(.agent-panel-shell),
+.card-body:has(.diff-panel),
+.card-body:has(.overview-card),
+.card-body:has(.files-card),
+.card-body:has(.tasks-card),
+.card-body:has(.rt-panel),
+.card-body:has(.term-panel) {
+  overflow: hidden;
+}
