@@ -44,6 +44,7 @@ import { collapseToolColumnPreserve, isChatColumn } from '../store/layoutHelpers
 import { getSessionById, selectActiveSessionId, useSessionField } from '../store/sessionStore';
 import { emitUiEvent } from '../api/uiEvents';
 import { IconSidebarRight } from './SidebarToggleIcons';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onAddProject?: () => void;
@@ -73,16 +74,16 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
   // 活动会话 → 确保标签存在（不重排；点选不会把 tab 挪到队首）
   useEffect(() => {
     if (!activeSessionId) return;
-    const sess = sessions.find((s) => s.id === activeSessionId);
+    const sess = getSessionById(activeSessionId);
     if (!sess || sess.isArchived) return;
     const folder = canonicalSessionFolder(sess.folder);
     const before = getOpenSessionTabIds(folder);
     const after = openSessionTab(folder, activeSessionId);
-    // 仅在真正新增标签时刷新，避免无意义重渲
+    // 仅在真正新增标签时刷新，避免无意义重渲染
     if (before.length !== after.length || !before.includes(activeSessionId)) {
       setTabsTick((n) => n + 1);
     }
-  }, [activeSessionId, sessions]);
+  }, [activeSessionId]);
 
   const projects: ProjectEntry[] = useMemo(() => {
     void projectTick;
@@ -329,37 +330,39 @@ export const WorkspaceStrip: React.FC<Props> = ({
         {s.workspaceTabs.map((tab) => {
           const active = tab.id === s.activeWsId;
           return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`${styles.wsChromeTab} ${active ? styles.isActive + ' is-active' : ''} ws-chrome-tab`}
-              title={tab.path || tab.label}
-              onClick={() => s.selectWorkspace(tab)}
-            >
-              {tab.kind === 'project' ? (
-                <Lucide.Folder size={13} strokeWidth={1.75} aria-hidden />
-              ) : (
-                <Lucide.MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
-              )}
-              <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.label}</span>
-            </button>
+            <Tooltip content={tab.path || tab.label}>
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`${styles.wsChromeTab} ${active ? styles.isActive + ' is-active' : ''} ws-chrome-tab`}
+                onClick={() => s.selectWorkspace(tab)}
+              >
+                {tab.kind === 'project' ? (
+                  <Lucide.Folder size={13} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <Lucide.MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
+                )}
+                <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.label}</span>
+              </button>
+            </Tooltip>
           );
         })}
         <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
-          <button
-            type="button"
-            className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
-            title="添加"
-            aria-label="添加工作区"
-            aria-haspopup="menu"
-            aria-expanded={add.open}
-            aria-controls={add.menuId}
-            onClick={() => add.setOpen((v) => !v)}
-          >
-            <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
-          </button>
+          <Tooltip content="添加">
+            <button
+              type="button"
+              className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
+              aria-label="添加工作区"
+              aria-haspopup="menu"
+              aria-expanded={add.open}
+              aria-controls={add.menuId}
+              onClick={() => add.setOpen((v) => !v)}
+            >
+              <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
+            </button>
+          </Tooltip>
           {add.open ? (
             <div
               id={add.menuId}
@@ -409,59 +412,64 @@ export const WorkspaceStrip: React.FC<Props> = ({
           role="toolbar"
           aria-label="顶栏操作"
         >
-          <button
-            type="button"
-            className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
-            title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-            aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-            onClick={toggleRightSidebar}
-          >
-            <IconSidebarRight size={15} aria-hidden />
-          </button>
+          <Tooltip content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}>
+            <button
+              type="button"
+              className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
+              aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+              onClick={toggleRightSidebar}
+            >
+              <IconSidebarRight size={15} aria-hidden />
+            </button>
+          </Tooltip>
 
           {onOpenHelp ? (
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-              title="快捷键与帮助"
-              aria-label="快捷键与帮助"
-              onClick={onOpenHelp}
-            >
-              <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
-            </button>
+            <Tooltip content="快捷键与帮助">
+              <button
+                type="button"
+                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                aria-label="快捷键与帮助"
+                onClick={onOpenHelp}
+              >
+                <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
           {onWinMinimize ? (
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-              title="最小化"
-              aria-label="最小化窗口"
-              onClick={onWinMinimize}
-            >
-              <Lucide.Minus size={14} strokeWidth={1.75} aria-hidden />
-            </button>
+            <Tooltip content="最小化">
+              <button
+                type="button"
+                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                aria-label="最小化窗口"
+                onClick={onWinMinimize}
+              >
+                <Lucide.Minus size={14} strokeWidth={1.75} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
           {onWinMaximize ? (
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-              title="最大化"
-              aria-label="最大化或还原窗口"
-              onClick={onWinMaximize}
-            >
-              <Lucide.Square size={12} strokeWidth={1.75} aria-hidden />
-            </button>
+            <Tooltip content="最大化">
+              <button
+                type="button"
+                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                aria-label="最大化或还原窗口"
+                onClick={onWinMaximize}
+              >
+                <Lucide.Square size={12} strokeWidth={1.75} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
           {onWinClose ? (
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
-              title="关闭"
-              aria-label="关闭窗口"
-              onClick={onWinClose}
-            >
-              <Lucide.X size={14} strokeWidth={1.75} aria-hidden />
-            </button>
+            <Tooltip content="关闭">
+              <button
+                type="button"
+                className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
+                aria-label="关闭窗口"
+                onClick={onWinClose}
+              >
+                <Lucide.X size={14} strokeWidth={1.75} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}
@@ -491,42 +499,45 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
               role="tab"
               aria-selected={active}
             >
-              <button
-                type="button"
-                className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
-                title={tab.title}
-                onClick={() => s.selectSession(tab.sessionId)}
-              >
-                {tab.pinned ? (
-                  <Lucide.Pin size={12} strokeWidth={2} aria-hidden className={`${styles.wsChromePin} ws-chrome-pin`} />
-                ) : null}
-                <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.title}</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.wsChromeTabClose} ws-chrome-tab-close`}
-                title="关闭标签"
-                aria-label={`关闭会话标签 ${tab.title}`}
-                onClick={(e) => s.onCloseSession(tab.sessionId, e)}
-              >
-                <Lucide.X size={12} strokeWidth={2} aria-hidden />
-              </button>
+              <Tooltip content={tab.title}>
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
+                  onClick={() => s.selectSession(tab.sessionId)}
+                >
+                  {tab.pinned ? (
+                    <Lucide.Pin size={12} strokeWidth={2} aria-hidden className={`${styles.wsChromePin} ws-chrome-pin`} />
+                  ) : null}
+                  <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.title}</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="关闭标签">
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTabClose} ws-chrome-tab-close`}
+                  aria-label={`关闭会话标签 ${tab.title}`}
+                  onClick={(e) => s.onCloseSession(tab.sessionId, e)}
+                >
+                  <Lucide.X size={12} strokeWidth={2} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           );
         })}
         <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
-          <button
-            type="button"
-            className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
-            title="新建"
-            aria-label="新建对话"
-            aria-haspopup="menu"
-            aria-expanded={add.open}
-            aria-controls={add.menuId}
-            onClick={() => add.setOpen((v) => !v)}
-          >
-            <Lucide.Plus size={15} strokeWidth={2} aria-hidden />
-          </button>
+          <Tooltip content="新建">
+            <button
+              type="button"
+              className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
+              aria-label="新建对话"
+              aria-haspopup="menu"
+              aria-expanded={add.open}
+              aria-controls={add.menuId}
+              onClick={() => add.setOpen((v) => !v)}
+            >
+              <Lucide.Plus size={15} strokeWidth={2} aria-hidden />
+            </button>
+          </Tooltip>
           {add.open ? (
             <div
               id={add.menuId}

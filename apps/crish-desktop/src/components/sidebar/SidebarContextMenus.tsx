@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
 import * as Lucide from 'lucide-react';
 import type { SessionState } from '../../store/layoutStore';
+import { getSessionStoreState } from '../../api/storeAccess';
+import { Tooltip } from '../Tooltip';
 
 export type SessionContextMenuState = {
   x: number;
@@ -48,7 +50,6 @@ export interface SidebarContextMenusProps {
   contextMenu: SessionContextMenuState | null;
   /** 已废弃：不再渲染 agent 菜单 */
   agentMenu?: AgentContextMenuState | null;
-  sessions: SessionState[];
   onSessionAction: (action: SessionMenuAction) => void;
   /** @deprecated */
   onOpenAgentPanel?: (sessionId: string, agentId: string) => void;
@@ -168,7 +169,6 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   menuRef,
   sortMenuRef,
   contextMenu,
-  sessions,
   onSessionAction,
   sortDropdownOpen,
   sortDropdownCoords,
@@ -199,9 +199,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       setFly(null);
     }, 150);
   }, []);
-  // 仅未归档目标：避免对幽灵/已归档 id 弹出可操作菜单
   const target = contextMenu
-    ? sessions.find((s) => s.id === contextMenu.sessionId && !s.isArchived)
+    ? (() => { const s = getSessionStoreState().sessionsById[contextMenu.sessionId]; return s && !s.isArchived ? s : undefined; })()
     : undefined;
   const isPinned = !!target?.isPinned;
   const showSessionMenu = !!(contextMenu && target);
@@ -400,17 +399,18 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div className={styles.contextMenuDivider} role="separator" />
 
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="export"
-            title="导出为 Markdown"
-            onClick={() => onSessionAction('export')}
-          >
-            <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
-            <span>导出 Markdown</span>
-          </button>
+          <Tooltip content="导出为 Markdown">
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="export"
+              onClick={() => onSessionAction('export')}
+            >
+              <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
+              <span>导出 Markdown</span>
+            </button>
+          </Tooltip>
         </div>,
         document.body,
       )}

@@ -314,7 +314,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const handleAction = (action: SessionMenuAction) => {
     if (!contextMenu) return;
     const { sessionId } = contextMenu;
-    const targetSession = sessions.find((s) => s.id === sessionId);
+    const targetSession = getSessionStoreState().sessionsById[sessionId];
     setContextMenu(null);
     if (!targetSession) return;
 
@@ -453,7 +453,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       setActiveNav('chat');
       setRenamingSessionId(null);
       // 再扫：选中后退出「仅置顶」以外的折叠干扰——若会话未置顶且对话区折叠则展开
-      const target = sessions.find((s) => s.id === id);
+      const target = getSessionStoreState().sessionsById[id];
       if (target && !target.isPinned) {
         setGeneralCollapsed(false);
         // 项目会话：展开对应项目组，避免选中却在折叠文件夹里
@@ -465,7 +465,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       }
       emitUiEvent('open-chat');
     },
-    [sessions, setActiveSessionId],
+    [setActiveSessionId],
   );
 
   const handleOpenProject = useCallback((id: string) => {
@@ -525,7 +525,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           useLayoutStore.setState({ sidebarCollapsed: false });
         }
         document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
-        if (newWidth >= SIDEBAR_WIDTH_MIN) setSidebarWidthPx(newWidth);
         window.dispatchEvent(new Event('crish-sidebar-resize'));
       }
     };
@@ -741,7 +740,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         menuRef={menuRef}
         sortMenuRef={sortMenuRef}
         contextMenu={contextMenu}
-        sessions={sessions}
         onSessionAction={handleAction}
         sortDropdownOpen={sortDropdownOpen}
         sortDropdownCoords={sortDropdownCoords}

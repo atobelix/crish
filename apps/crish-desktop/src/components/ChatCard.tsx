@@ -99,32 +99,25 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   // 收紧订阅：只跟当前会话，避免 sessions 整表变更触发重渲染
   const activeSessionId = useSessionField(selectActiveSessionId);
   const messages = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.messages || EMPTY_ARRAY;
+    return s.sessionsById[s.activeSessionId]?.messages || EMPTY_ARRAY;
   });
   const agents = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.agents || EMPTY_ARRAY;
+    return s.sessionsById[s.activeSessionId]?.agents || EMPTY_ARRAY;
   });
   const goalMode = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.goalMode;
+    return s.sessionsById[s.activeSessionId]?.goalMode;
   });
   const hydratedFromEngine = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.hydratedFromEngine;
+    return s.sessionsById[s.activeSessionId]?.hydratedFromEngine;
   });
   const engineCursor = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.engineCursor;
+    return s.sessionsById[s.activeSessionId]?.engineCursor;
   });
   const engineLastRunId = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.engineLastRunId;
+    return s.sessionsById[s.activeSessionId]?.engineLastRunId;
   });
   const activeSessionTitle = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
-    return active?.title;
+    return s.sessionsById[s.activeSessionId]?.title;
   });
 
   const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
@@ -286,7 +279,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   /** 导出 Markdown：sessionExport（ChatHeaderMore / 与侧栏一致）；成功静默、失败 toast */
   const handleExportMarkdown = useCallback(() => {
     const byId = getSessionStoreState().sessionsById;
-    const session = getSessionStoreState().sessions.find((s) => s.id === activeSessionId);
+    const session = getSessionStoreState().sessionsById[activeSessionId ?? ''];
     if (!session) return;
     const result = tryDownloadSessionMarkdown(session, new Date(), {
       sessionsById: byId,
@@ -654,9 +647,17 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         });
       }
     }
-    void daemonApproveTool(tid).finally(() => {
-      window.setTimeout(() => setApprovalBusy(false), 200);
-    });
+    void daemonApproveTool(tid)
+      .catch(() => {
+        updateMessageToolCall(activeSessionId, mid, tid, {
+          status: 'error',
+          output: '批准失败',
+        });
+        onShowToast?.('批准失败，请重试');
+      })
+      .finally(() => {
+        window.setTimeout(() => setApprovalBusy(false), 200);
+      });
   }, [activeSessionId, approvalBusy]);
 
   const handleApprovalDeny = useCallback((toolId: string, msgId: string) => {
@@ -718,7 +719,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」） */
   const shellActiveIsEmpty = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    const active = s.sessionsById[s.activeSessionId];
     return active ? isEmptyShellSession(active) : false;
   });
   /**
@@ -726,7 +727,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
    * 有活动会话时由 shellActiveIsEmpty 表达，不叠 willReuse。
    */
   const shellWillReuse = useSessionField((s) => {
-    const active = s.sessions.find((sess) => sess.id === s.activeSessionId);
+    const active = s.sessionsById[s.activeSessionId];
     if (s.activeSessionId && active) return false;
     const sessions = s.sessions;
     return Boolean(findReusableEmptyShell(sessions));
