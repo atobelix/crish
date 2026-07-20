@@ -33,36 +33,57 @@ const ACTIVE_MODEL_KEY = 'crish_active_model_id';
  */
 const DEFAULT_PROFILES: ProviderProfile[] = [
   {
-    id: 'flowbit',
-    name: 'Flowbit',
-    baseUrl: 'https://api.flowbit.me',
-    models: [],
+    id: 'opencode-go',
+    name: 'OpenCode Go 订阅',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    models: ['deepseek-v4-flash', 'glm-5', 'kimi-k2'],
+    hasKey: false,
+  },
+  {
+    id: 'opencode-zen',
+    name: 'OpenCode Zen 订阅',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    models: ['deepseek-v4-flash', 'gemini-3-flash', 'claude-3-7-sonnet'],
+    hasKey: false,
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek 官方',
+    baseUrl: 'https://api.deepseek.com',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    hasKey: false,
+  },
+  {
+    id: 'qwen',
+    name: '千问 Qwen Portal',
+    baseUrl: 'https://portal.qwen.ai/v1',
+    models: ['qwen-max', 'qwen-plus', 'qwen-coder'],
     hasKey: false,
   },
   {
     id: 'openai',
     name: 'OpenAI 兼容',
     baseUrl: 'https://api.openai.com/v1',
-    models: [],
-    hasKey: false,
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com',
-    models: [],
+    models: ['gpt-4o', 'o3-mini'],
     hasKey: false,
   },
   {
     id: 'anthropic',
     name: 'Anthropic 兼容',
     baseUrl: 'https://api.anthropic.com/v1',
+    models: ['claude-3-7-sonnet'],
+    hasKey: false,
+  },
+  {
+    id: 'flowbit',
+    name: 'Flowbit',
+    baseUrl: 'https://api.flowbit.me',
     models: [],
     hasKey: false,
   },
 ];
 
-/** 导出只读默认壳，便于单测断言「空模型列表」契约 */
+/** 导出只读默认壳，便于单测断言契约 */
 export function getDefaultProviderProfiles(): ProviderProfile[] {
   return DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
 }
@@ -72,10 +93,13 @@ export function getDefaultProviderProfiles(): ProviderProfile[] {
  * 自定义 id 无条目时由调用方回退到 name/id。
  */
 export const KNOWN_PROFILE_LABELS: Readonly<Record<string, string>> = {
-  flowbit: 'Flowbit',
+  'opencode-go': 'OpenCode Go 订阅',
+  'opencode-zen': 'OpenCode Zen 订阅',
+  deepseek: 'DeepSeek 官方',
+  qwen: '千问 Qwen Portal',
   openai: 'OpenAI 兼容',
-  deepseek: 'DeepSeek',
   anthropic: 'Anthropic 兼容',
+  flowbit: 'Flowbit',
 };
 
 const UNNAMED_PROFILE_LABEL = '未命名服务商';
