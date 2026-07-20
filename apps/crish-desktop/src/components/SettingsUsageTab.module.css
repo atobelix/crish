@@ -271,13 +271,13 @@
 /* segment heights set dynamically via inline style */
 .chartBarOut {
   width: 100%;
-  background: var(--accent-chart-out, var(--accent-primary));
+  background: var(--chart-color-1);
   opacity: 0.85;
 }
 
 .chartBarIn {
   width: 100%;
-  background: var(--accent-chart-in, var(--accent-secondary));
+  background: var(--chart-color-2);
 }
 
 .chartBarEmpty {
@@ -317,14 +317,14 @@
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--accent-chart-in, var(--accent-secondary));
+  background: var(--chart-color-2);
 }
 
 .chartLegendDotOut {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--accent-chart-out, var(--accent-primary));
+  background: var(--chart-color-1);
   opacity: 0.85;
 }
 
@@ -408,4 +408,24 @@
   align-items: center;
   gap: 4px;
   border-radius: 6px;
+}
+
+/* ----- Skeleton loading ----- */
+.skeletonSection {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skeletonBar {
+  height: 20px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }

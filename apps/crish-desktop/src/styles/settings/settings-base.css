@@ -349,8 +349,8 @@ select.settings-field-input {
    ============================================================ */
 .settings-pane--modern {
   gap: 16px;
-  max-width: min(720px, 100%);
   width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 32px;
 }
 .settings-page-head {
@@ -661,7 +661,8 @@ select.settings-field-input {
    ============================================================ */
 .settings-pane--personalize {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
 }
 .settings-pane--personalize .settings-page-head {
   margin-bottom: 4px;
@@ -719,6 +720,13 @@ select.settings-field-input {
     width: 132px;
     max-width: 148px;
   }
+  .settings-pane--security,
+  .settings-pane--modern,
+  .settings-pane--shortcuts,
+  .settings-pane--rules,
+  .settings-pane--usage {
+    max-width: 100%;
+  }
 }
 
 /* ============================================================
@@ -727,7 +735,8 @@ select.settings-field-input {
    ============================================================ */
 .settings-pane--security {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
 }
 .settings-pane--security .settings-page-head {
   margin-bottom: 2px;
@@ -1178,7 +1187,8 @@ select.settings-field-input {
    ============================================================ */
 .settings-pane--usage {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 28px;
 }
 .settings-usage-prices {
@@ -1348,7 +1358,8 @@ select.settings-field-input {
 /* ── 快捷键页密度：标题栏紧凑筛选 + 单行录制 ── */
 .settings-pane--shortcuts {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 28px;
 }
 .settings-pane--shortcuts .settings-page-head {
@@ -1421,7 +1432,8 @@ select.settings-field-input {
 /* ── 规则页：字号抬高、芯片可换行 ── */
 .settings-pane--rules {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 28px;
 }
 .settings-pane--rules .settings-page-head {
@@ -2178,14 +2190,14 @@ textarea.settings-dialog-textarea:focus-visible {
   margin-top: 6px;
 }
 /*
- * 设置内容列统一居中：个人 / 智能 / 工作同一宽度，避免贴左大片空白。
+ * 设置内容列统一居中：父容器已改为 align-items: stretch，
+ * 子页面通过 max-width + margin: auto 自居中，不再依赖 align-self。
  */
 .settings-cover-content > * {
   width: 100%;
-  max-width: min(720px, 100%);
+  max-width: var(--settings-content-max, 720px);
   margin-left: auto;
   margin-right: auto;
-  align-self: center;
 }
 .settings-cover-content > .models-tab,
 .settings-cover-content > .skills-tab,
@@ -2195,12 +2207,12 @@ textarea.settings-dialog-textarea:focus-visible {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  max-width: min(720px, 100%);
+  max-width: var(--settings-content-max, 720px);
   width: 100%;
 }
 .settings-pane {
   width: 100%;
-  max-width: min(720px, 100%);
+  max-width: var(--settings-content-max, 720px);
   gap: 16px;
 }
 .settings-loading-bar {
@@ -2491,7 +2503,8 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
 
 .settings-pane--personalize {
   gap: 16px;
-  max-width: min(680px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .settings-pane--personalize .settings-page-title {

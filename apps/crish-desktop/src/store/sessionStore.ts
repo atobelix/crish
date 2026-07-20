@@ -89,7 +89,7 @@ export const selectActiveSession = (
  */
 export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
   return useSessionStore(
-    selector as (state: ReturnType<typeof useSessionStore.getState>) => T,
+    selector as (state: ReturnType<typeof useLayoutStore.getState>) => T,
   );
 }
 
@@ -167,14 +167,25 @@ export function getActiveSessionId(): string {
   return getSessionStoreState().activeSessionId;
 }
 
+/** 会话在数组中的下标 */
 export function getSessionIndex(sessionId: string): number {
-  return getSessionIndexFromIndex(getSessionStoreState(), sessionId);
+  const state = getSessionStoreState();
+  return state.sessions.findIndex((s) => s.id === sessionId);
 }
 
 /**
- * Pure state helper for immer recipes / tests that already hold a state object.
- * For live-store lookups use the no-state `getSessionById(id)` above.
+ * 按 id 取会话内 agent（O(1) 会话 + O(n) agents）
  */
+export function getSessionAgent(
+  sessionId: string,
+  agentId: string,
+): SessionAgent | undefined {
+  const sess = getSessionById(sessionId);
+  return sess?.agents?.find((a) => a.id === agentId);
+}
+
+// ── Re-exports from sessionIndex ────────────────────────────────────────────
+
 export {
   getSessionById as getSessionByIdFromState,
   buildSessionsById,
@@ -182,7 +193,6 @@ export {
   checkSessionsIndex,
   isSessionsIndexConsistent,
   assertSessionsIndexConsistent,
-  // 侧栏投影：与 sessionIndex 同源，组件应经 facade 或 sessionIndex 取用
   filterSidebarSessions,
   partitionSidebarSessions,
   groupUnpinnedByProject,
@@ -197,6 +207,7 @@ export type {
   PartitionSidebarSessionsOpts,
   PartitionedSidebarSessions,
 } from './sessionIndex';
+
 export {
   sessionShellEqual,
   sidebarSessionsEqual,
@@ -208,11 +219,6 @@ export {
 export type { SessionActions } from './sessionActions';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
 
-/** 按 id 取会话内 agent（O(1) 会话 + O(n) agents） */
-export function getSessionAgent(
-  sessionId: string,
-  agentId: string,
-): import('./types').SessionAgent | undefined {
-  const sess = getSessionById(sessionId);
-  return sess?.agents?.find((a) => a.id === agentId);
-}
+import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
+sessionRuntimeRegistry.registerActiveIdResolver(() => useSessionStore.getState().activeSessionId);
+

@@ -5,8 +5,8 @@
   gap: 14px;
   min-height: 0;
   flex: 1;
-  max-width: min(720px, 100%);
   width: 100%;
+  max-width: var(--settings-content-max, 720px);
 }
 .models-head-row {
   display: flex;
@@ -1465,7 +1465,8 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   --settings-border-soft: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --settings-fill: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   gap: 18px;
-  max-width: min(680px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 

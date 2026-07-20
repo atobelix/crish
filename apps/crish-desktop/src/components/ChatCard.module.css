@@ -43,7 +43,7 @@
 
 .chatFooter > * {
   width: 100%;
-  max-width: min(var(--chat-col-max, 680px), 100%);
+  max-width: min(var(--chat-col-max, 760px), 100%);
 }
 
 .modelBadge {
@@ -114,7 +114,7 @@
   flex-direction: column !important;
   gap: 0 !important;
   width: 100% !important;
-  max-width: var(--chat-col-max, 680px) !important;
+  max-width: var(--chat-col-max, 760px) !important;
   margin: 0 auto !important;
   box-sizing: border-box !important;
 }

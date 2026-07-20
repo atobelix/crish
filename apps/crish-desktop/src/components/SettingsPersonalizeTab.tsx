@@ -25,10 +25,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
 
-  const [sendShortcut, setSendShortcut] = useState<string>(
-    () => (typeof window !== 'undefined' ? localStorage.getItem('crish_send_shortcut') || 'enter' : 'enter')
-  );
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -155,21 +151,12 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   // Map values correctly to feed the dynamic fields
   const schemaValues = useMemo(() => {
     if (!settings) return null;
-    return {
-      ...settings,
-      sendShortcut,
-    };
-  }, [settings, sendShortcut]);
+    return settings;
+  }, [settings]);
 
   const handleSave = useCallback(
     async (updates: Record<string, any>) => {
-      if ('sendShortcut' in updates) {
-        const val = String(updates.sendShortcut);
-        setSendShortcut(val);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('crish_send_shortcut', val);
-        }
-      } else if ('tabModeEnabled' in updates) {
+      if ('tabModeEnabled' in updates) {
         const on = Boolean(updates.tabModeEnabled);
         setTabModeEnabled(on);
         const ok = await save({ tabModeEnabled: on });

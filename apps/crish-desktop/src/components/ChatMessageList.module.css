@@ -1,6 +1,6 @@
 .list {
   width: 100%;
-  max-width: min(var(--chat-col-max, 680px), 100%);
+  max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
   margin-left: auto;
   margin-right: auto;
@@ -15,7 +15,7 @@
   top: 0;
   z-index: 10;
   width: 100%;
-  max-width: min(var(--chat-col-max, 680px), 100%);
+  max-width: min(var(--chat-col-max, 760px), 100%);
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
@@ -140,9 +140,9 @@
 
 @media (min-width: 1200px) {
   .list {
-    max-width: min(var(--chat-col-max-wide, 720px), 100%);
+    max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
   .pinnedBar {
-    max-width: min(var(--chat-col-max-wide, 720px), 100%);
+    max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }

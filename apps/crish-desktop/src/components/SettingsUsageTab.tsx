@@ -106,7 +106,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const [_pricesError, setPricesError] = useState<string | null>(null);
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
   const [priceFilter, setPriceFilter] = useState('');
-  const [history, setHistory] = useState<UsageSnapshot>(() => loadUsageSnapshot());
+  const [history, setHistory] = useState<UsageSnapshot | null>(null);
   const [chartDays, setChartDays] = useState<7 | 14>(7);
 
   const reloadPrices = useCallback(
@@ -131,10 +131,21 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
     setHistory(loadUsageSnapshot());
   }, []);
 
+  useEffect(() => {
+    if (!pricesModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPricesModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [pricesModalOpen]);
+
 
 
   const dayBars = useMemo(
-    () => usageDaysForChart(chartDays, history),
+    () => history ? usageDaysForChart(chartDays, history) : [],
     [chartDays, history],
   );
   const dayMax = useMemo(() => {
@@ -298,164 +309,174 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
     <SettingsPage title="用量" meta={headerMeta}>
       <SettingsSection title="历史统计">
         <SettingsCard>
-          {/* Summary Cards */}
-          <div className={styles.statsGrid}>
-            <div className={styles.statItem}>
-              <span className={styles.statLabel}>累计输入</span>
-              <span className={styles.statValue}>
-                {formatTokenCount(history.totalInput)}{' '}
-                <span className={styles.statUnit}>tokens</span>
-              </span>
+          {history === null ? (
+            <div className={styles.skeletonSection}>
+              <div className={styles.skeletonBar} />
+              <div className={styles.skeletonBar} />
+              <div className={styles.skeletonBar} />
             </div>
-            <div className={styles.statItem}>
-              <span className={styles.statLabel}>累计输出</span>
-              <span className={styles.statValue}>
-                {formatTokenCount(history.totalOutput)}{' '}
-                <span className={styles.statUnit}>tokens</span>
-              </span>
-            </div>
-            <div className={styles.statItem}>
-              <span className={styles.statLabel}>累计费用</span>
-              <span className={styles.statValueCost}>
-                {formatUsd(history.totalCost)}
-              </span>
-            </div>
-          </div>
-
-          {/* Daily Trend Chart */}
-          <div className={styles.chartSection}>
-            <div className={styles.chartHeader}>
-              <span className={styles.chartTitle}>每日使用趋势</span>
-              <div className={styles.chartSegment}>
-                <button
-                  type="button"
-                  className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 7 ? ` ${styles.active}` : ''}`}
-                  onClick={() => setChartDays(7)}
-                >
-                  近 7 日
-                </button>
-                <button
-                  type="button"
-                  className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 14 ? ` ${styles.active}` : ''}`}
-                  onClick={() => setChartDays(14)}
-                >
-                  近 14 日
-                </button>
+          ) : (
+            <>
+              {/* Summary Cards */}
+              <div className={styles.statsGrid}>
+                <div className={styles.statItem}>
+                  <span className={styles.statLabel}>累计输入</span>
+                  <span className={styles.statValue}>
+                    {formatTokenCount(history.totalInput)}{' '}
+                    <span className={styles.statUnit}>tokens</span>
+                  </span>
+                </div>
+                <div className={styles.statItem}>
+                  <span className={styles.statLabel}>累计输出</span>
+                  <span className={styles.statValue}>
+                    {formatTokenCount(history.totalOutput)}{' '}
+                    <span className={styles.statUnit}>tokens</span>
+                  </span>
+                </div>
+                <div className={styles.statItem}>
+                  <span className={styles.statLabel}>累计费用</span>
+                  <span className={styles.statValueCost}>
+                    {formatUsd(history.totalCost)}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.chartBars}>
-              {dayBars.map((d) => {
-                const total = d.input + d.output;
-                const heightPct = dayMax > 0 ? (total / dayMax) * 100 : 0;
-                const inPct = total > 0 ? (d.input / total) * 100 : 0;
-                const outPct = total > 0 ? (d.output / total) * 100 : 0;
-                const dateLabel = d.day.slice(5);
-
-                return (
-                  <div
-                    key={d.day}
-                    className={styles.chartBarCol}
-                    title={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
-                  >
-                    <div className={styles.chartBarInner}>
-                      {total > 0 ? (
-                        <div
-                          className={styles.chartBarStack}
-                          style={{ height: `${Math.max(4, heightPct)}%` }}
-                        >
-                          <div
-                            className={styles.chartBarOut}
-                            style={{ height: `${outPct}%` }}
-                          />
-                          <div
-                            className={styles.chartBarIn}
-                            style={{ height: `${inPct}%` }}
-                          />
-                        </div>
-                      ) : (
-                        <div className={styles.chartBarEmpty} />
-                      )}
-                    </div>
-                    <span className={styles.chartBarLabel}>{dateLabel}</span>
+              {/* Daily Trend Chart */}
+              <div className={styles.chartSection}>
+                <div className={styles.chartHeader}>
+                  <span className={styles.chartTitle}>每日使用趋势</span>
+                  <div className={styles.chartSegment}>
+                    <button
+                      type="button"
+                      className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 7 ? ` ${styles.active}` : ''}`}
+                      onClick={() => setChartDays(7)}
+                    >
+                      近 7 日
+                    </button>
+                    <button
+                      type="button"
+                      className={`ui-segment-item ${styles.chartSegmentBtn}${chartDays === 14 ? ` ${styles.active}` : ''}`}
+                      onClick={() => setChartDays(14)}
+                    >
+                      近 14 日
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-            <div className={styles.chartLegend}>
-              <div className={styles.chartLegendItem}>
-                <div className={styles.chartLegendDotIn} />
-                <span>输入 Token</span>
-              </div>
-              <div className={styles.chartLegendItem}>
-                <div className={styles.chartLegendDotOut} />
-                <span>输出 Token</span>
-              </div>
-            </div>
-          </div>
+                <div className={styles.chartBars}>
+                  {dayBars.map((d) => {
+                    const total = d.input + d.output;
+                    const heightPct = dayMax > 0 ? (total / dayMax) * 100 : 0;
+                    const inPct = total > 0 ? (d.input / total) * 100 : 0;
+                    const outPct = total > 0 ? (d.output / total) * 100 : 0;
+                    const dateLabel = d.day.slice(5);
 
-          {/* Model Breakdown */}
-          {history.models.length > 0 && (
-            <div className={styles.modelsSection}>
-              <span className={styles.modelsSectionTitle}>模型使用分布</span>
-              <div className={styles.modelsList}>
-                {history.models.map((m) => {
-                  const t = m.input + m.output;
-                  const maxM = history.models[0]
-                    ? history.models[0].input + history.models[0].output || 1
-                    : 1;
-                  const barWidth = Math.max(4, Math.round((t / maxM) * 100));
-                  return (
-                    <div key={m.model} className={styles.modelRow}>
-                      <span className={styles.modelName} title={m.model}>
-                        {m.model}
-                      </span>
-                      <div className={styles.modelBarTrack}>
-                        <div
-                          className={styles.modelBarFill}
-                          style={{ width: `${barWidth}%` }}
-                        />
+                    return (
+                      <div
+                        key={d.day}
+                        className={styles.chartBarCol}
+                        title={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
+                      >
+                        <div className={styles.chartBarInner}>
+                          {total > 0 ? (
+                            <div
+                              className={styles.chartBarStack}
+                              style={{ height: `${Math.max(4, heightPct)}%` }}
+                            >
+                              <div
+                                className={styles.chartBarOut}
+                                style={{ height: `${outPct}%` }}
+                              />
+                              <div
+                                className={styles.chartBarIn}
+                                style={{ height: `${inPct}%` }}
+                              />
+                            </div>
+                          ) : (
+                            <div className={styles.chartBarEmpty} />
+                          )}
+                        </div>
+                        <span className={styles.chartBarLabel}>{dateLabel}</span>
                       </div>
-                      <span className={styles.modelTokens}>
-                        {formatTokenCount(t)}{' '}
-                        <span className={styles.modelTokensUnit}>tokens</span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                    );
+                  })}
+                </div>
 
-          {/* Bottom Actions */}
-          <div className={styles.actionsBar}>
-            <button
-              type="button"
-              className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
-              onClick={() => setHistory(loadUsageSnapshot())}
-            >
-              <Lucide.RefreshCw size={12} /> 刷新数据
-            </button>
-            {(history.totalInput > 0 || history.totalOutput > 0) && (
-              <button
-                type="button"
-                className={`ui-btn ui-btn-ghost ui-btn-sm danger ${styles.actionBtn}`}
-                onClick={() => {
-                  if (
-                    typeof window !== 'undefined' &&
-                    window.confirm &&
-                    !window.confirm('确定清空本机用量历史？不可撤销。')
-                  ) {
-                    return;
-                  }
-                  setHistory(clearUsageHistory());
-                }}
-              >
-                <Lucide.Trash2 size={12} /> 清空历史
-              </button>
-            )}
-          </div>
+                <div className={styles.chartLegend}>
+                  <div className={styles.chartLegendItem}>
+                    <div className={styles.chartLegendDotIn} />
+                    <span>输入 Token</span>
+                  </div>
+                  <div className={styles.chartLegendItem}>
+                    <div className={styles.chartLegendDotOut} />
+                    <span>输出 Token</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Model Breakdown */}
+              {history.models.length > 0 && (
+                <div className={styles.modelsSection}>
+                  <span className={styles.modelsSectionTitle}>模型使用分布</span>
+                  <div className={styles.modelsList}>
+                    {history.models.map((m) => {
+                      const t = m.input + m.output;
+                      const maxM = history.models[0]
+                        ? history.models[0].input + history.models[0].output || 1
+                        : 1;
+                      const barWidth = Math.max(4, Math.round((t / maxM) * 100));
+                      return (
+                        <div key={m.model} className={styles.modelRow}>
+                          <span className={styles.modelName} title={m.model}>
+                            {m.model}
+                          </span>
+                          <div className={styles.modelBarTrack}>
+                            <div
+                              className={styles.modelBarFill}
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </div>
+                          <span className={styles.modelTokens}>
+                            {formatTokenCount(t)}{' '}
+                            <span className={styles.modelTokensUnit}>tokens</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Actions */}
+              <div className={styles.actionsBar}>
+                <button
+                  type="button"
+                  className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                  onClick={() => setHistory(loadUsageSnapshot())}
+                >
+                  <Lucide.RefreshCw size={12} /> 刷新数据
+                </button>
+                {(history.totalInput > 0 || history.totalOutput > 0) && (
+                  <button
+                    type="button"
+                    className={`ui-btn ui-btn-ghost ui-btn-sm danger ${styles.actionBtn}`}
+                    onClick={() => {
+                      if (
+                        typeof window !== 'undefined' &&
+                        window.confirm &&
+                        !window.confirm('确定清空本机用量历史？不可撤销。')
+                      ) {
+                        return;
+                      }
+                      setHistory(clearUsageHistory());
+                    }}
+                  >
+                    <Lucide.Trash2 size={12} /> 清空历史
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </SettingsCard>
       </SettingsSection>
       {pricingModal}

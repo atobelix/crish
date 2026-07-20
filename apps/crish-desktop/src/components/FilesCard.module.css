@@ -805,6 +805,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+.filesGitStatus {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin-left: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
 .filesEmpty {
   padding: 10px 8px;
   text-align: left;
@@ -1140,6 +1149,9 @@
     display: none;
   }
   .filesRowMeta {
+    display: none;
+  }
+  .filesGitStatus {
     display: none;
   }
   .filesBcChip {

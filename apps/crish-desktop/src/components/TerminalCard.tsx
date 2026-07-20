@@ -3,7 +3,7 @@
  * 单滚动面在 .term-body；成功路径无 toast。
  * 按会话隔离缓冲；空会话有独立空态，不混用其它会话行。
  */
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './TerminalCard.module.css';
 import { Tooltip } from './settings/SettingsUI';
 import { useLayoutStore } from '../store/layoutStore';
@@ -16,23 +16,16 @@ import {
   shellResultToLines,
   shouldExecuteTerminalInput,
 } from '../api/terminalShellApi';
+import { parseAnsi } from '../utils/parseAnsi';
 
 /** 空态种类：无活动会话 / 本会话尚无输出 */
 type TermEmptyKind = 'no-session' | 'session-empty';
 
-/** 行样式类型检测 */
+/** 行样式类型检测：基于 npx 退出码等 */
 function getLineType(line: string): 'cmd' | 'sep' | 'err' | 'normal' {
   if (line.startsWith('PS>') || line.startsWith('$')) return 'cmd';
   if (/^──\s/.test(line) || /^──/.test(line)) return 'sep';
-  if (
-    /失败|错误|error|Error|ERR!|FATAL|denied|拒绝|读取失败|异常|超时|\(exit\s/i.test(
-      line,
-    ) ||
-    line.startsWith('✗') ||
-    line.startsWith('[error]')
-  ) {
-    return 'err';
-  }
+  if (/^(Error|error):/.test(line) || /\bExit code 1\b/.test(line)) return 'err';
   return 'normal';
 }
 
@@ -84,6 +77,7 @@ export const TerminalCard: React.FC = () => {
   const [termHistIdx, setTermHistIdx] = useState(-1);
   const [cwdTick, setCwdTick] = useState(0);
   const [running, setRunning] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const demoShell = isDemoMode();
   const bodyRef = useRef<HTMLDivElement>(null);
   const outputEndRef = useRef<HTMLDivElement>(null);
@@ -120,6 +114,7 @@ export const TerminalCard: React.FC = () => {
   useEffect(() => {
     setTerminalInput('');
     setTermHistIdx(-1);
+    setSearchQuery('');
     stickToBottomRef.current = true;
     scrollInstantRef.current = true;
   }, [activeSessionId]);
@@ -149,6 +144,13 @@ export const TerminalCard: React.FC = () => {
     scrollInstantRef.current = false;
     outputEndRef.current?.scrollIntoView({ behavior, block: 'end' });
   }, [terminalLines, activeSessionId]);
+
+  /** 搜索过滤后的行 */
+  const filteredLines = useMemo(() => {
+    if (!searchQuery) return terminalLines;
+    const q = searchQuery.toLowerCase();
+    return terminalLines.filter((line) => line.toLowerCase().includes(q));
+  }, [terminalLines, searchQuery]);
 
   const clearOutput = useCallback(() => {
     clearTerminalLines(activeSessionId || undefined);
@@ -271,6 +273,8 @@ export const TerminalCard: React.FC = () => {
   const clearTitle =
     lineCount === 0 ? '暂无输出可清空' : `清空本会话输出（${lineCountLabel}）`;
 
+  const searchActive = searchQuery.length > 0;
+
   return (
     <div
       className={`${styles.panel} term-card`}
@@ -328,6 +332,34 @@ export const TerminalCard: React.FC = () => {
           </button>
         </Tooltip>
       </div>
+      {/* 搜索过滤行 */}
+      <div className={styles.searchRow} role="search" aria-label="过滤终端输出">
+        <Lucide.Search size={13} strokeWidth={1.75} className={styles.searchIco} aria-hidden />
+        <input
+          className={styles.searchInput}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索输出…"
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="过滤终端输出"
+        />
+        {searchActive && (
+          <>
+            <span className={styles.searchCount}>
+              {filteredLines.length}/{lineCount}
+            </span>
+            <button
+              type="button"
+              className={styles.searchClear}
+              aria-label="清除搜索"
+              onClick={() => setSearchQuery('')}
+            >
+              <Lucide.X size={13} strokeWidth={1.75} aria-hidden />
+            </button>
+          </>
+        )}
+      </div>
       {/* 单滚动面：overflow 在 term-body；长行 overflow-wrap，不撑破侧栏 */}
       <div
         ref={bodyRef}
@@ -361,7 +393,7 @@ export const TerminalCard: React.FC = () => {
             </div>
           </div>
         ) : (
-          terminalLines.map((line, i) => {
+          filteredLines.map((line, i) => {
             const lineType = getLineType(line);
             return (
               <div
@@ -373,7 +405,7 @@ export const TerminalCard: React.FC = () => {
                 }`}
                 data-line-index={i}
               >
-                {line}
+                {parseAnsi(line)}
               </div>
             );
           })

@@ -176,14 +176,24 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 24px 32px 40px;
+  /*
+   * scrollbar-gutter: stable 防止在有/无滚动条时内容区宽度跳动（tab 切换抖动）
+   * both-edges 让内容列左右均等缩进，视觉不偏移
+   */
+  scrollbar-gutter: stable both-edges;
+  padding: 24px 20px 40px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   position: relative;
   background: var(--bg-primary);
   max-width: none;
-  align-items: center;
+  /*
+   * stretch 让子页面（settingsUiPage / settings-pane--*）自然填满整列。
+   * 各子页面自己声明 max-width: var(--settings-content-max) + margin: auto 实现居中。
+   * 不再用 center 把子项压窄到 fit-content，消除宽窄不一的根本原因。
+   */
+  align-items: stretch;
 }
 
 .sidebarTab {

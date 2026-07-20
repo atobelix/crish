@@ -11,6 +11,8 @@
 
 import type { SessionAgent, SessionMessage, SessionState } from '../store/layoutStore';
 import type { MessageToolCall } from '../store/types';
+import type { WorkerPool } from '../workers/worker-pool';
+import { Priority } from '../workers/types';
 import { coerceSessionTimestamp } from './sessionTime';
 import { EMPTY_SESSION_TITLE, prepareSessionsForUi } from './sessionTitle';
 import { normalizeAssistantTimeline } from './toolPresentation';
@@ -26,6 +28,25 @@ export const DEFAULT_SESSION_FOLDER = '常规会话';
 
 /** 协作 agent 落盘上限 */
 export const SESSION_AGENTS_SAVE_CAP = 40;
+
+/** 使用 Worker 序列化的阈值（消息条数） */
+export const WORKER_BATCH_THRESHOLD = 200;
+
+let _poolPromise: Promise<WorkerPool | null> | null = null;
+
+function getPoolAsync(): Promise<WorkerPool | null> {
+  if (!_poolPromise) {
+    _poolPromise = (async () => {
+      try {
+        const { getWorkerPool } = await import('../workers/index');
+        return getWorkerPool();
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return _poolPromise;
+}
 
 // 向后兼容旧常量名（同值）
 const INDEX_KEY = SESSION_INDEX_KEY;
@@ -408,6 +429,72 @@ export function jsonlToMessages(text: string): SessionMessage[] {
   return out;
 }
 
+/** 兜底同步消息序列化（与 messagesToJsonl 同逻辑，保证 worker 不可用时一致） */
+export function messagesToJsonlFallback(messages: SessionMessage[]): string {
+  return messagesToJsonl(messages);
+}
+
+/**
+ * 异步 Worker 版 messagesToJsonl。
+ * 消息数 > WORKER_BATCH_THRESHOLD 时走 Web Worker，小数据量直接同步。
+ * Worker 不可用或出错时自动降级为同步。
+ */
+export async function messagesToJsonlWorker(
+  messages: SessionMessage[],
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!messages?.length) return '';
+  if (messages.length <= WORKER_BATCH_THRESHOLD) {
+    return messagesToJsonl(messages);
+  }
+  try {
+    const pool = await getPoolAsync();
+    if (pool) {
+      return await pool.schedule<string>(
+        'io',
+        'messages.to-jsonl',
+        { messages },
+        Priority.Normal,
+        { signal },
+      );
+    }
+  } catch {
+    // fallback to sync
+  }
+  return messagesToJsonlFallback(messages);
+}
+
+/**
+ * 异步 Worker 版 jsonlToMessages。
+ * 大数据量时走 Worker，小数据量直接同步。
+ */
+export async function jsonlToMessagesWorker(
+  jsonl: string,
+  signal?: AbortSignal,
+): Promise<SessionMessage[]> {
+  if (!jsonl?.trim()) return [];
+  // 长度阈值：~200 条消息 ≈ 200KB，超过走 worker
+  if (jsonl.length <= 200 * 1024) {
+    return jsonlToMessages(jsonl);
+  }
+  try {
+    const pool = await getPoolAsync();
+    if (pool) {
+      const result = await pool.schedule<unknown[]>(
+        'io',
+        'jsonl.to-messages',
+        { text: jsonl },
+        Priority.Normal,
+        { signal },
+      );
+      return parseSessionMessages(result);
+    }
+  } catch {
+    // fallback
+  }
+  return jsonlToMessages(jsonl);
+}
+
 /**
  * 恢复时把未完成的流式状态收成终态，避免 UI 永久转圈。
  */
@@ -505,14 +592,20 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
   return msgs;
 }
 
-export function saveSessionBody(sessionId: string, messages: SessionMessage[]): void {
+export function saveSessionBody(
+  sessionId: string,
+  messages: SessionMessage[],
+  serializedJsonl?: string | null,
+): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
   const msgs = messages || [];
   const prevCount = persistedMessageCounts.get(id) ?? 0;
 
   try {
-    if (prevCount === 0 || msgs.length < prevCount) {
+    if (serializedJsonl != null) {
+      localStorage.setItem(BODY_PREFIX + id, serializedJsonl);
+    } else if (prevCount === 0 || msgs.length < prevCount) {
       localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(msgs));
     } else if (msgs.length > prevCount) {
       const newMsgs = msgs.slice(prevCount);
@@ -720,7 +813,75 @@ const persistedMessageCounts = new Map<string, number>();
  */
 let lastKnownSessionIds: Set<string> | null = null;
 
-export function persistAllSessions(
+export async function persistAllSessions(
+  sessions: SessionState[],
+  activeSessionId: string,
+  folderOrder: string[],
+): Promise<void> {
+  const list = sessions ?? [];
+  saveSessionIndex(sessionsToIndex(list));
+  const workerJobs: Promise<void>[] = [];
+  for (const s of list) {
+    if (!s?.id) continue;
+    const msgs = (s.messages || []).map((m) =>
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+    );
+    // 大数据量（>200 条）走 Worker 序列化，小数据量直接同步
+    if (msgs.length > WORKER_BATCH_THRESHOLD) {
+      const job = messagesToJsonlWorker(msgs).then(
+        (jsonl) => {
+          saveSessionBody(s.id, msgs, jsonl);
+        },
+        () => {
+          saveSessionBody(s.id, msgs);
+        },
+      );
+      workerJobs.push(job);
+    } else {
+      saveSessionBody(s.id, msgs);
+    }
+    saveSessionAgents(s.id, s.agents || []);
+  }
+  // 等待所有 Worker 任务完成（主线程序列化的走同步路径已先写入）
+  if (workerJobs.length > 0) {
+    await Promise.allSettled(workerJobs);
+  }
+  // 孤儿扫描：只有当 keep 集合相对上次缩小时才扫 localStorage。
+  // 增量写入（无删除）时跳过 O(n) 全扫——这是高频路径的主要开销。
+  try {
+    const keep = new Set(list.map((s) => s.id).filter(Boolean));
+    const prev = lastKnownSessionIds;
+    const shrunk =
+      prev === null ||
+      Array.from(prev).some((id) => !keep.has(id));
+    if (shrunk) {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(BODY_PREFIX)) {
+          const id = k.slice(BODY_PREFIX.length);
+          if (!keep.has(id)) toRemove.push(k);
+        }
+        if (k && k.startsWith(AGENTS_PREFIX)) {
+          const id = k.slice(AGENTS_PREFIX.length);
+          if (!keep.has(id)) toRemove.push(k);
+        }
+      }
+      for (const k of toRemove) localStorage.removeItem(k);
+    }
+    lastKnownSessionIds = keep;
+  } catch {
+    /* ignore */
+  }
+  saveActiveSessionId(activeSessionId || '');
+  saveFolderOrder(folderOrder || []);
+}
+
+/**
+ * 同步版 persistAllSessions，用于 beforeunload 等必须同步的场景。
+ * 大数据量时仍走同步序列化（不依赖 Worker）。
+ */
+export function persistAllSessionsSync(
   sessions: SessionState[],
   activeSessionId: string,
   folderOrder: string[],
@@ -735,8 +896,6 @@ export function persistAllSessions(
     saveSessionBody(s.id, msgs);
     saveSessionAgents(s.id, s.agents || []);
   }
-  // 孤儿扫描：只有当 keep 集合相对上次缩小时才扫 localStorage。
-  // 增量写入（无删除）时跳过 O(n) 全扫——这是高频路径的主要开销。
   try {
     const keep = new Set(list.map((s) => s.id).filter(Boolean));
     const prev = lastKnownSessionIds;

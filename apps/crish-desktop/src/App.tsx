@@ -12,7 +12,8 @@ import {
   syncTelemetryData,
   toggleSettingsOverlay,
 } from './api/storeAccess';
-import { matchShortcutActions } from './api/shortcutBindings';
+import { ShortcutService } from './services/ShortcutService';
+import { bootstrapServices } from './bootstrap-services';
 import type { SettingsTabType } from './store/types';
 
 import { isDemoModeFast, isProductShellFast } from './createSsrGlobals';
@@ -182,6 +183,13 @@ function App() {
 
   useEffect(() => {
     import('./store/layoutStore').then(({ initLayoutStorePersistence }) => initLayoutStorePersistence());
+  }, []);
+
+  useEffect(() => {
+    const cleanup = bootstrapServices();
+    return () => {
+      cleanup();
+    };
   }, []);
 
   useEffect(() => {
@@ -366,7 +374,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    let lastEscTime = 0;
     const openTab = (tab: SettingsTabType) => {
       openSettings(tab);
     };
@@ -382,22 +389,80 @@ function App() {
         if (showCheatsheet) {
           e.preventDefault();
           setShowCheatsheet(false);
-          lastEscTime = 0;
           return;
         }
         if (showSettingsOverlay) {
           e.preventDefault();
           setShowSettingsOverlay(false);
-          lastEscTime = 0;
           return;
         }
-
         if (showFirstRun) {
-          lastEscTime = 0;
           return;
         }
-        const now = Date.now();
-        if (now - lastEscTime <= 300) {
+      }
+
+      const result = ShortcutService.getInstance().handleKeyDown(e);
+      if (!result) return;
+
+      const { actionId } = result;
+
+      if (inEditable && !['toggle_settings', 'toggle_sidebar', 'toggle_runtime', 'cheatsheet'].includes(actionId)) {
+        return;
+      }
+
+      switch (actionId) {
+        case 'toggle_settings':
+          e.preventDefault();
+          toggleSettingsOverlay();
+          return;
+        case 'new_session':
+          e.preventDefault();
+          createSession({ activate: true });
+          return;
+        case 'focus_composer':
+          e.preventDefault();
+          emitUiEvent('focus-composer');
+          return;
+        case 'stop_generation':
+          e.preventDefault();
+          emitUiEvent('stop-generation');
+          return;
+        case 'open_models':
+          e.preventDefault();
+          openTab('models');
+          return;
+        case 'open_usage':
+          e.preventDefault();
+          openTab('usage');
+          return;
+        case 'open_security':
+          e.preventDefault();
+          openTab('security');
+          return;
+        case 'open_shortcuts':
+          e.preventDefault();
+          openTab('shortcuts');
+          return;
+        case 'open_extensions':
+          e.preventDefault();
+          openTab('plugins');
+          return;
+        case 'open_schedule':
+          e.preventDefault();
+          openTab('schedule');
+          return;
+        case 'toggle_sidebar':
+          e.preventDefault();
+          setSidebarCollapsed(!useLayoutStore.getState().sidebarCollapsed);
+          return;
+
+        case 'toggle_plan_mode': {
+          e.preventDefault();
+          const st = useLayoutStore.getState();
+          st.setPlanModeEnabled(!st.planModeEnabled);
+          return;
+        }
+        case 'branch_session': {
           e.preventDefault();
           const oldSessionId = getSessionStoreState().activeSessionId;
           const activeSess = getSessionById(oldSessionId);
@@ -414,79 +479,14 @@ function App() {
               }
             });
           }
-          lastEscTime = 0;
           return;
         }
-        lastEscTime = now;
-        return;
-      }
-
-      const actions = matchShortcutActions(e);
-      if (actions.length === 0) return;
-
-      for (const action of actions) {
-        if (inEditable && !['toggle_settings', 'toggle_sidebar', 'toggle_runtime', 'cheatsheet'].includes(action)) {
-          continue;
-        }
-        switch (action) {
-          case 'toggle_settings':
-            e.preventDefault();
-            toggleSettingsOverlay();
-            return;
-          case 'new_session':
-            e.preventDefault();
-            createSession({ activate: true });
-            return;
-          case 'focus_composer':
-            e.preventDefault();
-            emitUiEvent('focus-composer');
-            return;
-          case 'stop_generation':
-            e.preventDefault();
-            emitUiEvent('stop-generation');
-            return;
-          case 'open_models':
-            e.preventDefault();
-            openTab('models');
-            return;
-          case 'open_usage':
-            e.preventDefault();
-            openTab('usage');
-            return;
-          case 'open_security':
-            e.preventDefault();
-            openTab('security');
-            return;
-          case 'open_shortcuts':
-            e.preventDefault();
-            openTab('shortcuts');
-            return;
-          case 'open_extensions':
-            e.preventDefault();
-            openTab('plugins');
-            return;
-          case 'open_schedule':
-            e.preventDefault();
-            openTab('schedule');
-            return;
-          case 'toggle_sidebar':
-            e.preventDefault();
-            setSidebarCollapsed(!useLayoutStore.getState().sidebarCollapsed);
-            return;
-
-          case 'toggle_plan_mode': {
-            e.preventDefault();
-            const st = useLayoutStore.getState();
-            st.setPlanModeEnabled(!st.planModeEnabled);
-            return;
-          }
-          case 'cheatsheet':
-            e.preventDefault();
-            setShowCheatsheet((v) => !v);
-            return;
-          default:
-            break;
-        }
+        case 'cheatsheet':
+          e.preventDefault();
+          setShowCheatsheet((v) => !v);
+          return;
+        default:
+          break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -499,6 +499,15 @@ function App() {
     setShowSettingsOverlay,
     setSidebarCollapsed,
   ]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      const conflicts = ShortcutService.getInstance().detectConflicts();
+      if (conflicts.length > 0) {
+        console.warn('[crish] 快捷键绑定冲突:', conflicts);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const unsubPromise = import('./api/clientApi').then(({ clientApi }) =>

@@ -43,8 +43,13 @@ import {
   type DiffSourceMode,
 } from '../api/diffPanelHelpers';
 import { getWorkspacePath } from '../api/projectStore';
-import { openPathDefault } from '../api/hostOpenersApi';
 import { readTextFile } from '../api/workspaceFsApi';
+import { useVirtualDiffScroll } from '../hooks/useVirtualDiffScroll';
+import { DiffCardFileList } from './DiffCardFileList';
+import { DiffCardGitActions } from './DiffCardGitActions';
+import { DiffCardUnifiedView } from './DiffCardUnifiedView';
+import { DiffCardSplitView } from './DiffCardSplitView';
+import type { CompareMode, ComputedChange, SplitPair, UnifiedRenderItem, SplitRenderItem } from './diffCardTypes';
 
 interface DiffCardProps {
   onShowToast: (message: string) => void;
@@ -56,14 +61,6 @@ function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
-// Interriched properties for git-specific operations
-interface EnrichedFileDiff extends FileDiff {
-  staged?: boolean;
-  unstaged?: boolean;
-  untracked?: boolean;
-  gitStatus?: string;
-}
-
 // ============================================================================
 // 🌟 HIGH-PERFORMANCE VIRTUAL SCROLL COMPONENTS FOR INFINITE SCALABILITY 🌟
 // ============================================================================
@@ -71,10 +68,11 @@ interface EnrichedFileDiff extends FileDiff {
 interface VirtualPlainCodeViewerProps {
   content: string;
   filePath: string;
-  styles: Record<string, string>;
 }
 
-const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content, filePath, styles }) => {
+const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content, filePath }) => {
+  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualDiffScroll();
+
   const lines = useMemo(() => {
     return content.split('\n').map((line, idx) => ({
       num: idx + 1,
@@ -82,28 +80,10 @@ const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content
     }));
   }, [content]);
 
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(400);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    setContainerHeight(el.clientHeight || 400);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height || 400);
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   const totalLines = lines.length;
   const rowHeight = 20;
   const totalHeight = totalLines * rowHeight;
 
-  // Render 15 extra buffer lines above and below to prevent blank spaces during fast scrolls
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
   const endIndex = Math.min(totalLines, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
 
@@ -114,7 +94,8 @@ const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content
     <div
       ref={containerRef}
       className={styles.scrollParent}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      onScroll={onScroll}
+      tabIndex={0}
       style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
     >
       <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
@@ -150,263 +131,12 @@ const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content
   );
 };
 
-interface VirtualUnifiedDiffViewerProps {
-  f: EnrichedFileDiff;
-  renderItems: any[];
-  onExpandBlock: (filePath: string, startIndex: number) => void;
-  styles: Record<string, string>;
-  Lucide: any;
-}
 
-const VirtualUnifiedDiffViewer: React.FC<VirtualUnifiedDiffViewerProps> = ({
-  f,
-  renderItems,
-  onExpandBlock,
-  styles,
-  Lucide,
-}) => {
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(400);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    setContainerHeight(el.clientHeight || 400);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height || 400);
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const totalItems = renderItems.length;
-  const rowHeight = 22;
-  const totalHeight = totalItems * rowHeight;
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
-  const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
-
-  const visibleItems = renderItems.slice(startIndex, endIndex);
-  const offsetTop = startIndex * rowHeight;
-
-  return (
-    <div
-      ref={containerRef}
-      className={styles.scrollParent}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
-    >
-      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
-        <div
-          className={styles.linesContainer}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            transform: `translateY(${offsetTop}px)`,
-            background: 'transparent',
-          }}
-          aria-label={`${basename(f.filePath)} 的变更内容`}
-        >
-          {visibleItems.map((item, localIdx) => {
-            const idx = startIndex + localIdx;
-            if (item.isCollapsedPlaceholder) {
-              return (
-                <div
-                  key={`collapse-${item.startIndex}`}
-                  className={styles.collapseBar}
-                  onClick={() => onExpandBlock(f.filePath, item.startIndex)}
-                  style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px`, display: 'flex', alignItems: 'center' }}
-                >
-                  <Lucide.Maximize2 size={12} className={styles.collapseIcon} />
-                  <span>展开其余 {item.count} 行代码...</span>
-                </div>
-              );
-            }
-
-            const { change, oldLine, newLine, isHeader } = item.item;
-            if (isHeader) return null;
-
-            let lineClass = styles.lineNormal;
-            let marker = ' ';
-            if (change.type === 'addition') {
-              lineClass = styles.lineAddition;
-              marker = '+';
-            } else if (change.type === 'deletion') {
-              lineClass = styles.lineDeletion;
-              marker = '−';
-            }
-
-            const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
-            const newLineNum = newLine !== undefined ? String(newLine) : '';
-
-            return (
-              <div
-                key={idx}
-                className={`${styles.line} ${lineClass}`}
-                style={{ minHeight: `${rowHeight}px` }}
-              >
-                <div className={styles.gutterNum} data-num={oldLineNum}>
-                  {oldLineNum}
-                </div>
-                <div className={styles.gutterNum} data-num={newLineNum}>
-                  {newLineNum}
-                </div>
-                <div className={styles.gutterMarker}>{marker}</div>
-                <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{change.content}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface VirtualSplitDiffViewerProps {
-  f: EnrichedFileDiff;
-  renderItems: any[];
-  onExpandBlock: (filePath: string, startIndex: number) => void;
-  styles: Record<string, string>;
-  Lucide: any;
-}
-
-const VirtualSplitDiffViewer: React.FC<VirtualSplitDiffViewerProps> = ({
-  f,
-  renderItems,
-  onExpandBlock,
-  styles,
-  Lucide,
-}) => {
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(400);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    setContainerHeight(el.clientHeight || 400);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height || 400);
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const totalItems = renderItems.length;
-  const rowHeight = 22;
-  const totalHeight = totalItems * rowHeight;
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
-  const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
-
-  const visibleItems = renderItems.slice(startIndex, endIndex);
-  const offsetTop = startIndex * rowHeight;
-
-  return (
-    <div
-      ref={containerRef}
-      className={styles.scrollParent}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
-    >
-      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
-        <div
-          className={styles.linesContainer}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            transform: `translateY(${offsetTop}px)`,
-            background: 'transparent',
-          }}
-          aria-label={`${basename(f.filePath)} 的变更分栏内容`}
-        >
-          {visibleItems.map((item, localIdx) => {
-            const idx = startIndex + localIdx;
-            if (item.isCollapsedPlaceholder) {
-              return (
-                <div
-                  key={`collapse-${item.startIndex}`}
-                  className={styles.collapseBar}
-                  onClick={() => onExpandBlock(f.filePath, item.startIndex)}
-                  style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px`, display: 'flex', alignItems: 'center' }}
-                >
-                  <Lucide.Maximize2 size={12} className={styles.collapseIcon} />
-                  <span>展开其余 {item.count} 行代码...</span>
-                </div>
-              );
-            }
-
-            const pair = item.pair;
-            const left = pair.left;
-            const right = pair.right;
-
-            let leftClass = '';
-            let leftMarker = ' ';
-            let leftText = '';
-            let leftNum = '';
-            if (left) {
-              if (left.change.type === 'deletion') {
-                leftClass = styles.lineDeletion;
-                leftMarker = '−';
-              }
-              leftText = left.change.content;
-              leftNum = String(left.oldLine || '');
-            }
-
-            let rightClass = '';
-            let rightMarker = ' ';
-            let rightText = '';
-            let rightNum = '';
-            if (right) {
-              if (right.change.type === 'addition') {
-                rightClass = styles.lineAddition;
-                rightMarker = '+';
-              }
-              rightText = right.change.content;
-              rightNum = String(right.newLine || '');
-            }
-
-            return (
-              <div
-                key={idx}
-                className={styles.splitLine}
-                style={{ minHeight: `${rowHeight}px` }}
-              >
-                <div className={`${styles.splitColumn} ${leftClass}`} style={{ padding: 0 }}>
-                  <div className={styles.gutterNum} data-num={leftNum}>
-                    {leftNum}
-                  </div>
-                  <div className={styles.gutterMarker}>{leftMarker}</div>
-                  <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{leftText}</div>
-                </div>
-                <div className={`${styles.splitColumn} ${rightClass}`} style={{ padding: 0 }}>
-                  <div className={styles.gutterNum} data-num={rightNum}>
-                    {rightNum}
-                  </div>
-                  <div className={styles.gutterMarker}>{rightMarker}</div>
-                  <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{rightText}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
-  const diffFiles = useLayoutStore((s) => s.diffFiles) as EnrichedFileDiff[];
+  const diffFiles = useLayoutStore((s) => s.diffFiles) as FileDiff[];
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
   const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
   const removeDiffFile = useLayoutStore((s) => s.removeDiffFile);
@@ -439,7 +169,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const [pushLoading, setPushLoading] = useState(false);
 
   // 🌟 Individual file compare modes: { [filePath]: compareMode } 🌟
-  const [fileCompareModes, setFileCompareModes] = useState<Record<string, 'git' | 'session-merged' | `turn-${string}` | 'plain'>>({});
+  const [fileCompareModes, setFileCompareModes] = useState<Record<string, CompareMode>>({});
 
   // Collapsed block state: { [filePath]: { [lineIndex]: isExpanded } }
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, Record<number, boolean>>>({});
@@ -890,7 +620,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return fileCompareModes[filePath] || (sourceMode === 'git' ? 'git' : 'session-merged');
   };
 
-  const changeFileCompareMode = async (filePath: string, mode: any) => {
+  const changeFileCompareMode = async (filePath: string, mode: CompareMode) => {
     setFileCompareModes((prev) => ({ ...prev, [filePath]: mode }));
     if (mode === 'plain') {
       await loadPlainContent(filePath);
@@ -898,7 +628,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Resolve Active Diff Source per File dynamically 🌟 */
-  const getFileDiffData = (f: EnrichedFileDiff) => {
+  const getFileDiffData = (f: FileDiff) => {
     const mode = getFileCompareMode(f.filePath);
     if (mode === 'plain') {
       return null;
@@ -920,7 +650,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return f;
   };
 
-  const getComputedChanges = (f: EnrichedFileDiff) => {
+  const getComputedChanges = (f: FileDiff) => {
     const target = getFileDiffData(f);
     if (!target) return [];
     let oldLineNum = 0;
@@ -963,7 +693,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Split View Lines Aligner 🌟 */
-  const getSplitPairs = (f: EnrichedFileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+  const getSplitPairs = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
     const lines = inputLines ?? getComputedChanges(f);
     const pairs: Array<{
       left?: typeof lines[0];
@@ -1076,7 +806,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Unified View) 🌟 */
-  const getUnifiedRenderItems = (f: EnrichedFileDiff, inputComputed?: ReturnType<typeof getComputedChanges>) => {
+  const getUnifiedRenderItems = (f: FileDiff, inputComputed?: ReturnType<typeof getComputedChanges>) => {
     const computed = inputComputed ?? getComputedChanges(f);
     const q = diffSearchQuery.trim().toLowerCase();
     const changes = q ? computed.filter((item) => item.change.content.toLowerCase().includes(q)) : computed;
@@ -1085,10 +815,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     
     if (q) {
       return changes.map((c, i) => ({
-        isCollapsedPlaceholder: false,
+        isCollapsedPlaceholder: false as const,
         index: i,
         item: c,
-      }));
+      })) as UnifiedRenderItem[];
     }
 
     const contextCount = 3;
@@ -1107,7 +837,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
 
     const fileKey = f.filePath;
-    const renderItems: any[] = [];
+    const renderItems: UnifiedRenderItem[] = [];
     let collapsedStart = -1;
 
     for (let i = 0; i < total; i++) {
@@ -1147,15 +877,15 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Split View) 🌟 */
-  const getSplitRenderItems = (f: EnrichedFileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+  const getSplitRenderItems = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
     const pairs = getSplitPairs(f, inputLines);
     const q = diffSearchQuery.trim().toLowerCase();
     if (q) {
       return pairs.map((p, i) => ({
-        isCollapsedPlaceholder: false,
+        isCollapsedPlaceholder: false as const,
         index: i,
         pair: p,
-      }));
+      })) as SplitRenderItem[];
     }
 
     const total = pairs.length;
@@ -1179,7 +909,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
 
     const fileKey = f.filePath;
-    const renderItems: any[] = [];
+    const renderItems: SplitRenderItem[] = [];
     let collapsedStart = -1;
 
     for (let i = 0; i < total; i++) {
@@ -1261,7 +991,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
   };
 
-  const acceptCurrentFile = async (f: EnrichedFileDiff) => {
+  const acceptCurrentFile = async (f: FileDiff) => {
     if (applyBusy) return;
     const cls = classifyFileDiff(f);
     if (!cls.ok) {
@@ -1292,25 +1022,23 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
   };
 
-  const rejectCurrentFile = useCallback((f: EnrichedFileDiff) => {
+  const rejectCurrentFile = useCallback((f: FileDiff) => {
     removeDiffFile(f.filePath);
   }, [removeDiffFile]);
 
   // Computed partitioned list of staged vs unstaged for git mode
-  const { stagedFiles, unstagedFiles } = useMemo(() => {
-    const staged: EnrichedFileDiff[] = [];
-    const unstaged: EnrichedFileDiff[] = [];
+  const { stagedCount, unstagedCount } = useMemo(() => {
+    let staged = 0;
+    let unstaged = 0;
     for (const f of fileList) {
-      if (f && f.staged) staged.push(f);
-      else if (f) unstaged.push(f);
+      if (f.staged) staged++;
+      else unstaged++;
     }
-    return { stagedFiles: staged, unstagedFiles: unstaged };
+    return { stagedCount: staged, unstagedCount: unstaged };
   }, [fileList]);
-  const stagedCount = stagedFiles.length;
-  const unstagedCount = unstagedFiles.length;
 
   /** 🌟 Collapsed / Expanding Diff Content Helper 🌟 */
-  const renderInlineDiffContent = (f: EnrichedFileDiff) => {
+  const renderInlineDiffContent = (f: FileDiff) => {
     const compareMode = getFileCompareMode(f.filePath);
 
     if (compareMode === 'plain') {
@@ -1328,7 +1056,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         <VirtualPlainCodeViewer
           content={fileContent}
           filePath={f.filePath}
-          styles={styles}
         />
       );
     }
@@ -1349,248 +1076,21 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     if (diffViewMode === 'split') {
       const renderItems = getSplitRenderItems(f, computed);
       return (
-        <VirtualSplitDiffViewer
+        <DiffCardSplitView
           f={f}
           renderItems={renderItems}
           onExpandBlock={handleExpandBlock}
-          styles={styles}
-          Lucide={Lucide}
         />
       );
     }
 
-    // Unified view mode
     const renderItems = getUnifiedRenderItems(f, computed);
     return (
-      <VirtualUnifiedDiffViewer
+      <DiffCardUnifiedView
         f={f}
         renderItems={renderItems}
         onExpandBlock={handleExpandBlock}
-        styles={styles}
-        Lucide={Lucide}
       />
-    );
-  };
-
-  /** 🌟 Accordion Block Render 🌟 */
-  const renderAccordionItem = (f: EnrichedFileDiff) => {
-    if (!f || !f.filePath) return null;
-    const active = current?.filePath === f.filePath;
-    const itemId = `diff-file-${f.filePath.replace(/[^\w.-]+/g, '_')}`;
-    
-    const cwd = getWorkspacePath();
-    const isAbsolute = f.filePath.startsWith('/') || f.filePath.includes(':');
-    const absolutePath = isAbsolute ? f.filePath : `${cwd}/${f.filePath}`;
-    const fileAiTurns = aiTurns.filter((t) => t.files.some((m) => m.filePath === f.filePath));
-
-    // 🌟 Separate Git vs AI turn comparison options logically 🌟
-    const compareOptions: { value: string; label: string; hint?: string }[] = [];
-    if (sourceMode === 'git') {
-      compareOptions.push({ value: 'git', label: 'Git 工作区改动' });
-    } else {
-      if (aiTurns.length > 0) {
-        compareOptions.push({ value: 'session-merged', label: 'AI 汇总改动' });
-      }
-      fileAiTurns.forEach((t) => {
-        compareOptions.push({
-          value: `turn-${t.msg.id}`,
-          label: `第 ${t.index + 1} 轮 AI 修改`,
-          hint: `${new Date(t.msg.timestamp).toLocaleTimeString()}`,
-        });
-      });
-    }
-    compareOptions.push({ value: 'plain', label: '当前源码全文 (无 Diff)' });
-
-    return (
-      <div key={f.filePath} className={`${styles.accordionItem} ${active ? styles.accordionActive : ''}`}>
-        <div className={styles.accordionHeaderRow}>
-          <Tooltip content={f.filePath}>
-            <button
-              id={itemId}
-              type="button"
-              role="option"
-              aria-selected={active}
-              className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
-              onClick={() => setActiveDiffSource(active ? null : f)}
-              aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
-            >
-              {/* Clickable hyperlinked name */}
-              <span
-                className={styles.fileNameLink}
-                role="link"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveDiffSource(active ? null : f);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setActiveDiffSource(active ? null : f);
-                  }
-                }}
-              >
-                {basename(f.filePath)}
-              </span>
-
-              <span className={styles.fileStat} aria-hidden>
-                <span className="add">+{f.additions}</span>
-                <span className="del">−{f.deletions}</span>
-              </span>
-            </button>
-          </Tooltip>
-
-          {/* Hover Git Stage/Unstage/Discard action controls */}
-          {sourceMode === 'git' && (
-            <div className={styles.hoverActions}>
-              {stagingPaths[f.filePath] ? (
-                <Lucide.Loader2 size={13} className={styles.spinner} />
-              ) : f.staged ? (
-                <Tooltip content="取消暂存此文件">
-                  <button
-                    type="button"
-                    className={styles.hoverActBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleUnstageFile(f.filePath);
-                    }}
-                  >
-                    <Lucide.Minus size={13} />
-                  </button>
-                </Tooltip>
-              ) : (
-                <>
-                  <Tooltip content="暂存此文件">
-                    <button
-                      type="button"
-                      className={styles.hoverActBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleStageFile(f.filePath);
-                      }}
-                    >
-                      <Lucide.Plus size={13} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="放弃此文件的所有本地修改">
-                    <button
-                      type="button"
-                      className={`${styles.hoverActBtn} ${styles.danger}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDiscardChanges(f.filePath);
-                      }}
-                    >
-                      <Lucide.Undo2 size={13} />
-                    </button>
-                  </Tooltip>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {active ? (
-          <div className={styles.inlineBody}>
-            {!classifyFileDiff(f).ok ? (
-              <div className={styles.applyHint} role="status">
-                此 diff 无法安全自动应用，请在编辑器确认
-              </div>
-            ) : null}
-
-            {/* Premium, unified inline toolbar inside the expanded file card */}
-            <div className={styles.inlineHeader}>
-              <div className={styles.compareSelectorWrap}>
-                <span className={styles.selectLabel}>对比维度:</span>
-                <SettingsSelect
-                  value={getFileCompareMode(f.filePath)}
-                  options={compareOptions}
-                  onChange={(val) => void changeFileCompareMode(f.filePath, val)}
-                  className={styles.inlineCompareSelect}
-                />
-              </div>
-
-              <div className={styles.inlineActions}>
-                <Tooltip content="在默认编辑器中打开该文件">
-                  <button
-                    type="button"
-                    className={styles.inlineIconBtn}
-                    onClick={() => void openPathDefault(absolutePath)}
-                    aria-label="在编辑器打开"
-                  >
-                    <Lucide.ExternalLink size={13} />
-                  </button>
-                </Tooltip>
-
-                <Tooltip content="复制最新文件源码">
-                  <button
-                    type="button"
-                    className={styles.inlineIconBtn}
-                    onClick={() => void handleCopyCodeOfFile(f.filePath)}
-                    aria-label="复制代码"
-                  >
-                    <Lucide.Copy size={13} />
-                  </button>
-                </Tooltip>
-
-                <Tooltip content="复制完整绝对路径">
-                  <button
-                    type="button"
-                    className={styles.inlineIconBtn}
-                    onClick={() => {
-                      void navigator.clipboard.writeText(absolutePath);
-                      onShowToast('绝对路径已复制到剪贴板');
-                    }}
-                    aria-label="复制路径"
-                  >
-                    <Lucide.FileCode size={13} />
-                  </button>
-                </Tooltip>
-
-                <div className={styles.actionDivider} />
-
-                <Tooltip
-                  content={
-                    classifyFileDiff(f).ok
-                      ? '接受并写入磁盘'
-                      : '此 diff 无法安全自动应用'
-                  }
-                >
-                  <button
-                    type="button"
-                    className={`${styles.inlineActionBtn} ${styles.inlineActionAccept}`}
-                    disabled={applyBusy || !classifyFileDiff(f).ok}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void acceptCurrentFile(f);
-                    }}
-                  >
-                    <Lucide.Check size={14} aria-hidden />
-                  </button>
-                </Tooltip>
-
-                <Tooltip content="从列表拒绝（不回滚磁盘）">
-                  <button
-                    type="button"
-                    className={styles.inlineActionBtn}
-                    disabled={applyBusy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      rejectCurrentFile(f);
-                    }}
-                  >
-                    <Lucide.X size={14} aria-hidden />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-
-            {/* Render with collapsible context or plain text! */}
-            {renderInlineDiffContent(f)}
-          </div>
-        ) : null}
-      </div>
     );
   };
 
@@ -1773,65 +1273,30 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         </div>
       ) : null}
 
-      {/* Independent scrollable file container */}
       <div className={styles.bodyWrap}>
         {fileList.length > 0 ? (
-          /* 🌟 Overview File List View with Inline Expansion 🌟 */
-          <div
-            className={`${styles.fileList} ${styles.isFullWidth}`}
-            role="listbox"
-            aria-label="变更文件列表"
-          >
-            {sourceMode === 'git' ? (
-              /* --- Git Mode with Staged / Unstaged Grouping --- */
-              <div className={styles.gitGroupList}>
-                {/* 1. Staged Changes Section */}
-                <div className={styles.gitGroupSection}>
-                  <div className={styles.gitGroupHeader}>
-                    <span className={styles.groupTitle}>已暂存的更改 ({stagedCount})</span>
-                    {stagedCount > 0 && (
-                      <button type="button" className={styles.groupActionBtn} onClick={handleUnstageAll}>
-                        <Lucide.MinusCircle size={13} style={{ marginRight: 3 }} />
-                        全部取消暂存
-                      </button>
-                    )}
-                  </div>
-                  {stagedCount === 0 ? (
-                    <div className={styles.groupEmptyHint}>无已暂存的文件</div>
-                  ) : (
-                    <div className={styles.groupItemsContainer}>
-                      {stagedFiles.map(renderAccordionItem)}
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Unstaged Changes Section */}
-                <div className={styles.gitGroupSection}>
-                  <div className={styles.gitGroupHeader}>
-                    <span className={styles.groupTitle}>未暂存的更改 ({unstagedCount})</span>
-                    {unstagedCount > 0 && (
-                      <button type="button" className={styles.groupActionBtn} onClick={handleStageAll}>
-                        <Lucide.PlusCircle size={13} style={{ marginRight: 3 }} />
-                        全部暂存
-                      </button>
-                    )}
-                  </div>
-                  {unstagedCount === 0 ? (
-                    <div className={styles.groupEmptyHint}>无未暂存的修改</div>
-                  ) : (
-                    <div className={styles.groupItemsContainer}>
-                      {unstagedFiles.map(renderAccordionItem)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              /* --- AI Turn / Session Mode (Flat Accordion List) --- */
-              fileList.map(renderAccordionItem)
-            )}
-          </div>
+          <DiffCardFileList
+            files={fileList}
+            sourceMode={sourceMode}
+            current={current}
+            applyBusy={applyBusy}
+            stagingPaths={stagingPaths}
+            aiTurns={aiTurns}
+            getFileCompareMode={getFileCompareMode}
+            onChangeCompareMode={changeFileCompareMode}
+            onSetActiveDiffSource={setActiveDiffSource}
+            onStageFile={handleStageFile}
+            onUnstageFile={handleUnstageFile}
+            onDiscardChanges={handleDiscardChanges}
+            onStageAll={handleStageAll}
+            onUnstageAll={handleUnstageAll}
+            onAcceptFile={acceptCurrentFile}
+            onRejectFile={rejectCurrentFile}
+            onCopyCode={handleCopyCodeOfFile}
+            onShowToast={onShowToast}
+            renderInlineDiffContent={renderInlineDiffContent}
+          />
         ) : !gitLoading ? (
-          /* Empty State */
           <div className={styles.empty} role="status" aria-live="polite">
             <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
             <div>暂无变更</div>
@@ -1870,70 +1335,19 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         ) : null}
       </div>
 
-      {/* 🌟 Pinned Docked Commit Panel at the Bottom (Always Visible, Non-scrolling!) 🌟 */}
       {sourceMode === 'git' && fileList.length > 0 && (
-        <>
-          {commitPanelOpen ? (
-            <div className={styles.commitPanel}>
-              <div className={styles.commitHeader}>
-                <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
-                <button type="button" className={styles.commitCloseBtn} onClick={() => setCommitPanelOpen(false)}>
-                  <Lucide.X size={13} />
-                </button>
-              </div>
-              <textarea
-                className={styles.commitInput}
-                placeholder={
-                  stagedCount > 0
-                    ? "输入提交信息… 将仅提交已暂存的更改 (Ctrl+Enter 提交)"
-                    : "输入提交信息… 将自动暂存全部更改并提交 (Ctrl+Enter 提交)"
-                }
-                value={commitMsg}
-                disabled={commitLoading || pushLoading}
-                onChange={(e) => setCommitMsg(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    void handleCommit();
-                  }
-                }}
-              />
-              <div className={styles.commitActions}>
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  style={{ height: 28 }}
-                  disabled={commitLoading || pushLoading}
-                  onClick={() => void handleCommit()}
-                >
-                  <Lucide.GitCommit size={14} style={{ marginRight: 4 }} />
-                  {commitLoading ? '提交中…' : stagedCount > 0 ? '提交已暂存' : '暂存并提交'}
-                </button>
-                <Tooltip content="将本地提交推送至远程仓库">
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    style={{ height: 28 }}
-                    disabled={commitLoading || pushLoading}
-                    onClick={() => void handlePush()}
-                  >
-                    <Lucide.CloudUpload size={14} style={{ marginRight: 4 }} />
-                    {pushLoading ? '推送中…' : '推送 (Push)'}
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          ) : (
-            /* Compact collapsed bottom docked status bar */
-            <div className={styles.commitTriggerBar} onClick={() => setCommitPanelOpen(true)}>
-              <Lucide.GitCommit size={14} className={styles.commitTriggerIcon} />
-              <span className={styles.commitTriggerText}>
-                输入提交信息… ({stagedCount} 个已暂存 / {unstagedCount} 个未暂存)
-              </span>
-              <Lucide.ChevronRight size={14} className={styles.commitTriggerArrow} />
-            </div>
-          )}
-        </>
+        <DiffCardGitActions
+          open={commitPanelOpen}
+          commitMsg={commitMsg}
+          commitLoading={commitLoading}
+          pushLoading={pushLoading}
+          stagedCount={stagedCount}
+          unstagedCount={unstagedCount}
+          onToggle={() => setCommitPanelOpen((v) => !v)}
+          onCommitMsgChange={setCommitMsg}
+          onCommit={handleCommit}
+          onPush={handlePush}
+        />
       )}
     </div>
   );

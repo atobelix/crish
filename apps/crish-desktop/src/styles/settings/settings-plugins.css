@@ -208,8 +208,8 @@
 
 /* —— 扩展中心：插件 + MCP + 技能（ChatGPT 式留白列表） —— */
 .settings-pane--extensions {
-  max-width: min(720px, 100%);
   width: 100%;
+  max-width: var(--settings-content-max, 720px);
 }
 .ext-toolbar,
 .ext-toolbar--one {
@@ -973,13 +973,18 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-pane--rules,
 .settings-pane--extensions {
   gap: 16px;
-  max-width: min(720px, 100%);
   width: 100%;
+  max-width: var(--settings-content-max, 720px);
 }
+/*
+ * .settings-cover-content 全局样式：父容器已改为 align-items: stretch，
+ * 子页面自居中，此处仅保留 gap/padding 覆盖，不再设 align-items。
+ */
 .settings-cover-content {
   gap: 14px;
-  padding: 24px 32px 40px;
-  align-items: center;
+  padding: 24px 20px 40px;
+  scrollbar-gutter: stable both-edges;
+  align-items: stretch;
 }
 /* 设置内按钮：圆角矩形；软底按钮禁止再加描边 */
 .settings-pane .ui-btn,

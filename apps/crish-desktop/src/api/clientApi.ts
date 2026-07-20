@@ -119,6 +119,10 @@ export interface Settings {
   httpIdleTimeoutMs?: number;
   /** 回答风格（本机偏好；写入 appSettings，下游可订阅） */
   responseStyle?: ResponseStyle;
+  /** 发送消息快捷键：enter | ctrlEnter */
+  sendShortcut?: string;
+  /** 自定义快捷键（键名 → 键值组合） */
+  shortcuts?: Record<string, string>;
   /** 优先合并工具标签页（与 layoutStore.tabModeEnabled 双写） */
   tabModeEnabled?: boolean;
   /**
@@ -319,6 +323,10 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     }
     out.mcpDisabledTools = map;
   }
+  if ('sendShortcut' in o) {
+    const v = normalizeSettingsText(o.sendShortcut);
+    out.sendShortcut = v === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+  }
   if ('defaultProvider' in o) out.defaultProvider = normalizeSettingsText(o.defaultProvider);
   if ('defaultModel' in o) out.defaultModel = normalizeSettingsText(o.defaultModel);
   if ('theme' in o) {
@@ -380,6 +388,7 @@ export function normalizeSettingsPayload(raw: unknown): Settings {
     hideThinkingBlock: normalizeSettingsBool(merged.hideThinkingBlock, false),
     tabModeEnabled: normalizeSettingsBool(merged.tabModeEnabled, true),
     quietStartup: normalizeSettingsBool(merged.quietStartup, true),
+    sendShortcut: merged.sendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter',
     enableSkillCommands: normalizeSettingsBool(merged.enableSkillCommands, true),
     enableAnalytics: normalizeSettingsBool(merged.enableAnalytics, false),
     customRules: normalizeCustomRules(merged.customRules),
@@ -449,6 +458,7 @@ const DEFAULT_SETTINGS: Settings = {
   themes: [],
   sessionDir: '',
   responseStyle: 'medium',
+  sendShortcut: 'enter',
   tabModeEnabled: true,
 };
 

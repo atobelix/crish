@@ -6,27 +6,23 @@ import { useLayoutStore } from '../store/layoutStore';
 import { clearAgentPanelFocus } from '../api/openAgentPanel';
 import {
   setActiveSessionId,
-  setScheduledTasks,
 } from '../api/storeAccess';
-import { getDesktopDaemonClient } from '../api/daemonClient';
 import { estimateCostUsd } from '../api/pricingStore';
 import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles';
 import {
-  fetchEngineLiveStatus,
-  type ActiveRunInfo,
   type PendingApprovalInfo,
 } from '../api/engineStatus';
-import { listWorkflows, scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import { scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,
   getBackgroundTaskOutput,
-  listBackgroundTasks,
   openBackgroundTaskInTerminal,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { emitUiEvent } from '../api/uiEvents';
+import { useDaemonState } from '../hooks/useDaemonState';
 
 interface RuntimePanelProps {
   wsId: string;
@@ -127,13 +123,8 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
   const tokenUsage = useLayoutStore((state) => state.tokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
 
-  const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
-  const [engineOnline, setEngineOnline] = useState(() => getDesktopDaemonClient().isConnected());
-  const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalInfo[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const ds = useDaemonState();
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
   /** 审批按钮防连点；成功静默，仅失败 toast */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
@@ -142,58 +133,6 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    const client = getDesktopDaemonClient();
-    setEngineOnline(client.isConnected());
-    const unsub = client.onState((s) => {
-      setEngineOnline(s === 'connected');
-    });
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
-
-  // 轮询引擎 live 状态 + 后台常驻任务
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      const [live, bgs] = await Promise.all([
-        fetchEngineLiveStatus(),
-        listBackgroundTasks().catch(() => [] as BackgroundTaskInfo[]),
-      ]);
-      if (cancelled) return;
-      setEngineOnline(live.connected);
-      setActiveRuns(live.activeRuns);
-      setPendingApprovals(live.pendingApprovals);
-      setBgTasks(bgs);
-    };
-    void tick();
-    const t = setInterval(() => void tick(), 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        // 正式：仅引擎 workflow；不再混入 localStorage 假 cron
-        const wfs = await listWorkflows();
-        setWorkflows(wfs);
-        setScheduledTasks([]);
-        // 成功/空列表静默（打开面板不 toast）
-      } catch {
-        // 仅错误 toast
-        onShowToast('读取运行状态失败');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void loadData();
-  }, [onShowToast]);
 
   type LiveTask = {
     id: string;
@@ -219,7 +158,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       }
     }
     // 合并引擎 activeRuns（不用英文 status 作标题）
-    for (const r of activeRuns) {
+    for (const r of ds.activeRuns) {
       if (fromMessages.some((t) => t.id === r.runId)) continue;
       const started =
         typeof r.startedAt === 'number'
@@ -240,13 +179,13 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       });
     }
     return fromMessages;
-  }, [sessions, activeRuns, now]);
+  }, [sessions, ds.activeRuns, now]);
 
-  const planCount = workflows.length + cronJobs.length;
+  const planCount = ds.workflows.length + cronJobs.length;
   const liveCountLabel = formatSectionCount(liveTasks.length);
-  const bgCountLabel = formatSectionCount(bgTasks.length);
+  const bgCountLabel = formatSectionCount(ds.bgTasks.length);
   const planCountLabel = formatSectionCount(planCount);
-  const approvalCountLabel = formatSectionCount(pendingApprovals.length);
+  const approvalCountLabel = formatSectionCount(ds.pendingApprovals.length);
 
   const focusSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
@@ -332,11 +271,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…');
-    // 成功静默（列表移除即反馈）；仅发送失败 toast
     void daemonApproveTool(id)
-      .then(() => {
-        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-      })
       .catch(() => {
         markLocalTool(id, 'error', '批准失败');
         onShowToast('批准失败，请重试');
@@ -357,9 +292,6 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝');
     void daemonDenyTool(id)
-      .then(() => {
-        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-      })
       .catch(() => {
         onShowToast('拒绝失败，请重试');
       })
@@ -396,7 +328,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
       ? tokenUsage.cost
       : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
 
-  if (loading) {
+  if (ds.loading) {
     return (
       <div
         className={`${styles.panel} ${styles.isLoading}`}
@@ -414,9 +346,9 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     100,
     Math.max(0, Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)),
   );
-  const engineFull = formatEngineStatusFull(engineOnline);
-  const engineShort = formatEngineStatusShort(engineOnline);
-  const engineTitle = formatEngineStatusTitle(engineOnline);
+  const engineFull = formatEngineStatusFull(ds.engineOnline);
+  const engineShort = formatEngineStatusShort(ds.engineOnline);
+  const engineTitle = formatEngineStatusTitle(ds.engineOnline);
 
   return (
     <div className={styles.panel} role="region" aria-label="运行状态">
@@ -433,7 +365,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             aria-label={engineFull}
             title={engineTitle}
           >
-            <span className={`${styles.dot} ${engineOnline ? styles.on : styles.off}`} aria-hidden />
+            <span className={`${styles.dot} ${ds.engineOnline ? styles.on : styles.off}`} aria-hidden />
             <span className={`${styles.rowMeta} ${styles.engineMeta}`}>{engineShort}</span>
           </div>
         </div>
@@ -479,7 +411,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         </div>
         {liveTasks.length === 0 ? (
           <div className={styles.empty} role="status">
-            {emptyLiveTasksHint(engineOnline)}
+            {emptyLiveTasksHint(ds.engineOnline)}
           </div>
         ) : (
           <div
@@ -541,17 +473,17 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             </span>
           ) : null}
         </div>
-        {bgTasks.length === 0 ? (
+        {ds.bgTasks.length === 0 ? (
           <div className={styles.empty} role="status">
-            {emptyBgTasksHint(engineOnline)}
+            {emptyBgTasksHint(ds.engineOnline)}
           </div>
         ) : (
           <div
-            className={`${styles.list}${bgTasks.length > 4 ? ` ${styles.listScroll}` : ''}`}
+            className={`${styles.list}${ds.bgTasks.length > 4 ? ` ${styles.listScroll}` : ''}`}
             role="list"
             aria-label="后台常驻任务"
           >
-            {bgTasks.map((t) => {
+            {ds.bgTasks.map((t) => {
               const opening = bgOpeningId === t.id;
               const stateZh = backgroundTaskStateLabel(t.state);
               const meta = formatBgTaskMeta({
@@ -593,7 +525,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         )}
       </section>
 
-      {pendingApprovals.length > 0 && (
+      {ds.pendingApprovals.length > 0 && (
         <section className={styles.section} aria-labelledby="rt-sec-approve">
           <div className={styles.sectionHead}>
             <h4 id="rt-sec-approve" className={styles.sectionTitle}>
@@ -610,7 +542,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
             ) : null}
           </div>
           <div className={styles.list} role="list" aria-label="待确认工具">
-            {pendingApprovals.map((a, i) => {
+            {ds.pendingApprovals.map((a, i) => {
               const toolLabel = a.toolName || '工具';
               const busy = approvalBusyId === (a.toolCallId || '');
               return (
@@ -696,11 +628,11 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
         </div>
         {planCount === 0 ? (
           <div className={styles.empty} role="status">
-            {emptyPlansHint(engineOnline)}
+            {emptyPlansHint(ds.engineOnline)}
           </div>
         ) : (
           <div className={`${styles.list} ${styles.listScroll}`} role="list" aria-label="计划任务列表">
-            {workflows.map((w) => {
+            {ds.workflows.map((w) => {
               const enabled = w.enabled !== false;
               return (
                 <div

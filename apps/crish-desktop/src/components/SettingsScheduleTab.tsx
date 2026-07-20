@@ -1,5 +1,5 @@
 /**
- * 设置 · 定时任务：筛选、新建、启停与立即执行；成功静默，仅错误提示。
+ * 设置 · 定时任务：筛选、新建、编辑、启停与立即执行；成功静默，仅错误提示。
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -111,6 +111,28 @@ function ensureScheduledSessionPlaceholder(
   }
 }
 
+function draftFromWorkflow(w: WorkflowDefinition): WorkflowScheduleDraft {
+  const d = emptyWorkflowDraft();
+  d.name = w.name;
+  d.prompt = w.prompt || '';
+  const s = w.schedule;
+  if (s && typeof s === 'object') {
+    const sch = s as { type?: string; time?: string; minutes?: number };
+    if (sch.type === 'daily') {
+      d.scheduleType = 'daily';
+      d.dailyTime = sch.time || '';
+    } else if (sch.type === 'intervalMinutes') {
+      d.scheduleType = 'intervalMinutes';
+      d.intervalMinutes = String(sch.minutes ?? '');
+    } else {
+      d.scheduleType = 'manual';
+    }
+  } else {
+    d.scheduleType = 'manual';
+  }
+  return d;
+}
+
 export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
@@ -121,6 +143,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
   const [createMode, setCreateMode] = useState<'none' | 'paths' | 'form'>('none');
   const [filter, setFilter] = useState<ScheduleFilter>('all');
   const [wfDraft, setWfDraft] = useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
+  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
 
   const workspacePath = getWorkspacePath() || '';
 
@@ -210,6 +233,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfError('');
     setWfOk('');
     resetDraft();
+    setEditingWorkflow(null);
   };
 
   const openMainScheduled = () => {
@@ -226,6 +250,14 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfDraft({ ...preset.draft });
   };
 
+  const handleEditClick = (w: WorkflowDefinition) => {
+    setEditingWorkflow(w);
+    setCreateMode('form');
+    setWfError('');
+    setWfOk('');
+    setWfDraft(draftFromWorkflow(w));
+  };
+
   /** 关闭设置，在对话里用 AI 写定时任务名称与提示词 */
   const handleAiCreateSchedule = () => {
     setComposerSeed(
@@ -237,7 +269,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     );
     setCreateMode('none');
     closeSettings();
-    emitUiEvent('open-chat');
+    setTimeout(() => emitUiEvent('open-chat'), 100);
   };
 
   /** 监听类关键词提示：行内即可，禁止教育性 toast（策略：仅错误+可撤销） */
@@ -262,7 +294,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfOk('');
   };
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     const draftErr = validateWorkflowDraft(wfDraft);
     if (draftErr) {
       failInline(draftErr);
@@ -277,29 +309,46 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfBusy(true);
     setWfError('');
     try {
-      const res = await createWorkflow({
-        name: wfDraft.name.trim(),
-        prompt: wfDraft.prompt.trim(),
-        schedule: schedGuard.schedule,
-        cwd: workspacePath || undefined,
-        enabled: true,
-      });
-      if (!res.ok) {
-        fail(
-          workflowActionErrorMessage(res.error, '创建失败，请检查引擎是否就绪', () =>
-            networkUserMessage(),
-          ),
-        );
-        return;
+      if (editingWorkflow) {
+        const res = await updateWorkflow(editingWorkflow.id, {
+          name: wfDraft.name.trim(),
+          prompt: wfDraft.prompt.trim(),
+          schedule: schedGuard.schedule,
+        });
+        if (!res.ok) {
+          fail(
+            workflowActionErrorMessage(res.error, '保存失败，请检查引擎是否就绪', () =>
+              networkUserMessage(),
+            ),
+          );
+          return;
+        }
+        setWfOk('已保存');
+      } else {
+        const res = await createWorkflow({
+          name: wfDraft.name.trim(),
+          prompt: wfDraft.prompt.trim(),
+          schedule: schedGuard.schedule,
+          cwd: workspacePath || undefined,
+          enabled: true,
+        });
+        if (!res.ok) {
+          fail(
+            workflowActionErrorMessage(res.error, '创建失败，请检查引擎是否就绪', () =>
+              networkUserMessage(),
+            ),
+          );
+          return;
+        }
+        setWfOk('已创建');
       }
-      // 成功仅行内，不 toast
-      setWfOk('已创建');
       setCreateMode('none');
       maybeWatchHint(`${wfDraft.name} ${wfDraft.prompt}`);
       resetDraft();
+      setEditingWorkflow(null);
       await refreshWorkflows();
     } catch (e) {
-      fail(networkUserMessage(e) || '创建失败');
+      fail(networkUserMessage(e) || '保存失败');
     } finally {
       setWfBusy(false);
     }
@@ -315,7 +364,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
         fail(workflowActionErrorMessage(res.error, '更新失败', () => networkUserMessage()));
         return;
       }
-      // 与 workflowEnabledLabel 同源中文；成功仅行内
       setWfOk(workflowEnabledLabel(enabling));
       if (enabling) maybeWatchHint(`${w.name} ${w.prompt || ''}`);
       await refreshWorkflows();
@@ -332,7 +380,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       const res = await triggerWorkflow(w.id);
       if (!res.ok) {
-        // 触发失败：toast + 行内；成功仅行内
         fail(workflowActionErrorMessage(res.error, '触发失败', () => networkUserMessage()));
         return;
       }
@@ -362,6 +409,8 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
       setWfBusy(false);
     }
   };
+
+  const isEditing = editingWorkflow !== null;
 
   return (
     <SettingsPage title="定时任务">
@@ -460,7 +509,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
           id="sched-settings-form"
           className="sched-settings-form"
           role="form"
-          aria-label="新建定时任务"
+          aria-label={isEditing ? '编辑定时任务' : '新建定时任务'}
         >
           <div className="sched-preset-chips" role="group" aria-label="模板">
             {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
@@ -554,10 +603,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
               disabled={wfBusy}
               aria-busy={wfBusy}
               onClick={() => {
-                void handleCreate();
+                void handleSave();
               }}
             >
-              {wfBusy ? '…' : '创建'}
+              {wfBusy ? '…' : (isEditing ? '保存' : '创建')}
             </button>
           </div>
           {workspacePath ? (
@@ -611,6 +660,17 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
                               void handleToggle(w);
                             }}
                           />
+                        </Tooltip>
+                        <Tooltip content="编辑">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            aria-label={`编辑 ${w.name}`}
+                            disabled={wfBusy}
+                            onClick={() => handleEditClick(w)}
+                          >
+                            <Lucide.Pencil size={16} aria-hidden />
+                          </button>
                         </Tooltip>
                         <Tooltip content="立即执行">
                           <button

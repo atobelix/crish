@@ -3,7 +3,8 @@
 
 .settings-pane--usage {
   gap: 16px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .settings-pane--usage .settings-page-title {

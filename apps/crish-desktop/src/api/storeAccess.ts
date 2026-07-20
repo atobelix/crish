@@ -1,23 +1,22 @@
 /**
- * 非 React 热路径的 store 命令式访问层。
+ * Store 跨域编排层。
  *
- * 组件渲染请用 facade selector（useSessionField / useWorkspaceField / …）。
- * 事件回调、bridge、stream hook、快捷键需要最新快照时走本模块，避免散落
- * `useLayoutStore.getState()` 与 `sessions.find`。
+ * 作为 SessionStore / WorkspaceStore / SettingsUiStore 三个独立 Store 之上的编排层，
+ * 提供跨域操作方法、StoreTransaction 原子操作，以及对下兼容的门面方法。
  *
- * 域归属：
- * - 会话 → sessionStore facade / 本文件 session helpers
- * - 工作区 → workspaceStore facade / focusOrOpenPanel 等
- * - 设置 UI → settingsUiStore facade / openSettings · toggleSettingsOverlay
- * - 跨域（diff / 遥测 / appSettings）→ 本文件 + getLayoutState
+ * ## 初始化
+ * 应用启动时由 Store 初始化代码调用 initStoreAccess 注入各 Store 实例：
+ * ```ts
+ * import { initStoreAccess } from './api/storeAccess';
+ * initStoreAccess(sessionStore, workspaceStore, settingsUiStore);
+ * ```
+ * 注入前所有方法降级到现有 facade 模块（保持兼容）。
  *
- * 对齐约定：会话 / 工作区 / 设置 UI 写路径优先经对应 facade 的 get* / 命令式 helper，
- * 本文件只做编排与 re-export，避免组件直接摸 layoutStore。
- *
- * 本文件额外提供：
- * - 会话 id null/undefined 守卫与 safe resolve
- * - 纯函数工作区查找（不触 store）
- * - FileDiff / CronJob 形态守卫与规范化（类型保真）
+ * ## 域归属
+ * - 会话 → SessionStore
+ * - 工作区/面板 → WorkspaceStore
+ * - 设置 UI/权限 → SettingsUiStore
+ * - 跨域编排 → 本文件
  */
 import { useLayoutStore } from '../store/layoutStore';
 import type { LayoutStore, TelemetrySyncPayload } from '../store/layoutStore';
@@ -65,6 +64,7 @@ import {
   togglePanel as togglePanelWs,
   type DraggedTabState,
 } from '../store/workspaceStore';
+import { sessionRuntimeRegistry } from './SessionRuntimeRegistry';
 
 export {
   getSessionById,
@@ -97,9 +97,237 @@ export type {
   WorkspaceState,
 };
 
-/** 完整 layout 快照（跨域写；优先窄域 get*StoreState） */
-export function getLayoutState(): LayoutStore {
-  return useLayoutStore.getState();
+// ── Store 引用（初始化时注入，避免循环依赖）─────────────────────────────────
+
+let _sessionStore: any = null;
+let _workspaceStore: any = null;
+let _settingsUiStore: any = null;
+
+/**
+ * 注入三个独立 Store 实例。
+ * 应用启动时调用一次；调用后跨域编排方法使用注入的 store 而非降级路径。
+ */
+export function initStoreAccess(session: any, workspace: any, settingsUi: any): void {
+  _sessionStore = session;
+  _workspaceStore = workspace;
+  _settingsUiStore = settingsUi;
+}
+
+/** 是否已完成 store 注入 */
+export function isStoreAccessInitialized(): boolean {
+  return _sessionStore !== null;
+}
+
+// ── 内部状态解析（优先注入 store，否则降级到 facade）────────────────────────
+
+function resolveSessionState(): any {
+  if (_sessionStore) return _sessionStore.getState();
+  return getSessionStoreState();
+}
+
+function resolveWorkspaceState(): any {
+  if (_workspaceStore) return _workspaceStore.getState();
+  return getWorkspaceStoreState();
+}
+
+function resolveSettingsUiState(): any {
+  if (_settingsUiStore) return _settingsUiStore.getState();
+  return getSettingsUiState();
+}
+
+// ── 跨域操作方法 ─────────────────────────────────────────────────────────────
+
+/**
+ * 创建新会话并切换到聊天主界面。
+ * 跨域编排：SessionStore.createSession + WorkspaceStore.setChatMainSurface。
+ * 返回新会话 id。
+ */
+export function createSessionAndOpenChat(folder?: string): string {
+  const sessionId = resolveSessionState().createSession({ folder });
+  if (sessionId) {
+    resolveWorkspaceState().setChatMainSurface('chat');
+  }
+  return sessionId;
+}
+
+/**
+ * 删除会话并清理运行时状态。
+ * 跨域编排：SessionStore.deleteSession + SessionRuntimeRegistry.remove。
+ * 返回是否成功删除。
+ */
+export function deleteSessionWithCleanup(sessionId: string): boolean {
+  const removed = resolveSessionState().deleteSession(sessionId);
+  if (removed) {
+    sessionRuntimeRegistry.remove(sessionId);
+  }
+  return removed;
+}
+
+/**
+ * 跨域：删除会话、清理运行时、切换到其他会话（如果有）。
+ * 相比 deleteSessionWithCleanup 额外处理会话切换。
+ */
+export function deleteSessionAndSwitch(sessionId: string): boolean {
+  const state = resolveSessionState();
+  const removed = state.deleteSession(sessionId);
+  if (removed) {
+    sessionRuntimeRegistry.remove(sessionId);
+    const sessions: SessionState[] = state.sessions ?? [];
+    if (sessions.length > 0 && state.activeSessionId === sessionId) {
+      const nextIdx = Math.min(
+        sessions.findIndex((s: SessionState) => s.id === sessionId) + 1,
+        sessions.length - 1,
+      );
+      const fallback = sessions[nextIdx] ?? sessions[sessions.length - 1];
+      if (fallback) {
+        state.setActiveSessionId(fallback.id);
+      }
+    }
+  }
+  return removed;
+}
+
+// ── StoreTransaction ────────────────────────────────────────────────────────
+
+export interface StoreSnapshot {
+  sessions: any;
+  workspaces: any;
+  settingsUi: any;
+}
+
+/**
+ * 跨 store 原子操作事务。
+ *
+ * 保存三个 store 的快照，支持 commit / rollback。
+ *
+ * @example
+ * ```ts
+ * const tx = new StoreTransaction();
+ * tx.begin();
+ * try {
+ *   createSessionAndOpenChat();
+ *   setShowSettingsOverlay(true);
+ *   tx.commit();
+ * } catch {
+ *   tx.rollback();
+ * }
+ * ```
+ */
+export class StoreTransaction {
+  private snapshots: StoreSnapshot[] = [];
+
+  /** 保存当前三个 store 的快照（压栈）。可嵌套调用。 */
+  begin(): void {
+    this.snapshots.push({
+      sessions: this.cloneSessions(),
+      workspaces: this.cloneWorkspaces(),
+      settingsUi: this.cloneSettingsUi(),
+    });
+  }
+
+  /** 提交：丢弃最近一次快照。 */
+  commit(): void {
+    this.snapshots.pop();
+  }
+
+  /** 回滚：从最近一次快照恢复三个 store。 */
+  rollback(): void {
+    const snapshot = this.snapshots.pop();
+    if (!snapshot) return;
+    this.restoreSessions(snapshot.sessions);
+    this.restoreWorkspaces(snapshot.workspaces);
+    this.restoreSettingsUi(snapshot.settingsUi);
+  }
+
+  /**
+   * 在事务中执行回调。回调抛异常时自动回滚。
+   * 返回回调的返回值。
+   */
+  run<T>(fn: () => T): T {
+    this.begin();
+    try {
+      const result = fn();
+      this.commit();
+      return result;
+    } catch (err) {
+      this.rollback();
+      throw err;
+    }
+  }
+
+  /** 当前快照栈深度（嵌套事务层级） */
+  get depth(): number {
+    return this.snapshots.length;
+  }
+
+  // ── 私有：克隆 / 恢复 ──────────────────────────────────────────────────
+
+  private cloneSessions(): any {
+    const state = resolveSessionState();
+    return {
+      sessions: cloneArray(state.sessions),
+      sessionsById: { ...(state.sessionsById ?? {}) },
+      folderOrder: cloneArray(state.folderOrder),
+      activeSessionId: state.activeSessionId,
+      activeAgentId: state.activeAgentId,
+      panelAgentId: state.panelAgentId,
+      composerDrafts: { ...(state.composerDrafts ?? {}) },
+      terminalBySession: { ...(state.terminalBySession ?? {}) },
+    };
+  }
+
+  private cloneWorkspaces(): any {
+    const state = resolveWorkspaceState();
+    return {
+      workspaces: cloneArray(state.workspaces),
+      activeWorkspaceIndex: state.activeWorkspaceIndex,
+      tabModeEnabled: state.tabModeEnabled,
+      uiSize: state.uiSize,
+      shellChromeMode: state.shellChromeMode,
+      chatMainSurface: state.chatMainSurface,
+      sidebarCollapsed: state.sidebarCollapsed,
+      draggedTab: state.draggedTab ? { ...state.draggedTab } : null,
+      dropPreview: state.dropPreview ? { ...state.dropPreview } : null,
+    };
+  }
+
+  private cloneSettingsUi(): any {
+    const state = resolveSettingsUiState();
+    return {
+      showSettingsOverlay: state.showSettingsOverlay,
+      settingsActiveTab: state.settingsActiveTab,
+      permissionMode: state.permissionMode,
+      planModeEnabled: state.planModeEnabled,
+      planApproved: state.planApproved,
+    };
+  }
+
+  private restoreSessions(snapshot: any): void {
+    const store = _sessionStore;
+    if (store) {
+      store.setState(snapshot);
+    } else {
+      useLayoutStore.setState(snapshot);
+    }
+  }
+
+  private restoreWorkspaces(snapshot: any): void {
+    const store = _workspaceStore;
+    if (store) {
+      store.setState(snapshot);
+    } else {
+      useLayoutStore.setState(snapshot);
+    }
+  }
+
+  private restoreSettingsUi(snapshot: any): void {
+    const store = _settingsUiStore;
+    if (store) {
+      store.setState(snapshot);
+    } else {
+      useLayoutStore.setState(snapshot);
+    }
+  }
 }
 
 // ── 纯工具：id / 对象形态 ───────────────────────────────────────────────────
@@ -122,6 +350,10 @@ export function normalizeSessionId(
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cloneArray<T>(arr: T[]): T[] {
+  return arr ? arr.map((item) => (typeof item === 'object' && item !== null ? ({ ...item } as T) : item)) : [];
 }
 
 // ── Safe selectors（纯 / 可对快照使用，不强制 mock zustand）────────────────
@@ -726,4 +958,9 @@ export function addCommandPermission(cmd: string): void {
 /** 命令白名单快照（bridge 审批热路径；避免组件/bridge 直摸 layout） */
 export function getCommandPermissions(): string[] {
   return getLayoutState().commandPermissions ?? [];
+}
+
+/** 完整 layout 快照（跨域写；优先窄域 get*StoreState） */
+export function getLayoutState(): LayoutStore {
+  return useLayoutStore.getState();
 }

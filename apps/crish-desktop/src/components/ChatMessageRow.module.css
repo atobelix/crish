@@ -3,7 +3,8 @@
   flex-direction: column;
   width: 100%;
   margin-bottom: 22px;
-  max-width: min(var(--chat-col-max, 720px), 100%);
+  /* 统一走 token，禁止散落 720/680px 硬编码 */
+  max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
   margin-left: auto;
   margin-right: auto;
@@ -25,7 +26,7 @@
   margin-left: -6px;
   margin-right: -6px;
   width: calc(100% + 12px);
-  max-width: calc(min(var(--chat-col-max, 680px), 100%) + 12px);
+  max-width: calc(min(var(--chat-col-max, 760px), 100%) + 12px);
   box-sizing: border-box;
 }
 
@@ -36,7 +37,7 @@
 
 .rowAssistant {
   align-items: flex-start;
-  max-width: min(var(--chat-col-max, 720px), 100%);
+  max-width: min(var(--chat-col-max, 760px), 100%);
   margin-bottom: 20px;
 }
 
@@ -505,7 +506,10 @@
 
 @media (min-width: 1200px) {
   .row {
-    max-width: min(var(--chat-col-max-wide, 720px), 100%);
+    max-width: min(var(--chat-col-max-wide, 840px), 100%);
+  }
+  .rowAssistant {
+    max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }
 

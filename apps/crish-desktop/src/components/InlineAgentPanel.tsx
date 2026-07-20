@@ -12,7 +12,6 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
-import { useLayoutStore } from '../store/layoutStore';
 import styles from './InlineAgentPanel.module.css';
 import {
   selectActiveAgentId,
@@ -21,12 +20,6 @@ import {
 } from '../store/sessionStore';
 import { buildAssistantTimeline } from '../api/toolPresentation';
 import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
-import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
-import { publishToolDiffs } from '../api/publishToolDiffs';
-import {
-  sendToSubagent,
-  streamCollaboratorRun,
-} from '../api/subagentApi';
 import {
   normalizeAgentPanelAgentId,
   openAgentInSidePanel,
@@ -38,6 +31,7 @@ import {
 } from '../api/openAgentPanel';
 import { ComposerField } from './ChatComposer';
 import { ChatToolStack } from './ChatToolCallBlock';
+import { useAgentStream } from '../hooks/useAgentStream';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 import { Tooltip } from './settings/SettingsUI';
 
@@ -83,28 +77,15 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 }) => {
   const [open, setOpen] = useState(Boolean(defaultOpen ?? agent.status === 'running'));
   const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [stopping, setStopping] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   /** 与主对话一致：工具默认折叠 */
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
-  const followUpCancelRef = useRef<null | (() => void)>(null);
-  /** 用户已点停止：忽略后续 onComplete 写回 completed */
-  const userStoppedRef = useRef(false);
-  /** follow-up 代数：停止后迟到的回调不再 patch */
-  const followUpEpochRef = useRef(0);
-  /** 组件仍挂载：send/stop 异步 finally 勿 setState */
-  const mountedRef = useRef(true);
-  /** 停止防抖 timer：卸载时清掉，避免 residual setStopping */
-  const stopCooldownTimerRef = useRef<number | null>(null);
 
   const reactId = useId();
   const bodyDomId = `inline-agent-body-${reactId}`;
   const labelDomId = `inline-agent-label-${reactId}`;
 
-  const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
-  const appendSessionAgentMessage = useLayoutStore((s) => s.appendSessionAgentMessage);
   const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
     setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
   }, []);
@@ -112,19 +93,6 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   /** 侧栏焦点订阅：reuse / 「已在侧栏」徽标 */
   const panelAgentId = useSessionField(selectPanelAgentId);
   const activeAgentId = useSessionField(selectActiveAgentId);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      followUpCancelRef.current?.();
-      followUpCancelRef.current = null;
-      if (stopCooldownTimerRef.current != null) {
-        window.clearTimeout(stopCooldownTimerRef.current);
-        stopCooldownTimerRef.current = null;
-      }
-    };
-  }, []);
 
   // 实时 agent 数据（O(1) sessionsById）
   const live =
@@ -134,6 +102,18 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
   const agentIdNorm = normalizeAgentPanelAgentId(live.id) ?? '';
   const running = live.status === 'running';
+
+  const {
+    handleSend,
+    handleStop,
+    sending,
+    stopping,
+  } = useAgentStream({
+    parentSessionId,
+    agentId: live.id,
+    isRunning: running,
+    subagentRunId: live.subagentRunId,
+  });
 
   /** 标题 / 短标签 / 状态：与 openAgentPanel 纯函数同轨（中文） */
   const displayTitle = useMemo(
@@ -200,226 +180,6 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       openAgentInSidePanel(id, { sessionId: parentSessionId });
     },
     [live, parentSessionId, panelAgentId, activeAgentId],
-  );
-
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || sending || stopping || !agentIdNorm) return;
-    setSending(true);
-    setInput('');
-    appendSessionAgentMessage(parentSessionId, live.id, {
-      id: `iu-${Date.now().toString(36)}`,
-      sender: 'user',
-      text,
-      timestamp: Date.now(),
-      status: 'completed',
-    });
-    try {
-      if (running && live.subagentRunId) {
-        const res = await sendToSubagent(live.subagentRunId, text);
-        if (!res.ok || res.accepted === false) {
-          // 降级新一轮
-          startFollowUp(text);
-        }
-      } else {
-        startFollowUp(text);
-      }
-    } finally {
-      if (mountedRef.current) setSending(false);
-    }
-  };
-
-  const startFollowUp = (text: string) => {
-    followUpCancelRef.current?.();
-    userStoppedRef.current = false;
-    const epoch = ++followUpEpochRef.current;
-    patchSessionAgent(parentSessionId, live.id, { status: 'running' });
-    const asstId = `ia-${Date.now().toString(36)}`;
-    appendSessionAgentMessage(parentSessionId, live.id, {
-      id: asstId,
-      sender: 'assistant',
-      text: '',
-      thinking: '正在处理…',
-      timestamp: Date.now(),
-      status: 'processing',
-      toolCalls: [],
-      blocks: [],
-    });
-    const patchAsst = (fn: (m: import('../store/layoutStore').SessionMessage) => void) => {
-      if (userStoppedRef.current || followUpEpochRef.current !== epoch) return;
-      useLayoutStore.setState((state) => {
-        // 优先 O(1) sessionsById（与侧栏 AgentCard 一致）
-        const sess =
-          state.sessionsById[parentSessionId] ||
-          state.sessions.find((s) => s.id === parentSessionId);
-        const ag = sess?.agents?.find((a) => a.id === live.id);
-        const m = ag?.messages?.find((x) => x.id === asstId);
-        if (m) fn(m);
-      });
-    };
-    const cancel = streamCollaboratorRun(text, live.id, {
-      onRunMeta: ({ runId }) => {
-        if (userStoppedRef.current || followUpEpochRef.current !== epoch) return;
-        patchSessionAgent(parentSessionId, live.id, { subagentRunId: runId, status: 'running' });
-      },
-      onThought: (t) => patchAsst((m) => { m.thinking = t; }),
-      onChunk: (c) => patchAsst((m) => { m.text = c; if (m.thinking === '正在处理…') m.thinking = ''; }),
-      onToolStart: (toolId, name, args, explanation) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          if (!m.toolCalls.some((t) => t.id === toolId)) {
-            m.toolCalls.push({ id: toolId, name, arguments: args, explanation, status: 'running' });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onToolSuccess: (toolId, output, diffs) => {
-        let resolved: import('../store/layoutStore').FileDiff[] = [];
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          const displayOut = sanitizeToolDisplayOutput(output || '');
-          resolved = resolveToolDiffs({
-            name: tc.name || '',
-            args: tc.arguments,
-            output: displayOut,
-            structuredDiffs: diffs,
-          });
-          tc.status = 'success';
-          tc.output = displayOut || output || '完成';
-          if (resolved.length) tc.diffs = resolved;
-        });
-        // 必须在 immer set 外推右侧变更，嵌套 set 会被丢弃
-        if (!userStoppedRef.current && followUpEpochRef.current === epoch) {
-          publishToolDiffs(resolved);
-        }
-      },
-      onToolError: (toolId, err) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (tc) {
-            tc.status = 'error';
-            tc.output = sanitizeToolDisplayOutput(err || '') || err || '失败';
-          }
-        });
-      },
-      onToolPendingApproval: (toolId, name, args, explanation, approvalMeta) => {
-        patchAsst((m) => {
-          if (!m.toolCalls) m.toolCalls = [];
-          if (!m.blocks) m.blocks = [];
-          const existing = m.toolCalls.find((t) => t.id === toolId);
-          if (existing) {
-            existing.status = 'pending_approval';
-            existing.arguments = args || existing.arguments;
-            if (explanation) existing.explanation = explanation;
-            if (approvalMeta) existing.approvalMeta = approvalMeta;
-          } else {
-            m.toolCalls.push({
-              id: toolId,
-              name,
-              arguments: args,
-              explanation,
-              status: 'pending_approval',
-              ...(approvalMeta ? { approvalMeta } : {}),
-            });
-            m.blocks.push({ type: 'tool_call', id: toolId });
-          }
-        });
-      },
-      onApprovalResolved: (toolId, decision) => {
-        patchAsst((m) => {
-          const tc = m.toolCalls?.find((t) => t.id === toolId);
-          if (!tc) return;
-          if (decision === 'allow') {
-            tc.status = 'running';
-            tc.output = '执行中…';
-          } else {
-            tc.status = 'error';
-            tc.output = '未获批准';
-          }
-        });
-      },
-      onComplete: () => {
-        if (userStoppedRef.current || followUpEpochRef.current !== epoch) {
-          followUpCancelRef.current = null;
-          return;
-        }
-        patchAsst((m) => {
-          m.status = 'completed';
-          if (m.thinking === '正在处理…') m.thinking = '';
-        });
-        patchSessionAgent(parentSessionId, live.id, { status: 'completed', endedAt: Date.now() });
-        followUpCancelRef.current = null;
-      },
-    });
-    followUpCancelRef.current = cancel;
-  };
-
-  /** 收尾进行中的 assistant 消息与工具行（status 仅 processing→completed） */
-  const finalizeInFlightOnStop = useCallback(() => {
-    useLayoutStore.setState((state) => {
-      const sess =
-        state.sessionsById[parentSessionId] ||
-        state.sessions.find((s) => s.id === parentSessionId);
-      const ag = sess?.agents?.find((a) => a.id === live.id);
-      if (!ag?.messages) return;
-      for (const m of ag.messages) {
-        if (m.sender !== 'assistant') continue;
-        if (m.status === 'processing') {
-          m.status = 'completed';
-          if (m.thinking === '正在处理…') m.thinking = '';
-        }
-        for (const tc of m.toolCalls || []) {
-          if (tc.status === 'running' || tc.status === 'pending_approval') {
-            tc.status = 'error';
-            tc.output = tc.output && tc.output !== '执行中…' ? tc.output : '已停止';
-          }
-        }
-      }
-    });
-  }, [live.id, parentSessionId]);
-
-  const handleStop = useCallback(
-    (e?: React.MouseEvent) => {
-      e?.stopPropagation();
-      e?.preventDefault();
-      if (stopping) return;
-      setStopping(true);
-      userStoppedRef.current = true;
-      followUpEpochRef.current += 1;
-      followUpCancelRef.current?.();
-      followUpCancelRef.current = null;
-
-      const runId = live.subagentRunId;
-      if (runId) {
-        void cancelSubagentRun(runId);
-      }
-
-      finalizeInFlightOnStop();
-      patchSessionAgent(parentSessionId, live.id, {
-        status: 'stopped',
-        summary: live.summary || '已停止',
-        endedAt: Date.now(),
-      });
-      // 短延迟后允许再次交互（避免连点）；卸载时清 timer
-      if (stopCooldownTimerRef.current != null) {
-        window.clearTimeout(stopCooldownTimerRef.current);
-      }
-      stopCooldownTimerRef.current = window.setTimeout(() => {
-        stopCooldownTimerRef.current = null;
-        if (mountedRef.current) setStopping(false);
-      }, 200);
-    },
-    [
-      stopping,
-      live.subagentRunId,
-      live.summary,
-      live.id,
-      parentSessionId,
-      finalizeInFlightOnStop,
-      patchSessionAgent,
-    ],
   );
 
   const messages = live.messages || [];
@@ -537,7 +297,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                 aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
                 aria-busy={stopping || undefined}
                 disabled={stopping}
-                onClick={handleStop}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleStop(live.summary); }}
               >
                 <Lucide.Square size={11} fill="currentColor" aria-hidden />
               </button>
@@ -569,7 +329,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                   aria-label="停止生成"
                   aria-busy={stopping || undefined}
                   disabled={stopping}
-                  onClick={handleStop}
+                  onClick={() => handleStop(live.summary)}
                 >
                   {stopping ? '停止中…' : '停止'}
                 </button>
@@ -673,14 +433,18 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
               value={input}
               onChange={setInput}
               onSend={() => {
-                void handleSend();
+                const text = input.trim();
+                if (text) {
+                  setInput('');
+                  void handleSend(text);
+                }
               }}
               canSend={canSend}
               disabled={sending || stopping || !agentIdNorm}
               isComposing={isComposing}
               setIsComposing={setIsComposing}
               isProcessing={running}
-              onStop={handleStop}
+              onStop={() => handleStop(live.summary)}
               processingSendLabel="发送"
               maxLines={INLINE_COMPOSER_MAX_LINES}
               placeholder={
@@ -706,16 +470,6 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
     </div>
   );
 };
-
-/** 向 daemon 发 cancel-run；失败静默（UI 已本地标 stopped） */
-async function cancelSubagentRun(runId: string): Promise<void> {
-  try {
-    const { getDesktopDaemonClient } = await import('../api/daemonClient');
-    await getDesktopDaemonClient().send({ type: 'cancel-run', runId });
-  } catch {
-    /* ignore */
-  }
-}
 
 /** 避免把 shell 表格拉进「思考」折叠 */
 function looksLikeShellDump(s: string): boolean {

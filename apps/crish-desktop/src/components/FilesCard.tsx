@@ -37,6 +37,8 @@ import {
 } from '../api/hostOpenersApi';
 import { fileExtColor, highlightCode, langFromFilename } from '../api/codeHighlight';
 import { parseMarkdownToHtml } from '../api/markdownRender';
+import { AppErrorBoundary } from './AppErrorBoundary';
+import { fetchGitStatus, type GitStatusFile } from '../api/gitApi';
 
 function getOpenerIcon(op: HostOpener, size = 14) {
   if (op.iconDataUrl) {
@@ -158,6 +160,8 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
   const [fileOpeners, setFileOpeners] = useState<HostOpener[]>([]);
   const [openDefaultLabel, setOpenDefaultLabel] = useState('打开');
   const [filterMode, setFilterMode] = useState(false);
+  const [gitStatusMap, setGitStatusMap] = useState<Record<string, string>>({});
+  const openedContentRef = useRef<string>('');
   /** 面包屑某段展开的目录下拉（Kimi 式：点层级列出该目录） */
   const [bcFlyout, setBcFlyout] = useState<{
     path: string;
@@ -274,6 +278,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         const res = await readTextFile(resolved, initialBudget);
         setContent(res.content);
         setEditBuf(res.content);
+        openedContentRef.current = res.content;
         setTruncated(res.truncated);
         setLineBudget(initialBudget);
       }
@@ -383,6 +388,25 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     [],
   );
 
+  useEffect(() => {
+    const buildMap = (files: GitStatusFile[]) => {
+      const m: Record<string, string> = {};
+      for (const f of files) m[f.path] = f.status;
+      setGitStatusMap(m);
+    };
+    const onGitUpdate = (ev: Event) => {
+      const data = (ev as CustomEvent<GitStatusFile[]>).detail;
+      if (data) buildMap(data);
+    };
+    const fromWindow = (window as any).__crish_git_status;
+    if (fromWindow) buildMap(fromWindow);
+    window.addEventListener('crish-git-status-changed', onGitUpdate);
+    void fetchGitStatus().then((r) => {
+      if (r.found && r.files) buildMap(r.files);
+    });
+    return () => window.removeEventListener('crish-git-status-changed', onGitUpdate);
+  }, []);
+
   const toggleExpand = async (dirPath: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (expanded[dirPath]) {
@@ -443,14 +467,18 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     if (!selected || !editing) return;
     clearActionHint();
     try {
+      const currentContent = await readTextFile(selected, FILE_PREVIEW_MAX_LINES);
+      if (currentContent.content !== openedContentRef.current) {
+        const ok = window.confirm('文件已被外部修改，是否覆盖？');
+        if (!ok) return;
+      }
       await writeTextFile(selected, editBuf);
       setContent(editBuf);
+      openedContentRef.current = editBuf;
       setDirty(false);
       setEditing(false);
       setError('');
-      // 成功静默：退出编辑 + dirty 消失即为反馈，不 toast
     } catch (e) {
-      // 行内错误，避免保存连点 toast 刷屏
       showActionError(e instanceof Error ? e.message : '保存失败');
     }
   };
@@ -608,12 +636,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
   if (!root) {
     return (
-      <div className={styles.filesCard}>
-        <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
-          <div className={styles.filesEmptyTitle}>未选择项目</div>
-          <div className={styles.filesEmptySub}>在侧栏选择工作区后即可浏览</div>
+      <AppErrorBoundary variant="compact" title="文件面板出错">
+        <div className={styles.filesCard}>
+          <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
+            <div className={styles.filesEmptyTitle}>未选择项目</div>
+            <div className={styles.filesEmptySub}>在侧栏选择工作区后即可浏览</div>
+          </div>
         </div>
-      </div>
+      </AppErrorBoundary>
     );
   }
 
@@ -631,6 +661,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     !editing;
 
   return (
+    <AppErrorBoundary variant="compact" title="文件面板出错">
     <div className={styles.filesCard}>
       {/* 顶栏：导航 + 面包屑（非输入框 chrome） */}
       <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
@@ -1215,6 +1246,22 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                       <span className={styles.filesRowName} title={e.name}>
                         {e.name}
                       </span>
+                      {!e.isDir && gitStatusMap[e.path] ? (
+                        <span
+                          className={styles.filesGitStatus}
+                          style={{
+                            color:
+                              gitStatusMap[e.path] === 'M' ? '#eab308' :
+                              gitStatusMap[e.path] === 'A' ? '#22c55e' :
+                              gitStatusMap[e.path] === 'D' ? '#ef4444' :
+                              gitStatusMap[e.path] === '?' ? '#9ca3af' :
+                              undefined,
+                          }}
+                          title={gitStatusMap[e.path]}
+                        >
+                          {gitStatusMap[e.path]}
+                        </span>
+                      ) : null}
                       {!e.isDir && e.size != null ? (
                         <span className={styles.filesRowMeta}>{formatSize(e.size)}</span>
                       ) : null}
@@ -1444,6 +1491,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         </div>
       </div>
     </div>
+    </AppErrorBoundary>
   );
 };
 

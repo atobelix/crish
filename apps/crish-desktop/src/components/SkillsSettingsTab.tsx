@@ -6,7 +6,7 @@
  * - 扫描、启用、同步、创建、导入、复制、打开路径失败：toast
  * - 引擎未同步：formatEngineDegradeToast（先说问题）
  */
-import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
   addExtraSkillDir,
@@ -97,6 +97,8 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [filter, setFilter] = useState('');
   /** all=当前工作区+全局；global=仅全局；其它=具体项目路径 */
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>(SCOPE_ALL);
+  const scopeFilterRef = useRef(scopeFilter);
+  scopeFilterRef.current = scopeFilter;
   const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
   const [extraDir, setExtraDir] = useState('');
   const [extraDirs, setExtraDirs] = useState<string[]>(() => {
@@ -171,7 +173,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
 
   const refresh = useCallback(
     async (opts?: { promptNew?: boolean; scope?: ScopeFilter }) => {
-      const scope = opts?.scope ?? scopeFilter;
+      const scope = opts?.scope ?? scopeFilterRef.current;
       setLoading(true);
       try {
         setFsOk(await skillsFsAvailable());
@@ -215,7 +217,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         setLoading(false);
       }
     },
-    [onShowToast, resolveDiscoverWorkspace, scopeFilter],
+    [onShowToast, resolveDiscoverWorkspace],
   );
 
   const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
@@ -264,13 +266,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  // 批量确认超时自动取消
-  useEffect(() => {
-    if (!batchConfirm) return;
-    const t = window.setTimeout(() => setBatchConfirm(null), 4000);
-    return () => window.clearTimeout(t);
-  }, [batchConfirm]);
 
   /** 当前作用域对应的文件夹展示名 */
   const activeScopeProjectName = useMemo(() => {
@@ -770,7 +765,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         <section
           className={`${styles.skillsDiscoverPanel} skills-discover-panel`}
           role="dialog"
-          aria-modal="false"
+           aria-modal="true"
           aria-labelledby={discoverTitleId}
           aria-busy={discoverBusy || undefined}
         >

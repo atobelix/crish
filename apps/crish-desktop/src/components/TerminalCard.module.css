@@ -218,6 +218,57 @@
   border: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
   background: var(--terminal-bar-fill);
 }
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--panel-pad-x, 12px);
+  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 26px;
+  box-sizing: border-box;
+  background: var(--terminal-bg);
+}
+.searchIco {
+  color: var(--terminal-muted);
+  flex-shrink: 0;
+}
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--terminal-fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+.searchInput::placeholder {
+  color: var(--terminal-muted);
+  opacity: 0.65;
+}
+.searchCount {
+  font-size: 11px;
+  color: var(--terminal-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+  user-select: none;
+}
+.searchClear {
+  color: var(--terminal-muted);
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.searchClear:hover {
+  color: var(--terminal-fg);
+}
 @media (max-width: 360px) {
   .body {
     line-height: var(--line-height-ui, 1.35);

@@ -31,6 +31,7 @@ import {
 } from './settings/SettingsUI';
 import { SettingsSchemaRenderer } from './settings/SettingsSchemaRenderer';
 import type { SchemaSection } from './settings/SettingsSchemaRenderer';
+import { useIsVisible } from '../hooks/useIsVisible';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -85,7 +86,9 @@ const skinPresets = Object.entries(SKIN_PRESETS).map(([id, config]) => ({
   preview: config.bgPrimary,
 }));
 
-
+/** 浅/深色主题各自的皮肤 ID 集合，用于皮肤回退校验（#237） */
+const DARK_SKIN_IDS = ['dark-cozy', 'deep-night', 'dark-forest', 'aurora', 'cocoa', 'burgundy', 'cyber', 'obsidian'];
+const LIGHT_SKIN_IDS = ['warm-gray', 'cream', 'paper', 'classic-gray', 'sakura', 'matcha', 'glacier', 'pearl'];
 
 /** 非法值回落标准 */
 function normalizeUiSize(raw: unknown): UiSize {
@@ -122,6 +125,17 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       window.removeEventListener('crish-theme-changed', handler);
     };
   }, []);
+
+  // 切换主题时，如果当前选中的皮肤不在新主题预设中，自动回退到该主题的第一个预设皮肤（#237）
+  useEffect(() => {
+    const validSkins = activeTheme === 'dark' ? DARK_SKIN_IDS : LIGHT_SKIN_IDS;
+    if (personalization.skin !== 'custom' && !validSkins.includes(personalization.skin)) {
+      const fallback = activeTheme === 'dark' ? 'dark-cozy' : 'warm-gray';
+      updatePersonalization({ skin: fallback });
+    }
+  }, [activeTheme, personalization.skin]);
+
+  const [visibilityRef, isVisible] = useIsVisible();
 
   const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
     const next = { ...personalization, ...updates };
@@ -166,9 +180,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const [loadTick, setLoadTick] = useState(0);
   const [tick, setTick] = useState(0);
 
+  // 10 秒轮询——仅在 tab 可见时运行（#234）
   useEffect(() => {
     let interval: any = null;
-    if (personalization.themeAutoTimeTransition) {
+    if (personalization.themeAutoTimeTransition && isVisible) {
       interval = setInterval(() => {
         setTick((t) => t + 1);
       }, 10000);
@@ -178,7 +193,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         clearInterval(interval);
       }
     };
-  }, [personalization.themeAutoTimeTransition]);
+  }, [personalization.themeAutoTimeTransition, isVisible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -410,6 +425,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   };
 
   return (
+    <div ref={visibilityRef}>
     <SettingsPage title="外观">
         <SettingsSchemaRenderer
           schema={appearanceSchema}
@@ -418,6 +434,11 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
           ready={!saving}
         />
 
+        {/*
+          字体设置（FontSettingsSection）保留为手写控件，原因：
+          - 包含字体加载状态、预览文本、异步字体加载等复杂交互
+          - 与 fontStore 深度耦合，不适合 Schema 抽象
+        */}
         <SettingsSection title="字体">
           <SettingsCard>
             <FontSettingsSection
@@ -432,6 +453,12 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
           </SettingsCard>
         </SettingsSection>
 
+        {/*
+          「重置外观」按钮保留为手写控件，原因：
+          - 不是数据绑定控件，而是一次性动作按钮
+          - SchemaRenderer 目前没有 "button"/"action" 类型
+          - 若用 Schema 实现需新增 type，超出当前需求范围
+        */}
         <SettingsSection title="其他">
           <SettingsCard>
             <SettingsRow
@@ -471,5 +498,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         </SettingsCard>
         </SettingsSection>
     </SettingsPage>
+    </div>
   );
 };

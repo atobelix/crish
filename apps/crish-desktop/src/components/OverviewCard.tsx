@@ -27,28 +27,23 @@ import {
 import { getWorkspacePath } from '../api/projectStore';
 import { openAgentInSidePanel, clearAgentPanelFocus } from '../api/openAgentPanel';
 import { toolHumanLabel } from '../api/toolPresentation';
-import { pushDiffFile, setActiveDiffSource, setActiveSessionId, setScheduledTasks } from '../api/storeAccess';
+import { pushDiffFile, setActiveDiffSource, setActiveSessionId } from '../api/storeAccess';
 import {
   computeChecklistProgress,
   findCurrentLiveTool,
   resolveSessionProgressItems,
 } from '../api/sessionProgressApi';
 
-// ── Imported from RuntimePanel to support state management ─────────────────────────
-import { getDesktopDaemonClient } from '../api/daemonClient';
 import { estimateCostUsd } from '../api/pricingStore';
 import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles';
 import {
-  fetchEngineLiveStatus,
-  type ActiveRunInfo,
   type PendingApprovalInfo,
 } from '../api/engineStatus';
-import { listWorkflows, scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import { scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,
   getBackgroundTaskOutput,
-  listBackgroundTasks,
   openBackgroundTaskInTerminal,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
@@ -57,6 +52,7 @@ import { emitUiEvent } from '../api/uiEvents';
 import { detectFileKind } from '../api/workspaceFsApi';
 import { fileExtColor } from '../api/codeHighlight';
 import type { CronJob } from '../api/clientApi';
+import { useDaemonState } from '../hooks/useDaemonState';
 
 type Props = {
   wsId: string;
@@ -153,11 +149,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   const sessions = useLayoutStore((state) => state.sessions);
 
   const [now, setNow] = useState(() => Date.now());
-  const [engineOnline, setEngineOnline] = useState(() => getDesktopDaemonClient().isConnected());
-  const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalInfo[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
-  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const ds = useDaemonState();
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
 
@@ -165,54 +157,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
-
-  // Daemon state subscription
-  useEffect(() => {
-    const client = getDesktopDaemonClient();
-    setEngineOnline(client.isConnected());
-    const unsub = client.onState((s) => {
-      setEngineOnline(s === 'connected');
-    });
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
-
-  // Polling engine status + background tasks
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      const [live, bgs] = await Promise.all([
-        fetchEngineLiveStatus(),
-        listBackgroundTasks().catch(() => [] as BackgroundTaskInfo[]),
-      ]);
-      if (cancelled) return;
-      setEngineOnline(live.connected);
-      setActiveRuns(live.activeRuns);
-      setPendingApprovals(live.pendingApprovals);
-      setBgTasks(bgs);
-    };
-    void tick();
-    const t = setInterval(() => void tick(), 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, []);
-
-  // Load workflows
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const wfs = await listWorkflows();
-        setWorkflows(wfs);
-        setScheduledTasks([]);
-      } catch {
-        /* ignore */
-      }
-    };
-    void loadData();
   }, []);
 
   type LiveTask = {
@@ -238,7 +182,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         }
       }
     }
-    for (const r of activeRuns) {
+    for (const r of ds.activeRuns) {
       if (fromMessages.some((t) => t.id === r.runId)) continue;
       const started =
         typeof r.startedAt === 'number'
@@ -259,7 +203,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
       });
     }
     return fromMessages;
-  }, [sessions, activeRuns, now]);
+  }, [sessions, ds.activeRuns, now]);
 
   const focusSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
@@ -346,9 +290,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…');
     void daemonApproveTool(id)
-      .then(() => {
-        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-      })
       .catch(() => {
         markLocalTool(id, 'error', '批准失败');
         showActionErr('批准失败，请重试');
@@ -369,9 +310,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝');
     void daemonDenyTool(id)
-      .then(() => {
-        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
-      })
       .catch(() => {
         showActionErr('拒绝失败，请重试');
       })
@@ -749,9 +687,9 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         >
           <Lucide.Activity size={15} strokeWidth={1.75} aria-hidden />
           <span>活动任务</span>
-          {liveTasks.length > 0 || pendingApprovals.length > 0 ? (
+          {liveTasks.length > 0 || ds.pendingApprovals.length > 0 ? (
             <span className={styles.pill}>
-              {liveTasks.length + pendingApprovals.length}
+              {liveTasks.length + ds.pendingApprovals.length}
             </span>
           ) : null}
           <Lucide.ChevronDown
@@ -762,11 +700,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         </button>
         {openSec.activeTasks ? (
           <div className={styles.secB}>
-            {liveTasks.length === 0 && pendingApprovals.length === 0 ? (
+            {liveTasks.length === 0 && ds.pendingApprovals.length === 0 ? (
               <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
             ) : (
               <ul className={styles.list}>
-                {pendingApprovals.map((a, i) => {
+                {ds.pendingApprovals.map((a, i) => {
                   const toolLabel = a.toolName || '工具';
                   const busy = approvalBusyId === (a.toolCallId || '');
                   return (
@@ -839,8 +777,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         >
           <Lucide.Terminal size={15} strokeWidth={1.75} aria-hidden />
           <span>后台常驻</span>
-          {bgTasks.length > 0 ? (
-            <span className={styles.pill}>{bgTasks.length}</span>
+          {ds.bgTasks.length > 0 ? (
+            <span className={styles.pill}>{ds.bgTasks.length}</span>
           ) : null}
           <Lucide.ChevronDown
             size={14}
@@ -850,11 +788,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         </button>
         {openSec.bgTasks ? (
           <div className={styles.secB}>
-            {bgTasks.length === 0 ? (
+            {ds.bgTasks.length === 0 ? (
               <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
             ) : (
               <ul className={styles.list}>
-                {bgTasks.map((t) => {
+                {ds.bgTasks.map((t) => {
                   const opening = bgOpeningId === t.id;
                   const meta = formatBgTaskMeta({
                     state: t.state,
@@ -894,8 +832,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         >
           <Lucide.CalendarClock size={15} strokeWidth={1.75} aria-hidden />
           <span>计划任务</span>
-          {workflows.length + cronJobs.length > 0 ? (
-            <span className={styles.pill}>{workflows.length + cronJobs.length}</span>
+          {ds.workflows.length + cronJobs.length > 0 ? (
+            <span className={styles.pill}>{ds.workflows.length + cronJobs.length}</span>
           ) : null}
           <Lucide.ChevronDown
             size={14}
@@ -905,11 +843,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         </button>
         {openSec.cronJobs ? (
           <div className={styles.secB}>
-            {workflows.length === 0 && cronJobs.length === 0 ? (
+            {ds.workflows.length === 0 && cronJobs.length === 0 ? (
               <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
             ) : (
               <ul className={styles.list}>
-                {workflows.map((w) => {
+                {ds.workflows.map((w) => {
                   const enabled = w.enabled !== false;
                   return (
                     <li key={w.id}>

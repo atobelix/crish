@@ -75,6 +75,8 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   const removeCommandPermissionStore = useLayoutStore((s) => s.removeCommandPermission);
   const setCommandPermissions = useLayoutStore((s) => s.setCommandPermissions);
   const [newWhitelistCmd, setNewWhitelistCmd] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showAllPaths, setShowAllPaths] = useState(false);
 
   const permLabelId = useId();
   const wlInputId = useId();
@@ -94,13 +96,18 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       const workspacePath = getWorkspacePath();
       return workspacePath
         ? [workspacePath]
-        : listProjects()
-            .slice(0, 3)
-            .map((p) => p.path);
+        : listProjects().map((p) => p.path);
     } catch {
       return [] as string[];
     }
   }, []);
+
+  const visiblePaths = useMemo(() => {
+    if (workspacePaths.length <= 5 || showAllPaths) return workspacePaths;
+    return workspacePaths.slice(0, 5);
+  }, [workspacePaths, showAllPaths]);
+
+  const extraCount = workspacePaths.length - 5;
 
   const whitelist = useMemo(() => {
     const raw = commandPermissions || [];
@@ -131,7 +138,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       const cmd = sanitizeWhitelistEntry(source);
       if (!cmd) {
-        // 有输入却被规范掉：错误 toast；空输入静默
         if (source.trim()) onShowToast('无效命令');
         return;
       }
@@ -143,7 +149,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       const exists = whitelist.some(
         (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase(),
       );
-      if (exists) return; // 已存在：成功静默
+      if (exists) return;
       addCommandPermissionStore(cmd);
       if (!raw) setNewWhitelistCmd('');
     } catch (err) {
@@ -159,17 +165,10 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
-  const clearWhitelist = () => {
-    if (whitelist.length === 0) return;
-    const ok =
-      typeof window !== 'undefined' && typeof window.confirm === 'function'
-        ? window.confirm(
-            `确定清空全部 ${whitelist.length} 条白名单？\n仅影响本机审批快捷放行，无法撤销。`,
-          )
-        : true;
-    if (!ok) return;
+  const doClearWhitelist = () => {
     try {
       setCommandPermissions([]);
+      setShowClearConfirm(false);
     } catch (err) {
       onShowToast('清空失败：' + String(err));
     }
@@ -178,7 +177,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   const onPermissionChange = (v: string) => {
     try {
       const next = transitionPermissionMode(permissionMode, v);
-      // 已是目标模式：跳过写 store，避免无意义重置 planApproved
       if (next === permissionMode) return;
       setPermissionMode(next as PermissionMode);
     } catch (err) {
@@ -199,7 +197,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       PERMISSION_MODES.map((m) => ({
         value: m.id,
         label: m.label,
-        // 下拉副文案：一句人话，不塞引擎码
         hint: m.description,
       })),
     [],
@@ -227,16 +224,40 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       <SettingsSection title="工作区">
         <SettingsCard>
           {workspacePaths.length > 0 ? (
-            workspacePaths.map((path) => {
-              const leaf = pathLeaf(path);
-              return (
-                <SettingsRow
-                  key={path}
-                  title={<span className="settings-path-ellipsis" title={path}>{leaf}</span>}
-                  desc={<span className="settings-security-path">{path}</span>}
-                />
-              );
-            })
+            <>
+              {visiblePaths.map((path) => {
+                const leaf = pathLeaf(path);
+                return (
+                  <SettingsRow
+                    key={path}
+                    title={<span className="settings-path-ellipsis" title={path}>{leaf}</span>}
+                    desc={<span className="settings-security-path">{path}</span>}
+                  />
+                );
+              })}
+              {extraCount > 0 && !showAllPaths ? (
+                <div style={{ padding: '8px 20px' }}>
+                  <button
+                    type="button"
+                    className="settings-chip-btn"
+                    onClick={() => setShowAllPaths(true)}
+                  >
+                    +{extraCount} 更多
+                  </button>
+                </div>
+              ) : null}
+              {showAllPaths && extraCount > 0 ? (
+                <div style={{ padding: '8px 20px' }}>
+                  <button
+                    type="button"
+                    className="settings-chip-btn"
+                    onClick={() => setShowAllPaths(false)}
+                  >
+                    收起
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : (
             <SettingsRow
               title={<span className="settings-list-empty">未打开项目</span>}
@@ -295,17 +316,38 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   添加
                 </button>
               </Tooltip>
-              {whitelist.length > 0 ? (
+              {whitelist.length > 0 && !showClearConfirm ? (
                 <Tooltip content={`清空全部 ${whitelist.length} 条（需确认）`}>
                   <button
                     type="button"
                     className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
                     aria-label={`清空全部 ${whitelist.length} 条白名单`}
-                    onClick={clearWhitelist}
+                    onClick={() => setShowClearConfirm(true)}
                   >
                     清空
                   </button>
                 </Tooltip>
+              ) : null}
+              {showClearConfirm ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                    确定清除所有白名单命令？此操作不可撤销
+                  </span>
+                  <button
+                    type="button"
+                    className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                    onClick={doClearWhitelist}
+                  >
+                    确认
+                  </button>
+                  <button
+                    type="button"
+                    className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                    onClick={() => setShowClearConfirm(false)}
+                  >
+                    取消
+                  </button>
+                </div>
               ) : null}
             </div>
           </div>

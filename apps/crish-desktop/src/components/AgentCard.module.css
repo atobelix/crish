@@ -589,7 +589,7 @@
 }
 
 .agentCardComposer :global(.input-container) {
-  max-width: min(var(--chat-col-max, 680px), 100%);
+  max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto;
   background: var(
     --composer-shell-bg,

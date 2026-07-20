@@ -110,6 +110,37 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     fallbackId: string;
   } | null>(null);
   const [toolTick, setToolTick] = useState(0);
+  const [expandedMcpTools, setExpandedMcpTools] = useState<Set<string>>(new Set());
+
+  const toggleExpandMcpTools = useCallback((id: string) => {
+    setExpandedMcpTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const highlightMatch = useCallback(
+    (text: string): React.ReactNode => {
+      const q = query.trim().toLowerCase();
+      if (!q) return text;
+      const lower = text.toLowerCase();
+      if (!lower.includes(q)) return text;
+      const parts: React.ReactNode[] = [];
+      let cursor = 0;
+      let idx = lower.indexOf(q, cursor);
+      while (idx !== -1) {
+        if (idx > cursor) parts.push(text.slice(cursor, idx));
+        parts.push(<mark key={idx}>{text.slice(idx, idx + q.length)}</mark>);
+        cursor = idx + q.length;
+        idx = lower.indexOf(q, cursor);
+      }
+      if (cursor < text.length) parts.push(text.slice(cursor));
+      return parts;
+    },
+    [query],
+  );
 
   const [skills, setSkills] = useState<DesktopSkill[]>(() => loadSkillsCache());
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>(() => loadMcpServersCache());
@@ -515,11 +546,19 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
           )}
           {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
             <ul className="ext-inline-tool-preview">
-              {installedItem.mcpTools.slice(0, 12).map((t) => (
+              {installedItem.mcpTools.slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12).map((t) => (
                 <li key={t}>{t}</li>
               ))}
               {installedItem.mcpTools.length > 12 ? (
-                <li>…共 {installedItem.mcpTools.length} 个</li>
+                <li>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    onClick={() => toggleExpandMcpTools(installedItem!.id)}
+                  >
+                    {expandedMcpTools.has(installedItem.id) ? '收起' : `展开全部（${installedItem.mcpTools.length}）`}
+                  </button>
+                </li>
               ) : null}
             </ul>
           ) : null}
@@ -561,7 +600,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         )}
         {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
           <div className="ext-tool-list" role="list" aria-label="MCP 工具">
-            {installedItem.mcpTools.map((tool) => {
+            {installedItem.mcpTools.slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12).map((tool) => {
               void toolTick;
               const serverId = installedItem.mcpId || installedItem.id;
               const off = isMcpToolDisabled(serverId, tool);
@@ -592,6 +631,17 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                 </div>
               );
             })}
+            {installedItem.mcpTools.length > 12 ? (
+              <div style={{ padding: '4px 0' }}>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  onClick={() => toggleExpandMcpTools(installedItem!.id)}
+                >
+                  {expandedMcpTools.has(installedItem.id) ? '收起' : `展开全部（${installedItem.mcpTools.length}）`}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : installedItem ? (
           <div className={`ext-empty ${styles.emptyCompact}`} role="status">
@@ -786,7 +836,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                     <div className="ext-row-main">
                       <div className="ext-row-title-line">
                         <span className="ext-kind-badge">{kindLabel(item.kind)}</span>
-                        <span className="ext-row-name">{item.name}</span>
+                        <span className="ext-row-name">{highlightMatch(item.name)}</span>
                         <span className="ext-source-badge">
                           {item.source === 'official'
                             ? '官方'
@@ -795,7 +845,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                               : '本机'}
                         </span>
                       </div>
-                      <div className="ext-row-desc">{item.description}</div>
+                      <div className="ext-row-desc">{highlightMatch(item.description)}</div>
                     </div>
                     <div className="ext-row-actions">
                       <button
@@ -862,7 +912,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                     <div className="ext-row-main">
                       <div className="ext-row-title-line">
                         <span className="ext-kind-badge">{kindLabel(entry.kind)}</span>
-                        <span className="ext-row-name">{entry.name}</span>
+                        <span className="ext-row-name">{highlightMatch(entry.name)}</span>
                         <span className="ext-source-badge">
                           {entry.source === 'official' ? '官方' : '三方'}
                         </span>
@@ -870,7 +920,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                           <span className="ext-installed-mark">已装</span>
                         ) : null}
                       </div>
-                      <div className="ext-row-desc">{entry.description}</div>
+                      <div className="ext-row-desc">{highlightMatch(entry.description)}</div>
                     </div>
                     <div className="ext-row-actions">
                       <button

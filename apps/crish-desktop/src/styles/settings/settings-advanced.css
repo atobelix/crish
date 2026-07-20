@@ -3,7 +3,8 @@
 
 .settings-pane--shortcuts {
   gap: 16px;
-  max-width: min(680px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .settings-pane--shortcuts .settings-page-title {
@@ -163,7 +164,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 .settings-pane--security {
   gap: 16px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .settings-pane--security .settings-page-title {
@@ -325,7 +327,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 .settings-pane--rules {
   gap: 16px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .settings-pane--rules .settings-page-title {
@@ -507,7 +510,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .sched-settings.settings-pane--modern,
 .settings-pane--modern.sched-settings {
   gap: 14px;
-  max-width: min(720px, 100%);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
 }
 .sched-settings .settings-page-title {

@@ -69,24 +69,21 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
   return { l, c, h: h < 0 ? h + 360 : h };
 }
 
-/**
- * Dynamically computes a high-contrast readable foreground text color
- * based on the target background.
- * Guaranteed to satisfy a minimum APCA contrast or WCAG 4.5:1 ratio.
- */
 export function getContrastGuardedText(bgPrimaryColor: string, isDark?: boolean): string {
-  if (typeof isDark === 'boolean') {
-    return isDark ? 'hsl(0, 0%, 94%)' : 'hsl(35, 12%, 11%)';
-  }
-  
-  const oklch = parseColorToOklch(bgPrimaryColor);
-  
-  if (oklch.l > 0.55) {
-    // Light background: Return deep warm charcoal contrast (soft and highly readable)
+  try {
+    const oklch = parseColorToOklch(bgPrimaryColor, isDark);
+    if (oklch.l > 0.52) {
+      // Light background: Return deep warm charcoal contrast (soft and highly readable)
+      return 'hsl(35, 12%, 11%)';
+    } else {
+      // Dark background: Return bright soft-white contrast
+      return 'hsl(0, 0%, 94%)';
+    }
+  } catch (e) {
+    if (typeof isDark === 'boolean') {
+      return isDark ? 'hsl(0, 0%, 94%)' : 'hsl(35, 12%, 11%)';
+    }
     return 'hsl(35, 12%, 11%)';
-  } else {
-    // Dark background: Return bright soft-white contrast
-    return 'hsl(0, 0%, 94%)';
   }
 }
 
@@ -100,7 +97,9 @@ export function applyTextContrastGuard(bgPrimaryColor: string, isDark: boolean) 
   
   root.style.setProperty('--text-primary', textPrimary);
   
-  if (isDark) {
+  const isComputedDark = textPrimary === 'hsl(0, 0%, 94%)';
+  
+  if (isComputedDark) {
     root.style.setProperty('--text-secondary', 'hsl(0, 0%, 72%)');
     root.style.setProperty('--text-tertiary', 'hsl(0, 0%, 50%)');
   } else {
@@ -108,3 +107,4 @@ export function applyTextContrastGuard(bgPrimaryColor: string, isDark: boolean) 
     root.style.setProperty('--text-tertiary', 'hsl(35, 6%, 52%)');
   }
 }
+

@@ -21,19 +21,13 @@ import {
   selectSessionsById,
   useSessionField,
 } from '../store/sessionStore';
-import { buildAssistantTimeline } from '../api/toolPresentation';
-import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
-import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
-import { publishToolDiffs } from '../api/publishToolDiffs';
 import {
   getSubagentStatus,
-  sendToSubagent,
-  streamCollaboratorRun,
 } from '../api/subagentApi';
-import { getWorkspacePath } from '../api/projectStore';
 import { ComposerField } from './ChatComposer';
 import { ChatToolStack } from './ChatToolCallBlock';
 import { AgentTeamBoard } from './AgentTeamBoard';
+import { useAgentStream } from '../hooks/useAgentStream';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 
 /** 状态芯片文案（中文唯一来源） */
@@ -309,7 +303,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const activeSessionId = useSessionField(selectActiveSessionId);
   const panelAgentId = useSessionField(selectPanelAgentId);
   const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
-  const appendSessionAgentMessage = useLayoutStore((s) => s.appendSessionAgentMessage);
 
   const id = agentId ?? panelAgentId;
 
@@ -327,19 +320,26 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           .flatMap((s) => s.agents || [])
           .find((a) => a.id === id)
       : undefined);
+  const {
+    handleSend: hookHandleSend,
+    handleStop: hookHandleStop,
+    sending,
+    sendError,
+    setSendError,
+    incrementEpoch,
+  } = useAgentStream({
+    parentSessionId: parentId || '',
+    agentId: id || '',
+    isRunning: agent?.status === 'running',
+    subagentRunId: agent?.subagentRunId,
+  });
 
   const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   /** 切换 agent 时递增，强制 ComposerField 重挂载以 autoFocus + 清空草稿 */
   const [composerEpoch, setComposerEpoch] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const followUpCancelRef = useRef<null | (() => void)>(null);
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastAgentIdRef = useRef<string | null | undefined>(undefined);
-  /** 焦点代数：切换 agent 后丢弃旧 send finally 的 setSending */
-  const focusGenRef = useRef(0);
 
   const activeWorkspace = useLayoutStore((s) => s.workspaces[s.activeWorkspaceIndex]);
   const onOpenDiff = useCallback((diff: FileDiff) => {
@@ -362,28 +362,25 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 
   /** 侧栏 only：切换/回浏览一律清草稿 + 停本卡 follow-up 流，不串输入 */
   const resetComposerForFocusChange = useCallback(() => {
-    focusGenRef.current += 1;
-    followUpCancelRef.current?.();
-    followUpCancelRef.current = null;
+    incrementEpoch();
     setInput('');
     setSendError('');
-    setSending(false);
     setIsComposing(false);
     setComposerEpoch((n) => n + 1);
-  }, []);
+  }, [incrementEpoch]);
 
   // 侧栏切换子 agent 或回浏览列表：清草稿/错误/流，不串会话输入
+  const prevIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const prev = lastAgentIdRef.current;
-    // 首次挂载仅记录，不清（避免无故丢草稿）
+    const prev = prevIdRef.current;
     if (prev === undefined) {
-      lastAgentIdRef.current = id ?? null;
+      prevIdRef.current = id ?? null;
       return;
     }
     const next = id ?? null;
     if (prev !== next) {
       resetComposerForFocusChange();
-      lastAgentIdRef.current = next;
+      prevIdRef.current = next;
     }
   }, [id, resetComposerForFocusChange]);
 
@@ -429,12 +426,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     };
   }, [agent?.id, agent?.status, agent?.subagentRunId, sess?.id, patchSessionAgent]);
 
-  useEffect(() => {
-    return () => {
-      followUpCancelRef.current?.();
-    };
-  }, []);
-
   if (!agent || !sess) {
     return (
       <AgentBrowsePad
@@ -452,222 +443,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const durationLabel = formatAgentDuration(agent);
   const pendingApproval = countPendingApprovals(agent);
   const msgCount = (agent.messages || []).length;
-
-  const applyLocalUserMessage = (text: string) => {
-    appendSessionAgentMessage(parentSessId, agent.id, {
-      id: `agent-user-${Date.now().toString(36)}`,
-      sender: 'user',
-      text,
-      timestamp: Date.now(),
-      status: 'completed',
-    });
-  };
-
-  /** 运行中：steer；已结束：新 run 续聊（同 agent session 恢复历史） */
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || sending) return;
-    const gen = focusGenRef.current;
-    const boundAgentId = agent.id;
-    setSendError('');
-    setSending(true);
-    setInput('');
-
-    try {
-      // 切换焦点后勿再写旧 agent 的发送态
-      if (focusGenRef.current !== gen || lastAgentIdRef.current !== boundAgentId) return;
-      if (running && agent.subagentRunId) {
-        applyLocalUserMessage(text);
-        const res = await sendToSubagent(agent.subagentRunId, text);
-        if (focusGenRef.current !== gen || lastAgentIdRef.current !== boundAgentId) return;
-        if (!res.ok) {
-          setSendError(res.error || '发送失败');
-          // 若 run 已结束，降级为 follow-up run
-          if (/not|unknown|unsupported|活跃|active/i.test(res.error || '') || res.accepted === false) {
-            await startFollowUpRun(text);
-          }
-        } else if (res.accepted === false) {
-          setSendError('当前无法注入消息（可能已结束），改为新一轮续聊…');
-          await startFollowUpRun(text);
-        }
-      } else {
-        applyLocalUserMessage(text);
-        await startFollowUpRun(text);
-      }
-    } finally {
-      if (focusGenRef.current === gen) setSending(false);
-    }
-  };
-
-  const startFollowUpRun = (text: string): Promise<void> => {
-    return new Promise((resolve) => {
-      followUpCancelRef.current?.();
-      patchSessionAgent(parentSessId, agent.id, { status: 'running' });
-
-      // 用 subagent 自己的 session 续历史；若无独立 session 则用 agent.id
-      const agentSessionId = agent.id;
-      let asstId = `agent-asst-${Date.now().toString(36)}`;
-      let localRunId: string | null = null;
-
-      appendSessionAgentMessage(parentSessId, agent.id, {
-        id: asstId,
-        sender: 'assistant',
-        text: '',
-        thinking: '正在处理…',
-        timestamp: Date.now(),
-        status: 'processing',
-        toolCalls: [],
-        blocks: [],
-      });
-
-      const patchAsst = (fn: (m: SessionMessage) => void) => {
-        useLayoutStore.setState((state) => {
-          // 优先 O(1) sessionsById，与主对话/sessionIndex 一致
-          const s =
-            state.sessionsById[parentSessId] ||
-            state.sessions.find((x) => x.id === parentSessId);
-          const ag = s?.agents?.find((a) => a.id === agent.id);
-          const m = ag?.messages?.find((x) => x.id === asstId);
-          if (m) fn(m);
-        });
-      };
-
-      const cancel = streamCollaboratorRun(text, agentSessionId, {
-        onRunMeta: ({ runId }) => {
-          localRunId = runId;
-          patchSessionAgent(parentSessId, agent.id, {
-            subagentRunId: runId,
-            status: 'running',
-          });
-        },
-        onThought: (thought) => {
-          patchAsst((m) => {
-            m.thinking = thought;
-          });
-        },
-        onChunk: (chunk) => {
-          patchAsst((m) => {
-            m.text = chunk;
-            if (m.thinking === '正在处理…') m.thinking = '';
-          });
-        },
-        onToolStart: (toolId, name, args, explanation) => {
-          patchAsst((m) => {
-            if (!m.toolCalls) m.toolCalls = [];
-            if (!m.blocks) m.blocks = [];
-            if (!m.toolCalls.some((t) => t.id === toolId)) {
-              m.toolCalls.push({
-                id: toolId,
-                name,
-                arguments: args,
-                explanation,
-                status: 'running',
-              });
-              m.blocks.push({ type: 'tool_call', id: toolId });
-            }
-          });
-        },
-        onToolSuccess: (toolId, output, diffs) => {
-          let resolved: import('../store/layoutStore').FileDiff[] = [];
-          patchAsst((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (!tc) return;
-            const displayOut = sanitizeToolDisplayOutput(output || '');
-            resolved = resolveToolDiffs({
-              name: tc.name || '',
-              args: tc.arguments,
-              output: displayOut,
-              structuredDiffs: diffs,
-            });
-            tc.status = 'success';
-            tc.output = displayOut || output || '完成';
-            if (resolved.length) tc.diffs = resolved;
-          });
-          // 必须在 immer set 外推右侧变更，嵌套 set 会被丢弃
-          publishToolDiffs(resolved);
-        },
-        onToolError: (toolId, error) => {
-          patchAsst((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (tc) {
-              tc.status = 'error';
-              tc.output = sanitizeToolDisplayOutput(error || '') || error || '失败';
-            }
-          });
-        },
-        onToolPendingApproval: (toolId, name, args, explanation, approvalMeta) => {
-          patchAsst((m) => {
-            if (!m.toolCalls) m.toolCalls = [];
-            if (!m.blocks) m.blocks = [];
-            const existing = m.toolCalls.find((t) => t.id === toolId);
-            if (existing) {
-              existing.status = 'pending_approval';
-              existing.arguments = args || existing.arguments;
-              if (explanation) existing.explanation = explanation;
-              if (approvalMeta) existing.approvalMeta = approvalMeta;
-            } else {
-              m.toolCalls.push({
-                id: toolId,
-                name,
-                arguments: args,
-                explanation,
-                status: 'pending_approval',
-                ...(approvalMeta ? { approvalMeta } : {}),
-              });
-              if (!m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)) {
-                m.blocks.push({ type: 'tool_call', id: toolId });
-              }
-            }
-          });
-        },
-        onApprovalResolved: (toolId, decision) => {
-          patchAsst((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (!tc) return;
-            if (decision === 'allow') {
-              tc.status = 'running';
-              tc.output = '执行中…';
-            } else {
-              tc.status = 'error';
-              tc.output = '未获批准';
-            }
-          });
-        },
-        onSubagentEvent: () => {
-          /* 嵌套子 agent 暂不展开 */
-        },
-        onComplete: () => {
-          patchAsst((m) => {
-            m.status = 'completed';
-            if (m.thinking === '正在处理…') m.thinking = '';
-          });
-          patchSessionAgent(parentSessId, agent.id, {
-            status: 'completed',
-            endedAt: Date.now(),
-            ...(localRunId ? { subagentRunId: localRunId } : {}),
-          });
-          followUpCancelRef.current = null;
-          resolve();
-        },
-      });
-
-      followUpCancelRef.current = cancel;
-      void getWorkspacePath(); // 确保 cwd 已由主会话设定
-    });
-  };
-
-  const handleStop = () => {
-    followUpCancelRef.current?.();
-    followUpCancelRef.current = null;
-    if (agent.subagentRunId) {
-      void getDesktopCancel(agent.subagentRunId);
-    }
-    patchSessionAgent(parentSessId, agent.id, {
-      status: 'stopped',
-      summary: agent.summary || '已停止',
-      endedAt: Date.now(),
-    });
-  };
 
   const siblingAgents = sess.agents || [];
   const regionLabel = `${titleName} · ${STATUS_LABEL[agent.status]}`;
@@ -696,7 +471,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
               onClick={() => {
                 // 先本地清草稿，再 browse（store 异步时仍不串输入）
                 resetComposerForFocusChange();
-                lastAgentIdRef.current = null;
                 browseAgentSidePanel({ sessionId: parentSessId });
               }}
             >
@@ -745,7 +519,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
               className={`${styles.agentCardBtn} ${styles.agentCardBtnDanger}`}
               title="停止子智能体"
               aria-label="停止子智能体"
-              onClick={handleStop}
+              onClick={() => hookHandleStop(agent.summary)}
             >
               <Lucide.Square size={12} fill="currentColor" aria-hidden />
             </button>
@@ -778,7 +552,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             // 切换即清草稿（TeamBoard 已跳过 active 重选）；再开侧栏 only
             if (nextId === agent.id) return;
             resetComposerForFocusChange();
-            lastAgentIdRef.current = nextId;
             openAgentInSidePanel(nextId, { sessionId: parentSessId });
           }}
         />
@@ -854,14 +627,18 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           value={input}
           onChange={setInput}
           onSend={() => {
-            void handleSend();
+            const text = input.trim();
+            if (text) {
+              setInput('');
+              void hookHandleSend(text);
+            }
           }}
           canSend={canSend}
           disabled={sending}
           isComposing={isComposing}
           setIsComposing={setIsComposing}
           isProcessing={running}
-          onStop={handleStop}
+          onStop={() => hookHandleStop(agent.summary)}
           processingSendLabel="发送"
           placeholder={running ? '补充指示…' : '继续对话…'}
           ariaLabel={running ? '向子智能体补充指示' : '继续与子智能体对话'}
@@ -875,16 +652,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 });
 
 AgentCard.displayName = 'AgentCard';
-
-async function getDesktopCancel(runId: string): Promise<void> {
-  try {
-    const { getDesktopDaemonClient } = await import('../api/daemonClient');
-    const client = getDesktopDaemonClient();
-    await client.send({ type: 'cancel-run', runId });
-  } catch {
-    /* ignore */
-  }
-}
 
 function AgentMessageRow({
   msg,

@@ -77,6 +77,7 @@ import {
   isEmptyShellSession,
 } from '../api/sessionTitle';
 import { isFirstRunOverlayOpen } from './FirstRunWizard';
+import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 
 interface ChatCardProps {
   wsId: string;
@@ -251,8 +252,19 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   /** /goal 目标模式进行中时展示停止 */
   const goalModeActive = Boolean(goalMode?.active);
 
-  // 切换会话时收起过滤 / 审批忙 / 水合超时 / 剪枝旁注，避免串会话
+  // 切换会话时保存当前附件到 registry，恢复目标会话附件，并收起过滤 / 审批忙 / 水合超时 / 剪枝旁注，避免串会话
   useEffect(() => {
+    const prevId = prevSessionIdRef.current;
+    if (prevId && prevId !== activeSessionId) {
+      sessionRuntimeRegistry.save(prevId, { attachments: attachments as any });
+    }
+    prevSessionIdRef.current = activeSessionId || '';
+    if (activeSessionId) {
+      const restored = sessionRuntimeRegistry.get(activeSessionId).attachments ?? [];
+      setAttachments(restored as ChatAttachment[]);
+    } else {
+      setAttachments([]);
+    }
     setLocalMsgFilter('');
     setShowMsgFilter(false);
     setApprovalBusy(false);
@@ -346,7 +358,13 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   const planApproved = useLayoutStore((s) => s.planApproved);
   const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
   const inPlanMode = permissionMode === 'plan' || planModeEnabled;
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const prevSessionIdRef = useRef(activeSessionId);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>(() => {
+    if (activeSessionId) {
+      return (sessionRuntimeRegistry.get(activeSessionId).attachments ?? []) as ChatAttachment[];
+    }
+    return [];
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addAttachments = useCallback((items: ChatAttachment[]) => {

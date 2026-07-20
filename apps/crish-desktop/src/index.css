@@ -17,3 +17,6 @@
 @import './styles/settings/settings-advanced.css';
 @import './styles/panels.css';
 @import './styles/theme-dark.css';
+@import './styles/focus-visible.css' layer(base);
+@import './styles/reduced-motion.css' layer(base);
+@import './styles/sr-only.css' layer(base);

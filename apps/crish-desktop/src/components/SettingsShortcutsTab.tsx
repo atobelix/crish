@@ -3,6 +3,7 @@
  */
 import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import styles from './SettingsShortcutsTab.module.css';
+import { clientApi } from '../api/clientApi';
 import {
   SettingsPage,
   SettingsSection,
@@ -174,6 +175,11 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         setCustomShortcuts(updated);
+        try {
+          clientApi.saveSettingsEx('__global__', 'global', {
+            shortcuts: updated,
+          } as any).catch(() => {});
+        } catch {}
         return true;
       } catch {
         onShowToast('保存失败：无法写入快捷键');
@@ -204,6 +210,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
   useEffect(() => {
     if (!recordingShortcutId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') return;
       e.preventDefault();
       e.stopPropagation();
 

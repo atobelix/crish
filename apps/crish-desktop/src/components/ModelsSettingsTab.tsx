@@ -50,6 +50,11 @@ type Props = {
   onShowToast?: (msg: string) => void;
 };
 
+const DEFAULT_PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+};
+
 const PRESETS: {
   id: string;
   name: string;
@@ -361,6 +366,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
 
+  /** 内联删除确认 */
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const selected = useMemo(
     () => profiles.find((p) => p.id === selectedId) || null,
     [profiles, selectedId],
@@ -399,6 +407,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       setAddDraft(emptyAddDraft());
       setEditingName(false);
       setNameDraft('');
+      setConfirmDeleteId(null);
     }
   }, [selectedId]);
 
@@ -427,10 +436,15 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         e.preventDefault();
         return;
       }
+      if (confirmDeleteId) {
+        setConfirmDeleteId(null);
+        e.preventDefault();
+        return;
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addOpen, configOpenId, manualOpen, modelFilter]);
+  }, [addOpen, configOpenId, manualOpen, modelFilter, confirmDeleteId]);
 
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
@@ -443,8 +457,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const addFromTemplate = (format: 'openai' | 'anthropic') => {
     const p = createCustomProfile({
       name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
-      baseUrl:
-        format === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1',
+      baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
       models: [],
     });
     refresh();
@@ -881,20 +894,56 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   </button>
 
                   {selected.id.startsWith('custom-') && (
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
-                      title={`删除「${selectedLabel}」`}
-                      onClick={() => {
-                        if (!window.confirm(`确定删除服务商「${selectedLabel}」？此操作不可撤销。`)) return;
-                        const next = removeProfile(selected.id);
-                        setProfiles(next);
-                        setSelectedId(next[0]?.id || null);
-                      }}
-                    >
-                      <Lucide.Trash2 size={14} />
-                    </button>
+                    <div style={{ position: 'relative' }}>
+                      {confirmDeleteId === selected.id ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: '8px',
+                            padding: '4px 8px',
+                            whiteSpace: 'nowrap',
+                            zIndex: 10,
+                          }}
+                        >
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>确定删除？</span>
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                            style={{ height: '24px', padding: '0 8px', fontSize: '11px', borderRadius: '5px' }}
+                            onClick={() => {
+                              const next = removeProfile(selected.id);
+                              setProfiles(next);
+                              setSelectedId(next[0]?.id || null);
+                              setConfirmDeleteId(null);
+                            }}
+                          >
+                            确认
+                          </button>
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            style={{ height: '24px', padding: '0 8px', fontSize: '11px', borderRadius: '5px' }}
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
+                          title={`删除「${selectedLabel}」`}
+                          onClick={() => setConfirmDeleteId(selected.id)}
+                        >
+                          <Lucide.Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

@@ -308,30 +308,35 @@ export const SettingsRulesTab: React.FC<Props> = ({
       const lines = dedupeRuleLines(textToRuleLines(editorText));
       const saved = await persistCustomRules(lines);
       if (!saved) return;
-      if (isGlobal) {
-        await syncEngineQuiet({
-          globalText:
-            saved.length > 0
-              ? rulesLinesToText(saved, '# 全局规则')
-              : EMPTY_GLOBAL_TEMPLATE,
-        });
-      } else {
-        // 项目：推送全局现状 + 本项目全文
-        let globalText = EMPTY_GLOBAL_TEMPLATE;
-        try {
-          const g = await clientApi.getSettingsEx('__global__');
-          const gl = dedupeRuleLines(normalizeCustomRules(g.customRules));
-          globalText =
-            gl.length > 0 ? rulesLinesToText(gl, '# 全局规则') : EMPTY_GLOBAL_TEMPLATE;
-        } catch {
-          /* keep empty template */
-        }
-        await syncEngineQuiet({
-          globalText,
-          projectText: editorText,
-        });
-      }
       setEditingOpen(false);
+      // 异步同步到引擎（独立步骤，不阻塞 UI）
+      const syncResult = isGlobal
+        ? await syncRulesToDaemon({
+            globalText:
+              saved.length > 0
+                ? rulesLinesToText(saved, '# 全局规则')
+                : EMPTY_GLOBAL_TEMPLATE,
+          })
+        : await (async () => {
+            let globalText = EMPTY_GLOBAL_TEMPLATE;
+            try {
+              const g = await clientApi.getSettingsEx('__global__');
+              const gl = dedupeRuleLines(normalizeCustomRules(g.customRules));
+              globalText =
+                gl.length > 0 ? rulesLinesToText(gl, '# 全局规则') : EMPTY_GLOBAL_TEMPLATE;
+            } catch {
+              /* keep empty template */
+            }
+            return syncRulesToDaemon({
+              globalText,
+              projectText: editorText,
+            });
+          })();
+      if (!syncResult.daemonSynced) {
+        onShowToast('规则已保存到本机，同步到引擎失败');
+      } else if (syncResult.truncated) {
+        onShowToast('规则较长，引擎侧已截断');
+      }
     } finally {
       setSaving(false);
     }

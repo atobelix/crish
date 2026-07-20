@@ -1,5 +1,5 @@
 /**
- * 设置 / 权限 UI facade：当前代理到 useLayoutStore（同一 immer store）。
+ * 设置 / 权限 UI facade：当前代理 to useLayoutStore（同一 immer store）。
  *
  * 覆盖设置浮层、设置 tab、permissionMode、planMode 及 openSettings 等。
  * 新代码可从本文件取设置 UI 相关状态；未来 multi-store 时只改本文件。
@@ -64,7 +64,6 @@ export const selectPlanModeEnabled = (s: Pick<SettingsUiSlice, 'planModeEnabled'
 export const selectPlanApproved = (s: Pick<SettingsUiSlice, 'planApproved'>) =>
   s.planApproved;
 
-/** openSettings action（打开浮层，可选切 tab） */
 export const selectOpenSettings = (s: Pick<SettingsUiActions, 'openSettings'>) =>
   s.openSettings;
 
@@ -133,7 +132,6 @@ export function getSettingsUiState(): SettingsUiFacade {
   return useSettingsUiStore.getState() as unknown as SettingsUiFacade;
 }
 
-/** 当前权限模式（bridge / stream 热路径；与 storeAccess.getPermissionMode 同源） */
 export function getPermissionMode(): PermissionMode {
   return getSettingsUiState().permissionMode;
 }
@@ -146,7 +144,6 @@ export function closeSettings(): void {
   getSettingsUiState().setShowSettingsOverlay(false);
 }
 
-/** 切换设置浮层显隐（快捷键 Ctrl/, 等） */
 export function toggleSettingsOverlay(): void {
   const s = getSettingsUiState();
   s.setShowSettingsOverlay(!s.showSettingsOverlay);
@@ -170,4 +167,16 @@ export function setPlanModeEnabled(enabled: boolean): void {
 
 export function setPlanApproved(approved: boolean): void {
   getSettingsUiState().setPlanApproved(approved);
+}
+
+export function addCommandPermission(cmd: string): void {
+  getSettingsUiState().addCommandPermission(cmd);
+}
+
+export function removeCommandPermission(cmd: string): void {
+  getSettingsUiState().removeCommandPermission(cmd);
+}
+
+export function setCommandPermissions(list: string[]): void {
+  getSettingsUiState().setCommandPermissions(list);
 }

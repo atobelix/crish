@@ -259,9 +259,16 @@ html[data-theme="light"] {
   /*
    * 主对话居中列：消息 / 空态 / footer 子项 / 审批条共用
    * 宽屏可在 media 里抬到 --chat-col-max-wide
+   * 680 → 760：利用宽屏可用空间，减少两侧大片留白
    */
-  --chat-col-max: 680px;
-  --chat-col-max-wide: 720px;
+  --chat-col-max: 760px;
+  --chat-col-max-wide: 840px;
+
+  /*
+   * 设置内容区最大宽度：统一来源，禁止各 CSS 文件散落 680 / 720px 硬编码。
+   * coverContent 拉伸填满时，settingsUiPage 用此值居中并限最大宽。
+   */
+  --settings-content-max: 720px;
   /* footer 顶缘淡入：与 .chat-footer / .agent-card-composer 同渐变 */
   --chat-footer-fade: linear-gradient(
     to bottom,

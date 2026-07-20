@@ -42,6 +42,9 @@ import {
   reindexSessionsById,
   type SessionsIndexed,
 } from './sessionIndex';
+import { validateStatusTransition } from '../utils/StatusTransitionGuard';
+import { messageSnapshots } from '../api/MessageSnapshots';
+import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 
 /** 手动 rename / 分叉标题码点上限（略宽于侧栏自动标题 28） */
 const MANUAL_SESSION_TITLE_MAX_LEN = 48;
@@ -141,8 +144,9 @@ export interface SessionActions {
   setSessionMessageStatus: (
     sessionId: string,
     messageId: string,
-    status: 'queued' | 'processing' | 'completed',
+    status: any,
     thinkingTime?: number,
+    opts?: { force?: boolean }
   ) => void;
   /** 固定消息（会话级 id 列表） */
   pinMessage: (sessionId: string, messageId: string) => void;
@@ -396,6 +400,15 @@ export function createSessionActions<T extends SessionStoreSlice>(
       if (sess?.messages) {
         const idx = sess.messages.findIndex((m) => m.id === messageId);
         if (idx !== -1) {
+          messageSnapshots.save(sessionId, {
+            sessionId,
+            operation: 'withdraw',
+            messages: [...sess.messages],
+            pinnedMessageIds: sess.pinnedMessageIds ? [...sess.pinnedMessageIds] : undefined,
+            diffFilePaths: [],
+            timestamp: Date.now(),
+            description: '撤回消息',
+          });
           sess.messages = sess.messages.slice(0, idx);
           // 截断后清理已不存在的固定 id
           if (sess.pinnedMessageIds?.length) {
@@ -557,7 +570,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
       // 不对齐 id 时不猜「最近 running」，避免写错行
     }),
 
-    setSessionMessageStatus: (sessionId, messageId, status, thinkingTime) => set((state) => {
+    setSessionMessageStatus: (sessionId, messageId, status, thinkingTime, opts) => set((state) => {
       const hit = getSessionMessage(state, sessionId, messageId);
       if (!hit) return;
       // status / thinkingTime 均无变化时不改 draft
@@ -565,6 +578,13 @@ export function createSessionActions<T extends SessionStoreSlice>(
         hit.message.status === status &&
         (thinkingTime === undefined || hit.message.thinkingTime === thinkingTime)
       ) {
+        return;
+      }
+      // 状态转换合法性校验
+      try {
+        validateStatusTransition(hit.message.status || '', status, opts?.force);
+      } catch (e) {
+        console.warn('[StatusTransition] 消息状态非法转换:', (e as Error).message);
         return;
       }
       hit.message.status = status;
@@ -886,6 +906,10 @@ export function createSessionActions<T extends SessionStoreSlice>(
           }),
         );
       });
+      if (removed) {
+        sessionRuntimeRegistry.remove(id);
+        messageSnapshots.clearSession(id);
+      }
       return removed;
     },
 

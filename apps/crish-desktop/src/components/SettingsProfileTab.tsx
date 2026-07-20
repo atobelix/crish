@@ -10,6 +10,7 @@ import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { getWorkspacePath } from '../api/projectStore';
 import { loadMirrorMeta } from '../api/sessionDiskMirror';
 import { networkUserMessage } from '../api/userFacingErrors';
+import { toastBus } from '../services/ToastBus';
 import {
   SettingsPage,
   SettingsSection,
@@ -86,7 +87,11 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      // 浏览器下载即反馈；成功不 toast
+      try {
+        toastBus.success('导出成功');
+      } catch {
+        console.log('导出成功');
+      }
     } catch (err) {
       onShowToast('导出失败：' + String(err));
     } finally {
@@ -123,7 +128,11 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             'global',
             parsed as Parameters<typeof clientApi.saveSettingsEx>[2],
           );
-          // 成功静默
+          try {
+            toastBus.success('导入成功');
+          } catch {
+            console.log('导入成功');
+          }
         } catch (err) {
           onShowToast('导入失败：' + String(err));
         } finally {
