@@ -1,6 +1,8 @@
 import React, {
+  createContext,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -14,7 +16,7 @@ import {
   partitionSidebarSessions,
 } from '../../store/sessionIndex';
 import { GENERAL_FOLDER, openProject, type ProjectEntry } from '../../api/projectStore';
-import { createSession } from '../../api/storeAccess';
+import { createSession, getSessionStoreState } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,
@@ -59,6 +61,42 @@ function dedupeSessionsById(list: SessionState[]): SessionState[] {
   }
   return out;
 }
+
+/**
+ * NowTickContext – 时间刻度上下文。
+ * 只有订阅了这个 Context 的局部 <SessionRowTime> 会因 tick 重渲染，
+ * 而父级 SessionRow (经 memo) 不会被 tick 无效化。
+ */
+const NowTickContext = createContext<number>(Date.now());
+
+/** 専门给时间显示的小组件，订阅 NowTickContext，论误不会拖带整行重渲染 */
+const SessionRowTime = memo(function SessionRowTime({
+  s,
+  className,
+}: {
+  s: SessionState;
+  className: string;
+}) {
+  const nowTick = useContext(NowTickContext);
+  const timeLabel = formatSessionListTime(s, nowTick);
+  const timeAbsolute = formatSessionListAbsoluteTime(s, nowTick);
+  const activityMs = sessionLastActivityMs(s);
+  const timeDateTime = activityMs > 0 ? new Date(activityMs).toISOString() : undefined;
+  if (!timeLabel) return null;
+  return (
+    <Tooltip content={timeAbsolute || timeLabel}>
+      <time
+        className={className}
+        dateTime={timeDateTime}
+        aria-hidden
+        data-session-time={timeLabel}
+        data-session-time-abs={timeAbsolute || undefined}
+      >
+        {timeLabel}
+      </time>
+    </Tooltip>
+  );
+});
 
 /** 从行元素合成右键坐标（键盘菜单 / 更多按钮） */
 function syntheticContextMenuEvent(
@@ -227,7 +265,6 @@ function useSessionListWindow(
 type SessionRowProps = {
   s: SessionState;
   activeSessionId: string;
-  nowTick: number;
   searchQuery: string;
   searchHit?: SessionSearchMatch;
   isDraggingThis: boolean;
@@ -255,7 +292,6 @@ type SessionRowProps = {
 const SessionRow = memo(function SessionRow({
   s,
   activeSessionId,
-  nowTick,
   searchQuery,
   searchHit,
   isDraggingThis,
@@ -280,13 +316,6 @@ const SessionRow = memo(function SessionRow({
     : baseTitle;
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
-  // 相对时间由 nowTick 重算；title 用绝对时间，避免只看见「刚刚」却无法核对真实时刻
-  const timeLabel = formatSessionListTime(s, nowTick);
-  const timeAbsolute = formatSessionListAbsoluteTime(s, nowTick);
-  // machine-readable：供 <time dateTime>；坏字面量/无效活动不写伪 ISO
-  const activityMs = sessionLastActivityMs(s);
-  const timeDateTime =
-    activityMs > 0 ? new Date(activityMs).toISOString() : undefined;
   const snippet = searchHit?.snippet;
   const q = searchQuery.trim();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -320,9 +349,7 @@ const SessionRow = memo(function SessionRow({
         aria-label={
           isRunning
             ? `${displayText}，处理中`
-            : timeAbsolute
-              ? `${displayText}，${timeAbsolute}`
-              : displayText
+            : displayText
         }
         // 活动行可聚焦；其余 -1，靠 ↑↓ 漫游（避免 Tab 扫过整表）
         tabIndex={sessionActive ? 0 : -1}
@@ -416,20 +443,8 @@ const SessionRow = memo(function SessionRow({
                 </Tooltip>
               ) : (
                 <>
-                  {/* 相对时间：nowTick 驱动；空标签不占位；<time> 带 ISO 便于无障碍/抓取 */}
-                  {timeLabel ? (
-                    <Tooltip content={timeAbsolute || timeLabel}>
-                      <time
-                        className={styles.sessionTime}
-                        dateTime={timeDateTime}
-                        aria-hidden
-                        data-session-time={timeLabel}
-                        data-session-time-abs={timeAbsolute || undefined}
-                      >
-                        {timeLabel}
-                      </time>
-                    </Tooltip>
-                  ) : null}
+                  {/* 相对时间：由 NowTickContext 驱动，只有本元素因 tick 重渲染 */}
+                  <SessionRowTime s={s} className={styles.sessionTime} />
                   <Tooltip content="更多操作">
                     <button
                       type="button"
@@ -571,7 +586,7 @@ function measureSessionRowHeight(
  * - 子 agent 不嵌套展示
  * - Phase 2：Pretext 精确测量长标题行高
  */
-export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
+const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   sessions,
   activeSessionId,
   searchQuery,
@@ -687,7 +702,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   // 进入重命名时同步草稿并聚焦
   useEffect(() => {
     if (!renamingSessionId) return;
-    const s = sessions.find((x) => x.id === renamingSessionId);
+    const s = getSessionStoreState().sessionsById[renamingSessionId];
     setRenameDraft(s ? sessionListDisplayTitle(s) : '');
     requestAnimationFrame(() => {
       renameInputRef.current?.focus();
@@ -1040,7 +1055,6 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
           key={s.id}
           s={s}
           activeSessionId={activeSessionId}
-          nowTick={nowTick}
           rowHeight={rh}
           searchQuery={searchQuery}
           searchHit={searchHits.get(s.id)}
@@ -1065,7 +1079,6 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     },
     [
       activeSessionId,
-      nowTick,
       searchQuery,
       searchHits,
       activeDragItem,
@@ -1088,6 +1101,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   const showProjectsAndGeneral = filterType !== 'pinned';
 
   return (
+    <NowTickContext.Provider value={nowTick}>
     <div
       ref={sessionListRef}
       className={styles.listScroll}
@@ -1419,5 +1433,9 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         </section>
       ) : null}
     </div>
+    </NowTickContext.Provider>
   );
 };
+
+export const SidebarSessionList = memo(_SidebarSessionList);
+
