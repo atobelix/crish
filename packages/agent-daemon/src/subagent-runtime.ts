@@ -91,7 +91,9 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         prompt: { type: "string", description: "Self-contained task prompt for the child agent." },
         description: { type: "string", description: "Short human-readable task label." },
         mode: { type: "string", enum: ["research", "implement", "verify"] },
-        forkPolicy: { type: "string", enum: ["task-only", "summary", "full"] }
+        forkPolicy: { type: "string", enum: ["task-only", "summary", "full"] },
+        taskId: { type: "string", description: "Optional stable identifier to resume a sub-agent task across turns." },
+        task_id: { type: "string", description: "Alias for taskId." }
       },
       required: ["prompt"],
       additionalProperties: false
@@ -112,8 +114,23 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       const description = stringField(input, "description") ?? prompt.slice(0, 120);
       const mode = subagentMode(input);
       const forkPolicy = forkPolicyField(input) ?? "summary";
+      const taskId = stringField(input, "taskId") || stringField(input, "task_id");
+      
       const subagentRunId = createId("subrun");
-      const subagentId = createId("subsession");
+      
+      // If taskId/task_id is provided, resolve deterministic subagentId to enable task resumption
+      let subagentId: string;
+      if (taskId) {
+        const crypto = require("node:crypto");
+        const hash = crypto.createHash("sha256")
+          .update(`${options.parentSessionId}::${taskId}`)
+          .digest("hex")
+          .slice(0, 16);
+        subagentId = `subsess-${hash}`;
+      } else {
+        subagentId = createId("subsession");
+      }
+
       const contextPack = buildSubagentContextPack({
         forkPolicy,
         mode,
@@ -145,8 +162,6 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       const emitBridge = (update: DaemonSubagentBridgeUpdate): void => {
         context.emit({ json: update as unknown as JsonValue });
       };
-
-      emitBridge({ ...base, phase: "started" });
 
       const handle = await options.startRun({
         id: subagentRunId,
@@ -186,23 +201,30 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         turns: 0
       };
 
+      let started = false;
+      let summary = "";
       try {
+        emitBridge({ ...base, phase: "started" });
+        started = true;
         await consumeSubagentEvents(handle.events, base, emitBridge, state);
       } catch (cause) {
         state.status = "failed";
         state.error = cause instanceof Error ? cause.message : String(cause);
       } finally {
         context.signal.removeEventListener("abort", onAbort);
+        if (started) {
+          try {
+            summary = buildCompletionSummary(description, mode, state);
+            emitBridge({
+              ...base,
+              phase: "ended",
+              status: state.status,
+              summary,
+              ...(state.error ? { error: state.error } : {})
+            });
+          } catch { /* ignore */ }
+        }
       }
-
-      const summary = buildCompletionSummary(description, mode, state);
-      emitBridge({
-        ...base,
-        phase: "ended",
-        status: state.status,
-        summary,
-        ...(state.error ? { error: state.error } : {})
-      });
 
       return {
         text: state.finalText || summary,

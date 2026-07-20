@@ -311,7 +311,7 @@ export class DesktopDaemonClient {
     if (!isTauriShell() && !isProductShell()) {
       const ep = await tryInvokeTauri<{ available?: boolean }>('workbench_daemon_endpoint');
       if (!ep) {
-        this.lastError = new Error('workbench_daemon_endpoint unavailable (not in Tauri shell?)');
+        this.lastError = new Error('Daemon sidecar unavailable in browser dev mode');
         return;
       }
     }
@@ -319,7 +319,9 @@ export class DesktopDaemonClient {
     if (result.status !== 'ok') {
       const msg = result.status === 'error' ? result.message : 'restart command missing';
       this.lastError = new Error(`Sidecar restart failed: ${msg}`);
-      console.warn('[DesktopDaemonClient]', this.lastError.message);
+      if (isTauriShell() || isProductShell()) {
+        console.warn('[DesktopDaemonClient]', this.lastError.message);
+      }
       return;
     }
     // 轮询等待 sidecar 就绪：15 × 200ms = 3s（Windows 冷启动通常 1-2s）
@@ -446,10 +448,17 @@ export class DesktopDaemonClient {
     if (this.reconnectTimer) return;
 
     this.reconnectAttempt += 1;
-    const delay = Math.min(
-      RECONNECT_MAX_MS,
-      RECONNECT_BASE_MS * 2 ** Math.min(this.reconnectAttempt - 1, 5),
+    
+    // 渐进式指数退避 + 随机抖动 (Jittered Exponential Backoff)
+    // 初始快速尝试，随着重试次数增加，最大间隔拉大到 5 分钟，防止长任务断线大面积惊群效应
+    const exponent = Math.min(this.reconnectAttempt - 1, 12);
+    const baseDelay = Math.min(
+      300_000, // 5 分钟上限
+      RECONNECT_BASE_MS * Math.pow(1.8, exponent)
     );
+    const jitter = Math.random() * 1000;
+    const delay = baseDelay + jitter;
+
     this.setState('reconnecting', this.lastError ?? undefined);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -475,7 +484,19 @@ export class DesktopDaemonClient {
   private startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatMisses = 0;
+    let lastHeartbeatTime = Date.now();
+
     this.heartbeatTimer = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - lastHeartbeatTime;
+      lastHeartbeatTime = now;
+
+      // 自动识别系统休眠唤醒 / Event Loop 严重挂起状态 (时间差大于预期 2.5 倍)
+      if (elapsed > HEARTBEAT_MS * 2.5) {
+        console.warn(`[DesktopDaemonClient] 心跳间隔异常大 (${elapsed}ms)，判定为系统休眠恢复或主线程严重阻塞，重置心跳未命中计数。`);
+        this.heartbeatMisses = 0;
+      }
+
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({ type: 'ping' }));
         this.heartbeatMisses = 0;
