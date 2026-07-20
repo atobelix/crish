@@ -53,6 +53,7 @@ import { detectFileKind } from '../api/workspaceFsApi';
 import { fileExtColor } from '../api/codeHighlight';
 import type { CronJob } from '../api/clientApi';
 import { useDaemonState } from '../hooks/useDaemonState';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   wsId: string;
@@ -142,6 +143,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   const [gitErr, setGitErr] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   // ── States and subscriptions migrated from RuntimePanel ──────────────────────
   const cronJobs = useLayoutStore((state) => state.scheduledTasks);
@@ -440,6 +442,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     };
   }, [refreshGit]);
 
+  // 切项目或折叠改动区时重置为默认折叠 (最多展示 8 项)
+  useEffect(() => {
+    setShowAllFiles(false);
+  }, [openSec.files]);
+
   const toggle = (k: SecKey) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
   const openGitFile = async (f: GitStatusFile) => {
@@ -527,34 +534,35 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
       ) : null}
 
       {goalMode || progress.total > 0 ? (
-        <button
-          type="button"
-          className={`${styles.liveRow} ${styles['liveRow--goal']}`}
-          title={goalMode?.goal || '活动任务与进度'}
-          aria-label={
-            goalMode
-              ? `目标：${agentOneLineLabel(goalMode.goal, '目标')}`
-              : `清单 ${progress.done}/${progress.total}`
-          }
-          onClick={() => setOpenSec((prev) => ({ ...prev, activeTasks: true }))}
-        >
-          <Lucide.Target
-            size={14}
-            strokeWidth={1.75}
-            className={styles.liveIco}
-            aria-hidden
-          />
-          <span className={styles.itemName}>
-            {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
-          </span>
-          <em>
-            {progress.total > 0
-              ? `${progress.done}/${progress.total}`
-              : goalMode
-                ? `第 ${(goalMode.iteration ?? 0) + 1} 轮`
-                : ''}
-          </em>
-        </button>
+        <Tooltip content={goalMode?.goal || '活动任务与进度'}>
+          <button
+            type="button"
+            className={`${styles.liveRow} ${styles['liveRow--goal']}`}
+            aria-label={
+              goalMode
+                ? `目标：${agentOneLineLabel(goalMode.goal, '目标')}`
+                : `清单 ${progress.done}/${progress.total}`
+            }
+            onClick={() => setOpenSec((prev) => ({ ...prev, activeTasks: true }))}
+          >
+            <Lucide.Target
+              size={14}
+              strokeWidth={1.75}
+              className={styles.liveIco}
+              aria-hidden
+            />
+            <span className={styles.itemName}>
+              {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
+            </span>
+            <em>
+              {progress.total > 0
+                ? `${progress.done}/${progress.total}`
+                : goalMode
+                  ? `第 ${(goalMode.iteration ?? 0) + 1} 轮`
+                  : ''}
+            </em>
+          </button>
+        </Tooltip>
       ) : null}
 
       {liveTool ? (
@@ -603,26 +611,27 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                   const st = agentStatusLabel(a.status);
                   return (
                     <li key={a.id}>
-                      <button
-                        type="button"
-                        className={`${styles.itemBtn} ${styles['itemBtn--agent']}`}
-                        title={name}
-                        aria-label={`${name}，${st}`}
-                        onClick={() => {
-                          openAgentInSidePanel(a.id, {
-                            sessionId: activeSessionId || undefined,
-                          });
-                        }}
-                      >
-                        <span
-                          className={`${styles.dot} ${a.status === 'running' ? styles.live : ''}`}
-                          aria-hidden="true"
-                        />
-                        <span className={styles.itemMain}>
-                          <span className={styles.itemName}>{name}</span>
-                          <em>{st}</em>
-                        </span>
-                      </button>
+                      <Tooltip content={name}>
+                        <button
+                          type="button"
+                          className={`${styles.itemBtn} ${styles['itemBtn--agent']}`}
+                          aria-label={`${name}，${st}`}
+                          onClick={() => {
+                            openAgentInSidePanel(a.id, {
+                              sessionId: activeSessionId || undefined,
+                            });
+                          }}
+                        >
+                          <span
+                            className={`${styles.dot} ${a.status === 'running' ? styles.live : ''}`}
+                            aria-hidden="true"
+                          />
+                          <span className={styles.itemMain}>
+                            <span className={styles.itemName}>{name}</span>
+                            <em>{st}</em>
+                          </span>
+                        </button>
+                      </Tooltip>
                     </li>
                   );
                 })}
@@ -905,28 +914,29 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
               aria-hidden
             />
           </button>
-          <button
-            type="button"
-            className={styles.iconBtn}
-            title="刷新"
-            aria-label={gitLoading ? '正在刷新' : '刷新 Git'}
-            disabled={gitLoading}
-            onClick={() => {
-              setActionErr(null);
-              if (actionErrTimerRef.current) {
-                clearTimeout(actionErrTimerRef.current);
-                actionErrTimerRef.current = null;
-              }
-              void refreshGit({ force: true });
-            }}
-          >
-            <Lucide.RefreshCw
-              size={14}
-              strokeWidth={1.75}
-              className={gitLoading ? 'spin' : ''}
-              aria-hidden
-            />
-          </button>
+          <Tooltip content="刷新">
+            <button
+              type="button"
+              className={styles.iconBtn}
+              aria-label={gitLoading ? '正在刷新' : '刷新 Git'}
+              disabled={gitLoading}
+              onClick={() => {
+                setActionErr(null);
+                if (actionErrTimerRef.current) {
+                  clearTimeout(actionErrTimerRef.current);
+                  actionErrTimerRef.current = null;
+                }
+                void refreshGit({ force: true });
+              }}
+            >
+              <Lucide.RefreshCw
+                size={14}
+                strokeWidth={1.75}
+                className={gitLoading ? 'spin' : ''}
+                aria-hidden
+              />
+            </button>
+          </Tooltip>
         </div>
         {openSec.files ? (
           <div
@@ -955,14 +965,15 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                     </button>
                   ) : null}
                   {gitHelp.action === 'init-repo' ? (
-                    <button
-                      type="button"
-                      className={styles.link}
-                      title="打开终端，在工作区执行 git init"
-                      onClick={() => onOpenPanel('terminal')}
-                    >
-                      打开终端（git init）
-                    </button>
+                    <Tooltip content="打开终端，在工作区执行 git init">
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => onOpenPanel('terminal')}
+                      >
+                        打开终端（git init）
+                      </button>
+                    </Tooltip>
                   ) : null}
                   {gitHelp.action === 'retry' || gitHelp.action === 'download-git' || gitHelp.action === 'init-repo' ? (
                     <button
@@ -984,83 +995,107 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             ) : null}
 
             {gitFiles.length > 0 ? (
-              <ul className={styles.list} aria-label="Git 改动文件">
-                {gitFiles.map((f) => {
-                  const opening = openingPath === f.path;
-                  const stLabel = gitStatusLabel(f.status);
-                  const statusColor = getGitStatusColor(f.status);
-                  const match = convoFiles.find(
-                    (c) => c.filePath === f.path || basename(c.filePath) === basename(f.path)
-                  );
-                  return (
-                    <li key={f.path}>
-                      <button
-                        type="button"
-                        className={styles.itemBtn}
-                        disabled={Boolean(openingPath)}
-                        aria-busy={opening}
-                        aria-label={
-                          opening
-                            ? `正在打开 ${basename(f.path)}`
-                            : `${basename(f.path)}，${stLabel}`
-                        }
-                        onClick={() => void openGitFile(f)}
-                      >
-                        <FileIcon name={basename(f.path)} />
-                        <span className={`${styles.itemMain} ${styles.mono}`}>
-                          <span
-                            className={styles.itemName}
-                            title={f.path}
-                          >
-                            {basename(f.path)}
+              <>
+                <ul className={styles.list} aria-label="Git 改动文件">
+                  {(showAllFiles ? gitFiles : gitFiles.slice(0, 8)).map((f) => {
+                    const opening = openingPath === f.path;
+                    const stLabel = gitStatusLabel(f.status);
+                    const statusColor = getGitStatusColor(f.status);
+                    const match = convoFiles.find(
+                      (c) => c.filePath === f.path || basename(c.filePath) === basename(f.path)
+                    );
+                    return (
+                      <li key={f.path}>
+                        <button
+                          type="button"
+                          className={styles.itemBtn}
+                          disabled={Boolean(openingPath)}
+                          aria-busy={opening}
+                          aria-label={
+                            opening
+                              ? `正在打开 ${basename(f.path)}`
+                              : `${basename(f.path)}，${stLabel}`
+                          }
+                          onClick={() => void openGitFile(f)}
+                        >
+                          <FileIcon name={basename(f.path)} />
+                          <span className={`${styles.itemMain} ${styles.mono}`}>
+                            <span
+                              className={styles.itemName}
+                              title={f.path}
+                            >
+                              {basename(f.path)}
+                            </span>
+                            <em style={{ color: statusColor, fontWeight: 300 }}>
+                              {opening ? (
+                                '…'
+                              ) : match ? (
+                                `+${match.additions} −${match.deletions}`
+                              ) : (
+                                `${stLabel}${f.conflicted ? ' · 冲突' : ''}`
+                              )}
+                            </em>
                           </span>
-                          <em style={{ color: statusColor, fontWeight: 300 }}>
-                            {opening ? (
-                              '…'
-                            ) : match ? (
-                              `+${match.additions} −${match.deletions}`
-                            ) : (
-                              `${stLabel}${f.conflicted ? ' · 冲突' : ''}`
-                            )}
-                          </em>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {gitFiles.length > 8 ? (
+                  <button
+                    type="button"
+                    className={styles.link}
+                    style={{ marginTop: 6, marginBottom: 6, width: '100%', textAlign: 'center', fontSize: 12 }}
+                    onClick={() => setShowAllFiles((v) => !v)}
+                  >
+                    {showAllFiles ? '收起改动列表' : `展开全部 ${gitFiles.length} 项改动`}
+                  </button>
+                ) : null}
+              </>
             ) : convoFiles.length > 0 ? (
-              <ul className={styles.list} aria-label="对话改动文件">
-                {convoFiles.map((f) => {
-                  const statusColor = f.additions > 0 ? 'var(--accent-green, #22c55e)' : 'var(--accent-orange, #f97316)';
-                  return (
-                    <li key={f.filePath}>
-                      <button
-                        type="button"
-                        className={styles.itemBtn}
-                        aria-label={`打开 ${basename(f.filePath)}`}
-                        onClick={() => {
-                          setActiveDiffSource(f);
-                          onOpenPanel('diff');
-                        }}
-                      >
-                        <FileIcon name={basename(f.filePath)} />
-                        <span className={`${styles.itemMain} ${styles.mono}`}>
-                          <span
-                            className={styles.itemName}
-                            title={f.filePath}
-                          >
-                            {basename(f.filePath)}
+              <>
+                <ul className={styles.list} aria-label="对话改动文件">
+                  {(showAllFiles ? convoFiles : convoFiles.slice(0, 8)).map((f) => {
+                    const statusColor = f.additions > 0 ? 'var(--accent-green, #22c55e)' : 'var(--accent-orange, #f97316)';
+                    return (
+                      <li key={f.filePath}>
+                        <button
+                          type="button"
+                          className={styles.itemBtn}
+                          aria-label={`打开 ${basename(f.filePath)}`}
+                          onClick={() => {
+                            setActiveDiffSource(f);
+                            onOpenPanel('diff');
+                          }}
+                        >
+                          <FileIcon name={basename(f.filePath)} />
+                          <span className={`${styles.itemMain} ${styles.mono}`}>
+                            <span
+                              className={styles.itemName}
+                              title={f.filePath}
+                            >
+                              {basename(f.filePath)}
+                            </span>
+                            <em style={{ color: statusColor, fontWeight: 300 }}>
+                              +{f.additions} −{f.deletions}
+                            </em>
                           </span>
-                          <em style={{ color: statusColor, fontWeight: 300 }}>
-                            +{f.additions} −{f.deletions}
-                          </em>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {convoFiles.length > 8 ? (
+                  <button
+                    type="button"
+                    className={styles.link}
+                    style={{ marginTop: 6, marginBottom: 6, width: '100%', textAlign: 'center', fontSize: 12 }}
+                    onClick={() => setShowAllFiles((v) => !v)}
+                  >
+                    {showAllFiles ? '收起改动列表' : `展开全部 ${convoFiles.length} 项改动`}
+                  </button>
+                ) : null}
+              </>
             ) : !gitHelp && !gitLoading ? (
               <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
                 {git?.found && git.clean ? '干净' : '无改动'}
