@@ -81,7 +81,7 @@ export function normalizeForCompare(path: string): string {
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
-export function computeSnapshotTag(bytes: Buffer): string {
+export function computeSnapshotTag(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
 }
 

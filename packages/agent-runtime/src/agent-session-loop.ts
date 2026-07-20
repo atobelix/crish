@@ -393,7 +393,7 @@ export class AgentSessionLoop {
 
         // ── streaming: 调用 Provider，收集助手消息 ────────────
         case "streaming": {
-          const callIterator = this.buildProviderCall();
+          const callIterator = await this.buildProviderCall();
           // 流式 delta 经队列边收边 yield，避免只能等整段 message-end
           // 流式 delta 队列：RingBuffer 提供 O(1) shift 与背压保护（超容量覆盖最旧 delta）。
           const deltaQueue = new RingBuffer<AgentEvent>(DELTA_QUEUE_CAPACITY);
@@ -1323,10 +1323,10 @@ export class AgentSessionLoop {
   /**
    * 构建 Provider 调用，返回流迭代器。
    */
-  private buildProviderCall(): AsyncIterable<ProviderStreamContractEvent> {
+  private async buildProviderCall(): Promise<AsyncIterable<ProviderStreamContractEvent>> {
     const messages = this.conversation.getMessagesMutable();
     const providerSystemPrompt = this.contextManager.projectSystemPrompt(this.options.systemPrompt);
-    const providerMessages = this.contextManager.projectForProvider(messages);
+    const providerMessages = await this.contextManager.projectForProvider(messages);
     const promptContext = this.projectPromptContextForProvider();
     const promptAssembly = assemblePromptForProvider({
       systemPrompt: providerSystemPrompt,

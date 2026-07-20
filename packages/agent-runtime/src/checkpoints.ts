@@ -102,7 +102,7 @@ export async function createWorkspaceCheckpoint(request: CreateWorkspaceCheckpoi
       path: relativePath,
       existed: true,
       bytes,
-      sha256: createHash("sha256").update(content).digest("hex"),
+      sha256: sha256Hex(content),
       snapshotPath
     });
   }
@@ -251,7 +251,11 @@ function safeSegment(input: string): string {
  * 原子覆写：先写 tmp 文件再 rename，避免 mid-write 崩溃留下截断内容。
  * tmp 文件名含 pid + 时间戳 + UUID，避免并发碰撞；与目标同目录保证 rename 原子。
  */
-async function atomicWriteFile(targetPath: string, data: string | Buffer): Promise<void> {
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function atomicWriteFile(targetPath: string, data: string | Uint8Array): Promise<void> {
   const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tmpPath, data);
   await rename(tmpPath, targetPath);
