@@ -349,6 +349,28 @@ export function guessContextLength(model: string): number | undefined {
   return undefined;
 }
 
+export function guessModelCapabilities(model: string): ModelCapabilities {
+  if (!model) return { tools: true };
+  const m = model.toLowerCase();
+  const reasoning =
+    m.includes('reasoner') ||
+    m.includes('r1') ||
+    m.includes('v4') ||
+    m.includes('o1') ||
+    m.includes('o3') ||
+    m.includes('thinking') ||
+    m.includes('k2') ||
+    m.includes('deepseek');
+  const vision =
+    m.includes('vision') ||
+    m.includes('vl') ||
+    m.includes('4o') ||
+    m.includes('gemini') ||
+    m.includes('claude') ||
+    m.includes('flash');
+  return { reasoning, vision, tools: true };
+}
+
 export function getModelMeta(profileId: string, model: string): ModelMeta {
   const map = loadMap();
   const k = metaKey(profileId, model);
@@ -740,6 +762,14 @@ export async function scanProviderModels(
       }
     }
     const unique = Array.from(new Set(models)).sort((a, b) => a.localeCompare(b));
+    for (const m of unique) {
+      const ctx = guessContextLength(m);
+      const caps = guessModelCapabilities(m);
+      upsertModelMeta(fresh.id, m, {
+        ...(ctx ? { contextLength: ctx } : {}),
+        capabilities: caps,
+      });
+    }
     return { ok: true, models: unique };
   } catch (e) {
     return { ok: false, models: [], error: friendlyFetchError(e) };

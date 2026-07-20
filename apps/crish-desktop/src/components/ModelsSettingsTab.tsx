@@ -472,7 +472,12 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     const res = await saveProfileKey(selected.id, keyDraft.trim());
     refresh();
     setKeyDraft('');
-    if (!res.ok) notify(false, `保存失败：${res.error || '未知错误'}`);
+    if (!res.ok) {
+      notify(false, `保存失败：${res.error || '未知错误'}`);
+      return;
+    }
+    notify(true, '密钥已保存，正在自动扫描服务器可用模型...');
+    void runScan();
   };
 
   const addFromTemplate = (format: 'openai' | 'anthropic') => {
