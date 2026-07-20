@@ -39,11 +39,12 @@ export const SettingsRow: React.FC<{
   control?: React.ReactNode;
   onClick?: () => void;
   className?: string;
-}> = ({ icon, title, desc, control, onClick, className = '' }) => {
+  vertical?: boolean;
+}> = ({ icon, title, desc, control, onClick, className = '', vertical }) => {
   const Component = onClick ? 'button' : 'div';
   return (
     <Component
-      className={`${styles.settingsUiRow} ${onClick ? styles.settingsUiRowClickable + ' settings-ui-row-clickable' : ''} settings-ui-row ${className}`}
+      className={`${styles.settingsUiRow} ${onClick ? styles.settingsUiRowClickable + ' settings-ui-row-clickable' : ''} ${vertical ? styles.settingsUiRowVertical + ' settings-ui-row-vertical' : ''} settings-ui-row ${className}`}
       onClick={onClick}
       type={onClick ? 'button' : undefined}
     >

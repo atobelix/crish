@@ -86,6 +86,17 @@
   border-bottom: none;
 }
 
+.settingsUiRowVertical {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+}
+
+.settingsUiRowVertical .settingsUiRowControl {
+  width: 100% !important;
+  display: block !important;
+}
+
 .settingsUiRowClickable {
   cursor: pointer;
   width: 100%;

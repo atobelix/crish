@@ -396,7 +396,7 @@
   border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
   border-right: none;
-  vertical-align: top;
+  vertical-align: middle;
   color: var(--text-primary);
   background: transparent;
   white-space: normal;

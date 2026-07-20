@@ -220,7 +220,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               }
 
-              return (
+               return (
                 <SettingsRow
                   key={prop.key}
                   title={
@@ -234,6 +234,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                   }
                   desc={prop.desc}
                   control={control}
+                  vertical={prop.type === 'preset-grid'}
                 />
               );
             })}

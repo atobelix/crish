@@ -73,6 +73,15 @@ export function applyTheme(theme: UiTheme | string): UiTheme {
   html.classList.toggle('theme-light', t !== 'dark');
   document.body.classList.toggle('theme-dark', t === 'dark');
   document.body.classList.toggle('theme-light', t !== 'dark');
+
+  // Automatically apply stored personalization to prevent styling loss
+  try {
+    const p = readStoredPersonalization();
+    applyPersonalization(p, t);
+  } catch {
+    /* ignore during early boot or SSR */
+  }
+
   return t;
 }
 
@@ -486,6 +495,17 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     const now = new Date();
     const currentHour = now.getHours() + now.getMinutes() / 60;
     currentActiveTheme = (currentHour >= 19 || currentHour < 6) ? 'dark' : 'default';
+
+    // Synchronize HTML attributes & body classes with currentActiveTheme
+    const currentAttr = root.getAttribute('data-theme');
+    if (currentAttr !== currentActiveTheme) {
+      root.setAttribute('data-theme', currentActiveTheme);
+      document.body.setAttribute('data-theme', currentActiveTheme);
+      root.classList.toggle('theme-dark', currentActiveTheme === 'dark');
+      root.classList.toggle('theme-light', currentActiveTheme !== 'dark');
+      document.body.classList.toggle('theme-dark', currentActiveTheme === 'dark');
+      document.body.classList.toggle('theme-light', currentActiveTheme !== 'dark');
+    }
   }
 
   // 校验皮肤是否与激活的黑夜/白天模式契合，若预设冲突则做回落

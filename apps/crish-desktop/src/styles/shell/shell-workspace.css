@@ -132,7 +132,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   align-items: end;
   flex-shrink: 0;
-  min-height: 42px;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
   background: var(--shell-chrome-bg);
   border-radius: 0;
   /* 无底部分隔：激活项目 tab 直接连入下方白卡 */
@@ -159,8 +161,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   /* 与右侧项目 tab 字高视觉中心对齐（tab 贴底 h≈30） */
   align-items: flex-end;
-  height: 100%;
-  padding: 0 10px 0 11px; /* Left rail padding set to 11px so button aligns with the 18px sidebar line */
+  height: 38px !important;
+  max-height: 38px !important;
+  padding: 6px 10px 0 11px; /* Left rail padding set to 11px so button aligns with the 18px sidebar line */
   box-sizing: border-box;
   min-width: 0;
   -webkit-app-region: drag;
@@ -168,11 +171,11 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 .app-container[data-shell-chrome="inset"] .ws-titlebar-sidebar-btn {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  margin: 0 0 1px 0;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0;
   padding: 0;
   color: var(--text-secondary);
   display: inline-flex;
@@ -202,7 +205,8 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: flex;
   align-items: flex-end;
   min-width: 0;
-  height: 100%;
+  height: 38px !important;
+  max-height: 38px !important;
   padding-left: 0;
   padding-right: 0;
   box-sizing: border-box;
@@ -212,13 +216,14 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  height: 100%;
+  height: 38px !important;
+  max-height: 38px !important;
   background: transparent;
   border-radius: 0 !important;
   padding-left: var(--shell-content-pad-x, 14px);
   padding-right: 6px;
-  padding-top: 8px;
-  padding-bottom: 0;
+  padding-top: 6px !important;
+  padding-bottom: 0 !important;
   min-height: 0;
   align-items: flex-end;
 }
@@ -434,10 +439,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   --ws-chrome-merge: var(--shell-inset-bg);
   --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
   --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
-  --ws-row2-min-h: 36px;
+  --ws-row2-min-h: 38px;
   --ws-row2-pad-t: 6px;
   --ws-row2-pad-x: 12px; /* 左右第二行同内边距 */
-  --ws-row2-tab-h: 30px;
+  --ws-row2-tab-h: 32px;
   --ws-row2-tab-radius: 8px 8px 0 0;
   --ws-row2-tab-font: 13px;
   --ws-row2-gap: 2px;
@@ -810,14 +815,18 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 /* --- CARD HEADERS & TABS --- readable bar; density via tokens */
 .card-header {
-  height: auto;
-  min-height: var(--card-header-min-height, 36px);
+  height: var(--titlebar-row-h) !important;
+  min-height: var(--titlebar-row-h) !important;
+  max-height: var(--titlebar-row-h) !important;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end !important;
   gap: var(--card-header-gap, 6px);
-  padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
+  padding-top: var(--titlebar-top-gap) !important;
+  padding-bottom: 0 !important;
+  padding-left: var(--card-header-pad-x, 8px) !important;
+  padding-right: var(--card-header-pad-x, 8px) !important;
   user-select: none;
   background-color: var(--card-header-bg, var(--bg-primary));
   flex-shrink: 0;
@@ -831,6 +840,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .card-header-left {
   display: flex;
   align-items: center;
+  height: var(--titlebar-item-h) !important;
   gap: var(--card-header-gap, 6px);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
@@ -841,6 +851,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   max-width: 70%;
   min-width: 0;
   flex: 1 1 auto;
+  box-sizing: border-box;
 }
 /* chat 面包屑含 ⋯ 菜单：勿裁切下拉；占满顶栏左侧 */
 .card-header-left.chat-breadcrumb-header {
@@ -967,13 +978,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 .card-tab.dragging-tab-hidden {
-  opacity: 0 !important;
-  width: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: none !important;
-  overflow: hidden !important;
+  opacity: 0.35 !important;
+  background: color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent) !important;
+  border: 1.2px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 50%, transparent) !important;
+  box-shadow: none !important;
   pointer-events: none !important;
+  transition: none !important;
 }
 
 .card-tab:hover {
@@ -1057,10 +1067,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .card-header-right {
   display: flex;
   align-items: center;
+  height: var(--titlebar-item-h) !important;
   gap: 4px;
   flex-shrink: 0;
   margin-left: 0;
   min-width: 0;
+  box-sizing: border-box;
 }
 /* 极窄侧栏：压缩顶栏 padding，动作区不挤占 tabs 横向滚动 */
 @container workspace-card (max-width: 320px) {
@@ -1214,3 +1226,151 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .card-body:has(.term-panel) {
   overflow: hidden;
 }
+
+/* --- PREMIUM DRAG & DROP PLACEHOLDER STYLES --- */
+
+/* 1. 拖拽创建新列时的外部灰色列容器 */
+.workspace-column--placeholder {
+  background: var(--shell-inset-bg, var(--bg-secondary, #f2f2f2)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 0 !important; /* 由内部卡片占位符的 ::before 统一控制边距 */
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  box-sizing: border-box !important;
+  margin: var(--space-3, 8px) !important;
+  flex: 1 !important;
+  height: calc(100% - var(--space-3) * 2) !important;
+}
+
+/* 2. 统一的占位卡片容器（外层底板为极其干净、淡雅的微灰底，比例自适应，并提供相对定位环境） */
+.app-container .workspace-card.placeholder-card-group,
+.placeholder-card-group {
+  background: color-mix(in srgb, var(--border-color) 10%, var(--bg-secondary, #f9f9fb)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 16px !important;
+  padding-top: 52px !important; /* 将提示文本和加号内容自然推移至下方大区域的视觉中心 */
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* 当卡片占位符作为列内部元素时，撑满外部容器 */
+.workspace-column--placeholder .placeholder-card-group {
+  background: transparent !important; /* 避免双重灰色重叠 */
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 3. 核心双框绘制（采用 ::before 绘制顶部标签行高度矩形，::after 绘制下方大内容区域，完美复刻图二比例） */
+.placeholder-card-group::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 10px !important;
+  left: 10px !important;
+  right: 10px !important;
+  height: 32px !important; /* 顶部标签行高度的矩形块 */
+  background: var(--bg-primary, #ffffff) !important; /* 纯净、高级、无暇的纯白底色 */
+  border: 1px solid color-mix(in srgb, var(--border-color) 35%, transparent) !important; /* 极轻、虚化的超细边框线 */
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.01) !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+.placeholder-card-group::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 52px !important; /* 10px top + 32px height + 10px gap */
+  bottom: 10px !important;
+  left: 10px !important;
+  right: 10px !important;
+  background: var(--bg-primary, #ffffff) !important; /* 纯净、高级、无暇的纯白底色 */
+  border: 1px solid color-mix(in srgb, var(--border-color) 35%, transparent) !important; /* 极轻、虚化的超细边框线 */
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.01) !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+/* 确保文字与图标浮动在内圆角矩形上方 */
+.placeholder-card-group > svg,
+.placeholder-card-group > span {
+  position: relative !important;
+  z-index: 2 !important;
+  color: var(--text-tertiary, #8a8a8a) !important;
+}
+
+.placeholder-card-group svg {
+  color: var(--text-tertiary, #8a8a8a) !important;
+  opacity: 0.65 !important;
+}
+
+
+/* 2. 拖放合并到现有标签栏的 inline 药丸占位符 */
+.tabs-bar .tab-placeholder-indicator,
+.tab-placeholder-indicator {
+  background: color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent) !important;
+  border: 1.2px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 50%, transparent) !important;
+  border-radius: var(--ws-row2-tab-radius, 6px) !important;
+  min-width: 96px !important;
+  height: var(--ws-row2-tab-h, 32px) !important;
+  min-height: var(--ws-row2-tab-h, 32px) !important;
+  max-height: var(--ws-row2-tab-h, 32px) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 12px !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+  position: relative !important;
+  opacity: 0.8 !important;
+  z-index: 10 !important;
+  box-sizing: border-box !important;
+  font-size: var(--ws-row2-tab-font, 12px) !important;
+  font-weight: 500 !important;
+  color: var(--accent-color, #1a73e8) !important;
+  animation: tab-indicator-pulse 1.5s infinite ease-in-out !important;
+}
+
+
+@keyframes tab-indicator-pulse {
+  0% {
+    opacity: 0.6;
+    background: color-mix(in srgb, var(--accent-color, #1a73e8) 8%, transparent);
+  }
+  50% {
+    opacity: 0.95;
+    background: color-mix(in srgb, var(--accent-color, #1a73e8) 18%, transparent);
+  }
+  100% {
+    opacity: 0.6;
+    background: color-mix(in srgb, var(--accent-color, #1a73e8) 8%, transparent);
+  }
+}
+
+
+
+@keyframes pulse-merge-highlight {
+  0%, 100% {
+    opacity: 0.7;
+    background-color: color-mix(in srgb, var(--accent-color, #1a73e8) 10%, transparent);
+  }
+  50% {
+    opacity: 1.0;
+    background-color: color-mix(in srgb, var(--accent-color, #1a73e8) 20%, transparent);
+  }
+}
+

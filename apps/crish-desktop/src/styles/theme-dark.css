@@ -298,4 +298,11 @@
   border-color: var(--text-tertiary);
 }
 
-/* 死类 plan-capsule / plan-expanded-card / quick-approve-btn / panel-dropdown 已清 */
+/* Dark theme 1px inset top border highlight for elevated cards & popovers */
+:where(html[data-theme="dark"]) .cardSurface,
+:where(html[data-theme="dark"]) .dropdownSurface,
+:where(html[data-theme="dark"]) .ui-popover-animate,
+:where(html[data-theme="dark"]) .ui-modal-animate {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), var(--shadow-md);
+}
+

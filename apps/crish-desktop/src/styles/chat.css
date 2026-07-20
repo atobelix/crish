@@ -968,9 +968,12 @@
 .msg-timeline-text {
   margin-bottom: var(--space-1, 4px);
 }
+.msg-timeline-tools {
+  margin: 2px 0;
+}
 .msg-timeline-text + .msg-timeline-tools,
 .msg-timeline-tools + .msg-timeline-text {
-  margin-top: var(--space-1, 4px);
+  margin-top: 2px;
 }
 
 /* --- 3. Tool row 折叠/展开字色；默认无底，勿再压扁行高 --- */

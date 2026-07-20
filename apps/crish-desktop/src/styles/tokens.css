@@ -101,6 +101,11 @@ html[data-theme="light"] {
   --radius-2xl: 14px;
   --radius-full: 999px;
 
+  /* --- Unified Header & Titlebar Rows Token System --- */
+  --titlebar-row-h: 38px;       /* Row height (e.g. workspace bar, sessions bar, card-header) */
+  --titlebar-item-h: 32px;      /* Content/button/tab height */
+  --titlebar-top-gap: 6px;      /* Vertical spacing from the upper frame border */
+
   /* Premium Soft Low-Presence Shadows */
   --shadow-sm: 
     0 1px 2px rgba(15, 15, 15, 0.015),
@@ -134,6 +139,12 @@ html[data-theme="light"] {
   --transition-exit: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --transition-slide: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-popover-enter: cubic-bezier(0.16, 1, 0.3, 1) 180ms;
+  --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
+  --transition-modal-enter: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  --transition-accordion: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  --transition-hover: 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-press: 80ms ease-out;
 
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
@@ -153,13 +164,13 @@ html[data-theme="light"] {
    * xxs/xs 仅用于时间、角标等极密元信息，慎用
    */
   --font-size-adjust: 0px;
-  --font-size-xxs: calc(10px + var(--font-size-adjust));
-  --font-size-xs: calc(11px + var(--font-size-adjust));
-  --font-size-sm: calc(12px + var(--font-size-adjust));
-  --font-size-base: calc(13px + var(--font-size-adjust));
-  --font-size-md: calc(14px + var(--font-size-adjust));
-  --font-size-lg: calc(16px + var(--font-size-adjust));
-  --font-size-xl: calc(18px + var(--font-size-adjust));
+  --font-size-xxs: calc(11px + var(--font-size-adjust));
+  --font-size-xs: calc(12px + var(--font-size-adjust));
+  --font-size-sm: calc(13px + var(--font-size-adjust));
+  --font-size-base: calc(14px + var(--font-size-adjust));
+  --font-size-md: calc(15px + var(--font-size-adjust));
+  --font-size-lg: calc(17px + var(--font-size-adjust));
+  --font-size-xl: calc(19px + var(--font-size-adjust));
 
   /*
    * 字重阶梯：
@@ -169,6 +180,8 @@ html[data-theme="light"] {
   --font-weight-medium: 500;
   --font-weight-content: 600;
   --font-weight-semibold: var(--font-weight-content);
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-normal: 0em;
 
   /* 层级与断点 Token 体系 */
   --z-dropdown: 2000;
@@ -220,7 +233,7 @@ html[data-theme="light"] {
    * 改此处即可统一顶栏高度与内边距，避免 shell/panels 各写一套 magic number
    */
   --card-header-min-height: 36px;
-  --card-header-pad-y: 4px;
+  --card-header-pad-y: 0px;
   --card-header-pad-x: 8px;
   /* card-header 左/右区间距；窄栏时避免 tabs 与动作钮贴死 */
   --card-header-gap: 6px;
@@ -382,14 +395,14 @@ html[data-theme="dark"] {
   --item-font-size: 13px;
   --header-height: 40px;
 
-  /* 紧凑档：底 12，元信息不低于 9；中文仍保持 body 行高不压扁 */
-  --font-size-xxs: calc(9px + var(--font-size-adjust, 0px));
-  --font-size-xs: calc(10px + var(--font-size-adjust, 0px));
-  --font-size-sm: calc(11px + var(--font-size-adjust, 0px));
-  --font-size-base: calc(12px + var(--font-size-adjust, 0px));
-  --font-size-md: calc(13px + var(--font-size-adjust, 0px));
-  --font-size-lg: calc(15px + var(--font-size-adjust, 0px));
-  --font-size-xl: calc(17px + var(--font-size-adjust, 0px));
+  /* 紧凑档：底 13，元信息不低于 10；中文仍保持 body 行高不压扁 */
+  --font-size-xxs: calc(10px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(11px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(16px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(18px + var(--font-size-adjust, 0px));
 
   --icon-size: 15px;
   --icon-size-sm: 13px;
@@ -454,13 +467,13 @@ html[data-theme="dark"] {
   --header-height: 48px;
 
   /* 大档：中文可读性优先，body 行高再抬半档 */
-  --font-size-xxs: calc(11px + var(--font-size-adjust, 0px));
-  --font-size-xs: calc(12px + var(--font-size-adjust, 0px));
-  --font-size-sm: calc(13px + var(--font-size-adjust, 0px));
-  --font-size-base: calc(15px + var(--font-size-adjust, 0px));
-  --font-size-md: calc(16px + var(--font-size-adjust, 0px));
-  --font-size-lg: calc(18px + var(--font-size-adjust, 0px));
-  --font-size-xl: calc(20px + var(--font-size-adjust, 0px));
+  --font-size-xxs: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(16px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(17px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(19px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(21px + var(--font-size-adjust, 0px));
 
   --icon-size: 17px;
   --icon-size-sm: 15px;
@@ -550,6 +563,44 @@ html[data-perf-tier="eco"] {
   --transition-exit: 0ms !important;
   --transition-spring: 0ms !important;
   --transition-slide: 0ms !important;
+  --transition-popover-enter: 0ms !important;
+  --transition-popover-exit: 0ms !important;
+  --transition-modal-enter: 0ms !important;
+  --transition-accordion: 0ms !important;
 }
+
+/* Dynamic Spring Motion & Keyframe Animations */
+@keyframes crish-popover-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes crish-modal-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.ui-popover-animate {
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  transform-origin: top center;
+}
+
+.ui-modal-animate {
+  animation: crish-modal-enter var(--transition-modal-enter) forwards;
+  transform-origin: center center;
+}
+
 
 
