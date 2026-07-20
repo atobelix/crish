@@ -3,9 +3,10 @@
  * 空态由 ChatCard → ChatEmptyState 负责；本组件不渲染欢迎壳，避免幽灵闪屏。
  * 状态机/stream 仍在 ChatCard；className 与历史路径保持一致。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMessageList.module.css';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { Tooltip } from './settings/SettingsUI';
 import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
@@ -24,18 +25,16 @@ import {
 } from '../api/messageWindow';
 import {
   messageMatchesSearch,
-  readSessionSearchQuery,
+  subscribeSearchQuery,
+  getSearchQuerySnapshot,
 } from '../api/sessionSearch';
 import {
   ChatAssistantMessageRow,
   ChatUserMessageRow,
 } from './ChatMessageRow';
 import { prepare, layout } from '@chenglou/pretext';
-import { useTextHeightCache } from '../hooks/useTextHeightCache';
-import {
-  computeAverageRowHeight,
-  MESSAGE_ESTIMATED_ROW_HEIGHT,
-} from '../api/messageWindow';
+import { useVirtualScroll } from '../hooks/useVirtualScroll';
+import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../api/messageWindow';
 import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
 
 const EMPTY_PIN_IDS: string[] = [];
@@ -148,8 +147,24 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     Record<string, true>
   >({});
   const sessionKey = activeSessionId || '_';
-  const expandedTools = expandedToolsBySession[sessionKey] || {};
-  const expandedUserMsgs = expandedUserMsgsBySession[sessionKey] || {};
+  const expandedTools = useMemo(
+    () => expandedToolsBySession[sessionKey] ?? {},
+    [expandedToolsBySession, sessionKey],
+  );
+  const expandedUserMsgs = useMemo(
+    () => expandedUserMsgsBySession[sessionKey] ?? {},
+    [expandedUserMsgsBySession, sessionKey],
+  );
+
+  // ref 层：依赖频繁变化的值，使回调 identity 稳定
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const onShowToastRef = useRef(onShowToast);
+  onShowToastRef.current = onShowToast;
+  const onRegenerateRef = useRef(onRegenerate);
+  onRegenerateRef.current = onRegenerate;
+  const onSendFollowUpRef = useRef(onSendFollowUp);
+  onSendFollowUpRef.current = onSendFollowUp;
 
   useEffect(() => {
     setExpandedOlder(0);
@@ -158,11 +173,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   }, [activeSessionId]);
 
   /** 侧栏搜索选中后写入 sessionStorage，用于命中消息高亮 */
-  const searchHighlightQuery = useMemo(
-    () => readSessionSearchQuery(),
-    // 随会话切换 / 消息数变化重读（选中会话后进入列表）
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeSessionId 触发重读
-    [activeSessionId, messages.length],
+  const searchHighlightQuery = useSyncExternalStore(
+    subscribeSearchQuery,
+    getSearchQuerySnapshot,
+    getSearchQuerySnapshot,
   );
 
   const pinMessage = useLayoutStore((s) => s.pinMessage);
@@ -387,7 +401,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       setExpandedToolsBySession((prev) => ({
         ...prev,
         [sessionKey]: {
-          ...(prev[sessionKey] || {}),
+          ...(prev[sessionKey] ?? {}),
           [toolId]: !currentlyOpen,
         },
       }));
@@ -421,8 +435,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       setExpandedUserMsgsBySession((prev) => ({
         ...prev,
         [sessionKey]: {
-          ...(prev[sessionKey] || {}),
-          [msgId]: !(prev[sessionKey] || {})[msgId],
+          ...(prev[sessionKey] ?? {}),
+          [msgId]: !(prev[sessionKey] ?? {})[msgId],
         },
       }));
     },
@@ -432,25 +446,27 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   /** 行组件内只收 assistantMsgId；在此解析对应用户原文，避免把整表 messages 传入行 props */
   const handleRegenerateRow = useCallback(
     (assistantMsgId: string) => {
-      const idx = messages.findIndex((m) => m.id === assistantMsgId);
+      const msgs = messagesRef.current;
+      const toast = onShowToastRef.current;
+      const idx = msgs.findIndex((m) => m.id === assistantMsgId);
       let userText = '';
       for (let i = idx - 1; i >= 0; i--) {
-        if (messages[i].sender === 'user') {
-          userText = messages[i].text || '';
+        if (msgs[i].sender === 'user') {
+          userText = msgs[i].text || '';
           break;
         }
       }
       if (!userText.trim()) {
-        onShowToast('没有可重新生成的内容');
+        toast('没有可重新生成的内容');
         return;
       }
-      if (messages.some((m) => m.status === 'processing')) {
-        onShowToast('请等待当前回复完成');
+      if (msgs.some((m) => m.status === 'processing')) {
+        toast('请等待当前回复完成');
         return;
       }
-      onRegenerate(userText, assistantMsgId);
+      onRegenerateRef.current?.(userText, assistantMsgId);
     },
-    [messages, onRegenerate, onShowToast],
+    [],
   );
 
   const handleDismissFollowUp = useCallback((msgId: string) => {
@@ -468,14 +484,16 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   const handleSendFollowUp = useCallback(
     (prompt: string) => {
-      if (!onSendFollowUp) return;
-      if (messages.some((m) => m.status === 'processing')) {
-        onShowToast('请等待当前回复完成');
+      const send = onSendFollowUpRef.current;
+      if (!send) return;
+      const msgs = messagesRef.current;
+      if (msgs.some((m) => m.status === 'processing')) {
+        onShowToastRef.current?.('请等待当前回复完成');
         return;
       }
-      onSendFollowUp(prompt);
+      send(prompt);
     },
-    [messages, onSendFollowUp, onShowToast],
+    [],
   );
 
   const toolStackProps = useMemo(
@@ -507,9 +525,18 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     ],
   );
 
-  // ───── 渐进精确高度缓存 ─────
-  const heightCache = useTextHeightCache();
-  const listRef = useRef<HTMLDivElement>(null);
+  // ───── 虚拟滚动 ─────
+  const vs = useVirtualScroll({
+    itemCount: visibleMessages.length,
+    overscan: 6,
+    fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
+  });
+  const { containerRef, setActual, clearHeights, manager } = vs;
+
+  /** 窗口偏移时虚拟滚动 index 全部变化，清空高度缓存避免错配 */
+  useEffect(() => {
+    clearHeights();
+  }, [messageWindow.startIndex, clearHeights]);
 
   const pretextFont = useMemo(() => {
     try {
@@ -522,72 +549,139 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const [containerWidth, setContainerWidth] = useState(680);
 
   useEffect(() => {
-    const el = listRef.current;
+    const el = containerRef.current;
     if (!el) return;
     const update = () => setContainerWidth(el.clientWidth);
     update();
     const ro = new ResizeObserver(() => update());
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [containerRef]);
 
-  /** 未渲染过的消息用 Pretext 估算纯文本部分高度 */
+  /** 未渲染过的消息用 Pretext 估算纯文本部分高度（喂给 VirtualScrollManager）
+   *  改为 requestIdleCallback 分批执行，避免阻塞会话切换的首帧渲染。
+   */
+  const pretextRicRef = useRef<number | null>(null);
   useEffect(() => {
     if (!pretextFont || containerWidth <= 0) return;
+    // 取消上一次未完成的 idle 任务
+    if (pretextRicRef.current != null) {
+      if (typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(pretextRicRef.current);
+      } else {
+        clearTimeout(pretextRicRef.current);
+      }
+      pretextRicRef.current = null;
+    }
     const TEXT_LINE_HEIGHT = 22;
     const TEXT_PADDING = 40;
     const TOOL_CALL_OVERHEAD_PER_CALL = 80;
     const availWidth = Math.max(1, containerWidth - 32);
-    for (const msg of visibleMessages) {
-      const existing = heightCache.get(msg.id);
-      if (existing?.actual != null || existing?.estimated != null) continue;
-      let h = MESSAGE_ESTIMATED_ROW_HEIGHT;
-      const text = msg.text || '';
-      if (text && availWidth > 0) {
-        try {
-          const prepared = prepare(text, pretextFont);
-          const result = layout(prepared, availWidth, TEXT_LINE_HEIGHT);
-          h = result.height + TEXT_PADDING;
-        } catch {
-          h = MESSAGE_ESTIMATED_ROW_HEIGHT;
+    // 只处理还未被 Pretext/RO 测量过的 index
+    const pending = visibleMessages
+      .map((msg, i) => ({ msg, i }))
+      .filter(({ msg, i }) => msg != null && manager.getHeight(i) === MESSAGE_ESTIMATED_ROW_HEIGHT);
+
+    if (pending.length === 0) return;
+
+    let cursor = 0;
+    const processChunk = (deadline?: IdleDeadline) => {
+      const timeRemaining = deadline ? () => deadline.timeRemaining() : () => 1;
+      while (cursor < pending.length && timeRemaining() > 0) {
+        const { msg, i } = pending[cursor++]!;
+        if (manager.getHeight(i) !== MESSAGE_ESTIMATED_ROW_HEIGHT) continue; // RO 已测量，跳过
+        let h = MESSAGE_ESTIMATED_ROW_HEIGHT;
+        const text = msg!.text || '';
+        if (text && availWidth > 0) {
+          try {
+            const prepared = prepare(text, pretextFont);
+            const result = layout(prepared, availWidth, TEXT_LINE_HEIGHT);
+            h = result.height + TEXT_PADDING;
+          } catch {
+            h = MESSAGE_ESTIMATED_ROW_HEIGHT;
+          }
         }
+        if (msg!.toolCalls?.length) {
+          h += TOOL_CALL_OVERHEAD_PER_CALL * msg!.toolCalls.length;
+        }
+        manager.setEstimated(i, h);
       }
-      if (msg.toolCalls?.length) {
-        h += TOOL_CALL_OVERHEAD_PER_CALL * msg.toolCalls.length;
+      if (cursor < pending.length) {
+        // 还有剩余，继续安排下一个 idle 帧
+        if (typeof requestIdleCallback !== 'undefined') {
+          pretextRicRef.current = requestIdleCallback(processChunk, { timeout: 500 });
+        } else {
+          pretextRicRef.current = window.setTimeout(() => processChunk(), 16) as unknown as number;
+        }
+      } else {
+        pretextRicRef.current = null;
       }
-      heightCache.set(msg.id, h, false);
+    };
+
+    if (typeof requestIdleCallback !== 'undefined') {
+      pretextRicRef.current = requestIdleCallback(processChunk, { timeout: 300 });
+    } else {
+      pretextRicRef.current = window.setTimeout(() => processChunk(), 16) as unknown as number;
     }
-  }, [visibleMessages, pretextFont, containerWidth, heightCache]);
+
+    return () => {
+      if (pretextRicRef.current != null) {
+        if (typeof cancelIdleCallback !== 'undefined') {
+          cancelIdleCallback(pretextRicRef.current);
+        } else {
+          clearTimeout(pretextRicRef.current);
+        }
+        pretextRicRef.current = null;
+      }
+    };
+  }, [visibleMessages, pretextFont, containerWidth, manager]);
 
   /** 渲染后通过 ResizeObserver 获取实际行高，覆盖 estimate */
+  const roRef = useRef<ResizeObserver | null>(null);
+  const observedRowsRef = useRef<Set<Element>>(new Set());
   useEffect(() => {
-    const container = listRef.current;
+    const container = containerRef.current;
     if (!container) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const el = entry.target as HTMLElement;
-        const msgId = el.dataset.msgId;
-        if (msgId && entry.contentRect.height > 0) {
-          heightCache.set(msgId, entry.contentRect.height, true);
+    // 创建一次 RO，生命周期与组件一致
+    if (!roRef.current) {
+      roRef.current = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          const vindex = el.dataset.vindex;
+          if (vindex != null && entry.contentRect.height > 0) {
+            setActual(Number(vindex), entry.contentRect.height);
+          }
         }
-      }
-    });
-    const rows = Array.from(container.querySelectorAll('[data-msg-id]'));
-    for (const row of rows) {
-      ro.observe(row);
+      });
     }
-    return () => ro.disconnect();
-  }, [visibleMessages, heightCache]);
+    const ro = roRef.current;
+    const observed = observedRowsRef.current;
+    const current = new Set<Element>(Array.from(container.querySelectorAll('[data-vindex]')));
+    // 新增观测
+    for (const row of current) {
+      if (!observed.has(row)) {
+        ro.observe(row);
+        observed.add(row);
+      }
+    }
+    // 移除不再可见的行
+    for (const row of observed) {
+      if (!current.has(row)) {
+        ro.unobserve(row);
+        observed.delete(row);
+      }
+    }
+    // 无需 cleanup disconnect：保持 RO 活跃直到组件 unmount
+  }, [visibleMessages, containerRef, setActual]);
 
-  /** 窗口计算用平均行高（fallback 120） */
-  const avgRowHeight = useMemo(
-    () =>
-      computeAverageRowHeight(
-        (id) => heightCache.getHeight(id),
-        visibleMessages.map((m) => m.id),
-      ),
-    [visibleMessages, heightCache],
-  );
+  // 组件卸载时彻底清理
+  useEffect(() => {
+    return () => {
+      roRef.current?.disconnect();
+      roRef.current = null;
+      observedRowsRef.current.clear();
+    };
+  }, []);
 
   // ChatCard 在 emptyKind 时改挂 ChatEmptyState；此处防御性短路，杜绝欢迎壳幽灵闪屏
   if (messages.length === 0) {
@@ -597,165 +691,194 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const olderAria = `显示更早的 ${olderStep} 条消息，当前仍有 ${messageWindow.hiddenCount} 条未显示`;
   const showAllAria = `一次展开全部 ${messageWindow.hiddenCount} 条更早消息`;
 
+  const { startIndex, endIndex, startOffset, estimatedTotalHeight } = vs.visibleRange;
+  const endOffset = vs.manager.getOffset(endIndex);
+
   return (
-    <div
-      ref={listRef}
-      className={styles.list}
-      role="region"
-      aria-label="会话消息"
-      data-window-start={messageWindow.startIndex}
-      data-hidden-count={messageWindow.hiddenCount}
-      data-visible-count={messageWindow.visibleCount}
-      data-total-count={messageWindow.totalCount}
-      data-show-all={showAllMessages ? 'true' : 'false'}
-      data-has-older={messageWindow.hasOlder ? 'true' : 'false'}
-      data-avg-row-height={Math.round(avgRowHeight)}
-      onClick={handleMarkdownClick}
-    >
-      {messageWindow.hasOlder && olderStep > 0 ? (
-        <div
-          className="chat-msg-window-older"
-          role="region"
-          aria-label="更早消息"
-        >
-          <div className="chat-msg-window-older-actions">
-            <button
-              type="button"
-              className="chat-msg-window-older-btn"
-              onClick={expandOlderStep}
-              title={olderAria}
-              aria-label={olderAria}
-            >
-              显示更早的 {olderStep} 条
-              <span className="chat-msg-window-older-meta" aria-hidden="true">
-                （另有 {messageWindow.hiddenCount} 条未显示）
-              </span>
-            </button>
-            {offerShowAllOlder ? (
+    <AppErrorBoundary variant="compact" title="消息列表出错">
+      <div
+        ref={vs.containerRef}
+        className={styles.list}
+        role="region"
+        aria-label="会话消息"
+        data-window-start={messageWindow.startIndex}
+        data-hidden-count={messageWindow.hiddenCount}
+        data-visible-count={messageWindow.visibleCount}
+        data-total-count={messageWindow.totalCount}
+        data-show-all={showAllMessages ? 'true' : 'false'}
+        data-has-older={messageWindow.hasOlder ? 'true' : 'false'}
+        data-virtual-scroll="true"
+        onClick={handleMarkdownClick}
+        onScroll={vs.onScroll}
+      >
+        {messageWindow.hasOlder && olderStep > 0 ? (
+          <div
+            className="chat-msg-window-older"
+            role="region"
+            aria-label="更早消息"
+          >
+            <div className="chat-msg-window-older-actions">
+              <Tooltip content={olderAria}>
+                <button
+                  type="button"
+                  className="chat-msg-window-older-btn"
+                  onClick={expandOlderStep}
+                  aria-label={olderAria}
+                >
+                  显示更早的 {olderStep} 条
+                  <span className="chat-msg-window-older-meta" aria-hidden="true">
+                    （另有 {messageWindow.hiddenCount} 条未显示）
+                  </span>
+                </button>
+              </Tooltip>
+              {offerShowAllOlder ? (
+                <Tooltip content={showAllAria}>
+                  <button
+                    type="button"
+                    className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
+                    onClick={expandOlderAll}
+                    aria-label={showAllAria}
+                  >
+                    全部展开
+                    <span className="chat-msg-window-older-meta" aria-hidden="true">
+                      （{messageWindow.hiddenCount} 条）
+                    </span>
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {pinnedItems.length > 0 ? (
+          <div className={styles.pinnedBar} role="region" aria-label="已固定消息">
+            <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
               <button
                 type="button"
-                className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
-                onClick={expandOlderAll}
-                title={showAllAria}
-                aria-label={showAllAria}
+                className={styles.pinnedBarToggle}
+                onClick={() => setPinsOpen((v) => !v)}
+                aria-expanded={pinsOpen}
+                aria-controls="chat-pinned-list"
+                aria-label={
+                  pinsOpen
+                    ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
+                    : `展开已固定消息列表，共 ${pinnedItems.length} 条`
+                }
               >
-                全部展开
-                <span className="chat-msg-window-older-meta" aria-hidden="true">
-                  （{messageWindow.hiddenCount} 条）
-                </span>
+                <Lucide.Pin size={13} strokeWidth={2} aria-hidden />
+                <span>已固定 · {pinnedItems.length}</span>
+                <Lucide.ChevronDown
+                  size={14}
+                  className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
+                  aria-hidden
+                />
               </button>
+            </Tooltip>
+            {pinsOpen ? (
+              <ul id="chat-pinned-list" className={styles.pinnedList}>
+                {pinnedItems.map((item) => (
+                  <li key={item.id} className={styles.pinnedItem}>
+                    <Tooltip content="跳转到消息">
+                      <button
+                        type="button"
+                        className={styles.pinnedJump}
+                        aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
+                        onClick={() => jumpToPinned(item.id)}
+                      >
+                        <span className={styles.pinnedSnippet}>{item.snippet}</span>
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="取消固定">
+                      <button
+                        type="button"
+                        className={styles.pinnedUnpin}
+                        aria-label={`取消固定：${item.snippet}`}
+                        onClick={() => togglePin(item.id)}
+                      >
+                        <Lucide.PinOff size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
-        </div>
-      ) : null}
-      {pinnedItems.length > 0 ? (
-        <div className={styles.pinnedBar} role="region" aria-label="已固定消息">
-          <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
-            <button
-              type="button"
-              className={styles.pinnedBarToggle}
-              onClick={() => setPinsOpen((v) => !v)}
-              aria-expanded={pinsOpen}
-              aria-controls="chat-pinned-list"
-              aria-label={
-                pinsOpen
-                  ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
-                  : `展开已固定消息列表，共 ${pinnedItems.length} 条`
-              }
-            >
-              <Lucide.Pin size={13} strokeWidth={2} aria-hidden />
-              <span>已固定 · {pinnedItems.length}</span>
-              <Lucide.ChevronDown
-                size={14}
-                className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
-                aria-hidden
-              />
-            </button>
-          </Tooltip>
-          {pinsOpen ? (
-            <ul id="chat-pinned-list" className={styles.pinnedList}>
-              {pinnedItems.map((item) => (
-                <li key={item.id} className={styles.pinnedItem}>
-                  <Tooltip content="跳转到消息">
-                    <button
-                      type="button"
-                      className={styles.pinnedJump}
-                      aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
-                      onClick={() => jumpToPinned(item.id)}
-                    >
-                      <span className={styles.pinnedSnippet}>{item.snippet}</span>
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="取消固定">
-                    <button
-                      type="button"
-                      className={styles.pinnedUnpin}
-                      aria-label={`取消固定：${item.snippet}`}
-                      onClick={() => togglePin(item.id)}
-                    >
-                      <Lucide.PinOff size={14} aria-hidden />
-                    </button>
-                  </Tooltip>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
 
-      {visibleMessages.map((msg, index) => {
-        const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
-        const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
-        const isPinnedMsg = pinnedIdSet.has(msg.id);
-        const isSearchHit =
-          !!searchHighlightQuery && messageMatchesSearch(msg, searchHighlightQuery);
+        {/* 顶部 spacer：已被滚出视口的消息占位 */}
+        <div style={{ height: startOffset, flexShrink: 0 }} aria-hidden />
 
-        if (msg.sender === 'user') {
+        {/* 可视范围内的消息 */}
+        {visibleMessages.slice(startIndex, endIndex).map((msg, i) => {
+          const virtualIndex = startIndex + i;
+          const prevMsg = virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
+          const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
+          const isPinnedMsg = pinnedIdSet.has(msg.id);
+          const isSearchHit =
+            !!searchHighlightQuery && messageMatchesSearch(msg, searchHighlightQuery);
+
+          if (msg.sender === 'user') {
+            return (
+              <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
+                <div data-vindex={virtualIndex}>
+                  <ChatUserMessageRow
+                    msg={msg}
+                    isPinned={isPinnedMsg}
+                    isSearchHit={isSearchHit}
+                    isExpanded={!!expandedUserMsgs[msg.id]}
+                    onToggleExpand={onToggleExpandUser}
+                    onTogglePin={togglePin}
+                    onWithdraw={onWithdraw}
+                    onShowToast={onShowToast}
+                    messageIndex={virtualIndex}
+                    virtualScrollManager={manager}
+                  />
+                </div>
+              </AppErrorBoundary>
+            );
+          }
+
           return (
-            <ChatUserMessageRow
-              key={msg.id}
-              msg={msg}
-              isPinned={isPinnedMsg}
-              isSearchHit={isSearchHit}
-              isExpanded={!!expandedUserMsgs[msg.id]}
-              onToggleExpand={onToggleExpandUser}
-              onTogglePin={togglePin}
-              onWithdraw={onWithdraw}
-              onShowToast={onShowToast}
-            />
+            <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
+                <div data-vindex={virtualIndex}>
+                  <ChatAssistantMessageRow
+                    msg={msg}
+                    isFollowUp={isFollowUp}
+                    isPinned={isPinnedMsg}
+                    isSearchHit={isSearchHit}
+                    isThinkingMsg={msg.id === thinkingMsgId}
+                    thinkingSeconds={thinkingSeconds}
+                    hideThinkingBlock={hideThinkingBlock}
+                    inPlanMode={inPlanMode}
+                    planApproved={planApproved}
+                    isLastAssistant={msg.id === lastAssistantId}
+                    toolStackProps={toolStackProps}
+                    onTogglePin={togglePin}
+                    onShowToast={onShowToast}
+                    onRegenerate={handleRegenerateRow}
+                    onBranch={onBranch}
+                    onOpenDiff={onOpenDiff}
+                    onOpenDiffPanel={onOpenDiffPanel}
+                    setPermissionMode={setPermissionMode}
+                    setPlanApproved={setPlanApproved}
+                    onFillFollowUp={handleFillFollowUp}
+                    onSendFollowUp={onSendFollowUp ? handleSendFollowUp : undefined}
+                    followUpDismissed={!!dismissedFollowUps[msg.id]}
+                    onDismissFollowUp={handleDismissFollowUp}
+                    messageIndex={virtualIndex}
+                    virtualScrollManager={manager}
+                  />
+                </div>
+              </AppErrorBoundary>
           );
-        }
+        })}
 
-        return (
-          <ChatAssistantMessageRow
-            key={msg.id}
-            msg={msg}
-            isFollowUp={isFollowUp}
-            isPinned={isPinnedMsg}
-            isSearchHit={isSearchHit}
-            isThinkingMsg={msg.id === thinkingMsgId}
-            thinkingSeconds={thinkingSeconds}
-            hideThinkingBlock={hideThinkingBlock}
-            inPlanMode={inPlanMode}
-            planApproved={planApproved}
-            isLastAssistant={msg.id === lastAssistantId}
-            toolStackProps={toolStackProps}
-            onTogglePin={togglePin}
-            onShowToast={onShowToast}
-            onRegenerate={handleRegenerateRow}
-            onBranch={onBranch}
-            onOpenDiff={onOpenDiff}
-            onOpenDiffPanel={onOpenDiffPanel}
-            setPermissionMode={setPermissionMode}
-            setPlanApproved={setPlanApproved}
-            onFillFollowUp={handleFillFollowUp}
-            onSendFollowUp={onSendFollowUp ? handleSendFollowUp : undefined}
-            followUpDismissed={!!dismissedFollowUps[msg.id]}
-            onDismissFollowUp={handleDismissFollowUp}
-          />
-        );
-      })}
-    </div>
+        {/* 底部 spacer：可视范围之后的剩余消息占位 */}
+        <div
+          style={{ height: Math.max(0, estimatedTotalHeight - endOffset), flexShrink: 0 }}
+          aria-hidden
+        />
+      </div>
+    </AppErrorBoundary>
   );
 };
 
