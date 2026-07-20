@@ -786,9 +786,9 @@ export async function createStreamSession(
   try {
     const ready = await client.waitUntilConnected(1_500);
     if (!ready || !client.isConnected()) {
-      if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
-      else callbacks.onChunk(networkUserMessage());
-      finish();
+      // 当 Daemon 未连接时，自动降级到 HTTP SSE Direct Fetch，直接与服务商 API (DeepSeek/OpenAI/OpenCode 等) 通信
+      const { streamViaDirectFetch } = await import('./directFetchBridge');
+      streamViaDirectFetch(prompt, callbacks, sessionId, runId, options);
       return;
     }
 
