@@ -45,6 +45,17 @@ export type StreamRequestOptions = {
   content?: ChatContentPart[];
   hasImages?: boolean;
   attachments?: StreamAttachmentMeta[];
+  systemPrompt?: string;
+  tools?: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>;
+  messages?: Array<{
+    role: string;
+    content: string | ChatContentPart[];
+    reasoning_content?: string;
+    tool_calls?: unknown[];
+    tool_call_id?: string;
+  }>;
+  /** 关流超时（毫秒），用于等待 inflight approval 结束后自动关流。默认 8000ms。 */
+  finishTimeoutMs?: number;
 };
 
 export interface StreamCallbacks {

@@ -1,11 +1,69 @@
 /**
  * Direct HTTP SSE fetch bridge for OpenAI/DeepSeek-compatible LLM endpoints.
  * Fallback path when agent-daemon binary is unreachable or running in browser dev mode.
+ * 
+ * 性能与缓存增强：
+ * - 规范化与确定性排序 Tool Schema (JSON Schema Canonicalization) 确保前缀字节级一致
+ * - 注入 FNV-1a Hash 派生的 prompt_cache_key (适用于 DeepSeek / OpenAI / OpenCode)
+ * - 捕获增量流中的 Prompt Cache Hit/Miss 用量统计并实时透传
  */
 
 import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
 import { getActiveModelId, getActiveProfile } from './providerProfiles';
 import { useLayoutStore } from '../store/layoutStore';
+
+/** 递归规范化与确定性排序 JSON Schema 键名与 required 数组 */
+function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!schema || typeof schema !== 'object') {
+    return { type: 'object', properties: {} };
+  }
+
+  const result: Record<string, unknown> = {
+    type: schema.type || 'object',
+    properties: {},
+  };
+
+  if (schema.properties && typeof schema.properties === 'object') {
+    const sortedProps: Record<string, unknown> = {};
+    const keys = Object.keys(schema.properties as Record<string, unknown>).sort();
+    for (const key of keys) {
+      sortedProps[key] = (schema.properties as Record<string, unknown>)[key];
+    }
+    result.properties = sortedProps;
+  }
+
+  if (Array.isArray(schema.required)) {
+    result.required = [...schema.required].sort();
+  }
+
+  return result;
+}
+
+/** 格式化确定性排序的 Tool 定义 */
+function formatStableTools(tools?: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>) {
+  if (!tools || tools.length === 0) return undefined;
+  
+  const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
+  return sorted.map((t) => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: canonicalizeJsonSchema(t.inputSchema),
+    },
+  }));
+}
+
+/** 构建前缀 Hash 键，用于 OpenAI / DeepSeek Prompt Cache Affinity */
+function buildStableCacheKey(systemPrompt?: string, tools?: ReturnType<typeof formatStableTools>): string {
+  const payload = JSON.stringify({ systemPrompt: systemPrompt || '', tools: tools || [] });
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < payload.length; i++) {
+    hash ^= payload.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `crish-prefix-${(hash >>> 0).toString(16)}`;
+}
 
 /**
  * Maps frontend thinking levels ('off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh')
@@ -48,7 +106,7 @@ function buildThinkingParams(thinkingLevel?: string): Record<string, unknown> {
 }
 
 /**
- * Direct SSE Streaming client using native fetch.
+ * Direct SSE Streaming client using native fetch with prompt caching and tool canonicalization.
  */
 export function streamViaDirectFetch(
   prompt: string,
@@ -63,8 +121,8 @@ export function streamViaDirectFetch(
   const activeProfile = getActiveProfile();
   const activeModel = getActiveModelId() || 'deepseek-chat';
 
-  if (!activeProfile || !activeProfile.apiKey) {
-    const errorMsg = '未检测到 Daemon 服务，且尚未配置活动服务商与 API Key。请在设置 → 模型中配置。';
+  if (!activeProfile || (!activeProfile.apiKey && !activeProfile.oauthToken?.accessToken)) {
+    const errorMsg = '未检测到 Daemon 服务，且尚未配置活动服务商与 API Key/OAuth Token。请在设置 → 模型中配置。';
     if (callbacks.onRunError) callbacks.onRunError(errorMsg, 'config');
     else callbacks.onChunk(errorMsg);
     callbacks.onComplete();
@@ -76,14 +134,47 @@ export function streamViaDirectFetch(
     baseUrl = `${baseUrl}/chat/completions`;
   }
 
+  const apiKey = activeProfile.apiKey || activeProfile.oauthToken?.accessToken || '';
   const thinkingLevel = useLayoutStore.getState().appSettings?.defaultThinkingLevel;
   const thinkingParams = buildThinkingParams(thinkingLevel);
 
-  const payload = {
+  // 1. Stable System Prompt & Tools
+  const systemPrompt = options?.systemPrompt || undefined;
+  const formattedTools = formatStableTools(options?.tools as any);
+  const cacheAffinityKey = buildStableCacheKey(systemPrompt, formattedTools);
+
+  // 2. Format Messages History + User Turn
+  const messagesPayload: Array<Record<string, unknown>> = [];
+  if (systemPrompt?.trim()) {
+    messagesPayload.push({ role: 'system', content: systemPrompt.trim() });
+  }
+
+  if (options?.messages && options.messages.length > 0) {
+    for (const msg of options.messages) {
+      const formattedMsg: Record<string, unknown> = {
+        role: msg.role,
+        content: msg.content,
+      };
+      if (msg.role === 'assistant' && msg.reasoning_content) {
+        formattedMsg.reasoning_content = msg.reasoning_content;
+      }
+      if (msg.tool_calls) formattedMsg.tool_calls = msg.tool_calls;
+      if (msg.tool_call_id) formattedMsg.tool_call_id = msg.tool_call_id;
+      messagesPayload.push(formattedMsg);
+    }
+  }
+
+  messagesPayload.push({ role: 'user', content: prompt });
+
+  // 3. Assemble Payload
+  const payload: Record<string, unknown> = {
     model: activeModel,
-    messages: [{ role: 'user', content: prompt }],
+    messages: messagesPayload,
     stream: true,
+    stream_options: { include_usage: true },
+    prompt_cache_key: cacheAffinityKey,
     ...thinkingParams,
+    ...(formattedTools ? { tools: formattedTools, tool_choice: 'auto' } : {}),
     ...(options?.content ? { content: options.content } : {}),
   };
 
@@ -94,7 +185,7 @@ export function streamViaDirectFetch(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${activeProfile.apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -130,7 +221,6 @@ export function streamViaDirectFetch(
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split(/\r?\n/);
-        // 保留未完整的最后一行
         buffer = lines.pop() || '';
 
         for (const line of lines) {
@@ -144,6 +234,22 @@ export function streamViaDirectFetch(
             const rawJson = trimmed.slice(6);
             try {
               const data = JSON.parse(rawJson);
+
+              // Capture Cache Usage Metrics from Stream Usage Chunk
+              if (data.usage) {
+                const hitTokens =
+                  data.usage.prompt_cache_hit_tokens ??
+                  data.usage.prompt_tokens_details?.cached_tokens ??
+                  0;
+                const missTokens =
+                  data.usage.prompt_cache_miss_tokens ??
+                  (data.usage.prompt_tokens ? Math.max(0, data.usage.prompt_tokens - hitTokens) : 0);
+
+                if (hitTokens > 0 || missTokens > 0) {
+                  callbacks.onThought?.(`[KV Cache: ${hitTokens} hit / ${missTokens} miss]`);
+                }
+              }
+
               const choice = data.choices?.[0];
               if (!choice) continue;
 

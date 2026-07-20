@@ -11,15 +11,42 @@
 import { updateEngineConfig, pushRecentModel, type EngineConfigUpdate } from './engineConfig';
 import { emitUiEvent } from './uiEvents';
 
+export type AuthType = 'api_key' | 'oauth2' | 'subscription';
+
+export type OAuthTokenData = {
+  accessToken: string;
+  refreshToken?: string;
+  /** Unix 时间戳 (ms)，指示 access token 何时过期 */
+  expiresAt: number;
+  tokenType?: string;
+  scope?: string;
+  idToken?: string;
+  issuedAt?: number;
+};
+
+export type OAuthConfig = {
+  clientId: string;
+  clientSecret?: string;
+  authorizeUrl?: string;
+  tokenUrl: string;
+  refreshUrl?: string;
+  scopes?: string[];
+  redirectUri?: string;
+  resource?: string;
+};
+
 export type ProviderProfile = {
   id: string;
   name: string;
   baseUrl: string;
+  authType?: AuthType;
   models: string[];
-  /** 是否已保存密钥（不回显完整密钥） */
+  /** 是否已保存密钥或已完成 OAuth 授权 */
   hasKey: boolean;
-  /** 仅本机桌面单用户存储 */
   apiKey?: string;
+  oauthConfig?: OAuthConfig;
+  oauthToken?: OAuthTokenData;
+  subscriptionPlan?: 'free' | 'go' | 'zen' | 'copilot_pro' | 'custom';
   enabled?: boolean;
 };
 
