@@ -69,12 +69,8 @@ export function getSessionById(
     const hit = byId[sessionId];
     if (hit) return hit;
   }
-  // 索引过期或尚未建立：线性回退并尽量回填
-  const found = state.sessions.find((s) => s.id === sessionId);
-  if (found && byId) {
-    byId[sessionId] = found;
-  }
-  return found;
+  // 索引缺失或尚未同步：回退到线性扫描（读路径绝不 mutate 对象，避免 frozen state 报 not extensible 崩溃）
+  return state.sessions.find((s) => s.id === sessionId);
 }
 
 /** 数组下标（需要重排时）；优先索引定位 */

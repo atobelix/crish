@@ -201,8 +201,7 @@ async function daemonRequest(
   const { getDesktopDaemonClient } = await import('../api/daemonClient');
   const client = getDesktopDaemonClient();
   if (!client.isConnected()) {
-    const ok = await client.waitUntilConnected(8_000);
-    if (!ok) throw new Error('Daemon not connected');
+    throw new Error('Daemon not connected');
   }
   return (await client.request(
     { type, ...payload },
@@ -299,7 +298,9 @@ export class SessionSyncService {
       this.emitStatus();
       return changes.length;
     } catch (err) {
-      console.error('[SessionSync] pullFromEngine failed:', err);
+      if (!String(err).includes('Daemon not connected')) {
+        console.error('[SessionSync] pullFromEngine failed:', err);
+      }
       eventBus.emit(SYNC_ERROR_EVENT, {
         operation: 'pull',
         error: String(err),
