@@ -153,6 +153,8 @@ export function streamViaDirectFetch(
                 callbacks.onThought(delta.reasoning_content);
               } else if (typeof delta.reasoning === 'string' && delta.reasoning) {
                 callbacks.onThought(delta.reasoning);
+              } else if (typeof delta.thinking === 'string' && delta.thinking) {
+                callbacks.onThought(delta.thinking);
               }
 
               // Text content delta
