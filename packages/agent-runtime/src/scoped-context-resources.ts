@@ -71,7 +71,17 @@ interface ParsedFrontmatter {
   body: string;
 }
 
-const DEFAULT_CONTEXT_FILE_NAMES = ["AGENTS.md", "CONEX.md", "PROJECT_RULES.md"];
+const DEFAULT_CONTEXT_FILE_NAMES = [
+  "AGENTS.md",
+  "CONEX.md",
+  "PROJECT_RULES.md",
+  "RULES.md",
+  "CLAUDE.md",
+  ".agents/AGENTS.md",
+  ".claude/CLAUDE.md",
+  ".opencode/AGENTS.md",
+  ".hermes/SOUL.md"
+];
 const DEFAULT_MAX_RULE_BYTES = 256 * 1024;
 
 export async function loadScopedContextResources(options: LoadScopedContextResourcesOptions): Promise<ScopedContextResourcesResult> {
@@ -150,7 +160,7 @@ export async function loadScopedContextResources(options: LoadScopedContextResou
       for (const skill of loaded.skills) {
         skills.push(skill);
         skillRecords.push(
-          skillToScopedContextRecord({
+          await skillToScopedContextRecord({
             skill,
             scope: directory.scope,
             activation: directory.activation,
@@ -182,7 +192,7 @@ export async function loadAndResolveScopedContextResources(
   const loaded = await loadScopedContextResources(options);
   return {
     ...loaded,
-    resolution: resolveScopedContext({
+    resolution: await resolveScopedContext({
       ...loaded.project,
       records: loaded.records,
       userEnabledIds: options.userEnabledIds,
@@ -228,7 +238,7 @@ async function readScopedRuleFile(
       },
       order
     };
-    return { record: defineScopedRule(ruleInput) };
+    return { record: await defineScopedRule(ruleInput) };
   } catch (error) {
     return { diagnostic: warning(filePath, `Failed to read scoped rule file: ${errorMessage(error)}`) };
   }

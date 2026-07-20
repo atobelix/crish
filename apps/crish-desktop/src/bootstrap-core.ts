@@ -24,10 +24,12 @@ export async function bootstrapCore(): Promise<void> {
       initMinimalPool();
     })(),
 
-    // 3. 最小配置读取 (只读必要的 localStorage key)
+    // 3. 最小配置读取 (只读必要的 localStorage key) 与 OAuth 调度器初始化
     (async () => {
       const { loadMinimalConfig } = await import('./store/minimalConfig');
       await loadMinimalConfig();
+      const { initOAuthTokenScheduler } = await import('./api/oauthTokenManager');
+      initOAuthTokenScheduler();
     })(),
   ]);
 
