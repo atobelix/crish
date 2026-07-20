@@ -1,0 +1,46 @@
+:root {
+  /* ── 基础层 ── */
+  --z-base: 0;
+  --z-decorative: 1;
+  --z-sticky-bar: 2;
+  --z-card-header: 3;
+  --z-card-footer: 5;
+  --z-pinned-bar: 10;
+  --z-scroll-fab: 12;
+
+  /* ── 侧栏与导航 ── */
+  --z-sidebar: 100;
+  --z-sidebar-resizer: 100;
+  --z-sidebar-menu: 150;
+
+  /* ── 弹出层（必须 > 侧栏）── */
+  --z-popover: 200;
+  --z-splitter: 300;
+  --z-dropdown-menu: 400;
+  --z-breadcrumb: 500;
+
+  /* ── 浮层面板 ── */
+  --z-floating-panel: 1000;
+  --z-dropdown: 1010;
+  --z-drag-highlight: 1020;
+  --z-drag-card: 1030;
+
+  /* ── 模态与通知 ── */
+  --z-modal-backdrop: 9000;
+  --z-context-menu: 9500;
+  --z-toast: 10000;
+  --z-drag-overlay: 10010;
+  --z-cheatsheet: 12000;
+  --z-settings-panel: 13000;
+
+  /* ── 设置内弹层 ── */
+  --z-settings-dialog: 20000;
+  --z-permission-menu: 20040;
+  --z-settings-tooltip: 20060;
+  --z-usage-modal: 30000;
+
+  /* ── 顶层 ── */
+  --z-first-run: 100000;
+  --z-model-flyout: 100000;
+  --z-skip-link: 100000;
+}

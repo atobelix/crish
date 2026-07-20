@@ -1,0 +1,11 @@
+/*
+ * 断点参考（非功能，仅文档）
+ * CSS @media 不支持 var()，请直接在 @media 查询中使用以下值。
+ *
+ * --breakpoint-desktop: 720px   最常用(11处)
+ * --breakpoint-tablet: 640px    7处
+ * --breakpoint-tablet-sm: 560px 6处
+ * --breakpoint-phone: 420px     1处
+ * --breakpoint-phone-sm: 360px  2处
+ * --breakpoint-wide: 1200px     1处 (min-width)
+ */
