@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { Tooltip } from './settings/SettingsUI';
@@ -28,6 +28,19 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
   onCommit,
   onPush,
 }) => {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [open, onToggle]);
+
   if (!open) {
     return (
       <div className={styles.commitTriggerBar} onClick={onToggle}>

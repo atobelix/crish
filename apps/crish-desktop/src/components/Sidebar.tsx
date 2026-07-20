@@ -752,6 +752,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         onSetGroupType={setGroupType}
         onSetFilterType={setFilterType}
         onCloseSortDropdown={() => setSortDropdownOpen(false)}
+        onCloseContextMenu={() => setContextMenu(null)}
       />
     </aside>
   );

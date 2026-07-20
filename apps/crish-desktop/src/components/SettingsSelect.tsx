@@ -231,7 +231,7 @@ export const SettingsSelect: React.FC<Props> = ({
               left: pos.left,
               width: pos.width,
               maxHeight: pos.maxH,
-              zIndex: 20050,
+              zIndex: 'var(--z-settings-tooltip)',
             }}
           >
             {footer ? <div className={styles.settingsSelectHeader}>{footer}</div> : null}

@@ -234,7 +234,7 @@ const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
             right: pos.right,
             width: pos.width,
             overflow: 'visible',
-            zIndex: 100000,
+            zIndex: 'var(--z-model-flyout)',
           }}
           onMouseLeave={() => setFlyProfileId(null)}
           onWheel={(e) => e.stopPropagation()}
@@ -276,7 +276,7 @@ const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                         maxHeight: '280px',
                         overflowY: 'auto',
                         overscrollBehavior: 'contain',
-                        zIndex: 100001,
+                        zIndex: 'var(--z-model-flyout)',
                       }}
                       onWheel={(e) => e.stopPropagation()}
                     >
@@ -676,7 +676,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             right: 0,
             top: 'calc(100% + 6px)',
             minWidth: '180px',
-            zIndex: 10000,
+            zIndex: 'var(--z-settings-dialog)',
           }}
           role="menu"
           aria-label="添加服务商"
@@ -906,7 +906,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                             borderRadius: '8px',
                             padding: '4px 8px',
                             whiteSpace: 'nowrap',
-                            zIndex: 10,
+                            zIndex: 'var(--z-card-footer)',
                           }}
                         >
                           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>确定删除？</span>
@@ -1006,7 +1006,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                       aria-label="检查连通性"
                     >
-                      {checkBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
+                      {checkBusy ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
                     </button>
                   </Tooltip>
                   <Tooltip content="自动获取服务商模型列表">
@@ -1018,7 +1018,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                       style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                       aria-label="自动获取"
                     >
-                      {scanBusy ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.RefreshCw size={13} />}
+                      {scanBusy ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.RefreshCw size={13} />}
                     </button>
                   </Tooltip>
                   <div style={{ position: 'relative' }}>
@@ -1208,7 +1208,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                                 </span>
                               )}
                               <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)} title="测试连通性">
-                                {testBusy === tKey ? <Lucide.Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Lucide.Wifi size={13} />}
+                                {testBusy === tKey ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
                               </button>
                               <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={closeConfig}>收起</button>
                               <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={saveConfig}>保存</button>

@@ -3,6 +3,9 @@
  * 长列表（100+）仅挂载可视区 + overscan，用 spacer 撑高度。
  *
  * 搜索（行高可变）/ 拖拽（需全量 drop target）时由调用方禁用。
+ *
+ * 支持 HeightGetter 回调实现可变行高（Phase 2 Pretext 集成）。
+ * 未提供 getHeight 时回退到统一 rowHeight（完全向后兼容）。
  */
 
 export const SIDEBAR_SESSION_ROW_HEIGHT = 28;
@@ -23,6 +26,35 @@ export type SessionListWindowRange = {
   windowed: boolean;
 };
 
+export type HeightGetter = (index: number) => number;
+
+export function uniformHeight(h: number): HeightGetter {
+  return () => h;
+}
+
+/** 对 [from, to) 范围内各行高度求和 */
+export function sumHeights(getHeight: HeightGetter, from: number, to: number): number {
+  let total = 0;
+  for (let i = from; i < to; i++) total += getHeight(i);
+  return total;
+}
+
+/** 查找累积高度首次超过 offset 的行下标；offset≤0 返回 0；count≤0 返回 -1 */
+export function indexAtOffset(getHeight: HeightGetter, offset: number, count: number): number {
+  if (count <= 0) return -1;
+  if (offset <= 0) return 0;
+  let acc = 0;
+  for (let i = 0; i < count; i++) {
+    acc += getHeight(i);
+    if (acc > offset) return i;
+  }
+  return count - 1;
+}
+
+function resolveHeightGetter(getHeight?: HeightGetter, rowHeight?: number): HeightGetter {
+  return getHeight ?? uniformHeight(normalizeRowHeight(rowHeight));
+}
+
 export type ComputeSessionListWindowOpts = {
   count: number;
   /**
@@ -35,6 +67,8 @@ export type ComputeSessionListWindowOpts = {
   /** 滚动容器 clientHeight */
   viewportHeight?: number;
   rowHeight?: number;
+  /** 可变行高回调（优先于 rowHeight）。未提供时使用 uniform rowHeight */
+  getHeight?: HeightGetter;
   overscan?: number;
   threshold?: number;
   /**
@@ -109,19 +143,24 @@ export function shouldWindowSessionList(
 /** 列表总内容高度（spacer 计算用） */
 export function sessionListTotalHeight(
   count: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): number {
-  return normalizeSessionCount(count) * normalizeRowHeight(rowHeight);
+  const n = normalizeSessionCount(count);
+  const gh = resolveHeightGetter(getHeight, rowHeight);
+  if (getHeight) return sumHeights(gh, 0, n);
+  return n * normalizeRowHeight(rowHeight);
 }
 
 /**
  * 视口可容纳行数（含 overscan*2），至少 1。
  * 与 computeSessionListWindow 的 visible 计算一致。
+ * 注：可变行高时按统一 rowHeight 估算，不影响精确定位。
  */
 export function estimateVisibleRowCount(
   viewportHeight: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
-  overscan: number = SIDEBAR_WINDOW_OVERSCAN,
+  rowHeight?: number,
+  overscan?: number,
 ): number {
   const h = normalizeRowHeight(rowHeight);
   const vh = Math.max(1, finiteOr(viewportHeight, 1) | 0 || 1);
@@ -148,24 +187,28 @@ export function windowContainsIndex(
  */
 export function sessionListWindowSpanHeight(
   range: Pick<SessionListWindowRange, 'start' | 'end' | 'topPad' | 'bottomPad'>,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): number {
-  const h = normalizeRowHeight(rowHeight);
-  const rows = Math.max(0, (range.end | 0) - (range.start | 0));
+  const gh = resolveHeightGetter(getHeight, rowHeight);
+  const start = range.start | 0;
+  const end = range.end | 0;
+  const rows = Math.max(0, end - start);
   const top = Number.isFinite(range.topPad) ? range.topPad : 0;
   const bottom = Number.isFinite(range.bottomPad) ? range.bottomPad : 0;
-  return top + rows * h + bottom;
+  return top + sumHeights(gh, start, end) + bottom;
 }
 
 /** 窗口 spacer 与 count 是否对齐（回归：裁剪不丢总高度） */
 export function sessionListWindowHeightMatchesCount(
   range: SessionListWindowRange,
   count: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): boolean {
   return (
-    sessionListWindowSpanHeight(range, rowHeight) ===
-    sessionListTotalHeight(count, rowHeight)
+    sessionListWindowSpanHeight(range, rowHeight, getHeight) ===
+    sessionListTotalHeight(count, rowHeight, getHeight)
   );
 }
 
@@ -177,10 +220,11 @@ export function clampSessionListWindowRange(
   range: Pick<SessionListWindowRange, 'start' | 'end'> &
     Partial<Pick<SessionListWindowRange, 'windowed'>>,
   count: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): SessionListWindowRange {
   const n = normalizeSessionCount(count);
-  const h = normalizeRowHeight(rowHeight);
+  const gh = resolveHeightGetter(getHeight, rowHeight);
   if (n === 0) {
     return { start: 0, end: 0, topPad: 0, bottomPad: 0, windowed: false };
   }
@@ -201,8 +245,8 @@ export function clampSessionListWindowRange(
   return {
     start,
     end,
-    topPad: start * h,
-    bottomPad: Math.max(0, (n - end) * h),
+    topPad: sumHeights(gh, 0, start),
+    bottomPad: Math.max(0, sumHeights(gh, end, n)),
     windowed: start > 0 || end < n,
   };
 }
@@ -216,7 +260,8 @@ export function expandWindowToIndex(
   range: SessionListWindowRange,
   index: number,
   count: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): SessionListWindowRange {
   const n = normalizeSessionCount(count);
   const idx = normalizeSessionIndex(index, n);
@@ -226,10 +271,9 @@ export function expandWindowToIndex(
   if (windowContainsIndex(range, idx)) {
     return range;
   }
-  const h = normalizeRowHeight(rowHeight);
   const start = Math.min(range.start | 0, idx);
   const end = Math.max(range.end | 0, idx + 1);
-  return clampSessionListWindowRange({ start, end }, n, h);
+  return clampSessionListWindowRange({ start, end }, n, rowHeight, getHeight);
 }
 
 /**
@@ -241,12 +285,13 @@ export function maxScrollTopForSessionList(opts: {
   viewportHeight: number;
   listOffsetTop?: number;
   rowHeight?: number;
+  getHeight?: HeightGetter;
 }): number {
   const count = normalizeSessionCount(opts.count);
-  const rowHeight = normalizeRowHeight(opts.rowHeight);
+  const gh = resolveHeightGetter(opts.getHeight, opts.rowHeight);
   const listOffsetTop = finiteOr(opts.listOffsetTop, 0);
   const viewportHeight = Math.max(1, finiteOr(opts.viewportHeight, 1));
-  const contentEnd = listOffsetTop + count * rowHeight;
+  const contentEnd = listOffsetTop + sumHeights(gh, 0, count);
   return Math.max(0, contentEnd - viewportHeight);
 }
 
@@ -257,13 +302,14 @@ export function maxScrollTopForSessionList(opts: {
 export function rowIndexAtListScroll(
   relativeScroll: number,
   count: number,
-  rowHeight: number = SIDEBAR_SESSION_ROW_HEIGHT,
+  rowHeight?: number,
+  getHeight?: HeightGetter,
 ): number {
+  const gh = resolveHeightGetter(getHeight, rowHeight);
   const n = normalizeSessionCount(count);
   if (n === 0) return -1;
-  const h = normalizeRowHeight(rowHeight);
-  const rs = Number.isFinite(relativeScroll) ? relativeScroll : 0;
-  return Math.max(0, Math.min(n - 1, Math.floor(rs / h)));
+  const rs = Math.max(0, Number.isFinite(relativeScroll) ? relativeScroll : 0);
+  return indexAtOffset(gh, rs, n);
 }
 
 /**
@@ -280,11 +326,12 @@ export function scrollTopToRevealIndex(opts: {
   viewportHeight: number;
   listOffsetTop?: number;
   rowHeight?: number;
+  getHeight?: HeightGetter;
   scrollTop?: number;
   align?: 'nearest' | 'start' | 'center';
 }): number {
   const count = normalizeSessionCount(opts.count);
-  const rowHeight = normalizeRowHeight(opts.rowHeight);
+  const gh = resolveHeightGetter(opts.getHeight, opts.rowHeight);
   const listOffsetTop = finiteOr(opts.listOffsetTop, 0);
   const viewportHeight = Math.max(1, finiteOr(opts.viewportHeight, 1));
   const align = opts.align ?? 'nearest';
@@ -293,7 +340,7 @@ export function scrollTopToRevealIndex(opts: {
     count,
     viewportHeight,
     listOffsetTop,
-    rowHeight,
+    getHeight: gh,
   });
   const clampScroll = (v: number) => Math.max(0, Math.min(maxScroll, v));
 
@@ -302,8 +349,9 @@ export function scrollTopToRevealIndex(opts: {
     return clampScroll(current);
   }
 
-  const rowTop = listOffsetTop + idx * rowHeight;
-  const rowBottom = rowTop + rowHeight;
+  const rowTop = listOffsetTop + sumHeights(gh, 0, idx);
+  const rowH = gh(idx);
+  const rowBottom = rowTop + rowH;
   const viewTop = current;
   const viewBottom = current + viewportHeight;
 
@@ -313,7 +361,7 @@ export function scrollTopToRevealIndex(opts: {
     return clampScroll(rowBottom - viewportHeight);
   }
   if (align === 'center') {
-    return clampScroll(rowTop - (viewportHeight - rowHeight) / 2);
+    return clampScroll(rowTop - (viewportHeight - rowH) / 2);
   }
   // start
   return clampScroll(rowTop);
@@ -327,6 +375,7 @@ export function computeSessionListWindow(
 ): SessionListWindowRange {
   const count = normalizeSessionCount(opts.count);
   const rowHeight = normalizeRowHeight(opts.rowHeight);
+  const gh = resolveHeightGetter(opts.getHeight, rowHeight);
   const overscan = Math.max(0, finiteOr(opts.overscan, SIDEBAR_WINDOW_OVERSCAN) | 0);
   const threshold = normalizeSessionCount(
     opts.threshold ?? SIDEBAR_WINDOW_THRESHOLD,
@@ -350,25 +399,25 @@ export function computeSessionListWindow(
   const listOffsetTop = finiteOr(opts.listOffsetTop, 0);
 
   // 列表内部相对滚动量：负值表示列表顶还在视口下方
-  const relativeScroll = scrollTop - listOffsetTop;
+  const relativeScroll = Math.max(0, scrollTop - listOffsetTop);
   const visible = estimateVisibleRowCount(viewportHeight, rowHeight, overscan);
   // 底部钳位：至少保留一窗行，避免 start===count 时空切片
   const maxStart = Math.max(0, count - Math.min(visible, count));
-  const rawStart = Math.floor(relativeScroll / rowHeight) - overscan;
+  const rawStart = indexAtOffset(gh, relativeScroll, count) - overscan;
   const start = Math.max(0, Math.min(maxStart, rawStart));
   const end = Math.min(count, start + visible);
 
   let range: SessionListWindowRange = {
     start,
     end,
-    topPad: start * rowHeight,
-    bottomPad: Math.max(0, (count - end) * rowHeight),
+    topPad: sumHeights(gh, 0, start),
+    bottomPad: Math.max(0, sumHeights(gh, end, count)),
     windowed: start > 0 || end < count,
   };
 
   // 视口大到能装下列表时 windowed 可能为 false——仍是正确的 full 等价切片
   if (opts.ensureIndex != null) {
-    range = expandWindowToIndex(range, opts.ensureIndex, count, rowHeight);
+    range = expandWindowToIndex(range, opts.ensureIndex, count, rowHeight, gh);
   }
 
   return range;

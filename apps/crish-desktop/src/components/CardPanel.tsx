@@ -212,7 +212,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
         border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
         animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
         pointerEvents: 'none',
-        zIndex: 1000,
+        zIndex: 'var(--z-drag-highlight)',
       };
     } else if (direction === 'top') {
       return {
@@ -226,7 +226,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
         border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
         animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
         pointerEvents: 'none',
-        zIndex: 1000,
+        zIndex: 'var(--z-drag-highlight)',
       };
     } else if (direction === 'bottom') {
       return {
@@ -240,7 +240,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
         border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
         animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
         pointerEvents: 'none',
-        zIndex: 1000,
+        zIndex: 'var(--z-drag-highlight)',
       };
     }
     return null;

@@ -101,7 +101,7 @@ export const Tooltip: React.FC<{
             top: rect.top - 8,
             left: rect.left + rect.width / 2,
             transform: 'translate(-50%, -100%)',
-            zIndex: 20060,
+            zIndex: 'var(--z-settings-tooltip)',
           }}
         >
           <div className={`${styles.modernSelectTooltipInner} modern-select-tooltip-inner`}>{content}</div>

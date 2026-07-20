@@ -128,7 +128,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
         top: 'calc(100% + 6px)',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 1000,
+        zIndex: 'var(--z-dropdown)',
         width: '230px',
         overflow: 'visible',
       }}

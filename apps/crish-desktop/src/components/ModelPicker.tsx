@@ -140,6 +140,16 @@ export const ModelPicker: React.FC<Props> = ({
 
   useEffect(() => {
     if (!open) return;
+    requestAnimationFrame(() => {
+      const first = rootRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();

@@ -3,7 +3,7 @@
  * 空态由 ChatCard → ChatEmptyState 负责；本组件不渲染欢迎壳，避免幽灵闪屏。
  * 状态机/stream 仍在 ChatCard；className 与历史路径保持一致。
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMessageList.module.css';
 import { Tooltip } from './settings/SettingsUI';
@@ -30,6 +30,13 @@ import {
   ChatAssistantMessageRow,
   ChatUserMessageRow,
 } from './ChatMessageRow';
+import { prepare, layout } from '@chenglou/pretext';
+import { useTextHeightCache } from '../hooks/useTextHeightCache';
+import {
+  computeAverageRowHeight,
+  MESSAGE_ESTIMATED_ROW_HEIGHT,
+} from '../api/messageWindow';
+import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
 
 const EMPTY_PIN_IDS: string[] = [];
 const EMPTY_MSGS: SessionMessage[] = [];
@@ -500,6 +507,88 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     ],
   );
 
+  // ───── 渐进精确高度缓存 ─────
+  const heightCache = useTextHeightCache();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const pretextFont = useMemo(() => {
+    try {
+      return buildPretextFontForUiSize('medium', 'sans', 'normal');
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [containerWidth, setContainerWidth] = useState(680);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const update = () => setContainerWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /** 未渲染过的消息用 Pretext 估算纯文本部分高度 */
+  useEffect(() => {
+    if (!pretextFont || containerWidth <= 0) return;
+    const TEXT_LINE_HEIGHT = 22;
+    const TEXT_PADDING = 40;
+    const TOOL_CALL_OVERHEAD_PER_CALL = 80;
+    const availWidth = Math.max(1, containerWidth - 32);
+    for (const msg of visibleMessages) {
+      const existing = heightCache.get(msg.id);
+      if (existing?.actual != null || existing?.estimated != null) continue;
+      let h = MESSAGE_ESTIMATED_ROW_HEIGHT;
+      const text = msg.text || '';
+      if (text && availWidth > 0) {
+        try {
+          const prepared = prepare(text, pretextFont);
+          const result = layout(prepared, availWidth, TEXT_LINE_HEIGHT);
+          h = result.height + TEXT_PADDING;
+        } catch {
+          h = MESSAGE_ESTIMATED_ROW_HEIGHT;
+        }
+      }
+      if (msg.toolCalls?.length) {
+        h += TOOL_CALL_OVERHEAD_PER_CALL * msg.toolCalls.length;
+      }
+      heightCache.set(msg.id, h, false);
+    }
+  }, [visibleMessages, pretextFont, containerWidth, heightCache]);
+
+  /** 渲染后通过 ResizeObserver 获取实际行高，覆盖 estimate */
+  useEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const el = entry.target as HTMLElement;
+        const msgId = el.dataset.msgId;
+        if (msgId && entry.contentRect.height > 0) {
+          heightCache.set(msgId, entry.contentRect.height, true);
+        }
+      }
+    });
+    const rows = Array.from(container.querySelectorAll('[data-msg-id]'));
+    for (const row of rows) {
+      ro.observe(row);
+    }
+    return () => ro.disconnect();
+  }, [visibleMessages, heightCache]);
+
+  /** 窗口计算用平均行高（fallback 120） */
+  const avgRowHeight = useMemo(
+    () =>
+      computeAverageRowHeight(
+        (id) => heightCache.getHeight(id),
+        visibleMessages.map((m) => m.id),
+      ),
+    [visibleMessages, heightCache],
+  );
+
   // ChatCard 在 emptyKind 时改挂 ChatEmptyState；此处防御性短路，杜绝欢迎壳幽灵闪屏
   if (messages.length === 0) {
     return null;
@@ -510,6 +599,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   return (
     <div
+      ref={listRef}
       className={styles.list}
       role="region"
       aria-label="会话消息"
@@ -519,6 +609,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       data-total-count={messageWindow.totalCount}
       data-show-all={showAllMessages ? 'true' : 'false'}
       data-has-older={messageWindow.hasOlder ? 'true' : 'false'}
+      data-avg-row-height={Math.round(avgRowHeight)}
       onClick={handleMarkdownClick}
     >
       {messageWindow.hasOlder && olderStep > 0 ? (

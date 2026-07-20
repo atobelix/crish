@@ -74,6 +74,10 @@ export const SHORTCUT_OVERRIDES_KEY = 'crish_shortcut_overrides';
 export const SHOW_ENGINE_SETTINGS_KEY = 'crish_show_engine_settings';
 /** 侧栏折叠状态 */
 export const SIDEBAR_COLLAPSED_KEY = 'crish_sidebar_collapsed';
+/** 侧栏宽度（px，拖拽/键盘调整后持久化） */
+export const SIDEBAR_WIDTH_KEY = 'crish_sidebar_width';
+/** 侧栏列表排序/分组/筛选偏好 */
+export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
 /** 技能激活状态 */
 export const SKILL_ACTIVATION_KEY = 'crish_skill_activation_v1';
 /** 技能额外搜索目录 */
@@ -94,6 +98,8 @@ export const THEME_BRIGHTNESS_ADJUST_KEY = 'crish_theme_brightness_adjust';
 export const THEME_BRIGHTNESS_VIBRANT_KEY = 'crish_theme_brightness_vibrant';
 /** 主题智能时光温感过渡开关 */
 export const THEME_BRIGHTNESS_AUTO_TIME_KEY = 'crish_theme_brightness_auto_time';
+/** 发送快捷键偏好：'enter' | 'ctrl+enter' */
+export const SEND_SHORTCUT_KEY = 'crish_send_shortcut';
 /** UI 密度：'small' | 'medium' | 'large' */
 export const UI_SIZE_KEY = 'crish_ui_size';
 /** 更新可用标记 */
@@ -110,6 +116,19 @@ export const WORKSPACE_LAYOUT_KEY = 'crish_workspace_layout_v1';
 export const WS_LAYOUT_CUSTOMIZED_KEY = 'crish_ws_layout_session_customized_v1';
 /** 本会话已应用布局的项目路径 */
 export const WS_LAYOUT_APPLIED_KEY = 'crish_ws_layout_session_applied_v1';
+
+// ── 会话持久化（sessionPersistence.ts 导出）───────────────────────────────
+
+/** 会话索引 JSON（全部会话元数据列表） */
+export const SESSION_INDEX_KEY = 'crish_session_index_v1';
+/** 会话消息正文 JSONL 前缀（后接 sessionId） */
+export const SESSION_BODY_PREFIX = 'crish_session_body_v1:';
+/** 协作 agent 前缀（后接 sessionId） */
+export const SESSION_AGENTS_PREFIX = 'crish_session_agents_v1:';
+/** 活动会话 id */
+export const SESSION_ACTIVE_KEY = 'crish_active_session_v1';
+/** 文件夹顺序列表 */
+export const SESSION_FOLDER_KEY = 'crish_folder_order_v1';
 
 // ── crish_ 前缀 sessionStorage keys ───────────────────────────────────────
 
@@ -158,3 +177,5 @@ export const CROSS_TAB_CHANNEL_NAME = 'crish-cross-tab' as const;
 export const SETTINGS_LOCK_NAME = 'crish-settings-write' as const;
 /** 跨标签页 Leader 选举 key（localStorage） */
 export const CROSS_TAB_LEADER_KEY = 'crish_cross_tab_leader';
+/** 引擎同步游标（SessionSyncService 记录 lastSyncedCursor） */
+export const SYNC_CURSOR_KEY = 'crish_sync_cursor';

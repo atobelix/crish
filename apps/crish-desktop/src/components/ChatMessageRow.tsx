@@ -8,7 +8,7 @@
  * - 角色文案：messageRoleLabelZh（你 / 助手）与固定条 chat-pinned-role 一致
  * - 工具栈：仅经 toolStackProps handoff 托管 ChatToolStack，禁止行内二次实现工具 UI
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from './settings/SettingsUI';
@@ -35,6 +35,8 @@ import { Priority } from '../workers';
 import { ChangeOverviewCard } from './ChangeOverviewCard';
 import type { PermissionMode } from '../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
+import { useBubbleShrinkWidth, usePreparedText } from '../hooks/useTextMeasure';
+import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
 
 // ─── 密度常量（长用户气泡截断） ─────────────────────────────────────────────
 
@@ -257,6 +259,9 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
+  const userRowRef = useRef<HTMLDivElement>(null);
+  const userBubbleFont = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
+  const userBubbleWidth = useBubbleShrinkWidth(displayText, userBubbleFont, userRowRef, 32);
   const pinLabels = pinToggleLabels(isPinned);
   const rowAria = messageRowAriaLabel({
     role: 'user',
@@ -307,6 +312,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   return (
     <div
       className={`${styles.row} ${styles.rowUser} msg-row msg-row-user${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      ref={userRowRef}
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
@@ -326,7 +332,10 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           className={`${styles.userBubble} ${isExpanded ? 'expanded' : ''}`}
           onClick={toggleExpand}
           onKeyDown={onBubbleKeyDown}
-          style={{ cursor: isLong ? 'pointer' : 'default' }}
+          style={{
+            cursor: isLong ? 'pointer' : 'default',
+            maxWidth: userBubbleWidth ?? undefined,
+          }}
           role={isLong ? 'button' : undefined}
           tabIndex={isLong ? 0 : undefined}
           aria-expanded={isLong ? isExpanded : undefined}
@@ -475,6 +484,11 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   onDismissFollowUp,
 }) => {
   void _onBranch;
+  const assistantRowRef = useRef<HTMLDivElement>(null);
+  const assistantBubbleFont = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
+  const assistantPlainText = msg.text || '';
+  const assistantBubbleWidth = useBubbleShrinkWidth(assistantPlainText, assistantBubbleFont, assistantRowRef, 0);
+
   const thinkingRaw =
     msg.thinking &&
     msg.thinking.trim() &&
@@ -537,6 +551,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   return (
     <div
       className={`${styles.row} ${styles.rowAssistant} msg-row msg-row-assistant ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      ref={assistantRowRef}
       data-msg-id={msg.id}
       data-role="assistant"
       data-pinned={isPinned ? 'true' : undefined}
@@ -605,7 +620,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
         </div>
       ) : null}
 
-      <div className={styles.assistantBody}>
+      <div className={styles.assistantBody} style={{ maxWidth: assistantBubbleWidth ?? undefined }}>
         {(() => {
           try {
             const timeline = buildAssistantTimeline(msg);
@@ -888,10 +903,31 @@ function useAsyncMarkdownHtml(markdown: string, priority: Priority): { html: str
 
 function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priority }) {
   const { html, loading } = useAsyncMarkdownHtml(text, priority);
+  const skeletonRef = useRef<HTMLDivElement>(null);
+  const font = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
+  const { measureHeight } = usePreparedText({ text, font });
+  const [skeletonMinH, setSkeletonMinH] = useState<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    if (!loading || !skeletonRef.current || !text) {
+      setSkeletonMinH(undefined);
+      return;
+    }
+    const parentW = skeletonRef.current.parentElement?.clientWidth ?? 0;
+    const fontSize = parseFloat(font.match(/([\d.]+)px/)?.[0] ?? '14');
+    const lineHeightPx = fontSize * 1.65;
+    const h = measureHeight(Math.max(1, parentW), lineHeightPx);
+    setSkeletonMinH(h > 0 ? Math.ceil(h * 1.15) : undefined);
+  }, [loading, measureHeight, font, text]);
+
   if (!text) return null;
   if (loading) {
     return (
-      <div className={styles.assistantText} style={{ whiteSpace: 'pre-wrap' }}>
+      <div
+        ref={skeletonRef}
+        className={styles.assistantText}
+        style={{ whiteSpace: 'pre-wrap', minHeight: skeletonMinH }}
+      >
         {escapeHtml(text)}
       </div>
     );

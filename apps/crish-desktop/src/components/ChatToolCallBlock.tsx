@@ -2,7 +2,7 @@
  * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
  * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
  */
-import React, { Suspense, lazy, useState, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useRef, useLayoutEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
@@ -26,7 +26,11 @@ import {
   type ToolRenderItem,
 } from '../api/toolPresentation';
 import { extractFilePathFromToolArgs } from '../api/workspaceFsApi';
-import { TOOL_OUTPUT_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
+import { TOOL_OUTPUT_PIXEL_CAP } from '../api/messageWindow';
+import { usePreparedText } from '../hooks/useTextMeasure';
+import { buildPretextFont, getResolvedFontSizePx } from '../utils/pretextFontBridge';
+import { prepareWithSegments, walkLineRanges, materializeLineRange, layout } from '@chenglou/pretext';
+import type { LayoutLineRange } from '@chenglou/pretext';
 
 const InlineAgentPanel = lazy(() =>
   import('./InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel })),
@@ -157,13 +161,66 @@ function ToolResultBody({
   const raw = tc.output || '';
   const images = useMemo(() => extractImageRefs(raw), [raw]);
   const full = useMemo(() => fullToolOutput(raw), [raw]);
-  const budget = useMemo(
-    () =>
-      showFullOutput
-        ? { text: full, truncated: false, originalLength: full.length }
-        : budgetDomText(full, TOOL_OUTPUT_DOM_CHAR_CAP),
-    [showFullOutput, full],
-  );
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => setContainerWidth(el.clientWidth - 24);
+    measure();
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const fontConfig = useMemo(() => {
+    const fontSizePx = getResolvedFontSizePx('--font-size-xs');
+    const fontStr = buildPretextFont('mono', 'normal', fontSizePx);
+    const lineHeightPx = Math.round(fontSizePx * 1.45);
+    return { fontStr, lineHeightPx };
+  }, []);
+
+  const { prepared } = usePreparedText({
+    text: full || '',
+    font: fontConfig.fontStr,
+    whiteSpace: 'pre-wrap',
+  });
+
+  const budget = useMemo(() => {
+    if (showFullOutput) {
+      return { text: full, truncated: false, originalLength: full.length };
+    }
+    if (!full || !containerWidth || containerWidth <= 16) {
+      return { text: full, truncated: false, originalLength: full.length };
+    }
+    try {
+      const totalHeight = layout(prepared!, containerWidth, fontConfig.lineHeightPx).height;
+      if (totalHeight <= TOOL_OUTPUT_PIXEL_CAP) {
+        return { text: full, truncated: false, originalLength: full.length };
+      }
+      const pws = prepareWithSegments(full, fontConfig.fontStr, { whiteSpace: 'pre-wrap' });
+      const lineRanges: LayoutLineRange[] = [];
+      walkLineRanges(pws, containerWidth, (line) => {
+        lineRanges.push(line);
+      });
+      let accumulated = 0;
+      const parts: string[] = [];
+      for (const lr of lineRanges) {
+        if (accumulated + fontConfig.lineHeightPx > TOOL_OUTPUT_PIXEL_CAP) break;
+        parts.push(materializeLineRange(pws, lr).text);
+        accumulated += fontConfig.lineHeightPx;
+      }
+      return {
+        text: parts.join('\n') + '\n…（已截断）',
+        truncated: true,
+        originalLength: full.length,
+      };
+    } catch {
+      return { text: full, truncated: false, originalLength: full.length };
+    }
+  }, [showFullOutput, full, containerWidth, fontConfig, prepared]);
+
   const out = budget.text;
   const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
   const shellTool = isShellToolName(tc.name || '');
@@ -186,9 +243,14 @@ function ToolResultBody({
     [shellTool, tc.id, tc.name, tc.arguments, tc.status],
   );
 
+  const truncatedStyle: React.CSSProperties | undefined = budget.truncated
+    ? { maxHeight: TOOL_OUTPUT_PIXEL_CAP, overflowY: 'hidden' }
+    : undefined;
+
   return (
     <div
       id={bodyId}
+      ref={bodyRef}
       className={styles.toolResultBody}
       role="region"
       aria-label={`${statusZh}的工具输出`}
@@ -204,7 +266,7 @@ function ToolResultBody({
           {TOOL_EMPTY_OUTPUT_ZH}
         </pre>
       ) : null}
-      {!emptyBody && out ? <pre className={styles.toolResultPre}>{out}</pre> : null}
+      {!emptyBody && out ? <pre className={styles.toolResultPre} style={truncatedStyle}>{out}</pre> : null}
       {budget.truncated ? (
         <div className={styles.toolResultLongHint}>
           <button

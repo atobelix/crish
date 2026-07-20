@@ -113,6 +113,19 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
 
   useEffect(() => () => clearErrTimer(), [clearErrTimer]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [open]);
+
   // 全部处理完后收起，避免空列表占位
   useEffect(() => {
     if (files.length === 0 && open) setOpen(false);

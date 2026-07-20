@@ -58,6 +58,8 @@ export const SHOW_ALL_OLDER_THRESHOLD = EXPAND_OLDER_STEP;
 export const THINKING_DOM_CHAR_CAP = 4000;
 /** 工具展开体写入 DOM 的字符上限（超长需二次点「显示全部」） */
 export const TOOL_OUTPUT_DOM_CHAR_CAP = 8000;
+/** 工具展开体像素高度上限（Pretext 测量，超长截断） */
+export const TOOL_OUTPUT_PIXEL_CAP = 600;
 
 // ── 输入归一化（与 sessionListWindow 同风格；避免 NaN 切片 / 非整数 startIndex） ──
 
@@ -603,6 +605,27 @@ export type MessageViewportSlice = {
 export const MESSAGE_VIEWPORT_OVERSCAN = 6;
 export const MESSAGE_VIEWPORT_THRESHOLD = 60;
 export const MESSAGE_ESTIMATED_ROW_HEIGHT = 120;
+
+/**
+ * 从 heightCache 读取已知行高，合并 fallback（120）后返回平均行高。
+ * 渐进精确：actual > estimated > 120。
+ * 首次加载 cache 空 → fallback=120，行为不变。
+ */
+export function computeAverageRowHeight(
+  getHeight: (msgId: string) => number,
+  messageIds: readonly string[],
+  fallback = MESSAGE_ESTIMATED_ROW_HEIGHT,
+): number {
+  if (messageIds.length === 0) return fallback;
+  let total = 0;
+  let count = 0;
+  for (const id of messageIds) {
+    const h = getHeight(id);
+    total += h;
+    count++;
+  }
+  return count > 0 ? total / count : fallback;
+}
 
 export function computeMessageViewportSlice(opts: {
   count: number;

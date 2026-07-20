@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { prepare, layout } from '@chenglou/pretext';
 import * as Lucide from 'lucide-react';
 import type { SessionState } from '../../store/layoutStore';
 import {
@@ -35,12 +36,14 @@ import {
   shouldWindowSessionList,
   windowContainsIndex,
   type SessionListWindowRange,
+  type HeightGetter,
 } from '../../api/sessionListWindow';
 import {
   matchSessionSearch,
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../api/sessionSearch';
+import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
 import { Tooltip } from '../settings/SettingsUI';
 import styles from './SidebarSessionList.module.css';
 
@@ -145,6 +148,7 @@ const FULL_RANGE = (count: number): SessionListWindowRange => ({
  * 轻量窗口化 hook：监听 scroll/resize，用 measureListOffsetTop 修正
  * 置顶/项目区占位导致的 scroll 偏移（否则 100+ 对话区错位）。
  * ensureIndex：活动会话下标始终挂载，避免窗口裁掉当前项。
+ * getHeight：可变行高回调（Pretext 集成）。
  * 首帧 rAF 再测一次：listRef 可能在 count 变化后才挂到 DOM。
  */
 function useSessionListWindow(
@@ -153,6 +157,7 @@ function useSessionListWindow(
   listRef: React.RefObject<HTMLElement | null>,
   enabled: boolean,
   ensureIndex: number | null = null,
+  getHeight?: HeightGetter,
 ): SessionListWindowRange {
   const [range, setRange] = useState<SessionListWindowRange>(() =>
     FULL_RANGE(count),
@@ -172,6 +177,7 @@ function useSessionListWindow(
           viewportHeight: 400,
           listOffsetTop: 0,
           ensureIndex,
+          getHeight,
         }),
       );
       return;
@@ -190,6 +196,7 @@ function useSessionListWindow(
         viewportHeight: scrollEl.clientHeight || 400,
         listOffsetTop,
         ensureIndex,
+        getHeight,
       });
       setRange((prev) =>
         sessionListWindowRangeEqual(prev, next) ? prev : next,
@@ -212,7 +219,7 @@ function useSessionListWindow(
       scrollEl.removeEventListener('scroll', update);
       ro?.disconnect();
     };
-  }, [count, enabled, ensureIndex, scrollParentRef, listRef]);
+  }, [count, enabled, ensureIndex, scrollParentRef, listRef, getHeight]);
 
   return range;
 }
@@ -226,6 +233,7 @@ type SessionRowProps = {
   isDraggingThis: boolean;
   isRenaming: boolean;
   isDraggable: boolean;
+  rowHeight: number;
   renameDraft: string;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
   onRenameDraftChange: (v: string) => void;
@@ -253,6 +261,7 @@ const SessionRow = memo(function SessionRow({
   isDraggingThis,
   isRenaming,
   isDraggable,
+  rowHeight,
   renameDraft,
   renameInputRef,
   onRenameDraftChange,
@@ -295,11 +304,13 @@ const SessionRow = memo(function SessionRow({
     [onContextMenuSession, s.id],
   );
 
+  const isMultiLine = rowHeight > SIDEBAR_SESSION_ROW_HEIGHT;
+
   return (
     <li
       data-session-id={s.id}
       className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''}`}
-      style={{ minHeight: SIDEBAR_SESSION_ROW_HEIGHT }}
+      style={{ height: rowHeight, minHeight: rowHeight }}
       role="presentation"
     >
       <div
@@ -315,7 +326,7 @@ const SessionRow = memo(function SessionRow({
         }
         // 活动行可聚焦；其余 -1，靠 ↑↓ 漫游（避免 Tab 扫过整表）
         tabIndex={sessionActive ? 0 : -1}
-        className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${snippet ? styles.hasSearchSnippet : ''} ${isRenaming ? styles.isRenaming : ''}`}
+        className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${snippet ? styles.hasSearchSnippet : ''} ${isRenaming ? styles.isRenaming : ''} ${isMultiLine ? styles.multiLine : ''}`}
         onClick={() => {
           if (isRenaming) return;
           selectThis();
@@ -386,7 +397,7 @@ const SessionRow = memo(function SessionRow({
           <>
             <Tooltip content={snippet ? `${displayText}\n${snippet}` : displayText}>
               <span className={styles.sessionTextCol}>
-                <span className={styles.sessionText}>{displayText}</span>
+                <span className={`${styles.sessionText} ${isMultiLine ? styles.sessionTextMultiLine : ''}`}>{displayText}</span>
                 {snippet ? (
                   <span className={styles.sessionSearchSnippet} aria-hidden>
                     {snippet}
@@ -509,12 +520,56 @@ function WindowedSessionUl({
   );
 }
 
+/** 构建 Pretext font 字符串，用于侧栏会话列表标题测量 */
+function buildSidebarPretextFont(): string {
+  try {
+    return buildPretextFontForUiSize('medium', 'sans', 'medium');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 读取 CSS 变量 --sidebar-width，返回侧栏内容可用宽度（px）。
+ * 失败时回退 228（默认 260 - 32 padding）。
+ */
+function readSidebarContentWidth(): number {
+  if (typeof document === 'undefined') return 228;
+  try {
+    const val = getComputedStyle(document.documentElement)
+      .getPropertyValue('--sidebar-width').trim();
+    return Math.max(180, (parseInt(val, 10) || 260) - 32);
+  } catch {
+    return 228;
+  }
+}
+
+/**
+ * 用 Pretext 测量一条会话标题的行数，返回行高。
+ * 单行 → 28px，多行 → 44px。
+ */
+function measureSessionRowHeight(
+  displayText: string,
+  font: string,
+  width: number,
+): number {
+  if (!font || width <= 0 || !displayText) return SIDEBAR_SESSION_ROW_HEIGHT;
+  try {
+    const p = prepare(displayText, font);
+    const { lineCount } = layout(p, width, 20);
+    return lineCount > 1 ? 44 : 28;
+  } catch {
+    return SIDEBAR_SESSION_ROW_HEIGHT;
+  }
+}
+
 /**
  * 会话列表：置顶区 + 项目分组 + 常规对话，含 session 拖拽 UI。
  * - 空壳过滤：partitionSidebarSessions（sessionIndex，含 pinned 筛选）
  * - 长列表窗口化：sessionListWindow（搜索/拖拽时关闭；ensure 活动项）
  * - 相对时间 tick、搜索摘录、拖拽不回归
  * - 子 agent 不嵌套展示
+ * - Phase 2：Pretext 精确测量长标题行高
  */
 export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   sessions,
@@ -723,6 +778,36 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     generalSessions,
   ]);
 
+  // ── Pretext 字体 + 可用宽度（一次性计算） ────────────────────────────
+  const pretextFont = useMemo(() => buildSidebarPretextFont(), []);
+  const contentWidth = useMemo(() => readSidebarContentWidth(), []);
+
+  // Pretext 行高缓存：sessionId → rowHeight
+  const rowHeightById = useMemo(() => {
+    const map = new Map<string, number>();
+    const font = pretextFont;
+    const w = contentWidth;
+    if (!font) return map;
+    for (const s of visibleSessions) {
+      const title = sessionListDisplayTitle(s);
+      const displayText = s.branchParentId
+        ? `分支: ${title.replace(/ - 分支$/, '')}`
+        : title;
+      map.set(s.id, measureSessionRowHeight(displayText, font, w));
+    }
+    return map;
+  }, [visibleSessions, pretextFont, contentWidth]);
+
+  // HeightGetter 回调：对话区各行高度由缓存提供，未命中回退默认
+  const getGeneralHeight: HeightGetter = useCallback(
+    (index: number) => {
+      const s = generalSessions[index];
+      if (!s) return SIDEBAR_SESSION_ROW_HEIGHT;
+      return rowHeightById.get(s.id) ?? SIDEBAR_SESSION_ROW_HEIGHT;
+    },
+    [generalSessions, rowHeightById],
+  );
+
   // 窗口化：仅「对话」长列表；搜索/拖拽关闭以保证 snippet 行高与 drop target
   const generalWindowEnabled =
     !generalCollapsed &&
@@ -737,6 +822,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     generalListRef,
     generalWindowEnabled,
     activeGeneralIndex,
+    getGeneralHeight,
   );
 
   // 渲染用 range：钳位 + ensure 活动下标（双保险，防 hook 首帧 listOffset 偏差）
@@ -744,7 +830,12 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     const base = generalWindowEnabled
       ? generalWindowRange
       : FULL_RANGE(generalSessions.length);
-    let r = clampSessionListWindowRange(base, generalSessions.length);
+    let r = clampSessionListWindowRange(
+      base,
+      generalSessions.length,
+      undefined,
+      getGeneralHeight,
+    );
     if (
       activeGeneralIndex != null &&
       !windowContainsIndex(r, activeGeneralIndex)
@@ -753,6 +844,8 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         r,
         activeGeneralIndex,
         generalSessions.length,
+        undefined,
+        getGeneralHeight,
       );
     }
     return r;
@@ -761,6 +854,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     generalWindowRange,
     generalSessions.length,
     activeGeneralIndex,
+    getGeneralHeight,
   ]);
 
   // 再扫：活动项在对话区时滚入视口（窗口化 ensure 只挂载 DOM，不保证可见）
@@ -785,6 +879,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       listOffsetTop,
       scrollTop: scrollEl.scrollTop,
       align: 'nearest',
+      getHeight: getGeneralHeight,
     });
     if (Math.abs(nextTop - scrollEl.scrollTop) > 1) {
       scrollEl.scrollTop = nextTop;
@@ -799,6 +894,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     generalCollapsed,
     generalSessions.length,
     filterType,
+    getGeneralHeight,
   ]);
 
   const navigateSession = useCallback(
@@ -937,32 +1033,36 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   }, []);
 
   const renderSessionItem = useCallback(
-    (s: SessionState, isDraggable: boolean = true) => (
-      <SessionRow
-        key={s.id}
-        s={s}
-        activeSessionId={activeSessionId}
-        nowTick={nowTick}
-        searchQuery={searchQuery}
-        searchHit={searchHits.get(s.id)}
-        isDraggingThis={
-          activeDragItem?.type === 'session' &&
-          activeDragItem.sessionId === s.id
-        }
-        isRenaming={renamingSessionId === s.id}
-        isDraggable={isDraggable}
-        renameDraft={renameDraft}
-        renameInputRef={renameInputRef}
-        onRenameDraftChange={onRenameDraftChange}
-        onSelectSession={onSelectSession}
-        onContextMenuSession={onContextMenuSession}
-        onStartSessionDrag={startSessionDrag}
-        onStartRename={onStartRename}
-        onCommitRename={commitRename}
-        onCancelRename={onCancelRename}
-        onNavigateSession={navigateSession}
-      />
-    ),
+    (s: SessionState, isDraggable: boolean = true) => {
+      const rh = rowHeightById.get(s.id) ?? SIDEBAR_SESSION_ROW_HEIGHT;
+      return (
+        <SessionRow
+          key={s.id}
+          s={s}
+          activeSessionId={activeSessionId}
+          nowTick={nowTick}
+          rowHeight={rh}
+          searchQuery={searchQuery}
+          searchHit={searchHits.get(s.id)}
+          isDraggingThis={
+            activeDragItem?.type === 'session' &&
+            activeDragItem.sessionId === s.id
+          }
+          isRenaming={renamingSessionId === s.id}
+          isDraggable={isDraggable}
+          renameDraft={renameDraft}
+          renameInputRef={renameInputRef}
+          onRenameDraftChange={onRenameDraftChange}
+          onSelectSession={onSelectSession}
+          onContextMenuSession={onContextMenuSession}
+          onStartSessionDrag={startSessionDrag}
+          onStartRename={onStartRename}
+          onCommitRename={commitRename}
+          onCancelRename={onCancelRename}
+          onNavigateSession={navigateSession}
+        />
+      );
+    },
     [
       activeSessionId,
       nowTick,
@@ -971,6 +1071,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       activeDragItem,
       renamingSessionId,
       renameDraft,
+      rowHeightById,
       onRenameDraftChange,
       onSelectSession,
       onContextMenuSession,

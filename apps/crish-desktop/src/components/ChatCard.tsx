@@ -479,9 +479,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
 
 
-  const { chatFlowRef, showScrollToBottom, scrollToBottom } = useChatAutoScroll(messages);
-  // Thinking timer: start when AI is processing, clear when done
   const isProcessing = messages.some((m) => m.status === 'processing');
+  const { chatFlowRef, showScrollToBottom, scrollToBottom } = useChatAutoScroll(messages, isProcessing);
   const thinkingSeconds = useThinkingTimer(isProcessing);
 
   // Slash commands：固定 + 技能（enableSkillCommands）
@@ -843,7 +842,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
               <div
                 ref={modelSelectorRef}
                 className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
-                onClick={() => setShowModelDropdown((v) => !v)}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setShowModelDropdown((v) => !v);
+                }}
                 style={{ cursor: 'pointer', position: 'relative' }}
               >
                 <span

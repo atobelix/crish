@@ -180,6 +180,9 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
   const filterInputRef = useRef<HTMLInputElement>(null);
   const bcFilterRef = useRef<HTMLInputElement>(null);
   const actionHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const openMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const bcTriggerRef = useRef<HTMLButtonElement>(null);
 
   /** 行内操作错误：短时自消，成功路径永不写提示 */
   const showActionError = useCallback((msg: string) => {
@@ -380,6 +383,68 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [moreOpen, openMenuOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setMoreOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!openMenuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpenMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [openMenuOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    requestAnimationFrame(() => {
+      const first = moreRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!openMenuOpen) return;
+    requestAnimationFrame(() => {
+      const first = openMenuRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
+  }, [openMenuOpen]);
+
+  const prevMoreRef = useRef(false);
+  useEffect(() => {
+    if (prevMoreRef.current && !moreOpen) {
+      requestAnimationFrame(() => moreTriggerRef.current?.focus());
+    }
+    prevMoreRef.current = moreOpen;
+  }, [moreOpen]);
+
+  const prevOpenMenuRef = useRef(false);
+  useEffect(() => {
+    if (prevOpenMenuRef.current && !openMenuOpen) {
+      requestAnimationFrame(() => openMenuTriggerRef.current?.focus());
+    }
+    prevOpenMenuRef.current = openMenuOpen;
+  }, [openMenuOpen]);
 
   useEffect(
     () => () => {
@@ -582,6 +647,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     async (dirPath: string, label: string) => {
       if (bcFlyout?.path === dirPath) {
         setBcFlyout(null);
+        requestAnimationFrame(() => bcTriggerRef.current?.focus());
         return;
       }
       setBcFlyout({ path: dirPath, label, entries: [], loading: true, filter: '' });
@@ -595,6 +661,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         requestAnimationFrame(() => bcFilterRef.current?.focus());
       } catch (e) {
         setBcFlyout(null);
+        requestAnimationFrame(() => bcTriggerRef.current?.focus());
         showActionError(e instanceof Error ? e.message : '无法读取目录');
       }
     },
@@ -607,9 +674,13 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
       const t = e.target as Node;
       if (crumbsRef.current?.contains(t)) return;
       setBcFlyout(null);
+      requestAnimationFrame(() => bcTriggerRef.current?.focus());
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setBcFlyout(null);
+      if (e.key === 'Escape') {
+        setBcFlyout(null);
+        requestAnimationFrame(() => bcTriggerRef.current?.focus());
+      }
     };
     document.addEventListener('mousedown', onDoc);
     window.addEventListener('keydown', onKey);
@@ -713,10 +784,14 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                         title={i === 0 ? '项目根目录 · 点击列出内容' : `${b.path} · 点击列出该层`}
                         aria-haspopup="listbox"
                         aria-expanded={flyOpen}
-                        onClick={() => void openBcFlyout(b.path, b.label)}
+                        onClick={(e) => {
+                          bcTriggerRef.current = e.currentTarget;
+                          void openBcFlyout(b.path, b.label);
+                        }}
                         onDoubleClick={() => {
                           // 双击：直接进入该目录（树刷新）
                           setBcFlyout(null);
+                          requestAnimationFrame(() => bcTriggerRef.current?.focus());
                           setSelected(null);
                           setEditing(false);
                           clearActionHint();
@@ -745,7 +820,10 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                                 )
                               }
                               onKeyDown={(e) => {
-                                if (e.key === 'Escape') setBcFlyout(null);
+                                if (e.key === 'Escape') {
+                                  setBcFlyout(null);
+                                  requestAnimationFrame(() => bcTriggerRef.current?.focus());
+                                }
                               }}
                             />
                           </div>
@@ -771,6 +849,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                                       void refresh(ent.path);
                                     } else {
                                       setBcFlyout(null);
+                                      requestAnimationFrame(() => bcTriggerRef.current?.focus());
                                       void openFile(ent.path);
                                     }
                                   }}
@@ -800,6 +879,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                             className={styles.filesBcFlyoutGoto}
                             onClick={() => {
                               setBcFlyout(null);
+                              requestAnimationFrame(() => bcTriggerRef.current?.focus());
                               setSelected(null);
                               setEditing(false);
                               clearActionHint();
@@ -868,6 +948,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
 
         <div className={styles.filesMoreWrap} ref={moreRef}>
           <button
+            ref={moreTriggerRef}
             type="button"
             className={styles.filesNavBtn}
             title="更多"
@@ -1034,6 +1115,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   {openDefaultLabel}
                 </button>
                 <button
+                  ref={openMenuTriggerRef}
                   type="button"
                   className={styles.filesOpenChev}
                   title="选择打开方式"
@@ -1156,7 +1238,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           ) : (
             <>
               {error ? (
-                <div className={styles.filesInlineErr} role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                <div className={styles.filesInlineErr} role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 'var(--z-pinned-bar)' }}>
                   <span className={styles.filesInlineErrText}>{error}</span>
                   <button
                     type="button"

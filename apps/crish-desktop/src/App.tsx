@@ -760,7 +760,7 @@ function App() {
               top: 0,
               bottom: 0,
               width: '8px',
-              zIndex: 9999,
+              zIndex: 'var(--z-sidebar)',
               cursor: 'w-resize',
             }}
           />
@@ -835,7 +835,7 @@ function App() {
           role="dialog"
           aria-modal="true"
           aria-label="设置"
-          style={{ zIndex: 13000 }}
+          style={{ zIndex: 'var(--z-settings-panel)' }}
         >
           <AppErrorBoundary
             title="设置加载失败"

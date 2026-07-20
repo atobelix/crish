@@ -174,6 +174,19 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
   }, [onAvailabilityChange, onShowToast]);
 
   useEffect(() => {
+    if (!showAdd) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowAdd(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [showAdd]);
+
+  useEffect(() => {
     if (demo) void refreshDemo();
     else void refreshLive();
   }, [demo, refreshDemo, refreshLive]);

@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
 import * as Lucide from 'lucide-react';
 import type { SessionState } from '../../store/layoutStore';
@@ -66,6 +67,9 @@ export interface SidebarContextMenusProps {
   onSetGroupType: (v: 'folder' | 'none') => void;
   onSetFilterType: (v: 'all' | 'pinned') => void;
   onCloseSortDropdown: () => void;
+  onCloseContextMenu?: () => void;
+  contextMenuTriggerRef?: React.RefObject<HTMLElement | null>;
+  sortTriggerRef?: React.RefObject<HTMLElement | null>;
 }
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
@@ -175,8 +179,26 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   onSetGroupType,
   onSetFilterType,
   onCloseSortDropdown,
+  onCloseContextMenu,
+  contextMenuTriggerRef,
+  sortTriggerRef,
 }) => {
   const [fly, setFly] = useState<FlyKey>(null);
+  const flyTimerRef = useRef<{ enter?: number; leave?: number }>({});
+
+  const handleFlyEnter = useCallback((type: FlyKey) => {
+    clearTimeout(flyTimerRef.current.leave);
+    flyTimerRef.current.enter = window.setTimeout(() => {
+      setFly(type);
+    }, 80);
+  }, []);
+
+  const handleFlyLeave = useCallback(() => {
+    clearTimeout(flyTimerRef.current.enter);
+    flyTimerRef.current.leave = window.setTimeout(() => {
+      setFly(null);
+    }, 150);
+  }, []);
   // 仅未归档目标：避免对幽灵/已归档 id 弹出可操作菜单
   const target = contextMenu
     ? sessions.find((s) => s.id === contextMenu.sessionId && !s.isArchived)
@@ -184,6 +206,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   const isPinned = !!target?.isPinned;
   const showSessionMenu = !!(contextMenu && target);
   const focusedOnceRef = useRef<string | null>(null);
+  const contextMenuRestoreRef = useRef<HTMLElement | null>(null);
+  const sortDropdownRestoreRef = useRef<HTMLElement | null>(null);
 
   // 打开后按真实尺寸再钳一次，贴底/贴右不溢出，并应用智能 transformOrigin
   useLayoutEffect(() => {
@@ -223,6 +247,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       focusedOnceRef.current = null;
       return;
     }
+    contextMenuRestoreRef.current = document.activeElement as HTMLElement | null;
     const key = contextMenu.sessionId;
     if (focusedOnceRef.current === key) return;
     focusedOnceRef.current = key;
@@ -237,9 +262,50 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     return () => cancelAnimationFrame(id);
   }, [showSessionMenu, contextMenu, menuRef]);
 
+  useEffect(() => {
+    if (!sortDropdownOpen || !sortMenuRef.current) return;
+    sortDropdownRestoreRef.current = document.activeElement as HTMLElement | null;
+    requestAnimationFrame(() => {
+      const first = sortMenuRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
+  }, [sortDropdownOpen, sortMenuRef]);
+
+  useEffect(() => {
+    if (!showSessionMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onCloseContextMenu?.();
+        const target = contextMenuTriggerRef?.current || contextMenuRestoreRef.current;
+        requestAnimationFrame(() => target?.focus());
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [showSessionMenu, onCloseContextMenu, contextMenuTriggerRef]);
+
+  useEffect(() => {
+    if (!sortDropdownOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onCloseSortDropdown();
+        const target = sortTriggerRef?.current || sortDropdownRestoreRef.current;
+        requestAnimationFrame(() => target?.focus());
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [sortDropdownOpen, onCloseSortDropdown, sortTriggerRef]);
+
   return (
     <>
-      {showSessionMenu && contextMenu && (
+      {showSessionMenu && contextMenu && createPortal(
         <div
           ref={menuRef}
           className={`${styles.contextMenu} ${styles.open}`}
@@ -247,7 +313,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             left: contextMenu.x,
             top: contextMenu.y,
             position: 'fixed',
-            zIndex: 9999,
+            zIndex: 'var(--z-context-menu)',
           }}
           role="menu"
           aria-label="会话操作"
@@ -345,10 +411,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
             <span>导出 Markdown</span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {sortDropdownOpen && sortDropdownCoords && (
+      {sortDropdownOpen && sortDropdownCoords && createPortal(
         <div
           ref={sortMenuRef}
           className={`${styles.sortFilterMenu} ${styles.open}`}
@@ -356,11 +423,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             position: 'fixed',
             left: sortDropdownCoords.x,
             top: sortDropdownCoords.y,
-            zIndex: 100000,
+            zIndex: 'var(--z-first-run)',
           }}
           role="menu"
           aria-label="排序与过滤"
-          onMouseLeave={() => setFly(null)}
+          onMouseLeave={handleFlyLeave}
           onKeyDown={onMenuKeyDown}
         >
           <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
@@ -369,7 +436,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
-            onMouseEnter={() => setFly('sort')}
+            onMouseEnter={() => handleFlyEnter('sort')}
           >
             <span className={styles.sortFilterRowLabel}>排序方式</span>
             <Lucide.ChevronRight
@@ -426,7 +493,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
-            onMouseEnter={() => setFly('group')}
+            onMouseEnter={() => handleFlyEnter('group')}
           >
             <span className={styles.sortFilterRowLabel}>分组方式</span>
             <Lucide.ChevronRight
@@ -483,7 +550,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
-            onMouseEnter={() => setFly('filter')}
+            onMouseEnter={() => handleFlyEnter('filter')}
           >
             <span className={styles.sortFilterRowLabel}>列表范围</span>
             <Lucide.ChevronRight
@@ -537,7 +604,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
               </div>
             ) : null}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

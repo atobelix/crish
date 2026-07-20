@@ -2,7 +2,8 @@
  * 输入区「+」菜单：附件 / 技能 / 插件 / MCP / 扩展中心
  * 紧凑单列，与模型选择菜单同气质。
  */
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 import styles from './ComposePlusMenu.module.css';
 import { Tooltip } from './settings/SettingsUI';
@@ -44,6 +45,12 @@ export const ComposePlusMenu: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return;
     restoreOnCloseRef.current = false;
+    requestAnimationFrame(() => {
+      const first = rootRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
 
     const onDoc = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
@@ -93,6 +100,31 @@ export const ComposePlusMenu: React.FC<Props> = ({
       }
     };
   }, [open, onClose, restoreFocusRef]);
+
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !restoreFocusRef?.current) {
+      setPos(null);
+      return;
+    }
+    const r = restoreFocusRef.current.getBoundingClientRect();
+    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+  }, [open, restoreFocusRef]);
+
+  useEffect(() => {
+    if (!open || !restoreFocusRef?.current) return;
+    const updatePos = () => {
+      const r = restoreFocusRef.current?.getBoundingClientRect();
+      if (r) setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+    };
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [open, restoreFocusRef]);
 
   if (!open) return null;
 
@@ -160,7 +192,9 @@ export const ComposePlusMenu: React.FC<Props> = ({
     },
   ];
 
-  return (
+  if (!pos) return null;
+
+  return createPortal(
     <div
       ref={rootRef}
       id={menuId}
@@ -168,6 +202,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       role="menu"
       aria-label="添加"
       data-cplus-density="compact"
+      style={{ position: 'fixed', left: pos.left, bottom: pos.bottom }}
     >
       <div className={styles.main} role="none">
         {items.map((item, idx) => (
@@ -193,6 +228,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
           </Tooltip>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

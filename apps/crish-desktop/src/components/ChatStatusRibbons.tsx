@@ -6,7 +6,7 @@
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import styles from './ChatStatusRibbons.module.css';
 import * as Lucide from 'lucide-react';
 import type { EngineStatus } from '../api/engineConfig';
@@ -419,6 +419,20 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 }) => {
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
   const [showPlanDrawer, setShowPlanDrawer] = useState(false);
+  const planDrawerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPlanDrawer) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowPlanDrawer(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [showPlanDrawer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -437,6 +451,16 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       clearInterval(t);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showPlanDrawer) return;
+    requestAnimationFrame(() => {
+      const first = planDrawerRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    });
+  }, [showPlanDrawer]);
 
   const activeBgTasks = useMemo(
     () => bgTasks.filter((t) => isBackgroundTaskActive(t.state)),
@@ -606,7 +630,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       ) : null}
 
       {showPlanDrawer && hasActivePlan ? (
-        <div className={styles.dynamicPlanDrawer} role="dialog" aria-label="计划与进度详情">
+        <div ref={planDrawerRef} className={styles.dynamicPlanDrawer} role="dialog" aria-label="计划与进度详情">
           <div className={styles.dynamicPlanHeader}>
             <span>{goalModeActive ? (goalText || '目标推进中') : '计划清单'}</span>
             <button
