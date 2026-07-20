@@ -63,24 +63,45 @@ const PRESETS: {
   format: 'openai' | 'anthropic';
 }[] = [
   {
-    id: 'preset-openai',
-    name: 'OpenAI',
-    baseUrl: 'https://api.openai.com/v1',
-    models: [],
+    id: 'preset-opencode-go',
+    name: 'OpenCode Go 订阅',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    models: ['deepseek-v4-flash', 'glm-5', 'kimi-k2'],
+    format: 'openai',
+  },
+  {
+    id: 'preset-opencode-zen',
+    name: 'OpenCode Zen 订阅',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    models: ['deepseek-v4-flash', 'gemini-3-flash', 'claude-3-7-sonnet'],
     format: 'openai',
   },
   {
     id: 'preset-deepseek',
-    name: 'DeepSeek',
+    name: 'DeepSeek 官方',
     baseUrl: 'https://api.deepseek.com',
-    models: [],
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    format: 'openai',
+  },
+  {
+    id: 'preset-qwen',
+    name: '千问 Qwen Portal',
+    baseUrl: 'https://portal.qwen.ai/v1',
+    models: ['qwen-max', 'qwen-plus', 'qwen-coder'],
+    format: 'openai',
+  },
+  {
+    id: 'preset-openai',
+    name: 'OpenAI 兼容',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'o3-mini'],
     format: 'openai',
   },
   {
     id: 'preset-anthropic',
-    name: 'Anthropic',
+    name: 'Anthropic 兼容',
     baseUrl: 'https://api.anthropic.com/v1',
-    models: [],
+    models: ['claude-3-7-sonnet'],
     format: 'anthropic',
   },
   {
@@ -933,15 +954,16 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
-                          title={`删除「${selectedLabel}」`}
-                          onClick={() => setConfirmDeleteId(selected.id)}
-                        >
-                          <Lucide.Trash2 size={14} />
-                        </button>
+                        <Tooltip content={`删除「${selectedLabel}」`}>
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
+                            onClick={() => setConfirmDeleteId(selected.id)}
+                          >
+                            <Lucide.Trash2 size={14} />
+                          </button>
+                        </Tooltip>
                       )}
                     </div>
                   )}
@@ -1118,43 +1140,46 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                         <span className={`${styles.mrdModelName} mrd-model-name`}>{display}</span>
                         <div className="mrd-model-meta">
                           {showCtx && <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>{liveCtxLabel}</span>}
-                          {meta.capabilities?.tools && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持工具调用"><Lucide.Wrench size={10} /></span>}
-                          {meta.capabilities?.vision && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持视觉"><Lucide.Eye size={10} /></span>}
-                          {meta.capabilities?.reasoning && <span className={`${styles.mrdCapTag} mrd-cap-tag`} title="支持思考"><Lucide.BrainCircuit size={10} /></span>}
+                          {meta.capabilities?.tools && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持工具调用"><Lucide.Wrench size={10} /></span>}
+                          {meta.capabilities?.vision && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持视觉"><Lucide.Eye size={10} /></span>}
+                          {meta.capabilities?.reasoning && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持思考"><Lucide.BrainCircuit size={10} /></span>}
                         </div>
                       </div>
                       <div className={`${styles.mrdModelActions} mrd-model-actions`}>
-                        <button
-                          type="button"
-                          className={`${styles.modelRowToggle} ${!off ? styles.active : ''}`}
-                          title={off ? '已停用，点击启用' : '点击停用'}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setModelEnabled(selected.id, m, off);
-                            refresh();
-                          }}
-                          aria-label={off ? '启用模型' : '停用模型'}
-                        >
-                          <span className={styles.toggleThumb} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
-                          style={{ padding: '0 5px', height: '26px', color: expanded ? 'var(--accent-primary)' : 'var(--text-tertiary)' }}
-                          title="配置"
-                          onClick={(e) => { e.stopPropagation(); if (expanded) closeConfig(); else openConfigFor(m); }}
-                        >
-                          <Lucide.SlidersHorizontal size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn"
-                          style={{ padding: '0 5px', height: '26px', color: 'var(--text-tertiary)' }}
-                          title="删除"
-                          onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) closeConfig(); refresh(); }}
-                        >
-                          <Lucide.Trash2 size={13} />
-                        </button>
+                        <Tooltip content={off ? '已停用，点击启用' : '点击停用'}>
+                          <button
+                            type="button"
+                            className={`${styles.modelRowToggle} ${!off ? styles.active : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModelEnabled(selected.id, m, off);
+                              refresh();
+                            }}
+                            aria-label={off ? '启用模型' : '停用模型'}
+                          >
+                            <span className={styles.toggleThumb} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="配置">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            style={{ padding: '0 5px', height: '26px', color: expanded ? 'var(--accent-primary)' : 'var(--text-tertiary)' }}
+                            onClick={(e) => { e.stopPropagation(); if (expanded) closeConfig(); else openConfigFor(m); }}
+                          >
+                            <Lucide.SlidersHorizontal size={13} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="删除">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn"
+                            style={{ padding: '0 5px', height: '26px', color: 'var(--text-tertiary)' }}
+                            onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) closeConfig(); refresh(); }}
+                          >
+                            <Lucide.Trash2 size={13} />
+                          </button>
+                        </Tooltip>
                       </div>
 
                       {/* Expanded config sub-panel */}
@@ -1207,9 +1232,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                                     : '失败'}
                                 </span>
                               )}
-                              <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)} title="测试连通性">
-                                {testBusy === tKey ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
-                              </button>
+                              <Tooltip content="测试连通性">
+                                <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)}>
+                                  {testBusy === tKey ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
+                                </button>
+                              </Tooltip>
                               <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={closeConfig}>收起</button>
                               <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={saveConfig}>保存</button>
                             </div>
