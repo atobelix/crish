@@ -42,7 +42,6 @@ interface SidebarProps {
   hoverExpanded?: boolean;
   onHoverEnter?: () => void;
   onHoverLeave?: () => void;
-  onOpenRuntime?: () => void;
   /** 顶栏搜索：过滤会话标题与消息正文等（见 sessionSearch）。 */
   searchQuery?: string;
   searchInput?: string;
@@ -173,7 +172,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   hoverExpanded,
   onHoverEnter,
   onHoverLeave,
-  onOpenRuntime: _onOpenRuntime,
   searchQuery = '',
   searchInput = '',
   onSearchChange,

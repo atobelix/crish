@@ -19,6 +19,11 @@
   color: var(--text-primary);
 }
 
+.permPill:active {
+  transform: scale(0.97);
+  transition: transform var(--transition-press, 80ms ease-out);
+}
+
 .permPill.isOpen {
   background: var(--bg-active);
   color: var(--text-primary);
@@ -58,6 +63,8 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  transform-origin: top left;
   box-sizing: border-box;
 }
 

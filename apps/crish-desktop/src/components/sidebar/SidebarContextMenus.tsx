@@ -75,23 +75,43 @@ const MENU_EDGE_PAD = 8;
 const MENU_EST_W = 160;
 const MENU_EST_H = 280;
 
-/** 右键坐标钳入视口，避免贴边裁切 */
+/** 右键/更多按钮坐标钳入视口并智能判断避让点 */
 export function clampContextMenuPosition(
   x: number,
   y: number,
   menuW = MENU_EST_W,
   menuH = MENU_EST_H,
-): { x: number; y: number } {
+): { x: number; y: number; transformOrigin: string } {
   const rawW = typeof window !== 'undefined' ? window.innerWidth : 0;
   const rawH = typeof window !== 'undefined' ? window.innerHeight : 0;
-  // jsdom / 未布局时可能为 0：退回安全默认，避免 NaN
   const vw = rawW > 0 ? rawW : 1280;
   const vh = rawH > 0 ? rawH : 800;
-  const maxX = Math.max(MENU_EDGE_PAD, vw - menuW - MENU_EDGE_PAD);
-  const maxY = Math.max(MENU_EDGE_PAD, vh - menuH - MENU_EDGE_PAD);
+
+  let finalX = x;
+  let finalY = y;
+  let originY = 'top';
+  let originX = 'left';
+
+  // 水平避让：右侧贴边则左翻
+  if (finalX + menuW > vw - MENU_EDGE_PAD) {
+    finalX = Math.max(MENU_EDGE_PAD, finalX - menuW);
+    originX = 'right';
+  } else {
+    finalX = Math.max(MENU_EDGE_PAD, finalX);
+  }
+
+  // 垂直避让：底部贴边则上翻
+  if (finalY + menuH > vh - MENU_EDGE_PAD) {
+    finalY = Math.max(MENU_EDGE_PAD, finalY - menuH);
+    originY = 'bottom';
+  } else {
+    finalY = Math.max(MENU_EDGE_PAD, finalY);
+  }
+
   return {
-    x: Math.min(Math.max(MENU_EDGE_PAD, x), maxX),
-    y: Math.min(Math.max(MENU_EDGE_PAD, y), maxY),
+    x: finalX,
+    y: finalY,
+    transformOrigin: `${originY} ${originX}`,
   };
 }
 
@@ -165,7 +185,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   const showSessionMenu = !!(contextMenu && target);
   const focusedOnceRef = useRef<string | null>(null);
 
-  // 打开后按真实尺寸再钳一次，贴底/贴右不溢出
+  // 打开后按真实尺寸再钳一次，贴底/贴右不溢出，并应用智能 transformOrigin
   useLayoutEffect(() => {
     if (!showSessionMenu || !contextMenu || !menuRef.current) return;
     const el = menuRef.current;
@@ -176,10 +196,9 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       rect.width,
       rect.height,
     );
-    if (next.x !== contextMenu.x || next.y !== contextMenu.y) {
-      el.style.left = `${next.x}px`;
-      el.style.top = `${next.y}px`;
-    }
+    el.style.left = `${next.x}px`;
+    el.style.top = `${next.y}px`;
+    el.style.transformOrigin = next.transformOrigin;
   }, [showSessionMenu, contextMenu, menuRef]);
 
   // 排序菜单同样钳位
@@ -193,13 +212,9 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       rect.width,
       rect.height,
     );
-    if (
-      next.x !== sortDropdownCoords.x ||
-      next.y !== sortDropdownCoords.y
-    ) {
-      el.style.left = `${next.x}px`;
-      el.style.top = `${next.y}px`;
-    }
+    el.style.left = `${next.x}px`;
+    el.style.top = `${next.y}px`;
+    el.style.transformOrigin = next.transformOrigin;
   }, [sortDropdownOpen, sortDropdownCoords, sortMenuRef]);
 
   // 打开会话菜单时聚焦首项（键盘可立即操作）

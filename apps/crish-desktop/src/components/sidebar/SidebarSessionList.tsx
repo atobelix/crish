@@ -12,7 +12,9 @@ import {
   groupUnpinnedByProject,
   partitionSidebarSessions,
 } from '../../store/sessionIndex';
-import { openProject, type ProjectEntry } from '../../api/projectStore';
+import { GENERAL_FOLDER, openProject, type ProjectEntry } from '../../api/projectStore';
+import { createSession } from '../../api/storeAccess';
+import { emitUiEvent } from '../../api/uiEvents';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,
   compareSessionsByActivity,
@@ -60,11 +62,20 @@ function syntheticContextMenuEvent(
   el: HTMLElement | null,
   base?: React.MouseEvent | React.KeyboardEvent,
 ): React.MouseEvent {
-  const rect = el?.getBoundingClientRect();
+  const targetEl =
+    base && base.currentTarget && base.currentTarget !== el
+      ? (base.currentTarget as HTMLElement)
+      : el;
+  const rect = targetEl?.getBoundingClientRect();
+  const isTargetButton = Boolean(targetEl && targetEl !== el);
   const clientX =
-    rect != null ? rect.left + Math.min(rect.width * 0.7, rect.width - 8) : 0;
+    rect != null
+      ? isTargetButton
+        ? rect.left
+        : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
+      : 0;
   const clientY =
-    rect != null ? rect.top + rect.height / 2 : 0;
+    rect != null ? (isTargetButton ? rect.bottom + 4 : rect.top + rect.height / 2) : 0;
   const preventDefault = () => {
     if (base && 'preventDefault' in base) base.preventDefault();
   };
@@ -540,6 +551,7 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [renameDraft, setRenameDraft] = useState('');
   const [expandedProjectFolders, setExpandedProjectFolders] = useState<Record<string, boolean>>({});
+  const [showAllGeneralSessions, setShowAllGeneralSessions] = useState(false);
 
   const pinnedZoneRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
@@ -1037,29 +1049,31 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               aria-hidden
             />
           </button>
-          {!pinnedCollapsed && (
-            <div
-              id="sb-pinned-zone"
-              ref={pinnedZoneRef}
-              className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
-            >
-              {pinnedSessions.length > 0 ? (
-                <ul
-                  className={`${styles.pinnedList} ${styles.folderSessions}`}
-                  role="listbox"
-                  aria-label="置顶会话列表"
-                >
-                  {pinnedSessions.map((s) => renderSessionItem(s))}
-                </ul>
-              ) : (
-                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
-                  {filterType === 'pinned'
-                    ? '还没有置顶 of 对话'
-                    : '置顶的对话会出现在这里'}
-                </div>
-              )}
+          <div className={styles.accordionWrapper} data-expanded={!pinnedCollapsed ? 'true' : 'false'}>
+            <div className={styles.accordionInner}>
+              <div
+                id="sb-pinned-zone"
+                ref={pinnedZoneRef}
+                className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
+              >
+                {pinnedSessions.length > 0 ? (
+                  <ul
+                    className={`${styles.pinnedList} ${styles.folderSessions}`}
+                    role="listbox"
+                    aria-label="置顶会话列表"
+                  >
+                    {pinnedSessions.map((s) => renderSessionItem(s))}
+                  </ul>
+                ) : (
+                  <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
+                    {filterType === 'pinned'
+                      ? '还没有置顶 of 对话'
+                      : '置顶的对话会出现在这里'}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </section>
       ) : null}
 
@@ -1092,14 +1106,14 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               </button>
             </div>
             <div className={styles.sectionLabelRight}>
-              <Tooltip content="添加本地项目">
+              <Tooltip content="管理与选择项目">
                 <button
                   type="button"
                   className={styles.sectionNew}
-                  aria-label="添加本地项目"
+                  aria-label="管理与选择项目"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onAddProject();
+                    emitUiEvent('open-project-picker');
                   }}
                 >
                   <Lucide.FolderPlus size={14} strokeWidth={1.75} aria-hidden />
@@ -1107,8 +1121,8 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               </Tooltip>
             </div>
           </div>
-          {!projectsSectionCollapsed && (
-            <>
+          <div className={styles.accordionWrapper} data-expanded={!projectsSectionCollapsed ? 'true' : 'false'}>
+            <div className={styles.accordionInner}>
               {projects.map((p) => {
                 const open = !collapsedProjects[p.id];
                 const sess = byProjectId[p.id] || [];
@@ -1143,30 +1157,33 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                             e.stopPropagation();
                             openProject(p.id);
                             onOpenProject(p.id);
-                            onNewSession();
+                            createSession({ folder: p.id });
                           }}
                         >
                           <Lucide.FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
                         </button>
                       </Tooltip>
                     </div>
-                    {open && sess.length > 0 ? (
-                      <ul
-                        className={`${styles.pinnedList} ${styles.folderSessions}`}
-                        role="listbox"
-                        aria-label={`${p.name} 会话`}
-                      >
-                        {sess.length <= 6 ? (
-                          sess.map((s) => renderSessionItem(s, true))
-                        ) : (
-                          <>
-                            {/* Always render first 6 sessions */}
-                            {sess.slice(0, 6).map((s) => renderSessionItem(s, true))}
-                            
-                            {/* If expanded, render the remaining sessions, followed by a Collapse button */}
-                            {expandedProjectFolders[p.id] ? (
+                    <div className={styles.accordionWrapper} data-expanded={open ? 'true' : 'false'}>
+                      <div className={styles.accordionInner}>
+                        {sess.length > 0 ? (
+                          <ul
+                            className={`${styles.pinnedList} ${styles.folderSessions}`}
+                            role="listbox"
+                            aria-label={`${p.name} 会话`}
+                          >
+                            {sess.length <= 6 ? (
+                              sess.map((s) => renderSessionItem(s, true))
+                            ) : (
                               <>
-                                {sess.slice(6).map((s) => renderSessionItem(s, true))}
+                                {sess.slice(0, 6).map((s) => renderSessionItem(s, true))}
+                                <div className={styles.accordionWrapper} data-expanded={expandedProjectFolders[p.id] ? 'true' : 'false'}>
+                                  <div className={styles.accordionInner}>
+                                    <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>
+                                      {sess.slice(6).map((s) => renderSessionItem(s, true))}
+                                    </ul>
+                                  </div>
+                                </div>
                                 <li className={styles.sessionItemWrap}>
                                   <button
                                     type="button"
@@ -1175,36 +1192,19 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                                     onClick={() => {
                                       setExpandedProjectFolders((prev) => ({
                                         ...prev,
-                                        [p.id]: false,
+                                        [p.id]: !prev[p.id],
                                       }));
                                     }}
                                   >
-                                    收起
+                                    {expandedProjectFolders[p.id] ? '收起' : `查看全部 (${sess.length})`}
                                   </button>
                                 </li>
                               </>
-                            ) : (
-                              /* If collapsed, render the 7th row Show All button */
-                              <li className={styles.sessionItemWrap}>
-                                <button
-                                  type="button"
-                                  className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
-                                  style={{ color: 'var(--text-tertiary)' }}
-                                  onClick={() => {
-                                    setExpandedProjectFolders((prev) => ({
-                                      ...prev,
-                                      [p.id]: true,
-                                    }));
-                                  }}
-                                >
-                                  查看全部 ({sess.length})
-                                </button>
-                              </li>
                             )}
-                          </>
-                        )}
-                      </ul>
-                    ) : null}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -1213,8 +1213,8 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                   点击分区旁 + 添加本地项目
                 </div>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -1259,14 +1259,14 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               </Tooltip>
             </div>
             <div className={styles.sectionLabelRight}>
-              <Tooltip content="新建对话">
+              <Tooltip content="新建常规对话">
                 <button
                   type="button"
                   className={styles.sectionNew}
-                  aria-label="新建对话"
+                  aria-label="新建常规对话"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onNewSession();
+                    createSession({ folder: GENERAL_FOLDER });
                   }}
                 >
                   <Lucide.MessageCirclePlus size={14} strokeWidth={1.75} aria-hidden />
@@ -1274,24 +1274,47 @@ export const SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               </Tooltip>
             </div>
           </div>
-          {!generalCollapsed && (
-            <>
+          <div className={styles.accordionWrapper} data-expanded={!generalCollapsed ? 'true' : 'false'}>
+            <div className={styles.accordionInner}>
               {generalSessions.length > 0 ? (
-                <WindowedSessionUl
-                  sessions={generalSessions}
-                  range={generalRenderRange}
-                  listRef={generalListRef}
-                  className={`${styles.pinnedList} ${styles.folderSessions}`}
-                  renderRow={renderSessionItem}
-                  ariaLabel="对话列表"
-                />
+                <>
+                  <WindowedSessionUl
+                    sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
+                    range={generalRenderRange}
+                    listRef={generalListRef}
+                    className={`${styles.pinnedList} ${styles.folderSessions}`}
+                    renderRow={renderSessionItem}
+                    ariaLabel="对话列表"
+                  />
+                  {generalSessions.length > 10 && (
+                    <div className={styles.accordionWrapper} data-expanded={showAllGeneralSessions ? 'true' : 'false'}>
+                      <div className={styles.accordionInner}>
+                        <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>
+                          {generalSessions.slice(10).map((s) => renderSessionItem(s))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                  {generalSessions.length > 10 && (
+                    <div style={{ paddingLeft: 10, paddingRight: 8, marginTop: 4 }}>
+                      <button
+                        type="button"
+                        className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
+                        style={{ color: 'var(--text-tertiary)' }}
+                        onClick={() => setShowAllGeneralSessions((v) => !v)}
+                      >
+                        {showAllGeneralSessions ? '收起' : `查看全部 (${generalSessions.length})`}
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
                   不在项目中的对话会出现在这里
                 </div>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </section>
       ) : null}
     </div>

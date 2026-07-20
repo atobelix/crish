@@ -13,6 +13,8 @@
   box-shadow: var(--shadow-lg);
   z-index: 20000;
   overflow: hidden;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  transform-origin: bottom right;
 }
 
 .mpickMenu {
