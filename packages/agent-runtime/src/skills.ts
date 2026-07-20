@@ -13,6 +13,10 @@ export interface AgentSkill {
   disableModelInvocation: boolean;
   scope?: "global" | "project" | "workspace";
   activation?: "enabled" | "recommended" | "disabled";
+  runAs?: "inline" | "subagent";
+  readOnly?: boolean;
+  allowedTools?: string[];
+  invocation?: "auto" | "manual";
   appliesTo?: string[];
   tags?: string[];
 }
@@ -134,6 +138,13 @@ async function loadSkillFile(filePath: string, result: LoadSkillsResult, options
   for (const message of validateSkillDescription(description)) {
     result.diagnostics.push(warning("skill-description-invalid", filePath, message));
   }
+  const runAsRaw = String(parsed.data["run-as"] ?? parsed.data.runAs ?? "").toLowerCase();
+  const runAs = runAsRaw === "subagent" ? "subagent" : runAsRaw === "inline" ? "inline" : undefined;
+  const readOnly = parsed.data["read-only"] === true || parsed.data.readOnly === true;
+  const invocationRaw = String(parsed.data.invocation || "").toLowerCase();
+  const invocation = invocationRaw === "manual" ? "manual" : invocationRaw === "auto" ? "auto" : undefined;
+  const allowedTools = stringList(parsed.data["allowed-tools"] ?? parsed.data.allowedTools);
+
   return {
     name,
     description,
@@ -141,6 +152,10 @@ async function loadSkillFile(filePath: string, result: LoadSkillsResult, options
     baseDir,
     content: parsed.body.trim(),
     disableModelInvocation: parsed.data["disable-model-invocation"] === true,
+    ...(runAs ? { runAs } : {}),
+    ...(readOnly ? { readOnly: true } : {}),
+    ...(invocation ? { invocation } : {}),
+    ...(allowedTools.length > 0 ? { allowedTools } : {}),
     ...(skillScope(parsed.data.scope) !== undefined ? { scope: skillScope(parsed.data.scope) } : {}),
     ...(skillActivation(parsed.data.activation) !== undefined ? { activation: skillActivation(parsed.data.activation) } : {}),
     ...(stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo).length > 0
