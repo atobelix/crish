@@ -1,5 +1,5 @@
 /* === usage polish-v1 === */
-/* 边框 ≤11%；统计卡片轻描边；列表与其它设置页一致 */
+/* 鏉堣锟?�?1%閿涙稓绮虹拋鈥冲幢閻楀洩浜ら幓蹇氱珶閿涙稑鍨悰銊ょ瑢閸忚泛鐣犵拋鍓х枂妞ゅ吀绔撮�?*/
 
 .settings-pane--usage {
   gap: 16px;
@@ -8,40 +8,40 @@
   padding-bottom: 36px;
 }
 .settings-pane--usage .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .settings-pane--usage .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   padding: 0 0 6px;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--usage .settings-group-count {
   font-size: var(--font-size-xxs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   opacity: 0.9;
 }
 
-/* 本会话三卡 */
+/* 閺堫兛绱扮拠婵呯瑏锟?*/
 .settings-pane--usage .settings-usage-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .settings-pane--usage .settings-usage-stat-card {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   padding: 12px 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
 }
 .settings-pane--usage .settings-usage-stat-label {
@@ -49,11 +49,11 @@
   color: var(--text-tertiary);
 }
 .settings-pane--usage .settings-usage-stat-value {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-content);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
 }
 .settings-pane--usage .settings-usage-bar {
   height: 4px;
@@ -80,7 +80,7 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   background: transparent;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 .settings-pane--usage .settings-usage-ratio-in {
   background: color-mix(in srgb, var(--text-primary) 22%, transparent);
@@ -94,26 +94,26 @@
   gap: 8px 14px;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  margin-top: 6px;
+  margin-top: var(--space-1_5);
 }
 .settings-pane--usage .settings-usage-meta-row strong {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
-/* 历史工具条 */
+/* 閸樺棗褰跺銉ュ徔锟?*/
 .settings-pane--usage .settings-usage-chart-tools {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 .settings-pane--usage .settings-choice-btn {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   min-height: 28px;
   padding: 0 10px;
   font-size: var(--font-size-xs);
@@ -127,18 +127,18 @@
 .settings-pane--usage .settings-choice-btn.active {
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .settings-pane--usage .ui-btn-ghost,
 .settings-pane--usage .ui-btn-secondary {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 定价折叠 */
+/* 鐎规矮鐜幎妯哄�?*/
 .settings-pane--usage .settings-usage-prices {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  padding-top: 10px;
-  margin-top: 4px;
+  padding-top: var(--space-2_5);
+  margin-top: var(--space-1);
 }
 .settings-pane--usage .settings-usage-prices-summary {
   cursor: pointer;
@@ -146,14 +146,14 @@
   user-select: none;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--usage .settings-usage-prices-summary::-webkit-details-marker {
   display: none;
 }
 .settings-pane--usage .settings-list--usage {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  margin-top: 8px;
+  margin-top: var(--space-2);
   background: transparent;
   gap: 0;
 }
@@ -177,22 +177,22 @@
   min-width: 0;
 }
 .settings-pane--usage .settings-list-title {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
 }
 .settings-pane--usage .settings-list-control--usage {
   flex: 1 1 auto;
   margin-left: auto;
   justify-content: flex-end;
   max-width: min(360px, 54%);
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .settings-pane--usage .settings-field-input,
 .settings-pane--usage .settings-usage-filter {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .settings-pane--usage .settings-field-input:focus,
 .settings-pane--usage .settings-field-input:focus-visible {

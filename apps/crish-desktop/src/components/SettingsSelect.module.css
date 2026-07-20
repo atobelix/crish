@@ -7,21 +7,21 @@
 .settingsSelectTriggerRow {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
 }
 
 .settingsSelectTrigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex: 1;
   min-width: 0;
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
   padding: 0 8px 0 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   color: var(--text-primary);
   font-family: inherit;
@@ -80,7 +80,7 @@
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -102,16 +102,14 @@
 .settingsSelectMenuPortal {
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
   padding: 4px 1px 4px 4px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  z-index: 10060;
+  z-index: var(--z-settings-tooltip);
 }
 
 .settingsSelectScroll {
@@ -129,7 +127,7 @@
 
 .settingsSelectScroll::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--text-primary) 18%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .settingsSelectScroll::-webkit-scrollbar-track {
@@ -146,13 +144,13 @@
 .settingsSelectItem {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
@@ -168,7 +166,7 @@
 .settingsSelectItem.isActive {
   background: var(--bg-active);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .settingsSelectItem.isActive:hover {
@@ -203,13 +201,13 @@
 
 .settingsSelectFooter {
   border-top: 1px solid var(--border-subtle);
-  margin-top: 4px;
-  padding-top: 6px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-1_5);
 }
 
 .settingsSelectCustom {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 0 2px;
 }
 
@@ -218,7 +216,7 @@
   min-width: 0;
   height: 28px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0 8px;
   font-size: var(--font-size-sm);
   font-family: inherit;

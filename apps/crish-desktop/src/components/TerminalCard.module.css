@@ -76,8 +76,8 @@
 .line.isSep {
   color: var(--terminal-muted);
   opacity: 0.9;
-  margin-top: 6px;
-  margin-bottom: 2px;
+  margin-top: var(--space-1_5);
+  margin-bottom: var(--space-0_5);
 }
 .line.isErr {
   color: var(--terminal-err, #f87171);
@@ -117,13 +117,13 @@
 }
 .input:focus-visible {
   outline: none;
-  /* 遵循设计规范：避免强烈的阴影环与厚黑边 */
+  /* 閬靛惊璁捐瑙勮寖锛氶伩鍏嶅己鐑堢殑闃村奖鐜笌鍘氶粦锟?*/
   box-shadow: none;
 }
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
   min-height: var(--card-header-min-height, 36px);
   background: var(--terminal-bg);
@@ -141,7 +141,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   overflow: hidden;
   white-space: nowrap;
   font-size: var(--font-size-xs);
@@ -221,7 +221,7 @@
 .searchRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 2px var(--panel-pad-x, 12px);
   border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
   flex-shrink: 0;
@@ -249,7 +249,7 @@
   opacity: 0.65;
 }
 .searchCount {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--terminal-muted);
   flex-shrink: 0;
   white-space: nowrap;
@@ -261,8 +261,8 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 2px;
-  line-height: 1;
+  padding: var(--space-0_5);
+  line-height: var(--line-height-none);
   display: inline-flex;
   align-items: center;
 }

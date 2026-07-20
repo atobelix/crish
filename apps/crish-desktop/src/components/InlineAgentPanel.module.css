@@ -11,7 +11,7 @@
 }
 
 
-/* 头行：折叠钮 + 停止/侧栏动作（折叠态也能停 / 侧栏 only） */
+/* 婢剁顢戦敍姘閸欑娀�?+ 閸嬫粍顒?娓氀勭埉閸斻劋缍旈敍鍫熷閸欑姵鈧椒绡冮懗钘変�?/ 娓氀勭埉 only�?*/
 .inlineAgentHeadRow {
   display: flex;
   align-items: stretch;
@@ -49,7 +49,7 @@
 .inlineAgentHeadActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
   padding: 2px 6px;
   opacity: 0; /* Hidden by default */
@@ -80,7 +80,7 @@
   height: 24px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
@@ -217,7 +217,7 @@
 .inlineAgentToolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 2px 8px;
   min-height: 22px;
   border-bottom-width: var(--hairline-width, 1px);
@@ -266,14 +266,14 @@
 }
 
 .inlineAgentMsg {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .inlineAgentMsg:last-child {
   margin-bottom: 0;
 }
 
-/* 内联 agent 输入：复用 .chat-footer.agent-card-composer + ComposerField */
+/* 閸愬懓浠?agent 鏉堟挸鍙嗛敍姘槻閻?.chat-footer.agent-card-composer + ComposerField */
 .inlineAgentComposerWrap {
   padding: var(--space-2, 6px);
   width: 100%;
@@ -281,7 +281,7 @@
   box-sizing: border-box;
 }
 
-/* denser 内联：再收 pad，配合 maxLines=3 */
+/* denser 閸愬懓浠堥敍姘晙閺�?pad閿涘矂鍘ら崥?maxLines=3 */
 .inlineAgentComposerWrapDense {
   padding: var(--space-1, 4px) var(--space-2, 5px) var(--space-2, 5px);
 }
@@ -298,16 +298,16 @@
   margin: 0;
 }
 
-/* 侧栏审批卡：略收边距，不占满工具列 */
+/* 娓氀勭埉鐎光剝澹掗崡鈽呯窗閻ｃ儲鏁规潏纭呯獩閿涘奔绗夐崡鐘冲姬瀹搞儱鍙块崚?*/
 .inlineAgent.inlineAgentDense :global(.approval-card) {
   margin: 4px 0;
   padding: 8px 8px 7px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
 .inlineAgent.inlineAgentDense :global(.approval-card-actions) {
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .inlineAgent.inlineAgentDense :global(.approval-card-btn) {
@@ -345,7 +345,7 @@
   text-align: left;
   padding: 0;
   max-width: 85%;
-  line-height: 1.55;
+  line-height: var(--line-height-body);
 }
 
 /* Premium Thinking Fold Styles matching main agent details */
@@ -361,12 +361,12 @@
 .thinkingFoldSum {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   cursor: pointer;
   list-style: none;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   user-select: none;
   padding: 0;
   min-height: 24px;
@@ -393,7 +393,7 @@
 
 .thinkingFoldLabel {
   color: var(--text-tertiary);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
 }
 
 .thinkingFoldBody {

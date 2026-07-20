@@ -1,4 +1,4 @@
-/* --- panels.css (preview / diff / tasks / terminal / overview / runtime) — split from index.css (selectors preserved) --- */
+/* --- panels.css (preview / diff / tasks / terminal / overview / runtime) �?split from index.css (selectors preserved) --- */
 .filepath-text {
   text-decoration: underline;
   cursor: pointer;
@@ -6,7 +6,7 @@
 
 .diff-green-red {
   font-weight: var(--font-weight-normal);
-  margin-left: 8px;
+  margin-left: var(--space-2);
 }
 
 .diff-file-path .diff-green-red {
@@ -18,8 +18,8 @@
   font-size: var(--font-size-xxs);
   padding: 4px 6px;
   background-color: var(--bg-hover);
-  border-radius: 4px;
-  margin-bottom: 6px;
+  border-radius: var(--radius-xs);
+  margin-bottom: var(--space-1_5);
   display: flex;
   align-items: center;
   width: max-content;
@@ -28,12 +28,12 @@
 .diff-code-block {
   display: flex;
   flex-direction: column;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2_5);
 }
 
 .code-line {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .code-line.added {
@@ -67,24 +67,24 @@
   height: 32px;
   color: var(--text-tertiary);
   opacity: 0.5;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 
 /* --- TERMINAL BODY --- */
 .terminal-body {
-  background-color: #111111;
-  color: #38bdf8;
+  background-color: var(--terminal-bg);
+  color: var(--terminal-fg);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
-  padding: 12px;
+  padding: var(--space-3);
   flex: 1;
   overflow: auto;
 }
 
 .terminal-line {
-  margin-bottom: 4px;
-  line-height: 1.4;
+  margin-bottom: var(--space-1);
+  line-height: var(--line-height-base);
 }
 
 .term-prompt {
@@ -113,7 +113,7 @@
   margin: 8px 0;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -130,7 +130,7 @@
 
 .mac-dots {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .mac-dots .dot {
@@ -159,8 +159,8 @@
   border: none;
   color: var(--text-tertiary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-1);
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,7 +184,7 @@
   background-color: var(--bg-primary);
 }
 
-/* --- DIFF CARD — clean canvas, soft add/del tints --- */
+/* --- DIFF CARD �?clean canvas, soft add/del tints --- */
 
 
 
@@ -214,7 +214,7 @@
   margin: 0;
   padding: 2px 10px;
   white-space: pre;
-  overflow-x: visible; /* 滚动交给容器，避免每行一条横条 */
+  overflow-x: visible; /* 濠婃艾濮╂禍銈囩舶鐎圭懓娅掗敍宀勪缉閸忓秵鐦＄悰灞肩閺夆剝铆锟?*/
   flex: 1;
   color: var(--text-primary);
   font-weight: var(--font-weight-code, 400);
@@ -228,7 +228,7 @@
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-/* 工具摘要行内：小一号绿圈 */
+/* 瀹搞儱鍙块幗妯款洣鐞涘苯鍞撮敍姘毈娑撯偓閸欓璞㈤�?*/
 .tool-row-ico-slot .loading-spinner {
   border-width: 1.5px;
   border-color: color-mix(in srgb, var(--accent-green, #2dbe6c) 28%, transparent);
@@ -245,7 +245,7 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 999;
+  z-index: var(--z-floating-panel);
   font-family: var(--font-sans);
   transition: transform var(--transition-exit), opacity var(--transition-exit);
 }
@@ -280,7 +280,7 @@
 .checklist-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-xxs);
   color: var(--text-secondary);
 }
@@ -314,7 +314,7 @@
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   padding: 5px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
@@ -326,7 +326,7 @@
   border-color: var(--border-color);
 }
 
-/* --- 运行状态面板：紧凑分区、少文案、单滚动 --- */
+/* --- 鏉╂劘顢戦悩鑸碘偓渚€娼伴弶鍖＄窗缁毖冨櫨閸掑棗灏妴浣哥毌閺傚洦顢嶉妴浣稿礋濠婃艾�?--- */
 
 
 
@@ -340,7 +340,7 @@
 
 
 
-/* 计划任务 / 活动任务 / 后台：区段内独立滚动，避免整面板无限拉长 */
+/* 鐠佲€冲灊娴犺�?/ 濞茶濮╂禒璇插�?/ 閸氬骸褰撮敍姘隘濞堥潧鍞撮悪顒傜彌濠婃艾濮╅敍宀勪缉閸忓秵鏆ｉ棃銏℃緲閺冪娀妾洪幏澶愭毐 */
 
 
 
@@ -349,7 +349,7 @@
 
 
 
-/* 待确认行：按钮常显，避免窄栏需 hover 才能批准 */
+/* 瀵板懐鈥樼拋銈堫攽閿涙碍瀵滈柦顔肩埗閺勬拝绱濋柆鍨帳缁愬嫭鐖棁锟?hover 閹靛秷鍏橀幍鐟板櫙 */
 
 
 
@@ -357,8 +357,8 @@
 
 
 
-/* 活动任务：安静密度，不抢视线 */
-/* 可点穿到会话：与后台任务一致的安静 hover */
+/* 濞茶濮╂禒璇插閿涙艾鐣ㄩ棃娆忕槕鎼达讣绱濇稉宥嗗鐟欏棛�?*/
+/* 閸欘垳鍋ｇ粚鍨煂娴兼俺鐦介敍姘瑢閸氬骸褰存禒璇插娑撯偓閼峰娈戠€瑰�?hover */
 
 /* Cron jobs as quiet rows */
 
@@ -391,11 +391,11 @@
 .cron-job-card {
   border: none;
   border-radius: var(--radius-md);
-  padding: 10px;
+  padding: var(--space-2_5);
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .cron-expr-text {
   font-size: var(--font-size-xs);
@@ -465,14 +465,14 @@
 .diff-green-red {
   color: var(--accent-green);
   font-weight: var(--font-weight-normal);
-  margin-left: 8px;
+  margin-left: var(--space-2);
   font-size: var(--font-size-sm);
 }
 .diff-col-label {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-weight: var(--font-weight-normal);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-1_5);
 }
 .diff-line-number {
   font-size: var(--font-size-xs);
@@ -493,14 +493,14 @@
   font-weight: var(--font-weight-code, 400);
 }
 
-/* Runtime floating sheet — header 对齐 card-header tokens；单滚动面在 .rt-panel */
+/* Runtime floating sheet �?header 鐎靛綊锟?card-header tokens閿涙稑宕熷姘З闂堛垹锟?.rt-panel */
 /* Demo context ribbon quieter in footer */
 .app-mode-normal .chat-context-ribbon .context-pill.git,
 .app-mode-normal .chat-context-ribbon .context-pill.server {
   display: none;
 }
 
-/* 右侧总览：极简，无重复标题、无空上下文、无神秘图标条 */
+/* 閸欏厖鏅堕幀鏄忣潔閿涙碍鐎粻鈧敍灞炬￥闁插秴顦查弽鍥暯閵嗕焦妫ょ粚杞扮瑐娑撳鏋冮妴浣规￥缁佺偟顫濋崶鐐垼锟?*/
 /* [Migrated to OverviewCard.module.css]
 button.overview-live-row {
   cursor: pointer;
@@ -510,21 +510,21 @@ button.overview-live-row:hover {
   color: var(--text-primary);
 }
 
-/* 任务面板 / AI 多步进度板（与 overview 同系 token） */
-/* 空态：短文案，非居中大灰块 */
-/* 安静的「当前步骤」：单行、弱对比，不抢 checklist 主视觉 */
-/* 当前工具仅一行：点 + 标签 + 状态，不列命令历史 */
+/* 娴犺濮熼棃銏℃�?/ AI 婢舵碍顒炴潻娑樺閺夊尅绱欐�?overview 閸氬瞼锟?token�?*/
+/* 缁岀儤鈧緤绱伴惌顓熸瀮濡楀牞绱濋棃鐐茬湷娑擃厼銇囬悘鏉挎健 */
+/* 鐎瑰娼ら惃鍕┾偓灞界秼閸撳秵顒炴銈冣偓宥忕窗閸楁洝顢戦妴浣告€ョ€佃鐦敍灞肩瑝�?checklist 娑撴槒顫嬬憴?*/
+/* 瑜版挸澧犲銉ュ徔娴犲懍绔寸悰宀嬬窗�?+ 閺嶅洨锟?+ 閻樿埖鈧緤绱濇稉宥呭灙閸涙垝鎶ら崢鍡楀�?*/
 
-/* 窄侧栏：三卡 + 运行面板可读、不溢出、不叠层 */
+/* 缁愬嫪鏅堕弽蹇ョ窗娑撳�?+ 鏉╂劘顢戦棃銏℃緲閸欘垵顕伴妴浣风瑝濠с垹鍤妴浣风瑝閸欑姴锟?*/
 @media (max-width: 360px) {
-  /* 窄侧栏：用量环缩小；padding/gap 继续走 panel tokens，不硬编码 */
+  /* 缁愬嫪鏅堕弽蹇ョ窗閻劑鍣洪悳顖滅級鐏忓骏绱眕adding/gap 缂佈呯敾�?panel tokens閿涘奔绗夌涵顒傜椽锟?*/
   .runtime-float-sheet--compact {
     width: min(300px, calc(100vw - 24px));
     right: 12px;
   }
 }
 
-/* Git 状态角标：统一灰度，不按增删上色 */
+/* Git 閻樿埖鈧浇顫楅弽鍥风窗缂佺喍绔撮悘鏉垮閿涘奔绗夐幐澶婎杻閸掔姳绗傞懝?*/
 .git-badge {
   display: inline-flex;
   align-items: center;
@@ -532,8 +532,8 @@ button.overview-live-row:hover {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
   font-family: var(--font-mono);
   flex-shrink: 0;
   margin-top: 1px;
@@ -557,12 +557,12 @@ button.overview-live-row:hover {
 }
 
 /* =============================================================================
- * FA panels polish — additive density / hairline / focus-visible / empty states
+ * FA panels polish �?additive density / hairline / focus-visible / empty states
  * Consumes tokens only (--hairline* / --space-* / --focus-ring* / --line-height-*
  * / --card-header-* / --panel-* / --control-height* / --row-height*). No token edits.
  * ============================================================================= */
 
-/* 1) Structural hairlines：面板分界统一 --hairline-width + --hairline */
+/* 1) Structural hairlines閿涙岸娼伴弶鍨瀻閻ｅ瞼绮烘稉锟?--hairline-width + --hairline */
 .line-num-col {
   border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
@@ -582,7 +582,7 @@ button.overview-live-row:hover {
 }
 .diff-file-item {
   border-bottom: none;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0_5);
   border-radius: var(--radius-sm);
   padding: var(--space-2, 6px) var(--space-3, 8px);
   min-height: var(--row-height-sm, var(--control-height-sm, 28px));
@@ -623,11 +623,11 @@ button.overview-live-row:hover {
   }
   .diff-file-item {
     border-right: none;
-    margin-right: 2px;
+    margin-right: var(--space-0_5);
   }
 }
 
-/* 2) Card / list density：消费 panel + space + row-height，避免 magic number */
+/* 2) Card / list density閿涙碍绉风拹?panel + space + row-height閿涘矂浼╅崗?magic number */
 .line-num-col {
   width: var(--control-height-xs, 24px);
   padding: 1px 0;
@@ -671,17 +671,17 @@ button.overview-live-row:hover {
   padding: var(--space-1, 4px) var(--space-2, 6px);
 }
 
-/* 3) focus-visible：面板控件统一 --focus-ring / --focus-ring-strong */
+/* 3) focus-visible閿涙岸娼伴弶鎸庡付娴犲墎绮烘稉锟?--focus-ring / --focus-ring-strong */
 .diff-icon-btn:focus-visible,
 .diff-file-item:focus-visible,
 .diff-file-item.is-active:focus-visible {
   background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
-/* 键盘可达：hover-only 动作在 focus-within 时显现 */
+/* 闁款喚娲忛崣顖濇彧閿涙over-only 閸斻劋缍旈崷?focus-within 閺冭埖妯夐悳?*/
 
 
-/* 4) Empty states：密度 token + 中文行高；非居中大灰块 */
+/* 4) Empty states閿涙艾鐦戞惔?token + 娑擃厽鏋冪悰宀勭彯閿涙盯娼仦鍛厬婢堆呬紗锟?*/
 .diff-empty {
   padding: var(--space-6, 20px) var(--panel-pad-x, 12px);
   gap: var(--space-2, 6px);
@@ -698,7 +698,7 @@ button.overview-live-row:hover {
   margin-top: var(--space-2, 6px);
 }
 
-/* 5) Files / Diff / Tasks 控件层：可交互描边 + 热区密度 */
+/* 5) Files / Diff / Tasks 閹貉傛鐏炲偊绱伴崣顖欐唉娴滄帗寮挎�?+ 閻戭厼灏€靛棗�?*/
 .diff-toolbar-actions {
   gap: var(--space-1, 4px);
 }
@@ -730,7 +730,7 @@ button.overview-live-row:hover {
 
 /* 6) Chinese UI line-height on panel chrome (titles / meta / mono paths) */
 
-/* 7) prefers-reduced-motion：面板微动效克制 */
+/* 7) prefers-reduced-motion閿涙岸娼伴弶鍨簳閸斻劍鏅ラ崗瀣�?*/
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner,
   .setup-loading .loading-spinner,
@@ -739,7 +739,7 @@ button.overview-live-row:hover {
   }
 }
 
-/* 8) 极窄侧栏：三卡 + files 再收密度（additive，叠在既有 @media 之上） */
+/* 8) 閺嬩胶鐛庢笟褎鐖敍姘瑏�?+ files 閸愬秵鏁圭€靛棗瀹抽敍鍧卍ditive閿涘苯褰旈崷銊︽＆锟?@media 娑斿绗傞敍?*/
 @media (max-width: 360px) {
 
   .diff-empty {

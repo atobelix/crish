@@ -111,7 +111,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: var(--z-splitter);
   transition: left var(--transition-fast);
 }
 
@@ -158,7 +158,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  z-index: 30;
+  z-index: var(--z-splitter);
   transition: top var(--transition-fast);
 }
 
@@ -217,7 +217,7 @@
   text-align: center;
   background: var(--bg-secondary);
   border: 1.5px dashed var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin: var(--space-3, 8px);
   flex: 1;
 }
@@ -254,8 +254,8 @@
 .dropIndicator {
   position: fixed;
   pointer-events: none;
-  z-index: 9999;
-  border-radius: 6px;
+  z-index: var(--z-drag-highlight);
+  border-radius: var(--radius-md);
   background-color: color-mix(in srgb, var(--accent-color, #1a73e8) 12%, transparent);
   border: 1.5px solid var(--accent-color, #1a73e8);
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, #1a73e8) 25%, transparent);

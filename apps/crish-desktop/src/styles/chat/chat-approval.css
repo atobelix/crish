@@ -1,7 +1,7 @@
-/* chat-approval.css — soft-hint / approval-dock / run-notice / plan-goal ribbons
- * (ChatStatusRibbons 所有权：ribbon / dock / soft-hint) */
+/* chat-approval.css 閳?soft-hint / approval-dock / run-notice / plan-goal ribbons
+ * (ChatStatusRibbons 閹碘偓閺堝娼堥敍姝砳bbon / dock / soft-hint) */
 
-/* ── Soft setup banner：hairline only，页内引导（禁止 toast） ── */
+/* 閳光偓閳光偓 Soft setup banner閿涙airline only閿涘矂銆夐崘鍛穿鐎电》绱欑粋浣诡剾 toast閿?閳光偓閳光偓 */
 /* --- CENTERED PERMISSION DIALOG OVERLAYS --- */
 .global-approval-backdrop {
   position: fixed;
@@ -14,20 +14,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-}
+  z-index: var(--z-modal-backdrop);
+} 
 
 .global-approval-modal {
   width: min(400px, calc(100vw - 32px));
   background: var(--bg-primary);
   border: 1px solid var(--hairline-strong, var(--border-color));
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.08));
   pointer-events: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   animation: modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
 }
@@ -46,7 +46,7 @@
 .global-approval-modal .modal-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
@@ -55,19 +55,19 @@
 .global-approval-modal .modal-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .global-approval-modal .modal-warning-text {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
 .global-approval-modal .command-display-box {
   background: var(--bg-secondary);
   border: 1px solid var(--hairline, var(--border-subtle, var(--border-color)));
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 12px;
   max-height: 120px;
   overflow-y: auto;
@@ -84,11 +84,11 @@
 .global-approval-modal .remember-checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   cursor: pointer;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .global-approval-modal .remember-checkbox-label input {
@@ -98,10 +98,10 @@
 .global-approval-modal .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   border-top: 1px solid var(--hairline, var(--border-subtle, var(--border-color)));
-  padding-top: 12px;
-  margin-top: 4px;
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
 }
 
 .global-approval-modal .modal-approve-btn {
@@ -109,7 +109,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   padding: 5px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
@@ -126,7 +126,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   padding: 5px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
@@ -138,15 +138,15 @@
   color: var(--text-primary);
 }
 
-/* 对话时间线内的权限卡片：与 tool-row 同列，左侧细强调线 */
+/* 鐎电鐦介弮鍫曟？缁惧灝鍞撮惃鍕綀闂勬劕宕遍悧鍥风窗娑?tool-row 閸氬苯鍨敍灞戒箯娓氀呯矎瀵缚鐨熺痪?*/
 .tool-row--approval {
   margin: 4px 0 8px;
 }
-/* 审批区：独立于 footer 快捷栏；靠左，避免与「回到最新」FAB 重叠 */
+/* 鐎光剝澹掗崠鐚寸窗閻欘剛鐝涙禍?footer 韫囶偅宓庨弽蹇ョ幢闂堢姴涔忛敍宀勪缉閸忓秳绗岄妴灞芥礀閸掔増娓堕弬鑸偓宀禔B 闁插秴褰?*/
 .inline-approval {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   margin: 0 48px 8px 16px;
   padding: 8px 0 4px;
   border: none;
@@ -154,7 +154,7 @@
   background: transparent;
   box-shadow: none;
   position: relative;
-  z-index: 5;
+  z-index: var(--z-card-footer);
 }
 .inline-approval--sticky {
   flex-shrink: 0;
@@ -163,14 +163,14 @@
 .inline-approval-main {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .inline-approval-kicker {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 .inline-approval-summary {
   font-size: var(--font-size-base);
@@ -189,7 +189,7 @@
   background: transparent;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -199,8 +199,8 @@
 .inline-approval-foot {
   display: flex;
   justify-content: flex-start;
-  gap: 12px;
-  padding-top: 2px;
+  gap: var(--space-3);
+  padding-top: var(--space-0_5);
 }
 .inline-approval-btn {
   border: none;
@@ -239,7 +239,7 @@
 .tool-row--pending {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 4px 0 6px;
 }
 .tool-row--pending .tool-row-summary {
@@ -251,7 +251,7 @@
 .tool-row-live {
   display: inline-flex;
   align-items: center;
-  margin-right: 2px;
+  margin-right: var(--space-0_5);
 }
 .tool-row-approve {
   display: flex;

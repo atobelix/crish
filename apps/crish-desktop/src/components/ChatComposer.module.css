@@ -13,7 +13,7 @@
   border: 1px solid var(--border-color); /* Explicit premium border */
   border-radius: 20px; /* Fully rounded top rectangle */
   padding: 10px 14px;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: calc(
     1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
   );
@@ -35,8 +35,8 @@
 .containerDense {
   --composer-line-height: 1.4;
   padding: 6px 10px;
-  gap: 4px;
-  border-radius: var(--radius-lg, 12px);
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
   background: var(--composer-shell-bg);
   background-color: var(--composer-shell-bg);
   border: 1px solid var(--border-color); /* Premium outline for dense sub-agent fields */
@@ -120,7 +120,7 @@
 .buttons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
   padding: 0;
   align-self: center;
@@ -129,33 +129,33 @@
 .attachStrip {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 0 4px 4px;
 }
 
 .attachChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   max-width: 220px;
   padding: 4px 6px 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: var(--hairline-width, 1px) solid var(--hairline-strong, var(--border-color));
   background: var(--bg-secondary);
-  font-size: 11.5px;
+  font-size: var(--font-size-micro);
   color: var(--text-secondary);
   min-width: 0;
 }
 
 .attachChipImage {
-  padding-left: 4px;
+  padding-left: var(--space-1);
 }
 
 .attachThumb {
   width: 36px;
   height: 36px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   flex-shrink: 0;
   background: var(--bg-primary);
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
@@ -196,7 +196,7 @@
   color: var(--text-tertiary);
   width: var(--control-height);
   height: var(--control-height);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,7 +233,7 @@
 .containerDense .sendBtn {
   width: calc(var(--control-height) - 4px);
   height: calc(var(--control-height) - 4px);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .containerDense .sendBtn svg {
@@ -245,11 +245,11 @@
   height: calc(var(--control-height-sm, 28px) - 2px);
   padding: 0 6px;
   font-size: var(--font-size-xs, 12px);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .containerDense .buttons {
-  gap: 2px;
+  gap: var(--space-0_5);
   padding-bottom: 0;
 }
 
@@ -257,12 +257,12 @@
   width: auto;
   height: var(--control-height-sm);
   padding: 0 8px;
-  gap: 4px;
+  gap: var(--space-1);
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-family: var(--font-sans);
 }
 
@@ -281,12 +281,12 @@
   width: auto;
   height: var(--control-height-sm);
   padding: 0 10px;
-  gap: 4px;
+  gap: var(--space-1);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-family: var(--font-sans);
 }
 
@@ -321,7 +321,7 @@
 .rightActions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .plusBtn {
@@ -330,7 +330,7 @@
   cursor: pointer;
   width: var(--control-height);
   height: var(--control-height);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -368,12 +368,12 @@
   overscroll-behavior: contain;
   background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  padding: 4px;
-  z-index: 20;
+    0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+  padding: var(--space-1);
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -392,14 +392,14 @@
   display: grid;
   grid-template-columns: minmax(auto, max-content) 1fr;
   align-items: center;
-  column-gap: 8px;
+  column-gap: var(--space-2);
   row-gap: 0;
   padding: 3px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-secondary);
   min-height: 24px;
-  line-height: 1.2;
+  line-height: var(--line-height-dense);
 }
 
 .slashItem:hover {
@@ -411,8 +411,8 @@
 }
 
 .slashCmd {
-  font-weight: 600;
-  font-size: 11.5px;
+  font-weight: var(--font-weight-content);
+  font-size: var(--font-size-micro);
   color: var(--text-primary);
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: nowrap;
@@ -438,8 +438,8 @@
 
 .slashEmpty {
   padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.3;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-compact);
   color: var(--text-tertiary);
   text-align: center;
   user-select: none;

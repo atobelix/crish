@@ -3,15 +3,15 @@
 .panel-dropdown {
   position: absolute;
   width: 220px;
-  background: var(--bg-primary);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
-  padding: 8px !important;
+  padding: var(--space-2) !important;
   display: none;
   flex-direction: column;
-  gap: 2px !important;
-  z-index: 1000;
+  gap: var(--space-0_5) !important;
+  z-index: var(--z-dropdown);
 }
 
 .panel-dropdown.open {
@@ -21,13 +21,13 @@
 .dropdown-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   padding: 6px 8px 8px;
   border-bottom: none;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0_5);
 }
 
 .dropdown-header svg {
@@ -69,7 +69,7 @@
   font-size: var(--item-font-size) !important;
   color: var(--text-secondary);
   cursor: pointer;
-  gap: 8px;
+  gap: var(--space-2);
   transition: background-color var(--transition-micro), color var(--transition-micro);
   user-select: none;
   position: relative;
@@ -88,12 +88,12 @@
   margin: 0;
 }
 
-/* Soft filled checkbox — no harsh outline */
+/* Soft filled checkbox �?no harsh outline */
 .custom-chk {
   width: 15px;
   height: 15px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -125,28 +125,28 @@
   color: var(--text-tertiary);
   background-color: var(--bg-tertiary);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
-/* Soft group separator — spacing over hard rules */
+/* Soft group separator �?spacing over hard rules */
 .dropdown-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding: 4px 0 2px;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .dropdown-group + .dropdown-group {
   border-top: 1px solid var(--border-subtle);
-  margin-top: 6px;
-  padding-top: 8px;
+  margin-top: var(--space-1_5);
+  padding-top: var(--space-2);
 }
 
 .dropdown-pref {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 6px 6px 4px;
 }
 
@@ -154,13 +154,13 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
-  padding-left: 2px;
+  padding-left: var(--space-0_5);
 }
 
-/* Segmented control — modern track + soft green active (三选滑块感) */
+/* Segmented control �?modern track + soft green active (娑撳鈧绮﹂崸妤佸�? */
 .ui-segment {
   display: flex;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding: 3px;
   background: var(--bg-secondary);
   border-radius: 999px;
@@ -197,7 +197,7 @@
   font-weight: var(--font-weight-normal);
 }
 
-/* 分段选中：中性 pill，不用整片绿 */
+/* 閸掑棙顔岄柅澶夎厬閿涙矮鑵戦幀?pill閿涘奔绗夐悽銊︽殻閻楀洨锟?*/
 .settings-row .ui-segment-item.active,
 .sb-quick-segment .ui-segment-item.active {
   background: var(--bg-card);
@@ -208,7 +208,7 @@
 /* Legacy aliases */
 .size-selector {
   display: flex;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding: 3px;
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
@@ -220,7 +220,7 @@
   background: transparent;
   border: none;
   padding: 5px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: var(--font-size-xs);
   height: auto;
   min-height: 26px;
@@ -243,18 +243,18 @@
   font-weight: var(--font-weight-normal);
 }
 
-/* Custom Context Menu — 与 SettingsSelect 浮层同档 */
+/* Custom Context Menu �?�?SettingsSelect 濞搭喖鐪伴崥灞撅�?*/
 .context-menu {
   position: fixed;
   display: none;
   flex-direction: column;
-  gap: 4px;
-  z-index: 10000;
+  gap: var(--space-1);
+  z-index: var(--z-context-menu);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
-  padding: 8px;
+  padding: var(--space-2);
   min-width: 200px;
   user-select: none;
 }
@@ -269,14 +269,14 @@
   border: none;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 8px 12px;
   font-family: var(--font-sans);
   font-size: var(--item-font-size);
   text-align: left;
   color: var(--text-primary);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   transition: background var(--transition-fast);
 }
 
@@ -303,7 +303,7 @@
   background-color: var(--accent-light);
   border: 2px dashed var(--accent-color);
   pointer-events: none;
-  z-index: 1000;
+  z-index: var(--z-drag-highlight);
   opacity: 0.7;
 }
 
@@ -315,17 +315,17 @@
   transform: rotate(-90deg) !important;
 }
 
-/* 排序与过滤：级联菜单（参考现代桌面设置/侧栏） */
+/* 閹烘帒绨稉搴ょ箖濠娿倧绱扮痪褑浠堥懣婊冨礋閿涘牆寮懓鍐箛娴狅絾顢戦棃銏ｎ啎锟?娓氀勭埉�?*/
 .sort-filter-menu {
   min-width: 200px;
-  padding: 8px;
+  padding: var(--space-2);
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
   display: none;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   box-sizing: border-box;
 }
 .sort-filter-menu.open {
@@ -334,19 +334,19 @@
 .sort-filter-menu-title {
   padding: 6px 10px 8px;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 .sort-filter-row {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 36px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   cursor: default;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -373,26 +373,26 @@
   left: calc(100% + 6px);
   top: -4px;
   min-width: 148px;
-  padding: 6px;
+  padding: var(--space-1_5);
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  z-index: 2;
+  gap: var(--space-0_5);
+  z-index: var(--z-sticky-bar);
 }
 .sort-filter-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
   min-height: 28px;
   padding: 4px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -405,7 +405,7 @@
 }
 .sort-filter-option.is-on {
   color: var(--accent-green, #22c55e);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .sort-filter-check {
   color: var(--accent-green, #22c55e);
@@ -418,7 +418,7 @@
   opacity: 0;
   transform: scale(0.96);
   transform-origin: top left;
-  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: opacity var(--transition-fast), transform var(--transition-enter);
 }
 .compact-menu-container.is-open,
 .large-menu-container.is-open {
@@ -426,7 +426,7 @@
   transform: scale(1);
 }
 
-/* 兼容旧 class（若仍有引用） */
+/* 閸忕厧顔愰弮?class閿涘牐瀚㈡禒宥嗘箒瀵洜鏁ら敍?*/
 .sort-dropdown {
   display: none;
 }

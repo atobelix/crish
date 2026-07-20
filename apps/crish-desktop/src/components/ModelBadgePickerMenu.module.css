@@ -5,12 +5,10 @@
   width: 170px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  padding: 4px;
-  z-index: 100;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1);
+  z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
@@ -32,12 +30,12 @@
 .mbRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -72,12 +70,10 @@
   width: 190px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  padding: 4px;
-  z-index: 101;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1);
+  z-index: var(--z-sidebar-menu);
   display: flex;
   flex-direction: column;
   max-height: 280px;
@@ -87,12 +83,12 @@
 .mbSubRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -133,12 +129,12 @@
 .mbManageBtn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   text-align: left;

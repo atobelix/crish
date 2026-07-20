@@ -8,7 +8,7 @@
   padding: 10px 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   background: var(--bg-primary);
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
@@ -17,17 +17,17 @@
 .panel.isLoading {
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   max-width: 100%;
   flex-shrink: 0;
-  padding-bottom: 10px;
+  padding-bottom: var(--space-2_5);
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
@@ -41,7 +41,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
   text-transform: none;
   min-width: 0;
   overflow: hidden;
@@ -53,7 +53,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   max-width: 100%;
   min-height: 22px;
@@ -66,19 +66,19 @@
 .engineStatus {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex-shrink: 0;
 }
 
 .usage {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 
 .usageCompact {
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .ring {
@@ -103,7 +103,7 @@
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
 .usageStats {
@@ -111,14 +111,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .statRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -149,23 +149,23 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   min-height: 0;
 }
 
 .listScroll {
   max-height: 200px;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: var(--space-0_5);
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
   transition: background var(--transition-micro);
   min-width: 0;
@@ -179,7 +179,7 @@
 .rowMain {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
@@ -187,7 +187,7 @@
 .rowText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   flex: 1;
   min-width: 0;
 }
@@ -208,13 +208,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 
 .rowActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-micro);
@@ -262,7 +262,7 @@
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   padding: 4px 8px;
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   text-align: left;
 }
 
@@ -273,7 +273,7 @@
 .cronCard {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 10px 0;
   border-radius: 0;
   background: transparent;
@@ -288,13 +288,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .cronLeft {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -314,7 +314,7 @@
 .cronPrompt {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -337,14 +337,14 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .formToggle {

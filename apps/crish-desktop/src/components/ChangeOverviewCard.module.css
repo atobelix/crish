@@ -1,7 +1,7 @@
 .changeOverview {
   margin: 6px 0 4px;
   border: 1px solid var(--hairline, var(--border-subtle));
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   overflow: hidden;
   width: 100%;
@@ -16,7 +16,7 @@
 .changeOverviewBar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 8px 6px 10px;
   flex-wrap: nowrap !important;
   min-width: 0;
@@ -27,7 +27,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: none;
   background: transparent;
   font-family: inherit;
@@ -54,7 +54,7 @@
 
 .changeOverviewStat {
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   flex-shrink: 0;
@@ -86,7 +86,7 @@
 .changeOverviewActions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex: 0 1 auto;
   flex-wrap: wrap;
   min-width: 0;
@@ -103,7 +103,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   padding: 5px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -125,7 +125,7 @@
   border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   max-height: 240px;
   overflow-y: auto;
   min-width: 0;
@@ -135,7 +135,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
   height: 32px;
   box-sizing: border-box;
@@ -148,13 +148,13 @@
   height: 28px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: none;
   background: transparent;
   font-family: inherit;
   text-align: left;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   color: var(--text-primary);
   overflow: hidden;
@@ -189,10 +189,10 @@
   display: flex;
   align-items: center;
   height: 28px;
-  gap: 4px;
+  gap: var(--space-1);
   flex: 0 0 auto;
   flex-shrink: 0;
-  padding-right: 4px;
+  padding-right: var(--space-1);
   box-sizing: border-box;
 }
 
@@ -204,14 +204,14 @@
   font-family: inherit;
   font-size: var(--font-size-xxs);
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
 .changeOverviewMiniBtn:hover:not(:disabled) {
@@ -233,7 +233,7 @@
   cursor: default;
 }
 
-/* 绐勬爮锛堝璇濆垪鏀剁獎 / 鍒嗘爮锛夛細闅愯棌闀胯矾寰勶紝鍔ㄤ綔鎹㈣涓嶉噸鍙?*/
+/* 缂佹劕瀚悥顕€鏁嶉崼婵愬殸閻犲洦绻傞崹顏堝绩閸撲胶宕?/ 闁告帒妫欓悥顕€鏁嶆径娑氱獥闂傚懏鍔樺Λ宀勬⒐閼愁垳鐔呯€垫澘瀚哥槐婵嬪礉閵娿倗绋婇柟骞垮灱椤㈡垶绋夊澶婃闁?*/
 @container change-overview (max-width: 420px) {
   .changeOverviewPath {
     display: none;
@@ -242,7 +242,7 @@
     flex-direction: row !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
-    gap: 8px;
+    gap: var(--space-2);
   }
   .changeOverviewToggle {
     flex: 1 1 auto;
@@ -252,7 +252,7 @@
     width: auto;
     flex-shrink: 0;
     justify-content: flex-end;
-    gap: 4px;
+    gap: var(--space-1);
     flex-wrap: nowrap !important;
   }
   .changeOverviewReview {
@@ -262,7 +262,7 @@
     flex-direction: row !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
-    gap: 4px;
+    gap: var(--space-1);
     height: 32px !important;
   }
   .changeOverviewFile {
@@ -295,7 +295,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 4px 10px;
   background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-primary));
   border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
@@ -320,8 +320,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  border-radius: 4px;
+  padding: var(--space-0_5);
+  border-radius: var(--radius-xs);
 }
 
 .filesActionHintDismiss:hover {

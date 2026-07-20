@@ -2,7 +2,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-height: 0;
   padding: 0 2px;
 }
@@ -14,7 +14,7 @@
   height: 24px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);

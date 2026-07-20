@@ -1,9 +1,9 @@
 .contextMenu {
   min-width: 160px;
   max-width: min(240px, calc(100vw - 16px));
-  padding: 6px;
-  gap: 2px;
-  border-radius: 12px;
+  padding: var(--space-1_5);
+  gap: var(--space-0_5);
+  border-radius: var(--radius-2xl);
   background: var(--bg-elevated) !important;
   border: 1px solid var(--border-color) !important;
   box-shadow: var(--shadow-lg) !important;
@@ -17,6 +17,10 @@
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: top left;
 }
+.contextMenuExit {
+  display: flex;
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+}
 
 .contextMenuItem {
   display: flex;
@@ -26,10 +30,10 @@
   background: transparent;
   min-height: 32px;
   padding: 6px 10px;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-sm);
   line-height: 1.35;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   transition: background var(--transition-fast);
   cursor: pointer;
@@ -68,14 +72,14 @@
 /* Sort/Filter Dropdown Menu */
 .sortFilterMenu {
   min-width: 200px;
-  padding: 8px;
+  padding: var(--space-2);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
   display: none;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   box-sizing: border-box;
 }
 
@@ -86,9 +90,9 @@
 .sortFilterMenuTitle {
   padding: 6px 10px 8px;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 .sortFilterRow {
@@ -96,10 +100,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 36px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   cursor: default;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -130,27 +134,27 @@
   left: calc(100% + 6px);
   top: -4px;
   min-width: 148px;
-  padding: 6px;
+  padding: var(--space-1_5);
   background: var(--bg-elevated, var(--bg-primary));
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  z-index: 2;
+  gap: var(--space-0_5);
+  z-index: var(--z-sticky-bar);
 }
 
 .sortFilterOption {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
   min-height: 34px;
   padding: 7px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -165,7 +169,7 @@
 
 .sortFilterOption.isOn {
   color: var(--accent-green, #22c55e);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .sortFilterCheck {

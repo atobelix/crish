@@ -1,6 +1,6 @@
-/* chat-markdown.css — .md-* / code block / hljs（与 ChatMessageRow .msg-assistant-text 对齐） */
+/* chat-markdown.css �?.md-* / code block / hljs閿涘牅绗?ChatMessageRow .msg-assistant-text 鐎靛綊缍堥敍?*/
 
-/* 基础排版：.msg-assistant-text 与通用 .md-rendered */
+/* 閸╄櫣顢呴幒鎺斿閿?msg-assistant-text 娑撳酣鈧氨�?.md-rendered */
 .msg-assistant-text,
 .md-rendered {
   font-size: var(--font-size-base);
@@ -22,7 +22,7 @@
   margin-bottom: 0;
 }
 
-/* 行内 code：浅底 + 正黑字；字重 400（mono 用 500 会显粗） */
+/* 鐞涘苯鍞?code閿涙碍绁惔?+ 濮濓綁绮︾€涙绱辩€涙鍣?400閿涘潰ono �?500 娴兼碍妯夌划妤嬬�?*/
 .msg-assistant-text code,
 .msg-assistant-text .md-inline-code,
 .md-rendered .md-inline-code,
@@ -30,7 +30,7 @@
 .chat-doc-flow p code {
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 1px 5px;
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -38,14 +38,14 @@
   border: none;
 }
 
-/* 代码块：浅灰底；字重 400 */
+/* 娴狅絿鐖滈崸妤嬬窗濞村懐浼嗘惔鏇幢鐎涙鍣?400 */
 .msg-assistant-text pre,
 .msg-assistant-text .md-code-block,
 .md-rendered .md-code-block,
 .md-rendered pre {
   background: var(--md-code-bg, var(--bg-secondary));
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   color: var(--md-code-fg, var(--text-primary));
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
@@ -64,7 +64,7 @@
   margin: 0.55em 0;
   overflow: hidden;
   padding: 0;
-  /* 内层 pre 透明，色与边框落在外壳 */
+  /* 閸愬懎鐪?pre 闁繑妲戦敍宀冨娑撳氦绔熷鍡氭儰閸︺劌顦绘�?*/
   color: var(--md-code-fg, var(--text-primary));
 }
 .msg-assistant-text .md-code-block > pre,
@@ -83,7 +83,7 @@
   line-height: inherit;
   tab-size: 2;
 }
-/* 特异性高于行内 code，无需 !important */
+/* 閻楃懓绱撻幀褔鐝禍搴ゎ攽閸?code閿涘本妫ら棁�?!important */
 .msg-assistant-text .md-code-block code,
 .md-rendered .md-code-block code {
   background: transparent;
@@ -96,12 +96,12 @@
   overflow-wrap: normal;
 }
 
-/* 代码语言徽章：左上角 pill，不挡复制钮 */
+/* 娴狅絿鐖滅拠顓♀枅瀵扮晫鐝烽敍姘箯娑撳﹨�?pill閿涘奔绗夐幐鈥愁槻閸掑爼�?*/
 .md-code-lang {
   position: absolute;
   top: 8px;
   left: 12px;
-  z-index: 1;
+  z-index: var(--z-decorative);
   max-width: calc(100% - 88px);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,12 +123,12 @@
 .md-code-block:has(.md-code-lang) .md-code-pre {
   padding-top: 32px;
 }
-/* 复制钮：只显示「复制」，禁止用 data-copy 塞全文（易撑破布局/误显） */
+/* 婢跺秴鍩楅柦顕嗙窗閸欘亝妯夌粈鎭掆偓灞筋槻閸掕翰鈧稄绱濈粋浣诡剾閻?data-copy 婵夌偛鍙忛弬鍥风礄閺勬挻鎷洪惍鏉戠鐏炩�?鐠囶垱妯夐敍?*/
 .md-code-copy {
   position: absolute;
   top: 6px;
   right: 6px;
-  z-index: 2;
+  z-index: var(--z-sticky-bar);
   min-height: 24px;
   max-width: 4.5em;
   overflow: hidden;
@@ -137,10 +137,10 @@
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-primary);
   color: var(--text-tertiary);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 1px 8px;
   font-size: var(--font-size-xxs);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   cursor: pointer;
   opacity: 0;
   transition: opacity var(--transition-micro), color var(--transition-micro);
@@ -158,15 +158,15 @@
   outline: none;
   box-shadow: none;
 }
-/* 文件路径面包屑：代码块标题左侧 */
+/* 閺傚洣娆㈢捄顖氱窞闂堛垹瀵樼仦鎴窗娴狅絿鐖滈崸妤佺垼妫版ê涔忔笟?*/
 .md-code-breadcrumb {
   position: absolute;
   top: 8px;
   left: 12px;
-  z-index: 1;
+  z-index: var(--z-decorative);
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0_5);
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
@@ -185,7 +185,7 @@
 }
 .md-code-breadcrumb-file {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .md-code-block:has(.md-code-breadcrumb) > pre,
 .md-code-block:has(.md-code-breadcrumb) .md-code-pre {
@@ -197,7 +197,7 @@
   padding-left: 1.2em;
 }
 
-/* 标题 */
+/* 閺嶅洭顣?*/
 .msg-assistant-text .md-h1,
 .msg-assistant-text .md-h2,
 .msg-assistant-text .md-h3,
@@ -227,8 +227,8 @@
 }
 
 /*
- * 列表：单列流式；outside 标记；禁 columns/float 重影。
- * margin/padding 靠选择器级联；仅 columns/float 保留防御性 !important。
+ * 閸掓銆冮敍姘礋閸掓绁﹀蹇ョ幢outside 閺嶅洩顔囬敍娑氼�?columns/float 闁插秴濂栭妴?
+ * margin/padding 闂堢娀鈧瀚ㄩ崳銊ч獓閼辨棑绱辨�?columns/float 娣囨繄鏆€闂冩彃灏介幀?!important�?
  */
 .msg-assistant-text ul,
 .msg-assistant-text ol,
@@ -306,8 +306,8 @@
 }
 
 /*
- * 任务列表：须写在通用 .md-li { display:list-item } 之后，
- * 用 .md-li.md-task-item 提高特异性，避免被 list-item 盖掉 flex。
+ * 娴犺濮熼崚妤勩€冮敍姘躲€忛崘娆忔躬闁氨�?.md-li { display:list-item } 娑斿鎮楅敍?
+ * �?.md-li.md-task-item 閹绘劙鐝悧鐟扮磽閹嶇礉闁灝鍘ょ悮?list-item 閻╂牗甯�?flex�?
  */
 .msg-assistant-text .md-li.md-task-item,
 .md-rendered .md-li.md-task-item {
@@ -358,7 +358,7 @@
 }
 
 /*
- * 表格：无外框、无竖线；单元格自动换行，禁止横向滚动条
+ * 鐞涖劍鐗搁敍姘￥婢舵牗顢嬮妴浣规￥缁旀牜鍤庨敍娑樺礋閸忓啯鐗搁懛顏勫З閹广垼顢戦敍宀€顩﹀銏∶崥鎴炵泊閸斻劍娼?
  */
 .msg-assistant-text .md-table-wrap,
 .md-rendered .md-table-wrap {
@@ -402,7 +402,7 @@
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
-  /* 均分列宽，长文换行而非撑出横滚 */
+  /* 閸у洤鍨庨崚妤€顔旈敍宀勬毐閺傚洦宕茬悰宀冣偓宀勬姜閹炬垵鍤Ο顏呯泊 */
   min-width: 0;
   max-width: 100%;
 }
@@ -434,11 +434,11 @@
 .md-rendered .md-table thead .md-th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-decorative);
   background: var(--bg-primary);
 }
 
-/* 裸 table 同气质：换行、无横滚 */
+/* �?table 閸氬本鐨电拹顭掔窗閹广垼顢戦妴浣规￥濡亝绮?*/
 .msg-assistant-text table:not(.md-table),
 .md-rendered table:not(.md-table) {
   border-collapse: collapse;
@@ -513,18 +513,18 @@
   font-weight: var(--font-weight-normal);
 }
 
-/* highlight.js — neutral readable */
+/* highlight.js �?neutral readable */
 .hljs { color: var(--text-primary); background: transparent; }
-.hljs-comment, .hljs-quote { color: var(--text-tertiary); font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #7c6fdb; }
-.hljs-string, .hljs-doctag, .hljs-template-variable { color: #0d9488; }
-.hljs-number, .hljs-regexp { color: #c2410c; }
-.hljs-title, .hljs-section, .hljs-name { color: #2563eb; }
-.hljs-built_in, .hljs-type { color: #ca8a04; }
-.hljs-attr, .hljs-attribute { color: #db2777; }
-.hljs-meta, .hljs-symbol { color: var(--text-secondary); }
-.hljs-addition { color: #16a34a; }
-.hljs-deletion { color: #dc2626; }
+.hljs-comment, .hljs-quote { color: var(--syntax-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: var(--syntax-keyword); }
+.hljs-string, .hljs-doctag, .hljs-template-variable { color: var(--syntax-string); }
+.hljs-number, .hljs-regexp { color: var(--syntax-number); }
+.hljs-title, .hljs-section, .hljs-name { color: var(--syntax-title); }
+.hljs-built_in, .hljs-type { color: var(--syntax-builtin); }
+.hljs-attr, .hljs-attribute { color: var(--syntax-attr); }
+.hljs-meta, .hljs-symbol { color: var(--syntax-meta); }
+.hljs-addition { color: var(--syntax-addition); }
+.hljs-deletion { color: var(--syntax-deletion); }
 
 .md-path-link {
   display: inline;
@@ -535,7 +535,7 @@
   font-family: var(--font-mono);
   font-size: 0.92em;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   text-decoration: none;
 }
@@ -548,7 +548,7 @@
 @media (max-width: 720px) {
   .msg-assistant-text .md-table-wrap,
   .md-rendered .md-table-wrap {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     margin: 0.45em 0 0.6em;
     overflow-x: hidden;
   }

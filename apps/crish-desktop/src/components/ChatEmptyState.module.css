@@ -51,8 +51,8 @@
 }
 
 .chatEmptyTitle {
-  font-size: 22px;
-  font-weight: 500;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-medium);
   letter-spacing: -0.01em;
   color: var(--text-primary);
   margin: 0 0 var(--space-2, 6px);
@@ -68,16 +68,16 @@
 }
 
 .chatEmptyTitleHero {
-  font-size: 34px; /* 增大字号，与 Kimi 类似的气度 */
-  font-weight: 600;
+  font-size: 34px; /* 婢х偛銇囩€涙褰块敍灞肩�?Kimi 缁鎶€閻ㄥ嫭鐨垫�?*/
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
-  letter-spacing: -0.025em;
-  margin-bottom: 8px;
+  letter-spacing: var(--letter-spacing-tightest);
+  margin-bottom: var(--space-2);
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 
 .chatEmptyProjectInline {
@@ -88,7 +88,7 @@
 
 .chatEmptyProjectBtnInline {
   font-size: 26px;
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   padding: 4px 14px;
   border-radius: var(--radius-md, 12px);
   background: transparent;
@@ -96,7 +96,7 @@
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   transition: background-color var(--transition-fast);
   cursor: pointer;
 }
@@ -109,9 +109,9 @@
   color: var(--text-primary);
   background: var(--control-soft-bg);
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   font-size: 24px;
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 
 .chatEmptySub {
@@ -124,12 +124,12 @@
   display: none; /* Hide for cleaner look globally, user found it too noisy */
 }
 
-/* 主行动 / 项目 / 快捷：软填充 pill，无黑描边 */
+/* 娑撴槒顢戦崝?/ 妞ゅ湱锟?/ 韫囶偅宓庨敍姘宠拫婵夘偄�?pill閿涘本妫ゆ鎴炲伎锟?*/
 .chatEmptyAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   margin: 0 0 var(--space-1, 4px);
   padding: var(--space-2, 6px) var(--space-5, 16px);
   border: none;
@@ -166,7 +166,7 @@
 .chatEmptyPrompts {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   max-width: var(--chat-col-max, 760px);
   margin: 20px auto 0 auto;
@@ -176,7 +176,7 @@
 .sessionEmpty .chatEmptyPrompts {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   max-width: var(--chat-col-max, 760px);
   margin-top: 20px;
@@ -191,7 +191,7 @@
   padding: 12px 18px;
   background: transparent !important;
   border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-2xl) !important;
   cursor: pointer;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -214,7 +214,7 @@
   padding: 12px 18px;
   background: transparent !important;
   border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-2xl) !important;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   box-shadow: none !important;
@@ -224,9 +224,9 @@
 }
 
 .quickPromptLabel {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  margin-right: 12px;
+  margin-right: var(--space-3);
   flex-shrink: 0;
 }
 
@@ -244,7 +244,7 @@
   background: var(--control-soft-bg-hover) !important;
   border-color: var(--border-color);
   color: var(--text-primary);
-  /* 严禁 translateY 上下跳动 */
+  /* 娑撱儳锟?translateY 娑撳﹣绗呯捄鍐插З */
 }
 
 .quickPromptCard:focus-visible {

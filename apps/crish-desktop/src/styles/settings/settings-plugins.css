@@ -1,11 +1,11 @@
-/* ===== Skills settings tab（v3：主操作新建/同步，其余 ⋯） ===== */
+/* ===== Skills settings tab閿涘�?閿涙矮瀵岄幙宥勭稊閺傛澘锟?閸氬本顒為敍灞藉従锟?閳邦垽锟?===== */
 
 
-/* 新建技能 / 定时：双路径卡片（导入 · AI） */
+/* 閺傛澘缂撻幎鈧�?/ 鐎规碍妞傞敍姘蓟鐠侯垰绶為崡锛勫閿涘牆顕遍崗?�?AI�?*/
 .settings-create-paths {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 4px 0 8px;
 }
 @media (max-width: 520px) {
@@ -17,10 +17,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 14px 14px 12px;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
   color: var(--text-primary);
   font: inherit;
@@ -33,31 +33,31 @@
 }
 .settings-create-path-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
-  line-height: 1.3;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
 }
 .settings-create-path-desc {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
-/* 用量统计卡：可视化优先 */
+/* 閻劑鍣虹紒鐔活吀閸椻槄绱伴崣顖濐潒閸栨牔绱�?*/
 .settings-usage-chart-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0 0 12px;
 }
 .settings-usage-day-chart {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   height: 120px;
   padding: 8px 4px 0;
-  margin-bottom: 10px;
-  border-radius: 12px;
+  margin-bottom: var(--space-2_5);
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 .settings-usage-day-col {
@@ -67,7 +67,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-usage-day-bar-wrap {
   flex: 1;
@@ -80,28 +80,28 @@
   width: 70%;
   max-width: 28px;
   min-height: 2px;
-  border-radius: 6px 6px 2px 2px;
+  border-radius: var(--radius-md) 6px 2px 2px;
   background: color-mix(in srgb, var(--text-primary) 28%, transparent);
 }
 .settings-usage-day-bar.is-empty {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .settings-usage-day-label {
-  font-size: 10px;
+  font-size: var(--font-size-nano);
   color: var(--text-tertiary);
-  line-height: 1;
+  line-height: var(--line-height-none);
   white-space: nowrap;
 }
 .settings-usage-model-bars {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 .settings-usage-model-bar-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-width: 0;
 }
 .settings-usage-model-bar-name {
@@ -127,7 +127,7 @@
 .settings-usage-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-2_5);
   margin: 4px 0 12px;
 }
 @media (max-width: 560px) {
@@ -138,9 +138,9 @@
 .settings-usage-stat-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 14px 14px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
   min-width: 0;
 }
@@ -150,11 +150,11 @@
 }
 .settings-usage-stat-value {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
 }
 .settings-usage-bar {
   height: 6px;
@@ -181,7 +181,7 @@
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 .settings-usage-ratio-in {
   background: color-mix(in srgb, var(--accent-green, #2dbe6c) 65%, transparent);
@@ -197,16 +197,16 @@
   gap: 12px 20px;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 .settings-usage-meta-row strong {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
 }
 
-/* —— 扩展中心：插件 + MCP + 技能（ChatGPT 式留白列表） —— */
+/* 閳ユ柡锟?閹碘晛鐫嶆稉顓炵妇閿涙碍褰冩�?+ MCP + 閹垛偓閼虫枻绱機hatGPT 瀵繒鏆€閻ц棄鍨悰顭掔�?閳ユ柡锟?*/
 .settings-pane--extensions {
   width: 100%;
   max-width: var(--settings-content-max, 720px);
@@ -216,8 +216,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 .ext-search {
   flex: 1 1 140px;
@@ -231,8 +231,8 @@
   background: transparent;
   min-height: 80px;
 }
-/* 行：大留白 + 极浅分隔，可点击进详情 */
-/* 列表行：默认纯留白；hover 极浅软底（无描边、不变黑） */
+/* 鐞涘矉绱版径褏鏆€锟?+ 閺嬩焦绁崚鍡涙閿涘苯褰查悙鐟板毊鏉╂稖顕涢幆?*/
+/* 閸掓銆冪悰宀嬬窗姒涙顓荤痪顖滄殌閻ф枻绱県over 閺嬩焦绁潪顖氱俺閿涘牊妫ら幓蹇氱珶閵嗕椒绗夐崣姗€绮﹂�?*/
 .ext-row--card {
   display: flex;
   align-items: center;
@@ -241,16 +241,16 @@
   padding: 14px 10px;
   border: none;
   border-bottom: none;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: transparent;
   cursor: pointer;
   text-align: left;
   width: 100%;
   font: inherit;
   color: inherit;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0_5);
 }
-/* 整行不高亮；仅按钮 .ui-btn / 开关等控件自身 hover */
+/* 閺佺顢戞稉宥夌彯娴滎噯绱辨禒鍛瘻�?.ui-btn / 瀵偓閸忓磭鐡戦幒褌娆㈤懛顏囬煩 hover */
 .ext-row--card:hover {
   background: transparent;
 }
@@ -259,17 +259,17 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .ext-row-title-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .ext-row-name {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -285,7 +285,7 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* 徽章：有软底则无描边 */
+/* 瀵扮晫鐝烽敍姘箒鏉烆垰绨抽崚娆愭￥閹诲繗锟?*/
 .ext-kind-badge,
 .ext-source-badge,
 .ext-installed-mark {
@@ -293,9 +293,9 @@
   align-items: center;
   height: 22px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -308,7 +308,7 @@
 .ext-row-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex-shrink: 0;
   align-items: center;
 }
@@ -320,13 +320,13 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .settings-create-path {
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
 }
 
-/* 扩展详情面板 */
+/* 閹碘晛鐫嶇拠锔藉剰闂堛垺�?*/
 .ext-detail {
   display: flex;
   flex-direction: column;
@@ -337,20 +337,20 @@
 .ext-detail-head {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .ext-detail-title-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .ext-detail-title {
   margin: 0;
   font-size: var(--font-size-xl);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
 }
 .ext-detail-desc {
   margin: 0;
@@ -364,17 +364,17 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .ext-detail-md {
   margin: 0;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   border: none;
   background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-size: var(--font-size-xs-plus);
+  line-height: var(--line-height-body);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -384,15 +384,15 @@
 .ext-tool-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .ext-tool-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   border: none;
   background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
 }
@@ -411,7 +411,7 @@
 .ext-detail-meta {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -421,8 +421,8 @@
 .ext-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
 }
 /* ===== Skills and MCP tab styles migrated to CSS Modules ===== */
 
@@ -461,11 +461,11 @@ pre,
 }
 
 /* ============================================================
-   Settings polish (FB) — density / hairline / focus / empty / zh
+   Settings polish (FB) �?density / hairline / focus / empty / zh
    Additive only: tokens from DF; no component or tokens.css edits
    ============================================================ */
 
-/* 1) 侧栏 tab 密度：行高对齐 --row-height-sm / --control-height-sm，间距走 --space-* */
+/* 1) 娓氀勭埉 tab 鐎靛棗瀹抽敍姘愁攽妤傛ê顕�?--row-height-sm / --control-height-sm閿涘矂妫跨捄婵婅�?--space-* */
 .settings-sidebar-tab {
   gap: var(--space-2, 6px);
   padding: var(--space-1, 4px) var(--space-3, 8px);
@@ -485,7 +485,7 @@ pre,
   padding: var(--space-3, 8px) var(--space-3, 8px) var(--space-1, 4px);
   font-size: var(--font-size-xxs);
   line-height: var(--line-height-tight, 1.25);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 .settings-cover-nav {
   width: 200px;
@@ -513,7 +513,7 @@ pre,
   line-height: var(--line-height-ui, 1.35);
 }
 
-/* 2) 行间 hairline：列表 / 卡片 / 排程 / MCP / skills 统一 --hairline-width + --hairline */
+/* 2) 鐞涘矂锟?hairline閿涙艾鍨悰?/ 閸楋紕锟?/ 閹烘帞锟?/ MCP / skills 缂佺喍锟?--hairline-width + --hairline */
 .settings-list-row,
 .settings-list--spaced .settings-list-row,
 .settings-card-row,
@@ -625,7 +625,7 @@ pre,
   border-style: solid;
   border-color: var(--hairline, var(--border-subtle));
 }
-/* 输入框去除背景色填充，依靠浅色边框区分激活状态 */
+/* 鏉堟挸鍙嗗鍡楀箵闂勩倛鍎楅弲顖濆婵夘偄鍘栭敍灞肩贩闂堢姵绁懝鑼剁珶濡楀棗灏崚鍡樼负濞茶崵濮搁幀?*/
 .settings-field-input {
   border-style: solid;
   border-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -642,7 +642,7 @@ pre,
   border: 1px solid var(--border-subtle);
   background: var(--control-soft-bg, var(--bg-secondary));
   box-shadow: none;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 .settings-select-trigger:focus,
 .settings-select-trigger:focus-visible,
@@ -656,7 +656,7 @@ pre,
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
 
-/* 3) focus-visible：设置控件统一 --focus-ring / --focus-ring-strong（键盘可达） */
+/* 3) focus-visible閿涙俺顔曠純顔藉付娴犲墎绮烘稉锟?--focus-ring / --focus-ring-strong閿涘牓鏁惄妯哄讲鏉堟拝�?*/
 .settings-sidebar-tab:focus-visible,
 .settings-back-btn:focus-visible,
 .settings-nav-back:focus-visible,
@@ -699,7 +699,7 @@ pre,
 .models-btn.primary:focus-visible {
   box-shadow: var(--focus-ring-strong, var(--focus-ring));
 }
-/* 输入 / 搜索：无黑边，聚焦几乎无差 */
+/* 鏉堟挸锟?/ 閹兼粎鍌ㄩ敍姘￥姒涙垼绔熼敍宀冧粵閻掞箑鍤戞稊搴㈡￥锟?*/
 .settings-field-input:focus-visible,
 .settings-nav-search:focus-visible,
 .settings-select-custom-input:focus-visible,
@@ -730,7 +730,7 @@ textarea.settings-dialog-textarea:focus-visible {
   border-radius: var(--radius-sm, 6px);
 }
 
-/* 4) 空态：居中/左对齐一致密度，中文行高，避免「灰块漂浮」 */
+/* 4) 缁岀儤鈧緤绱扮仦鍛厬/瀹革箑顕鎰閼锋潙鐦戞惔锔肩礉娑擃厽鏋冪悰宀勭彯閿涘矂浼╅崗宥冣偓宀€浼嗛崸妤佺磽濞搭喓�?*/
 .settings-nav-empty,
 .settings-list-empty,
 .sched-settings-empty,
@@ -812,7 +812,7 @@ textarea.settings-dialog-textarea:focus-visible {
   text-align: center;
 }
 
-/* 5) 紧凑表单：控件高 / 内边距 / 行 gap 走 density ladder */
+/* 5) 缁毖冨櫨鐞涖劌宕熼敍姘付娴犲爼�?/ 閸愬懓绔熺捄?/ �?gap �?density ladder */
 .settings-fields-stack {
   gap: var(--space-2, 6px);
 }
@@ -888,7 +888,7 @@ textarea.settings-dialog-textarea:focus-visible {
   min-height: var(--control-height-sm, 28px);
   padding: 0 var(--control-pad-x, 10px);
   font-size: var(--font-size-xs);
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 .settings-list-row,
 .settings-list-row--single,
@@ -915,10 +915,10 @@ textarea.settings-dialog-textarea:focus-visible {
   min-height: var(--control-height-sm, 28px);
   padding: 0 var(--control-pad-x-sm, 8px);
   font-size: var(--font-size-xs);
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
-/* 6) 中文 UI：标题/标签/正文行高；keep-all 防竖排碎字；元信息 tight */
+/* 6) 娑擃厽锟?UI閿涙碍鐖ｆ０?閺嶅洨锟?濮濓絾鏋冪悰宀勭彯閿涙舶eep-all 闂冭尙鐝幒鎺旑暢鐎涙绱遍崗鍐т繆锟?tight */
 .settings-page-title,
 .settings-cover-title,
 .settings-modal-title,
@@ -927,7 +927,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .skills-tab-title,
 .settings-dialog-title {
   line-height: var(--line-height-tight, 1.25);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
 }
 .settings-list-title,
 .settings-feature-title,
@@ -977,21 +977,19 @@ textarea.settings-dialog-textarea:focus-visible {
   max-width: var(--settings-content-max, 720px);
 }
 /*
- * .settings-cover-content 全局样式：父容器已改为 align-items: stretch，
- * 子页面自居中，此处仅保留 gap/padding 覆盖，不再设 align-items。
- */
+ * .settings-cover-content 閸忋劌鐪弽宄扮础閿涙氨鍩楃€圭懓娅掑鍙夋暭�?align-items: stretch�? * 鐎涙劙銆夐棃銏ｅ殰鐏炲懍鑵戦敍灞绢劃婢跺嫪绮庢穱婵堟�?gap/padding 鐟曞棛娲婇敍灞肩瑝閸愬秷�?align-items�? */
 .settings-cover-content {
   gap: 14px;
   padding: 24px 20px 40px;
   scrollbar-gutter: stable both-edges;
   align-items: stretch;
 }
-/* 设置内按钮：圆角矩形；软底按钮禁止再加描边 */
+/* 鐠佸墽鐤嗛崘鍛瘻闁筋噯绱伴崷鍡氼潡閻晛鑸伴敍娑滆拫鎼存洘瀵滈柦顔绢洣濮濄垹鍟€閸旂姵寮挎�?*/
 .settings-pane .ui-btn,
 .settings-pane .ui-btn-sm,
 .settings-pane .models-btn,
 .settings-btn-rect {
-  border-radius: 10px !important;
+  border-radius: var(--radius-xl) !important;
 }
 
 .settings-pane .models-btn:not(.ghost),
@@ -1011,7 +1009,7 @@ textarea.settings-dialog-textarea:focus-visible {
   font-size: var(--font-size-xs);
   padding: 8px 0 4px;
 }
-/* 芯片 / 预设：中文横向；默认软底无描边 */
+/* 閼侯垳锟?/ 妫板嫯顔曢敍姘厬閺傚洦铆閸氭埊绱辨妯款吇鏉烆垰绨抽弮鐘冲伎�?*/
 .settings-chip,
 .settings-chip-btn,
 .settings-rule-preset,
@@ -1042,7 +1040,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-preset-chip:hover {
   background: var(--control-soft-bg-hover, var(--bg-hover));
 }
-/* 窄宽：导航/内容继续吃 density token */
+/* 缁愬嫬顔旈敍姘嚤锟?閸愬懎顔愮紒褏鐢婚崥?density token */
 @media (max-width: 720px) {
   .settings-cover-nav {
     width: 152px;

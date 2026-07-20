@@ -18,7 +18,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .labelTitle {
@@ -34,7 +34,7 @@
 .inputGroup {
   flex: 1;
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .inputGrow {
@@ -42,21 +42,21 @@
 }
 
 .actionBtn {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .presetGroup {
   flex: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .presetChip {
   height: 28px;
   padding: 0 10px;
   font-size: var(--font-size-xs);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .cmdSpan {

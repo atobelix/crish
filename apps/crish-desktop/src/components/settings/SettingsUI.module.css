@@ -3,10 +3,7 @@
   flex-direction: column;
   gap: 24px;
   /*
-   * width: 100% 填满 stretch 父列；
-   * max-width 通过 token 统一控制，margin: auto 实现居中。
-   * 禁止再在各 tab CSS 里各写一份 max-width: 680/720px。
-   */
+   * width: 100% 婵夘偅寮?stretch 閻栬泛鍨敍?   * max-width 闁俺绻?token 缂佺喍绔撮幒褍鍩楅敍瀹產rgin: auto 鐎圭偟骞囩仦鍛厬閵?   * 缁備焦顒涢崘宥呮躬閸?tab CSS 闁插苯鎮囬崘娆庣娴?max-width: 680/720px閵?   */
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   margin-left: auto;
@@ -24,16 +21,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .settingsUiPageTitle {
   margin: 0;
   font-size: var(--font-size-2xl, 24px);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: var(--line-height-dense);
 }
 
 .settingsUiPageBody {
@@ -45,7 +42,7 @@
 .settingsUiSection {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   content-visibility: auto;
   contain-intrinsic-size: auto 200px;
 }
@@ -56,7 +53,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.01em;
+  letter-spacing: var(--letter-spacing-snug);
 }
 
 .settingsUiSectionContent {
@@ -65,7 +62,7 @@
   gap: 16px;
 }
 
-/* 缁熶竴鐨勯珮绾у崱鐗囧鍣紝涓ユ牸閬靛畧鏋佸井寮辩伆搴︼紙<=4%锛夛紝鏃犲帤閲嶉槾褰憋紝绾补鐨勫渾瑙掍笌 1px hairline */
+/* 缂備胶鍠嶇粩鎾儍閸曨垳褰紒鐙欏啫骞㈤柣妤€娲ら鎰板闯椤帞绀夊☉鎾卞劜閻楁悂鏌嗛棃娑氭殦闁哄绀佹禍鏇烆嚕鏉堚晙绱楅幖杈捐缁?=4%闁挎稑顧€缁辨繈寮悩鎻掕⒈闂佹彃绉瑰Σ鎹愩亹閹插绀夌紒缁㈠灣鐞涖儵鎯冮崟顐ｅ閻熸瑦甯婄粭?1px hairline */
 .settingsUiCard {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -128,7 +125,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .settingsUiRowTitle {
@@ -148,7 +145,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 /* Modern select tooltip */
@@ -173,9 +170,9 @@
   border: 1px solid var(--border-subtle, #e5e7eb);
   color: var(--text-primary, #1f2937);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
 }

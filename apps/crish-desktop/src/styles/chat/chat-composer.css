@@ -1,4 +1,4 @@
-/* chat-composer.css — Legacy styles for ChatHeaderMore.tsx */
+/* chat-composer.css �?Legacy styles for ChatHeaderMore.tsx */
 /* [All other composer and plus menu styles migrated to ChatComposer.module.css and ComposePlusMenu.module.css] */
 
 .chat-more-wrap {
@@ -11,26 +11,24 @@
   bottom: calc(100% + 6px);
   left: 0;
   min-width: 168px;
-  padding: 6px;
+  padding: var(--space-1_5);
   background: var(--bg-elevated, #fff);
   border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-radius: 12px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  z-index: 30;
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-context-menu);
 }
 
 .chat-more-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   text-align: left;
   border: none;
   background: transparent;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-sm, 13px);
   font-family: inherit;
   color: var(--text-primary);

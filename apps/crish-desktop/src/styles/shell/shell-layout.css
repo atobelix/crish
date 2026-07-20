@@ -18,14 +18,14 @@
   align-items: center;
   padding: 0 12px;
   user-select: none;
-  z-index: 100;
+  z-index: var(--z-sidebar);
   flex-shrink: 0;
 }
 
 .app-header-left, .app-header-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .app-header-left {
@@ -64,10 +64,10 @@
 .daemon-status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   height: var(--control-height);
   padding: 0 12px;
-  margin-right: 8px;
+  margin-right: var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   background: var(--bg-secondary, #f6f6f6);
@@ -114,23 +114,23 @@
 }
 
 .daemon-status-label {
-  line-height: 1;
+  line-height: var(--line-height-none);
   white-space: nowrap;
 }
 
 /* Product boot: integrated app, no "shell without engine" */
-/* 启动：真界面立刻上，仅顶栏轻提示引擎连接（比整页骨架更快） */
+/* 鍚姩锛氱湡鐣岄潰绔嬪埢涓婏紝浠呴《鏍忚交鎻愮ず寮曟搸杩炴帴锛堟瘮鏁撮〉楠ㄦ灦鏇村揩锛?*/
 .app-boot-banner {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
   padding: 6px 14px;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-secondary) 80%, var(--bg-primary));
   border-bottom: 1px solid var(--border-subtle);
-  z-index: 20;
+  z-index: var(--z-popover);
 }
 .app-boot-banner-dot {
   width: 7px;
@@ -158,7 +158,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 32px 40px;
   user-select: none;
 }
@@ -176,7 +176,7 @@
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-normal);
   color: var(--text-primary, #1a1a1a);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 .product-boot-sub {
@@ -193,8 +193,8 @@
 .navigation-arrows {
   display: flex;
   gap: 1px;
-  margin-left: 4px;
-  margin-right: 4px;
+  margin-left: var(--space-1);
+  margin-right: var(--space-1);
 }
 
 .header-btn:disabled {
@@ -210,7 +210,7 @@
   padding: 0 12px;
   width: 240px;
   height: 30px;
-  gap: 6px;
+  gap: var(--space-1_5);
   border: 1px solid var(--border-subtle) !important;
   box-sizing: border-box;
   box-shadow: none !important;
@@ -284,7 +284,7 @@
 }
 
 .win-btn i, .win-btn svg {
-  /* 窗口控件略小于主图标，避免视觉过重 */
+  /* 绐楀彛鎺т欢鐣ュ皬浜庝富鍥炬爣锛岄伩鍏嶈瑙夎繃閲?*/
   width: 14px;
   height: 14px;
 }

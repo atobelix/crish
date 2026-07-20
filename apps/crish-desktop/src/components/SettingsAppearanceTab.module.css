@@ -6,12 +6,12 @@
   border: none !important;
   border-radius: 0;
   padding: 0 !important;
-  gap: 8px !important;
+  gap: var(--space-2) !important;
   box-shadow: none !important;
 }
 
 .segmentItem {
-  border-radius: 10px !important;
+  border-radius: var(--radius-xl) !important;
   min-width: 48px;
   min-height: 32px;
   padding: 0 14px !important;
@@ -20,7 +20,7 @@
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent) !important;
   box-shadow: none !important;
-  line-height: 1;
+  line-height: var(--line-height-none);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
@@ -36,7 +36,7 @@
   background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-primary)) !important;
   border-color: transparent !important;
   color: var(--text-primary) !important;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   box-shadow: none !important;
 }
 
@@ -48,7 +48,7 @@
 .colorInput {
   cursor: pointer;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   width: 40px;
   height: 24px;
   padding: 0;
@@ -58,7 +58,7 @@
 .adjustContainer {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .adjustSlider {
@@ -74,5 +74,5 @@
   color: var(--text-secondary);
   min-width: 40px;
   text-align: right;
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }

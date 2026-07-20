@@ -2,7 +2,7 @@
 .chatSoftHint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0 0 6px;
   padding: 6px 10px;
   border-radius: var(--radius-md, 8px);
@@ -10,7 +10,7 @@
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   box-sizing: border-box;
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -53,7 +53,7 @@
 .chatSoftHintAction:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-color, #6c8cff) 55%, transparent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .chatSoftHint[data-setup-hint='needs-key'] {
@@ -98,21 +98,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2_5);
   margin: 0 0 8px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--hairline, var(--border-subtle));
   background: transparent;
   box-sizing: border-box;
 }
 
 .planModeRibbon.slim {
-  gap: 6px;
+  gap: var(--space-1_5);
   margin: 0 0 6px;
   padding: 4px 8px;
   min-height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .planModeRibbon.slim > svg {
@@ -143,7 +143,7 @@
 
 .planModeRibbonActions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex-shrink: 0;
 }
 
@@ -155,7 +155,7 @@
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -190,7 +190,7 @@
   flex-shrink: 0;
   width: 36px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--text-tertiary) 22%, transparent);
   overflow: hidden;
   align-self: center;
@@ -210,7 +210,7 @@
   position: absolute;
   right: 18px;
   bottom: 148px;
-  z-index: 12;
+  z-index: var(--z-scroll-fab);
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -234,12 +234,12 @@
 .runNotice {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--space-2_5);
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto 8px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--hairline, var(--border-subtle));
   background: transparent;
   box-sizing: border-box;
@@ -250,7 +250,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .runNoticeKicker {
@@ -267,8 +267,8 @@
 
 .runNoticeDetail {
   display: block;
-  margin-top: 2px;
-  font-size: 11.5px;
+  margin-top: var(--space-0_5);
+  font-size: var(--font-size-micro);
   line-height: 1.35;
   color: var(--text-tertiary);
   word-break: break-word;
@@ -280,8 +280,8 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  padding: 2px;
-  border-radius: 6px;
+  padding: var(--space-0_5);
+  border-radius: var(--radius-md);
   display: inline-flex;
 }
 
@@ -294,12 +294,12 @@
 .approvalDock {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto 6px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid color-mix(in srgb, var(--accent-orange, #f59e0b) 30%, var(--hairline, var(--border-subtle)));
   background: color-mix(in srgb, var(--accent-orange, #f59e0b) 5%, transparent);
   cursor: pointer;
@@ -311,7 +311,7 @@
 
 .approvalDock.slim {
   padding: 5px 10px;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-height: 30px;
 }
 
@@ -381,7 +381,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   margin: 0 0 6px;
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -391,10 +391,10 @@
 .dynamicChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   height: 26px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   color: var(--text-secondary);
@@ -402,7 +402,7 @@
   font-weight: var(--font-weight-medium, 500);
   font-family: inherit;
   cursor: pointer;
-  line-height: 1;
+  line-height: var(--line-height-none);
   transition: all var(--transition-fast);
   box-shadow: none;
   animation: chipFadeIn 0.22s ease-out;
@@ -456,7 +456,7 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 0 8px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: var(--hairline-width, 1px) solid var(--border-color);
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -467,7 +467,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
@@ -476,7 +476,7 @@
 .dynamicPlanList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -487,7 +487,7 @@
 .dynamicPlanItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: 1.35;

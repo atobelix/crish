@@ -49,16 +49,16 @@
   bottom: auto;
   left: 0;
   right: auto;
-  z-index: 40;
+  z-index: var(--z-dropdown-menu);
   min-width: 148px;
   padding: 3px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .moreItem {
@@ -74,9 +74,9 @@
   transition: background var(--transition-fast), color var(--transition-fast);
   box-sizing: border-box;
 
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: var(--font-size-xs, 12px);
   min-height: 28px;
 }

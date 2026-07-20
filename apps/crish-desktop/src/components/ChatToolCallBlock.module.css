@@ -20,7 +20,7 @@
 /* Tool Row */
 .toolRow {
   border: none !important;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   min-height: 0;
   contain: layout style;
@@ -57,12 +57,12 @@
 .toolRowHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none !important;
   background: transparent;
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -86,7 +86,7 @@
 .toolRowHeadMain {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -96,7 +96,7 @@
   flex: 0 0 16px;
   width: 16px;
   height: 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -116,7 +116,7 @@
   justify-content: center;
   margin-left: auto;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: var(--text-tertiary);
   opacity: 0;
   pointer-events: none;
@@ -152,7 +152,7 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -164,7 +164,7 @@
   min-width: 0;
   max-width: 100%;
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
   overflow: hidden;
@@ -216,7 +216,7 @@
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   position: relative;
   background: var(--bg-primary);
   box-shadow: var(--shadow-sm);
@@ -226,12 +226,12 @@
 
 .toolResultBody > * {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-decorative);
 }
 
 .toolResultPreCmd {
   color: var(--text-primary);
-  font-size: 11.5px;
+  font-size: var(--font-size-micro);
   opacity: 0.92;
   margin: 0 0 6px;
   padding: 0 0 6px;
@@ -262,7 +262,7 @@
 .toolPathWrap {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0_5);
   max-width: 100%;
   vertical-align: baseline;
 }
@@ -285,7 +285,7 @@
 .toolPathWrap:focus-within .toolPathActions {
   max-width: 56px;
   opacity: 1;
-  margin-left: 4px;
+  margin-left: var(--space-1);
 }
 
 .toolPathAction {
@@ -295,7 +295,7 @@
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -328,7 +328,7 @@
   color: var(--text-tertiary);
   cursor: pointer;
   text-decoration: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: var(--font-weight-normal);
 }
 
@@ -341,14 +341,14 @@
 .toolResultImages {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .toolResultImg {
   max-width: min(100%, 420px);
   max-height: 280px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--hairline, var(--border-subtle));
   object-fit: contain;
   background: var(--bg-secondary);
@@ -358,8 +358,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
   padding: 3px 0 0;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
@@ -368,14 +368,14 @@
 
 .toolResultLongActions {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .toolResultHintBtn,
 .toolResultOpenFile {
   border: 1px solid var(--hairline-strong, var(--border-color));
   background: var(--bg-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 1px 7px;
   font-size: var(--font-size-xxs);
   color: var(--text-secondary);
@@ -390,14 +390,14 @@
 }
 
 .toolResultOpenFile {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   display: inline-flex;
 }
 
 .toolRowFileOpen {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   margin: 2px 0 4px 28px;
   border: 1px solid var(--hairline, var(--border-subtle, var(--border-color)));
   background: transparent;
@@ -406,7 +406,7 @@
   cursor: pointer;
   font-family: inherit;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .toolRowFileOpen:hover {
@@ -450,7 +450,7 @@
 .gitDiffFileInfo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-sm);
   min-width: 0;
   flex: 1 1 auto;
@@ -477,7 +477,7 @@
 
 .gitDiffBadge {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-code, 400);
@@ -581,7 +581,7 @@
 .toolRowLive {
   display: inline-flex;
   align-items: center;
-  margin-right: 2px;
+  margin-right: var(--space-0_5);
 }
 
 @keyframes pulse-dot {

@@ -1,6 +1,6 @@
-/* --- settings.css (overlay / cover / panel / settings tabs) — split from index.css (selectors preserved) ---
- * Hairline 契约与 chat 一致：结构线 --border-subtle / --hairline；控件线 --border-color / --hairline-strong
- * 控件高走 --control-height*；字号走 --font-size*；勿再写 magic px 与 text-primary color-mix 描边 */
+/* --- settings.css (overlay / cover / panel / settings tabs) �?split from index.css (selectors preserved) ---
+ * Hairline 婵傛垹瀹虫�?chat 娑撯偓閼疯揪绱扮紒鎾寸€痪?--border-subtle / --hairline閿涙稒甯舵禒鍓佸�?--border-color / --hairline-strong
+ * 閹貉傛妤傛锟?--control-height*閿涙稑鐡ч崣鐤泲 --font-size*閿涙稑瀣侀崘宥呭晸 magic px �?text-primary color-mix 閹诲繗锟?*/
 /* --- PREMIUM SETTINGS BUTTONS --- */
 .settings-btn-primary {
   background-color: var(--bg-active);
@@ -78,7 +78,7 @@
   height: var(--control-height);
   min-height: var(--control-height);
   padding: 0 12px;
-  /* 可见软边：能看出可编辑区域，又不抢主内容 */
+  /* 閸欘垵顫嗘潪顖濈珶閿涙俺鍏橀惇瀣毉閸欘垳绱潏鎴濆隘閸╃噦绱濋崣鍫滅瑝閹额澀瀵岄崘鍛啇 */
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -90,7 +90,7 @@
   box-shadow: none;
   transition: border-color var(--transition-micro), background var(--transition-micro), box-shadow var(--transition-micro);
 }
-/* 设置密度：行内小控件 — 走 control-height-sm，避免 magic 28px + !important 堆叠 */
+/* 鐠佸墽鐤嗙€靛棗瀹抽敍姘愁攽閸愬懎鐨幒褌锟?�?�?control-height-sm閿涘矂浼╅崗?magic 28px + !important 閸棗锟?*/
 .settings-field-input--sm {
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
@@ -153,7 +153,7 @@ select.settings-field-input {
 
 .settings-section-header {
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
   margin-bottom: 16px;
 }
 
@@ -166,7 +166,7 @@ select.settings-field-input {
   border-radius: 0;
   padding: 4px 0 16px;
   background: transparent;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .settings-profile-avatar {
@@ -185,22 +185,22 @@ select.settings-field-input {
 .settings-profile-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .settings-fields-stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-/* Settings nav — 圆角矩形；选中只用软底，不叠描边 */
+/* Settings nav �?閸﹀棜顫楅惌鈺佽埌閿涙盯鈧鑵戦崣顏嗘暏鏉烆垰绨抽敍灞肩瑝閸欑姵寮挎潏?*/
 .settings-sidebar-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: none;
   cursor: pointer;
   font-size: var(--font-size-sm);
@@ -218,7 +218,7 @@ select.settings-field-input {
   color: var(--text-primary);
 }
 .settings-sidebar-tab.active {
-  /* 有底色 → 无描边 */
+  /* 閺堝绨抽懝?�?閺冪姵寮挎潏?*/
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
@@ -240,11 +240,11 @@ select.settings-field-input {
 .settings-sidebar-tab.active svg {
   color: var(--text-primary);
 }
-/* 列表/表单块：无色块外框；行间 hairline（与 chat-msg-filter-bar / tool 分区同 token） */
+/* 閸掓锟?鐞涖劌宕熼崸妤嬬窗閺冪姾澹婇崸妤€顦诲鍡幢鐞涘矂�?hairline閿涘牅锟?chat-msg-filter-bar / tool 閸掑棗灏崥?token�?*/
 .settings-card-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   border: none;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   border-radius: 0;
@@ -263,15 +263,15 @@ select.settings-field-input {
 }
 
 .settings-scope-selector {
-  display: none; /* removed from UI — confuses consumers */
+  display: none; /* removed from UI �?confuses consumers */
 }
 
 .settings-scope-toggle-group {
   display: flex;
   background: var(--bg-primary);
   padding: 3px;
-  border-radius: 8px;
-  gap: 2px;
+  border-radius: var(--radius-lg);
+  gap: var(--space-0_5);
 }
 
 .settings-scope-toggle-btn {
@@ -279,7 +279,7 @@ select.settings-field-input {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   background: transparent;
   color: var(--text-tertiary);
@@ -292,7 +292,7 @@ select.settings-field-input {
   box-shadow: none;
 }
 
-/* --- SHORTCUT BUTTONS — 与 field-input 同描边档，无 !important --- */
+/* --- SHORTCUT BUTTONS �?�?field-input 閸氬本寮挎潏瑙勩€傞敍灞炬￥ !important --- */
 .shortcut-key-btn {
   font-size: var(--font-size-xxs);
   background: transparent;
@@ -313,7 +313,7 @@ select.settings-field-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
 .shortcut-key-btn:hover {
@@ -322,7 +322,7 @@ select.settings-field-input {
 }
 
 .shortcut-key-btn.recording {
-  /* 中性体系：recording 用 active + standard hairline，不用暗色描边 */
+  /* 娑擃厽鈧傜秼缁紮绱皉ecording �?active + standard hairline閿涘奔绗夐悽銊︽閼瑰弶寮挎�?*/
   background-color: var(--bg-active);
   color: var(--text-primary);
   border-color: var(--border-color);
@@ -337,16 +337,14 @@ select.settings-field-input {
 .settings-section-header h4 {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-content);
-  letter-spacing: -0.02em;
-  line-height: 1.25;
+  letter-spacing: var(--letter-spacing-tighter);
+  line-height: var(--line-height-tight);
   color: var(--text-primary);
   margin: 0;
 }
 
 /* ============================================================
-   Settings Design System v3（个人+智能重设计）
-   原则：贴导航左对齐；功能台非说明书；状态≠当前值；字号+1；行高适中
-   ============================================================ */
+   Settings Design System v3閿涘牅閲滄禍?閺呴缚鍏橀柌宥堫啎鐠佲槄锟?   閸樼喎鍨敍姘冲垱鐎佃壈鍩呭锕€顕鎰剁幢閸旂喕鍏橀崣浼存姜鐠囧瓨妲戞稊锔肩幢閻樿埖鈧讲澧佃ぐ鎾冲閸婄》绱辩€涙�?1閿涙稖顢戞姗€鈧倷锟?   ============================================================ */
 .settings-pane--modern {
   gap: 16px;
   width: 100%;
@@ -363,18 +361,18 @@ select.settings-field-input {
   margin: 0;
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-content);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-tighter);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
-/* 默认隐藏大段说明：设置页是功能台，不是说明书 */
+/* 姒涙顓婚梾鎰婢堆勵唽鐠囧瓨妲戦敍姘愁啎缂冾噣銆夐弰顖氬閼宠棄褰撮敍灞肩瑝閺勵垵顕╅弰搴濆�?*/
 .settings-page-desc {
   display: none;
   margin: 6px 0 0;
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   max-width: 42em;
 }
 .settings-page-desc.settings-page-desc--show {
@@ -384,7 +382,7 @@ select.settings-field-input {
   font-size: var(--font-size-xs);
   opacity: 0.9;
 }
-/* 定时任务设置页：紧凑布局；保证进页即有可见骨架 */
+/* 鐎规碍妞傛禒璇插鐠佸墽鐤嗘い纰夌窗缁毖冨櫨鐢啫鐪敍娑楃箽鐠囦浇绻樻い闈涘祮閺堝褰茬憴渚€顎囬�?*/
 .sched-settings {
   gap: 14px;
   min-height: 240px;
@@ -394,25 +392,25 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .sched-settings-stats {
   margin: 6px 0 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 .sched-settings-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .sched-settings .sched-preset-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .sched-settings .sched-preset-chip {
   display: inline-flex;
@@ -428,7 +426,7 @@ select.settings-field-input {
   background: var(--control-soft-bg, var(--bg-secondary));
   color: var(--text-secondary);
   cursor: pointer;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .sched-settings .sched-preset-chip:hover {
   color: var(--text-primary);
@@ -437,19 +435,19 @@ select.settings-field-input {
 .sched-settings-status {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .sched-settings-form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 8px 0 4px;
   border-top: 1px solid var(--border-subtle);
 }
 .sched-settings-form-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   align-items: center;
 }
 .sched-settings-form-row .settings-field-input {
@@ -472,7 +470,7 @@ select.settings-field-input {
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   word-break: break-all;
   opacity: 0.88;
   white-space: nowrap;
@@ -482,7 +480,7 @@ select.settings-field-input {
 .sched-settings-form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .sched-settings-empty {
   padding: 20px 0 8px;
@@ -500,7 +498,7 @@ select.settings-field-input {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 34px;
   padding: 4px 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -513,7 +511,7 @@ select.settings-field-input {
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -536,12 +534,12 @@ select.settings-field-input {
 .sched-settings-row .ui-btn {
   flex-shrink: 0;
 }
-/* 兼容：列表内嵌模板芯片（其他页面若仍用 settings-list 包裹） */
+/* 閸忕厧顔愰敍姘灙鐞涖劌鍞村畵灞灸侀弶鑳П閻楀浄绱欓崗鏈电铂妞ょ敻娼伴懟銉ょ矝�?settings-list 閸栧懓锛欓敍?*/
 .settings-list .sched-preset-chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-list .sched-preset-chip {
   display: inline-flex;
@@ -557,35 +555,35 @@ select.settings-field-input {
   background: var(--control-soft-bg, var(--bg-secondary));
   color: var(--text-secondary);
   cursor: pointer;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .settings-list .sched-preset-chip:hover {
   color: var(--text-primary);
   background: var(--control-soft-bg-hover, var(--bg-hover));
 }
-/* 分组：仅用上边距 + 小标题，不用包框 */
+/* 閸掑棛绮嶉敍姘矌閻劋绗傛潏纭呯獩 + 鐏忓繑鐖ｆ０姗堢礉娑撳秶鏁ら崠鍛攱 */
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   border: none;
   background: transparent;
   padding: 0;
 }
 .settings-group + .settings-group {
-  margin-top: 10px;
+  margin-top: var(--space-2_5);
 }
 .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
   padding: 8px 0 4px;
   margin: 0;
   border: none;
   text-transform: none;
 }
-/* 列表：默认无外框；行间用极轻底部分隔（可关） */
+/* 閸掓銆冮敍姘剁帛鐠併倖妫ゆ径鏍攱閿涙稖顢戦梻瀵告暏閺嬩浇浜ゆ惔鏇㈠劥閸掑棝娈ч敍鍫濆讲閸忕锟?*/
 .settings-list {
   border: none;
   border-radius: 0;
@@ -597,12 +595,12 @@ select.settings-field-input {
 }
 .settings-list--flush {
   border: none;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
-/* 仅在需要「卡片感」时显式加 hairline 外框（整页最多 0–1 处） */
+/* 娴犲懎婀棁鈧憰浣碘偓灞藉幢閻楀洦鍔呴妴宥嗘閺勬儳绱￠�?hairline 婢舵牗顢嬮敍鍫熸殻妞ゅ灚娓舵�?0�? 婢跺嫸锟?*/
 .settings-list--hairline {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   padding: 4px 0;
 }
 .settings-list-row {
@@ -612,15 +610,15 @@ select.settings-field-input {
   align-items: center;
   justify-content: flex-start;
   gap: 12px 16px;
-  /* 留白为主：默认无描边无底；整行 hover 不高亮（避免假可点与抖动） */
+  /* 閻ｆ瑧娅ф稉杞板瘜閿涙岸绮拋銈嗘￥閹诲繗绔熼弮鐘茬俺閿涙稒鏆ｇ悰?hover 娑撳秹鐝禍顕嗙礄闁灝鍘ら崑鍥у讲閻愰€涚瑢閹舵牕濮╅�?*/
   padding: 12px 14px;
   min-height: 48px;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   box-sizing: border-box;
   background: transparent;
   margin: 0 0 4px;
-  /* 禁止 hover 改 padding/border 导致行高抖动 */
+  /* 缁備焦锟?hover 閺€?padding/border 鐎佃壈鍤х悰宀勭彯閹舵牕锟?*/
   transition: none;
 }
 .settings-list-row:hover {
@@ -628,7 +626,7 @@ select.settings-field-input {
   border: none;
   transform: none;
 }
-/* 外观页：标签固定宽，控件紧跟其后（禁止 space-between 两端对齐） */
+/* 婢舵牞顫囨い纰夌窗閺嶅洨顒烽崶鍝勭暰鐎规枻绱濋幒褌娆㈢槐褑绐￠崗璺烘倵閿涘牏顩﹀�?space-between 娑撱倗顏€靛綊缍堥�?*/
 .settings-list-row--single {
   flex-wrap: nowrap;
   align-items: center;
@@ -648,24 +646,23 @@ select.settings-field-input {
   margin-left: 0;
   margin-right: auto;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
 }
-/* 外观 · 密度分段：三档紧凑单行 */
+/* 婢舵牞锟?�?鐎靛棗瀹抽崚鍡橆唽閿涙矮绗佸锝囨彛閸戞垵宕熺�?*/
 .settings-density-segment.settings-segment-pill .ui-segment-item {
   min-width: 40px;
   padding: 0 10px;
 }
 
 /* ============================================================
-   个性化页：单行密度（标题左 / 控件右，无副文案撑高）
-   ============================================================ */
+   娑擃亝鈧冨妞ょ绱伴崡鏇☆攽鐎靛棗瀹抽敍鍫熺垼妫版ê�?/ 閹貉傛閸欑绱濋弮鐘插閺傚洦顢嶉幘鎴︾彯�?   ============================================================ */
 .settings-pane--personalize {
   gap: 14px;
   width: 100%;
   max-width: var(--settings-content-max, 720px);
 }
 .settings-pane--personalize .settings-page-head {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 .settings-list--personalize {
   gap: 0;
@@ -693,7 +690,7 @@ select.settings-field-input {
   flex: 0 1 auto;
   flex-wrap: nowrap;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .settings-personalize-select.settings-select,
@@ -730,16 +727,14 @@ select.settings-field-input {
 }
 
 /* ============================================================
-   安全页：单行密度（默认权限 / 工作目录 / 命令白名单）
-   说明进 title；芯片行允许控件侧换行，标题列保持单行
-   ============================================================ */
+   鐎瑰鍙忔い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫ョ帛鐠併倖娼堥梽?/ 瀹搞儰缍旈惄顔肩�?/ 閸涙垝鎶ら惂钘夋倳閸楁洩�?   鐠囧瓨妲戞潻?title閿涙稖濮遍悧鍥攽閸忎浇顔忛幒褌娆㈡笟褎宕茬悰宀嬬礉閺嶅洭顣介崚妞剧箽閹镐礁宕熺�?   ============================================================ */
 .settings-pane--security {
   gap: 14px;
   width: 100%;
   max-width: var(--settings-content-max, 720px);
 }
 .settings-pane--security .settings-page-head {
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0_5);
 }
 .settings-list--security {
   gap: 0;
@@ -762,7 +757,7 @@ select.settings-field-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 路径行：标题区吃满剩余空间，便于省略号 */
+/* 鐠侯垰绶炵悰宀嬬窗閺嶅洭顣介崠鍝勬倖濠娾€冲⒖娴ｆ瑧鈹栭梻杈剧礉娓氬じ绨惇浣烘殣�?*/
 .settings-list-row--security .settings-list-title.settings-path-ellipsis {
   display: block;
   max-width: 100%;
@@ -776,7 +771,7 @@ select.settings-field-input {
   flex: 1 1 auto;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
 }
 .settings-security-select.settings-select,
@@ -787,7 +782,7 @@ select.settings-field-input {
 }
 .settings-list-control--security.settings-list-control--inline-form {
   max-width: min(480px, 78%);
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-security-input.settings-field-input,
 .settings-list-control--security .settings-security-input {
@@ -799,12 +794,12 @@ select.settings-field-input {
   flex-shrink: 0;
   padding-inline: 6px;
 }
-/* 快捷 / 已允许：右侧 chips 可换行，左侧标题仍单行 */
+/* 韫囶偅锟?/ 瀹告彃鍘戠拋闈╃窗閸欏厖�?chips 閸欘垱宕茬悰宀嬬礉瀹革缚鏅堕弽鍥暯娴犲秴宕熺�?*/
 .settings-list-row--security-chips {
   align-items: flex-start;
   min-height: var(--control-height-sm, 28px);
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
 }
 .settings-list-row--security-chips .settings-list-copy {
   padding-top: 3px;
@@ -842,7 +837,7 @@ select.settings-field-input {
 
 .settings-font-control {
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   max-width: min(420px, 68%);
 }
 .settings-font-control .settings-select {
@@ -866,7 +861,7 @@ select.settings-field-input {
 .settings-list-row:last-child {
   border-bottom: none;
 }
-/* 间距型列表：仍单行 */
+/* 闂傜绐涢崹瀣灙鐞涱煉绱版禒宥呭礋�?*/
 .settings-list--spaced {
   gap: 0;
 }
@@ -885,31 +880,31 @@ select.settings-field-input {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   overflow: hidden;
 }
 .settings-list-title {
-  /* 字号 +1：跟密度 token，避免硬编码 13px 偏小 */
+  /* 鐎涙锟?+1閿涙俺绐＄€靛棗�?token閿涘矂浼╅崗宥団€栫紓鏍垳 13px 閸嬪繐锟?*/
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 空态 / 占位：非 essay，单行 tertiary */
+/* 缁岀儤锟?/ 閸楃姳缍呴敍姘舵�?essay閿涘苯宕熺悰?tertiary */
 .settings-list-empty {
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
-/* 默认不展示副文案；仅异常/空态可用 --force（禁止复述控件当前值） */
+/* 姒涙顓绘稉宥呯潔缁€鍝勫閺傚洦顢嶉敍娑楃矌瀵倸锟?缁岀儤鈧礁褰查�?--force閿涘牏顩﹀銏狀槻鏉╃増甯舵禒璺虹秼閸撳秴鈧》锟?*/
 .settings-list-sub {
   display: none;
   margin-top: 0;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 .settings-list-sub.settings-list-sub--force {
   display: block;
@@ -923,25 +918,23 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: nowrap;
   min-width: 0;
 }
-/* 行内表单：输入 + 按钮同一行，不换行成「两行设置项」 */
+/* 鐞涘苯鍞寸悰銊ュ礋閿涙俺绶�?+ 閹稿鎸抽崥灞肩鐞涘矉绱濇稉宥嗗床鐞涘本鍨氶妴灞艰⒈鐞涘矁顔曠純顕€銆嶉妴?*/
 .settings-list-control--inline-form {
   flex: 1 1 auto;
   max-width: min(520px, 72%);
   min-width: 0;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-list-control--inline-form .settings-field-input {
   min-width: 0;
 }
 /*
- * 二选一 / 三选一：按钮彼此分开，各自圆角矩形。
- * 激活：软底 + 浅描边；未激活：透明 + 更浅描边。
- */
+ * 娴滃矂鈧锟?/ 娑撳鈧绔撮敍姘瘻闁筋喖閮婂銈呭瀻瀵偓閿涘苯鎮囬懛顏勬妇鐟欐帞鐓╄ぐ顫�? * 濠碘偓濞蹭紮绱版潪顖氱俺 + 濞村懏寮挎潏鐧哥幢閺堫亝绺哄ú浼欑窗闁繑�?+ 閺囧瓨绁幓蹇氱珶锟? */
 .settings-segment-pill.ui-segment,
 .settings-segment-pill,
 .settings-segment-rect.ui-segment,
@@ -954,15 +947,15 @@ select.settings-field-input {
   border: none !important;
   border-radius: 0;
   padding: 0 !important;
-  gap: 8px !important;
+  gap: var(--space-2) !important;
   box-shadow: none !important;
 }
-/* 未激活：仅浅描边；激活：仅软底。禁止底+边叠用 */
+/* 閺堫亝绺哄ú浼欑窗娴犲懏绁幓蹇氱珶閿涙稒绺哄ú浼欑窗娴犲懓钂嬫惔鏇樷偓鍌滎洣濮濄垹�?鏉堢懓褰旈悽?*/
 .settings-segment-pill .ui-segment-item,
 .settings-segment-rect .ui-segment-item,
 .settings-choice-group .ui-segment-item,
 .settings-choice-btn {
-  border-radius: 10px !important;
+  border-radius: var(--radius-xl) !important;
   min-width: 48px;
   min-height: 32px;
   padding: 0 14px !important;
@@ -971,7 +964,7 @@ select.settings-field-input {
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent) !important;
   box-shadow: none !important;
-  line-height: 1;
+  line-height: var(--line-height-none);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
@@ -991,10 +984,10 @@ select.settings-field-input {
   background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-primary)) !important;
   border-color: transparent !important;
   color: var(--text-primary) !important;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   box-shadow: none !important;
 }
-/* 等宽路径/数据：默认可见（不是帮助文案）；优先单行省略 */
+/* 缁涘顔旂捄顖氱�?閺佺増宓侀敍姘剁帛鐠併倕褰茬憴渚婄礄娑撳秵妲哥敮顔煎И閺傚洦顢嶉敍澶涚幢娴兼ê鍘涢崡鏇☆攽閻胶锟?*/
 .settings-list-sub--mono {
   display: block;
   font-family: var(--font-mono);
@@ -1006,7 +999,7 @@ select.settings-field-input {
   color: var(--text-tertiary);
   max-width: 100%;
 }
-/* 路径/长 ID 单行省略 */
+/* 鐠侯垰锟?闂€?ID 閸楁洝顢戦惇浣烘�?*/
 .settings-path-ellipsis {
   display: inline-block;
   max-width: min(360px, 48vw);
@@ -1016,7 +1009,7 @@ select.settings-field-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   vertical-align: middle;
 }
 .settings-list-meta {
@@ -1028,7 +1021,7 @@ select.settings-field-input {
 .settings-list-control--chips {
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   max-width: 72%;
 }
 .settings-chip-btn {
@@ -1044,7 +1037,7 @@ select.settings-field-input {
   font-size: var(--font-size-xxs);
   cursor: pointer;
   white-space: nowrap;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 .settings-chip-btn:hover:not(:disabled) {
   color: var(--text-primary);
@@ -1093,7 +1086,7 @@ select.settings-field-input {
 .settings-list-copy--with-icon {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .settings-profile-avatar-sm {
@@ -1111,10 +1104,10 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: nowrap;
 }
-/* 顶栏 meta：仅异常/引擎态；复述当前值的 meta 应在 TSX 删除 */
+/* 妞よ埖锟?meta閿涙矮绮庡鍌氱�?瀵洘鎼搁幀渚婄幢婢跺秷鍫ぐ鎾冲閸婅偐锟?meta 鎼存柨锟?TSX 閸掔娀�?*/
 .settings-head-meta {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
@@ -1129,17 +1122,17 @@ select.settings-field-input {
 .settings-head-tools {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
   min-width: 0;
 }
 .settings-group-count {
-  margin-left: 6px;
-  font-weight: 400;
+  margin-left: var(--space-1_5);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   opacity: 0.9;
 }
-/* 禁止竖向堆叠成「两行设置项」——控件一律跟标题同一行 */
+/* 缁備焦顒涚粩鏍ф倻閸棗褰旈幋鎰┾偓灞艰⒈鐞涘矁顔曠純顕€銆嶉妴宥佲偓鏂衡偓鏃€甯舵禒鏈电瀵板绐￠弽鍥暯閸氬奔绔寸�?*/
 .settings-list-row.settings-list-row--stack,
 .settings-list-row--stack {
   flex-direction: row;
@@ -1152,7 +1145,7 @@ select.settings-field-input {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: auto;
   flex-shrink: 0;
 }
@@ -1161,9 +1154,9 @@ select.settings-field-input {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
-/* 预设芯片：禁止竖排汉字；用更高特异性代替 !important 堆叠 */
+/* 妫板嫯顔曢懞顖滃閿涙氨顩﹀銏㈢彨閹烘帗鐪界€涙绱遍悽銊︽纯妤傛澹掑鍌涒偓褌鍞�?!important 閸棗锟?*/
 .settings-preset-chips,
 .settings-list-stack-actions {
   writing-mode: horizontal-tb;
@@ -1176,14 +1169,13 @@ select.settings-field-input {
   height: auto;
   min-height: var(--control-height-sm);
   max-width: none;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   text-align: center;
   word-break: keep-all;
   overflow-wrap: normal;
 }
 /* ============================================================
-   用量页：单行密度（会话 token 总览 + 定价表）
-   数值右对齐 tabular-nums；说明进 title；成功静默 / 错误 toast
+   閻劑鍣烘い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫滅窗�?token 閹槒锟?+ 鐎规矮鐜悰顭掔�?   閺佹澘鈧厧褰哥€靛綊锟?tabular-nums閿涙稖顕╅弰搴ょ�?title閿涙稒鍨氶崝鐔兼饯锟?/ 闁挎瑨锟?toast
    ============================================================ */
 .settings-pane--usage {
   gap: 14px;
@@ -1192,7 +1184,7 @@ select.settings-field-input {
   padding-bottom: 28px;
 }
 .settings-usage-prices {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 .settings-usage-prices-summary {
   cursor: pointer;
@@ -1203,13 +1195,13 @@ select.settings-field-input {
   display: none;
 }
 .settings-usage-prices[open] .settings-usage-prices-summary {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 .settings-pane--usage .settings-page-head {
   margin: 0 0 4px;
 }
 .settings-pane--usage .settings-group {
-  gap: 4px;
+  gap: var(--space-1);
 }
 .settings-pane--usage .settings-group-label {
   padding: 8px 0 4px;
@@ -1242,7 +1234,7 @@ select.settings-field-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 定价行：模型 ID 吃满剩余空间，便于 mono 省略 */
+/* 鐎规矮鐜悰宀嬬窗濡€筹�?ID 閸氬啯寮ч崜鈺€缍戠粚娲？閿涘奔绌舵�?mono 閻胶锟?*/
 .settings-list-row--usage .settings-list-title.settings-usage-model-id {
   display: block;
   max-width: 100%;
@@ -1257,7 +1249,7 @@ select.settings-field-input {
   flex: 0 1 auto;
   flex-wrap: nowrap;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .settings-usage-value {
@@ -1266,7 +1258,7 @@ select.settings-field-input {
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   white-space: nowrap;
   text-align: right;
 }
@@ -1279,7 +1271,7 @@ select.settings-field-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   vertical-align: middle;
 }
 .settings-usage-price-meta {
@@ -1299,7 +1291,7 @@ select.settings-field-input {
   color: var(--text-tertiary);
   font-family: inherit;
   font-size: var(--font-size-xxs);
-  line-height: 1;
+  line-height: var(--line-height-none);
   padding: 0 2px;
   margin: 0;
   cursor: pointer;
@@ -1311,7 +1303,7 @@ select.settings-field-input {
 }
 .settings-list-control--usage-form {
   max-width: min(480px, 78%);
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-usage-input-model.settings-field-input,
 .settings-list-control--usage .settings-usage-input-model {
@@ -1355,7 +1347,7 @@ select.settings-field-input {
   }
 }
 
-/* ── 快捷键页密度：标题栏紧凑筛选 + 单行录制 ── */
+/* 閳光偓閳光偓 韫囶偅宓庨柨顕€銆夌€靛棗瀹抽敍姘垼妫版ɑ鐖槐褍鍣剧粵娑⑩偓?+ 閸楁洝顢戣ぐ鏇炲�?閳光偓閳光偓 */
 .settings-pane--shortcuts {
   gap: 14px;
   width: 100%;
@@ -1366,14 +1358,14 @@ select.settings-field-input {
   margin: 0 0 4px;
 }
 .settings-pane--shortcuts .settings-group {
-  gap: 4px;
+  gap: var(--space-1);
 }
 .settings-pane--shortcuts .settings-group-label {
   padding: 8px 0 4px;
   font-size: var(--font-size-xs);
 }
 .settings-head-tools--shortcuts {
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-pane--shortcuts .settings-head-meta {
   font-size: var(--font-size-sm);
@@ -1391,7 +1383,7 @@ select.settings-field-input {
   color: var(--text-tertiary);
   font-family: inherit;
   font-size: var(--font-size-xxs);
-  line-height: 1;
+  line-height: var(--line-height-none);
   padding: 0 2px;
   margin: 0;
   cursor: pointer;
@@ -1421,7 +1413,7 @@ select.settings-field-input {
   flex: 0 0 auto;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .settings-pane--shortcuts .shortcut-key-btn {
@@ -1429,7 +1421,7 @@ select.settings-field-input {
   max-width: 180px;
 }
 
-/* ── 规则页：字号抬高、芯片可换行 ── */
+/* 閳光偓閳光偓 鐟欏嫬鍨い纰夌窗鐎涙褰块幎顒勭彯閵嗕浇濮遍悧鍥у讲閹广垼锟?閳光偓閳光偓 */
 .settings-pane--rules {
   gap: 14px;
   width: 100%;
@@ -1440,14 +1432,14 @@ select.settings-field-input {
   margin: 0 0 4px;
 }
 .settings-pane--rules .settings-group {
-  gap: 4px;
+  gap: var(--space-1);
 }
 .settings-pane--rules .settings-group-label {
   padding: 8px 0 4px;
   font-size: var(--font-size-xs);
 }
 .settings-pane--rules .settings-head-tools {
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--rules .settings-head-meta {
   font-size: var(--font-size-sm);
@@ -1472,16 +1464,16 @@ select.settings-field-input {
   flex: 1 1 auto;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
   max-width: none;
 }
-/* 规则页：预设芯片 + 单行规则 + 添加行 */
+/* 鐟欏嫬鍨い纰夌窗妫板嫯顔曢懞顖滃 + 閸楁洝顢戠憴鍕�?+ 濞ｈ濮炵悰?*/
 .settings-rule-presets {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   writing-mode: horizontal-tb;
 }
 .settings-rule-preset {
@@ -1502,7 +1494,7 @@ select.settings-field-input {
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-xxs);
-  line-height: 1.2;
+  line-height: var(--line-height-dense);
   cursor: pointer;
   text-align: center;
   box-sizing: border-box;
@@ -1546,7 +1538,7 @@ select.settings-field-input {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   width: 100%;
 }
 .settings-rule-add-row .settings-field-input {
@@ -1556,11 +1548,11 @@ select.settings-field-input {
   min-height: var(--control-height-sm);
 }
 
-/* 设置二级弹层（规则全文 / 模型目录等） */
+/* 鐠佸墽鐤嗘禍宀€楠囧鐟扮湴閿涘牐顫夐崚娆忓弿�?/ 濡€崇€烽惄顔肩秿缁涘�?*/
 .settings-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20000;
+  z-index: var(--z-settings-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1576,26 +1568,26 @@ select.settings-field-input {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-elevated, var(--bg-primary));
-  border-radius: 14px;
+  border-radius: var(--radius-2xl);
   border: none;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent),
-    0 16px 48px color-mix(in srgb, #000 14%, transparent);
+    0 16px 48px color-mix(in srgb, var(--shadow-color) 14%, transparent);
 }
-/* 模型目录：主界面不堆几十行，弹层内管理 */
+/* 濡€崇€烽惄顔肩秿閿涙矮瀵岄悾宀勬桨娑撳秴鐖㈤崙鐘插磩鐞涘矉绱濆鐟扮湴閸愬懐顓搁悶?*/
 .settings-dialog--models {
   width: min(520px, calc(100vw - 28px));
   max-height: min(82vh, 640px);
 }
 .settings-dialog--models .settings-dialog-body {
   padding: 10px 12px 12px;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .models-catalog-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .models-catalog-toolbar .settings-field-input {
   flex: 1 1 140px;
@@ -1609,13 +1601,13 @@ select.settings-field-input {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 .models-catalog-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 40px;
   padding: 6px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
@@ -1631,7 +1623,7 @@ select.settings-field-input {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: none;
   background: transparent;
   text-align: left;
@@ -1652,11 +1644,11 @@ select.settings-field-input {
 .models-catalog-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0_5);
   flex-shrink: 0;
   opacity: 1;
 }
-/* 操作按钮始终可见，避免 hover 显隐导致行宽抖动 */
+/* 閹垮秳缍旈幐澶愭尦婵绮撻崣顖濐潌閿涘矂浼╅崗?hover 閺勯箖娈ｇ€佃壈鍤х悰灞筋啍閹舵牕�?*/
 .models-catalog-row .models-catalog-actions {
   opacity: 1;
 }
@@ -1664,18 +1656,18 @@ select.settings-field-input {
 .models-catalog-row:focus-within .models-catalog-actions {
   opacity: 1;
 }
-/* 弹层内图标不受主列表「默认隐藏」规则压制 */
+/* 瀵懓鐪伴崘鍛禈閺嶅洣绗夐崣妞惧瘜閸掓銆冮妴宀勭帛鐠併倝娈ｉ挊蹇嬧偓宥堫潐閸掓瑥甯囬崚?*/
 .models-catalog-actions .models-icon-btn {
   opacity: 1;
   pointer-events: auto;
 }
-/* 主界面摘要：当前模型 + 获取/手填入口 */
+/* 娑撹崵鏅棃銏℃喅鐟曚緤绱拌ぐ鎾冲濡€筹�?+ 閼惧嘲锟?閹靛锝為崗銉ュ�?*/
 .models-summary {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
   min-width: 0;
@@ -1684,7 +1676,7 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 .models-summary-current {
@@ -1700,7 +1692,7 @@ select.settings-field-input {
 }
 .models-summary-value {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1713,16 +1705,16 @@ select.settings-field-input {
 .models-summary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex-shrink: 0;
 }
 .models-action-hint {
   margin: 0;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   cursor: pointer;
 }
 .models-action-hint.is-ok {
@@ -1740,7 +1732,7 @@ select.settings-field-input {
   min-width: 0;
   padding: 4px 0 2px;
   border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 12px;
+  padding-bottom: var(--space-3);
 }
 .models-conn-list {
   gap: 0;
@@ -1759,22 +1751,22 @@ select.settings-field-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-top: 4px;
+  gap: var(--space-2_5);
+  margin-top: var(--space-1);
 }
 .models-list-title {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 .models-list-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
   position: relative;
-  z-index: 1;
+  z-index: var(--z-decorative);
   isolation: isolate;
 }
 .models-list-section .models-list-head {
@@ -1784,7 +1776,7 @@ select.settings-field-input {
 .models-main-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-height: 80px;
   min-width: 0;
 }
@@ -1792,13 +1784,13 @@ select.settings-field-input {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
   padding: 2px 4px;
   min-width: 0;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
   overflow: hidden;
 }
 .models-main-row.is-open {
@@ -1806,7 +1798,7 @@ select.settings-field-input {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
   padding: 4px 6px 8px;
   margin: 0;
-  z-index: 1;
+  z-index: var(--z-decorative);
 }
 .models-main-row.is-off {
   opacity: 0.62;
@@ -1842,12 +1834,12 @@ select.settings-field-input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .models-main-row-name {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1874,7 +1866,7 @@ select.settings-field-input {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   flex-shrink: 0;
   max-width: 100%;
   position: static;
@@ -1882,7 +1874,7 @@ select.settings-field-input {
 .models-enable--row {
   margin: 0;
   padding: 0 2px;
-  gap: 6px;
+  gap: var(--space-1_5);
   white-space: nowrap;
 }
 .models-enable-label {
@@ -1892,14 +1884,14 @@ select.settings-field-input {
 .models-config-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 10px;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   margin: 4px 0 0;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
   isolation: isolate;
   clear: both;
   min-width: 0;
@@ -1914,7 +1906,7 @@ select.settings-field-input {
 .models-config-idline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   padding: 2px 0 0;
 }
@@ -1932,13 +1924,13 @@ select.settings-field-input {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 8px;
 }
 .models-config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 .models-config-grid--two {
@@ -1947,7 +1939,7 @@ select.settings-field-input {
 .models-config-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   width: 100%;
   font-size: var(--font-size-xs);
@@ -1964,17 +1956,17 @@ select.settings-field-input {
 .models-cap-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
 }
 .models-cap-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   font-size: var(--font-size-sm);
@@ -1998,10 +1990,10 @@ select.settings-field-input {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 2px;
+  gap: var(--space-2);
+  padding-top: var(--space-0_5);
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 @media (max-width: 640px) {
   .models-main-row-top {
@@ -2015,17 +2007,17 @@ select.settings-field-input {
     grid-template-columns: 1fr;
   }
 }
-/* 扩展列表行块：内联展开详情/配置 */
+/* 閹碘晛鐫嶉崚妤勩€冪悰灞芥健閿涙艾鍞撮懕鏂跨潔瀵偓鐠囷附�?闁板秶锟?*/
 .ext-row-block {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-bottom: 2px;
-  border-radius: 12px;
+  margin-bottom: var(--space-0_5);
+  border-radius: var(--radius-2xl);
 }
 .ext-row-block.is-expanded {
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 .ext-row--static {
   cursor: default;
@@ -2036,7 +2028,7 @@ select.settings-field-input {
 .ext-inline-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 4px 12px 12px;
 }
 .ext-inline-tool-preview {
@@ -2047,11 +2039,11 @@ select.settings-field-input {
   line-height: 1.5;
   font-family: var(--font-mono);
 }
-/* 弹层挂到 body 时保证盖过设置全屏层 */
+/* 瀵懓鐪伴幐鍌氬�?body 閺冩湹绻氱拠浣烘磰鏉╁洩顔曠純顔煎弿鐏炲繐锟?*/
 body > .settings-dialog-backdrop {
-  z-index: 20050;
+  z-index: var(--z-settings-tooltip);
 }
-/* 规则全文弹层：更紧凑的头/脚，正文优先 */
+/* 鐟欏嫬鍨崗銊︽瀮瀵懓鐪伴敍姘纯缁毖冨櫨閻ㄥ嫬�?閼存熬绱濆锝嗘瀮娴兼ê锟?*/
 .settings-dialog--rules {
   width: min(680px, calc(100vw - 32px));
   max-height: min(85vh, 720px);
@@ -2060,7 +2052,7 @@ body > .settings-dialog-backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 10px 14px;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   flex-shrink: 0;
@@ -2073,7 +2065,7 @@ body > .settings-dialog-backdrop {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-content);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2083,7 +2075,7 @@ body > .settings-dialog-backdrop {
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
@@ -2091,7 +2083,7 @@ body > .settings-dialog-backdrop {
 .settings-dialog--rules .settings-dialog-body {
   padding: 8px 12px;
 }
-/* 覆盖 .settings-field-input 的固定高度；用更高特异性，少 !important */
+/* 鐟曞棛锟?.settings-field-input 閻ㄥ嫬娴愮€规岸鐝惔锔肩幢閻劍娲挎妯煎瀵倹鈧嶇礉锟?!important */
 textarea.settings-dialog-textarea.settings-field-input,
 .settings-dialog-textarea {
   width: 100%;
@@ -2124,7 +2116,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-dialog-foot {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 8px 12px 12px;
   flex-shrink: 0;
   border-top: 1px solid var(--border-subtle);
@@ -2132,32 +2124,32 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-dialog--rules .settings-dialog-foot {
   padding: 8px 12px 10px;
 }
-/* 壳层导航：主定义已在上方用 token；此处不再 !important 覆盖（避免与 field-input 冲突） */
+/* 婢瑰啿鐪扮€佃壈鍩呴敍姘瘜鐎规矮绠熷鎻掓躬娑撳﹥鏌熼�?token閿涙稒顒濇径鍕瑝锟?!important 鐟曞棛娲婇敍鍫ヤ缉閸忓秳�?field-input 閸愯尙鐛婇敍?*/
 .settings-cover-nav {
   background: transparent;
 }
 .settings-cover-header {
   background: transparent;
 }
-/* 功能块：容器可保留表单；长文案 body 默认隐藏 */
+/* 閸旂喕鍏橀崸妤嬬窗鐎圭懓娅掗崣顖欑箽閻ｆ瑨銆冮崡鏇幢闂€鎸庢瀮锟?body 姒涙顓婚梾鎰�?*/
 .settings-feature {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 0;
   border: none;
   background: transparent;
 }
 .settings-feature-title {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 .settings-feature-body {
   display: none;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 .settings-feature-body--force {
   display: block;
@@ -2165,7 +2157,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-feature-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 0;
 }
 .settings-kbd {
@@ -2175,7 +2167,7 @@ textarea.settings-dialog-textarea:focus-visible {
   height: var(--control-height-sm);
   padding: 0 8px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: var(--font-size-xxs);
   color: var(--text-secondary);
@@ -2187,12 +2179,10 @@ textarea.settings-dialog-textarea:focus-visible {
 }
 .settings-section-header p,
 .settings-section-header + p {
-  margin-top: 6px;
+  margin-top: var(--space-1_5);
 }
 /*
- * 设置内容列统一居中：父容器已改为 align-items: stretch，
- * 子页面通过 max-width + margin: auto 自居中，不再依赖 align-self。
- */
+ * 鐠佸墽鐤嗛崘鍛啇閸掓绮烘稉鈧仦鍛厬閿涙氨鍩楃€圭懓娅掑鍙夋暭锟?align-items: stretch�? * 鐎涙劙銆夐棃銏も偓姘崇箖 max-width + margin: auto 閼奉亜鐪虫稉顓ㄧ礉娑撳秴鍟€娓氭繆锟?align-self�? */
 .settings-cover-content > * {
   width: 100%;
   max-width: var(--settings-content-max, 720px);
@@ -2223,7 +2213,7 @@ textarea.settings-dialog-textarea:focus-visible {
   height: 2px;
   background: var(--border-color);
   overflow: hidden;
-  z-index: 5;
+  z-index: var(--z-card-footer);
 }
 .settings-loading-bar-inner {
   width: 30%;
@@ -2232,7 +2222,7 @@ textarea.settings-dialog-textarea:focus-visible {
   border-radius: 1px;
   animation: loading-bar 1.2s infinite linear;
 }
-/* ===== Settings rows：一项一行 ===== */
+/* ===== Settings rows閿涙矮绔存い閫涚锟?===== */
 .settings-rows {
   display: flex;
   flex-direction: column;
@@ -2265,7 +2255,7 @@ textarea.settings-dialog-textarea:focus-visible {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   display: block;
 }
 .settings-row-desc {
@@ -2273,7 +2263,7 @@ textarea.settings-dialog-textarea:focus-visible {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: 1.35;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 .settings-row--rich {
   min-height: 52px;
@@ -2290,7 +2280,7 @@ textarea.settings-dialog-textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -2305,7 +2295,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-row-preview-text {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .font-preview-sep {
   color: var(--text-tertiary);
@@ -2320,7 +2310,7 @@ textarea.settings-dialog-textarea:focus-visible {
   font-family: inherit;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   white-space: nowrap;
 }
 .settings-row-text-btn:hover:not(:disabled) {
@@ -2331,7 +2321,7 @@ textarea.settings-dialog-textarea:focus-visible {
   width: auto;
   max-width: none;
 }
-/* 二选一开关：关轨走 text-tertiary 混色（浅/暗自适应）；开=accent-green；钮用 elevated；密度略紧 */
+/* 娴滃矂鈧绔村鈧崗绛圭窗閸忓疇寤虹挧?text-tertiary 濞ｇ柉澹婇敍鍫熺�?閺嗘鍤滈柅鍌氱安閿涘绱卞锟?accent-green閿涙盯鎸抽悽?elevated閿涙稑鐦戞惔锔炬殣锟?*/
 .settings-switch,
 .settings-toggle-row input[type="checkbox"] {
   appearance: none;
@@ -2358,7 +2348,7 @@ textarea.settings-dialog-textarea:focus-visible {
   top: 2px;
   left: 2px;
   transition: transform var(--transition-fast);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
 }
 .settings-switch:checked,
 .settings-toggle-row input[type="checkbox"]:checked {
@@ -2391,7 +2381,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
 }
 /* [MIGRATED] .settings-select styles migrated to SettingsSelect.module.css */
 
-/* 窄宽：与对话列 chat-col 收口一致，避免设置导航挤爆内容 */
+/* 缁愬嫬顔旈敍姘瑢鐎电鐦介�?chat-col 閺€璺哄經娑撯偓閼疯揪绱濋柆鍨帳鐠佸墽鐤嗙€佃壈鍩呴幐銈囧瀻閸愬懎�?*/
 @media (max-width: 720px) {
   .settings-cover-nav {
     width: 152px;
@@ -2425,10 +2415,10 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
     max-width: min(240px, 48%);
   }
   .settings-pane--rules {
-    gap: 6px;
+    gap: var(--space-1_5);
   }
   .settings-pane--shortcuts {
-    gap: 6px;
+    gap: var(--space-1_5);
     max-width: 100%;
   }
   .settings-shortcuts-filter {
@@ -2446,7 +2436,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   }
 }
 
-/* 极窄：导航收成图标栏宽；内容全宽 */
+/* 閺嬩胶鐛庨敍姘嚤閼割亝鏁归幋鎰禈閺嶅洦鐖€规枻绱遍崘鍛啇閸忋劌锟?*/
 @media (max-width: 560px) {
   .settings-cover-nav {
     width: 56px;
@@ -2476,11 +2466,11 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--space-1);
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 0 10px;
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
@@ -2499,7 +2489,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
 }
 
 /* === personalize polish-v1 === */
-/* 边框 ≤11%；左标题+简述，右控件；开关绿开态 */
+/* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱卞鈧崗宕囪雹瀵偓锟?*/
 
 .settings-pane--personalize {
   gap: 16px;
@@ -2508,13 +2498,13 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   padding-bottom: 36px;
 }
 .settings-pane--personalize .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .settings-pane--personalize .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   padding: 0 0 4px;
 }
@@ -2547,20 +2537,20 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   align-items: flex-start;
 }
 .settings-pane--personalize .settings-list-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .settings-pane--personalize .settings-personalize-desc {
   display: block;
   margin: 0;
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   line-height: 1.35;
   white-space: nowrap;
@@ -2582,7 +2572,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   min-width: 120px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 

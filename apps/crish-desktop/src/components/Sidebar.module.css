@@ -7,7 +7,7 @@
   justify-content: space-between;
   flex-shrink: 0;
   transition: width var(--transition-spring-layout);
-  z-index: 10;
+  z-index: var(--z-sidebar);
   position: relative;
   overflow: hidden;
   height: 100%;
@@ -86,13 +86,13 @@
 .footerActions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .footerUpdate {
   display: none;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--font-size-xs);
   padding: 0 10px;
   min-width: auto;
@@ -115,7 +115,7 @@
 
 .footerUpdateLabel {
   font-size: var(--font-size-xs);
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
 .sidebarResizer {
@@ -124,7 +124,7 @@
   width: 8px;
   height: 100%;
   cursor: col-resize;
-  z-index: 100;
+  z-index: var(--z-sidebar-resizer);
   background: transparent;
   touch-action: none;
 }

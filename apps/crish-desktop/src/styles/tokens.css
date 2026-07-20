@@ -1,4 +1,4 @@
-/* --- CONEX UI tokens — pure neutral grays (no blue/purple tint) --- */
+/* --- CONEX UI tokens �?pure neutral grays (no blue/purple tint) --- */
 
 :root,
 html[data-theme="default"],
@@ -10,8 +10,8 @@ html[data-theme="light"] {
   --bg-primary: hsl(35, 12%, 94.0%);     /* 主背景色：极简护眼暖灰 */
   --bg-secondary: hsl(35, 12%, 91.5%);   /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
   --bg-tertiary: hsl(35, 12%, 88.5%);    /* 三级背景：配置卡片等下凹底色 */
-  --bg-hover: color-mix(in srgb, var(--control-mix-color) 4%, transparent);      /* 悬浮态 */
-  --bg-active: color-mix(in srgb, var(--control-mix-color) 8%, transparent);     /* 激活态 */
+  --bg-hover: color-mix(in srgb, var(--control-mix-color) 4%, transparent);      /* 悬浮�?*/
+  --bg-active: color-mix(in srgb, var(--control-mix-color) 8%, transparent);     /* 激活�?*/
   --bg-card: hsl(35, 10%, 98.0%);       /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
   --bg-elevated: hsl(35, 8%, 100.0%);   /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
   --bg-workspace: var(--bg-primary);
@@ -45,10 +45,10 @@ html[data-theme="light"] {
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
   --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--control-mix-color) 12%, transparent);
 
-  --accent-color: hsl(35, 16%, 15%);     /* 暖调深炭黑-古铜 */
+  --accent-color: hsl(35, 16%, 15%);     /* 暖调深炭�?古铜 */
   --accent-light: hsl(35, 20%, 98.5%);   /* 暖象牙白 */
   --accent-hover: hsl(35, 16%, 22%);     /* 暖深炭黑 */
-  --accent-soft: hsl(35, 12%, 93.5%);    /* 极柔和暖灰 */
+  --accent-soft: hsl(35, 12%, 93.5%);    /* 极柔和暖�?*/
 
   --accent-orange: hsl(38, 92%, 50%);
   --accent-orange-light: hsl(38, 100%, 96%);
@@ -57,8 +57,8 @@ html[data-theme="light"] {
   --accent-green-light: hsl(142, 35%, 96.5%); /* 极轻透暖鼠尾草绿 */
   --accent-green-soft: hsl(142, 30%, 92.5%);
   --accent-green-muted: hsl(142, 30%, 82.5%);
-  --accent-red: hsl(0, 55%, 55%);         /* 柔和砖红/赤土红 */
-  --accent-red-light: hsl(0, 55%, 97.5%);   /* 极轻透暖蜜桃粉 */
+  --accent-red: hsl(0, 55%, 55%);         /* 柔和砖红/赤土�?*/
+  --accent-red-light: hsl(0, 55%, 97.5%);   /* 极轻透暖蜜桃�?*/
   --accent-blue: hsl(217, 91%, 60%);
   --accent-blue-light: hsl(217, 70%, 96%);
   --accent-violet: hsl(258, 90%, 66%);
@@ -83,7 +83,23 @@ html[data-theme="light"] {
   --color-info-bg: var(--accent-blue-light);
   --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
 
+  /* shadow base color �?unified source for 28 color-mix(in srgb, #000 ...) */
+  --shadow-color: #000;
 
+  /* model/active status color (9 uses of #16a34a) */
+  --color-active: #16a34a;
+
+  /* syntax highlighting �?light */
+  --syntax-keyword: #7c6fdb;
+  --syntax-string: #0d9488;
+  --syntax-number: #c2410c;
+  --syntax-title: #2563eb;
+  --syntax-builtin: #ca8a04;
+  --syntax-attr: #db2777;
+  --syntax-comment: var(--text-tertiary);
+  --syntax-addition: #16a34a;
+  --syntax-deletion: #dc2626;
+  --syntax-meta: var(--text-secondary);
 
   --terminal-bg: var(--bg-secondary); 
   --terminal-fg: var(--text-primary);
@@ -93,18 +109,18 @@ html[data-theme="light"] {
   --terminal-cmd: var(--text-primary);
   --terminal-bar-fill: rgba(0, 0, 0, 0.03);
 
-  --radius-xs: 3px;
+  --radius-xs: 4px;
   --radius-sm: 5px;
-  --radius-md: 7px;
-  --radius-lg: 9px;
-  --radius-xl: 11px;
-  --radius-2xl: 14px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
   --radius-full: 999px;
 
   /* --- Unified Header & Titlebar Rows Token System --- */
   --titlebar-row-h: 38px;       /* Row height (e.g. workspace bar, sessions bar, card-header) */
   --titlebar-item-h: 32px;      /* Content/button/tab height */
-  --titlebar-top-gap: 6px;      /* Vertical spacing from the upper frame border */
+  --titlebar-top-gap: var(--space-1_5);      /* Vertical spacing from the upper frame border */
 
   /* Premium Soft Low-Presence Shadows */
   --shadow-sm: 
@@ -138,19 +154,19 @@ html[data-theme="light"] {
   --transition-enter: 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --transition-exit: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  --transition-slide: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-popover-enter: cubic-bezier(0.16, 1, 0.3, 1) 180ms;
   --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
   --transition-modal-enter: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
   --transition-accordion: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --transition-hover: 120ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-press: 80ms ease-out;
+  --transition-skeleton: 1.5s ease-in-out;
+  --transition-spin: 0.8s linear;
 
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Segoe UI Mono', 'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
-  --dropdown-padding: 6px;
-  --dropdown-gap: 2px;
+  --dropdown-padding: var(--space-1_5);
+  --dropdown-gap: var(--space-0_5);
   --dropdown-radius: var(--radius-md);
   --item-padding: 8px 12px;
   --item-radius: var(--radius-sm);
@@ -160,7 +176,7 @@ html[data-theme="light"] {
   --sidebar-width: 260px;
 
   /*
-   * 文字层级（正文 14 为基准）
+   * 文字层级（正�?14 为基准）
    * xxs/xs 仅用于时间、角标等极密元信息，慎用
    */
   --font-size-adjust: 0px;
@@ -171,19 +187,30 @@ html[data-theme="light"] {
   --font-size-md: calc(15px + var(--font-size-adjust));
   --font-size-lg: calc(17px + var(--font-size-adjust));
   --font-size-xl: calc(19px + var(--font-size-adjust));
+  --font-size-nano: calc(10px + var(--font-size-adjust));
+  --font-size-micro: calc(11.5px + var(--font-size-adjust));
+  --font-size-xs-plus: calc(12.5px + var(--font-size-adjust));
+  --font-size-sm-plus: calc(13.5px + var(--font-size-adjust));
+  --font-size-xxl: calc(18px + var(--font-size-adjust));
+  --font-size-2xl: calc(22px + var(--font-size-adjust));
 
   /*
-   * 字重阶梯：
+   * 字重阶梯�?
    */
   --font-weight-code: 400;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-content: 600;
   --font-weight-semibold: var(--font-weight-content);
+  --font-weight-heavy: 700;
   --letter-spacing-tight: -0.01em;
   --letter-spacing-normal: 0em;
+  --letter-spacing-snug: 0.01em;
+  --letter-spacing-wide: 0.02em;
+  --letter-spacing-tighter: -0.02em;
+  --letter-spacing-tightest: -0.025em;
 
-  /* 层级与断点 Token 体系 */
+  /* 层级与断�?Token 体系 */
   --z-dropdown: 2000;
   --z-modal: 5000;
   --z-tooltip: 9999;
@@ -195,8 +222,8 @@ html[data-theme="light"] {
   --opacity-disabled: 0.5;
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* 图标与控件热区
-   * xs = 角标/chip；sm = 工具条次级；默认 = 主按钮/输入；lg = 强调 CTA */
+  /* 图标与控件热�?
+   * xs = 角标/chip；sm = 工具条次级；默认 = 主按�?输入；lg = 强调 CTA */
   --icon-size: 16px;
   --icon-size-sm: 14px;
   --icon-size-lg: 18px;
@@ -209,9 +236,15 @@ html[data-theme="light"] {
   --control-pad-y: 6px;
 
   /*
-   * 密度间距阶梯（4 的半级）：列表 gap、内边距、图标旁文字间距共用
-   * ui-size gear 会整体缩放，组件勿再写 5/7/9 等零散 px
+   * 密度间距阶梯�? 的半级）：列�?gap、内边距、图标旁文字间距共用
+   * ui-size gear 会整体缩放，组件勿再�?5/7/9 等零�?px
    */
+  --space-0_5: 2px;
+  --space-1_25: 5px;
+  --space-1_5: 6px;
+  --space-1_75: 7px;
+  --space-2_5: 10px;
+  --space-3_5: 14px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -220,56 +253,60 @@ html[data-theme="light"] {
   --space-6: 24px;
 
   /*
-   * 行高：中文 UI 略抬 body，避免汉字行贴；控件/标签用 tight|ui
-   * shell body 可迁到 --line-height-body；markdown 用 relaxed
+   * 行高：中�?UI 略抬 body，避免汉字行贴；控件/标签�?tight|ui
+   * shell body 可迁�?--line-height-body；markdown �?relaxed
    */
   --line-height-tight: 1.25;
   --line-height-ui: 1.35;
   --line-height-body: 1.55;
   --line-height-relaxed: 1.65;
+  --line-height-none: 1;
+  --line-height-dense: 1.2;
+  --line-height-compact: 1.3;
+  --line-height-base: 1.4;
 
   /*
    * 面板壳层密度：card-header / files-bar / 右侧工具表面共用
-   * 改此处即可统一顶栏高度与内边距，避免 shell/panels 各写一套 magic number
+   * 改此处即可统一顶栏高度与内边距，避�?shell/panels 各写一�?magic number
    */
   --card-header-min-height: 36px;
   --card-header-pad-y: 0px;
   --card-header-pad-x: 8px;
-  /* card-header 左/右区间距；窄栏时避免 tabs 与动作钮贴死 */
-  --card-header-gap: 6px;
+  /* card-header �?右区间距；窄栏时避免 tabs 与动作钮贴死 */
+  --card-header-gap: var(--space-1_5);
   --panel-pad-x: 12px;
   --panel-pad-y: 10px;
-  --panel-gap: 8px;
-  --panel-sec-gap: 10px;
-  --tab-gap: 6px;
+  --panel-gap: var(--space-2);
+  --panel-sec-gap: var(--space-2_5);
+  --tab-gap: var(--space-1_5);
   --tab-pad-x: 16px;
   --tab-tool-pad-left: 12px;
   --tab-tool-pad-right: 16px;
-  /* 列表行高：侧栏会话 / settings-list / agent 卡；对齐 control-height 密度 */
+  /* 列表行高：侧栏会�?/ settings-list / agent 卡；对齐 control-height 密度 */
   --row-height: var(--control-height);
   --row-height-sm: var(--control-height-sm);
-  /* 变更面板：侧栏文件列表宽；@container 窄档可改用 md */
+  /* 变更面板：侧栏文件列表宽；@container 窄档可改�?md */
   --diff-sidebar-width: 148px;
   --diff-sidebar-width-md: 120px;
   --diff-file-chip-min: 96px;
   --diff-file-chip-min-xs: 80px;
-  /* 横向 tabs / 文件 chips 滚动条厚度 */
+  /* 横向 tabs / 文件 chips 滚动条厚�?*/
   --panel-h-scrollbar-size: 3px;
 
   /*
-   * 主对话居中列：消息 / 空态 / footer 子项 / 审批条共用
-   * 宽屏可在 media 里抬到 --chat-col-max-wide
-   * 680 → 760：利用宽屏可用空间，减少两侧大片留白
+   * 主对话居中列：消�?/ 空�?/ footer 子项 / 审批条共�?
+   * 宽屏可在 media 里抬�?--chat-col-max-wide
+   * 680 �?760：利用宽屏可用空间，减少两侧大片留白
    */
   --chat-col-max: 760px;
   --chat-col-max-wide: 840px;
 
   /*
-   * 设置内容区最大宽度：统一来源，禁止各 CSS 文件散落 680 / 720px 硬编码。
-   * coverContent 拉伸填满时，settingsUiPage 用此值居中并限最大宽。
+   * 设置内容区最大宽度：统一来源，禁止各 CSS 文件散落 680 / 720px 硬编码�?
+   * coverContent 拉伸填满时，settingsUiPage 用此值居中并限最大宽�?
    */
   --settings-content-max: 720px;
-  /* footer 顶缘淡入：与 .chat-footer / .agent-card-composer 同渐变 */
+  /* footer 顶缘淡入：与 .chat-footer / .agent-card-composer 同渐�?*/
   --chat-footer-fade: linear-gradient(
     to bottom,
     transparent 0%,
@@ -281,12 +318,12 @@ html[data-theme="light"] {
   color-scheme: light;
 }
 
-/* 深色：炭灰而非死黑；secondary 不低于 primary，避免侧栏「黑洞」
- * 仅 CSS 变量赋值，组件覆盖见 theme-dark.css
- * hairline 契约（与 light 同语义，供 chat / shell / settings 共用）：
- *   --hairline       = 结构分隔（card-header 底、settings-list 行、filter-bar）
+/* 深色：炭灰而非死黑；secondary 不低�?primary，避免侧栏「黑洞�?
+ * �?CSS 变量赋值，组件覆盖�?theme-dark.css
+ * hairline 契约（与 light 同语义，�?chat / shell / settings 共用）：
+ *   --hairline       = 结构分隔（card-header 底、settings-list 行、filter-bar�?
  *   --hairline-strong = 可交互描边（输入壳、浮层菜单、用户气泡）
- * 禁止组件再写独立 color-mix 百分比描边 */
+ * 禁止组件再写独立 color-mix 百分比描�?*/
 html[data-theme="dark"] {
   /* Premium Dark Theme (Neutral/Vercel style) */
   --bg-primary: hsl(0, 0%, 5%);
@@ -388,21 +425,34 @@ html[data-theme="dark"] {
   --terminal-bar-fill: rgba(255, 255, 255, 0.04);
 
   --bg-glass: rgba(10, 10, 10, 0.75);
+
+  /* syntax highlighting �?dark */
+  --syntax-keyword: #c4b5fd;
+  --syntax-string: #5eead4;
+  --syntax-number: #fdba74;
+  --syntax-title: #93c5fd;
+  --syntax-builtin: #fde047;
+  --syntax-attr: #f9a8d4;
+  --syntax-comment: #8b8b8b;
+  --syntax-addition: #4ade80;
+  --syntax-deletion: #f87171;
+  --syntax-meta: #a3a3a3;
+
   color-scheme: dark;
 }
 
-/* UI Size Gear — 相对 14px 基准缩放；small 不低于 11px 元信息 */
-/* 密度只改字号/控件高，不改侧栏宽（侧栏宽独立 token + 用户拖拽持久化） */
+/* UI Size Gear �?相对 14px 基准缩放；small 不低�?11px 元信�?*/
+/* 密度只改字号/控件高，不改侧栏宽（侧栏宽独�?token + 用户拖拽持久化） */
 [data-ui-size="small"] {
   --dropdown-padding: 5px;
-  --dropdown-gap: 2px;
+  --dropdown-gap: var(--space-0_5);
   --dropdown-radius: 10px;
   --item-padding: 6px 10px;
   --item-radius: 7px;
   --item-font-size: 13px;
   --header-height: 40px;
 
-  /* 紧凑档：底 13，元信息不低于 10；中文仍保持 body 行高不压扁 */
+  /* 紧凑档：�?13，元信息不低�?10；中文仍保持 body 行高不压�?*/
   --font-size-xxs: calc(10px + var(--font-size-adjust, 0px));
   --font-size-xs: calc(11px + var(--font-size-adjust, 0px));
   --font-size-sm: calc(12px + var(--font-size-adjust, 0px));
@@ -422,6 +472,12 @@ html[data-theme="dark"] {
   --control-pad-x-sm: 6px;
   --control-pad-y: 5px;
 
+  --space-0_5: 2px;
+  --space-1_25: 3px;
+  --space-1_5: 4px;
+  --space-1_75: 5px;
+  --space-2_5: 6px;
+  --space-3_5: 10px;
   --space-1: 3px;
   --space-2: 5px;
   --space-3: 6px;
@@ -434,23 +490,23 @@ html[data-theme="dark"] {
   --line-height-body: 1.5;
   --line-height-relaxed: 1.6;
 
-  --radius-xs: 2px;
+  --radius-xs: 3px;
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-2xl: 13px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 9px;
+  --radius-2xl: 11px;
   --radius-full: 998px;
 
   --card-header-min-height: 32px;
   --card-header-pad-y: 3px;
   --card-header-pad-x: 6px;
-  --card-header-gap: 4px;
+  --card-header-gap: var(--space-1);
   --panel-pad-x: 10px;
   --panel-pad-y: 8px;
-  --panel-gap: 6px;
-  --panel-sec-gap: 8px;
-  --tab-gap: 2px;
+  --panel-gap: var(--space-1_5);
+  --panel-sec-gap: var(--space-2);
+  --tab-gap: var(--space-0_5);
   --tab-pad-x: 6px;
   --tab-tool-pad-left: 5px;
   --tab-tool-pad-right: 6px;
@@ -465,7 +521,7 @@ html[data-theme="dark"] {
 
 
 [data-ui-size="large"] {
-  --dropdown-padding: 8px;
+  --dropdown-padding: var(--space-2);
   --dropdown-gap: 3px;
   --dropdown-radius: 14px;
   --item-padding: 9px 14px;
@@ -493,6 +549,12 @@ html[data-theme="dark"] {
   --control-pad-x-sm: 10px;
   --control-pad-y: 7px;
 
+  --space-0_5: 2px;
+  --space-1_25: 5px;
+  --space-1_5: 6px;
+  --space-1_75: 7px;
+  --space-2_5: 10px;
+  --space-3_5: 14px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -505,23 +567,23 @@ html[data-theme="dark"] {
   --line-height-body: 1.6;
   --line-height-relaxed: 1.7;
 
-  --radius-xs: 4px;
+  --radius-xs: 5px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 15px;
+  --radius-md: 7px;
+  --radius-lg: 9px;
+  --radius-xl: 11px;
+  --radius-2xl: 13px;
   --radius-full: 1000px;
 
   --card-header-min-height: 40px;
   --card-header-pad-y: 5px;
   --card-header-pad-x: 10px;
-  --card-header-gap: 8px;
+  --card-header-gap: var(--space-2);
   --panel-pad-x: 14px;
   --panel-pad-y: 12px;
-  --panel-gap: 10px;
-  --panel-sec-gap: 12px;
-  --tab-gap: 4px;
+  --panel-gap: var(--space-2_5);
+  --panel-sec-gap: var(--space-3);
+  --tab-gap: var(--space-1);
   --tab-pad-x: 10px;
   --tab-tool-pad-left: 8px;
   --tab-tool-pad-right: 10px;
@@ -569,7 +631,7 @@ html[data-perf-tier="eco"] {
   --transition-enter: 0ms !important;
   --transition-exit: 0ms !important;
   --transition-spring: 0ms !important;
-  --transition-slide: 0ms !important;
+  /* --transition-slide removed in Phase 1 */
   --transition-popover-enter: 0ms !important;
   --transition-popover-exit: 0ms !important;
   --transition-modal-enter: 0ms !important;
@@ -609,5 +671,40 @@ html[data-perf-tier="eco"] {
   transform-origin: center center;
 }
 
+/* ── 面板/浮层基准样式 ── */
+[data-panel] {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1);
+}
+[data-panel="modal"] {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2xl);
+  padding: var(--space-3);
+}
+[data-panel="overlay"] {
+  background: var(--bg-primary);
+  border-radius: 0;
+  box-shadow: none;
+}
 
-
+/* ── 面板动画（新增）── */
+@keyframes panel-enter {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes panel-exit {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.96); }
+}
+/* ── 弹出层退出动画（已有进入，补退出）── */
+@keyframes crish-popover-exit {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
+}
+/* ── 模态框退出动画（已有进入，补退出）── */
+@keyframes crish-modal-exit {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.96) translateY(8px); }
+}

@@ -1,5 +1,5 @@
 .detailMeta {
-  margin-right: 8px;
+  margin-right: var(--space-2);
 }
 
 .emptyCompact {

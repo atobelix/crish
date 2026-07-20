@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 100%;
   margin-bottom: 22px;
-  /* 统一走 token，禁止散落 720/680px 硬编码 */
+  /* 缂佺喍绔寸挧?token閿涘瞼顩﹀銏℃殠閽€?720/680px 绾剛绱惍?*/
   max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
   margin-left: auto;
@@ -16,12 +16,12 @@
 }
 
 .row.isPinned {
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 .row.searchHit {
   background: color-mix(in srgb, var(--accent, #3b82f6) 8%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   padding: 4px 6px;
   margin-left: -6px;
   margin-right: -6px;
@@ -42,12 +42,12 @@
 }
 
 .rowAssistant .assistantMeta {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .rowAssistant.isFollowup {
   margin-top: -2px;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .userStack {
@@ -55,17 +55,17 @@
   flex-direction: column;
   align-items: flex-end;
   max-width: min(78%, 560px);
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .userBubble {
   background: color-mix(in srgb, var(--bg-secondary) 88%, #e8e8e6 12%);
   color: var(--text-primary);
-  border-radius: 20px 20px 4px 20px;
+  border-radius: 20px 20px var(--radius-xs) 20px;
   padding: 12px 16px;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
-  line-height: 1.55;
+  line-height: var(--line-height-body);
   word-break: normal;
   overflow-wrap: break-word;
   white-space: pre-wrap;
@@ -90,7 +90,7 @@
   min-height: 22px;
   opacity: 0;
   transition: opacity var(--transition-fast);
-  padding-right: 2px;
+  padding-right: var(--space-0_5);
 }
 
 .userStack:hover .userMeta {
@@ -101,7 +101,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
-  margin-right: 4px;
+  margin-right: var(--space-1);
   font-variant-numeric: tabular-nums;
 }
 
@@ -119,20 +119,20 @@
 .planApproveRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 8px 0 2px;
 }
 
 .planApproveChip {
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 5px 12px;
   font-size: var(--font-size-xs);
   font-family: inherit;
   color: var(--text-primary);
   cursor: pointer;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 
 .planApproveChip:hover {
@@ -143,7 +143,7 @@
 .followupRow {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-1_5);
   margin: 10px 0 4px;
   max-width: 100%;
   min-width: 0;
@@ -152,7 +152,7 @@
 .followupChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -162,7 +162,7 @@
   align-items: stretch;
   max-width: 100%;
   border: var(--hairline-width, 1px) solid var(--hairline-strong, var(--border-color));
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   overflow: hidden;
 }
@@ -182,7 +182,7 @@
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-secondary);
   cursor: pointer;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   max-width: 220px;
   text-align: left;
 }
@@ -226,7 +226,7 @@
 .followupDismiss {
   flex: 0 0 auto;
   opacity: 0.55;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 
 .followupDismiss:hover {
@@ -252,7 +252,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
   min-height: 22px;
   opacity: 0.28;
   transition: opacity var(--transition-fast);
@@ -267,7 +267,7 @@
   height: 22px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
@@ -298,7 +298,7 @@
 .thinkingFoldSum {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   cursor: pointer;
   list-style: none;
   font-size: var(--font-size-sm);
@@ -390,7 +390,7 @@
 
 .queued {
   display: inline-block;
-  margin-top: 6px;
+  margin-top: var(--space-1_5);
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   background: transparent;
@@ -401,14 +401,14 @@
 .pinBadge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   align-self: flex-start;
   font-size: var(--font-size-xxs);
-  line-height: 1;
+  line-height: var(--line-height-none);
   color: var(--text-tertiary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
 }
@@ -429,7 +429,7 @@
 
 .rowPinFlash {
   animation: pinFlash 1.1s ease;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 @keyframes pinFlash {
@@ -456,7 +456,7 @@
 
 .timelineText + .timelineTools,
 .timelineTools + .timelineText {
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 
 .timelineTools + .timelineTools {
@@ -468,7 +468,7 @@
   display: inline-block;
   width: 2px;
   height: 0.95em;
-  margin-left: 2px;
+  margin-left: var(--space-0_5);
   vertical-align: text-bottom;
   background: var(--text-tertiary);
   animation: caret 1s step-end infinite;
@@ -481,14 +481,14 @@
 .inlineImages {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .mdImg {
   max-width: min(100%, 420px);
   max-height: 280px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
   object-fit: contain;
   background: var(--bg-secondary);
@@ -528,6 +528,6 @@
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-1_5);
 }
 

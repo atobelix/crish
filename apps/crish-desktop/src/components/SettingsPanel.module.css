@@ -7,7 +7,7 @@
 .settingsCover {
   position: fixed;
   inset: 0;
-  z-index: 13000;
+  z-index: var(--z-settings-panel);
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -34,7 +34,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   height: var(--header-height);
   min-height: var(--header-height);
   padding: 0 14px;
@@ -58,11 +58,11 @@
 .navBack {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   height: 36px;
   padding: 0 12px 0 10px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -73,7 +73,7 @@
   box-shadow: none;
   width: 100%;
   text-align: left;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .navBack:hover {
@@ -103,7 +103,7 @@
   min-height: var(--control-height-sm);
   padding: 0 10px 0 30px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
   color: var(--text-primary);
   font-family: inherit;
@@ -131,8 +131,8 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-bottom: 12px;
+  gap: var(--space-0_5);
+  padding-bottom: var(--space-3);
 }
 
 .navEmpty {
@@ -163,7 +163,7 @@
 .navGroup {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
   color: var(--text-tertiary);
   padding: 12px 10px 6px;
   text-transform: none;
@@ -177,9 +177,7 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   /*
-   * scrollbar-gutter: stable 防止在有/无滚动条时内容区宽度跳动（tab 切换抖动）
-   * both-edges 让内容列左右均等缩进，视觉不偏移
-   */
+   * scrollbar-gutter: stable 闂冨弶顒涢崷銊︽箒/閺冪姵绮撮崝銊︽蒋閺冭泛鍞寸€圭懓灏€硅棄瀹崇捄鍐插З閿涘澅ab 閸掑洦宕查幎鏍уЗ閿?   * both-edges 鐠佲晛鍞寸€圭懓鍨锕€褰搁崸鍥╃搼缂傗晞绻橀敍宀冾潒鐟欏绗夐崑蹇曅?   */
   scrollbar-gutter: stable both-edges;
   padding: 24px 20px 40px;
   display: flex;
@@ -189,19 +187,16 @@
   background: var(--bg-primary);
   max-width: none;
   /*
-   * stretch 让子页面（settingsUiPage / settings-pane--*）自然填满整列。
-   * 各子页面自己声明 max-width: var(--settings-content-max) + margin: auto 实现居中。
-   * 不再用 center 把子项压窄到 fit-content，消除宽窄不一的根本原因。
-   */
+   * stretch 鐠佲晛鐡欐い鐢告桨閿涘澃ettingsUiPage / settings-pane--*閿涘鍤滈悞璺猴綖濠娾剝鏆ｉ崚妞尖偓?   * 閸氬嫬鐡欐い鐢告桨閼奉亜绻佹竟鐗堟 max-width: var(--settings-content-max) + margin: auto 鐎圭偟骞囩仦鍛厬閵?   * 娑撳秴鍟€閻?center 閹跺﹤鐡欐い鐟板竾缁愬嫬鍩?fit-content閿涘本绉烽梽銈咁啍缁愬嫪绗夋稉鈧惃鍕壌閺堫剙甯崶鐘偓?   */
   align-items: stretch;
 }
 
 .sidebarTab {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: none;
   cursor: pointer;
   font-size: var(--font-size-sm);

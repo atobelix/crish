@@ -3,7 +3,7 @@
   inset: 0;
   background: color-mix(in srgb, var(--text-primary) 28%, transparent);
   backdrop-filter: blur(6px);
-  z-index: 12000;
+  z-index: var(--z-cheatsheet);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -34,7 +34,7 @@
 .cheatsheetTitleWrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .cheatsheetTitle {
@@ -73,14 +73,14 @@
   padding: 8px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .cheatsheetRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 10px 8px;
   border-radius: var(--radius-md);
   transition: background-color var(--transition-micro);
@@ -102,7 +102,7 @@
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 1.2%, transparent);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 8px;
   box-shadow: none;
 }
@@ -110,7 +110,7 @@
 .cheatsheetSearch {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 4px 16px 0;
   padding: 8px 12px;
   border-radius: var(--radius-md);
@@ -138,7 +138,7 @@
 }
 
 .cheatsheetCategory {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .cheatsheetCategoryTitle {

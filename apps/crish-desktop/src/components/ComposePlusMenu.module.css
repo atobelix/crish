@@ -4,8 +4,8 @@
   left: 0;
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  z-index: 40;
+  gap: var(--space-1_5);
+  z-index: var(--z-dropdown-menu);
   pointer-events: none;
 }
 .root > * {
@@ -15,27 +15,28 @@
   width: 220px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, #000 8%, transparent),
-    0 0 0 1px color-mix(in srgb, #000 2%, transparent);
-  padding: 6px;
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1_5);
   display: flex;
   flex-direction: column;
   gap: 1px;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: bottom left;
 }
+.mainExit {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+}
 .item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
@@ -52,7 +53,7 @@
 .icon {
   width: var(--control-height);
   height: var(--control-height);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   display: inline-flex;
   align-items: center;
@@ -87,50 +88,50 @@
   min-width: 0;
 }
 
-/* 加号菜单瘦身：与 slash 菜单同档紧凑，仅附件等轻动作 */
+/* 閸旂姴褰块懣婊冨礋閻︼箒闊╅敍姘瑢 slash 閼挎粌宕熼崥灞俱€傜槐褍鍣鹃敍灞肩矌闂勫嫪娆㈢粵澶庝氦閸斻劋锟?*/
 .slim {
   bottom: calc(100% + 6px);
 }
 .slim .main {
   width: 188px;
-  padding: 4px;
-  border-radius: 10px;
+  padding: var(--space-1);
+  border-radius: var(--radius-xl);
   gap: 1px;
   border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--text-primary) 10%, transparent);
   box-shadow:
-    0 10px 24px color-mix(in srgb, #000 10%, transparent),
+    0 10px 24px color-mix(in srgb, var(--shadow-color) 10%, transparent),
     0 0 0 1px color-mix(in srgb, var(--text-primary) 3%, transparent);
   background: var(--bg-elevated, var(--bg-primary));
 }
 .slim .item {
   padding: 6px 8px;
-  gap: 8px;
+  gap: var(--space-2);
   border-radius: 7px;
   min-height: 34px;
 }
 .slim .item:focus-visible {
   outline: none;
   background: var(--bg-hover);
-  /* 遵循设计规范：键盘 focus-visible 时使用极淡 active border 或 soft box shadow */
+  /* 闁潧鎯婄拋鎹愵吀鐟欏嫯瀵栭敍姘舵暛锟?focus-visible 閺冩湹濞囬悽銊︾€ǎ?active border 锟?soft box shadow */
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }
 .slim .title {
-  font-size: 12.5px;
+  font-size: var(--font-size-xs-plus);
   font-weight: var(--font-weight-medium, 500);
-  line-height: 1.2;
+  line-height: var(--line-height-dense);
   color: var(--text-primary);
 }
 .slim .desc {
   display: block;
   font-size: 10.5px;
-  line-height: 1.25;
+  line-height: var(--line-height-tight);
   opacity: 0.9;
   color: var(--text-tertiary);
 }
 .slim .icon {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-secondary);
 }

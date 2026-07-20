@@ -1,4 +1,4 @@
-/* 妯″瀷閫夋嫨锛氱揣鍑戝睍寮€闈㈡澘锛堟€濊€冨己搴?+ 鎵佸钩鍒楄〃锛屾棤涓嬫媺/鏃犳墜濉?id锛?*/
+/* 婵☆垪鈧磭鈧兘鏌呮径瀣仴闁挎稒姘ㄩ幓锝夊礄閹存繄娼旂€殿喒鍋撻梻鍫涘灪濠㈡﹢鏁嶉崼鐔插亾濠靛ň鍋撻崘銊ョ箒閹?+ 闁瑰吀绀侀柦鈺呭礆濡ゅ嫨鈧啴鏁嶇仦鐐骏濞戞挸顑嗘�?闁哄啰濮垫晶婊勭�?id�?*/
 .mpick {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -9,12 +9,15 @@
   flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
-  z-index: 20000;
+  z-index: var(--z-settings-dialog);
   overflow: hidden;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: bottom right;
+}
+.mpickExit {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .mpickMenu {
@@ -26,7 +29,7 @@
 .mpickThink {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 10px 8px;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
@@ -35,16 +38,16 @@
 
 .mpickThinkLabel {
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  padding-left: 2px;
-  letter-spacing: 0.02em;
+  padding-left: var(--space-0_5);
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 .mpickThinkChips {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .mpickThinkChip {
@@ -56,7 +59,7 @@
   font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
-  line-height: 1.2;
+  line-height: var(--line-height-dense);
   text-align: center;
   min-width: 0;
 }
@@ -70,7 +73,7 @@
   background: var(--control-soft-bg-active);
   border-color: var(--border-color);
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 
 .mpickThinkChip:disabled {
@@ -82,18 +85,18 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px;
+  padding: var(--space-1);
 }
 
 .mpickMenuItem {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 7px 8px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
@@ -149,7 +152,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .mpickEmptyTitle {
@@ -158,14 +161,14 @@
 
 .mpickEmptyHint {
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   max-width: 20em;
 }
 
 .mpickLinkBtn {
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 5px 10px;
   font-size: var(--font-size-sm);
   font-family: inherit;
@@ -180,18 +183,18 @@
 .mpickError {
   margin: 6px 8px 0;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--accent-red-light, #fef2f2);
   color: var(--accent-red, #b91c1c);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
 .mpickErrorAction {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   width: calc(100% - 16px);
   box-sizing: border-box;
   border: none;
@@ -220,11 +223,11 @@
 .mpickFooterBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0 8px;
   min-height: 30px;
   font-size: var(--font-size-sm);
@@ -239,7 +242,7 @@
   color: var(--text-primary);
 }
 
-/* 鍏煎鏃х被鍚嶏紙鑻ュ埆澶勫紩鐢級 */
+/* 闁稿繒鍘ч鎰板籍瑜忕悮顐﹀触瀹ュ繒绀勯柤姹囧劚閸╁棙寰勯崟顐ょ┛闁汇埄鐓夌槐?*/
 .mpickSlim .mpickProviderActions,
 .mpickSlim .mpickModelActions {
   display: none !important;
@@ -251,6 +254,6 @@
   flex-shrink: 0;
   padding: 6px 12px 2px;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
 }

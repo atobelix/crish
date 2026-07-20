@@ -1,7 +1,7 @@
 .skillsTab {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 0;
   flex: 1;
   width: 100%;
@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-height: var(--control-height);
   min-width: 0;
   flex-wrap: nowrap;
@@ -41,12 +41,12 @@
   background: transparent;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .skillsDiscoverTitle {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--font-size-xs-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
@@ -65,7 +65,7 @@
 .skillsDiscoverItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 3px 2px;
   border-radius: 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -85,7 +85,7 @@
 .skillsDiscoverName {
   display: block;
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -99,14 +99,14 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .skillsTabHead {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 0;
   border: none;
   background: transparent;
@@ -115,15 +115,15 @@
 .skillsTabTitle {
   margin: 0;
   font-size: var(--font-size-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tighter);
+  line-height: var(--line-height-dense);
   color: var(--text-primary);
 }
 
 .skillsTabSub {
   margin: 8px 0 0;
-  font-size: 13.5px;
+  font-size: var(--font-size-sm-plus);
   color: var(--text-tertiary);
   line-height: 1.5;
   max-width: 40em;
@@ -132,19 +132,19 @@
 .skillsTabActions {
   display: flex;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   align-items: center;
   min-width: 0;
   margin-left: auto;
   flex-shrink: 0;
 }
 
-/* 鎶€鑳界瓫閫夛細浣滅敤鍩熶笅鎷?+ 鎼滅储锛屼笉鍫嗙浜岃 segment */
+/* 闁瑰灈鍋撻柤宕囨櫕閻☆偊鏌呮径娑氱獥濞达絾绮庨弫銈夊春閻斿墎鐟撻�?+ 闁瑰吋绮庨崒銊╂晬鐏炶偐鐟濋柛顐㈡椤戝洦绂嶅畝鍐炬斀 segment */
 .skillsToolbarFocus {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-height: 36px;
 }
 
@@ -171,16 +171,16 @@
   top: calc(100% + 4px);
   right: 0;
   min-width: 168px;
-  padding: 4px;
-  border-radius: 10px;
+  padding: var(--space-1);
+  border-radius: var(--radius-xl);
   background: var(--bg-elevated, var(--bg-primary));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent),
-    0 8px 24px color-mix(in srgb, #000 8%, transparent);
-  z-index: 20;
+    0 8px 24px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .skillsMoreItem {
@@ -193,7 +193,7 @@
   font: inherit;
   font-size: var(--font-size-sm);
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
 }
 
@@ -214,7 +214,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 16px 8px;
   font-size: var(--font-size-base);
 }
@@ -246,18 +246,18 @@
   background: transparent;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .skillsCreateTitle {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
 .skillsCreateHint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--font-size-xs-plus);
   color: var(--text-tertiary);
   line-height: 1.45;
 }
@@ -270,7 +270,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
 }
 
@@ -287,14 +287,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .skillsStats strong {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .skillsStatSep {
@@ -314,7 +314,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   border: none;
   padding: 0;
   margin: 0;
@@ -325,7 +325,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   overflow-x: auto;
 }
@@ -333,15 +333,15 @@
 .skillsEnableCmd {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .skillsEnableTitle {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--font-size-xs-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -363,7 +363,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   border: none;
@@ -372,7 +372,7 @@
 }
 
 .skillsSlashLabel {
-  margin-right: 4px;
+  margin-right: var(--space-1);
 }
 
 .skillsSlashChip {
@@ -395,7 +395,7 @@
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: var(--font-size-sm-plus);
   line-height: 1.5;
 }
 
@@ -404,7 +404,7 @@
   flex: 1;
   min-height: min(360px, calc(100vh - 220px));
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: transparent;
 }
@@ -431,7 +431,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-1_5);
 }
 
 .skillsRailGroupLabel {
@@ -440,22 +440,22 @@
   align-items: center;
   padding: 4px 8px 3px;
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 .skillsRailItem {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 10px;
-  border-radius: 8px;
+  padding: var(--space-2_5);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: inherit;
   position: relative;
@@ -466,13 +466,13 @@
   min-height: 24px;
   padding: 1px 6px;
   gap: 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .skillsRailItemDense .skillsRailIcon {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: none;
 }
 
@@ -482,12 +482,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--font-size-xs-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .skillsRailItemDense .skillsActDot {
@@ -495,7 +495,7 @@
   flex-shrink: 0;
   width: 6px;
   height: 6px;
-  margin-left: 2px;
+  margin-left: var(--space-0_5);
 }
 
 .skillsRailItem:hover {
@@ -509,7 +509,7 @@
 .skillsRailIcon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
   border: 1px solid var(--border-subtle);
   display: inline-flex;
@@ -524,17 +524,17 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding-right: 14px;
 }
 
 .skillsRailName {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .skillsSysBadge {
@@ -590,7 +590,7 @@
 }
 
 .skillsEmptyHint {
-  margin-top: 8px;
+  margin-top: var(--space-2);
   font-size: var(--font-size-xs);
 }
 
@@ -604,7 +604,7 @@
   padding: 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   background: transparent;
 }
 
@@ -616,7 +616,7 @@
 .skillsExtraRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -632,7 +632,7 @@
 
 .skillsExtraAdd {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .skillsExtraAdd :global(.settings-field-input) {
@@ -649,7 +649,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   background: transparent;
 }
 
@@ -664,7 +664,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: nowrap;
   min-width: 0;
 }
@@ -674,21 +674,21 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .skillsDetailNameRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .skillsDetailCmdRow {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
 }
 
@@ -696,7 +696,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--font-size-micro);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -709,12 +709,12 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .skillsDetailName {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-content);
   letter-spacing: -0.015em;
   color: var(--text-primary);
   white-space: nowrap;
@@ -725,7 +725,7 @@
 .skillsDetailMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
   margin-top: 0;
 }
 
@@ -741,7 +741,7 @@
 
 .skillsDetailPath,
 .skillsPathBtn {
-  margin-top: 6px;
+  margin-top: var(--space-1_5);
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
   color: var(--text-tertiary);
@@ -751,7 +751,7 @@
 .skillsPathBtn {
   display: inline-flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-1_5);
   border: none;
   background: transparent;
   padding: 0;
@@ -790,13 +790,13 @@
   overflow: auto;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* 鎶€鑳戒晶鏍忛澶栫洰褰曪細鍗曡琛ㄥ崟锛屾棤 inline style */
+/* 闁瑰灈鍋撻柤铏灊閺呭爼寮借箛娑辨澓濠㈣埖鐗滃ú鎷屻亹閺囶亞绐楅柛妤佹礉椤㈡垹鎮伴妸銉ョ闁挎稑鏈Λ?inline style */
 .skillsExtraSection {
   padding: 6px 6px 8px;
   border-top: 1px solid var(--border-subtle);
@@ -812,7 +812,7 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
   min-width: 0;
 }

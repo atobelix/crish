@@ -8,20 +8,20 @@
   padding: 10px 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2_5);
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-primary);
 }
 
 .lean {
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .metaLine {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   flex-shrink: 0;
 }
@@ -29,7 +29,7 @@
 .metaChip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   max-width: 100%;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
@@ -49,16 +49,16 @@
 .gitHelp {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .gitActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 
 .gitActions .link {
@@ -77,7 +77,7 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  padding-bottom: 2px;
+  padding-bottom: var(--space-0_5);
 }
 
 .sec:last-of-type {
@@ -87,7 +87,7 @@
 .secHRow {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -100,7 +100,7 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   border: none;
   background: transparent;
   padding: 6px 2px;
@@ -141,7 +141,7 @@
   background: transparent;
   border: none;
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   font-variant-numeric: tabular-nums;
 }
 
@@ -156,7 +156,7 @@
   border-radius: 0;
   cursor: pointer;
   white-space: nowrap;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 
 .agentEntry:hover {
@@ -176,7 +176,7 @@
   color: var(--text-tertiary);
   text-align: left;
   cursor: pointer;
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
 .emptyLink:hover {
@@ -191,7 +191,7 @@
   font-size: var(--font-size-xxs);
   color: var(--accent-red);
   line-height: 1.35;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent-red) 8%, transparent);
 }
 
@@ -206,7 +206,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   max-height: min(36vh, 280px);
   overflow-x: hidden;
   overflow-y: auto;
@@ -229,7 +229,7 @@
   padding: 2px 0 4px;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   background: transparent;
 }
 
@@ -237,12 +237,12 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   border: none;
   background: transparent;
   text-align: left;
   padding: 2px 4px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   cursor: pointer;
   color: var(--text-primary);
@@ -267,7 +267,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -312,14 +312,14 @@
 .liveRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   min-height: var(--control-height-sm, 28px);
   max-height: var(--control-height-sm, 28px);
   padding: 0 4px 0 2px;
   margin: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -379,7 +379,7 @@ button.liveRow:hover {
 }
 
 .link {
-  margin-top: 8px;
+  margin-top: var(--space-2);
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -400,15 +400,15 @@ button.liveRow:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 1px;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .filesToolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: var(--space-1_5);
+  margin-bottom: var(--space-1);
   min-height: var(--control-height-sm, 28px);
 }
 
@@ -425,7 +425,7 @@ button.liveRow:hover {
   width: var(--control-height-sm, 28px);
   height: var(--control-height-sm, 28px);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
   display: inline-flex;
@@ -443,7 +443,7 @@ button.liveRow:hover {
 .branchLabel {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  margin-left: 4px;
+  margin-left: var(--space-1);
   font-weight: var(--font-weight-normal, normal);
 }
 
@@ -454,18 +454,18 @@ button.liveRow:hover {
   justify-content: center;
 }
 
-/* 用量 grid */
+/* 閻劑鍣?grid */
 .usageGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: var(--space-2);
   padding: 4px 2px;
 }
 
 .usageItem {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   min-width: 0;
 }
 
@@ -484,30 +484,30 @@ button.liveRow:hover {
   white-space: nowrap;
 }
 
-/* 待确认任务行 */
+/* 瀵板懐鈥樼拋銈勬崲閸斅ゎ攽 */
 .actionRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .rowActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
-/* 计划任务行 */
+/* 鐠佲€冲灊娴犺濮熺悰?*/
 .cronRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 4px 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -520,7 +520,7 @@ button.liveRow:hover {
 .cronInfo {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   flex: 1;
 }
@@ -541,7 +541,7 @@ button.liveRow:hover {
   white-space: nowrap;
 }
 
-/* 状态圆点 */
+/* 閻樿埖鈧礁娓鹃悙?*/
 .dot.warn {
   background: var(--accent-orange, #f97316);
 }

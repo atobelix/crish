@@ -1,5 +1,6 @@
 /* Conex desktop entry styles — domain splits live under ./styles/ */
 @import './styles/tokens.css';
+@import './styles/z-index.css' layer(base);
 @import './styles/shell/shell-reset.css';
 @import './styles/shell/shell-layout.css';
 @import './styles/shell/shell-sidebar.css';
@@ -20,3 +21,4 @@
 @import './styles/focus-visible.css' layer(base);
 @import './styles/reduced-motion.css' layer(base);
 @import './styles/sr-only.css' layer(base);
+@import './styles/breakpoints.css' layer(base);

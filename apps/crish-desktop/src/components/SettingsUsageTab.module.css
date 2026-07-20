@@ -1,10 +1,10 @@
-/* SettingsUsageTab.module.css éˆ¥?extracted from inline styles in SettingsUsageTab.tsx */
+/* SettingsUsageTab.module.css ï¿?extracted from inline styles in SettingsUsageTab.tsx */
 
 /* ----- Price row ----- */
 .priceRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -37,8 +37,8 @@
 .configBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 6px;
+  gap: var(--space-1_5);
+  border-radius: var(--radius-md);
 }
 
 /* ----- Pricing modal overlay ----- */
@@ -49,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 30000;
+  z-index: var(--z-usage-modal);
 }
 
 .modalBox {
@@ -59,7 +59,7 @@
   flex-direction: column;
   background: var(--bg-primary, #ffffff);
   border: 1px solid var(--border-subtle, #e5e7eb);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   padding: 20px;
   box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
 }
@@ -74,7 +74,7 @@
 
 .modalTitle {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
 }
 
@@ -89,9 +89,9 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 16px;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 
 .modalEmptyState {
@@ -103,7 +103,7 @@
 
 .modalAddRow {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   border-top: 1px solid var(--border-subtle);
   padding-top: 16px;
   align-items: center;
@@ -129,7 +129,7 @@
 .modalAddBtn {
   height: 28px;
   padding: 0 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .modalFooter {
@@ -139,7 +139,7 @@
 }
 
 .modalCloseBtn {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 /* ----- Stats grid (top summary) ----- */
@@ -155,7 +155,7 @@
 .statItem {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .statLabel {
@@ -165,19 +165,19 @@
 
 .statValue {
   font-size: var(--font-size-xl);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
 }
 
 .statValueCost {
   font-size: var(--font-size-xl);
-  font-weight: 600;
-  color: #16a34a;
+  font-weight: var(--font-weight-content);
+  color: var(--color-active);
 }
 
 .statUnit {
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -197,22 +197,22 @@
 
 .chartTitle {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
 .chartSegment {
   display: flex;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-0_5);
+  padding: var(--space-0_5);
   background: var(--bg-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .chartSegmentBtn {
   padding: 4px 10px;
   font-size: var(--font-size-xxs);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -235,7 +235,7 @@
   height: 140px;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 10px 0;
   border-bottom: 1px dashed var(--border-subtle);
 }
@@ -247,7 +247,7 @@
   height: 100%;
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .chartBarInner {
@@ -264,7 +264,7 @@
   width: 14px;
   display: flex;
   flex-direction: column;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
@@ -304,7 +304,7 @@
 .chartLegendItem {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .chartLegendDot {
@@ -334,25 +334,25 @@
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .modelsSectionTitle {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
 .modelsList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .modelRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   font-size: var(--font-size-sm);
 }
 
@@ -384,12 +384,12 @@
   flex: 0 0 100px;
   text-align: right;
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .modelTokensUnit {
   font-size: var(--font-size-xxs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -406,8 +406,8 @@
   font-size: var(--font-size-xs);
   display: flex;
   align-items: center;
-  gap: 4px;
-  border-radius: 6px;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
 }
 
 /* ----- Skeleton loading ----- */
@@ -421,7 +421,7 @@
 .skeletonBar {
   height: 20px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   animation: shimmer 1.5s infinite ease-in-out;
 }
 

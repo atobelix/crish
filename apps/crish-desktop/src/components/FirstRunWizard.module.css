@@ -1,7 +1,7 @@
 .firstRunRoot {
   position: fixed;
   inset: 0;
-  z-index: 100000;
+  z-index: var(--z-first-run);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,8 +15,8 @@
   width: min(440px, 100%);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.14);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2xl);
   padding: 22px 22px 16px;
   display: flex;
   flex-direction: column;
@@ -27,13 +27,13 @@
 .firstRunBrand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .firstRunLogo {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: var(--text-primary);
   color: #fff;
   display: flex;
@@ -52,19 +52,19 @@
 .firstRunSub {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 
 .firstRunSteps {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .firstRunStep {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   padding: 4px 8px;
@@ -102,7 +102,7 @@
 .firstRunBody {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 140px;
 }
 
@@ -110,10 +110,10 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
-/* 鍚戝涓嬫媺锛歋ettingsSelect 鍏ㄥ杞Е鍙?*/
+/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢�?*/
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -124,14 +124,14 @@
   width: 100%;
   min-height: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 .firstRunInput {
   width: 100%;
   box-sizing: border-box;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   padding: 9px 12px;
   font-size: var(--font-size-base);
   font-family: inherit;
@@ -157,7 +157,7 @@
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 8px 10px;
 }
 
@@ -165,8 +165,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding-top: 4px;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
   border-top: 1px solid var(--border-subtle);
   border-top-color: var(--hairline, var(--border-subtle));
 }
@@ -190,15 +190,15 @@
   width: 100%;
   text-align: center;
   margin-top: -4px;
-  padding-bottom: 4px;
+  padding-bottom: var(--space-1);
 }
 
-/* 妯″瀷姝ユ绾ц矾寰勶細绋嶅悗鎵嬪～ / 鎵撳紑璁剧疆锛堟棤 toast锛?*/
+/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛�?/ 閹垫挸绱戠拋鍓х枂閿涘牊妫?toast�?*/
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--space-0_5);
   padding: 0 4px 8px;
 }
 
@@ -210,8 +210,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 10px;
+  gap: var(--space-1_5);
+  border-radius: var(--radius-xl);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   font-family: inherit;
@@ -246,9 +246,9 @@
 .firstRunProjectOk {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 10px;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-xl);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -258,6 +258,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 16px 8px;
 }

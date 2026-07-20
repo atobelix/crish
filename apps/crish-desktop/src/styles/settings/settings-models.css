@@ -1,4 +1,4 @@
-/* ===== Models settings tab（v3：主路径密钥→列表→当前；次要操作 hover 才露） ===== */
+/* ===== Models settings tab閿涘�?閿涙矮瀵岀捄顖氱窞鐎靛棝鎸滈埆鎺戝灙鐞涖劉鍟嬭ぐ鎾冲閿涙稒顐肩憰浣规惙锟?hover 閹靛秹婀堕敍?===== */
 .models-tab {
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .models-head-stats {
   font-size: var(--font-size-sm);
@@ -26,18 +26,18 @@
   text-align: left;
 }
 .models-inline-badge {
-  margin-left: 8px;
+  margin-left: var(--space-2);
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 .models-inline-badge--warn {
   color: var(--text-secondary);
 }
 .models-count-badge {
-  margin-left: 6px;
+  margin-left: var(--space-1_5);
   font-size: var(--font-size-sm);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 .models-filter-input {
@@ -55,15 +55,15 @@
 }
 .models-tab-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tighter);
+  line-height: var(--line-height-dense);
   color: var(--text-primary);
 }
 .models-tab-sub {
   margin: 8px 0 0;
-  font-size: 13.5px;
+  font-size: var(--font-size-sm-plus);
   color: var(--text-tertiary);
   line-height: 1.5;
   max-width: 40em;
@@ -73,14 +73,14 @@
 
 /* === models-tab fresh-v2 === */
 .models-tab {
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 /* summary: no heavy fill, thin border only */
 .models-summary {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 0 4px;
   border: none;
   border-radius: 0;
@@ -91,28 +91,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
 }
 .models-summary-current {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   min-width: 0;
   flex: 1 1 140px;
 }
 .models-summary-label {
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 .models-summary-value {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -125,7 +125,7 @@
 .models-summary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   align-items: center;
   flex-shrink: 0;
 }
@@ -134,10 +134,10 @@
 .models-action-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   background: transparent;
   font-size: var(--font-size-xs);
@@ -146,7 +146,7 @@
 }
 .models-action-hint.is-ok {
   color: var(--text-secondary);
-  border-color: color-mix(in srgb, var(--accent-green, #16a34a) 22%, transparent);
+  border-color: color-mix(in srgb, var(--color-active) 22%, transparent);
 }
 .models-action-hint.is-err {
   color: var(--accent-red, #b91c1c);
@@ -161,7 +161,7 @@
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   display: inline-flex;
@@ -178,8 +178,8 @@
 /* connection: minimal */
 .models-conn {
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  padding-bottom: 10px;
-  margin-bottom: 2px;
+  padding-bottom: var(--space-2_5);
+  margin-bottom: var(--space-0_5);
 }
 .models-conn .settings-list-row {
   border-bottom: none;
@@ -189,11 +189,11 @@
 .models-list-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
   position: relative;
-  z-index: 1;
+  z-index: var(--z-decorative);
   isolation: isolate;
   background: transparent;
 }
@@ -201,20 +201,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2_5);
   margin: 0;
   padding: 0 2px;
 }
 .models-list-title {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--letter-spacing-wide);
 }
 .models-main-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-height: 48px;
   min-width: 0;
 }
@@ -224,7 +224,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
   padding: 0;
@@ -237,7 +237,7 @@
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
   padding: 0;
   margin: 0;
-  z-index: 1;
+  z-index: var(--z-decorative);
 }
 .models-main-row.is-live {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -256,7 +256,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   text-align: left;
 }
 .models-main-row-info--btn {
@@ -270,8 +270,8 @@
   width: 100%;
 }
 .models-main-row-name {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -291,7 +291,7 @@
   gap: 3px;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 .models-ico-tag svg {
   flex-shrink: 0;
@@ -303,7 +303,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
@@ -318,7 +318,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
   position: static;
 }
@@ -343,7 +343,7 @@
   padding: 0 8px;
   border-radius: 999px;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -434,8 +434,8 @@
 .models-config-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-radius: 0 0 10px 10px;
   background: transparent;
   border: none;
@@ -453,7 +453,7 @@
 .models-config-idline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .models-config-idline-label {
@@ -471,7 +471,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 3px 8px;
 }
 
@@ -479,13 +479,13 @@
 .models-cap-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .models-cap-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
@@ -521,8 +521,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .models-config-actions-spacer {
@@ -532,15 +532,15 @@
 
 /* billing: minimal, less card-y */
 .models-billing {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: var(--space-2_5);
+  padding-top: var(--space-2_5);
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   display: flex;
   flex-direction: column;
   gap: 0;
   min-width: 0;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
   isolation: isolate;
 }
 .models-billing-toggle {
@@ -548,7 +548,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   border: none;
   border-radius: 0;
   background: transparent;
@@ -564,7 +564,7 @@
 }
 .models-billing-title {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: inherit;
 }
 .models-billing-sub {
@@ -573,7 +573,7 @@
 .models-billing-toggle-side {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
@@ -586,8 +586,8 @@
 .models-billing-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
+  gap: var(--space-2_5);
+  margin-top: var(--space-1);
   padding: 8px 0 4px;
   border: none;
   border-radius: 0;
@@ -606,13 +606,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .models-price-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
@@ -685,16 +685,16 @@
 }
 
 /* === models-tab polish-v3 === */
-/* 只服务模型页：干净分区、细边框、少废话 */
+/* 閸欘亝婀囬崝鈩兡侀崹瀣€夐敍姘叡閸戔偓閸掑棗灏妴浣虹矎鏉堣顢嬮妴浣哥毌鎼寸喕锟?*/
 
 .models-tab {
-  gap: 12px;
+  gap: var(--space-3);
   max-width: min(880px, 100%);
 }
 
 .models-head-row {
   align-items: baseline;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .models-head-stats {
   font-size: var(--font-size-xs);
@@ -703,7 +703,7 @@
 
 .models-split {
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   overflow: hidden;
   background: transparent;
   min-height: min(460px, calc(100vh - 200px));
@@ -716,19 +716,19 @@
 }
 .models-rail-list {
   padding: 8px 6px;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 .models-rail-item {
   padding: 8px 10px;
-  border-radius: 8px;
-  gap: 2px;
+  border-radius: var(--radius-lg);
+  gap: var(--space-0_5);
 }
 .models-rail-item.is-active {
   background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
 }
 .models-rail-name {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .models-rail-meta {
   font-size: var(--font-size-xxs);
@@ -736,20 +736,20 @@
   min-height: 14px;
 }
 .models-rail-add-wrap {
-  padding: 8px;
+  padding: var(--space-2);
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .models-rail-add {
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px dashed color-mix(in srgb, var(--text-primary) 11%, transparent);
-  font-size: 12.5px;
+  font-size: var(--font-size-xs-plus);
 }
 .models-add-menu {
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-  box-shadow: 0 10px 28px color-mix(in srgb, #000 10%, transparent);
-  padding: 6px;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+  padding: var(--space-1_5);
 }
 .models-add-label {
   font-size: var(--font-size-xxs);
@@ -768,26 +768,26 @@
 }
 .models-detail-top {
   align-items: center;
-  gap: 10px;
-  padding-bottom: 2px;
+  gap: var(--space-2_5);
+  padding-bottom: var(--space-0_5);
 }
 .models-detail-name {
   font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tighter);
 }
 .models-detail-id {
   display: none;
 }
 .models-detail-top-actions {
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 
-/* 连接区：标签在上，输入在下 —— 对齐参考图密钥行气质 */
+/* 鏉╃偞甯撮崠鐚寸窗閺嶅洨顒烽崷銊ょ瑐閿涘矁绶崗銉ユ躬锟?閳ユ柡锟?鐎靛綊缍堥崣鍌濃偓鍐ㄦ禈鐎靛棝鎸滅悰灞剧毜锟?*/
 .models-conn {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 0 0 14px;
   margin: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -795,17 +795,17 @@
 .models-field-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
   margin: 0;
 }
 .models-field-label {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .models-field-block .settings-field-input {
   width: 100%;
@@ -813,7 +813,7 @@
 }
 .models-key-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   min-width: 0;
 }
@@ -827,7 +827,7 @@
 .models-inline-badge {
   margin-left: 0;
   font-size: var(--font-size-xxs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   padding: 1px 6px;
   border-radius: 999px;
@@ -838,9 +838,9 @@
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 对话使用区：一行说明 + 动作，不抢模型列表 */
+/* 鐎电鐦芥担璺ㄦ暏閸栫尨绱版稉鈧悰宀冾嚛�?+ 閸斻劋缍旈敍灞肩瑝閹躲垺膩閸ㄥ鍨�?*/
 .models-summary {
-  gap: 8px;
+  gap: var(--space-2);
   padding: 0;
   background: transparent;
   border: none;
@@ -848,7 +848,7 @@
 .models-summary-row {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
 }
 .models-summary-label {
@@ -857,7 +857,7 @@
 }
 .models-summary-value {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 .models-summary-meta {
   font-size: var(--font-size-xxs);
@@ -866,30 +866,30 @@
   height: 30px;
   min-height: 30px;
   padding: 0 10px;
-  font-size: 12.5px;
+  font-size: var(--font-size-xs-plus);
 }
 
-/* 提示：轻、可关 */
+/* 閹绘劗銇氶敍姘充氦閵嗕礁褰查�?*/
 .models-action-hint {
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
-/* 模型列表 */
+/* 濡€崇€烽崚妤勶拷?*/
 .models-list-section {
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 0;
 }
 .models-list-title {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
 }
 .models-main-list {
-  gap: 8px;
+  gap: var(--space-2);
 }
 .models-main-row {
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
 }
 .models-main-row.is-open,
@@ -901,8 +901,8 @@
   gap: 8px 10px;
 }
 .models-main-row-name {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
 }
 .models-main-row-icons {
   gap: 5px;
@@ -914,12 +914,12 @@
 .models-ico-dot {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
-/* 开关旁文字 */
+/* 瀵偓閸忚櫕姊洪弬鍥х�?*/
 .models-switch {
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .models-switch-text {
   font-size: var(--font-size-xs);
@@ -930,14 +930,14 @@
   display: inline;
 }
 
-/* 能力芯片 */
+/* 閼宠棄濮忛懞顖滃�?*/
 .models-cap-chip {
   min-height: 30px;
   padding: 5px 11px;
   border-radius: 999px;
 }
 
-/* 配置区 */
+/* 闁板秶鐤嗛崠?*/
 .models-config-panel,
 .models-config-panel--inline {
   padding: 12px 12px 12px;
@@ -949,13 +949,13 @@
   color: var(--text-tertiary);
 }
 .models-config-actions {
-  padding-top: 8px;
+  padding-top: var(--space-2);
 }
 
-/* 计费：更弱 */
+/* 鐠伮ゅ瀭閿涙碍娲垮�?*/
 .models-billing {
-  margin-top: 6px;
-  padding-top: 8px;
+  margin-top: var(--space-1_5);
+  padding-top: var(--space-2);
 }
 .models-billing-toggle {
   padding: 4px 2px;
@@ -963,7 +963,7 @@
 }
 .models-billing-title {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .models-billing-body {
   padding: 6px 0 0;
@@ -972,29 +972,29 @@
   padding: 5px 0;
 }
 
-/* 空态 */
+/* 缁岀儤锟?*/
 .models-empty--inline {
   padding: 14px 4px;
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
-/* 按钮统一高度 */
+/* 閹稿鎸崇紒鐔剁妤傛ê锟?*/
 .models-btn {
   height: 30px;
   min-height: 30px;
-  border-radius: 8px;
-  font-size: 12.5px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-xs-plus);
 }
 .models-btn.ghost {
   border-color: transparent;
 }
 
-/* 输入：细边框、轻底 */
+/* 鏉堟挸鍙嗛敍姘辩矎鏉堣顢嬮妴浣戒氦�?*/
 .models-tab .settings-field-input {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .models-tab .settings-field-input:focus,
 .models-tab .settings-field-input:focus-visible {
@@ -1003,7 +1003,7 @@
 }
 
 /* === models-tab polish-v4 === */
-/* 灰度：背景 ≤8%，描边 ~11%；使用中：#22b671 / #f0fdf4 */
+/* 閻忔澘瀹抽敍姘冲剹�?�?%閿涘本寮挎潏?~11%閿涙稐濞囬悽銊よ厬锟?22b671 / #f0fdf4 */
 
 .models-tab {
   --models-green: var(--accent-green, #10b981);
@@ -1012,14 +1012,14 @@
   --models-border-soft: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --models-fill: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   --models-fill-max: color-mix(in srgb, var(--text-primary) 7%, transparent);
-  gap: 12px;
+  gap: var(--space-3);
 }
 
-/* 输入：极细浅灰描边，聚焦略深，不跳高对比 */
+/* 鏉堟挸鍙嗛敍姘€紒鍡樼ガ閻忕増寮挎潏鐧哥礉閼辨氨鍔嶉悾銉︾箒閿涘奔绗夌捄鎶界彯鐎佃�?*/
 .models-tab .settings-field-input {
   border: 1px solid var(--models-border);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: none;
 }
 .models-tab .settings-field-input:focus,
@@ -1032,7 +1032,7 @@
 
 .models-split {
   border: 1px solid var(--models-border);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: transparent;
   overflow: hidden;
 }
@@ -1056,7 +1056,7 @@
   background: transparent;
 }
 
-/* 连接字段 */
+/* 鏉╃偞甯寸€涙�?*/
 .models-conn {
   border-bottom-color: var(--models-border-soft);
 }
@@ -1065,7 +1065,7 @@
   background: transparent;
 }
 
-/* 对话使用摘要 */
+/* 鐎电鐦芥担璺ㄦ暏閹芥�?*/
 .models-summary {
   background: transparent;
   border: none;
@@ -1074,7 +1074,7 @@
 .models-summary-row {
   border: 1px solid var(--models-border);
   background: transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   padding: 10px 12px;
 }
 .models-summary-actions .models-btn {
@@ -1085,18 +1085,18 @@
   background: var(--models-fill);
 }
 
-/* 页内横幅提示：不再使用（错误走全局 toast） */
+/* 妞ら潧鍞村Ο顏勭畽閹绘劗銇氶敍姘瑝閸愬秳濞囬悽顭掔礄闁挎瑨顕ょ挧鏉垮弿鐏炩偓 toast�?*/
 .models-action-hint {
   display: none !important;
 }
 
-/* 模型行：单行 */
+/* 濡€崇€风悰宀嬬窗閸楁洝锟?*/
 .models-main-list {
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .models-main-row {
   border: 1px solid var(--models-border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   transition: border-color var(--transition-micro), background var(--transition-micro), opacity var(--transition-micro);
 }
@@ -1112,12 +1112,12 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-width: 0;
 }
 .models-main-row-name {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1127,22 +1127,22 @@
   display: none;
 }
 
-/* 上下文：图标 + 长度，单行附属 */
+/* 娑撳﹣绗呴弬鍥风窗閸ョ偓�?+ 闂€鍨閿涘苯宕熺悰宀勬锟?*/
 .models-ctx {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: var(--font-size-micro);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 .models-ctx svg {
   opacity: 0.75;
 }
 
-/* 停用：整行变淡 + 名称删除线感弱化 */
+/* 閸嬫粎鏁ら敍姘殻鐞涘苯褰夊ǎ?+ 閸氬秶袨閸掔娀娅庣痪鎸庡妳瀵崬锟?*/
 .models-main-row.is-off {
   opacity: 1;
   background: transparent;
@@ -1155,7 +1155,7 @@
   opacity: 0.55;
 }
 
-/* 使用中：绿色点缀，浅底 */
+/* 娴ｈ法鏁ゆ稉顓ㄧ窗缂佽儻澹婇悙鍦磻閿涘本绁惔?*/
 .models-main-row.is-live {
   border-color: color-mix(in srgb, var(--models-green) 28%, var(--models-border));
   background: color-mix(in srgb, var(--models-green-soft) 82%, var(--bg-primary));
@@ -1166,20 +1166,20 @@ html[data-theme="dark"] .models-main-row.is-live {
 }
 .models-main-row.is-live .models-main-row-name {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 .models-main-row.is-open:not(.is-live) {
   border-color: var(--border-color);
   background: var(--bg-secondary);
 }
 
-/* 使用按钮：绿色组 */
+/* 娴ｈ法鏁ら幐澶愭尦閿涙氨璞㈤懝鑼矋 */
 .models-btn--use {
   height: 26px;
   min-height: 26px;
   padding: 0 10px;
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--models-green) 35%, transparent);
   color: var(--models-green);
@@ -1206,15 +1206,15 @@ html[data-theme="dark"] .models-btn--use {
   border: 1px solid color-mix(in srgb, var(--models-green) 30%, transparent);
   background: var(--models-green-soft);
   color: var(--models-green);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-content);
 }
 html[data-theme="dark"] .models-pill--live {
   background: color-mix(in srgb, var(--models-green) 14%, transparent);
   color: color-mix(in srgb, var(--models-green) 88%, white);
 }
 
-/* 启用开关：开=绿，关=浅灰 */
+/* 閸氼垳鏁ゅ鈧崗绛圭窗瀵�?缂佸尅绱濋崗?濞村懐锟?*/
 .models-switch-ui {
   width: 34px;
   height: 18px;
@@ -1239,7 +1239,7 @@ html[data-theme="dark"] .models-pill--live {
   display: none;
 }
 
-/* 配置/删除图标更轻 */
+/* 闁板秶锟?閸掔娀娅庨崶鐐垼閺囩锟?*/
 .models-main-row .models-icon-btn {
   opacity: 0.55;
   border: none;
@@ -1254,7 +1254,7 @@ html[data-theme="dark"] .models-pill--live {
   background: var(--models-fill);
 }
 
-/* 配置展开：轻分隔，不加重底 */
+/* 闁板秶鐤嗙仦鏇炵磻閿涙俺浜ら崚鍡涙閿涘奔绗夐崝鐘诲櫢锟?*/
 .models-config-panel,
 .models-config-panel--inline {
   border-top: 1px solid var(--models-border-soft);
@@ -1271,7 +1271,7 @@ html[data-theme="dark"] .models-pill--live {
   color: var(--text-primary);
 }
 
-/* 计费更淡 */
+/* 鐠伮ゅ瀭閺囧瓨�?*/
 .models-billing {
   border-top-color: var(--models-border-soft);
 }
@@ -1279,12 +1279,12 @@ html[data-theme="dark"] .models-pill--live {
   color: var(--text-tertiary);
 }
 
-/* 获取弹层空态错误 */
+/* 閼惧嘲褰囧鐟扮湴缁岀儤鈧線鏁婄�?*/
 .models-empty--err {
   color: var(--accent-red, #b91c1c);
 }
 
-/* 按钮通用：浅边框 */
+/* 閹稿鎸抽柅姘辨暏閿涙碍绁潏瑙勵攱 */
 .models-btn {
   border: 1px solid var(--models-border);
   background: transparent;
@@ -1302,7 +1302,7 @@ html[data-theme="dark"] .models-pill--live {
   color: var(--text-primary);
 }
 
-/* 避免 fill 超过约 8% */
+/* 闁灝锟?fill 鐡掑懓绻冪痪?8% */
 .models-main-row.is-live,
 .models-rail-item.is-active,
 .models-cap-chip.is-on {
@@ -1310,12 +1310,12 @@ html[data-theme="dark"] .models-pill--live {
 }
 
 /* === models-tab polish-v5-toggle === */
-/* 激活/未激活对齐参考：开 #22b671 + 浅底 #f0fdf4；关 浅灰轨 */
+/* 濠碘偓锟?閺堫亝绺哄ú璇差嚠姒绘劕寮懓鍐跨窗瀵�?#22b671 + 濞村懎锟?#f0fdf4閿涙稑锟?濞村懐浼嗘潪?*/
 
 .models-tab {
   --models-green: var(--accent-green, #10b981);
   --models-green-soft: color-mix(in srgb, var(--accent-green, #10b981) 8%, var(--bg-primary));
-  --models-green-on: #19b36b; /* 参考图实心开态，略深一点更稳 */
+  --models-green-on: #19b36b; /* 閸欏倽鈧啫娴樼€圭偛绺惧鈧幀渚婄礉閻ｃ儲绻佹稉鈧悙瑙勬纯锟?*/
   --models-off-track: #f0f0f0;
   --models-off-border: color-mix(in srgb, var(--text-primary) 11%, transparent);
   --models-border: color-mix(in srgb, var(--text-primary) 7%, transparent);
@@ -1323,7 +1323,7 @@ html[data-theme="dark"] .models-pill--live {
   --models-fill: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
 }
 
-/* 开关：胶囊轨 + 白圆钮（参考图） */
+/* 瀵偓閸忕绱伴懗璺烘抄�?+ 閻ц棄娓鹃柦顕嗙礄閸欏倽鈧啫娴橀�?*/
 .models-tab .models-switch {
   gap: 0;
   flex-shrink: 0;
@@ -1347,10 +1347,10 @@ html[data-theme="dark"] .models-pill--live {
   height: 14px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
   transition: transform var(--transition-fast), background var(--transition-fast);
 }
-/* 开：实心绿轨 + 白钮滑到右侧（对齐参考图） */
+/* 瀵偓閿涙艾鐤勮箛鍐雹�?+ 閻т粙鎸冲鎴濆煂閸欏厖鏅堕敍鍫濐嚠姒绘劕寮懓鍐ㄦ禈�?*/
 .models-tab .models-switch input:checked + .models-switch-ui,
 .models-tab .models-switch.is-on .models-switch-ui {
   border-color: var(--models-green-on);
@@ -1360,13 +1360,13 @@ html[data-theme="dark"] .models-pill--live {
 .models-tab .models-switch.is-on .models-switch-ui::after {
   transform: translateX(18px);
   background: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 10%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 10%, transparent);
 }
 .models-tab .models-switch-text {
   display: none;
 }
 
-/* 使用中标签 / 使用按钮：同色组 */
+/* 娴ｈ法鏁ゆ稉顓熺垼锟?/ 娴ｈ法鏁ら幐澶愭尦閿涙艾鎮撻懝鑼矋 */
 .models-tab .models-pill--live {
   height: 24px;
   padding: 0 10px;
@@ -1374,15 +1374,15 @@ html[data-theme="dark"] .models-pill--live {
   border: 1px solid color-mix(in srgb, var(--models-green) 28%, transparent);
   background: var(--models-green-soft);
   color: var(--models-green);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-content);
 }
 .models-tab .models-btn--use {
   height: 26px;
   min-height: 26px;
   padding: 0 11px;
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--models-green) 32%, transparent);
   color: var(--models-green);
@@ -1398,16 +1398,16 @@ html[data-theme="dark"] .models-pill--live {
   filter: grayscale(0.15);
 }
 
-/* 使用中行：浅绿底，不压过 8% 灰感 */
+/* 娴ｈ法鏁ゆ稉顓☆攽閿涙碍绁紒鍨俺閿涘奔绗夐崢瀣�?8% 閻忕増锟?*/
 .models-tab .models-main-row.is-live {
   border-color: color-mix(in srgb, var(--models-green) 26%, var(--models-border));
   background: color-mix(in srgb, var(--models-green-soft) 88%, var(--bg-primary));
 }
 .models-tab .models-main-row.is-live .models-main-row-name {
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 
-/* 停用行：更灰、更弱，和「未使用但启用」拉开 */
+/* 閸嬫粎鏁ょ悰宀嬬窗閺囧浼嗛妴浣规纯瀵唻绱濋崪灞烩偓灞炬弓娴ｈ法鏁ゆ担鍡楁儙閻劊鈧秵濯哄�?*/
 .models-tab .models-main-row.is-off {
   border-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
@@ -1422,7 +1422,7 @@ html[data-theme="dark"] .models-pill--live {
   opacity: 0.35;
 }
 
-/* 深色主题：绿轨保持可辨，浅底用透明绿 */
+/* 濞ｈ精澹婃稉濠氼暯閿涙氨璞㈡潪銊ょ箽閹镐礁褰叉潏顭掔礉濞村懎绨抽悽銊┾偓蹇旀锟?*/
 html[data-theme="dark"] .models-tab {
   --models-off-track: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --models-green-soft: color-mix(in srgb, var(--models-green) 14%, transparent);
@@ -1450,7 +1450,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-color: color-mix(in srgb, var(--models-green) 34%, transparent);
 }
 
-/* 能力芯片选中也跟绿色组，避免另一套色 */
+/* 閼宠棄濮忛懞顖滃闁鑵戞稊鐔荤缂佽儻澹婄紒鍕剁礉闁灝鍘ら崣锔跨婵傛�?*/
 .models-tab .models-cap-chip.is-on,
 .models-tab .models-cap-chip:has(input:checked) {
   border-color: color-mix(in srgb, var(--models-green) 28%, var(--models-border));
@@ -1458,7 +1458,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 
 /* === settings layout polish appearance-v1 === */
-/* 边框灰度 ≤11%；外观页：左标签右控件、细分割线 */
+/* 鏉堣顢嬮悘鏉垮�?�?1%閿涙稑顦荤憴鍌炪€夐敍姘箯閺嶅洨顒烽崣铏付娴犺翰鈧胶绮忛崚鍡楀锟?*/
 
 .settings-pane--modern {
   --settings-border: color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -1474,29 +1474,29 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   margin: 0 0 2px;
 }
 .settings-pane--modern .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
+  line-height: var(--line-height-tight);
 }
 
 .settings-pane--modern .settings-group {
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-pane--modern .settings-group + .settings-group {
-  margin-top: 6px;
-  padding-top: 2px;
+  margin-top: var(--space-1_5);
+  padding-top: var(--space-0_5);
 }
 .settings-pane--modern .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: 0.01em;
+  letter-spacing: var(--letter-spacing-snug);
   padding: 0 0 4px;
   margin: 0;
 }
 
-/* 列表：顶部分割 + 行间 8% 线，无重卡片底 */
+/* 閸掓銆冮敍姘躲€婇柈銊ュ瀻锟?+ 鐞涘矂锟?8% 缁惧尅绱濋弮鐘诲櫢閸楋紕澧栨�?*/
 .settings-pane--modern .settings-list {
   border: none;
   border-top: 1px solid var(--settings-border-soft);
@@ -1546,7 +1546,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .settings-pane--modern .settings-list-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1562,26 +1562,26 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   justify-content: flex-end;
   max-width: min(360px, 52%);
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-/* 分段控件：轻边框 */
+/* 閸掑棙顔岄幒褌娆㈤敍姘充氦鏉堣�?*/
 .settings-pane--modern .ui-segment,
 .settings-pane--modern .settings-choice-group {
   border: 1px solid var(--settings-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
-  padding: 2px;
-  gap: 2px;
+  padding: var(--space-0_5);
+  gap: var(--space-0_5);
 }
 .settings-pane--modern .ui-segment-item {
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   min-height: 28px;
   padding: 0 10px;
-  font-size: 12.5px;
+  font-size: var(--font-size-xs-plus);
 }
 .settings-pane--modern .ui-segment-item:hover:not(:disabled) {
   background: var(--settings-fill);
@@ -1590,18 +1590,18 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .settings-pane--modern .ui-segment-item.active {
   background: var(--settings-fill);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 
 
-/* 次要按钮描边 ≤11% */
+/* 濞喡ゎ洣閹稿鎸抽幓蹇氱�?�?1% */
 .settings-pane--modern .ui-btn-secondary,
 .settings-pane--modern .ui-btn-ghost {
   border-color: var(--settings-border);
 }
 
-/* models-tab：强制描边不超过 11%（覆盖历史叠层） */
+/* models-tab閿涙艾宸遍崚鑸靛伎鏉堥€涚瑝鐡掑懓锟?11%閿涘牐顩惄鏍у坊閸欐彃褰旂仦鍌︾�?*/
 .models-tab {
   --models-border: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --models-border-soft: color-mix(in srgb, var(--text-primary) 4%, transparent);
@@ -1641,10 +1641,10 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .models-rail-item-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -1678,7 +1678,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .models-rail-item-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -1691,7 +1691,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: 50%;
   background: var(--bg-tertiary);
   font-size: var(--font-size-xxs);
-  font-weight: 700;
+  font-weight: var(--font-weight-heavy);
   color: var(--text-secondary);
 }
 
@@ -1702,7 +1702,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 
 .models-rail-item-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1717,22 +1717,22 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   width: 100%;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  margin-top: 2px;
+  margin-top: var(--space-0_5);
 }
 
 .models-status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 2px 6px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 500;
+  border-radius: var(--radius-2xl);
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
 }
 
 .models-status-pill.active {
   background: rgba(22, 163, 74, 0.1);
-  color: #16a34a;
+  color: var(--color-active);
 }
 
 .models-status-pill.warn {
@@ -1760,7 +1760,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   padding: 12px 20px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .models-card-list {
@@ -1790,7 +1790,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #16a34a;
+  background: var(--color-active);
 }
 
 .models-row-card.is-enabled::before {
@@ -1818,9 +1818,9 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   align-items: center;
   gap: 3px;
   padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
 }
@@ -1828,9 +1828,9 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .models-capability-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   font-size: var(--font-size-xs);
@@ -1853,7 +1853,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   flex: 1 !important;
   min-height: min(560px, calc(100vh - 200px)) !important;
   border: 1px solid var(--models-border) !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-2xl) !important;
   overflow: hidden !important;
 }
 
@@ -1885,16 +1885,16 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: inherit !important;
 }
 
-/* Status pill — remove bullet, just text */
+/* Status pill �?remove bullet, just text */
 .models-status-pill {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
   padding: 2px 7px;
-  border-radius: 10px;
-  line-height: 1.4;
+  border-radius: var(--radius-xl);
+  line-height: var(--line-height-base);
 }
 .models-status-pill.active {
-  color: #16a34a;
+  color: var(--color-active);
   background: rgba(22, 163, 74, 0.10);
 }
 .models-status-pill.ok {
@@ -1920,11 +1920,10 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: #ffffff;
 }
 
-/* ═══════════════════════════════════════════════════════
-   MODELS TAB — REDESIGN  (mrl = rail, mrd = detail)
-   ═══════════════════════════════════════════════════════ */
+/* 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?   MODELS TAB �?REDESIGN  (mrl = rail, mrd = detail)
+   閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?*/
 
-/* ── Rail (left sidebar) ── */
+/* 閳光偓閳光偓 Rail (left sidebar) 閳光偓閳光偓 */
 .mrl-header {
   display: flex;
   align-items: center;
@@ -1933,7 +1932,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrl-label {
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-tertiary);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1944,7 +1943,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -1992,7 +1991,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrl-item-name {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -2001,7 +2000,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   min-width: 0;
 }
 .mrl-item.is-active .mrl-item-name {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 .mrl-item-dot {
@@ -2009,7 +2008,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  margin-left: 8px;
+  margin-left: var(--space-2);
 }
 
 /* Add menu dropdown */
@@ -2021,14 +2020,14 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 9px;
-  padding: 4px;
-  z-index: 30;
+  padding: var(--space-1);
+  z-index: var(--z-context-menu);
   box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
 }
 .mrl-add-section {
   padding: 5px 10px 3px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-content);
   color: var(--text-tertiary);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2042,7 +2041,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   display: block;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   text-align: left;
@@ -2055,7 +2054,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
-/* ── Detail (right panel) ── */
+/* 閳光偓閳光偓 Detail (right panel) 閳光偓閳光偓 */
 .mrd-empty {
   display: flex;
   flex: 1;
@@ -2084,27 +2083,27 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-head-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .mrd-head-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .mrd-title {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-primary);
   margin: 0;
 }
 .mrd-pill {
   font-size: var(--font-size-xxs);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   padding: 2px 9px;
   border-radius: 20px;
 }
 .mrd-pill--on {
-  color: #16a34a;
+  color: var(--color-active);
   background: rgba(22, 163, 74, 0.10);
 }
 .mrd-pill--off {
@@ -2113,7 +2112,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrd-toggle-btn {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   border: none;
   background: transparent;
@@ -2136,27 +2135,27 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .mrd-field-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 .mrd-field-badge {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-content);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .mrd-field-badge--ok {
-  color: #16a34a;
+  color: var(--color-active);
   background: rgba(22, 163, 74, 0.09);
 }
 .mrd-field-input {
@@ -2167,7 +2166,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   color: var(--text-primary);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   outline: none;
   font-family: inherit;
   transition: border-color var(--transition-fast);
@@ -2181,7 +2180,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrd-key-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 .mrd-key-row .mrd-field-input {
@@ -2197,13 +2196,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrd-models-label {
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
   color: var(--text-secondary);
 }
 .mrd-models-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .mrd-search {
   height: 28px;
@@ -2232,12 +2231,12 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: 9px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .mrd-add-form-fields {
   display: grid;
   grid-template-columns: 1.2fr 1fr 0.7fr;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .mrd-add-form-footer {
   display: flex;
@@ -2249,17 +2248,17 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   flex-direction: column;
   gap: 5px;
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 .mrd-cap-pill {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
@@ -2273,7 +2272,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
   color: var(--accent-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-content);
 }
 
 /* Model rows */
@@ -2281,7 +2280,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   display: flex;
   flex-direction: column;
   padding: 0 22px 16px;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .mrd-model-row {
   display: flex;
@@ -2289,10 +2288,10 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   justify-content: space-between;
   flex-wrap: wrap;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  gap: 8px;
+  gap: var(--space-2);
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .mrd-model-row:hover {
@@ -2304,13 +2303,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-model-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-width: 0;
   flex: 1;
 }
 .mrd-model-name {
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -2327,11 +2326,11 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrd-ctx-pill {
   font-size: var(--font-size-xxs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   padding: 1px 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .mrd-cap-tag {
   display: inline-flex;
@@ -2339,14 +2338,14 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-tertiary);
 }
 .mrd-model-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
@@ -2354,11 +2353,11 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-model-cfg {
   width: 100%;
   padding: 12px 14px;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-radius: 8px;
+  gap: var(--space-3);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   box-sizing: border-box;
@@ -2366,33 +2365,33 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-cfg-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .mrd-cfg-label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 .mrd-cfg-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-top: 4px;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
 }
 .mrd-cap-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .mrd-cap-pill {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -2413,7 +2412,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .mrd-cfg-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 /* Add model button */
@@ -2421,13 +2420,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 10px;
+  margin-top: var(--space-2_5);
   padding: 6px 12px;
   border-radius: 7px;
   border: 1px dashed var(--border-subtle);
   background: transparent;
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);

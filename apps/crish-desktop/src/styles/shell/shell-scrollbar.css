@@ -18,7 +18,7 @@
 .session-item.branch-session .branch-icon-wrap {
   display: flex;
   align-items: center;
-  margin-right: 4px;
+  margin-right: var(--space-1);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }

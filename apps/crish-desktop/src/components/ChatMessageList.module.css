@@ -13,7 +13,7 @@
 .pinnedBar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-pinned-bar);
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
@@ -26,7 +26,7 @@
 .pinnedBarToggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   width: 100%;
   border: none;
   background: transparent;
@@ -34,7 +34,7 @@
   font-size: var(--font-size-xs);
   padding: 7px 10px;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 .pinnedBarToggle:hover {
@@ -58,7 +58,7 @@
   padding: 0 6px 6px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   max-height: 160px;
   overflow-y: auto;
 }
@@ -66,7 +66,7 @@
 .pinnedItem {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0_5);
   min-width: 0;
 }
 
@@ -75,7 +75,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -109,7 +109,7 @@
   height: 22px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;

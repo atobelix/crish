@@ -13,7 +13,7 @@
   bottom: 0;
   height: 100%;
   width: var(--sidebar-width) !important;
-  z-index: 200;
+  z-index: var(--z-popover);
   box-shadow: 6px 0 24px rgba(0, 0, 0, 0.08);
   border-right: 1px solid var(--border-color);
   transform: translateX(0);
@@ -44,7 +44,7 @@
   background-color: rgba(55, 65, 81, 0.15);
   border: 2px solid var(--accent-color);
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-drag-highlight);
   border-radius: var(--radius-sm);
   transition: opacity var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
 }
@@ -56,7 +56,7 @@
   border-radius: 2px;
   background: var(--text-primary);
   pointer-events: none;
-  z-index: 10001;
+  z-index: var(--z-drag-overlay);
   box-shadow: none;
 }
 
@@ -64,7 +64,7 @@
 .drag-overlay-preview-card {
   position: fixed;
   pointer-events: none;
-  z-index: 10000;
+  z-index: var(--z-drag-overlay);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }

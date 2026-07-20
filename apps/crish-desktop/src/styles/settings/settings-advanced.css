@@ -1,5 +1,5 @@
 /* === shortcuts polish-v1 === */
-/* 边框 ≤11%；左名称+简述，右按键；录制态轻提示 */
+/* 鏉堣锟?�?1%閿涙稑涔忛崥宥囷�?缁犫偓鏉╁府绱濋崣铏瘻闁款噯绱辫ぐ鏇炲煑閹浇浜ら幓鎰仛 */
 
 .settings-pane--shortcuts {
   gap: 16px;
@@ -8,12 +8,12 @@
   padding-bottom: 36px;
 }
 .settings-pane--shortcuts .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .settings-pane--shortcuts .settings-head-tools--shortcuts {
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 .settings-pane--shortcuts .settings-head-meta {
@@ -36,7 +36,7 @@
 
 .settings-pane--shortcuts .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   padding: 0 0 4px;
 }
@@ -70,22 +70,22 @@
   max-width: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   align-items: flex-start;
 }
 .settings-pane--shortcuts .settings-list-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .settings-pane--shortcuts .settings-shortcuts-desc {
   display: block;
   margin: 0;
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,25 +94,25 @@
 
 .settings-pane--shortcuts .settings-list-control--shortcuts {
   flex: 0 0 auto;
-  gap: 6px;
+  gap: var(--space-1_5);
   align-items: center;
 }
 
-/* 按键按钮：细边框 ≤11% */
+/* 閹稿鏁幐澶愭尦閿涙氨绮忔潏瑙勵攱 �?1% */
 .settings-pane--shortcuts .shortcut-key-btn {
   min-width: 92px;
   max-width: 200px;
   min-height: 30px;
   height: 30px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  font-weight: 500;
-  line-height: 1;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
 }
 .settings-pane--shortcuts .shortcut-key-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
@@ -160,7 +160,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 
 /* === security polish-v1 === */
-/* 边框 ≤11%；左标题+简述，右控件；芯片轻描边 */
+/* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱遍懞顖滃鏉炵粯寮挎�?*/
 
 .settings-pane--security {
   gap: 16px;
@@ -169,13 +169,13 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding-bottom: 36px;
 }
 .settings-pane--security .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .settings-pane--security .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   padding: 0 0 4px;
 }
@@ -207,14 +207,14 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   align-items: flex-start;
 }
 .settings-pane--security .settings-list-title {
   font-size: var(--font-size-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .settings-pane--security .settings-list-title label {
   font: inherit;
@@ -225,7 +225,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   display: block;
   margin: 0;
   font-size: var(--font-size-xs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
   line-height: 1.35;
   max-width: 100%;
@@ -244,7 +244,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   justify-content: flex-end;
   max-width: min(420px, 58%);
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--security .settings-list-control--inline-form {
   flex-wrap: wrap;
@@ -256,13 +256,13 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   max-width: 180px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .settings-pane--security .settings-security-input,
 .settings-pane--security .settings-field-input {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .settings-pane--security .settings-security-input:focus,
 .settings-pane--security .settings-security-input:focus-visible,
@@ -272,7 +272,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   box-shadow: none;
 }
 
-/* 芯片：细边框 */
+/* 閼侯垳澧栭敍姘辩矎鏉堣�?*/
 .settings-pane--security .settings-chip-btn,
 .settings-pane--security .settings-chip {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -295,7 +295,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .settings-pane--security .settings-list-control--chips {
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-1_5);
   max-width: min(440px, 60%);
 }
 .settings-pane--security .ui-btn-secondary,
@@ -323,7 +323,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 
 /* === rules polish-v1 === */
-/* 边框 ≤11%；列表清晰；预设芯片轻描边 */
+/* 鏉堣锟?�?1%閿涙稑鍨悰銊︾閺呭府绱辨０鍕啎閼侯垳澧栨潪缁樺伎锟?*/
 
 .settings-pane--rules {
   gap: 16px;
@@ -332,19 +332,19 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding-bottom: 36px;
 }
 .settings-pane--rules .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .settings-pane--rules .settings-head-tools {
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 .settings-head-tools-row {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--rules .settings-head-meta {
   font-size: var(--font-size-xs);
@@ -352,16 +352,16 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 .settings-pane--rules .settings-group-label {
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   padding: 0 0 4px;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--rules .settings-group-count {
   font-size: var(--font-size-xxs);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 
@@ -393,7 +393,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   max-width: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   align-items: flex-start;
 }
 .settings-pane--rules .settings-list-copy--shrink {
@@ -402,13 +402,13 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   max-width: 88px;
 }
 .settings-pane--rules .settings-list-title {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   line-height: 1.35;
 }
 .settings-pane--rules .settings-rule-item-text {
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   white-space: normal;
   overflow: hidden;
   display: -webkit-box;
@@ -420,25 +420,25 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   margin: 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
 }
 .settings-pane--rules .settings-list-control {
   flex: 0 1 auto;
   margin-left: auto;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .settings-pane--rules .settings-list-control--chips {
   flex-wrap: wrap;
   max-width: min(520px, 72%);
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 .settings-pane--rules .settings-list-control--inline-form {
   flex: 1 1 auto;
   max-width: min(480px, 78%);
 }
 
-/* 预设芯片 */
+/* 妫板嫯顔曢懞顖滃�?*/
 .settings-pane--rules .settings-rule-preset {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary)) !important;
@@ -448,7 +448,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
-  line-height: 1.3;
+  line-height: var(--line-height-compact);
   max-width: 100%;
 }
 .settings-pane--rules .settings-rule-preset:hover:not(:disabled) {
@@ -467,7 +467,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .settings-pane--rules .settings-field-input {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .settings-pane--rules .settings-field-input:focus,
 .settings-pane--rules .settings-field-input:focus-visible {
@@ -482,7 +482,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   color: var(--accent-red, #b91c1c);
 }
 
-/* 全文弹层输入 */
+/* 閸忋劍鏋冨鐟扮湴鏉堟挸�?*/
 .settings-pane--rules .settings-dialog-textarea,
 .settings-dialog--rules .settings-dialog-textarea {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -505,7 +505,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 
 /* === schedule polish-v1 === */
-/* 边框 ≤11%；工具条/列表/新建路径统一轻描边 */
+/* 鏉堣锟?�?1%閿涙稑浼愰崗閿嬫�?閸掓锟?閺傛澘缂撶捄顖氱窞缂佺喍绔存潪缁樺伎�?*/
 
 .sched-settings.settings-pane--modern,
 .settings-pane--modern.sched-settings {
@@ -515,21 +515,21 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding-bottom: 36px;
 }
 .sched-settings .settings-page-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tightest);
 }
 .sched-settings-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .sched-settings-stats {
   margin: 4px 0 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
 .sched-settings-toolbar {
@@ -537,21 +537,21 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .sched-settings .settings-choice-group {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-0_5);
+  padding: var(--space-0_5);
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: transparent;
 }
 .sched-settings .settings-choice-btn {
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   min-height: 28px;
   padding: 0 10px;
   font-size: var(--font-size-xs);
@@ -565,29 +565,29 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .sched-settings .settings-choice-btn.active {
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .sched-settings .ui-btn-secondary,
 .sched-settings .ui-btn-ghost {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 新建双路径 */
+/* 閺傛澘缂撻崣宀冪熅�?*/
 .sched-settings .settings-create-paths {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 .sched-settings .settings-create-path {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: transparent;
   padding: 12px 14px;
   text-align: left;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   font: inherit;
   color: var(--text-primary);
 }
@@ -595,20 +595,20 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 .sched-settings .settings-create-path-title {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-content);
 }
 .sched-settings .settings-create-path-desc {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
 }
 
-/* 表单 */
+/* 鐞涖劌锟?*/
 .sched-settings-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2_5);
   padding: 12px 0 4px;
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
@@ -616,7 +616,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .sched-settings .sched-settings-select {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .sched-settings .settings-field-input:focus,
 .sched-settings .settings-field-input:focus-visible {
@@ -645,7 +645,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   white-space: nowrap;
 }
 
-/* 列表行 */
+/* 閸掓銆冪悰?*/
 .sched-settings-list {
   display: flex;
   flex-direction: column;
@@ -664,8 +664,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-bottom: none;
 }
 .sched-settings-row-name {
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
