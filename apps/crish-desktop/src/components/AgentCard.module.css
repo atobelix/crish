@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-primary);
+  background: var(--shell-inset-bg, var(--bg-primary));
   color: var(--text-primary);
 }
 
@@ -231,7 +231,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-primary);
+  background: var(--shell-inset-bg, var(--bg-primary));
 }
 
 .agentLaunchBody {

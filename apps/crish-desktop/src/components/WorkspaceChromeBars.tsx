@@ -41,14 +41,12 @@ import { EMPTY_SESSION_TITLE, sessionListDisplayTitle } from '../api/sessionTitl
 import { createSession, focusOrOpenPanel, setActiveSessionId } from '../api/storeAccess';
 import { useLayoutStore } from '../store/layoutStore';
 import { collapseToolColumnPreserve, isChatColumn } from '../store/layoutHelpers';
-import { selectActiveSessionId, useSessionField } from '../store/sessionStore';
+import { getSessionById, selectActiveSessionId, useSessionField } from '../store/sessionStore';
 import { emitUiEvent } from '../api/uiEvents';
 import { IconSidebarRight } from './SidebarToggleIcons';
 
 type Props = {
   onAddProject?: () => void;
-  /** 顶栏（项目行）右侧：运行态 — 不在会话行 */
-  onOpenRuntime?: () => void;
   /** 顶栏（项目行）右侧：更多/帮助 — 不在会话行 */
   onOpenHelp?: () => void;
   /** 工作区行右侧：窗口控件（inset 无独立顶栏时） */
@@ -214,7 +212,8 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
   );
 
   const onNewSession = useCallback(() => {
-    const folder = getActiveProjectId() || GENERAL_FOLDER;
+    const activeSess = activeSessionId ? getSessionById(activeSessionId) : null;
+    const folder = activeSess?.folder || getActiveProjectId() || GENERAL_FOLDER;
     const id = createSession({
       title: EMPTY_SESSION_TITLE,
       folder,
@@ -224,7 +223,7 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
       openSessionTab(folder, id);
       setTabsTick((n) => n + 1);
     }
-  }, []);
+  }, [activeSessionId]);
 
   const onAdd = useCallback(() => {
     if (onAddProject) onAddProject();
@@ -309,7 +308,6 @@ function useChromeAddMenu() {
 export const WorkspaceStrip: React.FC<Props> = ({
   onAddProject,
   className,
-  onOpenRuntime,
   onOpenHelp,
   onWinMinimize,
   onWinMaximize,
@@ -327,7 +325,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
       aria-label="工作区"
       data-tauri-drag-region
     >
-      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`} data-tauri-drag-region="false">
+      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`}>
         {s.workspaceTabs.map((tab) => {
           const active = tab.id === s.activeWsId;
           return (
@@ -410,7 +408,6 @@ export const WorkspaceStrip: React.FC<Props> = ({
           className={`${styles.wsChromeTrail} ws-chrome-trail ws-chrome-trail--win`}
           role="toolbar"
           aria-label="顶栏操作"
-          data-tauri-drag-region="false"
         >
           <button
             type="button"
@@ -421,17 +418,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
           >
             <IconSidebarRight size={15} aria-hidden />
           </button>
-          {onOpenRuntime ? (
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-              title="运行状态"
-              aria-label="运行状态"
-              onClick={onOpenRuntime}
-            >
-              <Lucide.Activity size={15} strokeWidth={1.75} aria-hidden />
-            </button>
-          ) : null}
+
           {onOpenHelp ? (
             <button
               type="button"
@@ -564,17 +551,6 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
             </div>
           ) : null}
         </div>
-      </div>
-      <div className={`${styles.wsChromeTrail} ws-chrome-trail`} role="toolbar" aria-label="右侧面板">
-        <button
-          type="button"
-          className={`${styles.wsChromeTrailBtn} ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
-          title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-          aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-          onClick={toggleRightSidebar}
-        >
-          <IconSidebarRight size={15} aria-hidden />
-        </button>
       </div>
     </div>
   );

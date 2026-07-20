@@ -17,7 +17,6 @@ import { RuntimePanel } from './RuntimePanel';
 import { ChatCard } from './ChatCard';
 import { PreviewCard } from './PreviewCard';
 import { DiffCard } from './DiffCard';
-import { TasksCard, useSuggestOpenTasksOnChecklist } from './TasksCard';
 import { TerminalCard } from './TerminalCard';
 import { AgentCard } from './AgentCard';
 import { FilesCard } from './FilesCard';
@@ -61,12 +60,10 @@ const KNOWN_BODY_IDS = new Set([
   'overview',
   'files',
   'diff',
-  'tasks',
   'terminal',
   'settings',
   'runtime',
   'agent',
-  'plan',
 ]);
 
 /** 可关闭的工具标签（对话/总览保留） */
@@ -125,14 +122,14 @@ function SettingsLegacyRedirect() {
   );
 }
 
-/** 历史布局残留 plan 卡：挂载时切到任务板（仅一次） */
+/** 历史布局残留 plan/tasks 卡：挂载时切到总览（仅一次） */
 function PlanLegacyRedirect({ wsId }: { wsId: string }) {
   React.useEffect(() => {
-    focusOrOpenPanel(wsId, 'tasks');
+    focusOrOpenPanel(wsId, 'overview');
   }, [wsId]);
   return (
     <div className="panel-legacy-redirect" role="status" aria-live="polite">
-      <span>计划进度已合并到任务面板…</span>
+      <span>已自动跳转到项目总览…</span>
     </div>
   );
 }
@@ -193,6 +190,61 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
   const ws = useLayoutStore(wsSelector);
   const activeSession = useSessionStore(selectActiveSession);
   const draggedTab = useLayoutStore((s) => s.draggedTab);
+  const dropPreview = useLayoutStore((s) => s.dropPreview);
+  const isTargetPanel = !!(
+    dropPreview &&
+    dropPreview.colIdx === colIdx &&
+    dropPreview.groupIdx === groupIdx
+  );
+  const showDockOverlay = !!(isTargetPanel && draggedTab && draggedTab.isTabDrag);
+  const dockOverlayStyle = React.useMemo<React.CSSProperties | null>(() => {
+    if (!showDockOverlay || !dropPreview) return null;
+    const { direction } = dropPreview;
+    if (direction === 'merge') {
+      return {
+        position: 'absolute',
+        top: '6px',
+        left: '10px',
+        right: '10px',
+        height: '32px',
+        borderRadius: '6px',
+        backgroundColor: 'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      };
+    } else if (direction === 'top') {
+      return {
+        position: 'absolute',
+        top: '48px',
+        left: '10px',
+        right: '10px',
+        height: 'calc((100% - 58px) / 2)',
+        borderRadius: '6px',
+        backgroundColor: 'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      };
+    } else if (direction === 'bottom') {
+      return {
+        position: 'absolute',
+        top: 'calc(48px + (100% - 58px) / 2)',
+        bottom: '10px',
+        left: '10px',
+        right: '10px',
+        borderRadius: '6px',
+        backgroundColor: 'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        border: '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      };
+    }
+    return null;
+  }, [showDockOverlay, dropPreview]);
   const closeTabInGroup = useLayoutStore((s) => s.closeTabInGroup);
   const [tabAddOpen, setTabAddOpen] = React.useState(false);
   const [tabAddPos, setTabAddPos] = React.useState<{ top: number; left: number } | null>(null);
@@ -238,7 +290,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
       handleGlobalTabClick('overview');
     });
     const offTasks = onUiEvent('open-tasks', () => {
-      handleGlobalTabClick('tasks');
+      handleGlobalTabClick('overview');
     });
     return () => {
       window.removeEventListener('crish-open-file', onOpenFile);
@@ -248,9 +300,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsId, isPanelEventHost]);
-
-  // 助手消息首次出现 checklist 时轻量建议打开任务板（每会话一次）
-  useSuggestOpenTasksOnChecklist(activeSession);
 
   const col = ws?.columns[colIdx];
   const group = col?.groups[groupIdx];
@@ -386,7 +435,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
     'files',
     'diff',
     'terminal',
-    'tasks',
     'preview',
     'runtime',
   ] as const;
@@ -784,7 +832,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                     ) : null}
                     {id === 'files' ? <FilesCard onShowToast={onShowToast} /> : null}
                     {id === 'diff' ? <DiffCard onShowToast={onShowToast} /> : null}
-                    {id === 'tasks' ? <TasksCard /> : null}
+                    {id === 'tasks' ? <PlanLegacyRedirect wsId={wsId} /> : null}
                     {id === 'terminal' ? <TerminalCard /> : null}
                     {id === 'settings' ? <SettingsLegacyRedirect /> : null}
                     {id === 'runtime' ? (
@@ -822,6 +870,9 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
           )}
         </AppErrorBoundary>
       </div>
+      {dockOverlayStyle && (
+        <div style={dockOverlayStyle} aria-hidden="true" />
+      )}
     </div>
   );
 });

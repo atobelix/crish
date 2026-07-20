@@ -302,48 +302,35 @@ describe('resolveTabDrop — split edges & zones', () => {
   });
 
   it('top / bottom edges and half-screen', () => {
-    // below tab bar + inside edge padding Y → top
     const topEdge = resolveTabDrop(
       baseCtx({
         relX: W / 2,
-        relY: 40,
+        relY: 45,
         tabBarH: 36,
         sourceColIdx: 9,
       }),
     );
     expect(topEdge.dropType).toBe('split-card-top');
-    expect(topEdge.preview).toEqual({
-      colIdx: 1,
-      groupIdx: 0,
-      direction: 'top',
-    });
 
     const bottomEdge = resolveTabDrop(
       baseCtx({
         relX: W / 2,
         relY: H - 10,
+        tabBarH: 36,
         sourceColIdx: 9,
       }),
     );
     expect(bottomEdge.dropType).toBe('split-card-bottom');
 
-    const upperHalf = resolveTabDrop(
+    const centerZone = resolveTabDrop(
       baseCtx({
         relX: W / 2,
-        relY: H * 0.4,
+        relY: H / 2,
+        tabBarH: 36,
         sourceColIdx: 9,
       }),
     );
-    expect(upperHalf.dropType).toBe('split-card-top');
-
-    const lowerHalf = resolveTabDrop(
-      baseCtx({
-        relX: W / 2,
-        relY: H * 0.7,
-        sourceColIdx: 9,
-      }),
-    );
-    expect(lowerHalf.dropType).toBe('split-card-bottom');
+    expect(centerZone.dropType).toBe('merge');
   });
 
   it('tab bar: merge (cross) / self-reorder / body-drag top', () => {
@@ -358,7 +345,11 @@ describe('resolveTabDrop — split edges & zones', () => {
     );
     expect(merge.dropType).toBe('merge');
     expect(merge.tabInsertIdx).toBe(2);
-    expect(merge.preview).toBeNull();
+    expect(merge.preview).toEqual({
+      colIdx: 1,
+      groupIdx: 0,
+      direction: 'merge',
+    });
 
     const reorder = resolveTabDrop(
       baseCtx({
@@ -397,14 +388,14 @@ describe('resolveTabDrop — split edges & zones', () => {
         hasTabsBar: true,
       }),
     );
-    expect(top.dropType).toBe('split-card-top');
+    expect(top.dropType).toBe('self-reorder');
 
     const bottom = resolveTabDrop(
       baseCtx({
         isSelfHover: true,
         isDragFromTabButton: true,
         cardsLength: 3,
-        relY: H * 0.8,
+        relY: H * 0.9,
       }),
     );
     expect(bottom.dropType).toBe('split-card-bottom');
@@ -414,7 +405,7 @@ describe('resolveTabDrop — split edges & zones', () => {
         isSelfHover: true,
         isDragFromTabButton: true,
         cardsLength: 1,
-        relY: H * 0.8,
+        relY: H * 0.9,
       }),
     );
     expect(single.dropType).toBeNull();
@@ -506,6 +497,8 @@ describe('invalid drop guards (redundancy + commit)', () => {
         sourceGroupIdx: 0,
         targetColIdx: 1,
         targetGroupIdx: 1,
+        cardsLength: 1,
+        isDragFromTabButton: false,
       }),
     );
     expect(above.dropType).toBeNull();
@@ -518,6 +511,8 @@ describe('invalid drop guards (redundancy + commit)', () => {
         sourceGroupIdx: 2,
         targetColIdx: 1,
         targetGroupIdx: 1,
+        cardsLength: 1,
+        isDragFromTabButton: false,
       }),
     );
     expect(below.dropType).toBeNull();

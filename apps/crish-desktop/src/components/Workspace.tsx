@@ -225,13 +225,52 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   };
 
   const renderedColumns = React.useMemo(() => {
-    const baseCols: RenderedColumn[] = ws.columns.map((col: any, cIdx: number) => {
+    // 1. Find the source column and check if it would be empty during drag
+    let sourceColIdx = -1;
+    let isSourceColEmpty = false;
+    if (draggedTab) {
+      sourceColIdx = ws.columns.findIndex((col: any) =>
+        col.groups.some((g: any) => g.id === draggedTab.sourceGroupId)
+      );
+      if (sourceColIdx >= 0) {
+        isSourceColEmpty = ws.columns[sourceColIdx].groups.every((g: any) => {
+          const isDraggingWholeGroup =
+            g.id === draggedTab.sourceGroupId &&
+            (!draggedTab.isTabDrag || g.cards.length === 1);
+          return isDraggingWholeGroup;
+        });
+      }
+    }
+
+    // 2. Decide if we should collapse/hide the empty source column
+    let shouldHideSourceCol = false;
+    if (draggedTab && isSourceColEmpty && dropPreview) {
+      const { colIdx } = dropPreview;
+      if (colIdx >= 0 && Math.abs(colIdx - sourceColIdx) > 1) {
+        shouldHideSourceCol = true;
+      }
+    }
+
+    // 3. Map all columns to RenderedColumn structure
+    const originalBaseCols: RenderedColumn[] = ws.columns.map((col: any, cIdx: number) => {
       const visibleGroups = draggedTab
         ? col.groups.filter((g: any) => {
+            const isDragged = g.id === draggedTab.sourceGroupId;
             const isDraggingWholeGroup =
-              g.id === draggedTab.sourceGroupId &&
-              (!draggedTab.isTabDrag || g.cards.length === 1);
-            return !isDraggingWholeGroup;
+              isDragged && (!draggedTab.isTabDrag || g.cards.length === 1);
+            
+            if (isDraggingWholeGroup) {
+              let shouldCollapseSourceGroup = false;
+              if (dropPreview) {
+                const isSplitInThisCol = dropPreview.colIdx === cIdx &&
+                  (dropPreview.direction === 'top' || dropPreview.direction === 'bottom');
+                if (dropPreview.colIdx !== cIdx || isSplitInThisCol) {
+                  shouldCollapseSourceGroup = true;
+                }
+              }
+              return !shouldCollapseSourceGroup;
+            }
+            return true;
           })
         : col.groups;
       const numVisible = visibleGroups.length;
@@ -243,11 +282,37 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
           const isDragged = draggedTab && g.id === draggedTab.sourceGroupId;
           const isDraggingWholeGroup =
             isDragged && (!draggedTab.isTabDrag || g.cards.length === 1);
-          let heightRatio = g.heightRatio;
+          
+          let shouldCollapseSourceGroup = false;
           if (isDraggingWholeGroup) {
+            if (dropPreview) {
+              const isSplitInThisCol = dropPreview.colIdx === cIdx &&
+                (dropPreview.direction === 'top' || dropPreview.direction === 'bottom');
+              if (dropPreview.colIdx !== cIdx || isSplitInThisCol) {
+                shouldCollapseSourceGroup = true;
+              }
+            }
+          }
+
+          let heightRatio = g.heightRatio;
+          if (shouldCollapseSourceGroup) {
             heightRatio = 0;
           } else if (draggedTab) {
-            heightRatio = numVisible > 0 ? 1 / numVisible : 1.0;
+            // Check if there is a split drop preview in this column
+            const isSplitInThisCol = dropPreview &&
+              dropPreview.colIdx === cIdx &&
+              (dropPreview.direction === 'top' || dropPreview.direction === 'bottom');
+
+            if (draggedTab.isTabDrag && !isDraggingWholeGroup && !isSplitInThisCol) {
+              // Keep original heightRatio for stable rendering
+              heightRatio = g.heightRatio;
+            } else if (isDraggingWholeGroup && !shouldCollapseSourceGroup) {
+              // Keep original heightRatio since we are not collapsing the source group yet
+              heightRatio = g.heightRatio;
+            } else {
+              // Otherwise (e.g. dragging the whole group out or splitting a new group in), equalize heights
+              heightRatio = numVisible > 0 ? 1 / numVisible : 1.0;
+            }
           }
 
           return {
@@ -259,39 +324,59 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
       };
     });
 
+    let baseCols = originalBaseCols;
+    if (shouldHideSourceCol && sourceColIdx >= 0) {
+      // Filter out the empty source column
+      baseCols = originalBaseCols.filter((col) => col.origColIdx !== sourceColIdx);
+
+      // Redistribute widths of remaining columns so they sum to 1.0 perfectly
+      const totalRemainingWidth = baseCols.reduce((sum, col) => sum + col.widthRatio, 0);
+      if (totalRemainingWidth > 0) {
+        baseCols.forEach((col) => {
+          col.widthRatio = col.widthRatio / totalRemainingWidth;
+        });
+      }
+    }
+
+    // 4. Splicing in drop previews if active
     if (!draggedTab || !dropPreview || draggedTab.workspaceId !== ws.id) {
       return baseCols;
     }
 
     const { colIdx, groupIdx, direction } = dropPreview;
-    // 稳定占位 id，避免 Date.now() 每帧换 key 导致占位闪烁
     const phKey = `${ws.id}-${colIdx}-${groupIdx}-${direction}`;
 
     if (direction === 'left' || direction === 'right') {
-      const insertColIdx = direction === 'left' ? colIdx : colIdx + 1;
-      const placeholderCol: RenderedColumn = {
-        id: `col-placeholder-${phKey}`,
-        origColIdx: -1,
-        widthRatio: 0.25,
-        groups: [
-          {
-            id: `group-placeholder-${phKey}`,
-            origGroupIdx: -1,
-            activeCardId: 'placeholder',
-            cards: [{ id: 'placeholder', title: '释放以创建列' }],
-            heightRatio: 1.0,
-          },
-        ],
-      };
+      const targetBaseColIdx = baseCols.findIndex((c) => c.origColIdx === colIdx);
+      if (targetBaseColIdx >= 0) {
+        const insertColIdx = direction === 'left' ? targetBaseColIdx : targetBaseColIdx + 1;
+        const placeholderCol: RenderedColumn = {
+          id: `col-placeholder-${phKey}`,
+          origColIdx: -1,
+          widthRatio: 0.25,
+          groups: [
+            {
+              id: `group-placeholder-${phKey}`,
+              origGroupIdx: -1,
+              activeCardId: 'placeholder',
+              cards: [{ id: 'placeholder', title: '释放以创建列' }],
+              heightRatio: 1.0,
+            },
+          ],
+        };
 
-      baseCols.forEach((c) => {
-        c.widthRatio *= 0.75;
-      });
-      baseCols.splice(insertColIdx, 0, placeholderCol);
+        baseCols.forEach((c) => {
+          c.widthRatio *= 0.75;
+        });
+        baseCols.splice(insertColIdx, 0, placeholderCol);
+      }
       return baseCols;
     } else if (direction === 'top' || direction === 'bottom') {
-      if (colIdx >= 0 && colIdx < baseCols.length) {
-        const col = baseCols[colIdx];
+      if (draggedTab.isTabDrag) {
+        return baseCols;
+      }
+      const col = baseCols.find((c) => c.origColIdx === colIdx);
+      if (col) {
         const insertGroupIdx = direction === 'top' ? groupIdx : groupIdx + 1;
         const nonDraggedGroups = col.groups.filter(
           (g) => g.id !== draggedTab.sourceGroupId,
@@ -313,15 +398,18 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
         };
 
         col.groups.forEach((g) => {
-          if (g.id === draggedTab.sourceGroupId) {
+          const isDraggingWholeGroup =
+            g.id === draggedTab.sourceGroupId &&
+            (!draggedTab.isTabDrag || g.cards.length === 1);
+          if (isDraggingWholeGroup) {
             g.heightRatio = 0;
           } else {
             g.heightRatio = evenHeight;
           }
         });
         col.groups.splice(insertGroupIdx, 0, placeholderGroup);
-        return baseCols;
       }
+      return baseCols;
     }
 
     return baseCols;

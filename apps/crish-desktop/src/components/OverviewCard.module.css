@@ -291,13 +291,9 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
   white-space: nowrap;
-  max-width: 36%;
+  max-width: 50%;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.list:not(.list--agents) .itemMain em {
-  display: none;
 }
 
 .itemBtn--agent .itemMain em {
@@ -442,4 +438,119 @@ button.liveRow:hover {
 .iconBtn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.branchLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-left: 4px;
+  font-weight: var(--font-weight-normal, normal);
+}
+
+.ico {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 用量 grid */
+.usageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.usageItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usageLabel {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.usageVal {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 待确认任务行 */
+.actionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 计划任务行 */
+.cronRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cronRow:hover {
+  background: var(--bg-hover);
+}
+
+.cronInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cronTitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cronMeta {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 状态圆点 */
+.dot.warn {
+  background: var(--accent-orange, #f97316);
+}
+
+.dot.on {
+  background: var(--accent-green, #22c55e);
+}
+
+.dot.off {
+  background: var(--text-tertiary);
+  opacity: 0.5;
 }

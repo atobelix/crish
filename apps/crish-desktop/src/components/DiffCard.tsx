@@ -135,13 +135,13 @@ const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = ({ content
             <div
               key={l.num}
               className={styles.line}
-              style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+              style={{ minHeight: `${rowHeight}px` }}
             >
               <div className={styles.gutterNum} data-num={l.num}>
                 {l.num}
               </div>
               <div className={styles.gutterMarker}> </div>
-              <div className={styles.lineText} style={{ whiteSpace: 'pre' }}>{l.content}</div>
+              <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{l.content}</div>
             </div>
           ))}
         </pre>
@@ -248,7 +248,7 @@ const VirtualUnifiedDiffViewer: React.FC<VirtualUnifiedDiffViewerProps> = ({
               <div
                 key={idx}
                 className={`${styles.line} ${lineClass}`}
-                style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+                style={{ minHeight: `${rowHeight}px` }}
               >
                 <div className={styles.gutterNum} data-num={oldLineNum}>
                   {oldLineNum}
@@ -257,7 +257,7 @@ const VirtualUnifiedDiffViewer: React.FC<VirtualUnifiedDiffViewerProps> = ({
                   {newLineNum}
                 </div>
                 <div className={styles.gutterMarker}>{marker}</div>
-                <div className={styles.lineText} style={{ whiteSpace: 'pre' }}>{change.content}</div>
+                <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{change.content}</div>
               </div>
             );
           })}
@@ -379,21 +379,21 @@ const VirtualSplitDiffViewer: React.FC<VirtualSplitDiffViewerProps> = ({
               <div
                 key={idx}
                 className={styles.splitLine}
-                style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px` }}
+                style={{ minHeight: `${rowHeight}px` }}
               >
-                <div className={`${styles.splitColumn} ${leftClass}`} style={{ height: '100%', padding: 0 }}>
-                  <div className={styles.gutterNum} data-num={leftNum} style={{ height: '100%' }}>
+                <div className={`${styles.splitColumn} ${leftClass}`} style={{ padding: 0 }}>
+                  <div className={styles.gutterNum} data-num={leftNum}>
                     {leftNum}
                   </div>
-                  <div className={styles.gutterMarker} style={{ height: '100%' }}>{leftMarker}</div>
-                  <div className={styles.lineText} style={{ height: '100%', overflow: 'hidden', whiteSpace: 'pre' }}>{leftText}</div>
+                  <div className={styles.gutterMarker}>{leftMarker}</div>
+                  <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{leftText}</div>
                 </div>
-                <div className={`${styles.splitColumn} ${rightClass}`} style={{ height: '100%', padding: 0 }}>
-                  <div className={styles.gutterNum} data-num={rightNum} style={{ height: '100%' }}>
+                <div className={`${styles.splitColumn} ${rightClass}`} style={{ padding: 0 }}>
+                  <div className={styles.gutterNum} data-num={rightNum}>
                     {rightNum}
                   </div>
-                  <div className={styles.gutterMarker} style={{ height: '100%' }}>{rightMarker}</div>
-                  <div className={styles.lineText} style={{ height: '100%', overflow: 'hidden', whiteSpace: 'pre' }}>{rightText}</div>
+                  <div className={styles.gutterMarker}>{rightMarker}</div>
+                  <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{rightText}</div>
                 </div>
               </div>
             );

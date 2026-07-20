@@ -60,10 +60,12 @@ export interface SessionStoreSlice extends SessionsIndexed {
   planApproved: boolean;
   terminalLines: string[];
   terminalBySession: Record<string, string[]>;
+  composerDrafts: Record<string, string>;
 }
 
 /** 会话 / 消息 / agent 域 action 签名（与 LayoutStore 同名方法一致） */
 export interface SessionActions {
+  setComposerDraft: (sessionId: string, draft: string) => void;
   setActiveSessionId: (id: string) => void;
   setActiveAgentId: (id: string | null) => void;
   setPanelAgentId: (id: string | null) => void;
@@ -343,6 +345,17 @@ export function createSessionActions<T extends SessionStoreSlice>(
   get: SessionStoreGet<T>,
 ): SessionActions {
   return {
+    setComposerDraft: (sessionId, draft) => set((state) => {
+      if (!sessionId) return;
+      if (!state.composerDrafts) state.composerDrafts = {};
+      if (state.composerDrafts[sessionId] === draft) return;
+      if (!draft) {
+        delete state.composerDrafts[sessionId];
+      } else {
+        state.composerDrafts[sessionId] = draft;
+      }
+    }),
+
     addMessage: (_wsId, sessionId, message) => set((state) => {
       const sess = getSessionById(state, sessionId);
       if (!sess) return;
@@ -739,36 +752,51 @@ export function createSessionActions<T extends SessionStoreSlice>(
       // 不 invent 远程壳：只复用本地已有 isEmptyShellSession 条目。
       if (!explicitId && activate) {
         const projectId = getActiveProjectId();
+        const activeId = get().activeSessionId;
+        const activeSess = activeId ? getSessionById(get(), activeId) : null;
+        // 若当前活动会话本身就是未发送信息的空壳：优先直接迁移到目标 folder 并保持激活，不刷双空壳
+        if (activeId && activeSess && isEmptyShellSession(activeSess) && (!activeSess.messages || activeSess.messages.length === 0)) {
+          const targetFolder = isDemoMode()
+            ? '常规会话'
+            : opts?.folder || activeSess.folder || projectId || GENERAL_FOLDER;
+          set((state) => {
+            const existing = getSessionById(state, activeId);
+            if (existing) {
+              existing.folder = targetFolder;
+              existing.timestamp = nowIsoTimestamp();
+              applyTitleIfDefault(existing, requestedTitle);
+            }
+          });
+          return activeId;
+        }
+
+        const currentFolder = activeSess?.folder;
         const defaultFolder = isDemoMode()
           ? '常规会话'
-          : opts?.folder || projectId || GENERAL_FOLDER;
-        const activeId = get().activeSessionId;
+          : opts?.folder || currentFolder || projectId || GENERAL_FOLDER;
         const reuseId = findReusableEmptyShell(get().sessions, defaultFolder, {
           preferId: activeId || null,
         });
         if (reuseId) {
-          // find→set 竞态：壳可能被 prune / 写消息 / 置顶 / 改标题 / 归档；
-          // 仅在 draft 内复检通过时才 reused=true，否则零写入并 mint。
           let reused = false;
           set((state) => {
             const existing = getSessionById(state, reuseId);
             if (!existing) return;
-            if (!isStillReusableEmptyShell(existing, defaultFolder)) return;
-            applyTitleIfDefault(existing, requestedTitle);
-            existing.timestamp = nowIsoTimestamp();
-            if (opts?.folder) existing.folder = opts.folder;
-            // 先记下旧 active：activate 后 keep 策略依赖 activating 标志
-            const prevActive = state.activeSessionId;
-            state.activeSessionId = reuseId;
-            state.activeAgentId = null;
-            state.panelAgentId = null;
-            state.terminalLines = state.terminalBySession[reuseId] || [];
-            // 只保留 reuseId，旧空壳一并剪掉，避免双幽灵
-            pruneEmptyShellsInPlace(
-              state,
-              shellPruneKeepIds(reuseId, prevActive, { activating: true }),
-            );
-            reused = true;
+            if (!existing.isArchived && isEmptyShellSession(existing)) {
+              applyTitleIfDefault(existing, requestedTitle);
+              existing.timestamp = nowIsoTimestamp();
+              if (opts?.folder) existing.folder = opts.folder;
+              const prevActive = state.activeSessionId;
+              state.activeSessionId = reuseId;
+              state.activeAgentId = null;
+              state.panelAgentId = null;
+              state.terminalLines = state.terminalBySession[reuseId] || [];
+              pruneEmptyShellsInPlace(
+                state,
+                shellPruneKeepIds(reuseId, prevActive, { activating: true }),
+              );
+              reused = true;
+            }
           });
           if (reused) {
             return reuseId;
@@ -796,9 +824,11 @@ export function createSessionActions<T extends SessionStoreSlice>(
           return;
         }
         const projectId = getActiveProjectId();
+        const activeSess = state.activeSessionId ? getSessionById(state, state.activeSessionId) : null;
+        const currentFolder = activeSess?.folder;
         const defaultFolder = isDemoMode()
           ? '常规会话'
-          : opts?.folder || projectId || GENERAL_FOLDER;
+          : opts?.folder || currentFolder || projectId || GENERAL_FOLDER;
         const sess: SessionState = {
           id,
           title: initialTitle,

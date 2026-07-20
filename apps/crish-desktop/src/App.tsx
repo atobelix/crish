@@ -32,14 +32,12 @@ import { Workspace } from './components/Workspace';
 // ── 非关键路径组件：代码分割，按需加载 ──
 const WorkspaceChromeBars = lazy(() => import('./components/WorkspaceChromeBars').then((m) => ({ default: m.WorkspaceChromeBars })));
 const ToastStack = lazy(() => import('./components/ToastStack').then((m) => ({ default: m.ToastStack })));
-const RuntimeFloatPanel = lazy(() => import('./components/RuntimeFloatPanel').then((m) => ({ default: m.RuntimeFloatPanel })));
 const CheatsheetModal = lazy(() => import('./components/CheatsheetModal').then((m) => ({ default: m.CheatsheetModal })));
 const FirstRunWizard = lazy(() => import('./components/FirstRunWizard').then((m) => ({ default: m.FirstRunWizard })));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })).catch((err) => { console.error('[crish] SettingsPanel lazy load failed', err); throw err; }));
 const IconSidebarLeft = lazy(() => import('./components/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarLeft })));
 const IconSidebarRight = lazy(() => import('./components/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarRight })));
 const LucideHelpCircle = lazy(() => import('lucide-react').then((m) => ({ default: m.HelpCircle })));
-const LucideGauge = lazy(() => import('lucide-react').then((m) => ({ default: m.Gauge })));
 const LucideMinus = lazy(() => import('lucide-react').then((m) => ({ default: m.Minus })));
 const LucideSquare = lazy(() => import('lucide-react').then((m) => ({ default: m.Square })));
 const LucideX = lazy(() => import('lucide-react').then((m) => ({ default: m.X })));
@@ -118,7 +116,6 @@ function App() {
 
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
-  const [runtimeFloatOpen, setRuntimeFloatOpen] = useState(false);
   const [skipLinkFocused, setSkipLinkFocused] = useState(false);
   const [sessionSearchInput, setSessionSearchInput] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -394,12 +391,7 @@ function App() {
           lastEscTime = 0;
           return;
         }
-        if (runtimeFloatOpen) {
-          e.preventDefault();
-          setRuntimeFloatOpen(false);
-          lastEscTime = 0;
-          return;
-        }
+
         if (showFirstRun) {
           lastEscTime = 0;
           return;
@@ -481,10 +473,7 @@ function App() {
             e.preventDefault();
             setSidebarCollapsed(!useLayoutStore.getState().sidebarCollapsed);
             return;
-          case 'toggle_runtime':
-            e.preventDefault();
-            setRuntimeFloatOpen((v) => !v);
-            return;
+
           case 'toggle_plan_mode': {
             e.preventDefault();
             const st = useLayoutStore.getState();
@@ -506,7 +495,6 @@ function App() {
     handleShowToast,
     showCheatsheet,
     showSettingsOverlay,
-    runtimeFloatOpen,
     showFirstRun,
     setShowSettingsOverlay,
     setSidebarCollapsed,
@@ -657,18 +645,7 @@ function App() {
                 <LucideHelpCircle size={16} aria-hidden="true" />
               </Suspense>
             </button>
-            <button
-              type="button"
-              className={`header-btn ${runtimeFloatOpen ? 'active' : ''}`}
-              title="运行状态"
-              aria-label="运行状态"
-              aria-pressed={runtimeFloatOpen}
-              onClick={() => setRuntimeFloatOpen((v) => !v)}
-            >
-              <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
-                <LucideGauge size={16} strokeWidth={1.75} aria-hidden="true" />
-              </Suspense>
-            </button>
+
             <div
               className="window-controls no-drag"
               role="group"
@@ -743,7 +720,6 @@ function App() {
                   variant="workspace"
                   className="ws-chrome-row--titlebar"
                   onAddProject={() => emitUiEvent('pick-workspace')}
-                  onOpenRuntime={() => setRuntimeFloatOpen((v) => !v)}
                   onOpenHelp={() => setShowCheatsheet(true)}
                   onWinMinimize={() => void winCtl('minimize')}
                   onWinMaximize={() => void winCtl('toggleMaximize')}
@@ -803,7 +779,6 @@ function App() {
                 hoverExpanded={sidebarCollapsed && isHoveredExpanded}
                 onHoverLeave={handleSidebarHoverLeave}
                 onHoverEnter={handleSidebarHoverEnter}
-                onOpenRuntime={() => setRuntimeFloatOpen(true)}
                 searchQuery={sessionSearch}
                 searchInput={sessionSearchInput}
                 onSearchChange={setSessionSearchInput}
@@ -831,13 +806,7 @@ function App() {
         </div>
       </main>
 
-      <Suspense fallback={null}>
-        <RuntimeFloatPanel
-          open={runtimeFloatOpen}
-          onClose={() => setRuntimeFloatOpen(false)}
-          onShowToast={handleShowToast}
-        />
-      </Suspense>
+
 
       <div role="region" aria-label="通知" aria-live="polite">
         <Suspense fallback={null}>

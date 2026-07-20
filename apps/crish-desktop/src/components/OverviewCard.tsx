@@ -25,14 +25,38 @@ import {
   type GitStatusResult,
 } from '../api/gitApi';
 import { getWorkspacePath } from '../api/projectStore';
-import { openAgentInSidePanel } from '../api/openAgentPanel';
+import { openAgentInSidePanel, clearAgentPanelFocus } from '../api/openAgentPanel';
 import { toolHumanLabel } from '../api/toolPresentation';
-import { pushDiffFile, setActiveDiffSource } from '../api/storeAccess';
+import { pushDiffFile, setActiveDiffSource, setActiveSessionId, setScheduledTasks } from '../api/storeAccess';
 import {
   computeChecklistProgress,
   findCurrentLiveTool,
   resolveSessionProgressItems,
-} from './TasksCard';
+} from '../api/sessionProgressApi';
+
+// ── Imported from RuntimePanel to support state management ─────────────────────────
+import { getDesktopDaemonClient } from '../api/daemonClient';
+import { estimateCostUsd } from '../api/pricingStore';
+import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles';
+import {
+  fetchEngineLiveStatus,
+  type ActiveRunInfo,
+  type PendingApprovalInfo,
+} from '../api/engineStatus';
+import { listWorkflows, scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import {
+  BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+  backgroundTaskStateLabel,
+  getBackgroundTaskOutput,
+  listBackgroundTasks,
+  openBackgroundTaskInTerminal,
+  type BackgroundTaskInfo,
+} from '../api/backgroundTasksApi';
+import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
+import { emitUiEvent } from '../api/uiEvents';
+import { detectFileKind } from '../api/workspaceFsApi';
+import { fileExtColor } from '../api/codeHighlight';
+import type { CronJob } from '../api/clientApi';
 
 type Props = {
   wsId: string;
@@ -41,7 +65,7 @@ type Props = {
   onShowToast?: (msg: string) => void;
 };
 
-type SecKey = 'agents' | 'files';
+type SecKey = 'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJobs';
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
@@ -60,6 +84,49 @@ function agentStatusLabel(status: string): string {
   return '完成';
 }
 
+function formatElapsed(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  if (s < 60) return `${s} 秒`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m < 60) return `${m} 分 ${r} 秒`;
+  const h = Math.floor(m / 60);
+  return `${h} 时 ${m % 60} 分`;
+}
+
+function formatBgTaskMeta(opts: {
+  state: unknown;
+  command?: string;
+  opening?: boolean;
+}): string {
+  if (opts.opening) return '打开中…';
+  const label = backgroundTaskStateLabel(opts.state);
+  const cmd = (opts.command || '').trim();
+  if (!cmd) return label;
+  return `${label} · ${cmd.slice(0, 40)}`;
+}
+
+function getGitStatusColor(status: string): string {
+  if (status === 'A' || status === '?') return 'var(--accent-green, #22c55e)';
+  if (status === 'D') return 'var(--accent-red, #ef4444)';
+  if (status === 'U') return 'var(--accent-red, #ef4444)';
+  return 'var(--accent-orange, #f97316)';
+}
+
+function FileIcon({ name }: { name: string }) {
+  const k = detectFileKind(name);
+  const color = fileExtColor(name);
+  const sw = 1.7;
+  const sz = 14;
+  if (k === 'image') return <Lucide.Image size={sz} className={styles.ico} style={{ color }} strokeWidth={sw} aria-hidden />;
+  if (k === 'pdf') return <Lucide.FileText size={sz} className={styles.ico} style={{ color }} strokeWidth={sw} aria-hidden />;
+  if (k === 'table') return <Lucide.Table size={sz} className={styles.ico} style={{ color }} strokeWidth={sw} aria-hidden />;
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
+    return <Lucide.FileCode2 size={sz} className={styles.ico} style={{ color }} strokeWidth={sw} aria-hidden />;
+  }
+  return <Lucide.File size={sz} className={styles.ico} style={{ color }} strokeWidth={sw} aria-hidden />;
+}
+
 const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   const activeSessionId = useSessionField(selectActiveSessionId);
   const session = useSessionField(selectActiveSession);
@@ -69,12 +136,280 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   const [openSec, setOpenSec] = useState<Record<SecKey, boolean>>({
     agents: true,
     files: true,
+    usage: false,
+    activeTasks: false,
+    bgTasks: false,
+    cronJobs: false,
   });
   const [git, setGit] = useState<GitStatusResult | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitErr, setGitErr] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+
+  // ── States and subscriptions migrated from RuntimePanel ──────────────────────
+  const cronJobs = useLayoutStore((state) => state.scheduledTasks);
+  const tokenUsage = useLayoutStore((state) => state.tokenUsage);
+  const sessions = useLayoutStore((state) => state.sessions);
+
+  const [now, setNow] = useState(() => Date.now());
+  const [engineOnline, setEngineOnline] = useState(() => getDesktopDaemonClient().isConnected());
+  const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalInfo[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+
+  // 1-second now timer
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Daemon state subscription
+  useEffect(() => {
+    const client = getDesktopDaemonClient();
+    setEngineOnline(client.isConnected());
+    const unsub = client.onState((s) => {
+      setEngineOnline(s === 'connected');
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
+
+  // Polling engine status + background tasks
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const [live, bgs] = await Promise.all([
+        fetchEngineLiveStatus(),
+        listBackgroundTasks().catch(() => [] as BackgroundTaskInfo[]),
+      ]);
+      if (cancelled) return;
+      setEngineOnline(live.connected);
+      setActiveRuns(live.activeRuns);
+      setPendingApprovals(live.pendingApprovals);
+      setBgTasks(bgs);
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Load workflows
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const wfs = await listWorkflows();
+        setWorkflows(wfs);
+        setScheduledTasks([]);
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadData();
+  }, []);
+
+  type LiveTask = {
+    id: string;
+    taskName: string;
+    elapsedSeconds: number;
+    sessionId?: string;
+    kind: 'session' | 'run';
+  };
+
+  const liveTasks = useMemo(() => {
+    const fromMessages: LiveTask[] = [];
+    for (const s of sessions) {
+      for (const m of s.messages || []) {
+        if (m.status === 'processing') {
+          fromMessages.push({
+            id: m.id,
+            taskName: s.title || '对话进行中',
+            elapsedSeconds: Math.max(0, Math.round((now - (m.timestamp || now)) / 1000)),
+            sessionId: s.id,
+            kind: 'session',
+          });
+        }
+      }
+    }
+    for (const r of activeRuns) {
+      if (fromMessages.some((t) => t.id === r.runId)) continue;
+      const started =
+        typeof r.startedAt === 'number'
+          ? r.startedAt
+          : typeof r.startedAt === 'string'
+            ? Date.parse(r.startedAt) || now
+            : now;
+      const matched = sessions.find(
+        (s) => s.engineLastRunId === r.runId || s.id === r.sessionId,
+      );
+      const rawName = (matched?.title || r.prompt || '').trim();
+      fromMessages.push({
+        id: r.runId,
+        taskName: (rawName || '引擎任务').slice(0, 48),
+        elapsedSeconds: Math.max(0, Math.round((now - started) / 1000)),
+        sessionId: matched?.id || r.sessionId,
+        kind: 'run',
+      });
+    }
+    return fromMessages;
+  }, [sessions, activeRuns, now]);
+
+  const focusSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    clearAgentPanelFocus();
+    try {
+      window.dispatchEvent(new CustomEvent('crish-focus-chat', { detail: { sessionId } }));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleLiveTaskClick = (wk: LiveTask) => {
+    if (!wk.sessionId) return;
+    focusSession(wk.sessionId);
+  };
+
+  const handleApprovalClick = (a: PendingApprovalInfo) => {
+    const toolCallId = a.toolCallId;
+    let found = toolCallId
+      ? sessions.find(
+          (s) =>
+            (s.messages || []).some((m) =>
+              (m.toolCalls || []).some(
+                (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+              ),
+            ) ||
+            (s.agents || []).some((ag) =>
+              (ag.messages || []).some((m) =>
+                (m.toolCalls || []).some(
+                  (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
+                ),
+              ),
+            ),
+        )
+      : undefined;
+    if (!found && a.runId) {
+      found = sessions.find(
+        (s) => s.engineLastRunId === a.runId || s.id === a.runId,
+      );
+    }
+    if (found) {
+      focusSession(found.id);
+    } else {
+      showActionErr('未找到待确认会话');
+    }
+  };
+
+  const markLocalTool = (
+    toolCallId: string | undefined,
+    status: 'running' | 'error',
+    output: string,
+  ) => {
+    if (!toolCallId) return;
+    useLayoutStore.setState((state) => {
+      for (const s of state.sessions) {
+        for (const m of s.messages || []) {
+          const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+          if (tc) {
+            tc.status = status;
+            tc.output = output;
+          }
+        }
+        for (const ag of s.agents || []) {
+          for (const m of ag.messages || []) {
+            const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+            if (tc) {
+              tc.status = status;
+              tc.output = output;
+            }
+          }
+        }
+      }
+    });
+  };
+
+  const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const id = a.toolCallId;
+    if (!id) {
+      showActionErr('缺少工具 id，无法批准');
+      return;
+    }
+    if (approvalBusyId) return;
+    setApprovalBusyId(id);
+    markLocalTool(id, 'running', '执行中…');
+    void daemonApproveTool(id)
+      .then(() => {
+        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+      })
+      .catch(() => {
+        markLocalTool(id, 'error', '批准失败');
+        showActionErr('批准失败，请重试');
+      })
+      .finally(() => {
+        setApprovalBusyId(null);
+      });
+  };
+
+  const handleApprovalDeny = (a: PendingApprovalInfo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const id = a.toolCallId;
+    if (!id) {
+      showActionErr('缺少工具 id，无法拒绝');
+      return;
+    }
+    if (approvalBusyId) return;
+    setApprovalBusyId(id);
+    markLocalTool(id, 'error', '已拒绝');
+    void daemonDenyTool(id)
+      .then(() => {
+        setPendingApprovals((prev) => prev.filter((x) => x.toolCallId !== id));
+      })
+      .catch(() => {
+        showActionErr('拒绝失败，请重试');
+      })
+      .finally(() => {
+        setApprovalBusyId(null);
+      });
+  };
+
+  const openBgTask = async (t: BackgroundTaskInfo) => {
+    if (bgOpeningId) return;
+    setBgOpeningId(t.id);
+    try {
+      const out = await getBackgroundTaskOutput(t.id);
+      openBackgroundTaskInTerminal(
+        t.label,
+        out || t.summary || t.command || BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+      );
+    } catch {
+      openBackgroundTaskInTerminal(
+        t.label,
+        t.summary || t.command || '读取失败',
+      );
+      showActionErr('读取后台任务输出失败');
+    } finally {
+      setBgOpeningId(null);
+    }
+  };
+
+  const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
+  const estimated =
+    tokenUsage.cost > 0
+      ? tokenUsage.cost
+      : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
+
+  const tokenPercent = Math.min(
+    100,
+    Math.max(0, Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)),
+  );
 
   const actionErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGitRefreshAtRef = useRef(0);
@@ -230,16 +565,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     () => findCurrentLiveTool(session),
     [session?.messages, session?.agents],
   );
-  const liveToolLabel = useMemo(
-    () => (liveTool ? toolHumanLabel(liveTool) : ''),
-    [liveTool],
-  );
-  const liveToolStatus =
-    liveTool?.status === 'pending_approval'
-      ? '待确认'
-      : liveTool?.status === 'running'
-        ? '进行中'
-        : '';
+  const liveToolLabel = liveTool ? liveTool.label : '';
+  const liveToolStatus = liveTool ? liveTool.statusLabel : '';
 
   const wsPath = getWorkspacePath();
   const branch = git?.found && git.branch ? git.branch : '';
@@ -253,19 +580,11 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
       data-file-count={fileCount}
     >
       {/* 仅有信息时一行：分支 / 目标 / 当前工具 — 无「工作总览」重复标题 */}
-      {branch || goalMode || progress.total > 0 || liveTool ? (
+      {wsPath ? (
         <div className={styles.metaLine} aria-label="会话状态">
-          {branch ? (
-            <span className={styles.metaChip} title={branch}>
-              <Lucide.GitBranch size={12} strokeWidth={1.75} aria-hidden />
-              {branch}
-            </span>
-          ) : null}
-          {wsPath ? (
-            <span className={styles.metaChip} title={wsPath}>
-              {basename(wsPath)}
-            </span>
-          ) : null}
+          <span className={styles.metaChip} title={wsPath}>
+            {basename(wsPath)}
+          </span>
         </div>
       ) : null}
 
@@ -273,13 +592,13 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         <button
           type="button"
           className={`${styles.liveRow} ${styles['liveRow--goal']}`}
-          title={goalMode?.goal || '打开任务'}
+          title={goalMode?.goal || '活动任务与进度'}
           aria-label={
             goalMode
               ? `目标：${agentOneLineLabel(goalMode.goal, '目标')}`
               : `清单 ${progress.done}/${progress.total}`
           }
-          onClick={() => onOpenPanel('tasks')}
+          onClick={() => setOpenSec((prev) => ({ ...prev, activeTasks: true }))}
         >
           <Lucide.Target
             size={14}
@@ -379,6 +698,251 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         ) : null}
       </section>
 
+      {/* ── 用量 (Usage) Section ── */}
+      <section className={styles.sec} aria-labelledby="overview-sec-usage">
+        <button
+          type="button"
+          id="overview-sec-usage"
+          className={styles.secH}
+          aria-expanded={openSec.usage}
+          onClick={() => toggle('usage')}
+        >
+          <Lucide.Cpu size={15} strokeWidth={1.75} aria-hidden />
+          <span>用量</span>
+          <span className={styles.pill}>
+            {"$"}{estimated.toFixed(3)}
+          </span>
+          <Lucide.ChevronDown
+            size={14}
+            className={`${styles.chev} ${openSec.usage ? styles.open : ''}`}
+            aria-hidden
+          />
+        </button>
+        {openSec.usage ? (
+          <div className={styles.secB}>
+            <div className={styles.usageGrid}>
+              <div className={styles.usageItem}>
+                <span className={styles.usageLabel}>输入</span>
+                <span className={styles.usageVal}>{tokenUsage.input.toLocaleString()}</span>
+              </div>
+              <div className={styles.usageItem}>
+                <span className={styles.usageLabel}>输出</span>
+                <span className={styles.usageVal}>{tokenUsage.output.toLocaleString()}</span>
+              </div>
+              <div className={styles.usageItem}>
+                <span className={styles.usageLabel}>费用</span>
+                <span className={styles.usageVal}>{"$"}{estimated.toFixed(4)}</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {/* ── 活动任务 (Active Tasks) Section ── */}
+      <section className={styles.sec} aria-labelledby="overview-sec-active">
+        <button
+          type="button"
+          id="overview-sec-active"
+          className={styles.secH}
+          aria-expanded={openSec.activeTasks}
+          onClick={() => toggle('activeTasks')}
+        >
+          <Lucide.Activity size={15} strokeWidth={1.75} aria-hidden />
+          <span>活动任务</span>
+          {liveTasks.length > 0 || pendingApprovals.length > 0 ? (
+            <span className={styles.pill}>
+              {liveTasks.length + pendingApprovals.length}
+            </span>
+          ) : null}
+          <Lucide.ChevronDown
+            size={14}
+            className={`${styles.chev} ${openSec.activeTasks ? styles.open : ''}`}
+            aria-hidden
+          />
+        </button>
+        {openSec.activeTasks ? (
+          <div className={styles.secB}>
+            {liveTasks.length === 0 && pendingApprovals.length === 0 ? (
+              <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
+            ) : (
+              <ul className={styles.list}>
+                {pendingApprovals.map((a, i) => {
+                  const toolLabel = a.toolName || '工具';
+                  const busy = approvalBusyId === (a.toolCallId || '');
+                  return (
+                    <li key={a.toolCallId || i} className={styles.actionRow}>
+                      <button
+                        type="button"
+                        className={styles.itemBtn}
+                        onClick={() => handleApprovalClick(a)}
+                      >
+                        <span className={`${styles.dot} ${styles.warn}`} />
+                        <span className={styles.itemMain}>
+                          <span className={styles.itemName}>{toolLabel} (待确认)</span>
+                          <em>{a.summary || '等待批准'}</em>
+                        </span>
+                      </button>
+                      <div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-primary ui-btn-xs"
+                          disabled={Boolean(approvalBusyId)}
+                          onClick={(e) => handleApprovalAllow(a, e)}
+                        >
+                          {busy ? '…' : '允许'}
+                        </button>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-xs"
+                          disabled={Boolean(approvalBusyId)}
+                          onClick={(e) => handleApprovalDeny(a, e)}
+                        >
+                          拒绝
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+                {liveTasks.map((wk) => {
+                  const elapsedText = formatElapsed(wk.elapsedSeconds);
+                  const clickable = Boolean(wk.sessionId);
+                  return (
+                    <li key={wk.id}>
+                      <button
+                        type="button"
+                        className={styles.itemBtn}
+                        onClick={() => { if (wk.sessionId) handleLiveTaskClick(wk); }}
+                      >
+                        <span className={`${styles.dot} ${styles.live}`} />
+                        <span className={styles.itemMain}>
+                          <span className={styles.itemName}>{wk.taskName}</span>
+                          <em>{elapsedText}</em>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      {/* ── 后台常驻 (Background Tasks) Section ── */}
+      <section className={styles.sec} aria-labelledby="overview-sec-bg">
+        <button
+          type="button"
+          id="overview-sec-bg"
+          className={styles.secH}
+          aria-expanded={openSec.bgTasks}
+          onClick={() => toggle('bgTasks')}
+        >
+          <Lucide.Terminal size={15} strokeWidth={1.75} aria-hidden />
+          <span>后台常驻</span>
+          {bgTasks.length > 0 ? (
+            <span className={styles.pill}>{bgTasks.length}</span>
+          ) : null}
+          <Lucide.ChevronDown
+            size={14}
+            className={`${styles.chev} ${openSec.bgTasks ? styles.open : ''}`}
+            aria-hidden
+          />
+        </button>
+        {openSec.bgTasks ? (
+          <div className={styles.secB}>
+            {bgTasks.length === 0 ? (
+              <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
+            ) : (
+              <ul className={styles.list}>
+                {bgTasks.map((t) => {
+                  const opening = bgOpeningId === t.id;
+                  const meta = formatBgTaskMeta({
+                    state: t.state,
+                    command: t.command,
+                    opening,
+                  });
+                  return (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        className={styles.itemBtn}
+                        onClick={() => void openBgTask(t)}
+                      >
+                        <Lucide.Terminal size={12} className={styles.ico} />
+                        <span className={styles.itemMain}>
+                          <span className={styles.itemName}>{t.label}</span>
+                          <em>{meta}</em>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      {/* ── 计划任务 (Scheduled Tasks) Section ── */}
+      <section className={styles.sec} aria-labelledby="overview-sec-cron">
+        <button
+          type="button"
+          id="overview-sec-cron"
+          className={styles.secH}
+          aria-expanded={openSec.cronJobs}
+          onClick={() => toggle('cronJobs')}
+        >
+          <Lucide.CalendarClock size={15} strokeWidth={1.75} aria-hidden />
+          <span>计划任务</span>
+          {workflows.length + cronJobs.length > 0 ? (
+            <span className={styles.pill}>{workflows.length + cronJobs.length}</span>
+          ) : null}
+          <Lucide.ChevronDown
+            size={14}
+            className={`${styles.chev} ${openSec.cronJobs ? styles.open : ''}`}
+            aria-hidden
+          />
+        </button>
+        {openSec.cronJobs ? (
+          <div className={styles.secB}>
+            {workflows.length === 0 && cronJobs.length === 0 ? (
+              <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
+            ) : (
+              <ul className={styles.list}>
+                {workflows.map((w) => {
+                  const enabled = w.enabled !== false;
+                  return (
+                    <li key={w.id}>
+                      <div className={styles.cronRow}>
+                        <div className={styles.cronInfo}>
+                          <span className={`${styles.dot} ${enabled ? styles.on : styles.off}`} />
+                          <span className={styles.cronTitle}>{w.name}</span>
+                        </div>
+                        <span className={styles.cronMeta}>{scheduleLabel(w.schedule)}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+                {cronJobs.map((job: CronJob) => {
+                  const active = job.status === 'active';
+                  return (
+                    <li key={job.id}>
+                      <div className={styles.cronRow}>
+                        <div className={styles.cronInfo}>
+                          <span className={`${styles.dot} ${active ? styles.on : styles.off}`} />
+                          <span className={styles.cronTitle}>{job.prompt}</span>
+                        </div>
+                        <span className={styles.cronMeta}>{job.cronExpression}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </section>
+
       <section className={styles.sec} aria-labelledby="overview-sec-files">
         <div className={styles.secHRow}>
           <button
@@ -393,6 +957,9 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             <span>改动</span>
             {fileCount > 0 ? (
               <span className={styles.pill}>{fileCount}</span>
+            ) : null}
+            {branch ? (
+              <span className={styles.branchLabel}>({branch})</span>
             ) : null}
             <Lucide.ChevronDown
               size={14}
@@ -429,12 +996,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
             id="overview-sec-files-b"
             aria-busy={gitLoading || Boolean(openingPath)}
           >
-            {git?.found && git.branch ? (
-              <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
-                分支 {git.branch}
-                {git.clean ? ' · 干净' : ''}
-              </p>
-            ) : null}
 
             {/* 诊断：无 git / 非仓库 / 超时 — 可操作，不无限转圈 */}
             {!gitLoading && gitHelp ? (
@@ -489,6 +1050,10 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                 {gitFiles.map((f) => {
                   const opening = openingPath === f.path;
                   const stLabel = gitStatusLabel(f.status);
+                  const statusColor = getGitStatusColor(f.status);
+                  const match = convoFiles.find(
+                    (c) => c.filePath === f.path || basename(c.filePath) === basename(f.path)
+                  );
                   return (
                     <li key={f.path}>
                       <button
@@ -503,21 +1068,22 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                         }
                         onClick={() => void openGitFile(f)}
                       >
-                        <span
-                          className={gitStatusBadgeClass(f.status)}
-                          title={stLabel}
-                          aria-hidden="true"
-                        >
-                          {String(f.status).slice(0, 1)}
-                        </span>
+                        <FileIcon name={basename(f.path)} />
                         <span className={`${styles.itemMain} ${styles.mono}`}>
-                          <span className={styles.itemName} title={f.path}>
+                          <span
+                            className={styles.itemName}
+                            title={f.path}
+                          >
                             {basename(f.path)}
                           </span>
-                          <em>
-                            {opening
-                              ? '…'
-                              : `${stLabel}${f.conflicted ? ' · 冲突' : ''}`}
+                          <em style={{ color: statusColor, fontWeight: 300 }}>
+                            {opening ? (
+                              '…'
+                            ) : match ? (
+                              `+${match.additions} −${match.deletions}`
+                            ) : (
+                              `${stLabel}${f.conflicted ? ' · 冲突' : ''}`
+                            )}
                           </em>
                         </span>
                       </button>
@@ -527,29 +1093,35 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
               </ul>
             ) : convoFiles.length > 0 ? (
               <ul className={styles.list} aria-label="对话改动文件">
-                {convoFiles.map((f) => (
-                  <li key={f.filePath}>
-                    <button
-                      type="button"
-                      className={styles.itemBtn}
-                      aria-label={`打开 ${basename(f.filePath)}`}
-                      onClick={() => {
-                        setActiveDiffSource(f);
-                        onOpenPanel('diff');
-                      }}
-                    >
-                      <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
-                      <span className={`${styles.itemMain} ${styles.mono}`}>
-                        <span className={styles.itemName} title={f.filePath}>
-                          {basename(f.filePath)}
+                {convoFiles.map((f) => {
+                  const statusColor = f.additions > 0 ? 'var(--accent-green, #22c55e)' : 'var(--accent-orange, #f97316)';
+                  return (
+                    <li key={f.filePath}>
+                      <button
+                        type="button"
+                        className={styles.itemBtn}
+                        aria-label={`打开 ${basename(f.filePath)}`}
+                        onClick={() => {
+                          setActiveDiffSource(f);
+                          onOpenPanel('diff');
+                        }}
+                      >
+                        <FileIcon name={basename(f.filePath)} />
+                        <span className={`${styles.itemMain} ${styles.mono}`}>
+                          <span
+                            className={styles.itemName}
+                            title={f.filePath}
+                          >
+                            {basename(f.filePath)}
+                          </span>
+                          <em style={{ color: statusColor, fontWeight: 300 }}>
+                            +{f.additions} −{f.deletions}
+                          </em>
                         </span>
-                        <em>
-                          +{f.additions} −{f.deletions}
-                        </em>
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : !gitHelp && !gitLoading ? (
               <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">

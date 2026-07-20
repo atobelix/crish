@@ -10,7 +10,10 @@ import { Tooltip } from './settings/SettingsUI';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../api/openAgentPanel';
 import { useLayoutStore } from '../store/layoutStore';
-import type { SessionAgent, SessionMessage } from '../store/layoutStore';
+import type { SessionAgent, SessionMessage, FileDiff } from '../store/layoutStore';
+import { focusOrOpenPanel, setActiveDiffSource as setActiveDiffSourceAccess } from '../api/storeAccess';
+import { openFileInPanel } from '../api/workspaceFsApi';
+import { ChatUserMessageRow, ChatAssistantMessageRow } from './ChatMessageRow';
 import {
   getSessionAgent,
   selectActiveSessionId,
@@ -337,6 +340,25 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const lastAgentIdRef = useRef<string | null | undefined>(undefined);
   /** 焦点代数：切换 agent 后丢弃旧 send finally 的 setSending */
   const focusGenRef = useRef(0);
+
+  const activeWorkspace = useLayoutStore((s) => s.workspaces[s.activeWorkspaceIndex]);
+  const onOpenDiff = useCallback((diff: FileDiff) => {
+    setActiveDiffSourceAccess(diff);
+    if (activeWorkspace) {
+      focusOrOpenPanel(activeWorkspace.id, 'diff');
+    }
+  }, [activeWorkspace]);
+  const onOpenPath = useCallback((filePath: string) => {
+    if (activeWorkspace) {
+      focusOrOpenPanel(activeWorkspace.id, 'files');
+    }
+    openFileInPanel(filePath);
+  }, [activeWorkspace]);
+  const onOpenTerminal = useCallback(() => {
+    if (activeWorkspace) {
+      focusOrOpenPanel(activeWorkspace.id, 'terminal');
+    }
+  }, [activeWorkspace]);
 
   /** 侧栏 only：切换/回浏览一律清草稿 + 停本卡 follow-up 流，不串输入 */
   const resetComposerForFocusChange = useCallback(() => {
@@ -801,12 +823,17 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             )}
           </div>
         ) : (
-          agent.messages.map((msg) => (
+          agent.messages.map((msg, idx) => (
             <AgentMessageRow
               key={msg.id}
               msg={msg}
               parentSessionId={parentSessId}
               agentId={agent.id}
+              idx={idx}
+              totalMsgs={agent.messages.length}
+              onOpenDiff={onOpenDiff}
+              onOpenPath={onOpenPath}
+              onOpenTerminal={onOpenTerminal}
             />
           ))
         )}
@@ -863,13 +890,21 @@ function AgentMessageRow({
   msg,
   parentSessionId,
   agentId,
+  idx,
+  totalMsgs,
+  onOpenDiff,
+  onOpenPath,
+  onOpenTerminal,
 }: {
   msg: SessionMessage;
   parentSessionId: string;
   agentId: string;
+  idx: number;
+  totalMsgs: number;
+  onOpenDiff: (diff: FileDiff) => void;
+  onOpenPath: (filePath: string) => void;
+  onOpenTerminal: () => void;
 }) {
-  const hideThinkingBlock = useLayoutStore((s) => Boolean(s.appSettings?.hideThinkingBlock));
-  /** 与主对话一致：工具默认折叠，按行展开 */
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
     setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
@@ -881,76 +916,56 @@ function AgentMessageRow({
   );
 
   if (msg.sender === 'user') {
-    // 任务提示 / 用户输入：左侧对齐，与主对话用户气泡略有区别
     return (
-      <div className={`msg-row msg-row-assistant ${styles.agentMsg} ${styles.agentMsgPrompt}`}>
-        <div className={styles.agentPromptBubble}>{msg.text}</div>
-      </div>
+      <ChatUserMessageRow
+        msg={msg}
+        isPinned={false}
+        isSearchHit={false}
+        isExpanded={true}
+        onToggleExpand={() => {}}
+        onTogglePin={() => {}}
+        onWithdraw={() => {}}
+      />
     );
   }
-  const timeline = buildAssistantTimeline(msg);
-  const showThinking =
-    !hideThinkingBlock &&
-    Boolean(msg.thinking && msg.thinking.trim() && msg.thinking !== '正在处理…');
+
+  const isLastAssistant = idx === totalMsgs - 1;
+  const isThinkingMsg = msg.status === 'processing' || msg.status === 'queued';
+
   return (
-    <div className={`msg-row msg-row-assistant ${styles.agentMsg}`}>
-      {showThinking ? (
-        <details className="msg-thinking-fold">
-          <summary className="msg-thinking-fold-sum">
-            <span className="msg-thinking-fold-label">思考</span>
-          </summary>
-          <div className="msg-thinking-fold-body">{msg.thinking!.slice(0, 4000)}</div>
-        </details>
-      ) : null}
-      <div className="msg-assistant-body">
-        {timeline.length === 0 && (msg.text || '').trim() ? (
-          <div
-            className="msg-assistant-text md-rendered"
-            dangerouslySetInnerHTML={{
-              __html: parseMarkdownToHtml(stripThoughtPlaceholders(msg.text || '')),
-            }}
-          />
-        ) : null}
-        {timeline.map((item) => {
-          if (item.kind === 'text') {
-            const body = stripThoughtPlaceholders(item.content || '');
-            if (!body.trim()) return null;
-            return (
-              <div
-                key={item.key}
-                className="msg-timeline-text msg-assistant-text md-rendered"
-                dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(body) }}
-              />
-            );
-          }
-          return (
-            <div key={item.key} className="msg-timeline-tools agent-tool-stack">
-              <ChatToolStack
-                items={item.items}
-                msgId={msg.id}
-                agents={[]}
-                activeSessionId={parentSessionId}
-                expandedTools={expandedTools}
-                onToggleTool={onToggleTool}
-                approvalBusy={approvalBusy}
-                pendingApprovalMsgId={msg.id}
-                onOpenDiff={() => {}}
-                onOpenPath={() => {}}
-                onOpenTerminal={() => {}}
-                onApprovalAllow={onApprovalAllow}
-                onApprovalDeny={onApprovalDeny}
-              />
-            </div>
-          );
-        })}
-        {msg.status === 'processing' && !(msg.text || '').trim() ? (
-          <div className={styles.agentMsgLive} role="status" aria-live="polite">
-            <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} aria-hidden />
-            生成中…
-          </div>
-        ) : null}
-      </div>
-    </div>
+    <ChatAssistantMessageRow
+      msg={msg}
+      isFollowUp={false}
+      isPinned={false}
+      isSearchHit={false}
+      isThinkingMsg={isThinkingMsg}
+      thinkingSeconds={0}
+      hideThinkingBlock={false}
+      inPlanMode={false}
+      planApproved={false}
+      isLastAssistant={isLastAssistant}
+      toolStackProps={{
+        agents: [],
+        activeSessionId: parentSessionId,
+        expandedTools: expandedTools,
+        onToggleTool: onToggleTool,
+        approvalBusy: approvalBusy,
+        pendingApprovalMsgId: msg.id,
+        onOpenDiff: onOpenDiff,
+        onOpenPath: onOpenPath,
+        onOpenTerminal: onOpenTerminal,
+        onApprovalAllow: onApprovalAllow,
+        onApprovalDeny: onApprovalDeny,
+      }}
+      onTogglePin={() => {}}
+      onShowToast={() => {}}
+      onRegenerate={() => {}}
+      onBranch={() => {}}
+      onOpenDiff={onOpenDiff}
+      onOpenDiffPanel={() => {}}
+      setPermissionMode={() => {}}
+      setPlanApproved={() => {}}
+    />
   );
 }
 

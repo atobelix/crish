@@ -10,6 +10,7 @@ import {
   CHAT_COL_LEFT_ZONE,
   CHAT_COL_RIGHT_ZONE,
   DEFAULT_TAB_BAR_H,
+  getPanelTitle,
   isRedundantColumnSplit,
   isRedundantGroupSplit,
   SPLIT_EDGE_PADDING_X,
@@ -392,28 +393,168 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
 
   const x = Math.max(0, Math.min(relX, width));
   const y = Math.max(0, Math.min(relY, height));
+  const isWholeGroupDrag = !isDragFromTabButton || cardsLength === 1;
 
-  // ── 自悬停：重排或拆出 ────────────────────────────────────────────────────
+  // ── 优先特殊处理拖拽标签按钮（isDragFromTabButton === true） ───────────────
+  if (isDragFromTabButton) {
+    // 1. 如果是在左/右边缘，依然可以分拆整列（跨列新窗口）
+    if (x < edgeX && targetColIdx > 0) {
+      if (
+        !isRedundantNonChatColumnSplit({
+          sourceColIdx,
+          targetColIdx,
+          direction: 'left',
+          isOnlyCardInCol,
+          sourceColGroupsLength,
+        })
+      ) {
+        return splitColResult('left', targetColIdx, targetGroupId, targetGroupIdx);
+      }
+    }
+
+    if (x > width - edgeX) {
+      if (
+        !isRedundantNonChatColumnSplit({
+          sourceColIdx,
+          targetColIdx,
+          direction: 'right',
+          isOnlyCardInCol,
+          sourceColGroupsLength,
+        })
+      ) {
+        return splitColResult('right', targetColIdx, targetGroupId, targetGroupIdx);
+      }
+    }
+
+    // 2. Chat列有其特殊的左右边缘，且不允许内部上下拆分
+    if (isChatColumn) {
+      if (x < width * CHAT_COL_LEFT_ZONE) {
+        if (
+          !isRedundantColumnSplit({
+            isOnlyCardInCol,
+            sourceColIdx,
+            targetColIdx,
+            direction: 'left',
+          })
+        ) {
+          return splitColResult('left', targetColIdx, targetGroupId, targetGroupIdx);
+        }
+      }
+      if (x > width * CHAT_COL_RIGHT_ZONE) {
+        if (
+          !isRedundantColumnSplit({
+            isOnlyCardInCol,
+            sourceColIdx,
+            targetColIdx,
+            direction: 'right',
+          })
+        ) {
+          return splitColResult('right', targetColIdx, targetGroupId, targetGroupIdx);
+        }
+      }
+      // 非边缘在chat列内拖拽标签无响应
+      return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
+    }
+
+    // 3. 在普通列的卡片主体内部，采用 VS Code 级 “边缘感知五分区停靠 + 中心大缓冲区” 模型
+    if (y < tabBarH) {
+      // 100% 纯净标签栏区域：只允许合并与重排
+      if (isSelfHover) {
+        return {
+          dropType: 'self-reorder',
+          targetColIdx,
+          targetGroupIdx,
+          targetGroupId: ctx.sourceGroupId,
+          tabInsertIdx: ctx.tabInsertIdx,
+          preview: {
+            colIdx: targetColIdx,
+            groupIdx: targetGroupIdx,
+            direction: 'merge',
+          },
+        };
+      } else {
+        if (hasTabsBar) {
+          return {
+            dropType: 'merge',
+            targetColIdx,
+            targetGroupIdx,
+            targetGroupId,
+            tabInsertIdx: ctx.tabInsertIdx,
+            preview: {
+              colIdx: targetColIdx,
+              groupIdx: targetGroupIdx,
+              direction: 'merge',
+            },
+          };
+        }
+        return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
+      }
+    } else {
+      // 标签栏下方的卡片内容主体区域
+      if (isSelfHover && cardsLength === 1) {
+        return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
+      }
+      const bodyHeight = height - tabBarH;
+      const bodyY = y - tabBarH;
+
+      // Top 20% 边缘：向上拆分
+      if (bodyY < bodyHeight * 0.20) {
+        if (isSelfHover) {
+          if (cardsLength > 1) {
+            return splitCardResult('top', targetColIdx, targetGroupIdx, targetGroupId);
+          }
+        } else {
+          return splitCardResult('top', targetColIdx, targetGroupIdx, targetGroupId);
+        }
+      }
+
+      // Bottom 20% 边缘：向下拆分
+      if (bodyY > bodyHeight * 0.80) {
+        if (isSelfHover) {
+          if (cardsLength > 1) {
+            return splitCardResult('bottom', targetColIdx, targetGroupIdx, targetGroupId);
+          }
+        } else {
+          return splitCardResult('bottom', targetColIdx, targetGroupIdx, targetGroupId);
+        }
+      }
+
+      // Center 60% 区域（安全避风港）：只进行合并与重排，绝不分裂
+      if (isSelfHover) {
+        return {
+          dropType: 'self-reorder',
+          targetColIdx,
+          targetGroupIdx,
+          targetGroupId: ctx.sourceGroupId,
+          tabInsertIdx: ctx.tabInsertIdx,
+          preview: {
+            colIdx: targetColIdx,
+            groupIdx: targetGroupIdx,
+            direction: 'merge',
+          },
+        };
+      } else {
+        if (hasTabsBar) {
+          return {
+            dropType: 'merge',
+            targetColIdx,
+            targetGroupIdx,
+            targetGroupId,
+            tabInsertIdx: ctx.tabInsertIdx,
+            preview: {
+              colIdx: targetColIdx,
+              groupIdx: targetGroupIdx,
+              direction: 'merge',
+            },
+          };
+        }
+        return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
+      }
+    }
+  }
+
+  // ── 以下是非标签拖拽的普通卡片组拖拽逻辑（isDragFromTabButton === false） ──
   if (isSelfHover) {
-    if (y < tabBarH && hasTabsBar && isDragFromTabButton) {
-      return {
-        dropType: 'self-reorder',
-        targetColIdx,
-        targetGroupIdx,
-        targetGroupId: ctx.sourceGroupId,
-        tabInsertIdx: ctx.tabInsertIdx,
-        preview: null,
-      };
-    }
-    if (isDragFromTabButton && cardsLength > 1) {
-      const isUpperHalf = y < height / 2;
-      return splitCardResult(
-        isUpperHalf ? 'top' : 'bottom',
-        targetColIdx,
-        targetGroupIdx,
-        targetGroupId,
-      );
-    }
     return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
   }
 
@@ -450,20 +591,8 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
 
   // ── 标签栏：跨组 merge 或（非 tab 拖）顶部分拆 ────────────────────────────
   if (y < tabBarH) {
-    if (isDragFromTabButton) {
-      if (hasTabsBar) {
-        return {
-          dropType: 'merge',
-          targetColIdx,
-          targetGroupIdx,
-          targetGroupId,
-          tabInsertIdx: ctx.tabInsertIdx,
-          preview: null,
-        };
-      }
-      return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
-    }
     if (
+      isWholeGroupDrag &&
       isRedundantGroupSplit({
         sourceColIdx,
         sourceGroupIdx,
@@ -510,6 +639,7 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
 
   if (y < tabBarH + edgeY) {
     if (
+      isWholeGroupDrag &&
       isRedundantGroupSplit({
         sourceColIdx,
         sourceGroupIdx,
@@ -525,6 +655,7 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
 
   if (y > height - edgeY) {
     if (
+      isWholeGroupDrag &&
       isRedundantGroupSplit({
         sourceColIdx,
         sourceGroupIdx,
@@ -541,6 +672,7 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
   const isUpperHalf = y < height / 2;
   if (isUpperHalf) {
     if (
+      isWholeGroupDrag &&
       isRedundantGroupSplit({
         sourceColIdx,
         sourceGroupIdx,
@@ -555,6 +687,7 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
   }
 
   if (
+    isWholeGroupDrag &&
     isRedundantGroupSplit({
       sourceColIdx,
       sourceGroupIdx,
@@ -791,10 +924,16 @@ export function useTabDrag({
       let lastTabInsertIdx: number | undefined = undefined;
 
       const cardRect = sourceCard ? sourceCard.getBoundingClientRect() : null;
+      const tabRect = targetEl ? targetEl.getBoundingClientRect() : null;
       const startWidth = cardRect ? cardRect.width : 0;
       const startHeight = cardRect ? cardRect.height : 0;
-      const clickOffsetX = cardRect ? (startX - cardRect.left) : 0;
-      const clickOffsetY = cardRect ? (startY - cardRect.top) : 0;
+      const clickOffsetX = isDragFromTabButton && tabRect
+        ? (startX - tabRect.left)
+        : (cardRect ? (startX - cardRect.left) : 0);
+      const clickOffsetY = isDragFromTabButton && tabRect
+        ? (startY - tabRect.top)
+        : (cardRect ? (startY - cardRect.top) : 0);
+
 
       const cardElements = Array.from(document.querySelectorAll('.workspace-card:not(.placeholder-card-group)')) as HTMLElement[];
       const cardSnapshots = cardElements.map((el) => {
@@ -839,6 +978,7 @@ export function useTabDrag({
           insertLineEl = null;
         }
         document.querySelectorAll('.tab-insert-line').forEach((el) => el.remove());
+        document.querySelectorAll('.tab-placeholder-indicator').forEach((el) => el.remove());
       };
 
       const clearIndicator = () => {
@@ -851,7 +991,7 @@ export function useTabDrag({
       };
 
       const showTabInsertLine = (tabsBar: HTMLElement, mouseX: number): { insertX: number; insertIdx: number } => {
-        const tabs = Array.from(tabsBar.querySelectorAll('.card-tab:not(.dragging-tab-hidden)')) as HTMLElement[];
+        const tabs = Array.from(tabsBar.querySelectorAll('.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)')) as HTMLElement[];
         const barRect = tabsBar.getBoundingClientRect();
         const tabRects = tabs.map((t) => {
           const tr = t.getBoundingClientRect();
@@ -863,23 +1003,27 @@ export function useTabDrag({
           insertX = tabs[insertIdx].getBoundingClientRect().left;
         }
 
-        if (!insertLineEl) {
-          insertLineEl = document.createElement('div');
-          insertLineEl.className = 'tab-insert-line';
-          insertLineEl.setAttribute('aria-hidden', 'true');
-          document.body.appendChild(insertLineEl);
+        // Clean up any placeholders that are either in other bars, or at a different position
+        document.querySelectorAll('.tab-placeholder-indicator').forEach((el) => {
+          if (el.parentElement !== tabsBar || Array.from(tabsBar.children).indexOf(el) !== insertIdx) {
+            el.remove();
+          }
+        });
+
+        // Insert new inline placeholder if it does not exist
+        if (!tabsBar.querySelector('.tab-placeholder-indicator')) {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'card-tab tab-placeholder-indicator';
+          placeholder.setAttribute('aria-hidden', 'true');
+          const title = getPanelTitle(cardId);
+          placeholder.innerHTML = `<span class="tab-label" style="opacity: 0.85">${title}</span>`;
+          
+          if (insertIdx < tabs.length) {
+            tabsBar.insertBefore(placeholder, tabs[insertIdx]);
+          } else {
+            tabsBar.appendChild(placeholder);
+          }
         }
-        insertLineEl.style.cssText = [
-          'position:fixed',
-          `left:${insertX - 1}px`,
-          `top:${barRect.top + 3}px`,
-          'width:2px',
-          `height:${Math.max(0, barRect.height - 6)}px`,
-          'background:#333333',
-          'border-radius:2px',
-          'pointer-events:none',
-          'z-index:10001',
-        ].join(';');
 
         return { insertX, insertIdx };
       };
@@ -895,24 +1039,50 @@ export function useTabDrag({
           isDragging = true;
           setDraggedTab({ cardId, sourceGroupId: groupId, workspaceId: wsId, isTabDrag: isDragFromTabButton });
 
-          if (sourceCard) {
+          if (isDragFromTabButton && targetEl) {
+            dragOverlay = targetEl.cloneNode(true) as HTMLDivElement;
+            dragOverlay.className = 'card-tab is-dragging-ghost';
+            dragOverlay.removeAttribute('id');
+            const tabR = targetEl.getBoundingClientRect();
+            dragOverlay.style.cssText = `
+              position: fixed;
+              width: ${tabR.width}px;
+              height: ${tabR.height}px;
+              overflow: hidden;
+              box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+              opacity: 0.95;
+              pointer-events: none;
+              z-index: 10000;
+              box-sizing: border-box;
+              border: 1px solid var(--border-color);
+              background: var(--bg-primary, #ffffff);
+              border-radius: var(--radius-sm, 6px);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            `;
+            // Remove close button from drag preview tab so it looks super clean
+            dragOverlay.querySelectorAll('.tab-close-btn').forEach((btn) => btn.remove());
+            document.body.appendChild(dragOverlay);
+            document.body.classList.add('dragging-card');
+          } else if (sourceCard) {
             dragOverlay = sourceCard.cloneNode(true) as HTMLDivElement;
             dragOverlay.className = 'drag-overlay-preview-card';
             dragOverlay.removeAttribute('id');
             dragOverlay.style.cssText = `
-            position: fixed;
-            width: ${startWidth}px;
-            height: ${startHeight}px;
-            overflow: hidden;
-            box-shadow: 0 0 16px rgba(0,0,0,0.12);
-            border-radius: 0;
-            border: 1.5px solid rgba(55, 65, 81, 0.3);
-            background: var(--bg-card, #f9f9f9);
-            opacity: 0.92;
-            pointer-events: none;
-            z-index: 10000;
-            transition: width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
-          `;
+              position: fixed;
+              width: ${startWidth}px;
+              height: ${startHeight}px;
+              overflow: hidden;
+              box-shadow: 0 0 16px rgba(0,0,0,0.12);
+              border-radius: 0;
+              border: 1.5px solid rgba(55, 65, 81, 0.3);
+              background: var(--bg-card, #f9f9f9);
+              opacity: 0.92;
+              pointer-events: none;
+              z-index: 10000;
+              transition: width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+            `;
             dragOverlay.querySelectorAll('input, textarea, button').forEach((el) => {
               (el as HTMLInputElement).disabled = true;
             });

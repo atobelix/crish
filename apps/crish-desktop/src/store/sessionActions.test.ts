@@ -57,6 +57,7 @@ function makeStateFromSessions(
     planApproved: false,
     terminalLines: [],
     terminalBySession: {},
+    composerDrafts: {},
   };
 }
 

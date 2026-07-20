@@ -419,6 +419,7 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   activeAgentId: string | null;
   /** 右侧「协作 agent」面板要展示的 agent id */
   panelAgentId: string | null;
+  composerDrafts: Record<string, string>;
   draggedTab: DraggedTabState | null;
   dropPreview: DropPreviewState | null;
   showSettingsOverlay: boolean;
@@ -601,6 +602,7 @@ export const useLayoutStore = create<LayoutStore>()(
 
     terminalLines: _initialTerminalLines,
     terminalBySession: {},
+    composerDrafts: {},
     manuallyTriggeredWorkers: [],
 
     setProviders: (providers) => set((state) => {

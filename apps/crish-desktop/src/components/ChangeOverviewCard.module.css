@@ -18,7 +18,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px 6px 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
   min-width: 0;
 }
 
@@ -134,14 +134,18 @@
 .changeOverviewRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
   min-width: 0;
-  flex-wrap: wrap;
+  height: 32px;
+  box-sizing: border-box;
+  flex-wrap: nowrap !important;
 }
 
 .changeOverviewFile {
   flex: 1 1 140px;
   min-width: 0;
+  height: 28px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -149,11 +153,12 @@
   background: transparent;
   font-family: inherit;
   text-align: left;
-  padding: 6px 8px;
+  padding: 0 8px;
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-primary);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .changeOverviewFile:hover {
@@ -183,22 +188,30 @@
 .changeOverviewFileActions {
   display: flex;
   align-items: center;
+  height: 28px;
   gap: 4px;
   flex: 0 0 auto;
   flex-shrink: 0;
   padding-right: 4px;
+  box-sizing: border-box;
 }
 
 .changeOverviewMiniBtn {
+  height: 22px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   color: var(--text-tertiary);
   font-family: inherit;
   font-size: var(--font-size-xxs);
-  padding: 3px 8px;
+  padding: 0 8px;
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1;
 }
 
 .changeOverviewMiniBtn:hover:not(:disabled) {
@@ -226,36 +239,39 @@
     display: none;
   }
   .changeOverviewBar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 8px;
   }
   .changeOverviewToggle {
     flex: 1 1 auto;
-    width: 100%;
+    min-width: 0;
   }
   .changeOverviewActions {
-    width: 100%;
-    justify-content: stretch;
-    gap: 6px;
+    width: auto;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 4px;
+    flex-wrap: nowrap !important;
   }
   .changeOverviewReview {
-    flex: 1 1 0;
-    min-width: 0;
-    text-align: center;
-    justify-content: center;
+    flex: 0 0 auto;
   }
   .changeOverviewRow {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
     gap: 4px;
+    height: 32px !important;
   }
   .changeOverviewFile {
     flex: 1 1 auto;
-    width: 100%;
+    min-width: 0;
   }
   .changeOverviewFileActions {
-    width: 100%;
+    width: auto;
+    flex-shrink: 0;
     justify-content: flex-end;
     padding-right: 0;
   }
