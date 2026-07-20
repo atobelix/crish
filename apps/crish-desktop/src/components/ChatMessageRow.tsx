@@ -595,11 +595,13 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
               ) : null}
             </span>
           </button>
-          {thinkingBodyOpen ? (
-            <div className={styles.thinkingFoldBody} id={thinkingBodyId}>
-              {thinkingBudget.text}
+          <div className={styles.accordionWrapper} data-expanded={thinkingBodyOpen ? 'true' : 'false'}>
+            <div className={styles.accordionInner}>
+              <div className={styles.thinkingFoldBody} id={thinkingBodyId}>
+                {thinkingBudget.text}
+              </div>
             </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 

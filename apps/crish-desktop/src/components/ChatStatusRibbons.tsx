@@ -6,13 +6,22 @@
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
  */
-import React from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import styles from './ChatStatusRibbons.module.css';
 import * as Lucide from 'lucide-react';
 import type { EngineStatus } from '../api/engineConfig';
 import type { RunNotice } from '../hooks/useChatStream';
 import { openAgentInSidePanel } from '../api/openAgentPanel';
 import { getSessionById } from '../store/sessionStore';
+import {
+  listBackgroundTasks,
+  isBackgroundTaskActive,
+  type BackgroundTaskInfo,
+} from '../api/backgroundTasksApi';
+import {
+  resolveSessionProgressItems,
+  computeChecklistProgress,
+} from '../api/sessionProgressApi';
 import {
   resolveNeedsKeySoftHintText,
   resolveNeedsModelSoftHintText,
@@ -22,6 +31,9 @@ import {
 import { isFirstRunOverlayOpen } from './FirstRunWizard';
 
 export type ChatStatusRibbonsProps = {
+  onOpenTerminal?: () => void;
+  onOpenDiff?: () => void;
+  diffCount?: number;
   /** 引擎状态（软提示三条分支） */
   engineHint: EngineStatus | null;
   /** 本地未配密钥且引擎也无密钥 */
@@ -373,6 +385,9 @@ export function resolveApprovalDockAriaLabel(
 }
 
 export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
+  onOpenTerminal,
+  onOpenDiff,
+  diffCount = 0,
   engineHint,
   needsKeySetup,
   needsModelSetup = false,
@@ -402,6 +417,44 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   onShowToast,
   between,
 }) => {
+  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const [showPlanDrawer, setShowPlanDrawer] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTasks = async () => {
+      try {
+        const tasks = await listBackgroundTasks();
+        if (!cancelled) setBgTasks(tasks || []);
+      } catch {
+        /* ignore */
+      }
+    };
+    void fetchTasks();
+    const t = setInterval(() => void fetchTasks(), 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  const activeBgTasks = useMemo(
+    () => bgTasks.filter((t) => isBackgroundTaskActive(t.state)),
+    [bgTasks],
+  );
+
+  const currentSession = activeSessionId ? getSessionById(activeSessionId) : null;
+  const progressItems = useMemo(
+    () => resolveSessionProgressItems(currentSession),
+    [currentSession],
+  );
+  const checklistProgress = useMemo(
+    () => computeChecklistProgress(progressItems),
+    [progressItems],
+  );
+
+  const hasActivePlan =
+    inPlanMode || goalModeActive || checklistProgress.total > 0;
   // 盖层生命周期优先于 LS gate（密钥步落盘后向导仍可能打开）
   const firstRunOpen = isFirstRunOverlayOpen();
   const engineOk = engineHint == null ? null : engineHint.ok;
@@ -502,6 +555,90 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
   return (
     <>
+      {/* 动态快捷状态浮条：仅在有活跃状态（后台运行/活动计划/差异）时呈现 */}
+      {(activeBgTasks.length > 0 || hasActivePlan || (diffCount > 0 && Boolean(onOpenDiff))) ? (
+        <div className={styles.dynamicChipBar} role="region" aria-label="快捷状态">
+          {activeBgTasks.length > 0 && onOpenTerminal ? (
+            <button
+              type="button"
+              className={`${styles.dynamicChip} ${styles.dynamicChipActive}`}
+              title={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}
+              aria-label={`后台运行中，${activeBgTasks.length} 个任务`}
+              onClick={onOpenTerminal}
+            >
+              <span className={styles.dynamicChipPulseDot} aria-hidden />
+              <span>后台任务 ({activeBgTasks.length})</span>
+            </button>
+          ) : null}
+
+          {hasActivePlan ? (
+            <button
+              type="button"
+              className={`${styles.dynamicChip}${showPlanDrawer ? ` ${styles.dynamicChipActive}` : ''}`}
+              title="点击查看计划与进度详情"
+              aria-label="查看计划与进度详情"
+              onClick={() => setShowPlanDrawer((v) => !v)}
+            >
+              <Lucide.Target size={13} strokeWidth={2} aria-hidden />
+              <span>
+                {goalModeActive
+                  ? `目标模式 · 第 ${goalIteration + 1} 轮`
+                  : checklistProgress.total > 0
+                    ? `计划任务 · ${checklistProgress.done}/${checklistProgress.total}`
+                    : '计划模式'}
+              </span>
+            </button>
+          ) : null}
+
+          {diffCount > 0 && onOpenDiff ? (
+            <button
+              type="button"
+              className={styles.dynamicChip}
+              title="在右侧查看代码变更"
+              aria-label="查看代码变更"
+              onClick={onOpenDiff}
+            >
+              <Lucide.GitBranch size={13} strokeWidth={2} aria-hidden />
+              <span>{diffCount} 个文件变更</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showPlanDrawer && hasActivePlan ? (
+        <div className={styles.dynamicPlanDrawer} role="dialog" aria-label="计划与进度详情">
+          <div className={styles.dynamicPlanHeader}>
+            <span>{goalModeActive ? (goalText || '目标推进中') : '计划清单'}</span>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
+              aria-label="关闭计划详情"
+              onClick={() => setShowPlanDrawer(false)}
+            >
+              <Lucide.X size={14} />
+            </button>
+          </div>
+          {progressItems.length > 0 ? (
+            <ul className={styles.dynamicPlanList}>
+              {progressItems.map((item) => (
+                <li key={item.id} className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}>
+                  {item.done ? (
+                    <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green, #22c55e)' }} />
+                  ) : (
+                    <Lucide.Circle size={13} style={{ color: 'var(--text-tertiary)' }} />
+                  )}
+                  <span>{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {inPlanMode ? '计划模式生效中，AI 将集中思考规划' : '暂无清单步数'}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {/* 引导态：页内 soft-hint 互斥一条；FirstRun 盖层时 resolveSetupHintKind=null */}
       {setupHint === 'engine-down' && setupAction ? (
         <div

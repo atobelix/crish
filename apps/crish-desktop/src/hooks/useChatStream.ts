@@ -1380,11 +1380,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${activeAttachments.map((a: ChatAttachment) => a.name).join('、')}`;
     }
 
-    setChatInput('');
-    setSlashMenuOpen(false);
-    if (!fromOverride) setAttachments([]);
-    setPickerInlineError('');
-
     const userMsgId = `user-msg-${Date.now()}`;
     const sessLookup = getSessionById(sessionId);
     // 二次校验：create 与发送之间壳被 prune 则中止，不 void 开流
@@ -1409,27 +1404,38 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     }
 
     let enqueued = false;
-    useLayoutStore.setState((state) => {
-      const sess = state.sessionsById[sessionId];
-      // messages 缺省时就地初始化；session 已不存在则跳过（不 invent）
-      if (!ensureSessionMessages(sess)) return;
-      const newMsg: SessionMessage = {
-        id: userMsgId,
-        sender: 'user',
-        text: displayText,
-        timestamp: Date.now(),
-        status: isAiBusy ? 'queued' : 'processing',
-      };
-      // 正式版：不再支持「插入打断」，统一入队或立即发送
-      // 侧栏时间由消息 timestamp 推算，不写死「刚刚」
-      sess.messages.push(newMsg);
-      enqueued = true;
-    });
+    try {
+      useLayoutStore.setState((state) => {
+        const sess = state.sessionsById[sessionId];
+        // messages 缺省时就地初始化；session 已不存在则跳过（不 invent）
+        if (!ensureSessionMessages(sess)) return;
+        const newMsg: SessionMessage = {
+          id: userMsgId,
+          sender: 'user',
+          text: displayText,
+          timestamp: Date.now(),
+          status: isAiBusy ? 'queued' : 'processing',
+        };
+        // 正式版：统一入队或立即发送
+        // 侧栏时间由消息 timestamp 推算，不写死「刚刚」
+        sess.messages.push(newMsg);
+        enqueued = true;
+      });
+    } catch (err) {
+      console.error('Failed to enqueue user message:', err);
+    }
 
     if (!enqueued) {
-      setPickerInlineError('会话不可用，请新建会话后重试');
+      setPickerInlineError('会话消息发送失败，已为您保留输入内容');
       return;
     }
+
+    // 消息已确定写入 Store 后方可重置输入框与草稿
+    setChatInput('');
+    useLayoutStore.getState().setComposerDraft(sessionId, '');
+    setSlashMenuOpen(false);
+    if (!fromOverride) setAttachments([]);
+    setPickerInlineError('');
 
     if (!isAiBusy) {
       const store = useLayoutStore.getState();

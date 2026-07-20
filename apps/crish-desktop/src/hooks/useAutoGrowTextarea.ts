@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
  * 主对话 ComposerField：默认约 2 行高，最多约 10 行后内部滚动。
  * 侧栏 / 内联 dense 由调用方传 maxLines（通常 3），仍走同一测量路径。
  */
-export const COMPOSER_MIN_LINES = 4;
+export const COMPOSER_MIN_LINES = 2;
 export const COMPOSER_MAX_LINES = 10;
 
 /** 与 chat-composer.css `.input-container` `--composer-line-height` 对齐 */

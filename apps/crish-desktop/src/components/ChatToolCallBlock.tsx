@@ -2,7 +2,7 @@
  * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
  * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
  */
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useState, useMemo } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
@@ -154,30 +154,37 @@ function ToolResultBody({
   onOpenTerminal: () => void;
 }) {
   const [showFullOutput, setShowFullOutput] = useState(false);
-  const images = extractImageRefs(tc.output || '');
   const raw = tc.output || '';
-  const full = fullToolOutput(raw);
-  const budget = showFullOutput
-    ? { text: full, truncated: false, originalLength: full.length }
-    : budgetDomText(full, TOOL_OUTPUT_DOM_CHAR_CAP);
+  const images = useMemo(() => extractImageRefs(raw), [raw]);
+  const full = useMemo(() => fullToolOutput(raw), [raw]);
+  const budget = useMemo(
+    () =>
+      showFullOutput
+        ? { text: full, truncated: false, originalLength: full.length }
+        : budgetDomText(full, TOOL_OUTPUT_DOM_CHAR_CAP),
+    [showFullOutput, full],
+  );
   const out = budget.text;
   const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
   const shellTool = isShellToolName(tc.name || '');
   const longShell = shellTool && (raw.length > 2000 || raw.split('\n').length > 80);
   const statusZh = toolStatusZh(tc.status as MessageToolCall['status'] | undefined);
   const emptyBody = !full && images.length === 0 && !hasDiffs;
-  // 展开体顶部：只展示命令本身（清洗后），不混系统元数据
-  const cmdLine = shellTool
-    ? toolCommandPreview(
-        {
-          id: tc.id || 'x',
-          name: tc.name || 'shell',
-          arguments: tc.arguments || '',
-          status: (tc.status as MessageToolCall['status']) || 'success',
-        },
-        200,
-      )
-    : '';
+  const cmdLine = useMemo(
+    () =>
+      shellTool
+        ? toolCommandPreview(
+            {
+              id: tc.id || 'x',
+              name: tc.name || 'shell',
+              arguments: tc.arguments || '',
+              status: (tc.status as MessageToolCall['status']) || 'success',
+            },
+            200,
+          )
+        : '',
+    [shellTool, tc.id, tc.name, tc.arguments, tc.status],
+  );
 
   return (
     <div
@@ -561,14 +568,17 @@ function CompactToolRow({
           ) : null}
         </span>
       </div>
-      {/* 默认折叠：未展开时整段结果不挂载，防流式高度抖动 */}
-      {isOpen && canToggle ? (
-        <ToolResultBody
-          tc={tc}
-          bodyId={bodyId}
-          onOpenDiff={onOpenDiff}
-          onOpenTerminal={onOpenTerminal}
-        />
+      {canToggle ? (
+        <div className={styles.accordionWrapper} data-expanded={isOpen ? 'true' : 'false'}>
+          <div className={styles.accordionInner}>
+            <ToolResultBody
+              tc={tc}
+              bodyId={bodyId}
+              onOpenDiff={onOpenDiff}
+              onOpenTerminal={onOpenTerminal}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );

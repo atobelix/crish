@@ -128,6 +128,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
 
   const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
   const appSettings = useLayoutStore((s) => s.appSettings);
+  const diffFiles = useLayoutStore((s) => s.diffFiles);
 
   const [engineModel, setEngineModel] = useState('');
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -407,7 +408,30 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
   }, [showModelDropdown]);
 
   // Keyboard and Input states
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInputState] = useState('');
+  const setComposerDraft = useLayoutStore((s) => s.setComposerDraft);
+  const composerDrafts = useLayoutStore((s) => s.composerDrafts);
+
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+    const restored = activeSessionId ? (composerDrafts[activeSessionId] || '') : '';
+    setChatInputState(restored);
+  }, [activeSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setChatInput = useCallback(
+    (textOrFn: React.SetStateAction<string>) => {
+      setChatInputState((prev) => {
+        const next = typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
+        const sid = activeSessionIdRef.current;
+        if (sid) {
+          setComposerDraft(sid, next);
+        }
+        return next;
+      });
+    },
+    [setComposerDraft],
+  );
 
   // 设置页「AI 创建技能/定时」写入的输入种子
   useEffect(() => {
@@ -424,7 +448,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
     };
     window.addEventListener(COMPOSER_SEED_EVENT, onSeed);
     return () => window.removeEventListener(COMPOSER_SEED_EVENT, onSeed);
-  }, []);
+  }, [setChatInput]);
   const [isComposing, setIsComposing] = useState(false); // IME Composition State
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -968,6 +992,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(({
         }}
       >
         <ChatStatusRibbons
+          onOpenTerminal={() => openSidePanel('terminal')}
+          onOpenDiff={() => openSidePanel('diff')}
+          diffCount={diffFiles.length}
           engineHint={engineHint}
           needsKeySetup={needsKeySetup}
           needsModelSetup={needsModelSetup}

@@ -3,10 +3,10 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin: 4px 0;
+  margin: 0;
   max-height: none;
   overflow: visible;
-  padding: 4px 0;
+  padding: 2px 0;
   border: none;
   background: transparent;
   box-shadow: none;
@@ -14,7 +14,7 @@
 }
 
 .toolStack > .toolRow + .toolRow {
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* Tool Row */
@@ -27,7 +27,7 @@
   color: var(--text-secondary);
   box-shadow: none !important;
   outline: none;
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .toolRow.isRunning .toolRowSummary {
@@ -181,6 +181,32 @@
 .toolRowChevron.rot {
   transform: rotate(90deg);
 }
+
+/* Accordion dynamic height interpolation */
+.accordionWrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
+  will-change: grid-template-rows;
+  contain: layout style;
+}
+
+.accordionWrapper[data-expanded="true"] {
+  grid-template-rows: 1fr;
+}
+
+.accordionInner {
+  overflow: hidden;
+  min-height: 0;
+  contain: content;
+  opacity: 0;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.accordionWrapper[data-expanded="true"] .accordionInner {
+  opacity: 1;
+}
+
 
 /* Tool Result Body */
 .toolResultBody {
