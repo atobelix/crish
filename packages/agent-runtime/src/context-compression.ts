@@ -122,7 +122,7 @@ export class ContextCompressor {
       return null;
     }
     const tokensAfter = estimateContextTokens([createCompressionSummaryMessage(summary), ...kept]).tokens;
-    const structuredSummary = createStructuredSummary({
+    const structuredSummary = await createStructuredSummary({
       kind: "context-compression",
       goal: lastUserMessageText(messages) ?? undefined,
       progress: [summary, ...state.completedTaskSummaries],
@@ -138,7 +138,7 @@ export class ContextCompressor {
       risks: commandFacts.failed,
       sourceIds: messages.map((message) => message.id)
     });
-    const cacheBoundary = createCompressionCacheBoundary({
+    const cacheBoundary = await createCompressionCacheBoundary({
       reason: decision.reason,
       structuredSummary,
       compressed,
@@ -238,12 +238,12 @@ export function createCompressionSummaryMessage(summary: string, record?: Contex
   };
 }
 
-function createCompressionCacheBoundary(input: {
+async function createCompressionCacheBoundary(input: {
   reason: ContextCompressionReason;
-  structuredSummary: ReturnType<typeof createStructuredSummary>;
+  structuredSummary: Awaited<ReturnType<typeof createStructuredSummary>>;
   compressed: AgentMessage[];
   kept: AgentMessage[];
-}): ContextCompressionCacheBoundaryMetadata {
+}): Promise<ContextCompressionCacheBoundaryMetadata> {
   const stablePrefixHash = input.structuredSummary.stableHash;
   const compressedMessageIds = input.compressed.map((message) => message.id);
   const keptMessageIds = input.kept.map((message) => message.id);
@@ -252,7 +252,7 @@ function createCompressionCacheBoundary(input: {
     version: 1,
     stablePrefixHash,
     cacheKey: `context-compression:v1:${stablePrefixHash}`,
-    structuredSummaryCacheKey: structuredSummaryCacheKey(input.structuredSummary),
+    structuredSummaryCacheKey: await structuredSummaryCacheKey(input.structuredSummary),
     structuredSummaryStableHash: input.structuredSummary.stableHash,
     invalidates: ["prompt-stable-prefix", "message-history", "usage-baseline", "volatile-context"],
     invalidationReason: input.reason,
@@ -403,7 +403,34 @@ function filePathsFromSnapshotHints(hints: string[], predicate: (hint: string) =
  * 注意：该值是 approximate，阈值门控应通过 {@link applyTokenEstimateSafetyFactor} 略提前触发压缩。
  * 未引入 tiktoken 等重量级依赖，以保持包体与冷启动开销可控。
  */
-export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEstimate {
+export interface ContextTokenEstimateOptions {
+  systemPrompt?: string;
+  tools?: unknown[];
+  rules?: string[];
+}
+
+export function estimateContextTokens(
+  messages: AgentMessage[],
+  options?: ContextTokenEstimateOptions
+): ContextTokenEstimate {
+  // 估算 System Prompt、Tool JSON Schemas 与 Scoped Rules 的 Token 占用
+  let staticOverheadTokens = 0;
+  if (options?.systemPrompt) {
+    staticOverheadTokens += Math.ceil(options.systemPrompt.length / 4);
+  }
+  if (options?.tools && options.tools.length > 0) {
+    try {
+      staticOverheadTokens += Math.ceil(JSON.stringify(options.tools).length / 4);
+    } catch {
+      staticOverheadTokens += options.tools.length * 150; // 保底兜底
+    }
+  }
+  if (options?.rules && options.rules.length > 0) {
+    for (const rule of options.rules) {
+      staticOverheadTokens += Math.ceil(rule.length / 4);
+    }
+  }
+
   const latestCompressionSummary = findLatestCompressionSummary(messages);
   let usageInfo: { usage: ProviderUsage; index: number } | undefined;
   for (let index = messages.length - 1; index > latestCompressionSummary.index; index--) {
@@ -419,12 +446,12 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextTokenEst
   }
 
   if (!usageInfo) {
-    let tokens = 0;
+    let tokens = staticOverheadTokens;
     for (let i = 0; i < messages.length; i++) tokens += estimateMessageTokens(messages[i]!);
-    return { tokens, usageTokens: 0, trailingTokens: tokens, lastUsageMessageIndex: null };
+    return { tokens, usageTokens: staticOverheadTokens, trailingTokens: tokens - staticOverheadTokens, lastUsageMessageIndex: null };
   }
 
-  const usageTokens = usageInfo.usage.totalTokens ?? 0;
+  const usageTokens = (usageInfo.usage.totalTokens ?? 0) + staticOverheadTokens;
   let trailingTokens = 0;
   for (let i = usageInfo.index + 1; i < messages.length; i++) trailingTokens += estimateMessageTokens(messages[i]!);
   return {
