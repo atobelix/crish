@@ -31,12 +31,15 @@ import {
 import { stripThoughtPlaceholders, escapeHtml } from '../api/markdownRender';
 import { parseMarkdownToHtmlAsync } from '../api/markdownRenderAsync';
 import { getMarkdownHtmlCache } from '../api/markdownCache';
+import { IncrementalMarkdownBridge } from '../api/incrementalMarkdownBridge';
+import { chunkUpdatesToDomPatches, applyDomPatches } from '../api/domPatch';
 import { Priority } from '../workers';
 import { ChangeOverviewCard } from './ChangeOverviewCard';
 import type { PermissionMode } from '../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
 import { useBubbleShrinkWidth, usePreparedText } from '../hooks/useTextMeasure';
 import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
+import { VirtualScrollManager } from '../api/VirtualScrollManager';
 
 // ─── 密度常量（长用户气泡截断） ─────────────────────────────────────────────
 
@@ -230,6 +233,8 @@ export type ChatUserMessageRowProps = {
   onWithdraw: (msgId: string, text: string) => void;
   /** 仅错误级（复制失败）；成功静默 */
   onShowToast?: (message: string) => void;
+  messageIndex: number;
+  virtualScrollManager: VirtualScrollManager | null;
 };
 
 function userRowPropsEqual(prev: ChatUserMessageRowProps, next: ChatUserMessageRowProps): boolean {
@@ -240,7 +245,11 @@ function userRowPropsEqual(prev: ChatUserMessageRowProps, next: ChatUserMessageR
     prev.msg.timestamp === next.msg.timestamp &&
     prev.isPinned === next.isPinned &&
     prev.isSearchHit === next.isSearchHit &&
-    prev.isExpanded === next.isExpanded
+    prev.isExpanded === next.isExpanded &&
+    prev.onToggleExpand === next.onToggleExpand &&
+    prev.onTogglePin === next.onTogglePin &&
+    prev.onWithdraw === next.onWithdraw &&
+    prev.onShowToast === next.onShowToast
   );
 }
 
@@ -253,6 +262,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   onTogglePin,
   onWithdraw: _onWithdraw,
   onShowToast,
+  messageIndex,
+  virtualScrollManager,
 }) => {
   void _onWithdraw;
   const isLong = isUserBubbleLong(msg.text);
@@ -275,6 +286,10 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     },
     [],
   );
+
+  useEffect(() => {
+    virtualScrollManager?.invalidateActual(messageIndex);
+  }, [msg.text, messageIndex, virtualScrollManager]);
 
   const handleCopy = useCallback(() => {
     const text = msg.text || '';
@@ -413,6 +428,8 @@ export type ChatAssistantMessageRowProps = {
   /** 本消息引导被用户关闭后 true */
   followUpDismissed?: boolean;
   onDismissFollowUp?: (msgId: string) => void;
+  messageIndex: number;
+  virtualScrollManager: VirtualScrollManager | null;
 };
 
 function assistantRowPropsEqual(
@@ -440,7 +457,18 @@ function assistantRowPropsEqual(
     prev.planApproved === next.planApproved &&
     prev.isLastAssistant === next.isLastAssistant &&
     prev.followUpDismissed === next.followUpDismissed &&
-    toolStackSharedPropsEqual(prev.toolStackProps, next.toolStackProps)
+    toolStackSharedPropsEqual(prev.toolStackProps, next.toolStackProps) &&
+    prev.onTogglePin === next.onTogglePin &&
+    prev.onShowToast === next.onShowToast &&
+    prev.onRegenerate === next.onRegenerate &&
+    prev.onBranch === next.onBranch &&
+    prev.onOpenDiff === next.onOpenDiff &&
+    prev.onOpenDiffPanel === next.onOpenDiffPanel &&
+    prev.setPermissionMode === next.setPermissionMode &&
+    prev.setPlanApproved === next.setPlanApproved &&
+    prev.onFillFollowUp === next.onFillFollowUp &&
+    prev.onSendFollowUp === next.onSendFollowUp &&
+    prev.onDismissFollowUp === next.onDismissFollowUp
   );
 }
 
@@ -482,6 +510,8 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   onSendFollowUp,
   followUpDismissed = false,
   onDismissFollowUp,
+  messageIndex,
+  virtualScrollManager,
 }) => {
   void _onBranch;
   const assistantRowRef = useRef<HTMLDivElement>(null);
@@ -527,6 +557,10 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     },
     [],
   );
+
+  useEffect(() => {
+    virtualScrollManager?.invalidateActual(messageIndex);
+  }, [msg.text, messageIndex, virtualScrollManager]);
 
   const thinkingBodyOpen = isThinkingMsg || thinkingOpen;
   const thinkingBudget = budgetDomText(thinkingText, THINKING_DOM_CHAR_CAP);
@@ -626,7 +660,19 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             const timeline = buildAssistantTimeline(msg);
             if (!timeline.length) {
                const fallback = stripThoughtPlaceholders(msg.text || '');
-               if (!fallback.trim()) return null;
+               if (!fallback.trim()) {
+                 if (msg.status === 'error') {
+                   return (
+                     <div className={styles.timelineText}>
+                       <div style={{ padding: '8px 12px', background: 'var(--bg-error-subtle, rgba(239, 68, 68, 0.08))', borderRadius: 8, color: 'var(--text-error, #ef4444)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                         <Lucide.AlertCircle size={14} />
+                         <span>服务暂时不可用，请检查网络或后端配置</span>
+                       </div>
+                     </div>
+                   );
+                 }
+                 return null;
+               }
                if (isThinkingMsg) {
                  return (
                    <div className={styles.timelineText}>
@@ -904,6 +950,9 @@ function useAsyncMarkdownHtml(markdown: string, priority: Priority): { html: str
 function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priority }) {
   const { html, loading } = useAsyncMarkdownHtml(text, priority);
   const skeletonRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const bridgeRef = useRef<IncrementalMarkdownBridge | null>(null);
+  const initializedRef = useRef(false);
   const font = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
   const { measureHeight } = usePreparedText({ text, font });
   const [skeletonMinH, setSkeletonMinH] = useState<number | undefined>(undefined);
@@ -920,6 +969,24 @@ function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priori
     setSkeletonMinH(h > 0 ? Math.ceil(h * 1.15) : undefined);
   }, [loading, measureHeight, font, text]);
 
+  useLayoutEffect(() => {
+    if (!containerRef.current || loading || !html) return;
+
+    const bridge = bridgeRef.current ?? (bridgeRef.current = new IncrementalMarkdownBridge());
+    const result = bridge.push(text);
+
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      const wrappedHtml = result.updates.map(u =>
+        `<span data-chunk-id="${u.id}">${u.html}</span>`
+      ).join('');
+      containerRef.current.innerHTML = wrappedHtml;
+    } else if (result.updates.length > 0) {
+      const patches = chunkUpdatesToDomPatches(containerRef.current, result.updates, false);
+      applyDomPatches(containerRef.current, patches);
+    }
+  }, [html, loading, text]);
+
   if (!text) return null;
   if (loading) {
     return (
@@ -934,8 +1001,8 @@ function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priori
   }
   return (
     <div
+      ref={containerRef}
       className={`${styles.assistantText} md-rendered`}
-      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }

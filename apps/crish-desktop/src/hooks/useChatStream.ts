@@ -53,6 +53,7 @@ import {
 import { estimateCostUsd } from '../api/pricingStore';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import { getActiveModelId } from '../api/providerProfiles';
+import { StreamRenderBuffer } from '../api/StreamRenderBuffer';
 import {
   StreamTextBatcher,
   StreamValueBatcher,
@@ -398,7 +399,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       const sessionId = key.slice(0, sep);
       const messageId = key.slice(sep + 2);
       updateMessageText(sessionId, messageId, text);
-    }, { intervalMs: 48 });
+    }, { intervalMs: 48, maxBufferedChars: 8000 });
   }
 
   /** 思考过程同样 48ms 批合并，避免 onThought 高于正文频率时打爆 store */
@@ -410,7 +411,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       const sessionId = key.slice(0, sep);
       const messageId = key.slice(sep + 2);
       updateMessageThinking(sessionId, messageId, thinking);
-    }, { intervalMs: 48 });
+    }, { intervalMs: 48, maxBufferedChars: 4000 });
   }
 
   /**
@@ -447,6 +448,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
       { intervalMs: 48, merge: mergeToolCallPatch },
     );
   }
+
+  /** 流式帧渲染缓冲区（per-run），替代定时批合并 → onFrame 中 updateMessageText */
+  const renderBufferRef = useRef<StreamRenderBuffer | null>(null);
 
   /**
    * complete/stop/切流/错误：正文 + thinking + 工具统一 flushNow。
@@ -502,7 +506,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
   );
 
   useEffect(() => {
-    return () => clearRunNoticeTimer();
+    return () => {
+      clearRunNoticeTimer();
+      renderBufferRef.current?.stop();
+    };
   }, [clearRunNoticeTimer]);
 
   /**
@@ -603,7 +610,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     const prevStream = streamManagerRef.current!.get(sid);
     if (prevStream) {
       streamManagerRef.current!.delete(sid);
-      // 刷出旧流 pending 正文，再 cancel（cancel 会同步触发旧 onComplete → isLive 已 false）
+      // 刷出旧流 pending 正文（含 render buffer），再 cancel
+      renderBufferRef.current?.flush(true);
+      renderBufferRef.current?.stop();
       flushStreamBatchers();
       safeCancelStream(prevStream.cancel);
     }
@@ -618,6 +627,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     let localRunId: string | null = null;
     /** 本轮已收口（complete/stop 竞态）：回调一律 no-op */
     let runClosed = false;
+
+    // StreamRenderBuffer 实例（per-run），驱动 rAF 分帧写入 store
+    const buffer = new StreamRenderBuffer();
+    renderBufferRef.current = buffer;
+    buffer.reset();
+    buffer.onFrame = (frame) => {
+      if (runClosed) return;
+      updateMessageText(sid, assistantMsgId, frame.full);
+    };
+    buffer.start();
     // 仅当前查看会话时清 diff 焦点，避免后台会话抢右侧
     if (useLayoutStore.getState().activeSessionId === sid) {
       openSidePanelOnceRef.current = { terminal: false, diff: false };
@@ -882,8 +901,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         gotRealText = true;
         // 有实质正文 → 问题已过，收起系统提示
         dismissRunNotice();
-        // 批合并写入 store，避免每 token 触发全树重绘
-        textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), chunk);
+        // 优先通过 StreamRenderBuffer 分帧写入 store（fallback 到定时批合并）
+        if (renderBufferRef.current) {
+          renderBufferRef.current.push(chunk);
+        } else {
+          textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), chunk);
+        }
         // 有正文后清空占位思考，避免与正式输出叠在一起
         const cur = getSessionById(sid)
           ?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
@@ -919,6 +942,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
           14000,
         );
         onShowToast(message);
+        // 若助手消息尚无文本，将错误消息写入助手气泡与状态，保证消息可见并可一键重试
+        if (asstErr && !(asstErr.text || '').trim()) {
+          store.updateMessageText(sid, assistantMsgId, message);
+          store.setSessionMessageStatus(sid, assistantMsgId, 'error');
+        }
         // 错误路径也刷出 pending，避免横幅已出但正文还卡在 batcher
         flushStreamBatchers();
       },
@@ -931,7 +959,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
         }
         runClosed = true;
 
-        // 终态前强制 flush 批合并正文 / thinking / 工具
+        // 终态前强制 flush 分帧缓冲区 + 批合并正文 / thinking / 工具
+        buffer.flush(true);
         flushStreamBatchers();
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const st = useLayoutStore.getState();
@@ -1111,7 +1140,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamResul
     if (!cur) return;
     // 先摘句柄：后续 cancel→onComplete 见 !isLive 整段 no-op，避免二次 drain
     streamManagerRef.current!.delete(sid);
-    // 停止前刷出批合并中的正文 / thinking / 工具
+    // 停止前刷出分帧缓冲区 + 批合并中的正文 / thinking / 工具
+    renderBufferRef.current?.flush(true);
+    renderBufferRef.current?.stop();
     flushStreamBatchers();
     const st = useLayoutStore.getState();
     // 停止生成时中断目标自动续写

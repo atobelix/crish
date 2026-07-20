@@ -206,7 +206,7 @@ export type MessageSender = 'user' | 'assistant';
  * 用户/助手消息处理状态（可选）。
  * queued=排队待发; processing=流式中; completed=终态（成功收口，不含 error 枚举）。
  */
-export type SessionMessageStatus = 'queued' | 'processing' | 'completed';
+export type SessionMessageStatus = 'queued' | 'processing' | 'completed' | 'error';
 
 /** 时间线块类型：正文段 vs 工具调用锚点 */
 export type MessageTimelineBlockType = 'text' | 'tool_call';

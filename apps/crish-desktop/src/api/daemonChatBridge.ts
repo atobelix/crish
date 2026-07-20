@@ -75,7 +75,7 @@ export function normalizeStreamSessionId(sessionId: unknown): string {
 export function messageBelongsToRun(msgRunId: unknown, localRunId: string): boolean {
   if (msgRunId == null) return true;
   const rid = typeof msgRunId === 'string' ? msgRunId.trim() : String(msgRunId).trim();
-  if (!rid) return true;
+  if (!rid) return false;
   return rid === localRunId;
 }
 
@@ -247,78 +247,85 @@ export function mergeAssistantTextPiece(prior: string, piece: string): string {
   return `${prior}\n\n${p}`;
 }
 
-/**
- * Start a daemon run and stream events into UI callbacks.
- * Returns a cancel function.
- *
- * Note: daemon streams type=event frames; client supplies runId.
- * options.content / hasImages：多模态图片（OpenAI-style parts）；引擎校验通过后写入消息 metadata。
- */
-export function streamViaDaemon(
-  prompt: string,
-  callbacks: StreamCallbacks,
-  sessionId: string,
-  assistantMsgId: string,
-  options?: StreamRequestOptions,
-): () => void {
-  const client = getDesktopDaemonClient();
-  client.startKeepAlive();
+/* ──────────────────────────────────────────── Stream state ─── */
 
-  let cancelled = false;
-  let finished = false;
-  let assistantText = '';
-  let assistantThought = '';
-  let unsub: (() => void) | null = null;
-  /** 审批 / 在飞工具状态机（替代四布尔散状态） */
-  const approvalFlow = new ApprovalFlowMachine();
-  let endTimer: ReturnType<typeof setTimeout> | null = null;
-  const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  void assistantMsgId;
-  try {
-    callbacks.onRunMeta?.({ runId });
-  } catch {
-    /* ignore */
+export interface StreamState {
+  cancelled: boolean;
+  finished: boolean;
+  assistantText: string;
+  assistantThought: string;
+  unsub: (() => void) | null;
+  endTimer: ReturnType<typeof setTimeout> | null;
+}
+
+function cleanupStreamState(state: StreamState): void {
+  state.unsub?.();
+  state.unsub = null;
+  if (state.endTimer) {
+    clearTimeout(state.endTimer);
+    state.endTimer = null;
   }
+}
 
-  /**
-   * 审批 / 在飞工具清空后，若曾 defer 终态则尝试收口。
-   * 必须已见 run 终态信号，避免「审批通过 → 首个 tool-end」误收口（agent 还可能继续）。
-   */
-  const tryResumeFinish = () => {
-    if (finished || cancelled) return;
-    const snap = approvalFlow.snapshot();
-    if (!snap.deferredTerminal) return;
-    if (!snap.sawRunTerminal) return;
-    if (approvalFlow.shouldBlockTerminal()) return;
-    finish(false);
-  };
+/* ── 5. surfaceStreamFailure ──────────────────────────────── */
 
+export function surfaceStreamFailure(
+  raw: unknown,
+  scope: string,
+  callbacks: StreamCallbacks,
+  runId: string,
+): void {
+  logInternalError(scope, raw);
+  const kind = classifySoftFailure(raw);
+  const formatted = formatRunFailureForUi(raw, scope);
+  let msg =
+    softFailureMessage(kind) ??
+    assistantBubbleForFailure(raw) ??
+    formatted.message;
+  if (/checkpoint/i.test(String(raw || '')) || /checkpoint/i.test(scope)) {
+    msg = formatted.message;
+  }
+  const detail = formatted.detail;
+  recordStreamDiag({
+    runId,
+    scope,
+    kind: kind || formatted.kindTag,
+    message: msg,
+    raw: detail,
+  });
+  if (callbacks.onRunError) {
+    callbacks.onRunError(msg, kind || scope || 'ended', detail);
+  }
+}
+
+/* ── 4. createFinishController ───────────────────────────── */
+
+export function createFinishController(
+  approvalFlow: ApprovalFlowMachine,
+  callbacks: StreamCallbacks,
+  cleanup: () => void,
+  state: StreamState,
+  timeoutMs = 8000,
+): { finish: (force?: boolean) => void; tryResumeFinish: () => void } {
   const finish = (force = false) => {
-    if (finished) return;
-    if (!force && !cancelled) {
+    if (state.finished) return;
+    if (!force && !state.cancelled) {
       if (approvalFlow.hasPending()) {
         approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
-      // 仍有在飞工具：标记 defer，等 tool-end 重入；超时再强制收口
       if (approvalFlow.hasInflight()) {
         approvalFlow.dispatch({ type: "defer_terminal" });
-        if (endTimer) clearTimeout(endTimer);
-        endTimer = setTimeout(() => finish(true), 1200);
+        if (state.endTimer) clearTimeout(state.endTimer);
+        state.endTimer = setTimeout(() => finish(true), timeoutMs);
         return;
       }
     }
-    if (endTimer) {
-      clearTimeout(endTimer);
-      endTimer = null;
-    }
-    // 收口时清 deferred 标记（保留 saw/pending 由 clear_all 在真失败路径处理）
     if (approvalFlow.isDeferredTerminal()) {
       approvalFlow.dispatch({ type: 'force_finish' });
     }
-    finished = true;
-    unsub?.();
-    unsub = null;
+    state.finished = true;
+    cleanup();
     try {
       callbacks.onComplete();
     } catch {
@@ -326,75 +333,78 @@ export function streamViaDaemon(
     }
   };
 
-  /**
-   * 产品错误：绝不写入助手正文（避免被当成 AI 回复）。
-   * 通过 onRunError 回调给 UI toast / 系统提示；附带 detail 供诊断横幅。
-   */
-  const surfaceFailure = (raw: unknown, scope: string) => {
-    logInternalError(scope, raw);
-    const kind = classifySoftFailure(raw);
-    const formatted = formatRunFailureForUi(raw, scope);
-    // soft 分类已有礼貌主句时保留；未知/检查点相关用 format 主句
-    let msg =
-      softFailureMessage(kind) ??
-      assistantBubbleForFailure(raw) ??
-      formatted.message;
-    if (/checkpoint/i.test(String(raw || '')) || /checkpoint/i.test(scope)) {
-      msg = formatted.message;
-    }
-    const detail = formatted.detail;
-    recordStreamDiag({
-      runId,
-      scope,
-      kind: kind || formatted.kindTag,
-      message: msg,
-      raw: detail,
-    });
-    if (callbacks.onRunError) {
-      callbacks.onRunError(msg, kind || scope || 'ended', detail);
-    }
+  const tryResumeFinish = () => {
+    if (state.finished || state.cancelled) return;
+    const snap = approvalFlow.snapshot();
+    if (!snap.deferredTerminal) return;
+    if (!snap.sawRunTerminal) return;
+    if (approvalFlow.shouldBlockTerminal()) return;
+    finish(false);
   };
 
-  /**
-   * Shared approval-resolved path (nested AgentEvent + top-level WS broadcast).
-   * Uses parseApprovalResolvedFields: ok === false early return + error log only.
-   */
-  const applyApprovalResolved = (payload: unknown) => {
-    if (cancelled || finished) return;
+  return { finish, tryResumeFinish };
+}
+
+/* ── 3. EventRouter ──────────────────────────────────────── */
+
+export class EventRouter {
+  private state: StreamState;
+  private approvalFlow: ApprovalFlowMachine;
+  private callbacks: StreamCallbacks;
+  private runId: string;
+  private finish: (force?: boolean) => void;
+  private tryResumeFinish: () => void;
+  private client: ReturnType<typeof getDesktopDaemonClient>;
+
+  constructor(
+    state: StreamState,
+    approvalFlow: ApprovalFlowMachine,
+    callbacks: StreamCallbacks,
+    runId: string,
+    finish: (force?: boolean) => void,
+    tryResumeFinish: () => void,
+    client: ReturnType<typeof getDesktopDaemonClient>,
+  ) {
+    this.state = state;
+    this.approvalFlow = approvalFlow;
+    this.callbacks = callbacks;
+    this.runId = runId;
+    this.finish = finish;
+    this.tryResumeFinish = tryResumeFinish;
+    this.client = client;
+  }
+
+  private applyApprovalResolved(payload: unknown): void {
+    if (this.state.cancelled || this.state.finished) return;
     const resolved = parseApprovalResolvedFields(payload);
     if (resolved.ok === false) {
       logInternalError('daemon-protocol', resolved.error);
       return;
     }
     const { toolCallId: requestId, denied, decision: uiDecision } = resolved.data;
-    approvalFlow.dispatch({
+    this.approvalFlow.dispatch({
       type: 'approval_resolved',
       toolId: requestId,
       denied,
     });
-    if (callbacks.onApprovalResolved) {
-      // 未知决策已由 parser 收成 deny，避免伪造 allow
-      callbacks.onApprovalResolved(requestId, uiDecision);
+    if (this.callbacks.onApprovalResolved) {
+      this.callbacks.onApprovalResolved(requestId, uiDecision);
     }
-    // allow 后引擎还会继续，勿提前收口；
-    // deny：若此前因审批 defer 过终态则收口；已见 run 终态时同样 tryResume
-    if (denied && approvalFlow.isDeferredTerminal() && !approvalFlow.hasPending()) {
-      finish(false);
-    } else if (approvalFlow.snapshot().sawRunTerminal) {
-      tryResumeFinish();
+    if (denied && this.approvalFlow.isDeferredTerminal() && !this.approvalFlow.hasPending()) {
+      this.finish(false);
+    } else if (this.approvalFlow.snapshot().sawRunTerminal) {
+      this.tryResumeFinish();
     }
-  };
+  }
 
-  const handleAgentEvent = (event: Record<string, unknown>) => {
-    if (cancelled || finished) return;
+  handleAgentEvent(event: Record<string, unknown>): void {
+    if (this.state.cancelled || this.state.finished) return;
     const envelope = resolveEventType(event);
     if (!envelope) return;
     const type = envelope.type;
-    // Prefer envelope.raw so alias-normalized type still uses original payload fields
     event = envelope.raw;
 
     if (type === 'message-delta' || type === 'text-delta') {
-      // text-delta: { text }；message-delta: { block: { type, text } }
       let t = '';
       let isThought = false;
       if (type === 'text-delta') {
@@ -407,21 +417,20 @@ export function streamViaDaemon(
       }
       if (!t) return;
       if (isThought) {
-        assistantThought += t;
-        callbacks.onThought(assistantThought);
+        this.state.assistantThought += t;
+        this.callbacks.onThought(this.state.assistantThought);
       } else {
-        // 仅当 content 是累计全文（长度 ≥ 当前）时才覆盖，避免把 delta 误当全文冲掉
         if (event.message && typeof event.message === 'object') {
           const msg = event.message as Record<string, unknown>;
-          if (typeof msg.content === 'string' && msg.content.length >= assistantText.length) {
-            assistantText = msg.content;
+          if (typeof msg.content === 'string' && msg.content.length >= this.state.assistantText.length) {
+            this.state.assistantText = msg.content;
           } else {
-            assistantText += t;
+            this.state.assistantText += t;
           }
         } else {
-          assistantText += t;
+          this.state.assistantText += t;
         }
-        callbacks.onChunk(assistantText);
+        this.callbacks.onChunk(this.state.assistantText);
       }
       return;
     }
@@ -439,40 +448,30 @@ export function streamViaDaemon(
             else if (b.type === 'text') text += blockText(b);
           }
         }
-        // content 仅作文案，不把 thought 混进正文
         if (typeof msg.content === 'string' && msg.content && !text) text = msg.content;
         if (thought.trim()) {
-          // 思考累计（多轮工具时可能多段）
-          if (assistantThought && !assistantThought.includes(thought.trim())) {
-            assistantThought = `${assistantThought}\n${thought.trim()}`;
+          if (this.state.assistantThought && !this.state.assistantThought.includes(thought.trim())) {
+            this.state.assistantThought = `${this.state.assistantThought}\n${thought.trim()}`;
           } else {
-            assistantThought = thought.trim();
+            this.state.assistantThought = thought.trim();
           }
-          callbacks.onThought(assistantThought);
+          this.callbacks.onThought(this.state.assistantThought);
         }
         if (text.trim()) {
-          // 多轮 tool→再回复：各轮正文累计；同轮 delta 已推过则用完整段覆盖，勿重复拼接
           const piece = text.trim();
-          assistantText = mergeAssistantTextPiece(assistantText, piece);
-          const full = assistantText;
-          // 无真实流式 delta 时直接交付完整段——
-          // 旧实现用本地 setTimeout 每 16ms 切片模拟流式（revealProgressively），
-          // 与真实 delta 叠加会产生闪烁 / 顺序错乱。
-          // 流式观感应由 UI 层的光标动画提供，而非数据层伪造。
-          callbacks.onChunk(full);
+          this.state.assistantText = mergeAssistantTextPiece(this.state.assistantText, piece);
+          this.callbacks.onChunk(this.state.assistantText);
         }
       }
       return;
     }
 
-    // 只认单条 tool-start，忽略 batch-start，避免同一工具进两次
     if (type === 'tool-start') {
       const { id, name, args, explanation } = toolCallFieldsFromEvent(event);
-      // Event guard: empty tool id never enters the flow machine / UI
       if (id && id.trim()) {
         const toolId = id.trim();
-        approvalFlow.dispatch({ type: 'tool_start', toolId });
-        callbacks.onToolStart(toolId, name, args, explanation);
+        this.approvalFlow.dispatch({ type: 'tool_start', toolId });
+        this.callbacks.onToolStart(toolId, name, args, explanation);
       }
       return;
     }
@@ -481,21 +480,17 @@ export function streamViaDaemon(
     }
 
     if (type === 'tool-end') {
-      // result 嵌套为协议主路径；兼容顶层摊平
       const resultPayload = event.result ?? event;
       const { id, text, isError, diffs } = toolResultFields(resultPayload);
-      // Event guard: drop tool-end without a usable id
       if (!id || !id.trim()) return;
       const toolId = id.trim();
-      approvalFlow.dispatch({ type: 'tool_end', toolId });
-      if (isError) callbacks.onToolError(toolId, text || 'failed');
-      else callbacks.onToolSuccess(toolId, text || '', diffs);
-      // 曾 defer 的终态：在飞工具归零后立即收口，不靠超时
-      tryResumeFinish();
+      this.approvalFlow.dispatch({ type: 'tool_end', toolId });
+      if (isError) this.callbacks.onToolError(toolId, text || 'failed');
+      else this.callbacks.onToolSuccess(toolId, text || '', diffs);
+      this.tryResumeFinish();
       return;
     }
 
-    // batch-end 与逐条 tool-end 重复，忽略以免双写
     if (type === 'tool-batch-end') {
       return;
     }
@@ -515,7 +510,6 @@ export function streamViaDaemon(
           ? parsed.data.toolCallId
           : String(req.toolCallId ?? req.id ?? req.requestId ?? '')
       ).trim();
-      // Event guard: never invent approval ids that cannot be resolved later
       if (!toolCallId) {
         if (parsed.ok === false) {
           logInternalError('daemon-protocol', parsed.error);
@@ -529,7 +523,6 @@ export function streamViaDaemon(
           ? parsed.data.toolName
           : String(req.toolName ?? req.name ?? 'command')
       ).trim() || 'command';
-      // parameters（runtime）/ input（daemon WS）；zod raw 已归一，勿整包序列化
       const args = extractApprovalCommandArgs(
         parsedOk && parsed.data.parameters
           ? { ...req, parameters: parsed.data.parameters }
@@ -538,40 +531,33 @@ export function streamViaDaemon(
       const explanation = parsedOk
         ? parsed.data.explanation
         : String(req.summary ?? req.reason ?? req.message ?? toolName ?? '需要确认');
-      // BE-04：后端风险事实透传（扁平 event + nested request.metadata）
       const approvalMeta = parseApprovalRiskMeta(event);
 
-      // 同一 toolCallId 已在 pending：不重复回调，避免 UI 双挂载
-      if (approvalFlow.debugSets().pending.includes(toolCallId)) {
+      if (this.approvalFlow.debugSets().pending.includes(toolCallId)) {
         return;
       }
 
-      // 引擎发来 approval-requested 说明策略要求确认——必须弹窗并挂起，
-      // 否则 run 会一直等批准。full 的非极危由引擎直接 allow，不会到这里。
-      // plan 写操作由引擎 deny，同样不会 ask。
       const perm = getPermissionMode();
       if (perm === 'plan') {
-        // 防御：计划模式不应 ask；若不慎收到则记 running 不拦用户
-        callbacks.onToolStart(toolCallId, toolName, args, explanation);
+        this.callbacks.onToolStart(toolCallId, toolName, args, explanation);
         return;
       }
 
-      // 命令白名单：自动 approve，不伪造输出（等引擎 tool-end）
       {
         const line = extractCommandForMatch(toolName, args);
         if (commandMatchesWhitelist(line, getCommandPermissions())) {
-          callbacks.onToolStart(
+          this.callbacks.onToolStart(
             toolCallId,
             toolName,
             args,
             explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许',
           );
-          void client
+          void this.client
             .send({ type: 'approve-tool', toolCallId, scope: 'project' })
             .catch(() => {
-              approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
-              if (callbacks.onToolPendingApproval) {
-                callbacks.onToolPendingApproval(
+              this.approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
+              if (this.callbacks.onToolPendingApproval) {
+                this.callbacks.onToolPendingApproval(
                   toolCallId,
                   toolName,
                   args,
@@ -584,9 +570,9 @@ export function streamViaDaemon(
         }
       }
 
-      approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
-      if (callbacks.onToolPendingApproval) {
-        callbacks.onToolPendingApproval(
+      this.approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
+      if (this.callbacks.onToolPendingApproval) {
+        this.callbacks.onToolPendingApproval(
           toolCallId,
           toolName,
           args,
@@ -594,18 +580,16 @@ export function streamViaDaemon(
           approvalMeta,
         );
       } else {
-        callbacks.onToolStart(toolCallId, toolName, args, explanation);
+        this.callbacks.onToolStart(toolCallId, toolName, args, explanation);
       }
       return;
     }
 
-    // 自动放行（完全访问）或用户批准后都会到这里
     if (type === 'approval-resolved') {
-      applyApprovalResolved(event);
+      this.applyApprovalResolved(event);
       return;
     }
 
-    // 真正终态以 run-terminal 为准
     if (type === 'run-terminal' || type === 'run-completed' || type === 'run-failed') {
       const termParsed = safeParseRunTerminal(event);
       const termOk = termParsed.ok === true;
@@ -623,58 +607,64 @@ export function streamViaDaemon(
         const errPayload = termOk
           ? termParsed.data.error
           : event.error ?? event.message ?? event;
-        surfaceFailure(errPayload ?? event, type === 'run-failed' ? 'run-failed' : 'run-terminal-failed');
+        surfaceStreamFailure(
+          errPayload ?? event,
+          type === 'run-failed' ? 'run-failed' : 'run-terminal-failed',
+          this.callbacks,
+          this.runId,
+        );
       }
-      approvalFlow.dispatch({ type: "run_terminal_seen" });
-      if (approvalFlow.hasPending() && !failed) {
-        approvalFlow.dispatch({ type: "defer_terminal" });
+      this.approvalFlow.dispatch({ type: "run_terminal_seen" });
+      if (this.approvalFlow.hasPending() && !failed) {
+        this.approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
-      approvalFlow.dispatch({ type: "clear_all" });
-      finish(failed);
+      this.approvalFlow.dispatch({ type: "clear_all" });
+      this.finish(failed);
       return;
     }
 
-    // agent-end 不是最终权威：仅在长时间无 run-terminal 时兜底
     if (type === 'agent-end') {
-      if (approvalFlow.hasPending()) {
-        approvalFlow.dispatch({ type: "defer_terminal" });
+      if (this.approvalFlow.hasPending()) {
+        this.approvalFlow.dispatch({ type: "defer_terminal" });
         return;
       }
       const reason = String((event as { reason?: string }).reason || '');
       if (reason === 'error') {
-        surfaceFailure((event as { error?: unknown }).error ?? event, 'agent-end-error');
-        finish(true);
+        surfaceStreamFailure(
+          (event as { error?: unknown }).error ?? event,
+          'agent-end-error',
+          this.callbacks,
+          this.runId,
+        );
+        this.finish(true);
         return;
       }
-      if (approvalFlow.snapshot().sawRunTerminal) {
-        finish(false);
+      if (this.approvalFlow.snapshot().sawRunTerminal) {
+        this.finish(false);
         return;
       }
-      // 等 run-terminal；最久等 2.5s 再兜底收口
-      if (endTimer) clearTimeout(endTimer);
-      endTimer = setTimeout(() => {
-        if (!cancelled && !finished) finish(false);
-      }, 2500);
+      if (this.state.endTimer) clearTimeout(this.state.endTimer);
+      this.state.endTimer = setTimeout(() => {
+        if (!this.state.cancelled && !this.state.finished) this.finish(false);
+      }, 8000);
     }
-  };
+  }
 
-  const onMsg = (msg: Record<string, unknown>) => {
-    if (cancelled || finished) return;
+  onMsg = (msg: Record<string, unknown>): void => {
+    if (this.state.cancelled || this.state.finished) return;
     const envelope = resolveEventType(msg);
     if (!envelope) return;
     const type = envelope.type;
     msg = envelope.raw;
 
-    // Event guard: foreign runId never drives this stream
-    if (!messageBelongsToRun(msg.runId, runId)) return;
+    if (!messageBelongsToRun(msg.runId, this.runId)) return;
 
-    // 子 agent 广播：runId 是父 run；与本流绑定
     if (type === 'subagent-started') {
-      callbacks.onSubagentStarted?.({
+      this.callbacks.onSubagentStarted?.({
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
-        parentRunId: String(msg.runId ?? runId),
+        parentRunId: String(msg.runId ?? this.runId),
         parentToolCallId: msg.parentToolCallId ? String(msg.parentToolCallId) : undefined,
         description: String(msg.description ?? '协作 agent'),
         mode: String(msg.mode ?? 'research'),
@@ -686,7 +676,7 @@ export function streamViaDaemon(
         msg.event && typeof msg.event === 'object' && !Array.isArray(msg.event)
           ? (msg.event as Record<string, unknown>)
           : {};
-      callbacks.onSubagentEvent?.({
+      this.callbacks.onSubagentEvent?.({
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
         event: ev,
@@ -701,7 +691,7 @@ export function streamViaDaemon(
           : /fail|error/i.test(raw)
             ? 'failed'
             : 'completed';
-      callbacks.onSubagentEnded?.({
+      this.callbacks.onSubagentEnded?.({
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
         status: st,
@@ -711,129 +701,218 @@ export function streamViaDaemon(
     }
 
     if (type === 'error') {
-      surfaceFailure(msg.message ?? msg.error ?? msg, 'daemon-error');
-      approvalFlow.dispatch({ type: 'clear_all' });
-      finish(true);
+      surfaceStreamFailure(
+        msg.message ?? msg.error ?? msg,
+        'daemon-error',
+        this.callbacks,
+        this.runId,
+      );
+      this.approvalFlow.dispatch({ type: 'clear_all' });
+      this.finish(true);
       return;
     }
 
     if (type === 'event') {
-      // Event guard: nested payload must be a plain object
       if (!msg.event || typeof msg.event !== 'object' || Array.isArray(msg.event)) return;
-      handleAgentEvent(msg.event as Record<string, unknown>);
+      this.handleAgentEvent(msg.event as Record<string, unknown>);
       return;
     }
 
     if (type === 'run-ended' || type === 'run-failed') {
       if (type === 'run-failed') {
-        surfaceFailure(msg.error ?? msg.message ?? msg, 'run-ended-failed');
+        surfaceStreamFailure(
+          msg.error ?? msg.message ?? msg,
+          'run-ended-failed',
+          this.callbacks,
+          this.runId,
+        );
       }
-      approvalFlow.dispatch({ type: 'run_terminal_seen' });
-      approvalFlow.dispatch({ type: 'clear_all' });
-      finish(type === 'run-failed');
+      this.approvalFlow.dispatch({ type: 'run_terminal_seen' });
+      this.approvalFlow.dispatch({ type: 'clear_all' });
+      this.finish(type === 'run-failed');
       return;
     }
 
     if (type === 'approval-requested') {
-      handleAgentEvent(msg);
+      this.handleAgentEvent(msg);
       return;
     }
 
-    // 广播的审批结果（不嵌在 event 里）— 与嵌套 AgentEvent 共用 parseApprovalResolvedFields
     if (type === 'approval-resolved') {
-      applyApprovalResolved(msg);
+      this.applyApprovalResolved(msg);
     }
   };
+}
 
-  void (async () => {
-    try {
-      // Prefer waiting for keep-alive over instant fail — backend must not stall UX
-      const ready = await client.waitUntilConnected(15_000);
-      if (!ready || !client.isConnected()) {
-        if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
-        else callbacks.onChunk(networkUserMessage());
-        finish();
-        return;
-      }
+/* ── 2. createStreamCancel ───────────────────────────────── */
 
-      unsub = client.onMessage(onMsg);
-      callbacks.onThought('正在处理…');
-
-      // Project open sets workspace path; no project → engine uses its default cwd
-      const { getWorkspacePath } = await import('./projectStore');
-      const cwd = getWorkspacePath() || undefined;
-
-      const mode = getPermissionMode();
-      const permissionMode = toDaemonPermissionMode(mode);
-
-      const hasImages = Boolean(options?.hasImages || options?.content?.some((p) => p.type === 'image_url'));
-      // Empty-session safety: never ship blank/whitespace sessionId to daemon
-      const safeSessionId = normalizeStreamSessionId(sessionId);
-
-      // MCP 工具禁用 + 思考强度（映射 budgetDifficulty）：本机设置 → 引擎 run-task
-      let mcpDisabledTools: Record<string, string[]> | undefined;
-      let budgetDifficulty: string | undefined;
-      try {
-        const { clientApi } = await import('./clientApi');
-        const sets = await clientApi.getSettingsEx(cwd || '__global__');
-        if (sets?.mcpDisabledTools && Object.keys(sets.mcpDisabledTools).length > 0) {
-          mcpDisabledTools = sets.mcpDisabledTools;
-        }
-        // 模型菜单思考档 → 引擎 budgetDifficulty（协议已允许该字段）
-        const tl = String(sets?.defaultThinkingLevel || '').trim().toLowerCase();
-        // 与模型菜单六档对齐：off 不传难度；其余映射到引擎 budgetDifficulty
-        if (tl === 'off') budgetDifficulty = undefined;
-        else if (tl === 'minimal') budgetDifficulty = 'easy';
-        else if (tl === 'low') budgetDifficulty = 'easy';
-        else if (tl === 'medium') budgetDifficulty = 'normal';
-        else if (tl === 'high') budgetDifficulty = 'hard';
-        else if (tl === 'xhigh') budgetDifficulty = 'hard';
-      } catch {
-        /* ignore */
-      }
-
-      await client.send({
-        type: 'run-task',
-        runId,
-        prompt,
-        sessionId: safeSessionId,
-        permissionMode,
-        ...(cwd ? { cwd } : {}),
-        ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
-        ...(budgetDifficulty ? { budgetDifficulty } : {}),
-        // 结构化多模态：引擎支持时走 vision；未知字段在旧校验下会被拒——与 daemon 轻量扩展对齐
-        ...(options?.content?.length ? { content: options.content } : {}),
-        ...(hasImages ? { hasImages: true } : {}),
-        ...(options?.attachments?.length ? { attachments: options.attachments } : {}),
-      });
-    } catch (e) {
-      // Stream start failures are connectivity/send path — user only sees network copy
-      logInternalError('stream-start', e);
-      if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
-      else callbacks.onChunk(networkUserMessage());
-      finish();
-    }
-  })();
-
+export function createStreamCancel(
+  client: ReturnType<typeof getDesktopDaemonClient>,
+  runId: string,
+  callbacks: StreamCallbacks,
+  approvalFlow: ApprovalFlowMachine,
+  cleanup: () => void,
+  state: StreamState,
+): () => void {
   return () => {
-    if (finished) return;
-    cancelled = true;
+    if (state.finished) return;
+    state.cancelled = true;
     approvalFlow.dispatch({ type: "clear_all" });
     approvalFlow.dispatch({ type: "force_finish" });
-    if (endTimer) {
-      clearTimeout(endTimer);
-      endTimer = null;
-    }
-    unsub?.();
-    unsub = null;
+    cleanup();
     void client.send({ type: 'cancel-run', runId }).catch(() => undefined);
-    finished = true;
+    state.finished = true;
     try {
       callbacks.onComplete();
     } catch {
       /* ignore */
     }
   };
+}
+
+/* ── 1. createStreamSession ──────────────────────────────── */
+
+export async function createStreamSession(
+  client: ReturnType<typeof getDesktopDaemonClient>,
+  prompt: string,
+  sessionId: string,
+  runId: string,
+  callbacks: StreamCallbacks,
+  options: StreamRequestOptions | undefined,
+  state: StreamState,
+  onMessage: (msg: Record<string, unknown>) => void,
+  finish: (force?: boolean) => void,
+): Promise<void> {
+  try {
+    const ready = await client.waitUntilConnected(1_500);
+    if (!ready || !client.isConnected()) {
+      if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
+      else callbacks.onChunk(networkUserMessage());
+      finish();
+      return;
+    }
+
+    state.unsub = client.onMessage(onMessage);
+    callbacks.onThought('正在处理…');
+
+    const { getWorkspacePath } = await import('./projectStore');
+    const cwd = getWorkspacePath() || undefined;
+
+    const mode = getPermissionMode();
+    const permissionMode = toDaemonPermissionMode(mode);
+
+    const hasImages = Boolean(options?.hasImages || options?.content?.some((p) => p.type === 'image_url'));
+    const safeSessionId = normalizeStreamSessionId(sessionId);
+
+    let mcpDisabledTools: Record<string, string[]> | undefined;
+    let budgetDifficulty: string | undefined;
+    try {
+      const { clientApi } = await import('./clientApi');
+      const sets = await clientApi.getSettingsEx(cwd || '__global__');
+      if (sets?.mcpDisabledTools && Object.keys(sets.mcpDisabledTools).length > 0) {
+        mcpDisabledTools = sets.mcpDisabledTools;
+      }
+      const tl = String(sets?.defaultThinkingLevel || '').trim().toLowerCase();
+      if (tl === 'off') budgetDifficulty = undefined;
+      else if (tl === 'minimal') budgetDifficulty = 'easy';
+      else if (tl === 'low') budgetDifficulty = 'easy';
+      else if (tl === 'medium') budgetDifficulty = 'normal';
+      else if (tl === 'high') budgetDifficulty = 'hard';
+      else if (tl === 'xhigh') budgetDifficulty = 'hard';
+    } catch {
+      /* ignore */
+    }
+
+    await client.send({
+      type: 'run-task',
+      runId,
+      prompt,
+      sessionId: safeSessionId,
+      permissionMode,
+      ...(cwd ? { cwd } : {}),
+      ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
+      ...(budgetDifficulty ? { budgetDifficulty } : {}),
+      ...(options?.content?.length ? { content: options.content } : {}),
+      ...(hasImages ? { hasImages: true } : {}),
+      ...(options?.attachments?.length ? { attachments: options.attachments } : {}),
+    });
+  } catch (e) {
+    logInternalError('stream-start', e);
+    if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
+    else callbacks.onChunk(networkUserMessage());
+    finish();
+  }
+}
+
+/* ── 6. streamViaDaemon (recomposed) ─────────────────────── */
+
+/**
+ * Start a daemon run and stream events into UI callbacks.
+ * Returns a cancel function.
+ *
+ * Note: daemon streams type=event frames; client supplies runId.
+ * options.content / hasImages：多模态图片（OpenAI-style parts）；引擎校验通过后写入消息 metadata。
+ */
+export function streamViaDaemon(
+  prompt: string,
+  callbacks: StreamCallbacks,
+  sessionId: string,
+  assistantMsgId: string,
+  options?: StreamRequestOptions,
+): () => void {
+  const client = getDesktopDaemonClient();
+  client.startKeepAlive();
+
+  const state: StreamState = {
+    cancelled: false,
+    finished: false,
+    assistantText: '',
+    assistantThought: '',
+    unsub: null,
+    endTimer: null,
+  };
+  const approvalFlow = new ApprovalFlowMachine();
+  const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  void assistantMsgId;
+  try {
+    callbacks.onRunMeta?.({ runId });
+  } catch {
+    /* ignore */
+  }
+
+  const cleanup = () => cleanupStreamState(state);
+
+  const { finish, tryResumeFinish } = createFinishController(
+    approvalFlow,
+    callbacks,
+    cleanup,
+    state,
+    options?.finishTimeoutMs ?? 8000,
+  );
+
+  const router = new EventRouter(
+    state,
+    approvalFlow,
+    callbacks,
+    runId,
+    finish,
+    tryResumeFinish,
+    client,
+  );
+
+  void createStreamSession(
+    client,
+    prompt,
+    sessionId,
+    runId,
+    callbacks,
+    options,
+    state,
+    (msg) => router.onMsg(msg),
+    finish,
+  );
+
+  return createStreamCancel(client, runId, callbacks, approvalFlow, cleanup, state);
 }
 
 export async function ensureDaemonConnected(): Promise<{ ok: boolean; url?: string; error?: string }> {

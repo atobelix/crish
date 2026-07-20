@@ -143,10 +143,12 @@ export function shouldListSessionInSidebar(
   s: ShellSessionLike & { id: string },
   _activeSessionId?: string | null,
 ): boolean {
-  void s;
-  void _activeSessionId;
-  // 归档在 filter 层处理；此处恒 true 保证空壳可见
-  return true;
+  if (s.isPinned) return true;
+  if (isScheduledSessionTitle(s.title)) return true;
+  if (sessionHasListableContent(s)) return true;
+  if (!isDefaultSessionTitle(s.title)) return true;
+  // 空壳会话（无实质内容、默认标题、未置顶）：侧栏不展示，待发送消息后自动列出
+  return false;
 }
 
 /**
