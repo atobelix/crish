@@ -1,24 +1,53 @@
-/**
- * 设置 / 权限 UI facade：当前代理 to useLayoutStore（同一 immer store）。
- *
- * 覆盖设置浮层、设置 tab、permissionMode、planMode 及 openSettings 等。
- * 新代码可从本文件取设置 UI 相关状态；未来 multi-store 时只改本文件。
- *
- * 勿破坏：`useLayoutStore` 仍是权威入口（见 layoutStore.ts）。
- *
- * 对齐约定（与 sessionStore / workspaceStore 一致）：
- * - useSettingsUiStore === useLayoutStore（同引用）
- * - 便捷 hooks 经 useSettingsUiStore 订阅，不直连 layoutStore 符号
- * - 命令式：getSettingsUiState / openSettings / closeSettings / toggleSettingsOverlay
- */
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import { withDevtools } from './middleware/withDevtools';
+import { withLogger } from './middleware/withLogger';
 
-import { useLayoutStore } from './layoutStore';
-import type { PermissionMode } from '../api/permissionModes';
-import type { SettingsTabType } from './types';
+import {
+  loadStoredPermissionMode,
+  permissionModeAfterPlanToggle,
+  persistPermissionMode,
+  planModeEnabledFor,
+  type PermissionMode,
+} from '../api/permissionModes';
+import {
+  addCommandPermission as persistAddCommandPermission,
+  loadCommandPermissions,
+  removeCommandPermission as persistRemoveCommandPermission,
+  saveCommandPermissions,
+} from '../api/commandPermissions';
+import {
+  DEFAULT_SHELL_CHROME,
+  parseShellChromeMode,
+  SHELL_CHROME_STORAGE_KEY,
+  type ShellChromeMode,
+} from '../api/shellChrome';
+import { isDemoMode } from '../api/appMode';
+import { MAX_TERMINAL_SESSIONS, MAX_DIFF_FILES } from '@crish/shared-utils/browser';
+import { appendTerminalLine } from './layoutHelpers';
+import type { CronJob, McpServer, ProviderInfo, Settings } from '../api/clientApi';
+import type { SettingsTabType, SessionState } from './types';
+import {
+  DEFAULT_TOKEN_USAGE,
+  DEMO_TOKEN_USAGE,
+  DEFAULT_UI_SIZE,
+  DEFAULT_SETTINGS_TAB,
+  finiteNumber,
+  isSettingsTabType,
+  parseSettingsTab,
+  parseUiSize,
+  sanitizeActiveWorkers,
+  sanitizeTokenUsage,
+  UI_SIZE_STORAGE_KEY,
+  TAB_MODE_STORAGE_KEY,
+  type ActiveWorkerState,
+  type TokenUsageState,
+  type TelemetrySyncPayload,
+  type UiSize,
+} from './layoutStore';
 
 export type { SettingsTabType } from './types';
 
-/** 设置 UI 域状态切片 */
 export type SettingsUiSlice = {
   showSettingsOverlay: boolean;
   settingsActiveTab: SettingsTabType;
@@ -27,7 +56,6 @@ export type SettingsUiSlice = {
   planApproved: boolean;
 };
 
-/** 设置 UI 域 actions */
 export type SettingsUiActions = {
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: SettingsTabType) => void;
@@ -35,17 +63,222 @@ export type SettingsUiActions = {
   setPermissionMode: (mode: PermissionMode) => void;
   setPlanModeEnabled: (enabled: boolean) => void;
   setPlanApproved: (approved: boolean) => void;
+  addCommandPermission: (cmd: string) => void;
+  removeCommandPermission: (cmd: string) => void;
+  setCommandPermissions: (list: string[]) => void;
 };
 
 export type SettingsUiFacade = SettingsUiSlice & SettingsUiActions;
 
-/**
- * 与 useLayoutStore 同一 zustand 实例。
- * 语义上表示「设置 UI 域订阅」；实现上暂未拆分 store。
- */
-export const useSettingsUiStore = useLayoutStore;
+type SettingsUiStoreData = SettingsUiSlice & {
+  commandPermissions: string[];
+  uiSize: UiSize;
+  shellChromeMode: ShellChromeMode;
+  chatMainSurface: 'chat' | 'scheduled';
+  sidebarCollapsed: boolean;
+  appSettings: Settings | null;
+  scheduledTasks: CronJob[];
+  mcpServers: McpServer[];
+  providers: ProviderInfo[];
+  activeWorkers: ActiveWorkerState[];
+  tokenUsage: TokenUsageState;
+  killedWorkerIds: string[];
+  manuallyTriggeredWorkers: ActiveWorkerState[];
+};
 
-// ── selectors ─────────────────────────────────────────────────────────────
+type SettingsUiStore = SettingsUiStoreData & SettingsUiActions & {
+  setUiSize: (size: UiSize) => void;
+  setShellChromeMode: (mode: ShellChromeMode) => void;
+  setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  setAppSettings: (settings: Settings | null) => void;
+  setScheduledTasks: (tasks: CronJob[]) => void;
+  setMcpServers: (servers: McpServer[]) => void;
+  setProviders: (providers: ProviderInfo[]) => void;
+  syncTelemetryData: (data: TelemetrySyncPayload) => void;
+  addCommandPermission: (cmd: string) => void;
+  removeCommandPermission: (cmd: string) => void;
+  setCommandPermissions: (list: string[]) => void;
+  killWorker: (id: string, taskName: string) => void;
+  triggerCronJobNow: (prompt: string) => void;
+};
+
+const _initialPermissionMode = loadStoredPermissionMode();
+
+function _readStoredUiSize(): UiSize {
+  try {
+    return parseUiSize(localStorage.getItem(UI_SIZE_STORAGE_KEY));
+  } catch {
+    return DEFAULT_UI_SIZE;
+  }
+}
+
+function _readStoredShellChrome(): ShellChromeMode {
+  try {
+    return parseShellChromeMode(localStorage.getItem(SHELL_CHROME_STORAGE_KEY));
+  } catch {
+    return DEFAULT_SHELL_CHROME;
+  }
+}
+
+function _readStoredTabModeEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(TAB_MODE_STORAGE_KEY);
+    if (raw == null || raw === '') return true;
+    if (raw === '0' || raw === 'false') return false;
+    if (raw === '1' || raw === 'true') return true;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+const _settingsData: SettingsUiStoreData = {
+  showSettingsOverlay: false,
+  settingsActiveTab: DEFAULT_SETTINGS_TAB,
+  permissionMode: _initialPermissionMode,
+  planModeEnabled: planModeEnabledFor(_initialPermissionMode),
+  planApproved: false,
+  commandPermissions: loadCommandPermissions(),
+  uiSize: _readStoredUiSize(),
+  shellChromeMode: _readStoredShellChrome(),
+  chatMainSurface: 'chat',
+  sidebarCollapsed: false,
+  appSettings: null,
+  scheduledTasks: [],
+  mcpServers: [],
+  providers: [],
+  activeWorkers: [],
+  tokenUsage: isDemoMode() ? { ...DEMO_TOKEN_USAGE } : { ...DEFAULT_TOKEN_USAGE },
+  killedWorkerIds: [],
+  manuallyTriggeredWorkers: [],
+};
+
+export const useSettingsUiStore = create<SettingsUiStore>()(
+  withDevtools(
+    withLogger(
+      immer((set, get) => ({
+        ..._settingsData,
+
+        setShowSettingsOverlay: (show) => set((state) => {
+          state.showSettingsOverlay = !!show;
+        }),
+        setSettingsActiveTab: (tab) => set((state) => {
+          if (isSettingsTabType(tab)) {
+            state.settingsActiveTab = tab;
+          }
+        }),
+        openSettings: (tab) => set((state) => {
+          if (tab !== undefined) {
+            state.settingsActiveTab = parseSettingsTab(tab, state.settingsActiveTab);
+          }
+          state.showSettingsOverlay = true;
+        }),
+        setPermissionMode: (mode) => {
+          set((state) => {
+            state.permissionMode = mode;
+            state.planModeEnabled = planModeEnabledFor(mode);
+            state.planApproved = false;
+          });
+          persistPermissionMode(mode);
+        },
+        setPlanModeEnabled: (enabled) => {
+          let nextMode: PermissionMode = 'ask';
+          set((state) => {
+            nextMode = permissionModeAfterPlanToggle(state.permissionMode, enabled);
+            state.permissionMode = nextMode;
+            state.planModeEnabled = planModeEnabledFor(nextMode);
+            state.planApproved = false;
+          });
+          persistPermissionMode(nextMode);
+        },
+        setPlanApproved: (approved) => set((state) => {
+          state.planApproved = approved;
+        }),
+
+        setUiSize: (size) => {
+          const next = parseUiSize(size);
+          set((state) => { state.uiSize = next; });
+          try { localStorage.setItem(UI_SIZE_STORAGE_KEY, next); } catch { /* ignore */ }
+        },
+        setShellChromeMode: (mode) => {
+          const next = parseShellChromeMode(mode);
+          set((state) => { state.shellChromeMode = next; });
+          try { localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next); } catch { /* ignore */ }
+        },
+        setChatMainSurface: (surface) =>
+          set((state) => { state.chatMainSurface = surface === 'scheduled' ? 'scheduled' : 'chat'; }),
+        setSidebarCollapsed: (collapsed) => set((state) => { state.sidebarCollapsed = !!collapsed; }),
+
+        setAppSettings: (settings) => set((state) => { state.appSettings = settings; }),
+        setScheduledTasks: (tasks) => set((state) => { state.scheduledTasks = Array.isArray(tasks) ? tasks : []; }),
+        setMcpServers: (servers) => set((state) => { state.mcpServers = Array.isArray(servers) ? servers : []; }),
+        setProviders: (providers) => set((state) => { state.providers = Array.isArray(providers) ? providers : []; }),
+
+        syncTelemetryData: (data) => set((state) => {
+          if (data.tokenUsage) {
+            state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
+          }
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w) => ({
+            id: w.id,
+            taskName: w.taskName,
+            elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
+          }));
+          if (data.activeWorkers) {
+            const live = sanitizeActiveWorkers(data.activeWorkers).filter(
+              (w) => !state.killedWorkerIds.includes(w.id),
+            );
+            state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
+          }
+          if (data.mcpServers) {
+            state.mcpServers = Array.isArray(data.mcpServers) ? data.mcpServers : state.mcpServers;
+          }
+          if (data.cronJobs) {
+            state.scheduledTasks = Array.isArray(data.cronJobs) ? data.cronJobs : state.scheduledTasks;
+          }
+        }),
+
+        addCommandPermission: (cmd) => set((state) => {
+          state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
+        }),
+        removeCommandPermission: (cmd) => set((state) => {
+          state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
+        }),
+        setCommandPermissions: (list) => set((state) => {
+          const next = Array.isArray(list) ? list.filter((c) => typeof c === 'string') : [];
+          state.commandPermissions = next;
+          saveCommandPermissions(next);
+        }),
+
+        killWorker: (id: string, _taskName: string) => set((state) => {
+          if (!id) return;
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
+          state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
+          if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
+            state.killedWorkerIds.push(id);
+          }
+          state.tokenUsage.input = Math.max(0, finiteNumber(state.tokenUsage.input, 0) - 1500);
+          const nextCost = finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
+          state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
+        }),
+
+        triggerCronJobNow: (prompt: string) => set((state) => {
+          const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
+          const newWorker: ActiveWorkerState = {
+            id: `worker-manual-${Date.now()}`,
+            taskName: `Cron: ${label}`,
+            elapsedSeconds: 0,
+          };
+          if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
+          if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
+        }),
+      })),
+    ),
+    'SettingsUiStore',
+  ),
+);
+
+export { DEFAULT_SETTINGS_TAB } from './layoutStore';
 
 export const selectShowSettingsOverlay = (
   s: Pick<SettingsUiSlice, 'showSettingsOverlay'>,
@@ -87,15 +320,6 @@ export const selectSetPlanApproved = (
   s: Pick<SettingsUiActions, 'setPlanApproved'>,
 ) => s.setPlanApproved;
 
-// ── 便捷 hooks ────────────────────────────────────────────────────────────
-
-/**
- * 订阅设置 UI 切片。组件不需要会话 / 工作区字段时优先用此 helper。
- *
- * @example
- *   const open = useSettingsUiField((s) => s.showSettingsOverlay);
- *   const mode = useSettingsUiField(selectPermissionMode);
- */
 export function useSettingsUiField<T>(selector: (state: SettingsUiFacade) => T): T {
   return useSettingsUiStore(
     selector as (state: ReturnType<typeof useSettingsUiStore.getState>) => T,
@@ -125,8 +349,6 @@ export function usePlanApproved(): boolean {
 export function useOpenSettings(): (tab?: SettingsTabType) => void {
   return useSettingsUiStore((s) => s.openSettings);
 }
-
-// ── 非 React helpers ──────────────────────────────────────────────────────
 
 export function getSettingsUiState(): SettingsUiFacade {
   return useSettingsUiStore.getState() as unknown as SettingsUiFacade;

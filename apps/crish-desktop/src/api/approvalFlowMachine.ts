@@ -14,11 +14,23 @@
  * - clear_all 全量复位（含 sawRunTerminal / resolved 履历）
  */
 
+export type FlowStatus =
+  | 'idle'
+  | 'pending'
+  | 'inflight'
+  | 'pending_inflight'
+  | 'deferred'
+  | 'disconnected'
+  | 'timed_out'
+  | 'reconnecting'
+  | 'recovered';
+
 export type ApprovalFlowSnapshot = {
   pendingCount: number;
   inflightCount: number;
   deferredTerminal: boolean;
   sawRunTerminal: boolean;
+  flowStatus: FlowStatus;
 };
 
 export type ApprovalFlowEvent =
@@ -31,7 +43,12 @@ export type ApprovalFlowEvent =
   | { type: 'run_terminal_seen' }
   | { type: 'defer_terminal' }
   | { type: 'clear_all' }
-  | { type: 'force_finish' };
+  | { type: 'force_finish' }
+  | { type: 'connection_lost' }
+  | { type: 'connection_restored' }
+  | { type: 'approval_timeout'; toolId?: string }
+  | { type: 'approval_extend'; toolId?: string }
+  | { type: 'rollback' };
 
 /** applied=状态变更；noop=幂等忽略；illegal=非法转换（状态不变） */
 export type TransitionOutcome = 'applied' | 'noop' | 'illegal';
@@ -54,6 +71,7 @@ export class ApprovalFlowMachine {
   private resolved = new Set<string>();
   private deferredTerminal = false;
   private sawRunTerminal = false;
+  private flowStatus: FlowStatus = 'idle';
   private lastResult: TransitionResult | null = null;
 
   snapshot(): ApprovalFlowSnapshot {
@@ -62,6 +80,7 @@ export class ApprovalFlowMachine {
       inflightCount: this.inflight.size,
       deferredTerminal: this.deferredTerminal,
       sawRunTerminal: this.sawRunTerminal,
+      flowStatus: this.flowStatus,
     };
   }
 
@@ -85,9 +104,15 @@ export class ApprovalFlowMachine {
     return Boolean(toolId) && this.resolved.has(toolId);
   }
 
-  /** 是否应阻塞 run 完成收口（有待批或进行中工具） */
+  /** 是否应阻塞 run 完成收口（有待批或进行中工具，或超时/断连中） */
   shouldBlockTerminal(): boolean {
-    return this.pending.size > 0 || this.inflight.size > 0;
+    return (
+      this.pending.size > 0 ||
+      this.inflight.size > 0 ||
+      this.flowStatus === 'timed_out' ||
+      this.flowStatus === 'disconnected' ||
+      this.flowStatus === 'reconnecting'
+    );
   }
 
   /** 是否可在审批清空后补发 deferred 完成 */
@@ -229,12 +254,14 @@ export class ApprovalFlowMachine {
           this.inflight.size > 0 ||
           this.resolved.size > 0 ||
           this.deferredTerminal ||
-          this.sawRunTerminal;
+          this.sawRunTerminal ||
+          this.flowStatus !== 'idle';
         this.pending.clear();
         this.inflight.clear();
         this.resolved.clear();
         this.deferredTerminal = false;
         this.sawRunTerminal = false;
+        this.flowStatus = 'idle';
         return finish(changed ? 'applied' : 'noop', changed ? 'cleared' : 'already_clear', changed);
       }
 
@@ -249,10 +276,67 @@ export class ApprovalFlowMachine {
         this.inflight.clear();
         this.resolved.clear();
         this.deferredTerminal = false;
+        this.flowStatus = 'idle';
         return finish(
           changed ? 'applied' : 'noop',
           changed ? 'force_finished' : 'already_finished',
           changed,
+        );
+      }
+
+      case 'connection_lost': {
+        if (this.flowStatus === 'disconnected') {
+          return finish('noop', 'already_disconnected', false);
+        }
+        this.flowStatus = 'disconnected';
+        return finish('applied', 'conn_lost', true);
+      }
+
+      case 'connection_restored': {
+        if (this.flowStatus === 'disconnected') {
+          this.flowStatus = 'reconnecting';
+          return finish('applied', 'conn_reconnecting', true);
+        }
+        if (this.flowStatus === 'reconnecting') {
+          this.flowStatus = 'recovered';
+          return finish('applied', 'conn_recovered', true);
+        }
+        return finish('noop', 'not_disconnected', false);
+      }
+
+      case 'approval_timeout': {
+        if (this.flowStatus === 'timed_out') {
+          return finish('noop', 'already_timed_out', false);
+        }
+        this.flowStatus = 'timed_out';
+        return finish('applied', 'timed_out', true);
+      }
+
+      case 'approval_extend': {
+        if (this.flowStatus !== 'timed_out') {
+          return finish('noop', 'not_timed_out', false);
+        }
+        this.flowStatus = this.pending.size > 0 ? 'pending' : 'idle';
+        return finish('applied', 'extended', true);
+      }
+
+      case 'rollback': {
+        const hadState =
+          this.pending.size > 0 ||
+          this.inflight.size > 0 ||
+          this.deferredTerminal ||
+          this.sawRunTerminal ||
+          this.resolved.size > 0;
+        this.pending.clear();
+        this.inflight.clear();
+        this.resolved.clear();
+        this.deferredTerminal = false;
+        this.sawRunTerminal = false;
+        this.flowStatus = 'idle';
+        return finish(
+          hadState ? 'applied' : 'noop',
+          hadState ? 'rolled_back' : 'already_idle',
+          hadState,
         );
       }
 
@@ -265,12 +349,17 @@ export class ApprovalFlowMachine {
     }
   }
 
+  getFlowStatus(): FlowStatus {
+    return this.flowStatus;
+  }
+
   /** 测试/调试 */
-  debugSets(): { pending: string[]; inflight: string[]; resolved: string[] } {
+  debugSets(): { pending: string[]; inflight: string[]; resolved: string[]; flowStatus: FlowStatus } {
     return {
       pending: [...this.pending],
       inflight: [...this.inflight],
       resolved: [...this.resolved],
+      flowStatus: this.flowStatus,
     };
   }
 }

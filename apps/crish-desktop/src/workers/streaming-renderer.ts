@@ -94,10 +94,7 @@ export class StreamingRenderer {
         this.lastRenderedText = fullText;
         this.lastRenderedHtml = html;
 
-        const patch = this.computePatch(this.lastRenderedHtml, html);
-        this.lastRenderedHtml = html;
-
-        this.onHtml(patch || html, isFinal);
+        this.onHtml(html, isFinal);
       })
       .catch(() => {
         if (isFinal) {
@@ -106,7 +103,4 @@ export class StreamingRenderer {
       });
   }
 
-  private computePatch(_oldHtml: string, newHtml: string): string | null {
-    return newHtml;
-  }
 }

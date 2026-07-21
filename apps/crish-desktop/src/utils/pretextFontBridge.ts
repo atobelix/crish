@@ -29,7 +29,9 @@ export type FontRole = 'sans' | 'mono';
 export type FontWeight = 'normal' | 'medium' | 'semibold';
 export type UiSize = 'small' | 'medium' | 'large';
 
-let fontSizeCache: Map<string, number> | null = null;
+const fontSizeCache = new Map<string, number>();
+const fontFamilyCache = new Map<FontRole, string>();
+let probeElement: HTMLDivElement | null = null;
 
 function isGenericFont(name: string): boolean {
   return GENERIC_FONTS.has(name.toLowerCase());
@@ -54,20 +56,18 @@ function safePx(px: number, fallback = 14): number {
 }
 
 export function getResolvedFontSizePx(cssVar: string): number {
-  if (fontSizeCache?.has(cssVar)) return fontSizeCache.get(cssVar)!;
+  if (fontSizeCache.has(cssVar)) return fontSizeCache.get(cssVar)!;
 
-  const probe = document.createElement('div');
-  probe.style.cssText = `position:absolute;visibility:hidden;height:0;width:0;overflow:hidden;font-size:var(${cssVar})`;
-  document.documentElement.appendChild(probe);
-  const px = safePx(parseFloat(getComputedStyle(probe).fontSize));
-  document.documentElement.removeChild(probe);
+  if (!probeElement) {
+    probeElement = document.createElement('div');
+    probeElement.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:0;overflow:hidden';
+    document.documentElement.appendChild(probeElement);
+  }
 
-  if (fontSizeCache) fontSizeCache.set(cssVar, px);
-  return px;
-}
-
-export function invalidateFontCache(): void {
-  fontSizeCache = null;
+  probeElement.style.fontSize = `var(${cssVar})`;
+  const px = safePx(parseFloat(getComputedStyle(probeElement).fontSize));
+  if (isFinite(px)) fontSizeCache.set(cssVar, px);
+  return px || 14;
 }
 
 export function buildPretextFont(
@@ -86,6 +86,9 @@ export function buildPretextFontForUiSize(
   weight: FontWeight = 'normal',
 ): string {
   if (!fontSizeCache) fontSizeCache = new Map();
+  const cacheKey = `${uiSize}:${role}:${weight}`;
+  const cached = fontSizeCache.get(cacheKey);
+  if (cached) return `${WEIGHT_MAP[weight]} ${cached}px ${getFontFamily(role)}`;
 
   const html = document.documentElement;
   const current = html.getAttribute('data-ui-size');
@@ -118,6 +121,7 @@ export function buildPretextFontForUiSize(
     }
   }
 
+  fontSizeCache.set(cacheKey, px);
   const family = getFontFamily(role);
   return `${WEIGHT_MAP[weight]} ${px}px ${family}`;
 }

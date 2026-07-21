@@ -7,8 +7,7 @@
 
 import { IS_MAC, formatForDisplay as platformFormat } from './ShortcutPlatformAdapt';
 import { BUILTIN_SHORTCUTS, type ShortcutMeta } from './ShortcutRegistry';
-
-const STORAGE_KEY = 'crish_shortcut_overrides';
+import { configService } from './ConfigService';
 
 /** Shift 键产生字符到原始键的映射 */
 const SHIFT_MAP: Record<string, string> = {
@@ -25,6 +24,11 @@ export class ShortcutService {
   private actions = new Map<string, { binding: string; meta: ShortcutMeta }>();
   private customOverrides = new Map<string, string>();
   private sequenceBuffer: { key: string; time: number }[] = [];
+  private boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private boundKeyUp: ((e: KeyboardEvent) => void) | null = null;
+  private container: HTMLElement | Document | null = null;
+  private matchCallbacks: Array<(match: { actionId: string; meta: ShortcutMeta; originalEvent: KeyboardEvent }) => void> = [];
+  private contextRoots = new Map<string, HTMLElement>();
 
   static getInstance(): ShortcutService {
     if (!ShortcutService.instance) {
@@ -38,6 +42,71 @@ export class ShortcutService {
       this.register(shortcut.id, shortcut.defaultBinding, shortcut);
     }
     this.loadCustomOverrides();
+  }
+
+  // ─── 生命周期 ────────────────────────────────────
+
+  /** 初始化：在 container（默认 document）上注册 keydown/keyup 监听 */
+  init(container?: HTMLElement): void {
+    if (this.boundKeyDown) return;
+    this.container = container ?? document;
+    this.boundKeyDown = (e: KeyboardEvent) => {
+      const result = this.handleKeyDown(e);
+      if (result) {
+        for (const cb of this.matchCallbacks) {
+          try { cb({ ...result, originalEvent: e }); } catch { /* callback error */ }
+        }
+      }
+    };
+    this.boundKeyUp = () => {
+      // reserved for future use
+    };
+    this.container.addEventListener('keydown', this.boundKeyDown);
+    this.container.addEventListener('keyup', this.boundKeyUp);
+    this.loadCustomOverrides();
+  }
+
+  /** 销毁：移除所有 DOM 监听，清空序列缓冲和回调 */
+  destroy(): void {
+    if (this.container && this.boundKeyDown) {
+      this.container.removeEventListener('keydown', this.boundKeyDown);
+    }
+    if (this.container && this.boundKeyUp) {
+      this.container.removeEventListener('keyup', this.boundKeyUp);
+    }
+    this.boundKeyDown = null;
+    this.boundKeyUp = null;
+    this.container = null;
+    this.sequenceBuffer = [];
+    this.matchCallbacks = [];
+  }
+
+  /** 注册快捷键匹配回调，返回取消订阅函数 */
+  onMatch(cb: (match: { actionId: string; meta: ShortcutMeta; originalEvent: KeyboardEvent }) => void): () => void {
+    this.matchCallbacks.push(cb);
+    return () => {
+      const idx = this.matchCallbacks.indexOf(cb);
+      if (idx >= 0) this.matchCallbacks.splice(idx, 1);
+    };
+  }
+
+  // ─── 上下文作用域 ─────────────────────────────────
+
+  /** 注册一个上下文根元素，用于 context scoping */
+  registerContextRoot(context: string, element: HTMLElement): void {
+    this.contextRoots.set(context, element);
+  }
+
+  /** 注销上下文根元素 */
+  unregisterContextRoot(context: string): void {
+    this.contextRoots.delete(context);
+  }
+
+  private isInContext(context: string): boolean {
+    if (context === 'global') return true;
+    const root = this.contextRoots.get(context);
+    if (!root) return false;
+    return root.contains(document.activeElement);
   }
 
   /** 注册快捷键 */
@@ -122,13 +191,17 @@ export class ShortcutService {
   // ─── 单次按键匹配 ───────────────────────────────
 
   private matchSingleKeyBinding(e: KeyboardEvent): { actionId: string; meta: ShortcutMeta } | null {
+    const matches: Array<{ actionId: string; meta: ShortcutMeta }> = [];
     for (const [actionId, { binding, meta }] of this.actions) {
       if (binding.includes(' ')) continue;
+      if (!this.isInContext(meta.context ?? 'global')) continue;
       if (this.matchSingleKey(e, binding)) {
-        return { actionId, meta };
+        matches.push({ actionId, meta });
       }
     }
-    return null;
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => (b.meta.priority ?? 0) - (a.meta.priority ?? 0));
+    return { actionId: matches[0].actionId, meta: matches[0].meta };
   }
 
   private matchSingleKey(e: KeyboardEvent, binding: string): boolean {
@@ -202,12 +275,10 @@ export class ShortcutService {
 
   // ─── 自定义覆盖 ──────────────────────────────────
 
-  /** 从 localStorage 加载已保存的自定义覆盖 */
+  /** 从 configService 加载已保存的自定义覆盖 */
   loadCustomOverrides(): void {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const overrides: Record<string, string> = JSON.parse(raw);
+      const overrides = configService.get<Record<string, string>>('shortcuts.overrides');
       for (const [id, binding] of Object.entries(overrides)) {
         this.customOverrides.set(id, binding);
         if (this.actions.has(id)) {
@@ -249,7 +320,7 @@ export class ShortcutService {
       for (const [id, binding] of this.customOverrides) {
         obj[id] = binding;
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      configService.set('shortcuts.overrides', obj);
     } catch {
       // 存储失败忽略
     }

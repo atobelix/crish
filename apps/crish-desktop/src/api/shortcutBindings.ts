@@ -1,9 +1,9 @@
 /**
- * 自定义快捷键读取与匹配（与 SettingsShortcutsTab 同源 STORAGE_KEY）。
+ * 自定义快捷键读取与匹配。
  * 仅负责解析；触发动作由 App 壳层完成。
  */
 
-export const SHORTCUTS_STORAGE_KEY = 'conex_custom_shortcuts';
+import { configService } from '../services/ConfigService';
 
 /** 与设置页 DEFAULT 对齐（新增 id 须同步 SettingsShortcutsTab） */
 export const DEFAULT_SHORTCUT_BINDINGS: Record<string, string> = {
@@ -30,11 +30,8 @@ export type ShortcutActionId = keyof typeof DEFAULT_SHORTCUT_BINDINGS | string;
 export function loadShortcutBindings(): Record<string, string> {
   const base = { ...DEFAULT_SHORTCUT_BINDINGS };
   try {
-    const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
-    if (!raw) return base;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return base;
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    const saved = configService.get<Record<string, string>>('shortcuts.overrides');
+    for (const [k, v] of Object.entries(saved)) {
       if (typeof v === 'string' && v.trim()) base[k] = v.trim();
     }
   } catch {

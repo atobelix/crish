@@ -660,4 +660,17 @@ describe('parseMarkdownToHtml lists & tables', () => {
     expect(html).toContain('href="https://ex.com/path"');
     expect(html).not.toMatch(/href="[^"]*<wbr>/);
   });
+
+  it('escapes script tag XSS payload in markdown body', () => {
+    const html = parseMarkdownToHtml('hello <script>alert(1)</script> world');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('hello');
+    expect(html).toContain('world');
+  });
+
+  it('passes img tags through (DOMPurify sanitizes event handlers at component level)', () => {
+    const html = parseMarkdownToHtml('<img onerror=alert(1) src=x>');
+    expect(html).toContain('<img');
+  });
 });

@@ -1,40 +1,25 @@
 import { parseMarkdownToHtmlUncached, highlightCode } from './markdown-render-standalone';
+import { StreamingCodeHighlighter } from '../api/streamingCodeHighlighter';
 import type { WorkerRequest, WorkerResponse } from './types';
-import { ComputationCache } from './computation-cache';
 
-const renderCache = new ComputationCache(200, 16 * 1024 * 1024);
-const highlightCache = new ComputationCache(500, 8 * 1024 * 1024);
+const streamingHighlighters = new Map<string, StreamingCodeHighlighter>();
 
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  const { id, type, payload, priority } = e.data;
+  const { id, type, payload } = e.data;
   const t0 = performance.now();
 
   try {
     switch (type) {
       case 'markdown.render': {
         const { raw } = payload as { raw: string };
-        const cacheKey = `md:${raw}`;
-        const cached = renderCache.get<string>(cacheKey);
-        if (cached) {
-          self.postMessage({ id, type: 'success', payload: cached, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: cached.length } } as WorkerResponse);
-          break;
-        }
         const html = parseMarkdownToHtmlUncached(raw);
-        if (html) renderCache.set(cacheKey, html, html.length);
         self.postMessage({ id, type: 'success', payload: html, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: html.length } } as WorkerResponse);
         break;
       }
 
       case 'highlight.code': {
         const { code, language } = payload as { code: string; language?: string };
-        const cacheKey = `${language || ''}:${code}`;
-        const cached = highlightCache.get<string>(cacheKey);
-        if (cached) {
-          self.postMessage({ id, type: 'success', payload: { html: cached, language: language || '' }, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: cached.length } } as WorkerResponse);
-          break;
-        }
         const html = highlightCode(code, language);
-        highlightCache.set(cacheKey, html, html.length);
         self.postMessage({ id, type: 'success', payload: { html, language: language || '' }, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: html.length } } as WorkerResponse);
         break;
       }
@@ -49,15 +34,27 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
         break;
       }
 
-      case 'ping': {
-        self.postMessage({ id, type: 'success', payload: 'pong', metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: 0 } } as WorkerResponse);
+      case 'highlight.code.stream': {
+        const { streamId, code, language } = payload as { streamId: string; code: string; language?: string };
+        let hl = streamingHighlighters.get(streamId);
+        if (!hl) {
+          hl = new StreamingCodeHighlighter(language || '');
+          streamingHighlighters.set(streamId, hl);
+        }
+        const result = hl.push(code);
+        self.postMessage({ id, type: 'success', payload: { html: result, language: language || '' }, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: result.length } } as WorkerResponse);
         break;
       }
 
-      case 'clear-cache': {
-        renderCache.clear();
-        highlightCache.clear();
-        self.postMessage({ id, type: 'success', payload: { renderCache: renderCache.getStats(), highlightCache: highlightCache.getStats() } } as WorkerResponse);
+      case 'highlight.code.stream.reset': {
+        const { streamId } = payload as { streamId: string };
+        streamingHighlighters.delete(streamId);
+        self.postMessage({ id, type: 'success', payload: null, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: 0 } } as WorkerResponse);
+        break;
+      }
+
+      case 'ping': {
+        self.postMessage({ id, type: 'success', payload: 'pong', metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: 0 } } as WorkerResponse);
         break;
       }
 

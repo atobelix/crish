@@ -11,11 +11,6 @@ import {
   getActiveProjectId,
 } from '../api/projectStore';
 import {
-  persistPermissionMode,
-  planModeEnabledFor,
-  type PermissionMode,
-} from '../api/permissionModes';
-import {
   EMPTY_SESSION_TITLE,
   findReusableEmptyShell,
   isDefaultSessionTitle,
@@ -58,9 +53,6 @@ export interface SessionStoreSlice extends SessionsIndexed {
   activeSessionId: string;
   activeAgentId: string | null;
   panelAgentId: string | null;
-  permissionMode: PermissionMode;
-  planModeEnabled: boolean;
-  planApproved: boolean;
   terminalLines: string[];
   terminalBySession: Record<string, string[]>;
   composerDrafts: Record<string, string>;
@@ -83,7 +75,6 @@ export interface SessionActions {
     agentId: string,
     message: SessionMessage,
   ) => void;
-  setPermissionMode: (mode: PermissionMode) => void;
   renameSession: (sessionId: string, title: string) => void;
   /**
    * @param opts.activate 默认 true。定时任务占位会话传 false，避免抢走当前对话焦点。
@@ -147,6 +138,12 @@ export interface SessionActions {
     status: any,
     thinkingTime?: number,
     opts?: { force?: boolean }
+  ) => void;
+  patchAgentTool: (
+    sessionId: string,
+    agentId: string,
+    toolCallId: string,
+    patch: Partial<MessageToolCall>,
   ) => void;
   /** 固定消息（会话级 id 列表） */
   pinMessage: (sessionId: string, messageId: string) => void;
@@ -610,6 +607,28 @@ export function createSessionActions<T extends SessionStoreSlice>(
       if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
     }),
 
+    patchAgentTool: (sessionId, agentId, toolCallId, patch) => set((state) => {
+      const sess = getSessionById(state, sessionId);
+      if (!sess) return;
+      const ag = getSessionAgent(sess, agentId);
+      if (!ag?.messages) return;
+      for (const msg of ag.messages) {
+        if (!msg.toolCalls) continue;
+        const tc = msg.toolCalls.find((t) => t.id === toolCallId);
+        if (!tc) continue;
+        if (
+          (tc.status === 'success' || tc.status === 'error') &&
+          patch.status === 'running'
+        ) {
+          const { status: _s, ...rest } = patch;
+          Object.assign(tc, rest);
+        } else {
+          Object.assign(tc, patch);
+        }
+        return;
+      }
+    }),
+
     /**
      * 主对话列永不挂 agent。
      * 非 null 时改写到 panelAgentId，避免历史路径同时点亮双表面。
@@ -735,17 +754,6 @@ export function createSessionActions<T extends SessionStoreSlice>(
           }
         }
       }
-    },
-
-    setPermissionMode: (mode) => {
-      set((state) => {
-        state.permissionMode = mode;
-        // 设置页 / Composer / plan ribbon 同一真相源
-        state.planModeEnabled = planModeEnabledFor(mode);
-        // 切换权限模式时重置确认；「批准执行」会在 setPermissionMode 之后再 setPlanApproved(true)
-        state.planApproved = false;
-      });
-      persistPermissionMode(mode);
     },
 
     renameSession: (sessionId, title) => set((state) => {

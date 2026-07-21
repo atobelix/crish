@@ -3,6 +3,7 @@
  * undo shape / error-only filters. No React render required.
  */
 import { describe, expect, it } from 'vitest';
+import type { AppToast } from '../services/ToastBus';
 import {
   TOAST_MAX_QUEUE,
   TOAST_TTL_MS,
@@ -26,7 +27,6 @@ import {
   shouldDropSuccessToast,
   toastDedupeKey,
   trimToastQueue,
-  type ToastItem,
 } from './useToastQueue';
 
 describe('constants (ttl / max queue)', () => {
@@ -68,7 +68,7 @@ describe('createToastId / createToastItem', () => {
   it('createToastItem normalizes message and keeps onUndo', () => {
     const undo = () => {};
     const item = createToastItem('  导出失败  ', undo, 'toast-fixed');
-    expect(item).toEqual({
+    expect(item).toMatchObject({
       id: 'toast-fixed',
       message: '导出失败',
       onUndo: undo,
@@ -90,7 +90,7 @@ describe('toastDedupeKey / findDuplicateToastIndex', () => {
   });
 
   it('finds duplicate by normalized message + undo-ness', () => {
-    const queue: ToastItem[] = [
+    const queue: AppToast[] = [
       createToastItem('复制失败', undefined, 'a'),
       createToastItem('已归档: t', () => {}, 'b'),
     ];
@@ -175,7 +175,7 @@ describe('error-only filters', () => {
 });
 
 describe('trimToastQueue / removeToastById', () => {
-  const mk = (id: string): ToastItem => createToastItem(`err-${id}`, undefined, id);
+  const mk = (id: string): AppToast => createToastItem(`err-${id}`, undefined, id);
 
   it('trimToastQueue is no-op under max', () => {
     const q = [mk('1'), mk('2')];
@@ -283,7 +283,7 @@ describe('enqueueToast (policy + dedupe + max)', () => {
   it('does not dedupe error vs undo with same text', () => {
     const undo = () => {};
     // craft same text on both paths (edge); keys must differ by undo flag
-    const q: ToastItem[] = [createToastItem('特殊', undefined, 'e')];
+    const q: AppToast[] = [createToastItem('特殊', undefined, 'e')];
     // '特殊' is not forbidden success → show without undo
     const r = enqueueToast(q, '特殊', undo, { id: 'u' });
     expect(r.kind).toBe('enqueue');
@@ -321,7 +321,7 @@ describe('enqueueToast (policy + dedupe + max)', () => {
   });
 
   it('caps at TOAST_MAX_QUEUE and reports evicted ids (FIFO)', () => {
-    let queue: ToastItem[] = [];
+    let queue: AppToast[] = [];
     for (let i = 0; i < TOAST_MAX_QUEUE; i++) {
       const r = enqueueToast(queue, `失败 ${i}`, undefined, { id: `id-${i}` });
       expect(r.kind).toBe('enqueue');

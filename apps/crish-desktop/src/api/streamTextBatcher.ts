@@ -74,8 +74,8 @@ export class StreamValueBatcher<T> {
         : null;
     this.maxBufferedSize =
       options.maxBufferedSize != null && options.maxBufferedSize > 0
-        ? options.maxBufferedSize
-        : null;
+        ? Math.floor(options.maxBufferedSize)
+        : 8000;
     this.estimateSize =
       options.estimateSize ??
       ((value: T) => (typeof value === 'string' ? value.length : 1));

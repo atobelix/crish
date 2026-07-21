@@ -508,6 +508,8 @@ export function storeSessionSearchQuery(query: string): void {
   } catch {
     /* ignore */
   }
+  // 触发响应式更新（ChatMessageList 通过 useSyncExternalStore 订阅）
+  notifySearchQueryListeners();
 }
 
 export function readSessionSearchQuery(): string {
@@ -516,4 +518,32 @@ export function readSessionSearchQuery(): string {
   } catch {
     return '';
   }
+}
+
+// ── 响应式订阅支持 ──────────────────────────────────────────────────────────
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+function notifySearchQueryListeners(): void {
+  for (const fn of listeners) {
+    try { fn(); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * 订阅搜索查询变化，返回取消订阅函数。
+ * 供 useSyncExternalStore 使用，实现响应式的高亮查询。
+ */
+export function subscribeSearchQuery(cb: Listener): () => void {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+}
+
+/**
+ * 获取当前搜索查询的快照（与 readSessionSearchQuery 同语义）。
+ * 供 useSyncExternalStore 使用。
+ */
+export function getSearchQuerySnapshot(): string {
+  return readSessionSearchQuery();
 }

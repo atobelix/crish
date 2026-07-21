@@ -35,55 +35,66 @@ export interface SessionRuntimeState {
 }
 
 export class SessionRuntimeRegistry {
+  private readonly MAX_SESSIONS = 50;
+  private readonly GC_INTERVAL_MS = 120_000;
+  private readonly GC_MAX_AGE_MS = 600_000;
   private activeIdResolver?: () => string;
 
-  /** 注册活动会话 ID 获取器，打破循环依赖 */
   registerActiveIdResolver(resolver: () => string): void {
     this.activeIdResolver = resolver;
   }
 
-  /** 会话运行时状态映射 */
   private states = new Map<string, SessionRuntimeState>();
-
-  /** 引用计数映射 */
   private refCounts = new Map<string, number>();
+  private retainTimestamps = new Map<string, number>();
+  private accessOrder: string[] = [];
+  private gcTimer: ReturnType<typeof setInterval> | null = null;
 
-  /**
-   * 获取指定会话的运行态。
-   * 不存在时自动创建默认值并返回。
-   */
   get(sessionId: string): SessionRuntimeState {
     let state = this.states.get(sessionId);
     if (!state) {
+      if (this.states.size >= this.MAX_SESSIONS) {
+        const oldest = this.accessOrder.pop();
+        if (oldest) this.remove(oldest);
+      }
       state = this.createDefault(sessionId);
       this.states.set(sessionId, state);
     }
+    const idx = this.accessOrder.indexOf(sessionId);
+    if (idx !== -1) this.accessOrder.splice(idx, 1);
+    this.accessOrder.unshift(sessionId);
     return state;
   }
 
-  /** 检查指定会话是否存在运行态 */
   exists(sessionId: string): boolean {
     return this.states.has(sessionId);
   }
 
-  /** 保存指定会话的部分运行时状态 */
   save(sessionId: string, partial: Partial<SessionRuntimeState>): void {
     const existing = this.get(sessionId);
     Object.assign(existing, partial);
   }
 
-  /** 删除指定会话的运行态（会话删除时清理） */
   remove(sessionId: string): void {
+    const state = this.states.get(sessionId);
+    if (state) {
+      (state as any).diffFiles = null;
+      (state as any).attachments = null;
+      (state as any).composerDraft = '';
+      (state as any).fileCompareModes = {};
+    }
     this.states.delete(sessionId);
     this.refCounts.delete(sessionId);
+    this.retainTimestamps.delete(sessionId);
+    const idx = this.accessOrder.indexOf(sessionId);
+    if (idx !== -1) this.accessOrder.splice(idx, 1);
   }
 
-  /** 引用计数 +1 */
   retain(sessionId: string): void {
+    this.retainTimestamps.set(sessionId, Date.now());
     this.refCounts.set(sessionId, (this.refCounts.get(sessionId) ?? 0) + 1);
   }
 
-  /** 引用计数 -1；减至 0 时自动清理运行态 */
   release(sessionId: string): void {
     const count = this.refCounts.get(sessionId);
     if (count === undefined || count <= 1) {
@@ -93,7 +104,6 @@ export class SessionRuntimeRegistry {
     }
   }
 
-  /** 读取当前活动会话的运行态；无活动会话时返回 null */
   getActiveState(): SessionRuntimeState | null {
     if (!this.activeIdResolver) return null;
     const activeId = this.activeIdResolver();
@@ -101,13 +111,55 @@ export class SessionRuntimeRegistry {
     return this.get(activeId);
   }
 
-  /** 清空所有运行态 */
   clearAll(): void {
     this.states.clear();
     this.refCounts.clear();
+    this.retainTimestamps.clear();
+    this.accessOrder = [];
   }
 
-  /** 创建默认运行时状态 */
+  startGC(): void {
+    this.stopGC();
+    this.gcTimer = setInterval(() => this._collectGarbage(), this.GC_INTERVAL_MS);
+    if (typeof this.gcTimer?.unref === 'function') this.gcTimer.unref();
+  }
+
+  stopGC(): void {
+    if (this.gcTimer !== null) {
+      clearInterval(this.gcTimer);
+      this.gcTimer = null;
+    }
+  }
+
+  garbageCollect(olderThanMs = 300_000): number {
+    let collected = 0;
+    const now = Date.now();
+    for (const [sessionId] of this.states) {
+      const refs = this.refCounts.get(sessionId) ?? 0;
+      if (refs === 0) {
+        const ts = this.retainTimestamps.get(sessionId) ?? 0;
+        if (now - ts > olderThanMs) {
+          this.remove(sessionId);
+          collected++;
+        }
+      }
+    }
+    return collected;
+  }
+
+  get size(): number {
+    return this.states.size;
+  }
+
+  private _collectGarbage(): void {
+    const cutoff = Date.now() - this.GC_MAX_AGE_MS;
+    for (const [sessionId, ts] of this.retainTimestamps) {
+      if (ts < cutoff && (this.refCounts.get(sessionId) ?? 0) > 0) {
+        this.release(sessionId);
+      }
+    }
+  }
+
   private createDefault(sessionId: string): SessionRuntimeState {
     return {
       sessionId,

@@ -48,21 +48,26 @@ export function useChatAutoScroll(
           try {
             const containerWidth = el.clientWidth;
             const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 22;
-            const newHeight = layout(
+            const pretextHeight = layout(
               prepare(currentText, font),
               containerWidth,
               lineHeight,
             ).height;
+            const actualHeight = el.scrollHeight;
+
+            const markdownOverhead = actualHeight - pretextHeight;
+            const buffer = markdownOverhead > 0 ? markdownOverhead * 0.15 : 0;
+            const estimatedHeight = pretextHeight + markdownOverhead + buffer;
 
             if (prevHeightRef.current > 0) {
-              const dh = newHeight - prevHeightRef.current;
+              const dh = estimatedHeight - prevHeightRef.current;
               if (dh > 0) {
-                el.scrollTop += dh;
+                el.scrollTop = Math.min(el.scrollTop + dh, actualHeight);
               }
             }
 
             prevTextRef.current = currentText;
-            prevHeightRef.current = newHeight;
+            prevHeightRef.current = estimatedHeight;
           } catch {
             el.scrollTop = el.scrollHeight;
           }
@@ -76,7 +81,7 @@ export function useChatAutoScroll(
     }
 
     setShowScrollToBottom(false);
-  }, [messages, getFont]);
+  }, [messages, getFont, isProcessing]);
 
   // Detect user scroll-up to stop auto-scroll
   useEffect(() => {

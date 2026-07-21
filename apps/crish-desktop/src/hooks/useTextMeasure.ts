@@ -6,8 +6,6 @@ interface UseTextMeasureOptions {
   text: string;
   font: string;
   whiteSpace?: 'normal' | 'pre-wrap';
-  wordBreak?: 'normal' | 'keep-all';
-  letterSpacing?: number;
 }
 
 interface UseTextMeasureReturn {
@@ -18,20 +16,27 @@ interface UseTextMeasureReturn {
 }
 
 export function usePreparedText(options: UseTextMeasureOptions): UseTextMeasureReturn {
-  const { text, font } = options;
+  const { text, font, whiteSpace } = options;
 
   const preparedRef = useRef<PreparedText | null>(null);
 
   const prepared = useMemo(() => {
     if (!text || !font) return null;
     try {
-      return prepare(text, font);
+      return prepare(text, font, whiteSpace ? { whiteSpace } : undefined);
     } catch {
       return null;
     }
-  }, [text, font]);
+  }, [text, font, whiteSpace]);
 
   preparedRef.current = prepared;
+
+  useEffect(() => {
+    return () => {
+      preparedRef.current = null;
+      // Do NOT call clearCache() — it's a global cache shared across all components
+    };
+  }, []);
 
   const measureHeight = (maxWidth: number, lineHeightPx: number): number => {
     const p = preparedRef.current;
@@ -74,6 +79,8 @@ export function useBubbleShrinkWidth(
   horizontalPadding: number,
 ): number | null {
   const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
+  const idleRef = useRef(true);
+  const pendingRef = useRef<number | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -103,7 +110,19 @@ export function useBubbleShrinkWidth(
       }
     };
 
-    compute();
+    if (idleRef.current) {
+      idleRef.current = false;
+      compute();
+      pendingRef.current = window.setTimeout(() => { idleRef.current = true; }, 300);
+    } else {
+      if (pendingRef.current != null) {
+        clearTimeout(pendingRef.current);
+      }
+      pendingRef.current = window.setTimeout(() => {
+        if (!cancelled) compute();
+        idleRef.current = true;
+      }, 300);
+    }
 
     const ro = new ResizeObserver(() => compute());
     ro.observe(container);
@@ -111,6 +130,10 @@ export function useBubbleShrinkWidth(
     return () => {
       cancelled = true;
       ro.disconnect();
+      if (pendingRef.current != null) {
+        clearTimeout(pendingRef.current);
+        pendingRef.current = null;
+      }
     };
   }, [text, font, containerRef, horizontalPadding]);
 

@@ -14,9 +14,9 @@ interface UsePanelToggleReturn {
   open: boolean;
   setOpen: (v: boolean) => void;
   toggle: () => void;
-  triggerRef: React.RefObject<HTMLElement>;
-  panelRef: React.RefObject<HTMLElement>;
-  subMenuRef: React.RefObject<HTMLElement>;
+  triggerRef: React.RefObject<HTMLElement | null>;
+  panelRef: React.RefObject<HTMLElement | null>;
+  subMenuRef: React.RefObject<HTMLElement | null>;
   animationState: 'entering' | 'open' | 'exiting' | 'closed';
   handleSelect: () => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
@@ -39,34 +39,51 @@ export function usePanelToggle(options: UsePanelToggleOptions = {}): UsePanelTog
   const [animationState, setAnimationState] = useState<'entering' | 'open' | 'exiting' | 'closed'>('closed');
 
   const toggleLockRef = useRef(false);
-  const triggerRef = useRef<HTMLElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
-  const subMenuRef = useRef<HTMLElement>(null);
+  const closeSeqRef = useRef(0);
+  const hasOpenedRef = useRef(false);
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const subMenuRef = useRef<HTMLElement | null>(null);
   const animateTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const animateRafRef = useRef<number | undefined>(undefined);
+  const mountedRef = useRef(false);
 
   const setOpen = useCallback((v: boolean) => {
     if (toggleLockRef.current) return;
     toggleLockRef.current = true;
 
+    if (animateTimeoutRef.current) {
+      clearTimeout(animateTimeoutRef.current);
+      animateTimeoutRef.current = undefined;
+    }
+    if (animateRafRef.current != null) {
+      cancelAnimationFrame(animateRafRef.current);
+      animateRafRef.current = undefined;
+    }
+
     if (v) {
+      hasOpenedRef.current = true;
       _setOpen(true);
       setAnimationState('entering');
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      animateRafRef.current = requestAnimationFrame(() => {
+        animateRafRef.current = requestAnimationFrame(() => {
           setAnimationState('open');
         });
       });
       onOpen?.();
     } else {
+      const seq = ++closeSeqRef.current;
       setAnimationState('exiting');
       animateTimeoutRef.current = setTimeout(() => {
+        animateTimeoutRef.current = undefined;
+        if (closeSeqRef.current !== seq) return; // superseded by a new open
         _setOpen(false);
         setAnimationState('closed');
       }, EXIT_DURATION);
       onClose?.();
     }
 
-    setTimeout(() => { toggleLockRef.current = false; }, 50);
+    queueMicrotask(() => { toggleLockRef.current = false; });
   }, [onOpen, onClose]);
 
   const toggle = useCallback(() => {
@@ -107,10 +124,17 @@ export function usePanelToggle(options: UsePanelToggleOptions = {}): UsePanelTog
   }, [closeOnEscape, open, setOpen]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!hasOpenedRef.current) return; // never opened, no focus to restore
     if (!restoreFocusOnClose || open) return;
-    requestAnimationFrame(() => {
+    const raf = requestAnimationFrame(() => {
       triggerRef.current?.focus();
     });
+    return () => cancelAnimationFrame(raf);
   }, [open, restoreFocusOnClose]);
 
   useEffect(() => {
@@ -127,6 +151,9 @@ export function usePanelToggle(options: UsePanelToggleOptions = {}): UsePanelTog
     return () => {
       if (animateTimeoutRef.current) {
         clearTimeout(animateTimeoutRef.current);
+      }
+      if (animateRafRef.current != null) {
+        cancelAnimationFrame(animateRafRef.current);
       }
     };
   }, []);

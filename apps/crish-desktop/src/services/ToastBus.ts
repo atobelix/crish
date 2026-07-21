@@ -1,3 +1,6 @@
+import { eventBus } from './EventBus';
+import type { UiError } from './ErrorStore';
+
 export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'recovery';
 export type ToastPriority = 'polite' | 'assertive';
 
@@ -9,7 +12,7 @@ export interface ToastOptions {
   group?: string;
 }
 
-export interface Toast {
+export interface AppToast {
   id: string;
   type: ToastType;
   title?: string;
@@ -18,6 +21,7 @@ export interface Toast {
   ariaLive: ToastPriority;
   action?: { label: string; onClick: () => void };
   onDismiss?: () => void;
+  onUndo?: () => void;
   group?: string;
   timestamp: number;
 }
@@ -42,16 +46,22 @@ function resolveDuration(type: ToastType, preferred?: number): number {
 }
 
 class ToastBus {
-  private toasts: Toast[] = [];
-  private subscribers = new Set<(toasts: Toast[]) => void>();
+  private toasts: AppToast[] = [];
+  private subscribers = new Set<(toasts: AppToast[]) => void>();
   private counter = 0;
   private maxVisible = 5;
 
-  show(toast: Omit<Toast, 'id' | 'timestamp'>): string {
+  show(toast: Omit<AppToast, 'id' | 'timestamp'>): string;
+  show(error: UiError): string;
+  show(input: Omit<AppToast, 'id' | 'timestamp'> | UiError): string {
+    if ('severity' in input && 'code' in input) {
+      return this.showFromError(input);
+    }
+    const toast = input as Omit<AppToast, 'id' | 'timestamp'>;
     const id = `toast_${++this.counter}_${Date.now()}`;
     const timestamp = Date.now();
 
-    const fullToast: Toast = {
+    const fullToast: AppToast = {
       ...toast,
       id,
       timestamp,
@@ -129,6 +139,19 @@ class ToastBus {
     });
   }
 
+  recovery(message: string, options?: ToastOptions): string {
+    return this.show({
+      type: 'recovery',
+      message,
+      title: options?.title,
+      duration: resolveDuration('recovery', options?.duration),
+      ariaLive: resolveAriaLive('recovery'),
+      action: options?.action,
+      onDismiss: options?.onDismiss,
+      group: options?.group,
+    });
+  }
+
   dismiss(id: string): void {
     const index = this.toasts.findIndex((t) => t.id === id);
     if (index !== -1) {
@@ -147,15 +170,32 @@ class ToastBus {
     this.notify();
   }
 
-  subscribe(callback: (toasts: Toast[]) => void): Unsubscribe {
+  subscribe(callback: (toasts: AppToast[]) => void): Unsubscribe {
     this.subscribers.add(callback);
     return () => {
       this.subscribers.delete(callback);
     };
   }
 
-  getToasts(): Toast[] {
+  getToasts(): AppToast[] {
     return [...this.toasts];
+  }
+
+  private showFromError(error: UiError): string {
+    const typeMap: Record<string, ToastType> = {
+      info: 'info',
+      warning: 'warning',
+      error: 'error',
+      critical: 'error',
+    };
+    const toastType = typeMap[error.severity] || 'warning';
+    return this.show({
+      type: toastType,
+      message: error.message,
+      title: error.code,
+      duration: DEFAULT_DURATIONS[toastType],
+      ariaLive: resolveAriaLive(toastType),
+    });
   }
 
   private notify(): void {
@@ -167,3 +207,9 @@ class ToastBus {
 }
 
 export const toastBus = new ToastBus();
+
+eventBus.on('toast:show', (payload: any) => {
+  if (payload && typeof payload === 'object' && 'severity' in payload && 'code' in payload) {
+    toastBus.show(payload as UiError);
+  }
+});

@@ -519,7 +519,7 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
   }
 
   if (skinConfig) {
-    const isDarkPreset = p.skin.startsWith('dark-') || p.skin === 'deep-night' || p.skin === 'aurora' || p.skin === 'cocoa' || p.skin === 'burgundy' || p.skin === 'cyber' || p.skin === 'obsidian' || currentActiveTheme === 'dark';
+    const isDarkPreset = currentActiveTheme === 'dark';
     
     let bgPrimary = skinConfig.bgPrimary;
     let bgSecondary = skinConfig.bgSecondary;

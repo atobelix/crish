@@ -11,6 +11,8 @@ export interface ShortcutMeta {
   label: string;                // 中文标签
   keywords: string[];           // 搜索关键词
   platforms?: { mac?: string; win?: string }; // 平台覆盖
+  context?: 'global' | 'chat' | 'settings' | 'sidebar' | 'diff';
+  priority?: number;            // higher = wins when multiple bindings match (default 0)
 }
 
 /** 全部内置快捷键注册表 */
@@ -28,5 +30,6 @@ export const BUILTIN_SHORTCUTS: ShortcutMeta[] = [
   { id: 'open_shortcuts',    defaultBinding: 'Ctrl + Shift + K',  category: 'panel',      label: '快捷键设置',      keywords: ['快捷键', '键盘'] },
   { id: 'command_palette',   defaultBinding: '/',                 category: 'editor',     label: '命令面板',        keywords: ['命令', '命令行'] },
   { id: 'toggle_plan_mode',  defaultBinding: 'Ctrl + Shift + P',  category: 'system',     label: '切换计划模式',    keywords: ['计划', '规划'] },
+  { id: 'export_logs',       defaultBinding: 'Ctrl + Shift + L',  category: 'system',     label: '导出诊断日志',    keywords: ['日志', '诊断', '导出', 'telemetry'] },
   { id: 'toggle_runtime',    defaultBinding: 'Ctrl + Shift + R',  category: 'panel',      label: '运行面板',        keywords: ['运行', '状态'] },
 ];

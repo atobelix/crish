@@ -19,6 +19,12 @@ import go from 'highlight.js/lib/languages/go';
 import java from 'highlight.js/lib/languages/java';
 import c from 'highlight.js/lib/languages/c';
 import cpp from 'highlight.js/lib/languages/cpp';
+import diff from 'highlight.js/lib/languages/diff';
+import ruby from 'highlight.js/lib/languages/ruby';
+import php from 'highlight.js/lib/languages/php';
+import swift from 'highlight.js/lib/languages/swift';
+import kotlin from 'highlight.js/lib/languages/kotlin';
+import dart from 'highlight.js/lib/languages/dart';
 import { LruCache, HIGHLIGHT_CACHE_ENTRIES, HIGHLIGHT_CACHE_BUDGET_BYTES, memoryManager } from '@crish/shared-utils/browser';
 
 let registered = false;
@@ -53,6 +59,14 @@ function ensureLangs() {
   hljs.registerLanguage('java', java);
   hljs.registerLanguage('c', c);
   hljs.registerLanguage('cpp', cpp);
+  hljs.registerLanguage('diff', diff);
+  hljs.registerLanguage('ruby', ruby);
+  hljs.registerLanguage('rb', ruby);
+  hljs.registerLanguage('php', php);
+  hljs.registerLanguage('swift', swift);
+  hljs.registerLanguage('kotlin', kotlin);
+  hljs.registerLanguage('kt', kotlin);
+  hljs.registerLanguage('dart', dart);
 }
 
 const EXT_LANG: Record<string, string> = {
@@ -138,7 +152,8 @@ function escapeHtml(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }
 
 /** 扩展名 → 柔和色点（文件树用） */

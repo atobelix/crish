@@ -197,6 +197,12 @@ export interface MessageToolCall {
   explanation?: string;
   /** approval-requested 带来的后端风险元数据 */
   approvalMeta?: MessageToolApprovalMeta;
+  /** 开始执行时刻（epoch ms） */
+  startedAt?: number;
+  /** 完成时刻（epoch ms） */
+  completedAt?: number;
+  /** 同一轮并行调用的 turn 标识 */
+  turnId?: string;
 }
 
 /** 消息发送方 */

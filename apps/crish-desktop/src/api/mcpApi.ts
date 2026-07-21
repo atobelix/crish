@@ -5,10 +5,14 @@
  * - list：依赖引擎 lastMcpStatus；未配置时常空
  * - start/stop：库存 McpLifecycleManager 通常无 startServer/stopServer → 诚实禁用
  * - 正式模式禁止用 clientApi.saveMcpServer 冒充引擎配置
+ *
+ * R4-A2 (2026-07)：MCP SDK 直连客户端（mcpClientManager），用于直接管理 stdio MCP 服务器。
  */
 
 import { getDesktopDaemonClient } from './daemonClient';
 import { logInternalError } from './userFacingErrors';
+import { mcpClientManager } from './mcpClient';
+import { eventBus } from '../services/EventBus';
 
 export type McpServerState =
   | 'ready'
@@ -513,4 +517,108 @@ export function mcpStateKind(
 export function resetMcpControlProbeMemory(): void {
   rememberedStartStopUnsupported = false;
   rememberedStartStopMessage = undefined;
+}
+
+// ── R4-A2: MCP SDK 直连集成 ──────────────────────────────────────────
+
+export { mcpClientManager };
+
+export type DirectMcpServerConfig = {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+};
+
+export type DirectMcpToolInfo = {
+  name: string;
+  description?: string;
+  inputSchema: any;
+};
+
+export type DirectMcpConnectResult = {
+  ok: boolean;
+  serverId: string;
+  error?: string;
+};
+
+export type DirectMcpListToolsResult = {
+  ok: boolean;
+  tools: DirectMcpToolInfo[];
+  error?: string;
+};
+
+export type DirectMcpCallToolResult = {
+  ok: boolean;
+  result: any;
+  error?: string;
+};
+
+export type DirectMcpDisconnectResult = {
+  ok: boolean;
+  serverId: string;
+  error?: string;
+};
+
+export async function connectDirectMcpServer(
+  serverId: string,
+  config: DirectMcpServerConfig,
+): Promise<DirectMcpConnectResult> {
+  try {
+    await mcpClientManager.connect(serverId, config);
+    return { ok: true, serverId };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, serverId, error: msg };
+  }
+}
+
+export async function disconnectDirectMcpServer(
+  serverId: string,
+): Promise<DirectMcpDisconnectResult> {
+  try {
+    await mcpClientManager.disconnect(serverId);
+    eventBus.emit('mcp:tools:changed', { serverId });
+    return { ok: true, serverId };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, serverId, error: msg };
+  }
+}
+
+export async function disconnectAllDirectMcpServers(): Promise<void> {
+  await mcpClientManager.disconnectAll();
+}
+
+export async function getDirectMcpTools(
+  serverId: string,
+): Promise<DirectMcpListToolsResult> {
+  try {
+    const tools = await mcpClientManager.listTools(serverId);
+    return { ok: true, tools };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, tools: [], error: msg };
+  }
+}
+
+export async function callDirectMcpTool(
+  serverId: string,
+  toolName: string,
+  args: any,
+): Promise<DirectMcpCallToolResult> {
+  try {
+    const result = await mcpClientManager.callTool(serverId, toolName, args);
+    return { ok: true, result };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, result: undefined, error: msg };
+  }
+}
+
+export function getConnectedDirectMcpServers(): string[] {
+  return mcpClientManager.getConnectedServers();
+}
+
+export function invalidateDirectMcpToolCache(serverId: string): void {
+  mcpClientManager.invalidateToolCache(serverId);
 }

@@ -900,7 +900,7 @@ export function setPlanApproved(approved: boolean): void {
 export function pushDiffFile(diff: FileDiff): void {
   const normalized = normalizeFileDiff(diff);
   if (!normalized) return;
-  getLayoutState().pushDiffFile(normalized);
+  resolveWorkspaceState().pushDiffFile(normalized);
 }
 
 /**
@@ -908,34 +908,34 @@ export function pushDiffFile(diff: FileDiff): void {
  */
 export function setActiveDiffSource(diff: FileDiff | null): void {
   if (diff === null) {
-    getLayoutState().setActiveDiffSource(null);
+    resolveWorkspaceState().setActiveDiffSource(null);
     return;
   }
   const normalized = normalizeFileDiff(diff);
   if (!normalized) return;
-  getLayoutState().setActiveDiffSource(normalized);
+  resolveWorkspaceState().setActiveDiffSource(normalized);
 }
 
 /** 变更列表快照（只读语义；返回 store 当前数组引用） */
 export function getDiffFiles(): FileDiff[] {
-  return getLayoutState().diffFiles;
+  return resolveWorkspaceState().diffFiles;
 }
 
 /** 当前激活的 diff；无则 null */
 export function getActiveDiffSource(): FileDiff | null {
-  return getLayoutState().activeDiffSource;
+  return resolveWorkspaceState().activeDiffSource;
 }
 
 export function syncTelemetryData(data: TelemetrySyncPayload): void {
-  getLayoutState().syncTelemetryData(data);
+  resolveSettingsUiState().syncTelemetryData(data);
 }
 
 export function setAppSettings(settings: Settings | null): void {
-  getLayoutState().setAppSettings(settings);
+  resolveSettingsUiState().setAppSettings(settings);
 }
 
 export function getAppSettings(): Settings | null {
-  return getLayoutState().appSettings;
+  return resolveSettingsUiState().appSettings;
 }
 
 /**
@@ -944,20 +944,20 @@ export function getAppSettings(): Settings | null {
  */
 export function setScheduledTasks(tasks: CronJob[]): void {
   const list = filterCronJobs(tasks);
-  getLayoutState().setScheduledTasks(list);
+  resolveSettingsUiState().setScheduledTasks(list);
 }
 
 export function getScheduledTasks(): CronJob[] {
-  return getLayoutState().scheduledTasks;
+  return resolveSettingsUiState().scheduledTasks;
 }
 
 export function addCommandPermission(cmd: string): void {
-  getLayoutState().addCommandPermission(cmd);
+  resolveSettingsUiState().addCommandPermission(cmd);
 }
 
 /** 命令白名单快照（bridge 审批热路径；避免组件/bridge 直摸 layout） */
 export function getCommandPermissions(): string[] {
-  return getLayoutState().commandPermissions ?? [];
+  return resolveSettingsUiState().commandPermissions ?? [];
 }
 
 /** 完整 layout 快照（跨域写；优先窄域 get*StoreState） */

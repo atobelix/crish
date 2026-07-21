@@ -1,160 +1,98 @@
-/**
- * EventBus —— 统一事件总线
- *
- * 职责：
- * - 提供 publish/subscribe 解耦机制，支持通配符匹配
- * - 事件命名规范：`category:scope:action` 三段式（如 `session:list:updated`）
- * - 支持 `*` 通配符（如 `session:*` 匹配所有 session 事件）
- * - 每个事件携带唯一 ID（crypto.randomUUID()）用于去重
- * - 同步调用所有匹配的 handler
- * - 导出单例 eventBus，供全应用共享
- */
-
-export type EventHandler = (event: AppEvent) => void;
+export type EventHandler = (payload: any, source?: string) => void | Promise<void>;
 export type Unsubscribe = () => void;
 
-export interface AppEvent {
-  type: string;
-  payload: unknown;
-  source: 'store' | 'daemon' | 'ui' | 'cross-tab';
-  timestamp: number;
-  id: string;
-}
-
-type HandlerEntry = {
+interface HandlerEntry {
   handler: EventHandler;
   once: boolean;
-};
+}
+
+const MAX_LISTENERS_WARN = 10;
 
 export class EventBus {
-  private handlers = new Map<string, HandlerEntry[]>();
+  private handlers = new Map<string, Set<HandlerEntry>>();
+  private anyHandlers = new Set<HandlerEntry>();
+  private listenerCounts = new Map<string, number>();
 
-  /**
-   * 发布事件。
-   * @param type    事件类型，如 "session:created"
-   * @param payload 事件附带数据
-   * @param source  事件来源，默认 "ui"
-   */
-  emit(type: string, payload: unknown, source: AppEvent['source'] = 'ui'): void {
-    const event: AppEvent = {
-      type,
-      payload,
-      source,
-      timestamp: Date.now(),
-      id: crypto.randomUUID(),
-    };
-
-    const matched: EventHandler[] = [];
-
-    for (const [pattern, entries] of this.handlers) {
-      if (!patternMatch(pattern, type)) continue;
-      for (let i = entries.length - 1; i >= 0; i--) {
-        const entry = entries[i];
-        matched.push(entry.handler);
-        if (entry.once) {
-          entries.splice(i, 1);
-        }
-      }
-      if (entries.length === 0) {
-        this.handlers.delete(pattern);
-      }
-    }
-
-    for (const handler of matched) {
-      try {
-        handler(event);
-      } catch (err) {
-        console.error(`[EventBus] handler error for "${type}":`, err);
-      }
-    }
-  }
-
-  /**
-   * 订阅事件。
-   * @param type    事件类型或通配符模式，如 "session:*"
-   * @param handler 处理函数
-   * @returns 取消订阅函数
-   */
   on(type: string, handler: EventHandler): Unsubscribe {
-    const entries = this.handlers.get(type);
-    if (entries) {
-      entries.push({ handler, once: false });
-    } else {
-      this.handlers.set(type, [{ handler, once: false }]);
-    }
-    return () => this.off(type, handler);
+    return this.addHandler(type, handler, false);
   }
 
-  /**
-   * 一次性订阅事件，触发后自动取消。
-   * @param type    事件类型或通配符模式
-   * @param handler 处理函数
-   * @returns 取消订阅函数
-   */
   once(type: string, handler: EventHandler): Unsubscribe {
+    return this.addHandler(type, handler, true);
+  }
+
+  onAny(handler: EventHandler): Unsubscribe {
+    const entry: HandlerEntry = { handler, once: false };
+    this.anyHandlers.add(entry);
+    return () => this.anyHandlers.delete(entry);
+  }
+
+  emit(type: string, payload?: any, source?: string): void {
     const entries = this.handlers.get(type);
     if (entries) {
-      entries.push({ handler, once: true });
-    } else {
-      this.handlers.set(type, [{ handler, once: true }]);
+      for (const entry of entries) {
+        try {
+          entry.handler(payload, source);
+        } catch (e) {
+          console.error(`[EventBus] handler error for "${type}":`, e);
+        }
+        if (entry.once) entries.delete(entry);
+      }
     }
-    return () => this.off(type, handler);
+    for (const entry of this.anyHandlers) {
+      try { entry.handler({ type, payload, source }); } catch (e) { console.error('[EventBus] onAny error:', e); }
+    }
   }
 
-  /**
-   * 取消订阅。
-   * @param type    事件类型
-   * @param handler 要移除的处理函数
-   */
-  off(type: string, handler: EventHandler): void {
+  async emitAsync(type: string, payload?: any, source?: string): Promise<void> {
+    const promises: Promise<void>[] = [];
     const entries = this.handlers.get(type);
-    if (!entries) return;
-    const idx = entries.findIndex((e) => e.handler === handler);
-    if (idx !== -1) {
-      entries.splice(idx, 1);
+    if (entries) {
+      for (const entry of entries) {
+        try {
+          const result = entry.handler(payload, source);
+          if (result instanceof Promise) promises.push(result);
+        } catch (e) {
+          promises.push(Promise.reject(e));
+        }
+        if (entry.once) entries.delete(entry);
+      }
     }
-    if (entries.length === 0) {
+    await Promise.allSettled(promises);
+  }
+
+  removeAllListeners(type?: string): void {
+    if (type) {
       this.handlers.delete(type);
+      this.listenerCounts.delete(type);
+    } else {
+      this.handlers.clear();
+      this.listenerCounts.clear();
     }
   }
 
-  /** 取消所有订阅（清理用）。 */
-  clear(): void {
-    this.handlers.clear();
+  listenerCount(type?: string): number {
+    if (type) return this.handlers.get(type)?.size ?? 0;
+    let total = 0;
+    for (const set of this.handlers.values()) total += set.size;
+    return total;
   }
 
-  /** 获取当前注册的订阅模式数量和 handler 总数（调试用）。 */
-  listenerCount(): number {
-    let count = 0;
-    for (const entries of this.handlers.values()) {
-      count += entries.length;
+  private addHandler(type: string, handler: EventHandler, once: boolean): Unsubscribe {
+    if (!this.handlers.has(type)) this.handlers.set(type, new Set());
+    const entries = this.handlers.get(type)!;
+    const count = this.listenerCounts.get(type) ?? 0;
+    if (count >= MAX_LISTENERS_WARN) {
+      console.warn(`[EventBus] "${type}" has ${count}+ listeners (possible leak?)`);
     }
-    return count;
+    const entry: HandlerEntry = { handler, once };
+    entries.add(entry);
+    this.listenerCounts.set(type, count + 1);
+    return () => {
+      entries.delete(entry);
+      this.listenerCounts.set(type, (this.listenerCounts.get(type) ?? 1) - 1);
+    };
   }
 }
 
-/**
- * 通配符匹配：将包含 `*` 的模式转为正则进行匹配。
- * - `*` 匹配任意字符（包括空字符串）
- * - `session:*` 匹配 "session:created"、"session:list:updated" 等
- * - `*` 匹配所有事件
- */
-function patternMatch(pattern: string, type: string): boolean {
-  if (pattern === '*') return true;
-  const regexStr = pattern
-    .split(/(\*+)/)
-    .map((part) => {
-      if (part === '*') return '.*';
-      if (part === '**') return '.*';
-      return escapeRegex(part);
-    })
-    .join('');
-  return new RegExp(`^${regexStr}$`).test(type);
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** 全局单例 */
 export const eventBus = new EventBus();

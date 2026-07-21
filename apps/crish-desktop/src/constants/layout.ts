@@ -1,5 +1,10 @@
 // ── 侧栏（参考值，CSS token --sidebar-width 为权威来源）──
 export const SIDEBAR_WIDTH_DEFAULT = 260; // 镜像 CSS token，修改时同步 tokens.css
+
+// ── 主内容列宽 ──
+export const CHAT_COL_MAX = 760;
+export const CHAT_COL_MAX_WIDE = 840;
+export const SETTINGS_CONTENT_MAX = 720;
 export const SIDEBAR_WIDTH_MIN = 220;
 export const SIDEBAR_WIDTH_MAX = 360;
 export const SIDEBAR_RESIZE_STEP = 12;
@@ -30,6 +35,9 @@ export const SPLIT_EDGE_PADDING_Y = 36;
 export const CHAT_COL_LEFT_ZONE = 0.45;
 export const CHAT_COL_RIGHT_ZONE = 0.55;
 export const DEFAULT_TAB_BAR_H = 36;
+
+// ── 面板头部 ──
+export const PANEL_HEADER_HEIGHT = 48;
 
 // ── 消息列表 ──
 export const DEFAULT_RECENT_MESSAGE_COUNT = 80;

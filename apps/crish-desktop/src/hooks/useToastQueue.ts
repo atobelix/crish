@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-export type ToastItem = {
-  id: string;
-  message: string;
-  onUndo?: () => void;
-};
+import type { AppToast } from '../services/ToastBus';
 
 /** 统一 toast 回调：仅错误，或可撤销操作（第二参 onUndo）。 */
 export type ShowToastFn = (message: string, onUndo?: () => void) => void;
@@ -25,12 +20,12 @@ export type ToastEnqueueResult =
       /** 去重命中后应重置的 auto-dismiss TTL（ms） */
       refreshTtlMs: number;
       /** 仅当 onUndo 回调被替换时给出新队列 */
-      next?: ToastItem[];
+      next?: AppToast[];
     }
   | {
       kind: 'enqueue';
-      item: ToastItem;
-      next: ToastItem[];
+      item: AppToast;
+      next: AppToast[];
       evictedIds: string[];
       /** 新条目应使用的 auto-dismiss TTL（ms） */
       ttlMs: number;
@@ -252,16 +247,22 @@ export function createToastId(
   return `toast-${now}-${rand}`;
 }
 
-/** 构造 ToastItem：归一 message；可选稳定 id。 */
+/** 构造 AppToast：归一 message；可选稳定 id。 */
 export function createToastItem(
   message: string,
   onUndo?: () => void,
   id?: string,
-): ToastItem {
+): AppToast {
+  const normalized = normalizeToastMessage(message);
+  const isError = /失败|错误|无法|拒绝/.test(normalized);
   return {
     id: id ?? createToastId(),
-    message: normalizeToastMessage(message),
+    message: normalized,
     onUndo,
+    ariaLive: isError ? 'assertive' : 'polite',
+    type: onUndo ? 'info' : (isError ? 'error' : 'warning'),
+    duration: TOAST_TTL_MS,
+    timestamp: Date.now(),
   };
 }
 
@@ -294,7 +295,7 @@ export function buildUndoToastItem(
   message: string,
   onUndo: () => void,
   id?: string,
-): ToastItem {
+): AppToast {
   return createToastItem(message, onUndo, id);
 }
 
@@ -320,7 +321,7 @@ export function filterErrorOnlyToastMessages(
 
 /** 队列中同 dedupe 键的下标；无则 -1。 */
 export function findDuplicateToastIndex(
-  queue: readonly ToastItem[],
+  queue: readonly AppToast[],
   message: string,
   hasUndo: boolean,
 ): number {
@@ -334,9 +335,9 @@ export function findDuplicateToastIndex(
  * 按 max 截断队列（FIFO 挤掉最旧），返回新队列与被挤 id。
  */
 export function trimToastQueue(
-  queue: readonly ToastItem[],
+  queue: readonly AppToast[],
   maxQueue: number = TOAST_MAX_QUEUE,
-): { next: ToastItem[]; evictedIds: string[] } {
+): { next: AppToast[]; evictedIds: string[] } {
   let max = Math.floor(Number(maxQueue));
   if (!Number.isFinite(max)) max = TOAST_MAX_QUEUE;
   if (max < 1) max = 1;
@@ -350,9 +351,9 @@ export function trimToastQueue(
 
 /** 按 id 移除一条（dismiss / TTL 到期）。 */
 export function removeToastById(
-  queue: readonly ToastItem[],
+  queue: readonly AppToast[],
   id: string,
-): ToastItem[] {
+): AppToast[] {
   return queue.filter((t) => t.id !== id);
 }
 
@@ -370,7 +371,7 @@ export type EnqueueToastOptions = {
  * hook 的 showToast 只编排 timer，状态转移全在此。
  */
 export function enqueueToast(
-  queue: readonly ToastItem[],
+  queue: readonly AppToast[],
   message: string,
   onUndo?: () => void,
   options?: EnqueueToastOptions,
@@ -419,10 +420,10 @@ export function enqueueToast(
  * showToast itself does not return a cleanup (callers ignore returns).
  */
 export function useToastQueue() {
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [toasts, setToasts] = useState<AppToast[]>([]);
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** 镜像队列，便于 showToast 同步读 prev 做纯 enqueue（避免 setState 副作用）。 */
-  const toastsRef = useRef<ToastItem[]>([]);
+  const toastsRef = useRef<AppToast[]>([]);
   toastsRef.current = toasts;
 
   const clearTimer = useCallback((id: string) => {

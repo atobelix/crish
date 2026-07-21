@@ -9,6 +9,11 @@
  * - 导出单例 errorStore，供全应用共享
  */
 
+import { eventBus } from './EventBus';
+import { classifyError } from './FailoverReason';
+import { telemetry } from './TelemetryService';
+import type { FailoverReason, ClassifiedError } from './FailoverReason';
+
 export type Unsubscribe = () => void;
 
 export interface UiError {
@@ -21,6 +26,8 @@ export interface UiError {
   timestamp: number;
   resolved: boolean;
   autoResolve?: boolean;
+  reason: FailoverReason;
+  classified: ClassifiedError;
 }
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'waiting' | 'disconnected' | 'degraded';
@@ -72,21 +79,49 @@ export class ErrorStore {
   private listeners = new Set<(state: ErrorState) => void>();
   private activeListeners = new Set<(errors: UiError[]) => void>();
 
-  push(error: Omit<UiError, 'id' | 'timestamp' | 'resolved'>): string {
+  private compactHistory(): void {
+    const cutoff = Date.now() - 3600000;
+    let i = 0;
+    while (i < this.errorHistory.length) {
+      if (this.errorHistory[i].resolved && this.errorHistory[i].timestamp < cutoff) {
+        this.errorHistory.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
+  }
+
+  private generateErrorId(): string {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      return `${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+    }
+  }
+
+  push(error: Omit<UiError, 'id' | 'timestamp' | 'resolved' | 'reason' | 'classified'>): string {
     const existing = this.errorHistory.find(
       (e) => e.code === error.code && !e.resolved && e.severity === error.severity,
     );
+
+    const classified = classifyError(error.code, error.message);
 
     if (existing) {
       existing.timestamp = Date.now();
       if (error.message) existing.message = error.message;
       if (error.technical !== undefined) existing.technical = error.technical;
       if (error.autoResolve !== undefined) existing.autoResolve = error.autoResolve;
+      existing.reason = classified.reason;
+      existing.classified = classified;
       this.notifyIfActiveChanged();
+      if (this.isToastableSeverity(error.severity)) {
+        eventBus.emit('toast:show', existing);
+      }
       return existing.id;
     }
 
-    const id = crypto.randomUUID();
+    this.compactHistory();
+    const id = this.generateErrorId();
     const entry: UiError = {
       id,
       code: error.code,
@@ -97,6 +132,8 @@ export class ErrorStore {
       timestamp: Date.now(),
       resolved: false,
       autoResolve: error.autoResolve,
+      reason: classified.reason,
+      classified,
     };
 
     this.errorHistory.push(entry);
@@ -104,8 +141,16 @@ export class ErrorStore {
       this.errorHistory.shift();
     }
 
+    telemetry.error(entry.module, entry.message, undefined, {
+      code: entry.code, severity: entry.severity, classified: entry.classified,
+    });
+
     this.notifyIfActiveChanged();
     this.notifyAll();
+
+    if (this.isToastableSeverity(error.severity)) {
+      eventBus.emit('toast:show', entry);
+    }
     return id;
   }
 
@@ -201,6 +246,10 @@ export class ErrorStore {
         console.error('[ErrorStore] subscriber error:', err);
       }
     }
+  }
+
+  private isToastableSeverity(severity: UiError['severity']): boolean {
+    return severity === 'warning' || severity === 'error' || severity === 'critical';
   }
 
   private notifyIfActiveChanged(): void {

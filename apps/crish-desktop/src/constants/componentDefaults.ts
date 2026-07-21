@@ -17,5 +17,14 @@ export const TOAST_DURATION_SUCCESS = 3000;
 export const TOAST_DURATION_WARNING = 8000;
 export const TOAST_DURATION_ERROR = 10000;
 
+// ── Toast 时长(ms) ──
+
+// ── 工具提示 ──
+export const TOOLTIP_DELAY_HIDE = 150;
+
+// ── Toast ──
+export const TOAST_DURATION_MS = 4000;
+export const TOAST_MAX_VISIBLE = 5;
+
 // ── UI 密度 ──
 export const UI_SIZE_DEFAULT = 'medium' as const;

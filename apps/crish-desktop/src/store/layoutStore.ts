@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { withDevtools } from './middleware/withDevtools';
+import { withLogger } from './middleware/withLogger';
+import { withPersist } from './middleware/withPersist';
 import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/clientApi';
 import { isDemoMode } from '../api/appMode';
 import { persistAllSessions } from '../api/sessionPersistence';
@@ -398,6 +401,7 @@ export function sanitizeSessionSeed(seed: {
 
 /** 工作区 + UI + 遥测 + 会话域 + 工作区域（actions 见 SessionActions / WorkspaceActions） */
 export interface LayoutStore extends SessionActions, WorkspaceActions {
+  setPermissionMode: (mode: PermissionMode) => void;
   workspaces: WorkspaceState[];
   activeWorkspaceIndex: number;
   tabModeEnabled: boolean;
@@ -464,6 +468,8 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   tokenUsage: TokenUsageState;
   killedWorkerIds: string[];
   providers: ProviderInfo[];
+  /** true 当会话磁盘镜像恢复完成（无论是否找到数据） */
+  hydrationComplete: boolean;
   setProviders: (providers: ProviderInfo[]) => void;
   setAppSettings: (settings: Settings | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
@@ -506,7 +512,10 @@ const _initialTerminalLines: string[] = isDemoMode()
   : [];
 
 export const useLayoutStore = create<LayoutStore>()(
-  immer((set, get) => ({
+  withDevtools(
+    withLogger(
+      withPersist(
+        immer((set, get) => ({
     workspaces: _initialWorkspaces,
     activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
     tabModeEnabled: _initialTabMode,
@@ -514,6 +523,7 @@ export const useLayoutStore = create<LayoutStore>()(
     shellChromeMode: _initialShellChrome,
     chatMainSurface: 'chat',
     sidebarCollapsed: false,
+    hydrationComplete: false,
     sessions: _sessionSeed.sessions,
     sessionsById: _sessionSeed.sessionsById,
     folderOrder: _sessionSeed.folderOrder,
@@ -558,6 +568,14 @@ export const useLayoutStore = create<LayoutStore>()(
     }),
     // 刷新后若 permissionMode=plan，ribbon 与引擎需同步点亮（与 permissionMode 同源）
     planModeEnabled: planModeEnabledFor(_initialPermissionMode),
+    setPermissionMode: (mode) => {
+      set((state) => {
+        state.permissionMode = mode;
+        state.planModeEnabled = planModeEnabledFor(mode);
+        state.planApproved = false;
+      });
+      persistPermissionMode(mode);
+    },
     setPlanModeEnabled: (enabled) => {
       let nextMode: PermissionMode = 'ask';
       set((state) => {
@@ -749,8 +767,88 @@ export const useLayoutStore = create<LayoutStore>()(
       }
       state.showSettingsOverlay = true;
     }),
-  }))
+      })),
+        {
+          name: 'crish-layout-v1',
+          partialize: (s) => ({
+            workspaces: s.workspaces,
+            sidebarCollapsed: s.sidebarCollapsed,
+            activeWorkspaceIndex: s.activeWorkspaceIndex,
+            tabModeEnabled: s.tabModeEnabled,
+          }),
+        },
+      ),
+    ),
+    'LayoutStore',
+  ),
 );
+
+// ── Layout state shape (state-only, excludes actions) ─────────────────────────
+
+export type LayoutStoreState = Pick<LayoutStore,
+  | 'workspaces' | 'activeWorkspaceIndex' | 'tabModeEnabled' | 'uiSize'
+  | 'shellChromeMode' | 'chatMainSurface' | 'sidebarCollapsed'
+  | 'sessions' | 'sessionsById' | 'folderOrder' | 'activeSessionId'
+  | 'activeAgentId' | 'panelAgentId' | 'composerDrafts'
+  | 'draggedTab' | 'dropPreview'
+  | 'showSettingsOverlay' | 'settingsActiveTab' | 'permissionMode'
+  | 'activeDiffSource' | 'diffFiles'
+  | 'planModeEnabled' | 'planApproved' | 'commandPermissions'
+  | 'appSettings' | 'providers' | 'scheduledTasks' | 'mcpServers'
+  | 'activeWorkers' | 'tokenUsage' | 'killedWorkerIds'
+  | 'terminalLines' | 'terminalBySession' | 'manuallyTriggeredWorkers'
+  | 'hydrationComplete'
+>;
+
+// ── Workspace layout snapshot (serialization) ────────────────────────────────
+
+export interface WorkspaceLayoutSnapshot {
+  version: number;
+  workspaces: Array<{
+    id: string;
+    columns: ColumnState[];
+  }>;
+  sidebarCollapsed: boolean;
+  activeWorkspaceIndex: number;
+}
+
+export function serializeWorkspaceLayout(state: LayoutStoreState): WorkspaceLayoutSnapshot {
+  return {
+    version: 1,
+    workspaces: state.workspaces.map(ws => ({
+      id: ws.id,
+      columns: ws.columns,
+    })),
+    sidebarCollapsed: state.sidebarCollapsed,
+    activeWorkspaceIndex: state.activeWorkspaceIndex,
+  };
+}
+
+export function deserializeWorkspaceLayout(snapshot: WorkspaceLayoutSnapshot, state: LayoutStoreState): void {
+  const index = clampActiveWorkspaceIndex(snapshot.workspaces, snapshot.activeWorkspaceIndex);
+  state.workspaces = snapshot.workspaces.map((ws, i) => ({
+    id: ws.id,
+    columns: ws.columns,
+  }));
+  state.activeWorkspaceIndex = index;
+  state.sidebarCollapsed = snapshot.sidebarCollapsed;
+}
+
+/** 等待 store 会话回灌完成 */
+export function waitForHydration(): Promise<void> {
+  return new Promise((resolve) => {
+    if (useLayoutStore.getState().hydrationComplete) {
+      resolve();
+      return;
+    }
+    const unsub = useLayoutStore.subscribe((state) => {
+      if (state.hydrationComplete) {
+        unsub();
+        resolve();
+      }
+    });
+  });
+}
 
 /**
  * 挂载会话持久化订阅（session index + 磁盘镜像）与空会话磁盘回灌。
@@ -763,6 +861,8 @@ export function initLayoutStorePersistence(): () => void {
   if (isDemoMode()) {
     return () => undefined;
   }
+
+  const abortController = new AbortController();
 
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let diskTimer: ReturnType<typeof setTimeout> | null = null;
@@ -797,55 +897,69 @@ export function initLayoutStorePersistence(): () => void {
   // localStorage 空时尝试从磁盘镜像回灌（compare-and-swap：写入前再次确认仍为空）
   if (useLayoutStore.getState().sessions.length === 0) {
     void restoreSessionsFromDiskMirror().then((restored) => {
-      if (!restored?.sessions?.length) return;
-      const cur = useLayoutStore.getState();
-      // 用户已新建会话则不覆盖
-      if (cur.sessions.length > 0) return;
+      if (abortController.signal.aborted) return;
 
-      let applied = false;
-      useLayoutStore.setState((state) => {
-        // 二次检查：recipe 内仍空才写入
-        if (state.sessions.length > 0) return;
+      if (restored?.sessions?.length) {
+        const cur = useLayoutStore.getState();
+        // 用户已新建会话则不覆盖
+        if (cur.sessions.length > 0) return;
 
-        const sanitized = sanitizeSessionSeed({
-          sessions: restored.sessions,
-          activeSessionId: restored.activeSessionId,
-          folderOrder: restored.folderOrder,
+        let applied = false;
+        useLayoutStore.setState((state) => {
+          // 二次检查：recipe 内仍空才写入
+          if (state.sessions.length > 0) return;
+
+          const sanitized = sanitizeSessionSeed({
+            sessions: restored.sessions,
+            activeSessionId: restored.activeSessionId,
+            folderOrder: restored.folderOrder,
+          });
+          state.sessions = sanitized.sessions;
+          state.sessionsById = sanitized.sessionsById;
+          state.activeSessionId = sanitized.activeSessionId;
+          state.folderOrder = sanitized.folderOrder.length
+            ? sanitized.folderOrder
+            : state.folderOrder;
+          // 回灌后清 ghost agent 焦点（会话集合已变）
+          state.activeAgentId = null;
+          state.panelAgentId = null;
+          // empty workspace seed：若被外部掏空则重种
+          state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
+          state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
+            state.workspaces,
+            state.activeWorkspaceIndex,
+          );
+          applied = true;
         });
-        state.sessions = sanitized.sessions;
-        state.sessionsById = sanitized.sessionsById;
-        state.activeSessionId = sanitized.activeSessionId;
-        state.folderOrder = sanitized.folderOrder.length
-          ? sanitized.folderOrder
-          : state.folderOrder;
-        // 回灌后清 ghost agent 焦点（会话集合已变）
-        state.activeAgentId = null;
-        state.panelAgentId = null;
-        // empty workspace seed：若被外部掏空则重种
-        state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
-        state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
-          state.workspaces,
-          state.activeWorkspaceIndex,
-        );
-        applied = true;
-      });
 
-      // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
-      if (!applied) return;
-      try {
-        const after = useLayoutStore.getState();
-        persistAllSessions(
-          after.sessions,
-          after.activeSessionId,
-          after.folderOrder,
-        );
-      } catch {
-        /* ignore */
+        // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
+        if (!applied) return;
+        try {
+          const after = useLayoutStore.getState();
+          persistAllSessions(
+            after.sessions,
+            after.activeSessionId,
+            after.folderOrder,
+          );
+        } catch {
+          /* ignore */
+        }
       }
+    }).finally(() => {
+      if (!abortController.signal.aborted) {
+        useLayoutStore.setState((state) => {
+          state.hydrationComplete = true;
+        });
+      }
+    });
+  } else {
+    useLayoutStore.setState((state) => {
+      state.hydrationComplete = true;
     });
   }
 
   return () => {
+    abortController.abort();
     if (persistTimer) clearTimeout(persistTimer);
     if (diskTimer) clearTimeout(diskTimer);
     unsub();
