@@ -4,6 +4,7 @@
 import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import styles from './SettingsShortcutsTab.module.css';
 import { clientApi } from '../api/clientApi';
+import { configService } from '../services/ConfigService';
 import {
   SettingsPage,
   SettingsSection,
@@ -76,8 +77,7 @@ function formatShortcutLabel(raw: string | undefined | null): string {
   return combo.map((p) => KEY_PART_ZH[p] || p).join(' + ');
 }
 
-/** 与 shortcutBindings 同源，改键后全局立即生效 */
-const STORAGE_KEY = 'conex_custom_shortcuts';
+/** 改键后全局立即生效 */
 
 
 function isValidShortcutValue(v: unknown): v is string {
@@ -85,17 +85,11 @@ function isValidShortcutValue(v: unknown): v is string {
 }
 
 function loadShortcuts(): Record<string, string> {
-  if (typeof window === 'undefined') return { ...DEFAULT_SHORTCUTS };
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return { ...DEFAULT_SHORTCUTS };
-    const parsed = JSON.parse(saved) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { ...DEFAULT_SHORTCUTS };
-    }
+    const saved = configService.get<Record<string, string>>('shortcuts.overrides');
     const merged: Record<string, string> = { ...DEFAULT_SHORTCUTS };
     for (const item of SHORTCUT_ITEMS) {
-      const v = (parsed as Record<string, unknown>)[item.id];
+      const v = saved[item.id];
       if (isValidShortcutValue(v)) merged[item.id] = v.trim();
     }
     return merged;
@@ -173,7 +167,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
   const persist = useCallback(
     (updated: Record<string, string>): boolean => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        configService.set('shortcuts.overrides', updated);
         setCustomShortcuts(updated);
         try {
           clientApi.saveSettingsEx('__global__', 'global', {
@@ -350,15 +344,16 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         }}
       />
       {hasQuery ? (
-        <button
-          type="button"
-          className="settings-shortcuts-filter-clear"
-          onClick={clearQuery}
-          title="清空筛选"
-          aria-label="清空筛选"
-        >
-          清空
-        </button>
+        <Tooltip content="清空筛选">
+          <button
+            type="button"
+            className="settings-shortcuts-filter-clear"
+            onClick={clearQuery}
+            aria-label="清空筛选"
+          >
+            清空
+          </button>
+        </Tooltip>
       ) : null}
       {headMetaText ? (
         <span
@@ -387,15 +382,16 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
               desc={hasQuery ? '试试更短关键词，或清空筛选' : ''}
               control={
                 hasQuery ? (
-                  <button
-                    type="button"
-                    className="settings-shortcuts-filter-clear"
-                    onClick={clearQuery}
-                    title="清空筛选"
-                    aria-label="清空筛选并显示全部快捷键"
-                  >
-                    清空筛选
-                  </button>
+                  <Tooltip content="清空筛选">
+                    <button
+                      type="button"
+                      className="settings-shortcuts-filter-clear"
+                      onClick={clearQuery}
+                      aria-label="清空筛选并显示全部快捷键"
+                    >
+                      清空筛选
+                    </button>
+                  </Tooltip>
                 ) : null
               }
             />

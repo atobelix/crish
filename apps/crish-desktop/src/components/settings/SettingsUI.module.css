@@ -1,9 +1,9 @@
 .settingsUiPage {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
   /*
-   * width: 100% 婵夘偅寮?stretch 閻栬泛鍨敍?   * max-width 闁俺绻?token 缂佺喍绔撮幒褍鍩楅敍瀹產rgin: auto 鐎圭偟骞囩仦鍛厬閵?   * 缁備焦顒涢崘宥呮躬閸?tab CSS 闁插苯鎮囬崘娆庣娴?max-width: 680/720px閵?   */
+   * width: 100% 婵夘偅寮?stretch 閻栬泛鍨敍?   * max-width 闁俺绻?token 缂佺喍绔撮幒褍鍩楅敍瀹產rgin: auto 鐎圭偟骞囩仦鍛厬閵?   * 缁備焦顒涢崘宥呮躬閸?tab CSS 闁插苯鎮囬崘娆庣娴?max-width: 680/720px�?   */
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   margin-left: auto;
@@ -36,7 +36,7 @@
 .settingsUiPageBody {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--space-8);
 }
 
 .settingsUiSection {
@@ -59,10 +59,10 @@
 .settingsUiSectionContent {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
-/* 缂備胶鍠嶇粩鎾儍閸曨垳褰紒鐙欏啫骞㈤柣妤€娲ら鎰板闯椤帞绀夊☉鎾卞劜閻楁悂鏌嗛棃娑氭殦闁哄绀佹禍鏇烆嚕鏉堚晙绱楅幖杈捐缁?=4%闁挎稑顧€缁辨繈寮悩鎻掕⒈闂佹彃绉瑰Σ鎹愩亹閹插绀夌紒缁㈠灣鐞涖儵鎯冮崟顐ｅ閻熸瑦甯婄粭?1px hairline */
+/* 缂備胶鍠嶇粩鎾儍閸曨垳褰紒鐙欏啫骞㈤柣妤€娲ら鎰板闯椤帞绀夊☉鎾卞劜閻楁悂鏌嗛棃娑氭殦闁哄绀佹禍鏇烆嚕鏉堚晙绱楅幖杈捐�?=4%闁挎稑顧€缁辨繈寮悩鎻掕⒈闂佹彃绉瑰Σ鎹愩亹閹插绀夌紒缁㈠灣鐞涖儵鎯冮崟顐ｅ閻熸瑦甯婄粭?1px hairline */
 .settingsUiCard {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -75,7 +75,7 @@
 .settingsUiRow {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
   background: transparent;
@@ -94,7 +94,7 @@
 .settingsUiRowVertical {
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 16px !important;
+  gap: var(--space-4) !important;
 }
 
 .settingsUiRowVertical .settingsUiRowControl {
@@ -151,7 +151,7 @@
 /* Modern select tooltip */
 .modernSelectTooltip {
   pointer-events: none;
-  animation: tooltip-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: tooltip-fade-in var(--transition-popover-enter);
 }
 
 @keyframes tooltip-fade-in {

@@ -1,0 +1,19 @@
+:root {
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  --sidebar-width: 260px;
+  --sidebar-width-collapsed: 48px;
+}
+
+@container workspace (max-width: 640px) {
+  .panel { --panel-layout: single; }
+}
+@container workspace (min-width: 641px) and (max-width: 1024px) {
+  .panel { --panel-layout: dual; }
+}
+@container workspace (min-width: 1025px) {
+  .panel { --panel-layout: triple; }
+}

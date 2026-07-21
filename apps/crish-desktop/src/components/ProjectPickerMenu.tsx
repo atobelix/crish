@@ -10,6 +10,7 @@ import {
   setNoProject,
   type ProjectEntry,
 } from '../api/projectStore';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   open: boolean;
@@ -188,19 +189,20 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
               </button>
 
               {/* Delete hover-only button */}
-              <button
-                type="button"
-                className={styles.rowDeleteBtn}
-                title="从列表中移除"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeProject(p.id);
-                  refresh();
-                  onChanged?.();
-                }}
-              >
-                <Lucide.X size={12} />
-              </button>
+              <Tooltip content="从列表中移除">
+                <button
+                  type="button"
+                  className={styles.rowDeleteBtn}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeProject(p.id);
+                    refresh();
+                    onChanged?.();
+                  }}
+                >
+                  <Lucide.X size={12} />
+                </button>
+              </Tooltip>
             </div>
           );
         })}

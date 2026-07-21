@@ -23,6 +23,7 @@ import {
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
 import { emitUiEvent } from '../api/uiEvents';
 import { useDaemonState } from '../hooks/useDaemonState';
+import { Tooltip } from './Tooltip';
 
 interface RuntimePanelProps {
   wsId: string;
@@ -492,33 +493,34 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
                 opening,
               });
               return (
-                <div
-                  key={t.id}
-                  className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  title="在终端中查看输出"
-                  aria-label={`${t.label}，${stateZh}，在终端中查看输出`}
-                  aria-busy={opening || undefined}
-                  onClick={() => {
-                    void openBgTask(t);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      void openBgTask(t);
-                    }
-                  }}
-                >
-                  <div className={styles.rowMain}>
-                    <Lucide.Terminal size={16} className={styles.rowIco} aria-hidden />
-                    <div className={styles.rowText}>
-                      <span className={styles.rowTitle}>{t.label}</span>
-                      <span className={styles.rowMeta}>{meta}</span>
+                  <Tooltip content="在终端中查看输出">
+                    <div
+                      key={t.id}
+                      className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${t.label}，${stateZh}，在终端中查看输出`}
+                      aria-busy={opening || undefined}
+                      onClick={() => {
+                        void openBgTask(t);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          void openBgTask(t);
+                        }
+                      }}
+                    >
+                      <div className={styles.rowMain}>
+                        <Lucide.Terminal size={16} className={styles.rowIco} aria-hidden />
+                        <div className={styles.rowText}>
+                          <span className={styles.rowTitle}>{t.label}</span>
+                          <span className={styles.rowMeta}>{meta}</span>
+                        </div>
+                      </div>
+                      <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
                     </div>
-                  </div>
-                  <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
-                </div>
+                  </Tooltip>
               );
             })}
           </div>
@@ -546,59 +548,62 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
               const toolLabel = a.toolName || '工具';
               const busy = approvalBusyId === (a.toolCallId || '');
               return (
-                <div
-                  key={a.toolCallId || i}
-                  className={`${styles.row} ${styles.isClickable}`}
-                  role="button"
-                  tabIndex={0}
-                  title="打开待确认会话"
-                  aria-label={`${toolLabel}，等待批准，打开对应会话`}
-                  onClick={() => handleApprovalClick(a)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleApprovalClick(a);
-                    }
-                  }}
-                >
-                  <div className={styles.rowMain}>
-                    <span className={`${styles.dot} ${styles.warn}`} aria-hidden />
-                    <div className={styles.rowText}>
-                      <span className={styles.rowTitle}>{toolLabel}</span>
-                      <span className={styles.rowMeta}>
-                        {a.summary || a.toolCallId || '等待批准'}
-                      </span>
+                  <Tooltip content="打开待确认会话">
+                    <div
+                      key={a.toolCallId || i}
+                      className={`${styles.row} ${styles.isClickable}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${toolLabel}，等待批准，打开对应会话`}
+                      onClick={() => handleApprovalClick(a)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleApprovalClick(a);
+                        }
+                      }}
+                    >
+                      <div className={styles.rowMain}>
+                        <span className={`${styles.dot} ${styles.warn}`} aria-hidden />
+                        <div className={styles.rowText}>
+                          <span className={styles.rowTitle}>{toolLabel}</span>
+                          <span className={styles.rowMeta}>
+                            {a.summary || a.toolCallId || '等待批准'}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        className={styles.rowActions}
+                        role="group"
+                        aria-label={`${toolLabel} 审批`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Tooltip content="允许">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-primary ui-btn-sm"
+                            aria-label={`允许 ${toolLabel}`}
+                            aria-busy={busy || undefined}
+                            disabled={Boolean(approvalBusyId)}
+                            onClick={(e) => handleApprovalAllow(a, e)}
+                          >
+                            {busy ? '…' : '允许'}
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="拒绝">
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            aria-label={`拒绝 ${toolLabel}`}
+                            disabled={Boolean(approvalBusyId)}
+                            onClick={(e) => handleApprovalDeny(a, e)}
+                          >
+                            拒绝
+                          </button>
+                        </Tooltip>
+                      </div>
                     </div>
-                  </div>
-                  <div
-                    className={styles.rowActions}
-                    role="group"
-                    aria-label={`${toolLabel} 审批`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-primary ui-btn-sm"
-                      title="允许"
-                      aria-label={`允许 ${toolLabel}`}
-                      aria-busy={busy || undefined}
-                      disabled={Boolean(approvalBusyId)}
-                      onClick={(e) => handleApprovalAllow(a, e)}
-                    >
-                      {busy ? '…' : '允许'}
-                    </button>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="拒绝"
-                      aria-label={`拒绝 ${toolLabel}`}
-                      disabled={Boolean(approvalBusyId)}
-                      onClick={(e) => handleApprovalDeny(a, e)}
-                    >
-                      拒绝
-                    </button>
-                  </div>
-                </div>
+                  </Tooltip>
               );
             })}
           </div>

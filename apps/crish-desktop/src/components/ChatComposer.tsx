@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { slashMenuPick } from '../api/resolveSlashCommand';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
@@ -420,8 +421,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       : undefined;
 
   return (
-    <div className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}>
-      <ComposerField
+    <AppErrorBoundary variant="compact" title="输入区出错">
+      <div className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}>
+        <ComposerField
         containerRef={fieldContainerRef}
         textAreaId={textAreaDomId}
         value={chatInput}
@@ -654,5 +656,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         <div className={styles.rightActions}>{rightActions}</div>
       </div>
     </div>
-  );
+  </AppErrorBoundary>
+);
 };

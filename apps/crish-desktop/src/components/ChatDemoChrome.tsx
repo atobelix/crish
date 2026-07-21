@@ -97,6 +97,7 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                   <button
                     type="button"
                     className="ui-btn ui-btn-ghost"
+                    aria-label="停止"
                     onClick={() => {
                       setGoalActive(false);
                       setActivePill(null);
@@ -105,7 +106,7 @@ export const ChatDemoChrome: React.FC<ChatDemoChromeProps> = ({
                     <Lucide.Square size={14} />
                   </button>
                 </Tooltip>
-                <button type="button" className="ui-btn ui-btn-ghost" onClick={() => setActivePill(null)}>
+                <button type="button" className="ui-btn ui-btn-ghost" aria-label="关闭" onClick={() => setActivePill(null)}>
                   <Lucide.X size={16} />
                 </button>
               </div>

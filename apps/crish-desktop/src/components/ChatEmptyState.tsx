@@ -15,6 +15,7 @@
 import React, { useId } from 'react';
 import styles from './ChatEmptyState.module.css';
 import * as Lucide from 'lucide-react';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import {
   CHAT_EMPTY_QUICK_PROMPTS,
   chatEmptyKindAriaLabel,
@@ -225,23 +226,24 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       : styles.sessionEmpty;
 
   return (
-    <div
-      className={`${styles.chatEmptyState} ${kindClass}`}
-      data-empty-kind={kind}
-      data-primary-action={primaryAction ?? 'none'}
-      data-show-project-bar={showProjectBar ? 'true' : 'false'}
-      data-show-prompts={showPrompts ? 'true' : 'false'}
-      data-first-run={firstRunOpen ? 'true' : 'false'}
-      data-engine-ok={engineOkAttr}
-      data-messages-loading={messagesLoading ? 'true' : 'false'}
-      data-density={density}
-      data-shell-cue={shellCue?.code ?? 'none'}
-      role="status"
-      aria-live={ariaLive}
-      aria-label={ariaLabel}
-      aria-labelledby={titleId}
-      aria-describedby={describedBy}
-    >
+    <AppErrorBoundary variant="minimal" title="快捷提示出错">
+      <div
+        className={`${styles.chatEmptyState} ${kindClass}`}
+        data-empty-kind={kind}
+        data-primary-action={primaryAction ?? 'none'}
+        data-show-project-bar={showProjectBar ? 'true' : 'false'}
+        data-show-prompts={showPrompts ? 'true' : 'false'}
+        data-first-run={firstRunOpen ? 'true' : 'false'}
+        data-engine-ok={engineOkAttr}
+        data-messages-loading={messagesLoading ? 'true' : 'false'}
+        data-density={density}
+        data-shell-cue={shellCue?.code ?? 'none'}
+        role="status"
+        aria-live={ariaLive}
+        aria-label={ariaLabel}
+        aria-labelledby={titleId}
+        aria-describedby={describedBy}
+      >
       {showIcon ? (
         <div className={styles.chatEmptyIconWrap} aria-hidden>
           <EmptyIcon kind={kind} />
@@ -357,5 +359,6 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         </div>
       ) : null}
     </div>
-  );
+  </AppErrorBoundary>
+);
 };

@@ -57,7 +57,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
     <div className={styles.commitPanel}>
       <div className={styles.commitHeader}>
         <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
-        <button type="button" className={styles.commitCloseBtn} onClick={onToggle}>
+        <button type="button" className={styles.commitCloseBtn} aria-label="关闭提交面板" onClick={onToggle}>
           <Lucide.X size={13} />
         </button>
       </div>

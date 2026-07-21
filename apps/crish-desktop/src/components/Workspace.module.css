@@ -260,3 +260,21 @@
   border: 1.5px solid var(--accent-color, #1a73e8);
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, #1a73e8) 25%, transparent);
 }
+
+/* Responsive narrow layout */
+.isNarrow .canvas {
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.isNarrow .column {
+  width: 100% !important;
+  flex: 0 0 auto !important;
+  min-height: 300px;
+  container-type: inline-size;
+  container-name: workspace;
+}
+
+.isNarrow .column[data-col-idx]:not([data-col-idx="0"]) {
+  display: none;
+}

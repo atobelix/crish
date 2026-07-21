@@ -14,7 +14,7 @@
   height: 100%;
   width: var(--sidebar-width) !important;
   z-index: var(--z-popover);
-  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 6px 0 24px color-mix(in srgb, var(--shadow-color) 8%, transparent);
   border-right: 1px solid var(--border-color);
   transform: translateX(0);
   pointer-events: auto;

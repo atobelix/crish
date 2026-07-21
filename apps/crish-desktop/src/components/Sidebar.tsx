@@ -29,6 +29,8 @@ import {
   type SessionMenuAction,
 } from './sidebar/SidebarContextMenus';
 import type { ShowToastFn } from '../hooks/useToastQueue';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
+import { configService } from '../services/ConfigService';
 
 /** 侧栏宽度合法区间（与拖拽 / 键盘步进共用） */
 const SIDEBAR_WIDTH_MIN = 220;
@@ -182,6 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const sessions = useSidebarSessions(isSearching);
   const activeSessionId = useLayoutStore((s) => s.activeSessionId);
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
   const setActiveSessionId = useLayoutStore((s) => s.setActiveSessionId);
   const createSession = useLayoutStore((s) => s.createSession);
   const pinSession = useLayoutStore((s) => s.pinSession);
@@ -239,9 +242,22 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     });
   }, []);
 
+  const { sidebarBehavior } = useResponsiveLayout();
+
+  const [overlayOpen, setOverlayOpen] = useState(false);
+
   // 侧栏宽独立于主题/密度；启动恢复用户拖拽宽度
   useEffect(() => {
     try {
+      // Restore from ConfigService first
+      const layout = configService.get('workspace.layout') as { sidebarWidth?: number } | undefined;
+      let restoredWidth = layout?.sidebarWidth;
+      if (typeof restoredWidth === 'number' && restoredWidth >= SIDEBAR_WIDTH_MIN && restoredWidth <= SIDEBAR_WIDTH_MAX) {
+        document.documentElement.style.setProperty('--sidebar-width', `${restoredWidth}px`);
+        setSidebarWidthPx(restoredWidth);
+        return;
+      }
+      // Fallback to legacy localStorage
       const raw = localStorage.getItem('crish_sidebar_width');
       const n = raw ? parseInt(raw, 10) : NaN;
       if (!Number.isNaN(n) && n >= SIDEBAR_WIDTH_MIN && n <= SIDEBAR_WIDTH_MAX) {
@@ -384,6 +400,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const persistSidebarWidth = useCallback((px: number) => {
     try {
       localStorage.setItem('crish_sidebar_width', String(px));
+      const layout = configService.get('workspace.layout') as { sidebarWidth?: number };
+      configService.set('workspace.layout', { ...layout, sidebarWidth: px });
     } catch {
       /* ignore */
     }
@@ -583,19 +601,59 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     filterType === 'pinned' ? '仅置顶' : '全部会话';
   const densityHint = isSearching ? 'search' : filterType === 'pinned' ? 'pinned' : 'default';
 
+  const handleOverlayClose = useCallback(() => {
+    setOverlayOpen(false);
+    setSidebarCollapsed(true);
+  }, [setSidebarCollapsed]);
+
+  const handleHamburgerClick = useCallback(() => {
+    if (sidebarBehavior === 'overlay') {
+      setOverlayOpen(true);
+      setSidebarCollapsed(false);
+    } else {
+      setSidebarCollapsed(!sidebarCollapsed);
+    }
+  }, [sidebarBehavior, sidebarCollapsed, setSidebarCollapsed]);
+
+  const isOverlayActive = sidebarBehavior === 'overlay' && overlayOpen;
+
   return (
-    <aside
-      ref={sidebarRef}
-      className={`${styles.sidebar} crish-sidebar ${sidebarCollapsed ? styles.collapsed : ''} ${hoverExpanded ? styles.tempExpanded : ''}`}
-      role="navigation"
-      aria-label="侧栏导航"
-      data-sidebar-filter={filterType}
-      data-sidebar-density={densityHint}
-      data-searching={isSearching ? '1' : '0'}
-      data-sidebar-collapsed={sidebarCollapsed ? '1' : '0'}
-      onMouseEnter={onHoverEnter}
-      onMouseLeave={onHoverLeave}
-    >
+    <>
+      {/* Hamburger toggle — always visible in overlay mode */}
+      {sidebarBehavior === 'overlay' && (
+        <button
+          type="button"
+          className={`${styles.hamburger} ${isOverlayActive ? styles.hamburgerActive : ''}`}
+          aria-label={isOverlayActive ? '关闭侧栏菜单' : '打开侧栏菜单'}
+          aria-expanded={isOverlayActive}
+          onClick={handleHamburgerClick}
+        >
+          <Lucide.Menu size={18} strokeWidth={1.75} aria-hidden />
+        </button>
+      )}
+
+      {/* Overlay backdrop */}
+      {isOverlayActive && (
+        <div
+          className={styles.overlayBackdrop}
+          aria-hidden="true"
+          onClick={handleOverlayClose}
+        />
+      )}
+
+      <aside
+        ref={sidebarRef}
+        className={`${styles.sidebar} crish-sidebar ${sidebarCollapsed ? styles.collapsed : ''} ${hoverExpanded ? styles.tempExpanded : ''} ${isOverlayActive ? styles.overlay : ''} ${sidebarBehavior === 'icon-collapse' && !isOverlayActive ? styles.iconCollapse : ''}`}
+        role="navigation"
+        aria-label="侧栏导航"
+        data-sidebar-filter={filterType}
+        data-sidebar-density={densityHint}
+        data-searching={isSearching ? '1' : '0'}
+        data-sidebar-collapsed={sidebarCollapsed ? '1' : '0'}
+        data-sidebar-behavior={sidebarBehavior}
+        onMouseEnter={onHoverEnter}
+        onMouseLeave={onHoverLeave}
+      >
       {/* 顶栏搜索结果状态：输入在 header，读屏在此同步播报（无 sr-only token，clip 隐藏） */}
       <div
         role="status"
@@ -753,6 +811,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         onCloseContextMenu={() => setContextMenu(null)}
       />
     </aside>
+    </> /* end overlay fragment */
   );
 });
 

@@ -31,6 +31,7 @@ import { WorkspaceChromeBars } from './WorkspaceChromeBars';
 import type { ShowToastFn } from '../hooks/useToastQueue';
 import { GENERAL_FOLDER, getActiveProject } from '../api/projectStore';
 import { sessionListDisplayTitle, EMPTY_SESSION_TITLE } from '../api/sessionTitle';
+import { Tooltip } from './Tooltip';
 
 /** + 菜单挂 body 用 fixed 视口坐标；避开 stack transform 把 fixed 参照改掉导致「飞走」 */
 const TABS_ADD_MENU_W = 188;
@@ -673,7 +674,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                   }
                 }}
                 style={{ touchAction: 'none' }}
-                title={hint}
                 aria-label={hint}
               >
                 <div className="tab-icon-container" aria-hidden>
@@ -681,11 +681,11 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                 </div>
                 <span className="tab-label">{label}</span>
                 {isClosableTab(c.id) ? (
-                  <button
-                    type="button"
-                    className="tab-close-btn"
-                    title={`关闭「${label}」`}
-                    aria-label={getCloseAriaLabel(c.id)}
+                  <Tooltip content={`关闭「${label}」`}>
+                    <button
+                      type="button"
+                      className="tab-close-btn"
+                      aria-label={getCloseAriaLabel(c.id)}
                     tabIndex={selected ? 0 : -1}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -701,34 +701,36 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(({
                   >
                     <Lucide.X size={12} aria-hidden />
                   </button>
+                  </Tooltip>
                 ) : null}
               </div>
               );
             })}
             {/* Obsidian 式：标签后加号；菜单 fixed 全视口 */}
             <div className="tabs-add-wrap">
-              <button
-                type="button"
-                className="tabs-add-btn"
-                ref={tabAddBtnRef}
-                title="打开面板"
-                aria-label="打开面板"
-                aria-haspopup="menu"
-                aria-expanded={tabAddOpen}
-                aria-controls={tabAddOpen ? tabAddMenuId : undefined}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const nextOpen = !tabAddOpen;
-                  setTabAddOpen(nextOpen);
-                  if (nextOpen) {
-                    setTabAddPos(placeTabsAddMenu(e.currentTarget.getBoundingClientRect()));
-                  } else {
-                    setTabAddPos(null);
-                  }
-                }}
-              >
-                <Lucide.Plus size={TAB_ICON_SIZE} strokeWidth={TAB_ICON_STROKE} aria-hidden />
-              </button>
+              <Tooltip content="打开面板">
+                <button
+                  type="button"
+                  className="tabs-add-btn"
+                  ref={tabAddBtnRef}
+                  aria-label="打开面板"
+                  aria-haspopup="menu"
+                  aria-expanded={tabAddOpen}
+                  aria-controls={tabAddOpen ? tabAddMenuId : undefined}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const nextOpen = !tabAddOpen;
+                    setTabAddOpen(nextOpen);
+                    if (nextOpen) {
+                      setTabAddPos(placeTabsAddMenu(e.currentTarget.getBoundingClientRect()));
+                    } else {
+                      setTabAddPos(null);
+                    }
+                  }}
+                >
+                  <Lucide.Plus size={TAB_ICON_SIZE} strokeWidth={TAB_ICON_STROKE} aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           </div>
         )}

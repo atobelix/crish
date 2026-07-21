@@ -2,7 +2,7 @@
 /* 鏉堣锟?�?1%閿涙稓绮虹拋鈥冲幢閻楀洩浜ら幓蹇氱珶閿涙稑鍨悰銊ょ瑢閸忚泛鐣犵拋鍓х枂妞ゅ吀绔撮�?*/
 
 .settings-pane--usage {
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;

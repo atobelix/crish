@@ -16,19 +16,19 @@ type Props = {
 export const ModelBadgePickerMenu: React.FC<Props> = ({ activeModel, onClose, open = true, triggerRef }) => {
   const [hoveredProfileId, setHoveredProfileId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const enterTimerRef = useRef<number>();
-  const leaveTimerRef = useRef<number>();
+  const enterTimerRef = useRef<number | undefined>(undefined);
+  const leaveTimerRef = useRef<number | undefined>(undefined);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   const handleRowEnter = useCallback((profileId: string) => {
-    clearTimeout(leaveTimerRef.current);
+    if (leaveTimerRef.current != null) clearTimeout(leaveTimerRef.current);
     enterTimerRef.current = window.setTimeout(() => {
       setHoveredProfileId(profileId);
     }, 80);
   }, []);
 
   const handleRowLeave = useCallback(() => {
-    clearTimeout(enterTimerRef.current);
+    if (enterTimerRef.current != null) clearTimeout(enterTimerRef.current);
     leaveTimerRef.current = window.setTimeout(() => {
       setHoveredProfileId(null);
     }, 150);

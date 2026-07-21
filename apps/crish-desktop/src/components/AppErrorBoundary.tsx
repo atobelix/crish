@@ -13,6 +13,7 @@
  */
 import React from 'react';
 import styles from './AppErrorBoundary.module.css';
+import { errorStore } from '../services/ErrorStore';
 
 type Variant = 'fullscreen' | 'compact' | 'minimal';
 
@@ -34,7 +35,13 @@ type Props = {
 
 type State = {
   error: Error | null;
+  retryCount: number;
+  circuitOpen: boolean;
 };
+
+const CIRCUIT_KEY = 'crish_error_boundary_circuit';
+const MAX_RETRIES = 3;
+const RETRY_WINDOW_MS = 30000;
 
 function toError(error: unknown): Error {
   if (error instanceof Error) return error;
@@ -74,17 +81,81 @@ function queryFirstFocusable(container: HTMLElement): HTMLElement | null {
 }
 
 export class AppErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, retryCount: 0, circuitOpen: false };
 
   private containerRef = React.createRef<HTMLDivElement>();
 
   static getDerivedStateFromError(error: unknown): State {
-    return { error: toError(error) };
+    try {
+      if (!import.meta.env.DEV) {
+        const err = toError(error);
+        sessionStorage.setItem('crish_error_boundary_crash', JSON.stringify({
+          message: err.message, name: err.name, stack: err.stack?.split('\n').slice(0,6).join('\n'), timestamp: Date.now(),
+        }));
+      }
+    } catch { /* ignore */ }
+    return { error: toError(error), retryCount: 0, circuitOpen: false };
+  }
+
+  private readCircuitState(): { count: number; windowStart: number } {
+    try {
+      const saved = sessionStorage.getItem(CIRCUIT_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { count: 0, windowStart: 0 };
+  }
+
+  private writeCircuitState(state: { count: number; windowStart: number }): void {
+    try {
+      sessionStorage.setItem(CIRCUIT_KEY, JSON.stringify(state));
+    } catch { /* ignore */ }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[crish] render crash', error, info.componentStack);
     this.props.onError?.(error);
+
+    const circuit = this.readCircuitState();
+    const now = Date.now();
+
+    if (now - circuit.windowStart > RETRY_WINDOW_MS) {
+      circuit.count = 0;
+      circuit.windowStart = now;
+    }
+
+    circuit.count++;
+    this.writeCircuitState(circuit);
+
+    if (circuit.count >= MAX_RETRIES) {
+      this.setState({ error, circuitOpen: true, retryCount: circuit.count });
+    } else {
+      this.setState({ error, circuitOpen: false, retryCount: circuit.count });
+    }
+
+    try {
+      errorStore.push({
+        code: 'REACT_RENDER_ERROR',
+        module: 'AppErrorBoundary',
+        severity: 'error',
+        message: error.message || '渲染崩溃',
+        technical: info.componentStack || error.stack,
+        autoResolve: true,
+      });
+    } catch { /* prevent recursive crash */ }
+  }
+
+  componentDidMount() {
+    try {
+      if (import.meta.env.DEV) return;
+      if (this.resolveVariant() !== 'fullscreen') return;
+      const raw = sessionStorage.getItem('crish_error_boundary_crash');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Date.now() - parsed.timestamp < 30000) {
+          this.setState({ error: new Error(parsed.message), retryCount: 0, circuitOpen: false });
+        }
+      }
+    } catch { /* ignore */ }
   }
 
   componentDidUpdate(_prevProps: Props, prevState: State) {
@@ -96,6 +167,10 @@ export class AppErrorBoundary extends React.Component<Props, State> {
         const first = queryFirstFocusable(el);
         first?.focus({ preventScroll: true });
       });
+    }
+    // Reset circuit counter if error cleared (dismissed)
+    if (prevState.error && !this.state.error) {
+      this.writeCircuitState({ count: 0, windowStart: 0 });
     }
   }
 
@@ -111,6 +186,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   private dismiss = () => {
     this.setState({ error: null });
     this.props.onReset?.();
+    try {
+      sessionStorage.removeItem('crish_error_boundary_crash');
+    } catch { /* ignore */ }
   };
 
   private handleClose = () => {
@@ -131,8 +209,48 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
     const variant = this.resolveVariant();
     const error = this.state.error;
+    const { circuitOpen, retryCount } = this.state;
     const msg = formatErrorMessage(error);
     const stack = formatErrorStack(error);
+
+    // --- circuit open: excessive errors ---
+    if (circuitOpen) {
+      if (variant === 'minimal') {
+        return (
+          <div className={styles.appErrorMinimal} role="alert">
+            <span className={styles.appErrorMinimalIcon} aria-hidden="true">!</span>
+            <span className={styles.appErrorMinimalText}>重复出错，请重新加载</span>
+          </div>
+        );
+      }
+      return (
+        <div className={styles.appErrorBoundary}>
+          <div className={styles.appErrorCard}>
+            <div className={styles.appErrorTitle}>频繁出错</div>
+            <div className={styles.appErrorMsg} role="alert">
+              应用连续 {retryCount} 次发生渲染错误（{RETRY_WINDOW_MS / 1000}秒内），暂时无法自动恢复。
+            </div>
+            <div className={styles.appErrorActions}>
+              <button
+                type="button"
+                className="ui-btn ui-btn-primary ui-btn-sm"
+                onClick={this.reload}
+              >
+                重新加载
+              </button>
+            </div>
+            {stack && (
+              <details className={styles.appErrorDetails}>
+                <summary className={styles.appErrorDetailsSummary}>
+                  错误详情
+                </summary>
+                <pre className={styles.appErrorDetailsPre}>{stack}</pre>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     // --- minimal: 仅错误图标 + "此区域出错"，不影响周围布局 ---
     if (variant === 'minimal') {

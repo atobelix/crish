@@ -46,6 +46,7 @@ import {
   type SessionSearchMatch,
 } from '../../api/sessionSearch';
 import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
+import { useDragReorder } from '../../hooks/useDragReorder';
 import { Tooltip } from '../settings/SettingsUI';
 import styles from './SidebarSessionList.module.css';
 
@@ -286,6 +287,19 @@ type SessionRowProps = {
   onCancelRename?: () => void;
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
   onNavigateSession?: (fromId: string, delta: number) => void;
+  /** HTML5 拖拽句柄（useDragReorder） */
+  dragHandlers?: {
+    draggable: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
+  /** 放置目标句柄 */
+  dropHandlers?: {
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: () => void;
+  };
+  /** 键盘重排（Alt+↑/↓） */
+  onReorderKeyboard?: (sessionId: string, direction: -1 | 1) => void;
 };
 
 /** memo：长列表下避免无关 tick/state 整表重渲每一行 */
@@ -308,6 +322,9 @@ const SessionRow = memo(function SessionRow({
   onCommitRename,
   onCancelRename,
   onNavigateSession,
+  dragHandlers,
+  dropHandlers,
+  onReorderKeyboard,
 }: SessionRowProps) {
   const isBranched = !!s.branchParentId;
   const baseTitle = sessionListDisplayTitle(s);
@@ -341,10 +358,15 @@ const SessionRow = memo(function SessionRow({
       className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''}`}
       style={{ height: rowHeight, minHeight: rowHeight }}
       role="presentation"
+      draggable={dragHandlers?.draggable ?? false}
+      onDragStart={dragHandlers?.onDragStart}
+      onDragEnd={dragHandlers?.onDragEnd}
+      onDragOver={dropHandlers?.onDragOver}
+      onDrop={dropHandlers?.onDrop}
     >
       <div
         ref={rowRef}
-        role="option"
+        role="treeitem"
         aria-selected={sessionActive}
         aria-label={
           isRunning
@@ -392,6 +414,12 @@ const SessionRow = memo(function SessionRow({
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             onNavigateSession?.(s.id, e.key === 'ArrowDown' ? 1 : -1);
+            return;
+          }
+          if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            e.stopPropagation();
+            onReorderKeyboard?.(s.id, e.key === 'ArrowUp' ? -1 : 1);
             return;
           }
           if (e.key === 'Home' || e.key === 'End') {
@@ -489,17 +517,17 @@ function WindowedSessionUl({
   const safe = clampSessionListWindowRange(range, sessions.length);
   if (!safe.windowed) {
     return (
-      <ul
-        ref={listRef}
-        className={className}
-        role="listbox"
-        aria-label={ariaLabel}
-        data-windowed="0"
-        data-window-count={sessions.length}
-        aria-rowcount={sessions.length}
-      >
-        {sessions.map((s) => renderRow(s))}
-      </ul>
+       <ul
+         ref={listRef}
+         className={className}
+         role="tree"
+         aria-label={ariaLabel}
+         data-windowed="0"
+         data-window-count={sessions.length}
+         aria-rowcount={sessions.length}
+       >
+         {sessions.map((s) => renderRow(s))}
+       </ul>
     );
   }
   const slice = sessions.slice(safe.start, safe.end);
@@ -507,9 +535,9 @@ function WindowedSessionUl({
     <ul
       ref={listRef}
       className={`${className} ${styles.sessionListWindowed}`}
-      role="listbox"
-      aria-label={ariaLabel}
-      data-windowed="1"
+       role="tree"
+       aria-label={ariaLabel}
+       data-windowed="1"
       data-window-start={safe.start}
       data-window-end={safe.end}
       data-window-count={sessions.length}
@@ -532,6 +560,121 @@ function WindowedSessionUl({
         />
       ) : null}
     </ul>
+  );
+}
+
+/**
+ * 内部组件：给一个会话列表注入 drag-reorder（useDragReorder + FLIP）。
+ * 每个实例持有一个独立的 drag 状态。
+ */
+function DragReorderSection({
+  sessions,
+  folderName,
+  isPinned,
+  onMoveSessionRealtime,
+  renderRow,
+}: {
+  sessions: SessionState[];
+  folderName?: string;
+  isPinned?: boolean;
+  onMoveSessionRealtime: SidebarSessionListProps['onMoveSessionRealtime'];
+  renderRow: (s: SessionState) => React.ReactNode;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const flipRectsRef = useRef<Map<string, DOMRect>>(new Map());
+
+  const items = useMemo(() => sessions.map(s => ({ id: s.id })), [sessions]);
+
+  const handleReorder = useCallback((fromIndex: number, toIndex: number) => {
+    const list = listRef.current;
+    if (list) {
+      const rects = new Map<string, DOMRect>();
+      list.querySelectorAll<HTMLElement>('[data-session-id]').forEach(el => {
+        const id = el.getAttribute('data-session-id');
+        if (id) rects.set(id, el.getBoundingClientRect());
+      });
+      flipRectsRef.current = rects;
+    }
+    const fromSession = sessions[fromIndex];
+    const toSession = sessions[toIndex];
+    if (!fromSession) return;
+    onMoveSessionRealtime(
+      fromSession.id,
+      toSession?.id ?? null,
+      folderName ?? fromSession.folder ?? '会话',
+      isPinned ?? fromSession.isPinned,
+    );
+  }, [sessions, folderName, isPinned, onMoveSessionRealtime]);
+
+  const { dragIndex, dropIndex, onDragStart, onDragOver, onDrop, onDragEnd } = useDragReorder({
+    items,
+    onReorder: handleReorder,
+  });
+
+  const handleKeyboardReorder = useCallback((sessionId: string, dir: -1 | 1) => {
+    const idx = sessions.findIndex(s => s.id === sessionId);
+    if (idx < 0) return;
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= sessions.length) return;
+    handleReorder(idx, targetIdx);
+  }, [sessions, handleReorder]);
+
+  // FLIP animation on reorder
+  useEffect(() => {
+    const rects = flipRectsRef.current;
+    if (rects.size === 0) return;
+    const list = listRef.current;
+    if (!list) return;
+    requestAnimationFrame(() => {
+      list.querySelectorAll<HTMLElement>('[data-session-id]').forEach(el => {
+        const id = el.getAttribute('data-session-id');
+        if (!id) return;
+        const prev = rects.get(id);
+        if (!prev) return;
+        const curr = el.getBoundingClientRect();
+        const dx = prev.left - curr.left;
+        const dy = prev.top - curr.top;
+        if (dx === 0 && dy === 0) return;
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        el.style.transition = 'none';
+        requestAnimationFrame(() => {
+          el.style.transform = '';
+          el.style.transition = 'transform 200ms ease';
+          el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+        });
+      });
+      flipRectsRef.current = new Map();
+    });
+  }, [sessions]);
+
+  return (
+    <div ref={listRef} style={{ display: 'contents' }}>
+      {sessions.map((s, idx) => {
+        const isDropTarget = dragIndex !== null && dragIndex !== idx && dropIndex === idx;
+        return (
+          <React.Fragment key={s.id}>
+            {isDropTarget && (
+              <div className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`} />
+            )}
+            {React.cloneElement(renderRow(s) as React.ReactElement, {
+              dragHandlers: {
+                draggable: true,
+                onDragStart: (e: React.DragEvent) => onDragStart(idx, e),
+                onDragEnd,
+              },
+              dropHandlers: {
+                onDragOver: (e: React.DragEvent) => onDragOver(idx, e),
+                onDrop: () => onDrop(idx),
+              },
+              onReorderKeyboard: handleKeyboardReorder,
+            })}
+          </React.Fragment>
+        );
+      })}
+      {dragIndex !== null && dropIndex === sessions.length && (
+        <div className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`} />
+      )}
+    </div>
   );
 }
 
@@ -1171,15 +1314,20 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                 ref={pinnedZoneRef}
                 className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
               >
-                {pinnedSessions.length > 0 ? (
-                  <ul
-                    className={`${styles.pinnedList} ${styles.folderSessions}`}
-                    role="listbox"
-                    aria-label="置顶会话列表"
-                  >
-                    {pinnedSessions.map((s) => renderSessionItem(s))}
-                  </ul>
-                ) : (
+                  {pinnedSessions.length > 0 ? (
+                    <ul
+                      className={`${styles.pinnedList} ${styles.folderSessions}`}
+                      role="tree"
+                      aria-label="置顶会话列表"
+                    >
+                      <DragReorderSection
+                        sessions={pinnedSessions}
+                        isPinned
+                        onMoveSessionRealtime={onMoveSessionRealtime}
+                        renderRow={(s) => renderSessionItem(s)}
+                      />
+                    </ul>
+                  ) : (
                   <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
                     {filterType === 'pinned'
                       ? '还没有置顶 of 对话'
@@ -1284,14 +1432,24 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                         {sess.length > 0 ? (
                           <ul
                             className={`${styles.pinnedList} ${styles.folderSessions}`}
-                            role="listbox"
-                            aria-label={`${p.name} 会话`}
+                           role="tree"
+                           aria-label={`${p.name} 会话`}
                           >
                             {sess.length <= 6 ? (
-                              sess.map((s) => renderSessionItem(s, true))
+                              <DragReorderSection
+                                sessions={sess}
+                                folderName={p.id}
+                                onMoveSessionRealtime={onMoveSessionRealtime}
+                                renderRow={(s) => renderSessionItem(s, true)}
+                              />
                             ) : (
                               <>
-                                {sess.slice(0, 6).map((s) => renderSessionItem(s, true))}
+                                <DragReorderSection
+                                  sessions={expandedProjectFolders[p.id] ? sess : sess.slice(0, 6)}
+                                  folderName={p.id}
+                                  onMoveSessionRealtime={onMoveSessionRealtime}
+                                  renderRow={(s) => renderSessionItem(s, true)}
+                                />
                                 <div className={styles.accordionWrapper} data-expanded={expandedProjectFolders[p.id] ? 'true' : 'false'}>
                                   <div className={styles.accordionInner}>
                                     <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>
@@ -1393,15 +1551,26 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             <div className={styles.accordionInner}>
               {generalSessions.length > 0 ? (
                 <>
-                  <WindowedSessionUl
-                    sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
-                    range={generalRenderRange}
-                    listRef={generalListRef}
-                    className={`${styles.pinnedList} ${styles.folderSessions}`}
-                    renderRow={renderSessionItem}
-                    ariaLabel="对话列表"
-                  />
-                  {generalSessions.length > 10 && (
+                  {generalWindowEnabled ? (
+                    <WindowedSessionUl
+                      sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
+                      range={generalRenderRange}
+                      listRef={generalListRef}
+                      className={`${styles.pinnedList} ${styles.folderSessions}`}
+                      renderRow={renderSessionItem}
+                      ariaLabel="对话列表"
+                    />
+                  ) : (
+                    <ul className={`${styles.pinnedList} ${styles.folderSessions}`} role="tree" aria-label="对话列表" data-windowed="0" data-window-count={generalSessions.length}>
+                      <DragReorderSection
+                        sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
+                        folderName={GENERAL_FOLDER}
+                        onMoveSessionRealtime={onMoveSessionRealtime}
+                        renderRow={(s) => renderSessionItem(s)}
+                      />
+                    </ul>
+                  )}
+                  {generalSessions.length > 10 && !showAllGeneralSessions && (
                     <div className={styles.accordionWrapper} data-expanded={showAllGeneralSessions ? 'true' : 'false'}>
                       <div className={styles.accordionInner}>
                         <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>

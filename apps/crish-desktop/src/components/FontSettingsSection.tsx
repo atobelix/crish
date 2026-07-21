@@ -329,7 +329,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <label
               className={styles.settingsRowCheck}
-              title="启用代码连字（liga / calt）"
+              aria-label="启用代码连字（liga / calt）"
             >
               <input
                 type="checkbox"

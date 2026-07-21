@@ -10,7 +10,7 @@
   margin-right: auto;
   box-sizing: border-box;
   scroll-margin-top: 56px;
-  scroll-margin-bottom: 16px;
+  scroll-margin-bottom: var(--space-4);
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
 }
@@ -32,13 +32,13 @@
 
 .rowUser {
   align-items: flex-end;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .rowAssistant .assistantMeta {

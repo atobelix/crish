@@ -1,0 +1,94 @@
+.tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip, 9999);
+  pointer-events: none;
+}
+
+.tooltipEnter {
+  animation: tooltip-enter var(--transition-popover-enter) forwards;
+}
+
+.tooltipExit {
+  animation: tooltip-exit var(--transition-popover-exit) forwards;
+}
+
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+    transform: var(--tooltip-translate) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: var(--tooltip-translate) scale(1);
+  }
+}
+
+@keyframes tooltip-exit {
+  from {
+    opacity: 1;
+    transform: var(--tooltip-translate) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: var(--tooltip-translate) scale(0.95);
+  }
+}
+
+.tooltipContent {
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-tooltip, var(--radius-md));
+  box-shadow: var(--shadow-lg);
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+html[data-theme="dark"] .tooltipContent {
+  background: var(--bg-elevated);
+}
+
+.arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-elevated);
+}
+
+html[data-theme="dark"] .arrow {
+  background: var(--bg-elevated);
+}
+
+.top .arrow {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
+}
+
+.bottom .arrow {
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  border-left: 1px solid var(--hairline-strong);
+  border-top: 1px solid var(--hairline-strong);
+}
+
+.left .arrow {
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  border-right: 1px solid var(--hairline-strong);
+  border-top: 1px solid var(--hairline-strong);
+}
+
+.right .arrow {
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  border-left: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
+}

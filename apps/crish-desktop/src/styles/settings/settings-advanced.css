@@ -2,7 +2,7 @@
 /* 鏉堣锟?�?1%閿涙稑涔忛崥宥囷�?缁犫偓鏉╁府绱濋崣铏瘻闁款噯绱辫ぐ鏇炲煑閹浇浜ら幓鎰仛 */
 
 .settings-pane--shortcuts {
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
@@ -163,7 +163,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 /* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱遍懞顖滃鏉炵粯寮挎�?*/
 
 .settings-pane--security {
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;
@@ -326,7 +326,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 /* 鏉堣锟?�?1%閿涙稑鍨悰銊︾閺呭府绱辨０鍕啎閼侯垳澧栨潪缁樺伎锟?*/
 
 .settings-pane--rules {
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   padding-bottom: 36px;

@@ -641,7 +641,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
           <iframe
             ref={iframeRef}
             key={frameSrc}
-            title="预览页面"
+            aria-label="预览页面"
             src={frameSrc}
             className={styles.iframe}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"

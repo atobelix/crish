@@ -17,6 +17,7 @@ import {
 } from '../api/applyFileDiff';
 import { filterPublishableDiffs, publishToolDiffs } from '../api/publishToolDiffs';
 import { resolveToolDiffs } from '../api/toolFeedback';
+import { Tooltip } from './Tooltip';
 
 export type ChangeOverviewCardProps = {
   message: SessionMessage;
@@ -327,68 +328,72 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
           />
         </button>
         <div className={styles.changeOverviewActions} role="toolbar" aria-label="改动操作">
-          <button
-            type="button"
-            className={styles.changeOverviewReview}
-            disabled={busy || safeCount === 0}
-            title={
-              safeCount === 0
-                ? '无可安全自动应用的文件'
-                : safeCount < files.length
-                  ? `全部接受（${safeCount}/${files.length} 可应用）`
-                  : '全部接受可安全应用的文件'
-            }
-            aria-label={
-              safeCount === 0
-                ? '全部接受，当前无可安全应用的文件'
-                : `全部接受 ${safeCount} 个可安全应用的文件`
-            }
-            onClick={(e) => void acceptAll(e)}
-          >
-            全部接受
-          </button>
+          <Tooltip content={
+            safeCount === 0
+              ? '无可安全自动应用的文件'
+              : safeCount < files.length
+                ? `全部接受（${safeCount}/${files.length} 可应用）`
+                : '全部接受可安全应用的文件'
+          }>
+            <button
+              type="button"
+              className={styles.changeOverviewReview}
+              disabled={busy || safeCount === 0}
+              aria-label={
+                safeCount === 0
+                  ? '全部接受，当前无可安全应用的文件'
+                  : `全部接受 ${safeCount} 个可安全应用的文件`
+              }
+              onClick={(e) => void acceptAll(e)}
+            >
+              全部接受
+            </button>
+          </Tooltip>
           {files.length > 1 ? (
+            <Tooltip content="拒绝全部并从列表移除">
+              <button
+                type="button"
+                className={styles.changeOverviewReview}
+                disabled={busy}
+                aria-label={`拒绝全部 ${files.length} 个文件`}
+                onClick={(e) => rejectAll(e)}
+              >
+                全部拒绝
+              </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip content="打开变更面板">
             <button
               type="button"
               className={styles.changeOverviewReview}
               disabled={busy}
-              title="拒绝全部并从列表移除"
-              aria-label={`拒绝全部 ${files.length} 个文件`}
-              onClick={(e) => rejectAll(e)}
+              aria-label="查看变更"
+              onClick={() => {
+                if (files[0]) onOpenDiff(files[0]);
+                onOpenDiffPanel?.();
+              }}
             >
-              全部拒绝
+              查看变更
             </button>
-          ) : null}
-          <button
-            type="button"
-            className={styles.changeOverviewReview}
-            disabled={busy}
-            title="打开变更面板"
-            aria-label="查看变更"
-            onClick={() => {
-              if (files[0]) onOpenDiff(files[0]);
-              onOpenDiffPanel?.();
-            }}
-          >
-            查看变更
-          </button>
+          </Tooltip>
         </div>
       </div>
 
       {inlineErr ? (
         <div className={styles.filesActionHint} role="alert" aria-live="assertive">
-          <span className={styles.filesActionHintText} title={inlineErr}>
+          <span className={styles.filesActionHintText}>
             {inlineErr}
           </span>
-          <button
-            type="button"
-            className={styles.filesActionHintDismiss}
-            title="关闭"
-            aria-label="关闭错误"
-            onClick={dismissErr}
-          >
-            <Lucide.X size={12} aria-hidden />
-          </button>
+          <Tooltip content="关闭">
+            <button
+              type="button"
+              className={styles.filesActionHintDismiss}
+              aria-label="关闭错误"
+              onClick={dismissErr}
+            >
+              <Lucide.X size={12} aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
@@ -407,56 +412,59 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
             const del = f.deletions || 0;
             return (
               <li key={f.filePath} className={styles.changeOverviewRow}>
-                <button
-                  type="button"
-                  className={styles.changeOverviewFile}
-                  title={f.filePath}
-                  aria-label={
-                    emptyLine
-                      ? `打开变更 ${name}，无行级 diff`
-                      : `打开变更 ${name}，+${add} −${del}`
-                  }
-                  onClick={() => onOpenDiff(f)}
-                >
-                  <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
-                  <span className={styles.changeOverviewName}>{name}</span>
-                  {parent ? (
-                    <span className={styles.changeOverviewPath}>{parent}</span>
-                  ) : null}
-                  <span className={`${styles.changeOverviewStat} ${styles.changeOverviewStatGlobalSm}`} aria-hidden>
-                    {emptyLine ? (
-                      <span className="del">无行级</span>
-                    ) : (
-                      <>
-                        <span className="add">+{add}</span>
-                        <span className="del">−{del}</span>
-                      </>
-                    )}
-                  </span>
-                </button>
-                <div className={styles.changeOverviewFileActions}>
+                <Tooltip content={f.filePath}>
                   <button
                     type="button"
-                    className={`${styles.changeOverviewMiniBtn} ${styles.accept}`}
-                    title={canApply ? '接受并写入磁盘' : '无法安全自动应用'}
+                    className={styles.changeOverviewFile}
                     aria-label={
-                      canApply ? `接受 ${name}` : `无法自动应用 ${name}`
+                      emptyLine
+                        ? `打开变更 ${name}，无行级 diff`
+                        : `打开变更 ${name}，+${add} −${del}`
                     }
-                    disabled={busy || !canApply}
-                    onClick={(e) => void acceptOne(f, e)}
+                    onClick={() => onOpenDiff(f)}
                   >
-                    接受
+                    <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
+                    <span className={styles.changeOverviewName}>{name}</span>
+                    {parent ? (
+                      <span className={styles.changeOverviewPath}>{parent}</span>
+                    ) : null}
+                    <span className={`${styles.changeOverviewStat} ${styles.changeOverviewStatGlobalSm}`} aria-hidden>
+                      {emptyLine ? (
+                        <span className="del">无行级</span>
+                      ) : (
+                        <>
+                          <span className="add">+{add}</span>
+                          <span className="del">−{del}</span>
+                        </>
+                      )}
+                    </span>
                   </button>
-                  <button
-                    type="button"
-                    className={styles.changeOverviewMiniBtn}
-                    title="从变更列表移除"
-                    aria-label={`拒绝 ${name}`}
-                    disabled={busy}
-                    onClick={(e) => rejectOne(f, e)}
-                  >
-                    拒绝
-                  </button>
+                </Tooltip>
+                <div className={styles.changeOverviewFileActions}>
+                  <Tooltip content={canApply ? '接受并写入磁盘' : '无法安全自动应用'}>
+                    <button
+                      type="button"
+                      className={`${styles.changeOverviewMiniBtn} ${styles.accept}`}
+                      aria-label={
+                        canApply ? `接受 ${name}` : `无法自动应用 ${name}`
+                      }
+                      disabled={busy || !canApply}
+                      onClick={(e) => void acceptOne(f, e)}
+                    >
+                      接受
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="从变更列表移除">
+                    <button
+                      type="button"
+                      className={styles.changeOverviewMiniBtn}
+                      aria-label={`拒绝 ${name}`}
+                      disabled={busy}
+                      onClick={(e) => rejectOne(f, e)}
+                    >
+                      拒绝
+                    </button>
+                  </Tooltip>
                 </div>
               </li>
             );

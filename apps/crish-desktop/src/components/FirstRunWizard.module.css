@@ -8,7 +8,7 @@
   background: rgba(15, 23, 42, 0.28);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 .firstRunCard {
@@ -113,7 +113,7 @@
   margin-top: var(--space-1);
 }
 
-/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢�?*/
+/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢�?*/
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -193,7 +193,7 @@
   padding-bottom: var(--space-1);
 }
 
-/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛�?/ 閹垫挸绱戠拋鍓х枂閿涘牊妫?toast�?*/
+/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛�?/ 閹垫挸绱戠拋鍓х枂閿涘牊妫?toast�?*/
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;

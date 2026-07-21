@@ -1,28 +1,19 @@
-/* focus-visible.css — 全局键盘焦点指示器 */
+/* focus-visible.css — 全局键盘焦点指示器（Phase 1 对比度标准） */
 /* 使用 :focus-visible 只在键盘导航时显示 focus ring，鼠标点击时隐藏 */
 
-/* 鼠标点击时隐藏 outline */
-:focus:not(:focus-visible) {
-  outline: none;
-}
+:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 
-/* 键盘导航焦点指示 */
 :focus-visible {
-  outline: 2px solid var(--accent-color, #4A90D9);
-  outline-offset: 2px;
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
 
-/* 输入框和文本域使用内嵌 outline，不破坏布局 */
-input:focus-visible,
-textarea:focus-visible {
-  outline-offset: -2px;
-}
+input:focus-visible, textarea:focus-visible { outline-offset: -2px; }
 
-/* 按钮、链接等可交互元素保留默认焦点指示 */
-button:focus-visible,
-a:focus-visible,
+button:focus-visible, a:focus-visible,
 [role="button"]:focus-visible,
 [tabindex]:not([tabindex="-1"]):focus-visible {
-  outline: 2px solid var(--accent-color, #4A90D9);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }

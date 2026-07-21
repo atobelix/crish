@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode, type RefObject } from 'react';
 
 interface FocusTrapProps {
   children: ReactNode;
@@ -29,6 +29,39 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 
 function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const originalValues = useRef<Map<Element, string | null>>(new Map());
+
+  const activate = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const parent = container.parentElement;
+    if (parent) {
+      for (const child of parent.children) {
+        if (child !== container) {
+          originalValues.current.set(child, child.getAttribute('aria-hidden'));
+          child.setAttribute('aria-hidden', 'true');
+          if ('inert' in HTMLElement.prototype) {
+            (child as any).inert = true;
+          }
+        }
+      }
+    }
+  }, []);
+
+  const deactivate = useCallback(() => {
+    for (const [el, val] of originalValues.current) {
+      if (val === null) {
+        el.removeAttribute('aria-hidden');
+      } else {
+        el.setAttribute('aria-hidden', val);
+      }
+      if ('inert' in HTMLElement.prototype) {
+        (el as any).inert = false;
+      }
+    }
+    originalValues.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -38,6 +71,8 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
     const target =
       initialFocusRef?.current ?? getFocusableElements(container)[0];
     target?.focus();
+
+    activate();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
@@ -59,8 +94,11 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [active, initialFocusRef]);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      deactivate();
+    };
+  }, [active, initialFocusRef, activate, deactivate]);
 
   return <div ref={containerRef}>{children}</div>;
 }

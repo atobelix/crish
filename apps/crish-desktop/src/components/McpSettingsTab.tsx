@@ -21,6 +21,7 @@ import { clientApi, type McpServer } from '../api/clientApi';
 import { SettingsSelect } from './SettingsSelect';
 import styles from './McpSettingsTab.module.css';
 import { SettingsPage } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -360,30 +361,32 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             {srv.tools.map((t) => (
               <li key={t}>
                 <Lucide.Wrench size={12} aria-hidden />
-                <button
-                  type="button"
-                  className={`${styles.mcpInlineCopy} mcp-inline-copy`}
-                  title="复制工具名"
-                  aria-label={`复制工具名 ${t}`}
-                  onClick={() => void handleCopy(t)}
-                >
-                  <code>{t}</code>
-                </button>
+                <Tooltip content="复制工具名">
+                  <button
+                    type="button"
+                    className={`${styles.mcpInlineCopy} mcp-inline-copy`}
+                    aria-label={`复制工具名 ${t}`}
+                    onClick={() => void handleCopy(t)}
+                  >
+                    <code>{t}</code>
+                  </button>
+                </Tooltip>
               </li>
             ))}
           </ul>
         )}
         <div className={`${styles.mcpCardId} mcp-card-id`}>
           标识{' '}
-          <button
-            type="button"
-            className={`${styles.mcpInlineCopy} mcp-inline-copy`}
-            title="复制标识"
-            aria-label={`复制标识 ${srv.id}`}
-            onClick={() => void handleCopy(srv.id)}
-          >
-            <code>{srv.id}</code>
-          </button>
+          <Tooltip content="复制标识">
+            <button
+              type="button"
+              className={`${styles.mcpInlineCopy} mcp-inline-copy`}
+              aria-label={`复制标识 ${srv.id}`}
+              onClick={() => void handleCopy(srv.id)}
+            >
+              <code>{srv.id}</code>
+            </button>
+          </Tooltip>
         </div>
       </div>
     );
@@ -402,15 +405,16 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     return (
       <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite" title={EMPTY_FILTER_HINT}>
         <span>无匹配</span>
-        <button
-          type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
-          onClick={clearFilter}
-          title={EMPTY_FILTER_HINT}
-          aria-label="清除筛选"
-        >
-          清除筛选
-        </button>
+        <Tooltip content={EMPTY_FILTER_HINT}>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            onClick={clearFilter}
+            aria-label="清除筛选"
+          >
+            清除筛选
+          </button>
+        </Tooltip>
       </div>
     );
   };
@@ -419,63 +423,68 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
 
   const renderSharedToolbar = () => (
     <div className={`${styles.mcpToolbar} mcp-toolbar`} role="toolbar" aria-label="扩展服务工具栏">
-      <button
-        type="button"
-        className="ui-btn ui-btn-ghost ui-btn-sm"
-        onClick={() => void refresh()}
-        disabled={loading}
-        title={loading ? '刷新中…' : '刷新列表'}
-        aria-label={loading ? '刷新中' : '刷新列表'}
-        aria-busy={loading || undefined}
-      >
-        <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />
-      </button>
+      <Tooltip content={loading ? '刷新中…' : '刷新列表'}>
+        <button
+          type="button"
+          className="ui-btn ui-btn-ghost ui-btn-sm"
+          onClick={() => void refresh()}
+          disabled={loading}
+          aria-label={loading ? '刷新中' : '刷新列表'}
+          aria-busy={loading || undefined}
+        >
+          <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />
+        </button>
+      </Tooltip>
       <div className="ui-segment ui-segment--inline settings-segment-pill" role="group" aria-label="排序方式">
-        <button
-          type="button"
-          className={`ui-segment-item ${sortMode === 'name' ? 'active' : ''}`}
-          onClick={() => setSort('name')}
-          aria-pressed={sortMode === 'name'}
-          title="按名称排序"
-        >
-          名称
-        </button>
-        <button
-          type="button"
-          className={`ui-segment-item ${sortMode === 'state' ? 'active' : ''}`}
-          onClick={() => setSort('state')}
-          aria-pressed={sortMode === 'state'}
-          title={demo ? '按启用状态排序' : '按运行状态排序'}
-        >
-          状态
-        </button>
+        <Tooltip content="按名称排序">
+          <button
+            type="button"
+            className={`ui-segment-item ${sortMode === 'name' ? 'active' : ''}`}
+            onClick={() => setSort('name')}
+            aria-pressed={sortMode === 'name'}
+          >
+            名称
+          </button>
+        </Tooltip>
+        <Tooltip content={demo ? '按启用状态排序' : '按运行状态排序'}>
+          <button
+            type="button"
+            className={`ui-segment-item ${sortMode === 'state' ? 'active' : ''}`}
+            onClick={() => setSort('state')}
+            aria-pressed={sortMode === 'state'}
+          >
+            状态
+          </button>
+        </Tooltip>
       </div>
-      <input
-        className={`settings-field-input settings-field-input--sm ${styles.mcpSearch} mcp-search`}
-        placeholder="搜索名称、标识…"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && filter) {
-            e.preventDefault();
-            clearFilter();
-          }
-        }}
-        aria-label="搜索扩展服务"
-        title="搜索名称、标识或工具；Esc 清除"
-      />
+      <Tooltip content="搜索名称、标识或工具；Esc 清除">
+        <input
+          className={`settings-field-input settings-field-input--sm ${styles.mcpSearch} mcp-search`}
+          placeholder="搜索名称、标识…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && filter) {
+              e.preventDefault();
+              clearFilter();
+            }
+          }}
+          aria-label="搜索扩展服务"
+        />
+      </Tooltip>
       {demo ? (
-        <button
-          type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
-          onClick={() => setShowAdd((v) => !v)}
-          title={showAdd ? '收起添加表单' : '添加演示服务'}
-          aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
-          aria-expanded={showAdd}
-        >
-          <Lucide.Plus size={14} aria-hidden />
-          {showAdd ? '收起' : '添加'}
-        </button>
+        <Tooltip content={showAdd ? '收起添加表单' : '添加演示服务'}>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={() => setShowAdd((v) => !v)}
+            aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
+            aria-expanded={showAdd}
+          >
+            <Lucide.Plus size={14} aria-hidden />
+            {showAdd ? '收起' : '添加'}
+          </button>
+        </Tooltip>
       ) : null}
     </div>
   );
@@ -553,32 +562,35 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
               />
               {newType === 'stdio' ? (
                 <>
-                  <input
-                    className="settings-field-input settings-field-input--sm"
-                    value={newCmd}
-                    onChange={(e) => setNewCmd(e.target.value)}
-                    placeholder="命令"
-                    aria-label="启动命令"
-                    title="stdio 启动命令"
-                  />
-                  <input
-                    className="settings-field-input settings-field-input--sm"
-                    value={newArgs}
-                    onChange={(e) => setNewArgs(e.target.value)}
-                    placeholder="参数（逗号分隔）"
-                    aria-label="参数，逗号分隔"
-                    title="参数（逗号分隔）"
-                  />
+                  <Tooltip content="stdio 启动命令">
+                    <input
+                      className="settings-field-input settings-field-input--sm"
+                      value={newCmd}
+                      onChange={(e) => setNewCmd(e.target.value)}
+                      placeholder="命令"
+                      aria-label="启动命令"
+                    />
+                  </Tooltip>
+                  <Tooltip content="参数（逗号分隔）">
+                    <input
+                      className="settings-field-input settings-field-input--sm"
+                      value={newArgs}
+                      onChange={(e) => setNewArgs(e.target.value)}
+                      placeholder="参数（逗号分隔）"
+                      aria-label="参数，逗号分隔"
+                    />
+                  </Tooltip>
                 </>
               ) : (
-                <input
-                  className={`settings-field-input settings-field-input--sm ${styles.mcpAddUrl} mcp-add-url`}
-                  value={newUrl}
-                  onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="端点 URL"
-                  aria-label="端点 URL"
-                  title="SSE 端点地址"
-                />
+                <Tooltip content="SSE 端点地址">
+                  <input
+                    className={`settings-field-input settings-field-input--sm ${styles.mcpAddUrl} mcp-add-url`}
+                    value={newUrl}
+                    onChange={(e) => setNewUrl(e.target.value)}
+                    placeholder="端点 URL"
+                    aria-label="端点 URL"
+                  />
+                </Tooltip>
               )}
               <button
                 type="button"
@@ -588,16 +600,17 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
               >
                 取消
               </button>
-              <button
-                type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
-                disabled={!newName.trim()}
-                onClick={() => void handleAddDemo()}
-                aria-label="保存演示服务"
-                title={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}
-              >
-                保存
-              </button>
+              <Tooltip content={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  disabled={!newName.trim()}
+                  onClick={() => void handleAddDemo()}
+                  aria-label="保存演示服务"
+                >
+                  保存
+                </button>
+              </Tooltip>
             </div>
           </div>
         ) : null}
@@ -609,16 +622,17 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
           emptyContent: (
             <>
               <span>{EMPTY_DEMO_HINT}</span>
-              <button
-                type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
-                onClick={() => setShowAdd(true)}
-                aria-label="添加演示服务"
-                title={EMPTY_DEMO_HINT}
-              >
-                <Lucide.Plus size={14} aria-hidden />
-                添加
-              </button>
+              <Tooltip content={EMPTY_DEMO_HINT}>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  onClick={() => setShowAdd(true)}
+                  aria-label="添加演示服务"
+                >
+                  <Lucide.Plus size={14} aria-hidden />
+                  添加
+                </button>
+              </Tooltip>
               <button
                 type="button"
                 className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -642,15 +656,16 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                     aria-hidden
                     title={on ? '已启用' : '已禁用'}
                   />
-                  <button
-                    type="button"
-                    className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
-                    title={`复制标识 ${srv.id}`}
-                    aria-label={`复制标识 ${srv.name}`}
-                    onClick={() => void handleCopy(srv.id)}
-                  >
-                    {srv.name}
-                  </button>
+                  <Tooltip content={`复制标识 ${srv.id}`}>
+                    <button
+                      type="button"
+                      className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
+                      aria-label={`复制标识 ${srv.name}`}
+                      onClick={() => void handleCopy(srv.id)}
+                    >
+                      {srv.name}
+                    </button>
+                  </Tooltip>
                   <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
                     {on ? '启用' : '禁用'}
                   </span>
@@ -668,15 +683,16 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                       aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
                       onChange={() => setDemoEnabled((p) => ({ ...p, [srv.id]: !on }))}
                     />
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="删除"
-                      aria-label={`删除 ${srv.name}`}
-                      onClick={() => void handleDeleteDemo(srv.id)}
-                    >
-                      <Lucide.Trash2 size={14} aria-hidden />
-                    </button>
+                    <Tooltip content="删除">
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label={`删除 ${srv.name}`}
+                        onClick={() => void handleDeleteDemo(srv.id)}
+                      >
+                        <Lucide.Trash2 size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               </div>
@@ -721,7 +737,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             {canStartStop ? '启停可用' : '启停不可用'}
           </span>
           {filterActive ? (
-            <span className={`${styles.mcpStatusPill} mcp-status-pill`} title="当前筛选结果数">
+            <span className={`${styles.mcpStatusPill} mcp-status-pill`} aria-label="当前筛选结果数">
               显示 {filtered.length}
             </span>
           ) : null}
@@ -750,17 +766,18 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             <span title={liveEmptyHint}>
               {status?.configured ? '暂无服务实例' : '暂无扩展服务'}
             </span>
-            <button
-              type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
-              onClick={() => void refreshLive()}
-              disabled={loading}
-              aria-label="刷新列表"
-              title="重新向引擎查询列表"
-            >
-              <Lucide.RefreshCw size={14} aria-hidden />
-              刷新
-            </button>
+            <Tooltip content="重新向引擎查询列表">
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => void refreshLive()}
+                disabled={loading}
+                aria-label="刷新列表"
+              >
+                <Lucide.RefreshCw size={14} aria-hidden />
+                刷新
+              </button>
+            </Tooltip>
           </>
         ),
         renderItem: (srv: McpServerInfo) => {
@@ -785,15 +802,16 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                   aria-hidden
                   title={mcpStateLabel(srv.state)}
                 />
-                <button
-                  type="button"
-                  className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
-                  title={`复制标识 ${srv.id}`}
-                  aria-label={`复制标识 ${srv.name}`}
-                  onClick={() => void handleCopy(srv.id)}
-                >
-                  {srv.name}
-                </button>
+                <Tooltip content={`复制标识 ${srv.id}`}>
+                  <button
+                    type="button"
+                    className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
+                    aria-label={`复制标识 ${srv.name}`}
+                    onClick={() => void handleCopy(srv.id)}
+                  >
+                    {srv.name}
+                  </button>
+                </Tooltip>
                 <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`} title={mcpStateLabel(srv.state)}>
                   {mcpStateLabel(srv.state)}
                 </span>
@@ -808,61 +826,65 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                   ) : null}
                 </span>
                 <div className={`${styles.mcpRowActions} mcp-row-actions`}>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title={isOpen ? '收起工具' : `展开工具（${toolN}）`}
-                    aria-label={isOpen ? `收起 ${srv.name} 的工具` : `展开 ${srv.name} 的工具 ${toolN}`}
-                    aria-expanded={isOpen}
-                    aria-controls={panelId}
-                    onClick={() => setExpanded((p) => ({ ...p, [srv.id]: !isOpen }))}
-                  >
-                    {isOpen ? (
-                      <Lucide.ChevronUp size={14} aria-hidden />
-                    ) : (
-                      <Lucide.ChevronDown size={14} aria-hidden />
-                    )}
-                  </button>
-                  {canStartStop ? (
-                    running ? (
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
-                        disabled={busy}
-                        title={busy ? '停止中…' : '停止'}
-                        aria-label={`停止 ${srv.name}`}
-                        aria-busy={busy || undefined}
-                        onClick={() => void handleToggleServer(srv.id, 'stop')}
-                      >
-                        <Lucide.Square size={14} aria-hidden />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ui-btn ui-btn-secondary ui-btn-sm"
-                        disabled={busy}
-                        title={busy ? '启动中…' : '启动'}
-                        aria-label={`启动 ${srv.name}`}
-                        aria-busy={busy || undefined}
-                        onClick={() => void handleToggleServer(srv.id, 'start')}
-                      >
-                        <Lucide.Play size={14} aria-hidden />
-                      </button>
-                    )
-                  ) : (
+                  <Tooltip content={isOpen ? '收起工具' : `展开工具（${toolN}）`}>
                     <button
                       type="button"
                       className="ui-btn ui-btn-ghost ui-btn-sm"
-                      disabled
-                      title={stopHint}
-                      aria-label={running ? '停止不可用' : '启动不可用'}
+                      aria-label={isOpen ? `收起 ${srv.name} 的工具` : `展开 ${srv.name} 的工具 ${toolN}`}
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      onClick={() => setExpanded((p) => ({ ...p, [srv.id]: !isOpen }))}
                     >
-                      {running ? (
-                        <Lucide.Square size={14} aria-hidden />
+                      {isOpen ? (
+                        <Lucide.ChevronUp size={14} aria-hidden />
                       ) : (
-                        <Lucide.Play size={14} aria-hidden />
+                        <Lucide.ChevronDown size={14} aria-hidden />
                       )}
                     </button>
+                  </Tooltip>
+                  {canStartStop ? (
+                    running ? (
+                      <Tooltip content={busy ? '停止中…' : '停止'}>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          disabled={busy}
+                          aria-label={`停止 ${srv.name}`}
+                          aria-busy={busy || undefined}
+                          onClick={() => void handleToggleServer(srv.id, 'stop')}
+                        >
+                          <Lucide.Square size={14} aria-hidden />
+                        </button>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip content={busy ? '启动中…' : '启动'}>
+                        <button
+                          type="button"
+                          className="ui-btn ui-btn-secondary ui-btn-sm"
+                          disabled={busy}
+                          aria-label={`启动 ${srv.name}`}
+                          aria-busy={busy || undefined}
+                          onClick={() => void handleToggleServer(srv.id, 'start')}
+                        >
+                          <Lucide.Play size={14} aria-hidden />
+                        </button>
+                      </Tooltip>
+                    )
+                  ) : (
+                    <Tooltip content={stopHint}>
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        disabled
+                        aria-label={running ? '停止不可用' : '启动不可用'}
+                      >
+                        {running ? (
+                          <Lucide.Square size={14} aria-hidden />
+                        ) : (
+                          <Lucide.Play size={14} aria-hidden />
+                        )}
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
               </div>

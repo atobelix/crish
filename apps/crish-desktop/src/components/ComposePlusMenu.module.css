@@ -21,11 +21,11 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  animation: cds-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: bottom left;
 }
 .mainExit {
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
 .item {
   display: flex;

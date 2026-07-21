@@ -452,10 +452,23 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
 
   const hasAiTurns = aiTurns.length > 0;
 
+  const mergedSessionFiles = useMemo(
+    () => mergeSessionDiffFiles(aiTurns),
+    [aiTurns],
+  );
+
   const fileList = useMemo(() => {
     if (diffFiles.length > 0) return diffFiles;
     return activeDiffSource ? [activeDiffSource] : [];
   }, [diffFiles, activeDiffSource]);
+
+  const computedChangesByFile = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getComputedChanges>>();
+    for (const f of fileList) {
+      map.set(f.filePath, getComputedChanges(f));
+    }
+    return map;
+  }, [fileList]);
 
   const current = activeDiffSource;
 
@@ -589,7 +602,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   ]);
 
   const loadSessionAll = useCallback(() => {
-    const files = mergeSessionDiffFiles(aiTurns);
+    const files = mergedSessionFiles;
     if (!files.length) {
       showSoftHint('本会话暂无 AI 改动');
       setDiffFiles([]);
@@ -637,7 +650,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       return f;
     }
     if (mode === 'session-merged') {
-      const mergedFiles = mergeSessionDiffFiles(aiTurns);
+      const mergedFiles = mergedSessionFiles;
       return mergedFiles.find((m) => m.filePath === f.filePath) || f;
     }
     if (mode.startsWith('turn-')) {
@@ -948,6 +961,24 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return renderItems;
   };
 
+  const unifiedRenderCache = useMemo(() => {
+    const map = new Map<string, UnifiedRenderItem[]>();
+    for (const f of fileList) {
+      const computed = computedChangesByFile.get(f.filePath) ?? [];
+      map.set(f.filePath, getUnifiedRenderItems(f, computed));
+    }
+    return map;
+  }, [fileList, computedChangesByFile, diffSearchQuery, expandedBlocks, diffViewMode]);
+
+  const splitRenderCache = useMemo(() => {
+    const map = new Map<string, SplitRenderItem[]>();
+    for (const f of fileList) {
+      const computed = computedChangesByFile.get(f.filePath) ?? [];
+      map.set(f.filePath, getSplitRenderItems(f, computed));
+    }
+    return map;
+  }, [fileList, computedChangesByFile, diffSearchQuery, expandedBlocks, diffViewMode]);
+
   const handleExpandBlock = (fileKey: string, startIndex: number) => {
     setExpandedBlocks((prev) => ({
       ...prev,
@@ -1060,7 +1091,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       );
     }
 
-    const computed = getComputedChanges(f);
+    const computed = computedChangesByFile.get(f.filePath) ?? [];
     const q = diffSearchQuery.trim();
     if (q && computed.filter(item => item.change.content.toLowerCase().includes(q.toLowerCase())).length === 0) {
       return (
@@ -1074,7 +1105,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
 
     if (diffViewMode === 'split') {
-      const renderItems = getSplitRenderItems(f, computed);
+      const renderItems = splitRenderCache.get(f.filePath) ?? [];
       return (
         <DiffCardSplitView
           f={f}
@@ -1084,7 +1115,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       );
     }
 
-    const renderItems = getUnifiedRenderItems(f, computed);
+    const renderItems = unifiedRenderCache.get(f.filePath) ?? [];
     return (
       <DiffCardUnifiedView
         f={f}

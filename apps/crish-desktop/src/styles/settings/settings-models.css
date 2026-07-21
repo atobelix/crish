@@ -1,4 +1,4 @@
-/* ===== Models settings tab閿涘�?閿涙矮瀵岀捄顖氱窞鐎靛棝鎸滈埆鎺戝灙鐞涖劉鍟嬭ぐ鎾冲閿涙稒顐肩憰浣规惙锟?hover 閹靛秹婀堕敍?===== */
+/* ===== Models settings tab閿涘�?閿涙矮瀵岀捄顖氱窞鐎靛棝鎸滈埆鎺戝灙鐞涖劉鍟嬭ぐ鎾冲閿涙稒顐肩憰浣规惙锟?hover 閹靛秹婀堕敍?===== */
 .models-tab {
   display: flex;
   flex-direction: column;
@@ -838,7 +838,7 @@
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 鐎电鐦芥担璺ㄦ暏閸栫尨绱版稉鈧悰宀冾嚛�?+ 閸斻劋缍旈敍灞肩瑝閹躲垺膩閸ㄥ鍨�?*/
+/* 鐎电鐦芥担璺ㄦ暏閸栫尨绱版稉鈧悰宀冾嚛�?+ 閸斻劋缍旈敍灞肩瑝閹躲垺膩閸ㄥ鍨�?*/
 .models-summary {
   gap: var(--space-2);
   padding: 0;
@@ -869,7 +869,7 @@
   font-size: var(--font-size-xs-plus);
 }
 
-/* 閹绘劗銇氶敍姘充氦閵嗕礁褰查�?*/
+/* 閹绘劗銇氶敍姘充氦閵嗕礁褰查�?*/
 .models-action-hint {
   padding: 7px 10px;
   border-radius: var(--radius-lg);
@@ -917,7 +917,7 @@
   border-radius: var(--radius-md);
 }
 
-/* 瀵偓閸忚櫕姊洪弬鍥х�?*/
+/* 瀵偓閸忚櫕姊洪弬鍥х�?*/
 .models-switch {
   gap: var(--space-1_5);
 }
@@ -930,7 +930,7 @@
   display: inline;
 }
 
-/* 閼宠棄濮忛懞顖滃�?*/
+/* 閼宠棄濮忛懞顖滃�?*/
 .models-cap-chip {
   min-height: 30px;
   padding: 5px 11px;
@@ -952,7 +952,7 @@
   padding-top: var(--space-2);
 }
 
-/* 鐠伮ゅ瀭閿涙碍娲垮�?*/
+/* 鐠伮ゅ瀭閿涙碍娲垮�?*/
 .models-billing {
   margin-top: var(--space-1_5);
   padding-top: var(--space-2);
@@ -990,7 +990,7 @@
   border-color: transparent;
 }
 
-/* 鏉堟挸鍙嗛敍姘辩矎鏉堣顢嬮妴浣戒氦�?*/
+/* 鏉堟挸鍙嗛敍姘辩矎鏉堣顢嬮妴浣戒氦�?*/
 .models-tab .settings-field-input {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
@@ -1003,7 +1003,7 @@
 }
 
 /* === models-tab polish-v4 === */
-/* 閻忔澘瀹抽敍姘冲剹�?�?%閿涘本寮挎潏?~11%閿涙稐濞囬悽銊よ厬锟?22b671 / #f0fdf4 */
+/* 閻忔澘瀹抽敍姘冲剹�?�?%閿涘本寮挎潏?~11%閿涙稐濞囬悽銊よ厬锟?22b671 / #f0fdf4 */
 
 .models-tab {
   --models-green: var(--accent-green, #10b981);
@@ -1015,7 +1015,7 @@
   gap: var(--space-3);
 }
 
-/* 鏉堟挸鍙嗛敍姘€紒鍡樼ガ閻忕増寮挎潏鐧哥礉閼辨氨鍔嶉悾銉︾箒閿涘奔绗夌捄鎶界彯鐎佃�?*/
+/* 鏉堟挸鍙嗛敍姘€紒鍡樼ガ閻忕増寮挎潏鐧哥礉閼辨氨鍔嶉悾銉︾箒閿涘奔绗夌捄鎶界彯鐎佃�?*/
 .models-tab .settings-field-input {
   border: 1px solid var(--models-border);
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
@@ -1056,7 +1056,7 @@
   background: transparent;
 }
 
-/* 鏉╃偞甯寸€涙�?*/
+/* 鏉╃偞甯寸€涙�?*/
 .models-conn {
   border-bottom-color: var(--models-border-soft);
 }
@@ -1065,7 +1065,7 @@
   background: transparent;
 }
 
-/* 鐎电鐦芥担璺ㄦ暏閹芥�?*/
+/* 鐎电鐦芥担璺ㄦ暏閹芥�?*/
 .models-summary {
   background: transparent;
   border: none;
@@ -1085,7 +1085,7 @@
   background: var(--models-fill);
 }
 
-/* 妞ら潧鍞村Ο顏勭畽閹绘劗銇氶敍姘瑝閸愬秳濞囬悽顭掔礄闁挎瑨顕ょ挧鏉垮弿鐏炩偓 toast�?*/
+/* 妞ら潧鍞村Ο顏勭畽閹绘劗銇氶敍姘瑝閸愬秳濞囬悽顭掔礄闁挎瑨顕ょ挧鏉垮弿鐏炩偓 toast�?*/
 .models-action-hint {
   display: none !important;
 }
@@ -1127,7 +1127,7 @@
   display: none;
 }
 
-/* 娑撳﹣绗呴弬鍥风窗閸ョ偓�?+ 闂€鍨閿涘苯宕熺悰宀勬锟?*/
+/* 娑撳﹣绗呴弬鍥风窗閸ョ偓�?+ 闂€鍨閿涘苯宕熺悰宀勬锟?*/
 .models-ctx {
   display: inline-flex;
   align-items: center;
@@ -1214,7 +1214,7 @@ html[data-theme="dark"] .models-pill--live {
   color: color-mix(in srgb, var(--models-green) 88%, white);
 }
 
-/* 閸氼垳鏁ゅ鈧崗绛圭窗瀵�?缂佸尅绱濋崗?濞村懐锟?*/
+/* 閸氼垳鏁ゅ鈧崗绛圭窗瀵�?缂佸尅绱濋崗?濞村懐锟?*/
 .models-switch-ui {
   width: 34px;
   height: 18px;
@@ -1271,7 +1271,7 @@ html[data-theme="dark"] .models-pill--live {
   color: var(--text-primary);
 }
 
-/* 鐠伮ゅ瀭閺囧瓨�?*/
+/* 鐠伮ゅ瀭閺囧瓨�?*/
 .models-billing {
   border-top-color: var(--models-border-soft);
 }
@@ -1279,7 +1279,7 @@ html[data-theme="dark"] .models-pill--live {
   color: var(--text-tertiary);
 }
 
-/* 閼惧嘲褰囧鐟扮湴缁岀儤鈧線鏁婄�?*/
+/* 閼惧嘲褰囧鐟扮湴缁岀儤鈧線鏁婄�?*/
 .models-empty--err {
   color: var(--accent-red, #b91c1c);
 }
@@ -1310,7 +1310,7 @@ html[data-theme="dark"] .models-pill--live {
 }
 
 /* === models-tab polish-v5-toggle === */
-/* 濠碘偓锟?閺堫亝绺哄ú璇差嚠姒绘劕寮懓鍐跨窗瀵�?#22b671 + 濞村懎锟?#f0fdf4閿涙稑锟?濞村懐浼嗘潪?*/
+/* 濠碘偓锟?閺堫亝绺哄ú璇差嚠姒绘劕寮懓鍐跨窗瀵�?#22b671 + 濞村懎锟?#f0fdf4閿涙稑锟?濞村懐浼嗘潪?*/
 
 .models-tab {
   --models-green: var(--accent-green, #10b981);
@@ -1323,7 +1323,7 @@ html[data-theme="dark"] .models-pill--live {
   --models-fill: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
 }
 
-/* 瀵偓閸忕绱伴懗璺烘抄�?+ 閻ц棄娓鹃柦顕嗙礄閸欏倽鈧啫娴橀�?*/
+/* 瀵偓閸忕绱伴懗璺烘抄�?+ 閻ц棄娓鹃柦顕嗙礄閸欏倽鈧啫娴橀�?*/
 .models-tab .models-switch {
   gap: 0;
   flex-shrink: 0;
@@ -1350,7 +1350,7 @@ html[data-theme="dark"] .models-pill--live {
   box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
   transition: transform var(--transition-fast), background var(--transition-fast);
 }
-/* 瀵偓閿涙艾鐤勮箛鍐雹�?+ 閻т粙鎸冲鎴濆煂閸欏厖鏅堕敍鍫濐嚠姒绘劕寮懓鍐ㄦ禈�?*/
+/* 瀵偓閿涙艾鐤勮箛鍐雹�?+ 閻т粙鎸冲鎴濆煂閸欏厖鏅堕敍鍫濐嚠姒绘劕寮懓鍐ㄦ禈�?*/
 .models-tab .models-switch input:checked + .models-switch-ui,
 .models-tab .models-switch.is-on .models-switch-ui {
   border-color: var(--models-green-on);
@@ -1398,7 +1398,7 @@ html[data-theme="dark"] .models-pill--live {
   filter: grayscale(0.15);
 }
 
-/* 娴ｈ法鏁ゆ稉顓☆攽閿涙碍绁紒鍨俺閿涘奔绗夐崢瀣�?8% 閻忕増锟?*/
+/* 娴ｈ法鏁ゆ稉顓☆攽閿涙碍绁紒鍨俺閿涘奔绗夐崢瀣�?8% 閻忕増锟?*/
 .models-tab .models-main-row.is-live {
   border-color: color-mix(in srgb, var(--models-green) 26%, var(--models-border));
   background: color-mix(in srgb, var(--models-green-soft) 88%, var(--bg-primary));
@@ -1407,7 +1407,7 @@ html[data-theme="dark"] .models-pill--live {
   font-weight: var(--font-weight-content);
 }
 
-/* 閸嬫粎鏁ょ悰宀嬬窗閺囧浼嗛妴浣规纯瀵唻绱濋崪灞烩偓灞炬弓娴ｈ法鏁ゆ担鍡楁儙閻劊鈧秵濯哄�?*/
+/* 閸嬫粎鏁ょ悰宀嬬窗閺囧浼嗛妴浣规纯瀵唻绱濋崪灞烩偓灞炬弓娴ｈ法鏁ゆ担鍡楁儙閻劊鈧秵濯哄�?*/
 .models-tab .models-main-row.is-off {
   border-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
@@ -1450,7 +1450,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-color: color-mix(in srgb, var(--models-green) 34%, transparent);
 }
 
-/* 閼宠棄濮忛懞顖滃闁鑵戞稊鐔荤缂佽儻澹婄紒鍕剁礉闁灝鍘ら崣锔跨婵傛�?*/
+/* 閼宠棄濮忛懞顖滃闁鑵戞稊鐔荤缂佽儻澹婄紒鍕剁礉闁灝鍘ら崣锔跨婵傛�?*/
 .models-tab .models-cap-chip.is-on,
 .models-tab .models-cap-chip:has(input:checked) {
   border-color: color-mix(in srgb, var(--models-green) 28%, var(--models-border));
@@ -1458,7 +1458,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 
 /* === settings layout polish appearance-v1 === */
-/* 鏉堣顢嬮悘鏉垮�?�?1%閿涙稑顦荤憴鍌炪€夐敍姘箯閺嶅洨顒烽崣铏付娴犺翰鈧胶绮忛崚鍡楀锟?*/
+/* 鏉堣顢嬮悘鏉垮�?�?1%閿涙稑顦荤憴鍌炪€夐敍姘箯閺嶅洨顒烽崣铏付娴犺翰鈧胶绮忛崚鍡楀锟?*/
 
 .settings-pane--modern {
   --settings-border: color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -1496,7 +1496,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   margin: 0;
 }
 
-/* 閸掓銆冮敍姘躲€婇柈銊ュ瀻锟?+ 鐞涘矂锟?8% 缁惧尅绱濋弮鐘诲櫢閸楋紕澧栨�?*/
+/* 閸掓銆冮敍姘躲€婇柈銊ュ瀻锟?+ 鐞涘矂锟?8% 缁惧尅绱濋弮鐘诲櫢閸楋紕澧栨�?*/
 .settings-pane--modern .settings-list {
   border: none;
   border-top: 1px solid var(--settings-border-soft);
@@ -1565,7 +1565,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   gap: var(--space-2);
 }
 
-/* 閸掑棙顔岄幒褌娆㈤敍姘充氦鏉堣�?*/
+/* 閸掑棙顔岄幒褌娆㈤敍姘充氦鏉堣�?*/
 .settings-pane--modern .ui-segment,
 .settings-pane--modern .settings-choice-group {
   border: 1px solid var(--settings-border);
@@ -1595,13 +1595,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 
 
 
-/* 濞喡ゎ洣閹稿鎸抽幓蹇氱�?�?1% */
+/* 濞喡ゎ洣閹稿鎸抽幓蹇氱�?�?1% */
 .settings-pane--modern .ui-btn-secondary,
 .settings-pane--modern .ui-btn-ghost {
   border-color: var(--settings-border);
 }
 
-/* models-tab閿涙艾宸遍崚鑸靛伎鏉堥€涚瑝鐡掑懓锟?11%閿涘牐顩惄鏍у坊閸欐彃褰旂仦鍌︾�?*/
+/* models-tab閿涙艾宸遍崚鑸靛伎鏉堥€涚瑝鐡掑懓锟?11%閿涘牐顩惄鏍у坊閸欐彃褰旂仦鍌︾�?*/
 .models-tab {
   --models-border: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --models-border-soft: color-mix(in srgb, var(--text-primary) 4%, transparent);
@@ -1748,7 +1748,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 .models-credentials-grid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   padding: 16px 20px;
 }
@@ -1863,7 +1863,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-right: 1px solid var(--models-border-soft) !important;
   display: flex !important;
   flex-direction: column !important;
-  background: transparent !important;
+  background: transparent;
 }
 
 .models-detail {
@@ -1871,7 +1871,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   min-width: 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  background: transparent !important;
+  background: transparent;
   overflow-y: auto !important;
 }
 
@@ -1885,7 +1885,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: inherit !important;
 }
 
-/* Status pill �?remove bullet, just text */
+/* Status pill �?remove bullet, just text */
 .models-status-pill {
   font-size: var(--font-size-nano);
   font-weight: var(--font-weight-medium);
@@ -1920,8 +1920,8 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: #ffffff;
 }
 
-/* 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?   MODELS TAB �?REDESIGN  (mrl = rail, mrd = detail)
-   閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?*/
+/* 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?   MODELS TAB �?REDESIGN  (mrl = rail, mrd = detail)
+   閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查�?*/
 
 /* 閳光偓閳光偓 Rail (left sidebar) 閳光偓閳光偓 */
 .mrl-header {
@@ -2022,7 +2022,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   border-radius: 9px;
   padding: var(--space-1);
   z-index: var(--z-context-menu);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--shadow-color) 10%, transparent), 0 1px 4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
 }
 .mrl-add-section {
   padding: 5px 10px 3px;

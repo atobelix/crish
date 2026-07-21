@@ -311,7 +311,7 @@ body.is-resizing * {
 
 .branch-container {
   position: relative;
-  padding-left: 20px;
+  padding-left: var(--space-5);
 }
 .branch-connector {
   position: absolute;
@@ -381,7 +381,7 @@ body.is-resizing * {
 
 /*
  * 娓氀勭埉閹锋牕濮╅幍瀣妳閸栫尨绱伴崨鎴掕厬閻ｃ儱顔旈敍灞藉讲鐟欎胶鍤庣紒鍡幢
- * 娑擃參妫块悾銉︽▔閵嗕椒琚辨径瀛樼瑤闂呮劕鍩?0閿涘牏姹夐柨?/ 閺€鍓佺崕閿涘鈧? */
+ * 娑擃參妫块悾銉︽▔閵嗕椒琚辨径瀛樼瑤闂呮劕�?0閿涘牏姹夐柨?/ 閺€鍓佺崕閿涘�? */
 .sidebar-resizer {
   position: absolute;
   right: -4px;

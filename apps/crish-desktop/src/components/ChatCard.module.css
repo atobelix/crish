@@ -22,8 +22,7 @@
   background-color: var(--shell-inset-bg, var(--bg-primary));
   color: var(--text-primary);
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   line-height: 1.5;
 }
 

@@ -643,7 +643,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               key 切换时重置错误态 + Suspense 重新挂载 */}
           {safeActiveTab === 'profile' && (
             <Suspense key="tab-profile-suspense" fallback={<SettingsTabSuspenseFallback tabName="个人资料" />}>
-              <AppErrorBoundary key="tab-profile" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-profile" compact title="设置页面出错">
                 <SettingsProfileTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -651,7 +651,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'appearance' && (
             <Suspense key="tab-appearance-suspense" fallback={<SettingsTabSuspenseFallback tabName="外观" />}>
-              <AppErrorBoundary key="tab-appearance" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-appearance" compact title="设置页面出错">
                 <SettingsAppearanceTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -659,7 +659,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'personalize' && (
             <Suspense key="tab-personalize-suspense" fallback={<SettingsTabSuspenseFallback tabName="通用设置" />}>
-              <AppErrorBoundary key="tab-personalize" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-personalize" compact title="设置页面出错">
                 <SettingsPersonalizeTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -667,7 +667,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'models' && (
             <Suspense key="tab-models-suspense" fallback={<SettingsTabSuspenseFallback tabName="模型" />}>
-              <AppErrorBoundary key="tab-models" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-models" compact title="设置页面出错">
                 <ModelsSettingsTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -678,7 +678,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               key="tab-plugins-suspense"
               fallback={<SettingsTabSuspenseFallback tabName="扩展" />}
             >
-              <AppErrorBoundary key="tab-plugins" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-plugins" compact title="设置页面出错">
                 <SettingsExtensionsTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -686,7 +686,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'usage' && (
             <Suspense key="tab-usage-suspense" fallback={<SettingsTabSuspenseFallback tabName="用量" />}>
-              <AppErrorBoundary key="tab-usage" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-usage" compact title="设置页面出错">
                 <SettingsUsageTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -694,7 +694,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'schedule' && (
             <Suspense key="tab-schedule-suspense" fallback={<SettingsTabSuspenseFallback tabName="定时任务" />}>
-              <AppErrorBoundary key="tab-schedule" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-schedule" compact title="设置页面出错">
                 <SettingsScheduleTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -702,7 +702,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'rules' && (
             <Suspense key="tab-rules-suspense" fallback={<SettingsTabSuspenseFallback tabName="规则" />}>
-              <AppErrorBoundary key="tab-rules" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-rules" compact title="设置页面出错">
                 <SettingsRulesTab
                   onShowToast={onShowToast}
                   onBlockingOverlayChange={setRulesModalOpen}
@@ -713,7 +713,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'shortcuts' && (
             <Suspense key="tab-shortcuts-suspense" fallback={<SettingsTabSuspenseFallback tabName="快捷键" />}>
-              <AppErrorBoundary key="tab-shortcuts" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-shortcuts" compact title="设置页面出错">
                 <SettingsShortcutsTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
@@ -721,7 +721,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {safeActiveTab === 'security' && (
             <Suspense key="tab-security-suspense" fallback={<SettingsTabSuspenseFallback tabName="安全" />}>
-              <AppErrorBoundary key="tab-security" compact title={`${activeLabel}加载失败`}>
+              <AppErrorBoundary key="tab-security" compact title="设置页面出错">
                 <SettingsSecurityTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>

@@ -18,7 +18,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 6px 8px 6px 10px;
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
@@ -139,7 +139,7 @@
   min-width: 0;
   height: 32px;
   box-sizing: border-box;
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
 }
 
 .changeOverviewFile {

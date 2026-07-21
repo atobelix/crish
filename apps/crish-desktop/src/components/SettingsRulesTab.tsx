@@ -492,17 +492,18 @@ export const SettingsRulesTab: React.FC<Props> = ({
           disabled={busy}
           className="settings-rules-scope-select"
         />
-        <button
-          ref={fullEditorBtnRef}
-          type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
-          onClick={openFullEditor}
-          title={`编辑${scopeLabel}全文`}
-          aria-label={`编辑${scopeLabel}全文`}
-          disabled={busy}
-        >
-          编辑全文
-        </button>
+        <Tooltip content={`编辑${scopeLabel}全文`}>
+          <button
+            ref={fullEditorBtnRef}
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={openFullEditor}
+            aria-label={`编辑${scopeLabel}全文`}
+            disabled={busy}
+          >
+            编辑全文
+          </button>
+        </Tooltip>
       </div>
     </div>
   );
@@ -522,16 +523,17 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 key={`${idx}-${rule.slice(0, 24)}`}
                 title={<span className="settings-rule-item-text" title={rule}>{rule}</span>}
                 control={
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCustomRule(idx)}
-                    className="ui-btn ui-btn-ghost ui-btn-sm danger"
-                    title="删除此规则"
-                    aria-label={`删除规则：${rule}`}
-                    disabled={busy}
-                  >
-                    <Lucide.Trash2 size={14} aria-hidden />
-                  </button>
+                  <Tooltip content="删除此规则">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCustomRule(idx)}
+                      className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                      aria-label={`删除规则：${rule}`}
+                      disabled={busy}
+                    >
+                      <Lucide.Trash2 size={14} aria-hidden />
+                    </button>
+                  </Tooltip>
                 }
               />
             ))

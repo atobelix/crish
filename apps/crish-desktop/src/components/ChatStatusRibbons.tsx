@@ -9,6 +9,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import styles from './ChatStatusRibbons.module.css';
 import * as Lucide from 'lucide-react';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import type { EngineStatus } from '../api/engineConfig';
 import type { RunNotice } from '../hooks/useChatStream';
 import { openAgentInSidePanel } from '../api/openAgentPanel';
@@ -29,6 +30,7 @@ import {
   shouldShowNeedsModelSoftHint,
 } from '../api/chatEmptyState';
 import { isFirstRunOverlayOpen } from './FirstRunWizard';
+import { Tooltip } from './Tooltip';
 
 export type ChatStatusRibbonsProps = {
   onOpenTerminal?: () => void;
@@ -578,53 +580,56 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   };
 
   return (
-    <>
+    <AppErrorBoundary variant="minimal" title="状态栏出错">
       {/* 动态快捷状态浮条：仅在有活跃状态（后台运行/活动计划/差异）时呈现 */}
       {(activeBgTasks.length > 0 || hasActivePlan || (diffCount > 0 && Boolean(onOpenDiff))) ? (
         <div className={styles.dynamicChipBar} role="region" aria-label="快捷状态">
           {activeBgTasks.length > 0 && onOpenTerminal ? (
-            <button
-              type="button"
-              className={`${styles.dynamicChip} ${styles.dynamicChipActive}`}
-              title={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}
-              aria-label={`后台运行中，${activeBgTasks.length} 个任务`}
-              onClick={onOpenTerminal}
-            >
-              <span className={styles.dynamicChipPulseDot} aria-hidden />
-              <span>后台任务 ({activeBgTasks.length})</span>
-            </button>
+            <Tooltip content={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}>
+              <button
+                type="button"
+                className={`${styles.dynamicChip} ${styles.dynamicChipActive}`}
+                aria-label={`后台运行中，${activeBgTasks.length} 个任务`}
+                onClick={onOpenTerminal}
+              >
+                <span className={styles.dynamicChipPulseDot} aria-hidden />
+                <span>后台任务 ({activeBgTasks.length})</span>
+              </button>
+            </Tooltip>
           ) : null}
 
           {hasActivePlan ? (
-            <button
-              type="button"
-              className={`${styles.dynamicChip}${showPlanDrawer ? ` ${styles.dynamicChipActive}` : ''}`}
-              title="点击查看计划与进度详情"
-              aria-label="查看计划与进度详情"
-              onClick={() => setShowPlanDrawer((v) => !v)}
-            >
-              <Lucide.Target size={13} strokeWidth={2} aria-hidden />
-              <span>
-                {goalModeActive
-                  ? `目标模式 · 第 ${goalIteration + 1} 轮`
-                  : checklistProgress.total > 0
-                    ? `计划任务 · ${checklistProgress.done}/${checklistProgress.total}`
-                    : '计划模式'}
-              </span>
-            </button>
+            <Tooltip content="点击查看计划与进度详情">
+              <button
+                type="button"
+                className={`${styles.dynamicChip}${showPlanDrawer ? ` ${styles.dynamicChipActive}` : ''}`}
+                aria-label="查看计划与进度详情"
+                onClick={() => setShowPlanDrawer((v) => !v)}
+              >
+                <Lucide.Target size={13} strokeWidth={2} aria-hidden />
+                <span>
+                  {goalModeActive
+                    ? `目标模式 · 第 ${goalIteration + 1} 轮`
+                    : checklistProgress.total > 0
+                      ? `计划任务 · ${checklistProgress.done}/${checklistProgress.total}`
+                      : '计划模式'}
+                </span>
+              </button>
+            </Tooltip>
           ) : null}
 
           {diffCount > 0 && onOpenDiff ? (
-            <button
-              type="button"
-              className={styles.dynamicChip}
-              title="在右侧查看代码变更"
-              aria-label="查看代码变更"
-              onClick={onOpenDiff}
-            >
-              <Lucide.GitBranch size={13} strokeWidth={2} aria-hidden />
-              <span>{diffCount} 个文件变更</span>
-            </button>
+            <Tooltip content="在右侧查看代码变更">
+              <button
+                type="button"
+                className={styles.dynamicChip}
+                aria-label="查看代码变更"
+                onClick={onOpenDiff}
+              >
+                <Lucide.GitBranch size={13} strokeWidth={2} aria-hidden />
+                <span>{diffCount} 个文件变更</span>
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}
@@ -777,15 +782,16 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
             {planLabel}
           </span>
           {showPlanApprove ? (
-            <button
-              type="button"
-              className={styles.planModeRibbonIconBtn}
-              title="批准执行"
-              aria-label="批准计划执行"
-              onClick={onApprovePlan}
-            >
-              <Lucide.Check size={14} strokeWidth={2} aria-hidden />
-            </button>
+            <Tooltip content="批准执行">
+              <button
+                type="button"
+                className={styles.planModeRibbonIconBtn}
+                aria-label="批准计划执行"
+                onClick={onApprovePlan}
+              >
+                <Lucide.Check size={14} strokeWidth={2} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}
@@ -819,29 +825,31 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
               />
             </span>
           ) : null}
-          <button
-            type="button"
-            className={`${styles.planModeRibbonIconBtn} is-danger`}
-            title="停止目标"
-            aria-label="停止目标"
-            onClick={onStopGoal}
-          >
-            <Lucide.Square size={12} fill="currentColor" aria-hidden />
-          </button>
+          <Tooltip content="停止目标">
+            <button
+              type="button"
+              className={`${styles.planModeRibbonIconBtn} is-danger`}
+              aria-label="停止目标"
+              onClick={onStopGoal}
+            >
+              <Lucide.Square size={12} fill="currentColor" aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
       {/* 回到最新：浮在对话区右下角，仅图标 */}
       {showScrollToBottom ? (
-        <button
-          type="button"
-          className={styles.chatScrollFab}
-          title="回到最新"
-          aria-label="回到最新"
-          onClick={onScrollToBottom}
-        >
-          <Lucide.ChevronDown size={16} strokeWidth={2} aria-hidden />
-        </button>
+        <Tooltip content="回到最新">
+          <button
+            type="button"
+            className={styles.chatScrollFab}
+            aria-label="回到最新"
+            onClick={onScrollToBottom}
+          >
+            <Lucide.ChevronDown size={16} strokeWidth={2} aria-hidden />
+          </button>
+        </Tooltip>
       ) : null}
 
       {between}
@@ -877,23 +885,25 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
       {renderApprovalDock ? (
-        <button
-          type="button"
-          className={`${styles.approvalDock} ${styles.slim}`}
-          title={approvalAria}
-          aria-label={approvalAria}
-          data-pending-count={pendingApprovalCount}
-          onClick={handleApprovalDockClick}
-        >
-          <span className={styles.approvalDockDot} aria-hidden />
-          <span className={styles.approvalDockLabel}>{approvalLabel}</span>
-          <Lucide.ChevronRight
-            size={14}
-            className={styles.approvalDockGoIcon}
-            aria-hidden
-          />
-        </button>
+        <Tooltip content={approvalAria}>
+          <button
+            type="button"
+            className={`${styles.approvalDock} ${styles.slim}`}
+            aria-label={approvalAria}
+            data-pending-count={pendingApprovalCount}
+            onClick={handleApprovalDockClick}
+          >
+            <span className={styles.approvalDockDot} aria-hidden />
+            <span className={styles.approvalDockLabel}>{approvalLabel}</span>
+            <Lucide.ChevronRight
+              size={14}
+              className={styles.approvalDockGoIcon}
+              aria-hidden
+            />
+          </button>
+        </Tooltip>
       ) : null}
-    </>
+    </AppErrorBoundary>
   );
 };
+

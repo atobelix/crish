@@ -1,6 +1,6 @@
 /* Branch session dashed connector graphics */
 .session-item.branch-session {
-  padding-left: 20px !important;
+  padding-left: var(--space-5) !important;
   position: relative;
 }
 

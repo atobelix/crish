@@ -10,7 +10,7 @@
   overflow: hidden;
   background: transparent;
 }
-/* 閸愬懎顔愰弽鍫窗娴兼俺鐦界�?+ 闂堛垺婢橀敍鍫濇妇鐟欐帒宕遍張顑跨秼閿?*/
+/* 閸愬懎顔愰弽鍫窗娴兼俺鐦界�?+ 闂堛垺婢橀敍鍫濇妇鐟欐帒宕遍張顑跨秼閿?*/
 .workspaces-stack {
   display: flex;
   flex-direction: column;
@@ -27,28 +27,28 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  /* 姒涙顓婚柅蹇旀閿涙稓�?stack 婵夘偂瀵岄懝璇х礉闁灝鍘ょ憴鎺嶇瑐闂囨彃�?secondary 閻╃顫?*/
+  /* 姒涙顓婚柅蹇旀閿涙稓�?stack 婵夘偂瀵岄懝璇х礉闁灝鍘ょ憴鎺嶇瑐闂囨彃�?secondary 閻╃顫?*/
   background-color: transparent;
 }
 
 /*
  * 娑撳楠囬惄姝岀€洪弽鍥╊劮閿涘湦bsidian 閺傚洣娆㈡径褰掋€夌粵鎾呯礆
  *
- *   L0 婢瑰啿鐪伴悘?閳光偓閳光偓 妞ゅ湱娲扮悰? *        濠碘偓濞插銆嶉�?tab 鎼存洝绔熼幍鎾崇�?�?鏉╃偛鍙?L1 閸愬懎顔愰崡锛勬�? *   L1 閸愬懎顔愰崡?閳光偓閳光偓 娴兼俺鐦界悰宀嬬礄閸楋繝銆婇悘鏉跨敨閿? *        濠碘偓濞茶绱扮�?tab 鎼存洝绔熼幍鎾崇�?�?鏉╃偛鍙?L2 濮濓絾鏋冮惂? *   L2 濮濓絾鏋? *
- * 閸忔娊鏁柨顕嗙窗濠碘偓�?tab 閸欘亝婀佹い璺烘妇鐟欐帪绱濇惔鏇＄珶娑撳簼绗呯仦鍌氭倱閼瑰眰鈧本濮介幒澶堚偓宥呭瀻闂呮梻鍤庨敍灞借埌閹存劕褰涚悮瀣祲鏉╃偑�? */
+ *   L0 婢瑰啿鐪伴悘?閳光偓閳光偓 妞ゅ湱娲扮悰? *        濠碘偓濞插銆嶉�?tab 鎼存洝绔熼幍鎾崇�?�?鏉╃偛鍙?L1 閸愬懎顔愰崡锛勬�? *   L1 閸愬懎顔愰崡?閳光偓閳光偓 娴兼俺鐦界悰宀嬬礄閸楋繝銆婇悘鏉跨敨閿? *        濠碘偓濞茶绱扮�?tab 鎼存洝绔熼幍鎾崇�?�?鏉╃偛鍙?L2 濮濓絾鏋冮惂? *   L2 濮濓絾鏋? *
+ * 閸忔娊鏁柨顕嗙窗濠碘偓�?tab 閸欘亝婀佹い璺烘妇鐟欐帪绱濇惔鏇＄珶娑撳簼绗呯仦鍌氭倱閼瑰眰鈧本濮介幒澶堚偓宥呭瀻闂呮梻鍤庨敍灞借埌閹存劕褰涚悮瀣祲鏉╃偑�? */
 /* [MIGRATED] ws-chrome styles migrated to WorkspaceChromeBars.module.css */
 
-/* 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡? * 婢瑰啿鐪?chrome閿涘潐ata-shell-chrome�? * classic / inset 閸忚京鏁ら敍姘樆鐏炲倸锛撻懝?+ 閸愬懎鐪伴崷鍡氼潡閸愬懎顔愰崡鈽呯礄娑撯偓閼规彃顦诲鍡愨偓浣风閼规彃鍞撮崠鐚寸礆
+/* 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡? * 婢瑰啿鐪?chrome閿涘潐ata-shell-chrome�? * classic / inset 閸忚京鏁ら敍姘樆鐏炲倸锛撻懝?+ 閸愬懎鐪伴崷鍡氼潡閸愬懎顔愰崡鈽呯礄娑撯偓閼规彃顦诲鍡愨偓浣风閼规彃鍞撮崠鐚寸礆
  * inset 妫版繂顦婚敍姘￥閻欘剛鐝涙い鑸电埉閵嗕礁寮荤悰灞戒紣娴ｆ粌褰撮弽鍥╊劮閵嗕胶鐛ラ幒褍婀い鍦窗鐞? * 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡?*/
 .app-container[data-shell-chrome="classic"],
 .app-container[data-shell-chrome="inset"] {
-  /* 婢瑰啿鐪扮痪顖涙閼硅尪鐨熼敍灞肩瑝濞ｈ渹鎹㈡担鏇炲枎�?*/
+  /* 婢瑰啿鐪扮痪顖涙閼硅尪鐨熼敍灞肩瑝濞ｈ渹鎹㈡担鏇炲枎�?*/
   --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --shell-inset-radius: 14px;
   --shell-inset-pad: 5px;
   --shell-inset-gap: 0;
-  /* 閸愬懎顔愰崚妤佹寜楠炲啿鍞存潏纭呯獩閿涙岸銆嶉惄?tab 娑撳簼绱扮拠?tab 閸忚京鏁ら敍灞肩箽鐠囦胶鐝惄鏉戭嚠�?*/
+  /* 閸愬懎顔愰崚妤佹寜楠炲啿鍞存潏纭呯獩閿涙岸銆嶉惄?tab 娑撳簼绱扮拠?tab 閸忚京鏁ら敍灞肩箽鐠囦胶鐝惄鏉戭嚠�?*/
   --shell-content-pad-x: 14px;
   --ws-chrome-strip: color-mix(in srgb, var(--shell-chrome-bg) 40%, var(--shell-inset-bg));
   --ws-chrome-surface: var(--shell-inset-bg);
@@ -66,7 +66,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   --ws-chrome-pill: color-mix(in srgb, var(--shell-chrome-bg) 50%, var(--shell-inset-bg));
 }
 
-/* 閳ユ柡鈧?閸忚京鏁ら敍姘櫠閺嶅繗绐℃竟瀹犲�?閳ユ柡鈧?*/
+/* 閳ユ柡鈧?閸忚京鏁ら敍姘櫠閺嶅繗绐℃竟瀹犲�?閳ユ柡鈧?*/
 .app-container[data-shell-chrome="classic"] .sidebar-wrapper,
 .app-container[data-shell-chrome="classic"] .crish-sidebar,
 .app-container[data-shell-chrome="classic"] .sidebar,
@@ -94,21 +94,21 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   box-sizing: border-box;
   gap: 0;
 }
-/* classic閿涙矮绮庢惔鏇＄珶閻ｆ瑧娅ч敍娑樺礁娓氀嗗垱姒绘劧绱欓弮?right padding�?*/
+/* classic閿涙矮绮庢惔鏇＄珶閻ｆ瑧娅ч敍娑樺礁娓氀嗗垱姒绘劧绱欓弮?right padding�?*/
 .app-container[data-shell-chrome="classic"] .main-layout {
   padding: 0 0 var(--shell-inset-pad) 0;
 }
 /*
- * inset 閹烘帞澧楃純鎴炵壐閿涘牆顕鎰彠缁紮绱氶�? *
- *  閳瑰备鏀?rail (= sidebar-width) 閳光偓閳诡兘鏀?main (= 閸愬懎顔愰崡鈥虫倱閸? 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  �?[娓氀勭埉闁界�?                 �?[conex][鐎电鐦絔[+]     [缁愭甯�?       �? 妞よ埖鐖弮鐘叉妇�? *  閳规壕鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞灏栨敘閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  �?娓氀勭埉閹兼粎鍌?閸掓銆?             �?�?閸﹀棜顫楅崡鈽呯窗娴兼俺鐦界�?+ 濮濓絾鏋?閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳?�? *  �?                         �?�?[娴ｇ姴銈介崯濂璠閺傞绱扮拠婕栭�?               �?�? *  �?                         �?閳规柡鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞?�? *  閳规柡鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞绮规敘閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  妞ゅ湱娲?tab 娑撳簼绱扮拠?tab 閸忚京鏁?--shell-content-pad-x閿涘苯涔忕紓妯侯嚠姒绘劑�? */
+ * inset 閹烘帞澧楃純鎴炵壐閿涘牆顕鎰彠缁紮绱氶�? *
+ *  閳瑰备鏀?rail (= sidebar-width) 閳光偓閳诡兘鏀?main (= 閸愬懎顔愰崡鈥虫倱閸? 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  �?[娓氀勭埉闁界�?                 �?[conex][鐎电鐦絔[+]     [缁愭甯�?       �? 妞よ埖鐖弮鐘叉妇�? *  閳规壕鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞灏栨敘閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  �?娓氀勭埉閹兼粎鍌?閸掓銆?             �?�?閸﹀棜顫楅崡鈽呯窗娴兼俺鐦界�?+ 濮濓絾鏋?閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳?�? *  �?                         �?�?[娴ｇ姴銈介崯濂璠閺傞绱扮拠婕栭�?               �?�? *  �?                         �?閳规柡鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞?�? *  閳规柡鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞绮规敘閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓�? *  妞ゅ湱娲?tab 娑撳簼绱扮拠?tab 閸忚京鏁?--shell-content-pad-x閿涘苯涔忕紓妯侯嚠姒绘劑�? */
 .app-container[data-shell-chrome="inset"] {
   --shell-content-pad-x: 14px;
 }
 .app-container[data-shell-chrome="inset"] .main-layout {
-  /* �?padding 閸樼粯甯€閿涙稑褰ч悾娆忕俺鏉堢顔€閸﹀棜顫楅崡鈩冭癁鐠?*/
+  /* �?padding 閸樼粯甯€閿涙稑褰ч悾娆忕俺鏉堢顔€閸﹀棜顫楅崡鈩冭癁鐠?*/
   padding: 0 0 var(--shell-inset-pad) 0;
 }
-/* 妞ゅ湱娲版い鑸电埉閿涙矮琚遍崚妤冪秹閺嶇》绱辨惔鏇＄珶鐠愭潙鍞寸€圭懓宕遍敍灞肩返濠碘偓濞插銆嶉惄?tab 閸氭垳绗呭鈧崣锝囨祲�?*/
+/* 妞ゅ湱娲版い鑸电埉閿涙矮琚遍崚妤冪秹閺嶇》绱辨惔鏇＄珶鐠愭潙鍞寸€圭懓宕遍敍灞肩返濠碘偓濞插銆嶉惄?tab 閸氭垳绗呭鈧崣锝囨祲�?*/
 .app-container[data-shell-chrome="inset"] .ws-titlebar-host {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -119,12 +119,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   max-height: 38px !important;
   background: var(--shell-chrome-bg);
   border-radius: 0;
-  /* 閺冪姴绨抽柈銊ュ瀻闂呮棑绱板┑鈧ú濠氥€嶉�?tab 閻╁瓨甯存潻鐐插弳娑撳鏌熼惂钘夊幢 */
+  /* 閺冪姴绨抽柈銊ュ瀻闂呮棑绱板┑鈧ú濠氥€嶉�?tab 閻╁瓨甯存潻鐐插弳娑撳鏌熼惂钘夊幢 */
   border-bottom: none;
   padding: 0 var(--shell-inset-pad) 0 0;
   gap: 0;
   box-sizing: border-box;
-  /* 閺佸瓨娼い鑸电埉閸欘垱瀚嬬粣妤€褰涢敍娑楁唉娴滄帗甯舵禒璺哄礋�?no-drag */
+  /* 閺佸瓨娼い鑸电埉閸欘垱瀚嬬粣妤€褰涢敍娑楁唉娴滄帗甯舵禒璺哄礋�?no-drag */
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -141,7 +141,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 .app-container[data-shell-chrome="inset"] .ws-titlebar-rail {
   display: flex;
-  /* 娑撳骸褰告笟褔銆嶉惄?tab 鐎涙鐝憴鍡氼潕娑擃厼绺剧€靛綊缍堥敍鍧盿b 鐠愭潙绨?h�?0�?*/
+  /* 娑撳骸褰告笟褔銆嶉惄?tab 鐎涙鐝憴鍡氼潕娑擃厼绺剧€靛綊缍堥敍鍧盿b 鐠愭潙绨?h�?0�?*/
   align-items: flex-end;
   height: 38px !important;
   max-height: 38px !important;
@@ -210,7 +210,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   align-items: flex-end;
 }
 /*
- * 閸愬懎顔愰崡鈥虫妇鐟欐帪绱欓崶娑滎潡韫囧懘銆忛惇鐔割劀閸﹀棴绱濇稉宥堝厴閸欘亞绮版径鏍э�?radius閿涘�? * - stack 閺堫兛缍嬮敍姘妇鐟?+ overflow 鐟佷礁鍨? * - 妞よ泛鐪版导姘崇樈閺?/ 鎼存洖鐪伴棃銏℃緲閿涙艾鎮囬懛顏囁夋�?鎼存洖娓剧憴鎺炵礄opaque 鐎涙劕鐪扮敮闀愮窗閻╂牗甯€閻栧墎楠囬弴鑼殠閿涘本妯夐崙铏逛紗閻╃顫楅敍? * - 娑撳秶鏁?clip-path閿涘湹ebView2 娑撳﹥妲楅幎濠囨Ь�?鏉堢顥嗛幋鎰煙閿? * - 娑撳秶鏁?0 0 0 1px ring閿涘牐顫楁稉濠冩閺勭偓鏌熼崸妤嬬礆
+ * 閸愬懎顔愰崡鈥虫妇鐟欐帪绱欓崶娑滎潡韫囧懘銆忛惇鐔割劀閸﹀棴绱濇稉宥堝厴閸欘亞绮版径鏍э�?radius閿涘�? * - stack 閺堫兛缍嬮敍姘妇鐟?+ overflow 鐟佷礁鍨? * - 妞よ泛鐪版导姘崇樈閺?/ 鎼存洖鐪伴棃銏℃緲閿涙艾鎮囬懛顏囁夋�?鎼存洖娓剧憴鎺炵礄opaque 鐎涙劕鐪扮敮闀愮窗閻╂牗甯€閻栧墎楠囬弴鑼殠閿涘本妯夐崙铏逛紗閻╃顫楅敍? * - 娑撳秶鏁?clip-path閿涘湹ebView2 娑撳﹥妲楅幎濠囨Ь�?鏉堢顥嗛幋鎰煙閿? * - 娑撳秶鏁?0 0 0 1px ring閿涘牐顫楁稉濠冩閺勭偓鏌熼崸妤嬬礆
  */
 .app-container[data-shell-chrome="classic"] .workspaces-column,
 .app-container[data-shell-chrome="inset"] .workspaces-column {
@@ -238,7 +238,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   backface-visibility: hidden;
 }
 /*
- * 娴兼俺鐦介弶鈩冩暭閹稿倽浜版径鈺佸灙妞よ泛鎮楅敍瀹籺ack 閸愬懎褰ч�?container�? * 閸ユ稖顫楅悽?stack 鐟佷礁鍨忛敍娌渙ntainer 闁剧儤寮ч�? */
+ * 娴兼俺鐦介弶鈩冩暭閹稿倽浜版径鈺佸灙妞よ泛鎮楅敍瀹籺ack 閸愬懎褰ч�?container�? * 閸ユ稖顫楅悽?stack 鐟佷礁鍨忛敍娌渙ntainer 闁剧儤寮ч�? */
 .app-container[data-shell-chrome="classic"] .workspaces-stack > .workspaces-container,
 .app-container[data-shell-chrome="inset"] .workspaces-stack > .workspaces-container {
   border-radius: 0;
@@ -251,7 +251,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   gap: 0;
   background: transparent !important;
 }
-/* 閸愬懘鍎存繅顐ュ鐏炲倷绔村瀣偓蹇旀閹存牕鎮撻懝璇х礉缁備焦�?bg-secondary / 閻╃顫?border 閸︺劏顫楁稉濠傚晪閸戠儤�?*/
+/* 閸愬懘鍎存繅顐ュ鐏炲倷绔村瀣偓蹇旀閹存牕鎮撻懝璇х礉缁備焦�?bg-secondary / 閻╃顫?border 閸︺劏顫楁稉濠傚晪閸戠儤�?*/
 .app-container[data-shell-chrome="classic"] .workspaces-container,
 .app-container[data-shell-chrome="inset"] .workspaces-container {
   background: transparent !important;
@@ -274,7 +274,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .app-container[data-shell-chrome="inset"] .workspace-canvas {
   overflow: hidden;
 }
-/* 閸楋繝娼伴惄纾嬵潡鏉堣顢嬫导姘躬鎼存洝顫?娓氀嗩潡閻㈡眹鈧瞼浼嗛惄纾嬵潡閵嗗稄绱濇竟鍐茬湴濡€崇础娑撳骞撻幒澶婄俺鏉堥€涚瑢閺堫偄鍨崣瀹犵�?*/
+/* 閸楋繝娼伴惄纾嬵潡鏉堣顢嬫导姘躬鎼存洝顫?娓氀嗩潡閻㈡眹鈧瞼浼嗛惄纾嬵潡閵嗗稄绱濇竟鍐茬湴濡€崇础娑撳骞撻幒澶婄俺鏉堥€涚瑢閺堫偄鍨崣瀹犵�?*/
 .app-container[data-shell-chrome="classic"] .workspace-card,
 .app-container[data-shell-chrome="inset"] .workspace-card {
   background: transparent !important;
@@ -294,7 +294,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   padding-right: var(--space-3);
 }
 /* inset 瀹搞儱鍙块崚?header 閺嶅嘲绱＄憴浣风瑓閺傚箍鈧瞼顑囨禍宀冾攽閵嗗秶绮烘稉鈧崸妤嬬礉閸曞灝婀銈夋懙閻ц棄绨?*/
-/* classic 瀹搞儱鍙块崚妤嬬窗閻ｃ儱鍨庨懝鑼紗�?+ 閺傚洣娆㈡径褰掋€夌�?*/
+/* classic 瀹搞儱鍙块崚妤嬬窗閻ｃ儱鍨庨懝鑼紗�?+ 閺傚洣娆㈡径褰掋€夌�?*/
 .app-container[data-shell-chrome="classic"] .workspace-card .card-header {
   align-items: flex-end;
   padding-top: var(--space-1_5);
@@ -408,21 +408,21 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: none !important;
 }
 /*
- * inset 缁楊兛绨╃悰宀嬬窗瀹革缚绱扮拠婵囨�?+ 閸欏啿浼愰崗?card-header 閸忚京鏁ら崥灞肩婵傛鍤戞�? * 閿涘牏浼嗙敮?/ 妤傛ê�?/ 妞ょ數顒?/ 鎼存洜鍤?/ + 闁筋噯绱氶垾?閻鎹ｉ弶銉︽Ц娑撯偓閺佸瓨娼敍灞肩瑝閺勵垯琚辨總妤佺壉瀵繈鈧? */
+ * inset 缁楊兛绨╃悰宀嬬窗瀹革缚绱扮拠婵囨�?+ 閸欏啿浼愰崗?card-header 閸忚京鏁ら崥灞肩婵傛鍤戞�? * 閿涘牏浼嗙敮?/ 妤傛ê�?/ 妞ょ數顒?/ 鎼存洜鍤?/ + 闁筋噯绱氶垾?閻鎹ｉ弶銉︽Ц娑撯偓閺佸瓨娼敍灞肩瑝閺勵垯琚辨總妤佺壉瀵繈鈧? */
 .app-container[data-shell-chrome="inset"] {
   --ws-chrome-merge: var(--shell-inset-bg);
   --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
   --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
   --ws-row2-min-h: 38px;
   --ws-row2-pad-t: 6px;
-  --ws-row2-pad-x: 12px; /* 瀹革箑褰哥粭顑跨癌鐞涘苯鎮撻崘鍛扮珶�?*/
+  --ws-row2-pad-x: 12px; /* 瀹革箑褰哥粭顑跨癌鐞涘苯鎮撻崘鍛扮珶�?*/
   --ws-row2-tab-h: 32px;
   --ws-row2-tab-radius: 8px 8px 0 0;
   --ws-row2-tab-font: 13px;
   --ws-row2-gap: var(--space-0_5);
 }
 
-/* 閳ユ柡鈧?鐞涘苯顔愰崳顭掔窗�?sessions / �?card-header 鐎瑰苯鍙忛崥灞藉�?閳ユ柡鈧?*/
+/* 閳ユ柡鈧?鐞涘苯顔愰崳顭掔窗�?sessions / �?card-header 鐎瑰苯鍙忛崥灞藉�?閳ユ柡鈧?*/
 .app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions,
 .app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header {
@@ -446,7 +446,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   z-index: var(--z-sticky-bar);
   user-select: none;
 }
-/* 鎼存洟鍎撮崚鍡涙缁惧尅绱板锕€褰搁崥鍕暰娑撯偓濞堢绱濋懝?閸樻矮绔撮懛?�?鐠恒劌鍨潻鐐村灇娑撯偓�?*/
+/* 鎼存洟鍎撮崚鍡涙缁惧尅绱板锕€褰搁崥鍕暰娑撯偓濞堢绱濋懝?閸樻矮绔撮懛?�?鐠恒劌鍨潻鐐村灇娑撯偓�?*/
 .app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions::after,
 .app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions::after,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header::after {
@@ -461,7 +461,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   z-index: var(--z-base);
 }
 
-/* 濠婃艾濮╅崠鐚寸窗tabs-bar �?ws-chrome-scroll */
+/* 濠婃艾濮╅崠鐚寸窗tabs-bar �?ws-chrome-scroll */
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header .tabs-bar {
   display: flex;
   align-items: flex-end;
@@ -484,7 +484,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: 0;
 }
 
-/* 閳ユ柡鈧?妞ょ數顒烽敍姘�?session tab �?�?card-tab 閳ユ柡鈧?*/
+/* 閳ユ柡鈧?妞ょ數顒烽敍姘�?session tab �?�?card-tab 閳ユ柡鈧?*/
 .app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
 .app-container[data-shell-chrome="inset"] .ws-chrome-tab--session,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab {
@@ -649,7 +649,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome {
   border-right-color: var(--ws-session-line, #f3f3f3) !important;
 }
-/* 妞ゅ湱娲伴敍姘弓濠碘偓濞叉槒鍒涙竟宕囦紗閿涙稒绺哄ú?= 閸楋紕娅ч獮璺烘倻娑撳绱戦崣锝囨磰�?*/
+/* 妞ゅ湱娲伴敍姘弓濠碘偓濞叉槒鍒涙竟宕囦紗閿涙稒绺哄ú?= 閸楋紕娅ч獮璺烘倻娑撳绱戦崣锝囨磰�?*/
 .app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab,
 .app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab {
   background: transparent;
@@ -692,7 +692,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   box-shadow: none;
   border-color: transparent;
 }
-/* 濮濓絾鏋冮敍姘瑢濠碘偓�?tab 鐎瑰苯鍙忛崥宀冨閿涘瞼顩﹀顫崲娴ｆ洟銆婇柈銊ュ瀻閸撹尙�?*/
+/* 濮濓絾鏋冮敍姘瑢濠碘偓�?tab 鐎瑰苯鍙忛崥宀冨閿涘瞼顩﹀顫崲娴ｆ洟銆婇柈銊ュ瀻閸撹尙�?*/
 .app-container[data-shell-chrome="inset"] .workspaces-container,
 .app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body,
 .app-container[data-shell-chrome="inset"] .workspace-card.flat-layout .card-body,
@@ -727,7 +727,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex-direction: column;
   overflow: hidden;
   min-width: 0; /* narrow side panels: children can shrink / container-query */
-  /* �?card-header / tabs 閸︺劍鐎粣鍕灙閻?@container 閺€璺虹槕鎼?*/
+  /* �?card-header / tabs 閸︺劍鐎粣鍕灙閻?@container 閺€璺虹槕鎼?*/
   container-type: inline-size;
   container-name: workspace-card;
   border-radius: 0 !important; /* Flattened border radius */
@@ -761,7 +761,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   pointer-events: none;
 }
 
-/* Flat layout閿涙矮瀵岀€电鐦介崚?hairline 閸掑棛鏅敍鍫㈡�?border-color閿涘本鐦?subtle 閺囨潙褰叉潏顭掔幢閺嗘�?token 瀹稿弶濮€佃鐦�?*/
+/* Flat layout閿涙矮瀵岀€电鐦介崚?hairline 閸掑棛鏅敍鍫㈡�?border-color閿涘本鐦?subtle 閺囨潙褰叉潏顭掔幢閺嗘�?token 瀹稿弶濮€佃鐦�?*/
 .workspace-card.flat-layout {
   background-color: var(--bg-primary);
   border-right: 1px solid var(--border-color) !important;
@@ -769,13 +769,13 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 .workspace-card.flat-layout .card-header {
   background-color: var(--card-header-bg, var(--bg-primary));
-  /* 娑撳孩绉烽幁顖氬�?/ settings 鐞涘苯鍨庨悾灞芥�?--hairline閿涙矤lat 娑撳娓堕崢瀣箖闁氨�?border 鐟欏嫬鍨?*/
+  /* 娑撳孩绉烽幁顖氬�?/ settings 鐞涘苯鍨庨悾灞芥�?--hairline閿涙矤lat 娑撳娓堕崢瀣箖闁氨�?border 鐟欏嫬鍨?*/
   border-bottom: 1px solid var(--hairline, var(--border-subtle)) !important;
   position: relative;
   z-index: var(--z-card-header);
   /* 閸曞灝褰旈悘鏉跨俺閸ф绱濇稉?chat hairline 娑撯偓閼?*/
   box-shadow: none;
-  /* ChatHeaderMore 娑撳濯烘稉宥堫潶鐟佷礁�?*/
+  /* ChatHeaderMore 娑撳濯烘稉宥堫潶鐟佷礁�?*/
   overflow: visible;
 }
 
@@ -807,7 +807,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
-  /* 姒涙顓荤憗浣稿瀼闂€鎸庣垼妫版﹫绱辨稉瀣閼挎粌宕熺�?fixed �?.chat-breadcrumb-header 娓氬顦?*/
+  /* 姒涙顓荤憗浣稿瀼闂€鎸庣垼妫版﹫绱辨稉瀣閼挎粌宕熺�?fixed �?.chat-breadcrumb-header 娓氬顦?*/
   overflow: hidden;
 }
 
@@ -827,7 +827,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex: 1 1 auto;
   box-sizing: border-box;
 }
-/* chat 闂堛垹瀵樼仦鎴濇儓 �?閼挎粌宕熼敍姘瑏鐟佷礁鍨忔稉瀣閿涙稑宕板锟犮€婇弽蹇撲箯娓?*/
+/* chat 闂堛垹瀵樼仦鎴濇儓 �?閼挎粌宕熼敍姘瑏鐟佷礁鍨忔稉瀣閿涙稑宕板锟犮€婇弽蹇撲箯娓?*/
 .card-header-left.chat-breadcrumb-header {
   overflow: visible;
   max-width: none;
@@ -895,7 +895,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex: 0 0 auto;
 }
 
-/* 閸欏厖鏅跺銉ュ徔閺嶅洨顒烽敍姘杹鐎规枻绱濋崚顐ｅ�?*/
+/* 閸欏厖鏅跺銉ュ徔閺嶅洨顒烽敍姘杹鐎规枻绱濋崚顐ｅ�?*/
 .card-tab.card-tab--tool {
   padding: 0 var(--tab-tool-pad-right, 16px) 0 var(--tab-tool-pad-left, 12px);
   min-width: 100px;
@@ -1048,7 +1048,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   min-width: 0;
   box-sizing: border-box;
 }
-/* 閺嬩胶鐛庢笟褎鐖敍姘竾缂傗晠銆婇�?padding閿涘苯濮╂担婊冨隘娑撳秵灏嬮�?tabs 濡亜鎮滃姘З */
+/* 閺嬩胶鐛庢笟褎鐖敍姘竾缂傗晠銆婇�?padding閿涘苯濮╂担婊冨隘娑撳秵灏嬮�?tabs 濡亜鎮滃姘З */
 @container workspace-card (max-width: 320px) {
   .card-header {
     padding-left: max(4px, calc(var(--card-header-pad-x, 8px) - 2px));
@@ -1183,14 +1183,14 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .card-body {
   flex: 1;
   min-height: 0;
-  min-width: 0; /* flex chain: allow Diff/妫板嫯顫嶇粵澶愭桨閺夊灝婀粣鍕埉閸愬懏鏁圭�?*/
+  min-width: 0; /* flex chain: allow Diff/妫板嫯顫嶇粵澶愭桨閺夊灝婀粣鍕埉閸愬懏鏁圭�?*/
   overflow: auto;
   position: relative;
   background-color: var(--shell-inset-bg, var(--bg-primary));
   display: flex;
   flex-direction: column;
 }
-/* 娓氀勭埉 agent / 瀹搞儱鍙块棃銏℃緲閸忋劑鐝敍姘辨暠閸愬懘鍎村姘З閿涘矂浼╅崗?card-body 閸欏本绮撮崝銊︽�?*/
+/* 娓氀勭埉 agent / 瀹搞儱鍙块棃銏℃緲閸忋劑鐝敍姘辨暠閸愬懘鍎村姘З閿涘矂浼╅崗?card-body 閸欏本绮撮崝銊︽�?*/
 .card-body:has(.agent-panel-shell),
 .card-body:has(.diff-panel),
 .card-body:has(.overview-card),
@@ -1208,7 +1208,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: var(--shell-inset-bg, var(--bg-secondary, #f2f2f2)) !important;
   border: none !important;
   border-radius: var(--radius-lg) !important;
-  padding: 0 !important; /* 閻㈠崬鍞撮柈銊ュ幢閻楀洤宕版担宥囶儊閻?::before 缂佺喍绔撮幒褍鍩楁潏纭呯�?*/
+  padding: 0 !important; /* 閻㈠崬鍞撮柈銊ュ幢閻楀洤宕版担宥囶儊閻?::before 缂佺喍绔撮幒褍鍩楁潏纭呯�?*/
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
@@ -1219,7 +1219,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   height: calc(100% - var(--space-3) * 2) !important;
 }
 
-/* 2. 缂佺喍绔撮惃鍕窗娴ｅ秴宕遍悧鍥ь啇閸ｎ煉绱欐径鏍х湴鎼存洘婢樻稉鐑樼€崗璺哄叡閸戔偓閵嗕焦璐伴梿鍛畱瀵邦喚浼嗘惔鏇礉濮ｆ柧绶ラ懛顏堚偓鍌氱安閿涘苯鑻熼幓鎰返閻╃顕€规矮缍呴悳顖氼暔�?*/
+/* 2. 缂佺喍绔撮惃鍕窗娴ｅ秴宕遍悧鍥ь啇閸ｎ煉绱欐径鏍х湴鎼存洘婢樻稉鐑樼€崗璺哄叡閸戔偓閵嗕焦璐伴梿鍛畱瀵邦喚浼嗘惔鏇礉濮ｆ柧绶ラ懛顏堚偓鍌氱安閿涘苯鑻熼幓鎰返閻╃顕€规矮缍呴悳顖氼暔�?*/
 .app-container .workspace-card.placeholder-card-group,
 .placeholder-card-group {
   background: color-mix(in srgb, var(--border-color) 10%, var(--bg-secondary, #f9f9fb)) !important;
@@ -1231,23 +1231,23 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center !important;
   align-items: center !important;
   gap: var(--space-2) !important;
-  padding: 16px !important;
-  padding-top: 52px !important; /* 鐏忓棙褰佺粈鐑樻瀮閺堫剙鎷伴崝鐘插娇閸愬懎顔愰懛顏嗗姧閹恒劎些閼峰厖绗呴弬鐟般亣閸栧搫鐓欓惃鍕潒鐟欏鑵戣�?*/
+  padding: var(--space-4) !important;
+  padding-top: 52px !important; /* 鐏忓棙褰佺粈鐑樻瀮閺堫剙鎷伴崝鐘插娇閸愬懎顔愰懛顏嗗姧閹恒劎些閼峰厖绗呴弬鐟般亣閸栧搫鐓欓惃鍕潒鐟欏鑵戣�?*/
   box-sizing: border-box !important;
-  transition: all 0.2s ease !important;
+  transition: all var(--duration-normal) ease !important;
   position: relative !important;
   overflow: hidden !important;
 }
 
-/* 瑜版挸宕遍悧鍥у窗娴ｅ秶顑佹担婊€璐熼崚妤€鍞撮柈銊ュ帗缁辩姵妞傞敍灞炬嫼濠娾€愁樆闁劌顔愰�?*/
+/* 瑜版挸宕遍悧鍥у窗娴ｅ秶顑佹担婊€璐熼崚妤€鍞撮柈銊ュ帗缁辩姵妞傞敍灞炬嫼濠娾€愁樆闁劌顔愰�?*/
 .workspace-column--placeholder .placeholder-card-group {
-  background: transparent !important; /* 闁灝鍘ら崣宀勫櫢閻忔媽澹婇柌宥呭�?*/
+  background: transparent !important; /* 闁灝鍘ら崣宀勫櫢閻忔媽澹婇柌宥呭�?*/
   margin: 0 !important;
   width: 100% !important;
   height: 100% !important;
 }
 
-/* 3. 閺嶇绺鹃崣灞绢攱缂佹ê鍩楅敍鍫ュ櫚閻?::before 缂佹ê鍩楁い鍫曞劥閺嶅洨顒风悰宀勭彯鎼达妇鐓╄ぐ顫�?:after 缂佹ê鍩楁稉瀣煙婢堆冨敶鐎圭懓灏崺鐕傜礉鐎瑰瞼绶ㄦ径宥呭煝閸ュ彞绨╁В鏂剧伐閿?*/
+/* 3. 閺嶇绺鹃崣灞绢攱缂佹ê鍩楅敍鍫ュ櫚閻?::before 缂佹ê鍩楁い鍫曞劥閺嶅洨顒风悰宀勭彯鎼达妇鐓╄ぐ顫�?:after 缂佹ê鍩楁稉瀣煙婢堆冨敶鐎圭懓灏崺鐕傜礉鐎瑰瞼绶ㄦ径宥呭煝閸ュ彞绨╁В鏂剧伐閿?*/
 .placeholder-card-group::before {
   content: "" !important;
   position: absolute !important;
@@ -1258,7 +1258,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: var(--bg-primary, #ffffff) !important; /* 缁绢垰鍣ｉ妴渚€鐝痪褋鈧焦妫ら弳鍥╂畱缁绢垳娅ф惔鏇″ */
   border: 1px solid color-mix(in srgb, var(--border-color) 35%, transparent) !important; /* 閺嬩浇浜ら妴浣芥珓閸栨牜娈戠搾鍛矎鏉堣顢嬬痪?*/
   border-radius: var(--radius-md) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.01) !important;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent) !important;
   z-index: var(--z-decorative) !important;
   pointer-events: none !important;
 }
@@ -1273,12 +1273,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: var(--bg-primary, #ffffff) !important; /* 缁绢垰鍣ｉ妴渚€鐝痪褋鈧焦妫ら弳鍥╂畱缁绢垳娅ф惔鏇″ */
   border: 1px solid color-mix(in srgb, var(--border-color) 35%, transparent) !important; /* 閺嬩浇浜ら妴浣芥珓閸栨牜娈戠搾鍛矎鏉堣顢嬬痪?*/
   border-radius: var(--radius-md) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.01) !important;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent) !important;
   z-index: var(--z-decorative) !important;
   pointer-events: none !important;
 }
 
-/* 绾喕绻氶弬鍥х摟娑撳骸娴橀弽鍥ㄨ癁閸斻劌婀崘鍛妇鐟欐帞鐓╄ぐ顫瑐�?*/
+/* 绾喕绻氶弬鍥х摟娑撳骸娴橀弽鍥ㄨ癁閸斻劌婀崘鍛妇鐟欐帞鐓╄ぐ顫瑐�?*/
 .placeholder-card-group > svg,
 .placeholder-card-group > span {
   position: relative !important;
@@ -1292,7 +1292,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 
-/* 2. 閹锋牗鏂侀崥鍫濊嫙閸掓壆骞囬張澶嬬垼缁涚偓鐖�?inline 閼筋垯鐖堕崡鐘辩秴缁?*/
+/* 2. 閹锋牗鏂侀崥鍫濊嫙閸掓壆骞囬張澶嬬垼缁涚偓鐖�?inline 閼筋垯鐖堕崡鐘辩秴缁?*/
 .tabs-bar .tab-placeholder-indicator,
 .tab-placeholder-indicator {
   background: color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent) !important;

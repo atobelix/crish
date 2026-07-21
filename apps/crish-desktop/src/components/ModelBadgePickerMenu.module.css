@@ -11,8 +11,12 @@
   z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  animation: cds-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: bottom right;
+}
+
+.mbMenuExit {
+  animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .mbEmpty {

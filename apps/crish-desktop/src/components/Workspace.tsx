@@ -3,10 +3,12 @@ import { useLayoutStore } from '../store/layoutStore';
 import styles from './Workspace.module.css';
 import type { CardGroupState, ColumnState } from '../store/layoutStore';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { Tooltip } from './Tooltip';
 import { CardPanel } from './CardPanel';
 import * as Lucide from 'lucide-react';
 
 import type { ShowToastFn } from '../hooks/useToastQueue';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 
 interface WorkspaceProps {
   wsId: string;
@@ -57,6 +59,8 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   const isSplitMode = useLayoutStore(
     (s) => s.workspaces.length > 1
   );
+
+  const { isNarrow } = useResponsiveLayout();
 
   if (!ws) return null;
 
@@ -437,7 +441,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
   return (
     <div
       ref={containerRef}
-      className={`${styles.section} workspace-section`}
+      className={`${styles.section} workspace-section ${isNarrow ? styles.isNarrow : ''}`}
       role="region"
       aria-label={regionLabel}
       aria-current={isSplitMode && isActiveWorkspace ? 'true' : undefined}
@@ -446,6 +450,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
       data-ws-empty={isEmptyWorkspace ? 'true' : 'false'}
       data-ws-split={isSplitMode ? 'true' : 'false'}
       data-ws-ordinal={ordinal}
+      data-ws-narrow={isNarrow ? 'true' : 'false'}
       onPointerDownCapture={focusThisWorkspace}
       onFocusCapture={focusThisWorkspace}
     >
@@ -477,15 +482,16 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(({ wsId, onShowToa
               </span>
             </span>
           </div>
-          <button
-            type="button"
-            className="workspace-close-btn card-action-btn"
-            onClick={() => closeWorkspace(ws.id)}
-            aria-label={`关闭拆分工作区 ${ordinal}`}
-            title={`关闭拆分工作区 ${ordinal}`}
-          >
-            <Lucide.X size={14} strokeWidth={1.75} aria-hidden />
-          </button>
+          <Tooltip content={`关闭拆分工作区 ${ordinal}`}>
+            <button
+              type="button"
+              className="workspace-close-btn card-action-btn"
+              onClick={() => closeWorkspace(ws.id)}
+              aria-label={`关闭拆分工作区 ${ordinal}`}
+            >
+              <Lucide.X size={14} strokeWidth={1.75} aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       )}
 

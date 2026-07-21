@@ -30,6 +30,7 @@ import {
   projectFolderLabel,
 } from '../api/projectStore';
 import { parseMarkdownToHtml } from '../api/markdownRender';
+import DOMPurify from 'dompurify';
 import { clientApi } from '../api/clientApi';
 import { setComposerSeed } from '../api/composerSeed';
 import { emitUiEvent } from '../api/uiEvents';
@@ -39,6 +40,7 @@ import { closeSettings } from '../store/settingsUiStore';
 import { SettingsSelect } from './SettingsSelect';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast?: (msg: string) => void;
@@ -577,16 +579,17 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           title={EMPTY_INSTALL_HINT}
         >
           <div>暂无技能</div>
-          <button
-            type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
-            onClick={() => setCreateMode('paths')}
-            title="导入本机技能或用 AI 创建"
-            aria-label="新建技能"
-          >
-            <Lucide.Plus size={14} aria-hidden />
-            新建技能
-          </button>
+          <Tooltip content="导入本机技能或用 AI 创建">
+            <button
+              type="button"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() => setCreateMode('paths')}
+              aria-label="新建技能"
+            >
+              <Lucide.Plus size={14} aria-hidden />
+              新建技能
+            </button>
+          </Tooltip>
         </div>
       );
     }
@@ -601,15 +604,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       >
         <div>无匹配 · 共 {skills.length} 个技能</div>
         <div className={`${styles.skillsDiscoverActions} skills-discover-actions`} style={{ justifyContent: 'flex-start' }}>
-          <button
-            type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
-            onClick={clearFilters}
-            title={EMPTY_FILTER_HINT}
-            aria-label="清除筛选"
-          >
-            清除筛选
-          </button>
+          <Tooltip content={EMPTY_FILTER_HINT}>
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              onClick={clearFilters}
+              aria-label="清除筛选"
+            >
+              清除筛选
+            </button>
+          </Tooltip>
         </div>
       </div>
     );
@@ -620,33 +624,35 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       title="技能"
       meta={
         <div className={`${styles.skillsTabActions} skills-tab-actions`} role="toolbar" aria-label="技能操作">
-          <button
-            type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
-            onClick={() =>
-              setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
-            }
-            title="导入本机技能 or AI"
-            aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
-            aria-expanded={createMode !== 'none'}
-            aria-controls={createBoxId}
-          >
-            <Lucide.Plus size={14} aria-hidden />
-            {createMode !== 'none' ? '收起' : '新建'}
-          </button>
-          <div className={`${styles.skillsMoreWrap} skills-more-wrap`}>
+          <Tooltip content="导入本机技能 or AI">
             <button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
-              onClick={() => setMoreOpen((v) => !v)}
-              aria-expanded={moreOpen}
-              aria-controls={moreMenuId}
-              aria-haspopup="menu"
-              title="更多操作"
-              aria-label="更多操作"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
+              onClick={() =>
+                setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
+              }
+              aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
+              aria-expanded={createMode !== 'none'}
+              aria-controls={createBoxId}
             >
-              <Lucide.MoreHorizontal size={16} aria-hidden />
+              <Lucide.Plus size={14} aria-hidden />
+              {createMode !== 'none' ? '收起' : '新建'}
             </button>
+          </Tooltip>
+          <div className={`${styles.skillsMoreWrap} skills-more-wrap`}>
+            <Tooltip content="更多操作">
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-expanded={moreOpen}
+                aria-controls={moreMenuId}
+                aria-haspopup="menu"
+                aria-label="更多操作"
+              >
+                <Lucide.MoreHorizontal size={16} aria-hidden />
+              </button>
+            </Tooltip>
             {moreOpen ? (
               <div
                 id={moreMenuId}
@@ -873,22 +879,23 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           aria-label="手填项目技能"
         >
           <div className={`${styles.skillsCreateRow} skills-create-row`}>
-            <input
-              id={createNameId}
-              className="settings-field-input settings-field-input--sm"
-              placeholder="名称"
-              value={createName}
-              onChange={(e) => setCreateName(e.target.value)}
-              title="写入 .conex/skills/<name>/SKILL.md"
-              aria-label="技能名称"
-              disabled={createBusy}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && createName.trim()) {
-                  e.preventDefault();
-                  void handleCreate();
-                }
-              }}
-            />
+              <Tooltip content="写入 .conex/skills/<name>/SKILL.md">
+                <input
+                  id={createNameId}
+                  className="settings-field-input settings-field-input--sm"
+                  placeholder="名称"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  aria-label="技能名称"
+                  disabled={createBusy}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && createName.trim()) {
+                      e.preventDefault();
+                      void handleCreate();
+                    }
+                  }}
+                />
+              </Tooltip>
             <input
               id={createDescId}
               className="settings-field-input settings-field-input--sm"
@@ -949,7 +956,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
         <div
           className={`${styles.skillsFsWarn} skills-fs-warn`}
           role="status"
-          title="需桌面壳以扫描本机技能目录"
+          aria-label="需桌面壳以扫描本机技能目录"
         >
           当前环境无法读取本机技能目录
         </div>
@@ -994,36 +1001,37 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                   const actLabel = ACTIVATION_LABEL[s.activation] || s.activation;
                   const isSel = selectedId === s.id;
                   return (
-                    <button
-                      key={s.id}
-                      id={`skill-opt-${s.id}`}
-                      type="button"
-                      role="option"
-                      aria-selected={isSel}
-                      className={`${styles.skillsRailItem} skills-rail-item ${styles.skillsRailItemDense} skills-rail-item--dense ${isSel ? styles.isActive + ' is-active' : ''} act-${s.activation}`}
-                      onClick={() => setSelectedId(s.id)}
-                      title={s.description || s.name}
-                      aria-label={`${s.name}，${groupLabel}，${actLabel}${s.system ? '，系统' : ''}`}
-                    >
-                      <span className={`${styles.skillsRailIcon} skills-rail-icon`} aria-hidden>
-                        {s.system ? (
-                          <Lucide.Package size={12} />
-                        ) : (
-                          <Lucide.Sparkles size={12} />
-                        )}
-                      </span>
-                      <span className={`${styles.skillsRailName} skills-rail-name`}>
-                        {s.name}
-                        {s.system ? (
-                          <em className={`${styles.skillsSysBadge} skills-sys-badge`}>系统</em>
-                        ) : null}
-                      </span>
-                      <span
-                        className={`${styles.skillsActDot} skills-act-dot act-${s.activation}`}
-                        title={actLabel}
-                        aria-hidden
-                      />
-                    </button>
+                    <Tooltip content={s.description || s.name}>
+                      <button
+                        key={s.id}
+                        id={`skill-opt-${s.id}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isSel}
+                        className={`${styles.skillsRailItem} skills-rail-item ${styles.skillsRailItemDense} skills-rail-item--dense ${isSel ? styles.isActive + ' is-active' : ''} act-${s.activation}`}
+                        onClick={() => setSelectedId(s.id)}
+                        aria-label={`${s.name}，${groupLabel}，${actLabel}${s.system ? '，系统' : ''}`}
+                      >
+                        <span className={`${styles.skillsRailIcon} skills-rail-icon`} aria-hidden>
+                          {s.system ? (
+                            <Lucide.Package size={12} />
+                          ) : (
+                            <Lucide.Sparkles size={12} />
+                          )}
+                        </span>
+                        <span className={`${styles.skillsRailName} skills-rail-name`}>
+                          {s.name}
+                          {s.system ? (
+                            <em className={`${styles.skillsSysBadge} skills-sys-badge`}>系统</em>
+                          ) : null}
+                        </span>
+                        <span
+                          className={`${styles.skillsActDot} skills-act-dot act-${s.activation}`}
+                          title={actLabel}
+                          aria-hidden
+                        />
+                      </button>
+                    </Tooltip>
                   );
                 })}
               </div>
@@ -1049,44 +1057,47 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     </div>
                   </div>
                   <div className="settings-list-control">
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="移除此目录"
-                      aria-label={`移除目录 ${d}`}
-                      onClick={() => handleRemoveExtra(d)}
-                    >
-                      <Lucide.X size={14} aria-hidden />
-                    </button>
+                    <Tooltip content="移除此目录">
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label={`移除目录 ${d}`}
+                        onClick={() => handleRemoveExtra(d)}
+                      >
+                        <Lucide.X size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               ))}
               <div className="settings-list-row">
                 <div className={`${styles.skillsExtraAddRow} skills-extra-add-row`}>
-                  <input
-                    id={extraDirId}
-                    className="settings-field-input settings-field-input--sm"
-                    placeholder="绝对路径"
-                    value={extraDir}
-                    onChange={(e) => setExtraDir(e.target.value)}
-                    title="技能目录绝对路径 · 回车添加"
-                    aria-label="额外技能目录绝对路径"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && extraDir.trim()) {
-                        e.preventDefault();
-                        commitExtraDir(extraDir);
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
-                    title="浏览文件夹"
-                    aria-label="浏览文件夹"
-                    onClick={() => void handlePickExtra()}
-                  >
-                    <Lucide.FolderOpen size={14} aria-hidden />
-                  </button>
+                  <Tooltip content="技能目录绝对路径 · 回车添加">
+                    <input
+                      id={extraDirId}
+                      className="settings-field-input settings-field-input--sm"
+                      placeholder="绝对路径"
+                      value={extraDir}
+                      onChange={(e) => setExtraDir(e.target.value)}
+                      aria-label="额外技能目录绝对路径"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && extraDir.trim()) {
+                          e.preventDefault();
+                          commitExtraDir(extraDir);
+                        }
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip content="浏览文件夹">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      aria-label="浏览文件夹"
+                      onClick={() => void handlePickExtra()}
+                    >
+                      <Lucide.FolderOpen size={14} aria-hidden />
+                    </button>
+                  </Tooltip>
                   <button
                     type="button"
                     className="ui-btn ui-btn-secondary ui-btn-sm"
@@ -1123,7 +1134,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                         <span className={`${styles.skillsTag} skills-tag`}>系统</span>
                       ) : null}
                       {selected.disableModelInvocation ? (
-                        <span className={`${styles.skillsTag} skills-tag`} title="禁止模型自动调用">
+                        <span className={`${styles.skillsTag} skills-tag`} aria-label="禁止模型自动调用">
                           禁自动
                         </span>
                       ) : null}
@@ -1138,31 +1149,33 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
                     <code className="settings-kbd" title={selectedSlash}>
                       {selectedSlash}
                     </code>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="复制斜杠命令"
-                      aria-label={`复制命令 ${selectedSlash}`}
-                      onClick={() => void copySlashCommand(selected.name)}
-                    >
-                      <Lucide.Copy size={14} aria-hidden />
-                    </button>
+                    <Tooltip content="复制斜杠命令">
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label={`复制命令 ${selectedSlash}`}
+                        onClick={() => void copySlashCommand(selected.name)}
+                      >
+                        <Lucide.Copy size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
                     <span className={`${styles.skillsPathInline} skills-path-inline`} title={selected.filePath}>
                       {selected.filePath}
                     </span>
-                    <button
-                      type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
-                      title="在文件管理器中打开位置"
-                      aria-label="打开技能文件位置"
-                      onClick={() => {
-                        void revealSkillPath(selected.filePath).then((ok) => {
-                          if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
-                        });
-                      }}
-                    >
-                      <Lucide.ExternalLink size={14} aria-hidden />
-                    </button>
+                    <Tooltip content="在文件管理器中打开位置">
+                      <button
+                        type="button"
+                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        aria-label="打开技能文件位置"
+                        onClick={() => {
+                          void revealSkillPath(selected.filePath).then((ok) => {
+                            if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
+                          });
+                        }}
+                      >
+                        <Lucide.ExternalLink size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
                 <div className={`${styles.skillsDetailControls} skills-detail-controls`}>
@@ -1207,7 +1220,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
               ) : (
                 <div
                   className={`${styles.skillsPreview} skills-preview md-rendered msg-assistant-text`}
-                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
                   aria-label="技能预览"
                 />
               )}

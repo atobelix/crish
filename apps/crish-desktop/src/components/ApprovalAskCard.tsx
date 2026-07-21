@@ -47,6 +47,10 @@ type Props = {
   onAllow: (note: string) => void;
   onAllowRemember: (note: string) => void;
   onDeny: () => void;
+  /** 超时倒计时 ms（父级传入则渲染进度条） */
+  remainingMs?: number;
+  /** 超时回调 */
+  onTimeout?: () => void;
 };
 
 function toRiskMeta(
@@ -123,6 +127,8 @@ export const ApprovalAskCard: React.FC<Props> = ({
   onAllow,
   onAllowRemember,
   onDeny,
+  remainingMs,
+  onTimeout,
 }) => {
   const [note, setNote] = useState('');
   const [confirmArmed, setConfirmArmed] = useState(false);
@@ -133,6 +139,10 @@ export const ApprovalAskCard: React.FC<Props> = ({
   const allowBtnRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const commitLockRef = useRef(false);
+  /** 超时倒计时百分比 0-100，用于进度条宽度 */
+  const [timeoutPercent, setTimeoutPercent] = useState(100);
+  const timeoutTotalRef = useRef(remainingMs ?? 0);
+  const timeoutFiredRef = useRef(false);
 
   const titleId = useId();
   const descId = useId();
@@ -240,6 +250,30 @@ export const ApprovalAskCard: React.FC<Props> = ({
     }, 0);
     return () => window.clearTimeout(t);
   }, [msgId, toolId]);
+
+  // 超时倒计时进度条
+  useEffect(() => {
+    if (remainingMs == null || remainingMs <= 0) return;
+    timeoutTotalRef.current = Math.max(remainingMs, 1);
+    timeoutFiredRef.current = false;
+    setTimeoutPercent(100);
+
+    const interval = setInterval(() => {
+      const elapsed = timeoutTotalRef.current - remainingMs;
+      const pct = Math.max(0, Math.min(100, (remainingMs / timeoutTotalRef.current) * 100));
+      setTimeoutPercent(pct);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [remainingMs]);
+
+  // 超时触发
+  useEffect(() => {
+    if (remainingMs == null || remainingMs > 0) return;
+    if (timeoutFiredRef.current) return;
+    if (busy || commitLockRef.current) return;
+    timeoutFiredRef.current = true;
+    onTimeout?.();
+  }, [remainingMs, busy, onTimeout]);
 
   // Focus trap：Tab / Shift+Tab 在卡片内循环，不漂回页面其他元素。
   useEffect(() => {
@@ -551,6 +585,24 @@ export const ApprovalAskCard: React.FC<Props> = ({
           {allowButtonLabel(needsDouble, confirmArmed, rememberIntent)}
         </button>
       </div>
+
+      {remainingMs != null ? (
+        <div
+          className={`${styles.approvalCardTimeoutBar} ${
+            timeoutPercent <= 0 ? styles.approvalCardTimeoutBarExpired : ''
+          }`}
+          role="progressbar"
+          aria-valuenow={Math.round(timeoutPercent)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`审批剩余时间 ${Math.ceil((remainingMs) / 1000)} 秒`}
+        >
+          <span
+            className={styles.approvalCardTimeoutFill}
+            style={{ width: `${timeoutPercent}%` }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 };

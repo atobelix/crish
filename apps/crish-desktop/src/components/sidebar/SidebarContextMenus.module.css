@@ -14,12 +14,12 @@
 
 .contextMenu.open {
   display: flex;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  animation: cds-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: top left;
 }
 .contextMenuExit {
   display: flex;
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .contextMenuItem {

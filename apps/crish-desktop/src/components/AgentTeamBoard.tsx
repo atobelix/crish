@@ -13,7 +13,7 @@ import { humanizeAgentSummary } from '../api/toolPresentation';
 function AgentStatusDot({ status }: { status: SessionAgent['status'] }) {
   if (status === 'running') {
     return (
-      <span className={styles.statusSpinner} aria-hidden="true" title="正在运行">
+      <span className={styles.statusSpinner} aria-hidden="true">
         <svg className={styles.spinnerSvg} viewBox="0 0 24 24">
           <circle
             className={styles.spinnerCircle}
@@ -333,7 +333,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           <div className={styles.agentTeamBoardHead}>
             <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
             <span className={styles.agentTeamBoardLabel}>{headLabel}</span>
-            <span className={styles.agentTeamBoardCount} title="协作数量">
+            <span className={styles.agentTeamBoardCount} aria-label="协作数量">
               0
             </span>
           </div>
@@ -388,7 +388,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           </span>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
             {boardStats.runningN > 0 ? (
-              <span className={styles.statusSpinner} title="有正在运行的子智能体">
+              <span className={styles.statusSpinner} aria-label="有正在运行的子智能体">
                 <svg className={styles.spinnerSvg} viewBox="0 0 24 24">
                   <circle
                     className={styles.spinnerCircle}
@@ -404,9 +404,9 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 </svg>
               </span>
             ) : boardStats.pendingN > 0 || boardStats.failedN > 0 ? (
-              <span className={styles.statusDot} style={{ backgroundColor: '#f97316' }} title="有待审批或失败的协作" />
+              <span className={styles.statusDot} style={{ backgroundColor: '#f97316' }} aria-label="有待审批或失败的协作" />
             ) : (
-              <span className={styles.statusDot} style={{ backgroundColor: '#10b981' }} title="所有协作已完成" />
+              <span className={styles.statusDot} style={{ backgroundColor: '#10b981' }} aria-label="所有协作已完成" />
             )}
           </div>
         </div>

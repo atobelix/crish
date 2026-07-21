@@ -6,6 +6,9 @@
   margin-right: auto;
   align-self: center;
   box-sizing: border-box;
+  overflow-y: auto;
+  position: relative;
+  min-height: 0;
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
 }

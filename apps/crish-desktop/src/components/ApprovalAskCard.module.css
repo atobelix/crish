@@ -3,7 +3,7 @@
   padding: 10px 12px 12px 14px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--hairline, var(--border-subtle));
-  border-left: 2px solid var(--accent-orange, #f59e0b);
+  border-left: 4px solid var(--accent-orange, #f59e0b);
   background: transparent;
   display: flex;
   flex-direction: column;
@@ -43,8 +43,11 @@
   border-left-color: var(--accent-danger, #ef4444);
 }
 
-/* 閸氬海顏?riskLevel 妫版粏澹婇幒褍鍩?*/
-.approvalCard[data-risk-level="critical"],
+.approvalCard[data-risk-level="critical"] {
+  border-left-width: 6px;
+  border-left-color: var(--accent-danger, #ef4444);
+}
+
 .approvalCard[data-risk-level="high"] {
   border-left-color: var(--accent-danger, #ef4444);
 }
@@ -272,4 +275,28 @@
   min-height: 28px;
   padding: 4px 8px;
   font-size: var(--font-size-xs);
+}
+
+/* — 超时倒计时进度条 */
+.approvalCardTimeoutBar {
+  position: relative;
+  height: 2px;
+  margin: 6px 0 0;
+  border-radius: 1px;
+  background: var(--hairline, var(--border-subtle));
+  overflow: hidden;
+}
+
+.approvalCardTimeoutFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent-orange, #f59e0b);
+  border-radius: 1px;
+  transition: width 0.1s linear;
+}
+
+.approvalCardTimeoutBarExpired .approvalCardTimeoutFill {
+  background: var(--accent-danger, #ef4444);
 }

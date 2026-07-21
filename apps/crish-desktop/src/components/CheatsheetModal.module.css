@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: var(--space-6);
   box-sizing: border-box;
 }
 
@@ -19,7 +19,7 @@
   box-shadow: var(--shadow-2xl);
   border: 1px solid var(--border-color);
   overflow: hidden;
-  animation: crish-modal-enter var(--transition-modal-enter) forwards;
+  animation: cds-modal-enter var(--transition-modal-enter) forwards;
   transform-origin: center center;
   box-sizing: border-box;
 }
@@ -171,6 +171,10 @@
 .cheatsheetFooterTip strong {
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
+}
+
+.cheatsheetModalExit {
+  animation: cds-modal-exit var(--transition-modal-exit) forwards;
 }
 
 .cheatsheetOverlay {

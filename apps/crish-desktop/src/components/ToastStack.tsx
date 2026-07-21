@@ -1,17 +1,17 @@
 import { useState, useCallback } from 'react';
-import type { ToastItem } from '../hooks/useToastQueue';
+import type { AppToast } from '../services/ToastBus';
 import styles from './ToastStack.module.css';
 
 type Props = {
-  toasts: ToastItem[];
+  toasts: AppToast[];
   onDismiss: (id: string) => void;
 };
 
 /** Bottom-stacked toast notifications (Chinese UI). */
 export const ToastStack = ({ toasts, onDismiss }: Props) => {
-  const [exitingToasts, setExitingToasts] = useState<Map<string, ToastItem>>(new Map());
+  const [exitingToasts, setExitingToasts] = useState<Map<string, AppToast>>(new Map());
 
-  const handleDismiss = useCallback((toast: ToastItem) => {
+  const handleDismiss = useCallback((toast: AppToast) => {
     setExitingToasts((prev) => {
       const next = new Map(prev);
       next.set(toast.id, toast);
@@ -37,10 +37,12 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
   if (allToasts.length === 0) return null;
 
   return (
-    <div className={styles.toastStack} role="status" aria-live="polite">
+    <div className={styles.toastStack}>
       {allToasts.map((toast) => (
         <div
           key={toast.id}
+          role="status"
+          aria-live={toast.ariaLive ?? 'polite'}
           className={`${styles.toastAlert}${exitingToasts.has(toast.id) ? ` ${styles.toastAlertExiting}` : ''}`}
         >
           <span>{toast.message}</span>
@@ -56,6 +58,14 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
               撤销
             </button>
           ) : null}
+          <button
+            type="button"
+            className={styles.toastDismissBtn}
+            aria-label="关闭通知"
+            onClick={() => handleDismiss(toast)}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
         </div>
       ))}
     </div>

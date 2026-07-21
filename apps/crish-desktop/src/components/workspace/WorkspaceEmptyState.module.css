@@ -9,7 +9,7 @@
   padding: var(--space-6) var(--space-4);
   text-align: center;
   box-sizing: border-box;
-  animation: fadeIn var(--transition-smooth) ease-out forwards;
+  animation: cds-fade-in var(--transition-smooth) forwards;
 }
 
 .workspaceEmptyState .emptyStateIconWrapper {
@@ -40,28 +40,8 @@
   line-height: var(--line-height-body);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-@keyframes fadeOut {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
 
 .workspaceEmptyStateExit {
-  animation: fadeOut var(--transition-smooth) ease-out forwards;
+  animation: cds-fade-out var(--transition-smooth) forwards;
 }

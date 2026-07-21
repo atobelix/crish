@@ -1,6 +1,6 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import styles from './SettingsUI.module.css';
+import { Tooltip as UnifiedTooltip } from '../Tooltip';
 
 export const SettingsPage: React.FC<{
   title: string;
@@ -68,47 +68,20 @@ export const SettingsRow: React.FC<{
   );
 };
 
+/**
+ * @deprecated Use `Tooltip` from `../Tooltip` instead.
+ * This component is kept for backward compatibility and delegates to the new unified Tooltip.
+ */
 export const Tooltip: React.FC<{
   content: React.ReactNode;
   children: React.ReactElement;
   disabled?: boolean;
-}> = ({ content, children, disabled }) => {
-  const [hovered, setHovered] = React.useState(false);
-  const [rect, setRect] = React.useState<DOMRect | null>(null);
-
-  if (disabled || !content) return children;
-
-  const child = children as React.ReactElement<any>;
-
+  /** @deprecated side is always 'top' in this legacy wrapper; use the new Tooltip for custom sides */
+  side?: 'top' | 'bottom' | 'left' | 'right';
+}> = ({ content, children, disabled, side }) => {
   return (
-    <>
-      {React.cloneElement(child, {
-        onMouseEnter: (e: React.MouseEvent) => {
-          setRect(e.currentTarget.getBoundingClientRect());
-          setHovered(true);
-          if (child.props.onMouseEnter) child.props.onMouseEnter(e);
-        },
-        onMouseLeave: (e: React.MouseEvent) => {
-          setHovered(false);
-          if (child.props.onMouseLeave) child.props.onMouseLeave(e);
-        },
-      })}
-      {hovered && rect && createPortal(
-        <div
-          className={`${styles.modernSelectTooltip} modern-select-tooltip`}
-          style={{
-            position: 'fixed',
-            top: rect.top - 8,
-            left: rect.left + rect.width / 2,
-            transform: 'translate(-50%, -100%)',
-            zIndex: 'var(--z-settings-tooltip)',
-          }}
-        >
-          <div className={`${styles.modernSelectTooltipInner} modern-select-tooltip-inner`}>{content}</div>
-          <div className={`${styles.modernSelectTooltipArrow} modern-select-tooltip-arrow`} />
-        </div>,
-        document.body
-      )}
-    </>
+    <UnifiedTooltip content={content} disabled={disabled} side={side}>
+      {children}
+    </UnifiedTooltip>
   );
 };

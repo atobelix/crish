@@ -1,5 +1,5 @@
 /* reduced-motion.css — 尊重用户减少动效偏好 */
-/* 通过 prefers-reduced-motion media query 禁用不必要的动画和过渡 */
+/* 通过 prefers-reduced-motion media query 禁用所有 cds- 动画和过渡 */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -9,6 +9,37 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* 显式禁用所有 cds- 前缀动画类 */
+  [class*="cds-animate-"] {
+    animation: none !important;
+  }
+
+  /* 覆盖 transition 系统变量，确保以 var() 引用的过渡也被禁用 */
+  :root,
+  html[data-theme="default"],
+  html[data-theme="light"],
+  html[data-theme="dark"] {
+    --transition-micro: 0ms !important;
+    --transition-fast: 0ms !important;
+    --transition-normal: 0ms !important;
+    --transition-slow: 0ms !important;
+    --transition-spring-enter: 0ms !important;
+    --transition-spring-exit: 0ms !important;
+    --transition-popover-enter: 0ms !important;
+    --transition-popover-exit: 0ms !important;
+    --transition-modal-enter: 0ms !important;
+    --transition-modal-exit: 0ms !important;
+    --transition-accordion: 0ms !important;
+    --transition-press: 0ms !important;
+    --transition-skeleton: 0ms !important;
+    --duration-instant: 0ms !important;
+    --duration-micro: 0ms !important;
+    --duration-fast: 0ms !important;
+    --duration-normal: 0ms !important;
+    --duration-slow: 0ms !important;
+    --transition-spring: 0ms !important;
   }
 
   /* 允许关键性动画（如加载提示）以极慢速度保留 */

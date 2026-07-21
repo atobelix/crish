@@ -2,7 +2,7 @@
  * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
  * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
  */
-import React, { Suspense, lazy, useState, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useRef, useLayoutEffect, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, MessageToolCall, SessionAgent } from '../store/layoutStore';
@@ -74,6 +74,9 @@ export interface ChatToolStackProps {
   onOpenTerminal: () => void;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
+  onRetryTool?: (toolId: string) => void;
+  onBatchApprove?: (msgIds: string[]) => void;
+  onBatchDeny?: (msgIds: string[]) => void;
 }
 
 /**
@@ -423,10 +426,30 @@ function CompactToolRow({
       n.includes('edit') ||
       n.includes('glob'));
   const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
-  // ± 仅进 aria，不在摘要行展示
+  // ± 在折叠行展示
   const diffStatsRaw = toolDiffLineStats(tc);
   const diffStats = diffStatsRaw ? normalizeToolDiffStat(diffStatsRaw) : null;
   const diffStatLabel = diffStats ? formatToolDiffStat(diffStats) : '';
+
+  // Duration display
+  const [liveNow, setLiveNow] = useState(Date.now());
+  useEffect(() => {
+    if (tc.status !== 'running' || !tc.startedAt) return;
+    const id = setInterval(() => setLiveNow(Date.now()), 100);
+    return () => clearInterval(id);
+  }, [tc.status, tc.startedAt]);
+  const durationStr = useMemo(() => {
+    if (tc.startedAt && tc.completedAt) {
+      const sec = (tc.completedAt - tc.startedAt) / 1000;
+      return sec >= 0.1 ? `${sec.toFixed(1)}s` : null;
+    }
+    if (tc.status === 'running' && tc.startedAt) {
+      const sec = (liveNow - tc.startedAt) / 1000;
+      return `${sec.toFixed(1)}s`;
+    }
+    return null;
+  }, [tc.startedAt, tc.completedAt, tc.status, liveNow]);
+
   /** 读屏：意图 · 状态 · ± · 展开态 */
   const rowAriaLabel = [
     human,
@@ -444,6 +467,7 @@ function CompactToolRow({
           <button
             type="button"
             className={styles.toolPathAction}
+            aria-label="在文件面板打开"
             onClick={() => onOpenPath(filePath)}
           >
             <Lucide.PanelRightOpen size={14} />
@@ -453,6 +477,7 @@ function CompactToolRow({
           <button
             type="button"
             className={styles.toolPathAction}
+            aria-label="复制路径"
             onClick={() => {
               void navigator.clipboard.writeText(filePath);
             }}
@@ -518,12 +543,9 @@ function CompactToolRow({
   };
 
   /**
-   * 工具图标：统一圆润线稿（round cap/join + 同尺寸线宽），
-   * 不用圆描边框；选型偏软、少棱角。
+   * 状态图标：根据工具状态显示对应图标，不再按工具名称区分。
    */
   const toolIcon = (() => {
-    const name = (tc.name || '').toLowerCase();
-    const cls = 'tool-row-type-ico';
     const sz = 14;
     const sw = 1.6;
     let inner: React.ReactNode;
@@ -533,34 +555,14 @@ function CompactToolRow({
           <span className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
         </span>
       );
-    } else if (
-      isShellToolName(name) ||
-      name.includes('bash') ||
-      name.includes('shell') ||
-      name.includes('exec')
-    ) {
-      // 终端图标（勿用 Lucide.Command=⌘，Windows 上像奇怪光标符号）
-      inner = <Lucide.Terminal className={cls} size={sz} strokeWidth={sw} />;
-    } else if (name.includes('grep') || name.includes('search') || name.includes('find')) {
-      inner = <Lucide.Search className={cls} size={sz} strokeWidth={sw} />;
-    } else if (name.includes('read') || name.includes('cat') || name.includes('view')) {
-      // File 比 FileText 更简、外轮廓更圆
-      inner = <Lucide.File className={cls} size={sz} strokeWidth={sw} />;
-    } else if (
-      isEditToolName(name) ||
-      name.includes('write') ||
-      name.includes('edit') ||
-      name.includes('patch')
-    ) {
-      inner = <Lucide.PenLine className={cls} size={sz} strokeWidth={sw} />;
-    } else if (name.includes('list') || name.includes('glob') || name.includes('dir')) {
-      inner = <Lucide.FolderOpen className={cls} size={sz} strokeWidth={sw} />;
-    } else if (name.includes('web') || name.includes('fetch') || name.includes('http')) {
-      inner = <Lucide.Globe className={cls} size={sz} strokeWidth={sw} />;
-    } else if (name.includes('git')) {
-      inner = <Lucide.GitBranch className={cls} size={sz} strokeWidth={sw} />;
+    } else if (tc.status === 'success') {
+      inner = <Lucide.CheckCircle2 size={sz} strokeWidth={sw} color="var(--accent-green, #22c55e)" />;
+    } else if (tc.status === 'error') {
+      inner = <Lucide.XCircle size={sz} strokeWidth={sw} color="var(--accent-red, #ef4444)" />;
+    } else if (tc.status === 'pending_approval') {
+      inner = <Lucide.Clock size={sz} strokeWidth={sw} color="#f59e0b" />;
     } else {
-      inner = <Lucide.CircleDot className={cls} size={sz} strokeWidth={sw} />;
+      inner = <Lucide.CircleDot size={sz} strokeWidth={sw} color="var(--text-tertiary)" />;
     }
     return (
       <span className={styles.toolRowIcoSlot} aria-hidden>
@@ -616,11 +618,33 @@ function CompactToolRow({
         <span className={styles.toolRowHeadMain}>
           {toolIcon}
           <span className={styles.toolRowText}>
-            {/* 摘要行只保留人话意图；命令/±/状态放到展开体或 aria，避免一行堆太多标识 */}
+            {/* 摘要行只保留人话意图 */}
             {renderSummary()}
           </span>
+          {diffStats ? (
+            <span className={styles.diffStats}>
+              <span className={styles.diffStatsAdd}>+{diffStats.add}</span>
+              <span className={styles.diffStatsDel}>-{diffStats.del}</span>
+            </span>
+          ) : null}
+          {durationStr ? (
+            <span className={styles.duration}>{durationStr}</span>
+          ) : null}
         </span>
         <span className={`${styles.toolRowChevronSlot} ${canToggle ? styles.isToggle : ''}`}>
+          {tc.status === 'error' && props.onRetryTool ? (
+            <button
+              type="button"
+              className={styles.retryBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onRetryTool!(tc.id);
+              }}
+              aria-label="重试"
+            >
+              <Lucide.RotateCcw size={12} />
+            </button>
+          ) : null}
           {canToggle ? (
             <Lucide.ChevronRight
               size={12}
@@ -631,8 +655,8 @@ function CompactToolRow({
         </span>
       </div>
       {canToggle ? (
-        <div className={styles.accordionWrapper} data-expanded={isOpen ? 'true' : 'false'}>
-          <div className={styles.accordionInner}>
+        <div className={`${styles.toolBody}${isOpen ? ' ' + styles.expanded : ''}`}>
+          <div className={styles.toolBodyInner}>
             <ToolResultBody
               tc={tc}
               bodyId={bodyId}
@@ -656,15 +680,130 @@ function flattenRenderTools(items: ToolRenderItem[]): MessageToolCall[] {
   return out;
 }
 
+/** 批量审批栏：2+ 相邻待确认工具时渲染 */
+function BatchApprovalBar({
+  toolIds,
+  msgIds,
+  onApprove,
+  onDeny,
+}: {
+  toolIds: string[];
+  msgIds: string[];
+  onApprove?: (msgIds: string[]) => void;
+  onDeny?: (msgIds: string[]) => void;
+}) {
+  return (
+    <div className={styles.batchBar} role="group" aria-label={`批量审批 ${toolIds.length} 个工具`}>
+      <span className={styles.batchBarLabel}>
+        待确认工具（{toolIds.length}）
+      </span>
+      {onApprove ? (
+        <button
+          type="button"
+          className={`${styles.batchBarBtn} ${styles.batchBarApprove}`}
+          onClick={() => onApprove(msgIds)}
+        >
+          <Lucide.Check size={12} />
+          全部批准
+        </button>
+      ) : null}
+      {onDeny ? (
+        <button
+          type="button"
+          className={`${styles.batchBarBtn} ${styles.batchBarDeny}`}
+          onClick={() => onDeny(msgIds)}
+        >
+          <Lucide.X size={12} />
+          全部拒绝
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** 对一组工具渲染行，在相邻 pending_approval 间插入批量审批栏 */
+function renderToolsWithBatchBars(
+  tools: MessageToolCall[],
+  msgId: string | undefined,
+  props: ChatToolStackProps,
+): JSX.Element[] {
+  const elements: JSX.Element[] = [];
+  let i = 0;
+  while (i < tools.length) {
+    if (tools[i].status === 'pending_approval' && msgId) {
+      const pendingGroup: MessageToolCall[] = [tools[i]];
+      let j = i + 1;
+      while (j < tools.length && tools[j].status === 'pending_approval') {
+        pendingGroup.push(tools[j]);
+        j++;
+      }
+      if (pendingGroup.length >= 2) {
+        const ids = pendingGroup.map((t) => t.id);
+        const mIds = pendingGroup.map(() => msgId);
+        elements.push(
+          <BatchApprovalBar
+            key={`batch-${ids[0]}`}
+            toolIds={ids}
+            msgIds={mIds}
+            onApprove={props.onBatchApprove}
+            onDeny={props.onBatchDeny}
+          />,
+        );
+      }
+      for (const tc of pendingGroup) {
+        elements.push(
+          <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />,
+        );
+      }
+      i = j;
+    } else {
+      elements.push(
+        <CompactToolRow key={tools[i].id} tc={tools[i]} rowKey={tools[i].id} msgId={msgId} props={props} />,
+      );
+      i++;
+    }
+  }
+  return elements;
+}
+
 function renderToolStackItems(
   items: ToolRenderItem[],
   msgId: string | undefined,
   props: ChatToolStackProps,
 ) {
   const tools = flattenRenderTools(items);
-  return tools.map((tc) => (
-    <CompactToolRow key={tc.id} tc={tc} rowKey={tc.id} msgId={msgId} props={props} />
-  ));
+  // Build parallel groups first, then render with batch bars inside each group
+  const segments: JSX.Element[] = [];
+  let i = 0;
+  while (i < tools.length) {
+    const cur = tools[i];
+    if (cur.turnId && cur.startedAt) {
+      const group: MessageToolCall[] = [cur];
+      let j = i + 1;
+      while (
+        j < tools.length &&
+        tools[j].turnId === cur.turnId &&
+        tools[j].startedAt != null &&
+        Math.abs(tools[j].startedAt! - cur.startedAt) <= 200
+      ) {
+        group.push(tools[j]);
+        j++;
+      }
+      if (group.length >= 2) {
+        segments.push(
+          <div key={`pg-${cur.id}`} className={styles.parallelGroup}>
+            <div className={styles.parallelHeader}>Parallel（{group.length}）</div>
+            {renderToolsWithBatchBars(group, msgId, props)}
+          </div>,
+        );
+        i = j;
+        continue;
+      }
+    }
+    segments.push(...renderToolsWithBatchBars([cur], msgId, props));
+    i++;
+  }
+  return segments;
 }
 
 export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {

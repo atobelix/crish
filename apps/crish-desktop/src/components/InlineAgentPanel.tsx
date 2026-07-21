@@ -13,6 +13,7 @@ import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import styles from './InlineAgentPanel.module.css';
+import DOMPurify from 'dompurify';
 import {
   selectActiveAgentId,
   selectPanelAgentId,
@@ -31,7 +32,7 @@ import {
 } from '../api/openAgentPanel';
 import { ComposerField } from './ChatComposer';
 import { ChatToolStack } from './ChatToolCallBlock';
-import { useAgentStream } from '../hooks/useAgentStream';
+import { useAgentPanel } from '../hooks/useAgentStream';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 import { Tooltip } from './settings/SettingsUI';
 
@@ -78,17 +79,11 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   const [open, setOpen] = useState(Boolean(defaultOpen ?? agent.status === 'running'));
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
-  /** 与主对话一致：工具默认折叠 */
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const reactId = useId();
   const bodyDomId = `inline-agent-body-${reactId}`;
   const labelDomId = `inline-agent-label-${reactId}`;
-
-  const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
-    setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
-  }, []);
 
   /** 侧栏焦点订阅：reuse / 「已在侧栏」徽标 */
   const panelAgentId = useSessionField(selectPanelAgentId);
@@ -108,11 +103,13 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
     handleStop,
     sending,
     stopping,
-  } = useAgentStream({
+    expandedTools,
+    onToggleTool,
+  } = useAgentPanel({
     parentSessionId,
     agentId: live.id,
     isRunning: running,
-    subagentRunId: live.subagentRunId,
+    useDaemonSync: false,
   });
 
   /** 标题 / 短标签 / 状态：与 openAgentPanel 纯函数同轨（中文） */
@@ -375,9 +372,9 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                             <div
                               className="msg-assistant-text md-rendered"
                               dangerouslySetInnerHTML={{
-                                __html: parseMarkdownToHtml(
+                                __html: DOMPurify.sanitize(parseMarkdownToHtml(
                                   stripThoughtPlaceholders(msg.text || ''),
-                                ),
+                                )),
                               }}
                             />
                           );
@@ -391,7 +388,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                                 key={item.key}
                                 className="msg-timeline-text msg-assistant-text md-rendered"
                                 dangerouslySetInnerHTML={{
-                                  __html: parseMarkdownToHtml(body),
+                                  __html: DOMPurify.sanitize(parseMarkdownToHtml(body)),
                                 }}
                               />
                             );

@@ -50,7 +50,7 @@
   background: var(--accent-hover);
 }
 
-/* 濞嗏剝瀵滈�?= 鏉烆垰锝為崗?pill閿涘本妫ら幓蹇氱珶閿涘牆顕鎰┾偓灞炬煀瀵ゆ亽鈧稄绱?*/
+/* 濞嗏剝瀵滈�?= 鏉烆垰锝為崗?pill閿涘本妫ら幓蹇氱珶閿涘牆顕鎰┾偓灞炬煀瀵ゆ亽鈧稄绱?*/
 .ui-btn-secondary {
   background: var(--control-soft-bg);
   color: var(--text-secondary);
@@ -183,7 +183,7 @@ select.ui-input {
   background: var(--text-tertiary);
 }
 
-   Crish shell polish �?distinct from Claude Desktop patterns
+   Crish shell polish �?distinct from Claude Desktop patterns
    ============================================================ */
 
 /* Titlebar drag (Tauri frameless) */
@@ -402,14 +402,14 @@ select.ui-input {
   flex: 1;
   min-height: 0;
 }
-/* 妞ゅ湱娲?+ 鐎电鐦介崗杈╂暏娑撯偓閺夆剝绮撮崝銊︽�?*/
+/* 妞ゅ湱娲?+ 鐎电鐦介崗杈╂暏娑撯偓閺夆剝绮撮崝銊︽�?*/
 .crish-sidebar .sb-list-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: var(--space-2);
-  /* 濠婃艾濮╅弶陇鍒涙潻鎴濆礁娓氀冨瀻閸撹尙鍤庨�?�?px�?*/
+  /* 濠婃艾濮╅弶陇鍒涙潻鎴濆礁娓氀冨瀻閸撹尙鍤庨�?�?px�?*/
   margin: 0;
   padding-left: var(--space-0_5);
   padding-right: var(--space-0_5);
@@ -422,8 +422,8 @@ select.ui-input {
 /* [sidebar-top-actions, sb-nav-item, sb-nav-link styles migrated to SidebarNav.module.css] */
 /* [sb-section styles migrated to SidebarSessionList.module.css] */
 /* [folder, session-item, context-menu-compact, session-running-spinner, and sidebar-drag-ghost styles migrated to SidebarSessionList.module.css and SidebarContextMenus.module.css] */
-/* 娑撹鍨崘鍛サ閸忋劌�?agent 婢瑰啿鍑℃惔鐔风磾閿涙艾�?agent 閸欘亜婀笟褎鐖?.agent-panel-shell
- * 鐎靛棗瀹虫總鎴犲閿涙airline 閸掑棝娈?+ 缁毖冨櫨 pad閿涙稓顩﹀銏犮亣閸ф浼嗘�?鐎圭晫娅?*/
+/* 娑撹鍨崘鍛サ閸忋劌�?agent 婢瑰啿鍑℃惔鐔风磾閿涙艾�?agent 閸欘亜婀笟褎鐖?.agent-panel-shell
+ * 鐎靛棗瀹虫總鎴犲閿涙airline 閸掑棝娈?+ 缁毖冨櫨 pad閿涙稓顩﹀銏犮亣閸ф浼嗘�?鐎圭晫娅?*/
 /* [MIGRATED] agent-card and team-board styles migrated to AgentCard.module.css */
 
 .agent-panel-shell {
@@ -499,7 +499,7 @@ select.ui-input {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* �?SettingsSelect / 娑撳﹣绗呴弬鍥綅閸楁洜绮烘稉鈧敍姘宠拫濞搭喖�?*/
+/* �?SettingsSelect / 娑撳﹣绗呴弬鍥綅閸楁洜绮烘稉鈧敍姘宠拫濞搭喖�?*/
 .tabs-add-menu {
   position: fixed;
   z-index: var(--z-cheatsheet);
@@ -537,10 +537,10 @@ select.ui-input {
 }
 
 /* =============================================================================
- * ED shell polish �?additive density / hairline / focus / empty-list / 娑擃厽鏋冪悰宀勭彯
- * 娴犲懏绉风拹?tokens.css�?-hairline* / --space-* / --focus-ring* / --line-height-*�? * ============================================================================= */
+ * ED shell polish �?additive density / hairline / focus / empty-list / 娑擃厽鏋冪悰宀勭彯
+ * 娴犲懏绉风拹?tokens.css�?-hairline* / --space-* / --focus-ring* / --line-height-*�? * ============================================================================= */
 
-/* 1) Chinese UI閿涙碍顒滈弬?閹貉傛鐞涘矂鐝挧?token閿涘本鐪界€涙ぞ绗夌拹娣偓浣稿灙鐞涖劋绗夐�?*/
+/* 1) Chinese UI閿涙碍顒滈弬?閹貉傛鐞涘矂鐝挧?token閿涘本鐪界€涙ぞ绗夌拹娣偓浣稿灙鐞涖劋绗夐�?*/
 body {
   line-height: var(--line-height-body, 1.55);
 }
@@ -747,7 +747,7 @@ body {
   padding-bottom: 0 !important;
 }
 
-/* 4) Empty-list spacing閿涙矮鏅堕弽蹇曗敄閹?/ 缂冾噣銆婇崠鍝勭槕鎼达讣绱欐稉宥勭贩�?chat.css 閸忔粌绨抽敍?*/
+/* 4) Empty-list spacing閿涙矮鏅堕弽蹇曗敄閹?/ 缂冾噣銆婇崠鍝勭槕鎼达讣绱欐稉宥勭贩�?chat.css 閸忔粌绨抽敍?*/
 .crish-sidebar .sb-empty-hint {
   padding: var(--space-5, 16px) var(--space-3, 8px);
   font-size: var(--font-size-sm);
@@ -870,7 +870,7 @@ body {
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
   color: var(--text-primary);
 }
-/* 閹兼粎鍌ㄩ敍姘负濞茶绮庨弸浣硅窗閹诲繗绔熼敍宀€顩﹀銏犲蓟�?focus �?*/
+/* 閹兼粎鍌ㄩ敍姘负濞茶绮庨弸浣硅窗閹诲繗绔熼敍宀€顩﹀銏犲蓟�?focus �?*/
 .search-bar:focus-within {
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: none;
@@ -895,7 +895,7 @@ body {
   color: var(--text-primary);
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }
-/* 闁款喚娲忛崣顖濇彧閿涙岸娈ｉ�?hover-only 閸斻劋缍旈崷?focus-within 閺冭埖妯夐悳?*/
+/* 闁款喚娲忛崣顖濇彧閿涙岸娈ｉ�?hover-only 閸斻劋缍旈崷?focus-within 閺冭埖妯夐悳?*/
 .crish-sidebar .session-item:focus-within .session-actions-btn,
 .crish-sidebar .session-item:focus-visible .session-actions-btn {
   opacity: 1;
@@ -1195,7 +1195,7 @@ body {
   justify-content: center;
   min-height: 200px;
   gap: var(--space-2);
-  padding: 20px;
+  padding: var(--space-5);
   text-align: center;
 }
 .emptyStateIcon {

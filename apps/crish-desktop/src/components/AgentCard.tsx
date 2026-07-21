@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../api/openAgentPanel';
 import { useLayoutStore } from '../store/layoutStore';
@@ -183,15 +183,16 @@ function AgentBrowsePad({
           ) : null}
         </div>
         {onClose ? (
-          <button
-            type="button"
-            className={styles.agentCardBtn}
-            title={embedded ? '返回' : '关闭侧栏'}
-            aria-label={embedded ? '返回' : '关闭侧栏'}
-            onClick={onClose}
-          >
-            {embedded ? <Lucide.ChevronLeft size={14} aria-hidden /> : <Lucide.X size={14} aria-hidden />}
-          </button>
+          <Tooltip content={embedded ? '返回' : '关闭侧栏'}>
+            <button
+              type="button"
+              className={styles.agentCardBtn}
+              aria-label={embedded ? '返回' : '关闭侧栏'}
+              onClick={onClose}
+            >
+              {embedded ? <Lucide.ChevronLeft size={14} aria-hidden /> : <Lucide.X size={14} aria-hidden />}
+            </button>
+          </Tooltip>
         ) : null}
       </header>
 
@@ -237,6 +238,7 @@ function AgentBrowsePad({
                 (a.summary || '').trim().slice(0, 80),
               ].filter(Boolean);
               return (
+                <Tooltip content={titleBits.join(' · ')}>
                 <button
                   key={a.id}
                   type="button"
@@ -247,7 +249,6 @@ function AgentBrowsePad({
                   aria-label={`${name}，${STATUS_LABEL[a.status]}${
                     pending ? `，${pending} 项待批` : ''
                   }。在侧栏打开`}
-                  title={titleBits.join(' · ')}
                   onClick={() => {
                     // 侧栏 only：禁止主列全屏 / 新会话 ghost
                     openAgentInSidePanel(a.id, {
@@ -268,6 +269,7 @@ function AgentBrowsePad({
                   ) : null}
                   <AgentStatusChip status={a.status} mode={a.mode} compact />
                 </button>
+              </Tooltip>
               );
             })}
           </div>
@@ -463,19 +465,20 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
         <div className={styles.agentCardTitleRow}>
           {/* 返回浏览列表：不关 tab、不碰主列；browse 会触发 id 清空 → 清草稿 */}
           {siblingAgents.length > 0 ? (
-            <button
-              type="button"
-              className={styles.agentCardBtn}
-              title="返回子智能体列表"
-              aria-label="返回子智能体列表"
-              onClick={() => {
-                // 先本地清草稿，再 browse（store 异步时仍不串输入）
-                resetComposerForFocusChange();
-                browseAgentSidePanel({ sessionId: parentSessId });
-              }}
-            >
-              <Lucide.ChevronLeft size={14} aria-hidden />
-            </button>
+            <Tooltip content="返回子智能体列表">
+              <button
+                type="button"
+                className={styles.agentCardBtn}
+                aria-label="返回子智能体列表"
+                onClick={() => {
+                  // 先本地清草稿，再 browse（store 异步时仍不串输入）
+                  resetComposerForFocusChange();
+                  browseAgentSidePanel({ sessionId: parentSessId });
+                }}
+              >
+                <Lucide.ChevronLeft size={14} aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
           <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
           <span
@@ -514,30 +517,32 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
         </div>
         <div className={styles.agentCardActions}>
           {running ? (
-            <button
-              type="button"
-              className={`${styles.agentCardBtn} ${styles.agentCardBtnDanger}`}
-              title="停止子智能体"
-              aria-label="停止子智能体"
-              onClick={() => hookHandleStop(agent.summary)}
-            >
-              <Lucide.Square size={12} fill="currentColor" aria-hidden />
-            </button>
+            <Tooltip content="停止子智能体">
+              <button
+                type="button"
+                className={`${styles.agentCardBtn} ${styles.agentCardBtnDanger}`}
+                aria-label="停止子智能体"
+                onClick={() => hookHandleStop(agent.summary)}
+              >
+                <Lucide.Square size={12} fill="currentColor" aria-hidden />
+              </button>
+            </Tooltip>
           ) : null}
           {onClose ? (
-            <button
-              type="button"
-              className={styles.agentCardBtn}
-              title={embedded ? '返回' : '关闭侧栏'}
-              aria-label={embedded ? '返回' : '关闭侧栏'}
-              onClick={onClose}
-            >
-              {embedded ? (
-                <Lucide.ChevronLeft size={14} aria-hidden />
-              ) : (
-                <Lucide.X size={14} aria-hidden />
-              )}
-            </button>
+            <Tooltip content={embedded ? '返回' : '关闭侧栏'}>
+              <button
+                type="button"
+                className={styles.agentCardBtn}
+                aria-label={embedded ? '返回' : '关闭侧栏'}
+                onClick={onClose}
+              >
+                {embedded ? (
+                  <Lucide.ChevronLeft size={14} aria-hidden />
+                ) : (
+                  <Lucide.X size={14} aria-hidden />
+                )}
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </header>
@@ -692,6 +697,8 @@ function AgentMessageRow({
         onToggleExpand={() => {}}
         onTogglePin={() => {}}
         onWithdraw={() => {}}
+        messageIndex={idx}
+        virtualScrollManager={null}
       />
     );
   }
@@ -711,6 +718,8 @@ function AgentMessageRow({
       inPlanMode={false}
       planApproved={false}
       isLastAssistant={isLastAssistant}
+      messageIndex={idx}
+      virtualScrollManager={null}
       toolStackProps={{
         agents: [],
         activeSessionId: parentSessionId,

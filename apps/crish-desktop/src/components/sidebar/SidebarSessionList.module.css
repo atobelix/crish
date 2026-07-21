@@ -511,6 +511,21 @@
   flex-shrink: 0;
 }
 
+.dropIndicator {
+  height: 0;
+  transition: height var(--transition-micro), opacity var(--transition-micro);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.dropIndicatorActive {
+  height: 2px;
+  background: var(--accent-primary, #3b82f6);
+  border-radius: 1px;
+  margin: 1px 8px;
+  opacity: 1;
+}
+
 .sidebarDragGhost {
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);

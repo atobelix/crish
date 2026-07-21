@@ -121,7 +121,7 @@
 }
 .md-code-block:has(.md-code-lang) > pre,
 .md-code-block:has(.md-code-lang) .md-code-pre {
-  padding-top: 32px;
+  padding-top: var(--space-8);
 }
 /* 婢跺秴鍩楅柦顕嗙窗閸欘亝妯夌粈鎭掆偓灞筋槻閸掕翰鈧稄绱濈粋浣诡剾閻?data-copy 婵夌偛鍙忛弬鍥风礄閺勬挻鎷洪惍鏉戠鐏炩�?鐠囶垱妯夐敍?*/
 .md-code-copy {
@@ -189,7 +189,7 @@
 }
 .md-code-block:has(.md-code-breadcrumb) > pre,
 .md-code-block:has(.md-code-breadcrumb) .md-code-pre {
-  padding-top: 32px;
+  padding-top: var(--space-8);
 }
 .md-ul-nested,
 .md-ol-nested {

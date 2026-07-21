@@ -5,7 +5,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import * as Lucide from 'lucide-react';
 import { getWorkspacePath } from '../api/projectStore';
 import {
@@ -37,6 +37,7 @@ import {
 } from '../api/hostOpenersApi';
 import { fileExtColor, highlightCode, langFromFilename } from '../api/codeHighlight';
 import { parseMarkdownToHtml } from '../api/markdownRender';
+import DOMPurify from 'dompurify';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { fetchGitStatus, type GitStatusFile } from '../api/gitApi';
 
@@ -736,27 +737,29 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     <div className={styles.filesCard}>
       {/* 顶栏：导航 + 面包屑（非输入框 chrome） */}
       <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
-        <button
-          type="button"
-          className={styles.filesNavBtn}
-          title="上级目录"
-          disabled={!cwd || cwd === root}
-          onClick={() => goUp()}
-        >
-          <Lucide.CornerLeftUp size={15} />
-        </button>
-        <button
-          type="button"
-          className={styles.filesNavBtn}
-          title="刷新"
-          onClick={() => {
-            clearActionHint();
-            if (view === 'detail' && selected) void openFile(selected);
-            else void refresh();
-          }}
-        >
-          <Lucide.RotateCw size={15} />
-        </button>
+        <Tooltip content="上级目录">
+          <button
+            type="button"
+            className={styles.filesNavBtn}
+            disabled={!cwd || cwd === root}
+            onClick={() => goUp()}
+          >
+            <Lucide.CornerLeftUp size={15} />
+          </button>
+        </Tooltip>
+        <Tooltip content="刷新">
+          <button
+            type="button"
+            className={styles.filesNavBtn}
+            onClick={() => {
+              clearActionHint();
+              if (view === 'detail' && selected) void openFile(selected);
+              else void refresh();
+            }}
+          >
+            <Lucide.RotateCw size={15} />
+          </button>
+        </Tooltip>
 
         <div
           className={styles.filesCrumbs}
@@ -778,29 +781,30 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                   {i > 0 ? <span className={styles.filesBcSep}>/</span> : null}
                   {canNav ? (
                     <span className={styles.filesBcSeg}>
-                      <button
-                        type="button"
-                        className={`${styles.filesBcChip} ${flyOpen ? styles.isOpen : ''}`}
-                        title={i === 0 ? '项目根目录 · 点击列出内容' : `${b.path} · 点击列出该层`}
-                        aria-haspopup="listbox"
-                        aria-expanded={flyOpen}
-                        onClick={(e) => {
-                          bcTriggerRef.current = e.currentTarget;
-                          void openBcFlyout(b.path, b.label);
-                        }}
-                        onDoubleClick={() => {
-                          // 双击：直接进入该目录（树刷新）
-                          setBcFlyout(null);
-                          requestAnimationFrame(() => bcTriggerRef.current?.focus());
-                          setSelected(null);
-                          setEditing(false);
-                          clearActionHint();
-                          setError('');
-                          void refresh(b.path);
-                        }}
-                      >
-                        {b.label}
-                      </button>
+                      <Tooltip content={i === 0 ? '项目根目录 · 点击列出内容' : `${b.path} · 点击列出该层`}>
+                        <button
+                          type="button"
+                          className={`${styles.filesBcChip} ${flyOpen ? styles.isOpen : ''}`}
+                          aria-haspopup="listbox"
+                          aria-expanded={flyOpen}
+                          onClick={(e) => {
+                            bcTriggerRef.current = e.currentTarget;
+                            void openBcFlyout(b.path, b.label);
+                          }}
+                          onDoubleClick={() => {
+                            // 双击：直接进入该目录（树刷新）
+                            setBcFlyout(null);
+                            requestAnimationFrame(() => bcTriggerRef.current?.focus());
+                            setSelected(null);
+                            setEditing(false);
+                            clearActionHint();
+                            setError('');
+                            void refresh(b.path);
+                          }}
+                        >
+                          {b.label}
+                        </button>
+                      </Tooltip>
                       {flyOpen && bcFlyout ? (
                         <div
                           className={styles.filesBcFlyout}
@@ -922,45 +926,47 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           />
         ) : null}
         {view === 'browse' ? (
-          <button
-            type="button"
-            className={`${styles.filesNavBtn} ${filterMode || filter ? styles.isOn : ''}`}
-            title={filterMode || filter ? '关闭筛选' : '筛选当前目录'}
-            onClick={() => {
-              if (filterMode || filter) {
-                setFilter('');
-                setFilterMode(false);
-              } else {
-                setFilterMode(true);
-                requestAnimationFrame(() => filterInputRef.current?.focus());
-              }
-            }}
-          >
-            {filterMode || filter ? <Lucide.X size={14} /> : <Lucide.Search size={14} />}
-          </button>
+          <Tooltip content={filterMode || filter ? '关闭筛选' : '筛选当前目录'}>
+            <button
+              type="button"
+              className={`${styles.filesNavBtn} ${filterMode || filter ? styles.isOn : ''}`}
+              onClick={() => {
+                if (filterMode || filter) {
+                  setFilter('');
+                  setFilterMode(false);
+                } else {
+                  setFilterMode(true);
+                  requestAnimationFrame(() => filterInputRef.current?.focus());
+                }
+              }}
+            >
+              {filterMode || filter ? <Lucide.X size={14} /> : <Lucide.Search size={14} />}
+            </button>
+          </Tooltip>
         ) : null}
 
         {pendingCount > 0 ? (
-          <span className={styles.filesPendingBadge} title="待发送批注">
+          <span className={styles.filesPendingBadge} aria-label="待发送批注">
             {pendingCount}
           </span>
         ) : null}
 
         <div className={styles.filesMoreWrap} ref={moreRef}>
-          <button
-            ref={moreTriggerRef}
-            type="button"
-            className={styles.filesNavBtn}
-            title="更多"
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            onClick={() => {
-              setMoreOpen((v) => !v);
-              setOpenMenuOpen(false);
-            }}
-          >
-            <Lucide.MoreHorizontal size={15} />
-          </button>
+          <Tooltip content="更多">
+            <button
+              ref={moreTriggerRef}
+              type="button"
+              className={styles.filesNavBtn}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => {
+                setMoreOpen((v) => !v);
+                setOpenMenuOpen(false);
+              }}
+            >
+              <Lucide.MoreHorizontal size={15} />
+            </button>
+          </Tooltip>
           {moreOpen ? (
             <div className={`${styles.filesMoreMenu} files-more-menu`} role="menu">
               <button
@@ -1027,7 +1033,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
         <div className={styles.filesContextBar}>
           <span className={styles.filesContextName} title={selected}>
             {dirty ? (
-              <span className={styles.filesDirtyDot} title="未保存" aria-label="未保存">
+              <span className={styles.filesDirtyDot} aria-label="未保存">
                 ·
               </span>
             ) : null}
@@ -1036,24 +1042,26 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           <div className={styles.filesContextActions}>
             {isMd ? (
               <div className={styles.filesSeg} role="group" aria-label="Markdown 显示">
-                <button
-                  type="button"
-                  className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
-                  aria-pressed={mdMode === 'render'}
-                  title="渲染预览"
-                  onClick={() => setMdMode('render')}
-                >
-                  渲染
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
-                  aria-pressed={mdMode === 'source'}
-                  title="源码"
-                  onClick={() => setMdMode('source')}
-                >
-                  源码
-                </button>
+                <Tooltip content="渲染预览">
+                  <button
+                    type="button"
+                    className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
+                    aria-pressed={mdMode === 'render'}
+                    onClick={() => setMdMode('render')}
+                  >
+                    渲染
+                  </button>
+                </Tooltip>
+                <Tooltip content="源码">
+                  <button
+                    type="button"
+                    className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
+                    aria-pressed={mdMode === 'source'}
+                    onClick={() => setMdMode('source')}
+                  >
+                    源码
+                  </button>
+                </Tooltip>
               </div>
             ) : null}
             {canEdit && !editing ? (
@@ -1099,36 +1107,38 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
             ) : null}
             {selected ? (
               <div className={styles.filesOpenCapsule} ref={openMenuRef}>
-                <button
-                  type="button"
-                  className={styles.filesOpenMain}
-                  title={`${openDefaultLabel}（系统默认）`}
-                  onClick={() => {
-                    void openPathDefault(selected)
-                      .then(() => clearActionHint())
-                      .catch((e) =>
-                        showActionError(e instanceof Error ? e.message : '打开失败'),
-                      );
-                  }}
-                >
-                  <Lucide.ExternalLink size={13} aria-hidden />
-                  {openDefaultLabel}
-                </button>
-                <button
-                  ref={openMenuTriggerRef}
-                  type="button"
-                  className={styles.filesOpenChev}
-                  title="选择打开方式"
-                  aria-haspopup="menu"
-                  aria-expanded={openMenuOpen}
-                  onClick={() => {
-                    setOpenMenuOpen((v) => !v);
-                    setOpenMenuMore(false);
-                    setMoreOpen(false);
-                  }}
-                >
-                  <Lucide.ChevronDown size={14} aria-hidden />
-                </button>
+                <Tooltip content={`${openDefaultLabel}（系统默认）`}>
+                  <button
+                    type="button"
+                    className={styles.filesOpenMain}
+                    onClick={() => {
+                      void openPathDefault(selected)
+                        .then(() => clearActionHint())
+                        .catch((e) =>
+                          showActionError(e instanceof Error ? e.message : '打开失败'),
+                        );
+                    }}
+                  >
+                    <Lucide.ExternalLink size={13} aria-hidden />
+                    {openDefaultLabel}
+                  </button>
+                </Tooltip>
+                <Tooltip content="选择打开方式">
+                  <button
+                    ref={openMenuTriggerRef}
+                    type="button"
+                    className={styles.filesOpenChev}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenuOpen}
+                    onClick={() => {
+                      setOpenMenuOpen((v) => !v);
+                      setOpenMenuMore(false);
+                      setMoreOpen(false);
+                    }}
+                  >
+                    <Lucide.ChevronDown size={14} aria-hidden />
+                  </button>
+                </Tooltip>
                 {openMenuOpen ? (
                   <div className={`${styles.filesOpenMenu} files-open-menu`} role="menu">
                     <button
@@ -1205,15 +1215,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
       {actionHint ? (
         <div className={styles.filesActionHint} role="alert" aria-live="assertive">
           <span className={styles.filesActionHintText}>{actionHint}</span>
-          <button
-            type="button"
-            className={styles.filesActionHintDismiss}
-            title="关闭"
-            aria-label="关闭提示"
-            onClick={() => clearActionHint()}
-          >
-            <Lucide.X size={12} />
-          </button>
+          <Tooltip content="关闭">
+            <button
+              type="button"
+              className={styles.filesActionHintDismiss}
+              aria-label="关闭提示"
+              onClick={() => clearActionHint()}
+            >
+              <Lucide.X size={12} />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
@@ -1240,15 +1251,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
               {error ? (
                 <div className={styles.filesInlineErr} role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 'var(--z-pinned-bar)' }}>
                   <span className={styles.filesInlineErrText}>{error}</span>
-                  <button
-                    type="button"
-                    className={styles.filesInlineErrDismiss}
-                    title="关闭"
-                    aria-label="关闭错误"
-                    onClick={() => setError('')}
-                  >
-                    <Lucide.X size={11} />
-                  </button>
+                  <Tooltip content="关闭">
+                    <button
+                      type="button"
+                      className={styles.filesInlineErrDismiss}
+                      aria-label="关闭错误"
+                      onClick={() => setError('')}
+                    >
+                      <Lucide.X size={11} />
+                    </button>
+                  </Tooltip>
                 </div>
               ) : null}
               <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
@@ -1365,15 +1377,16 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
           {selected && error && (content || assetUrl) ? (
             <div className={`${styles.filesInlineErr} ${styles.filesInlineErrDetail}`} role="alert" aria-live="polite">
               <span className={styles.filesInlineErrText}>{error}</span>
-              <button
-                type="button"
-                className={styles.filesInlineErrDismiss}
-                title="关闭"
-                aria-label="关闭错误"
-                onClick={() => setError('')}
-              >
-                <Lucide.X size={11} />
-              </button>
+              <Tooltip content="关闭">
+                <button
+                  type="button"
+                  className={styles.filesInlineErrDismiss}
+                  aria-label="关闭错误"
+                  onClick={() => setError('')}
+                >
+                  <Lucide.X size={11} />
+                </button>
+              </Tooltip>
             </div>
           ) : null}
           {selected ? (
@@ -1401,7 +1414,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                 </div>
               ) : kind === 'pdf' && assetUrl ? (
                 <iframe
-                  title="pdf"
+                  aria-label="pdf"
                   className={styles.filesPreviewPdf}
                   src={assetUrl}
                 />
@@ -1447,7 +1460,7 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                     <div
                       className={`${styles.filesMdBody} md-rendered msg-assistant-text`}
                       dangerouslySetInnerHTML={{
-                        __html: parseMarkdownToHtml(content || '（空文件）'),
+                        __html: DOMPurify.sanitize(parseMarkdownToHtml(content || '（空文件）')),
                       }}
                     />
                     {canLoadMore ? (
@@ -1470,10 +1483,12 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
                       onKeyUp={onTextSelect}
                       dangerouslySetInnerHTML={{
                         __html:
-                          highlightCode(
-                            content || '（空文件）',
-                            langFromFilename(selected || ''),
-                          ) || '',
+                          DOMPurify.sanitize(
+                            highlightCode(
+                              content || '（空文件）',
+                              langFromFilename(selected || ''),
+                            ) || '',
+                          ),
                       }}
                     />
                     {canLoadMore ? (

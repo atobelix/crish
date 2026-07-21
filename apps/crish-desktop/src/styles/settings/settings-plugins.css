@@ -1,7 +1,7 @@
-/* ===== Skills settings tab閿涘�?閿涙矮瀵岄幙宥勭稊閺傛澘锟?閸氬本顒為敍灞藉従锟?閳邦垽锟?===== */
+/* ===== Skills settings tab閿涘�?閿涙矮瀵岄幙宥勭稊閺傛澘锟?閸氬本顒為敍灞藉従锟?閳邦垽锟?===== */
 
 
-/* 閺傛澘缂撻幎鈧�?/ 鐎规碍妞傞敍姘蓟鐠侯垰绶為崡锛勫閿涘牆顕遍崗?�?AI�?*/
+/* 閺傛澘缂撻幎鈧�?/ 鐎规碍妞傞敍姘蓟鐠侯垰绶為崡锛勫閿涘牆顕遍崗?�?AI�?*/
 .settings-create-paths {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -42,7 +42,7 @@
   line-height: var(--line-height-base);
 }
 
-/* 閻劑鍣虹紒鐔活吀閸椻槄绱伴崣顖濐潒閸栨牔绱�?*/
+/* 閻劑鍣虹紒鐔活吀閸椻槄绱伴崣顖濐潒閸栨牔绱�?*/
 .settings-usage-chart-tools {
   display: flex;
   flex-wrap: wrap;
@@ -206,7 +206,7 @@
   font-family: var(--font-mono);
 }
 
-/* 閳ユ柡锟?閹碘晛鐫嶆稉顓炵妇閿涙碍褰冩�?+ MCP + 閹垛偓閼虫枻绱機hatGPT 瀵繒鏆€閻ц棄鍨悰顭掔�?閳ユ柡锟?*/
+/* 閳ユ柡锟?閹碘晛鐫嶆稉顓炵妇閿涙碍褰冩�?+ MCP + 閹垛偓閼虫枻绱機hatGPT 瀵繒鏆€閻ц棄鍨悰顭掔�?閳ユ柡锟?*/
 .settings-pane--extensions {
   width: 100%;
   max-width: var(--settings-content-max, 720px);
@@ -232,12 +232,12 @@
   min-height: 80px;
 }
 /* 鐞涘矉绱版径褏鏆€锟?+ 閺嬩焦绁崚鍡涙閿涘苯褰查悙鐟板毊鏉╂稖顕涢幆?*/
-/* 閸掓銆冪悰宀嬬窗姒涙顓荤痪顖滄殌閻ф枻绱県over 閺嬩焦绁潪顖氱俺閿涘牊妫ら幓蹇氱珶閵嗕椒绗夐崣姗€绮﹂�?*/
+/* 閸掓銆冪悰宀嬬窗姒涙顓荤痪顖滄殌閻ф枻绱県over 閺嬩焦绁潪顖氱俺閿涘牊妫ら幓蹇氱珶閵嗕椒绗夐崣姗€绮﹂�?*/
 .ext-row--card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   padding: 14px 10px;
   border: none;
   border-bottom: none;
@@ -250,7 +250,7 @@
   color: inherit;
   margin-bottom: var(--space-0_5);
 }
-/* 閺佺顢戞稉宥夌彯娴滎噯绱辨禒鍛瘻�?.ui-btn / 瀵偓閸忓磭鐡戦幒褌娆㈤懛顏囬煩 hover */
+/* 閺佺顢戞稉宥夌彯娴滎噯绱辨禒鍛瘻�?.ui-btn / 瀵偓閸忓磭鐡戦幒褌娆㈤懛顏囬煩 hover */
 .ext-row--card:hover {
   background: transparent;
 }
@@ -326,11 +326,11 @@
   border-radius: var(--radius-2xl);
 }
 
-/* 閹碘晛鐫嶇拠锔藉剰闂堛垺�?*/
+/* 閹碘晛鐫嶇拠锔藉剰闂堛垺�?*/
 .ext-detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   min-height: 0;
   flex: 1;
 }
@@ -368,7 +368,7 @@
 }
 .ext-detail-md {
   margin: 0;
-  padding: 16px;
+  padding: var(--space-4);
   border-radius: var(--radius-2xl);
   border: none;
   background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
@@ -427,9 +427,7 @@
 /* ===== Skills and MCP tab styles migrated to CSS Modules ===== */
 
 
-@keyframes crish-spin {
-  to { transform: rotate(360deg); }
-}
+/* 引用 panels.css 中的 crish-spin keyframe */
 .spin {
   animation: crish-spin 0.8s linear infinite;
 }
@@ -461,11 +459,11 @@ pre,
 }
 
 /* ============================================================
-   Settings polish (FB) �?density / hairline / focus / empty / zh
+   Settings polish (FB) �?density / hairline / focus / empty / zh
    Additive only: tokens from DF; no component or tokens.css edits
    ============================================================ */
 
-/* 1) 娓氀勭埉 tab 鐎靛棗瀹抽敍姘愁攽妤傛ê顕�?--row-height-sm / --control-height-sm閿涘矂妫跨捄婵婅�?--space-* */
+/* 1) 娓氀勭埉 tab 鐎靛棗瀹抽敍姘愁攽妤傛ê顕�?--row-height-sm / --control-height-sm閿涘矂妫跨捄婵婅�?--space-* */
 .settings-sidebar-tab {
   gap: var(--space-2, 6px);
   padding: var(--space-1, 4px) var(--space-3, 8px);
@@ -656,7 +654,7 @@ pre,
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
 
-/* 3) focus-visible閿涙俺顔曠純顔藉付娴犲墎绮烘稉锟?--focus-ring / --focus-ring-strong閿涘牓鏁惄妯哄讲鏉堟拝�?*/
+/* 3) focus-visible閿涙俺顔曠純顔藉付娴犲墎绮烘稉锟?--focus-ring / --focus-ring-strong閿涘牓鏁惄妯哄讲鏉堟拝�?*/
 .settings-sidebar-tab:focus-visible,
 .settings-back-btn:focus-visible,
 .settings-nav-back:focus-visible,
@@ -730,7 +728,7 @@ textarea.settings-dialog-textarea:focus-visible {
   border-radius: var(--radius-sm, 6px);
 }
 
-/* 4) 缁岀儤鈧緤绱扮仦鍛厬/瀹革箑顕鎰閼锋潙鐦戞惔锔肩礉娑擃厽鏋冪悰宀勭彯閿涘矂浼╅崗宥冣偓宀€浼嗛崸妤佺磽濞搭喓�?*/
+/* 4) 缁岀儤鈧緤绱扮仦鍛厬/瀹革箑顕鎰閼锋潙鐦戞惔锔肩礉娑擃厽鏋冪悰宀勭彯閿涘矂浼╅崗宥冣偓宀€浼嗛崸妤佺磽濞搭喓�?*/
 .settings-nav-empty,
 .settings-list-empty,
 .sched-settings-empty,
@@ -812,7 +810,7 @@ textarea.settings-dialog-textarea:focus-visible {
   text-align: center;
 }
 
-/* 5) 缁毖冨櫨鐞涖劌宕熼敍姘付娴犲爼�?/ 閸愬懓绔熺捄?/ �?gap �?density ladder */
+/* 5) 缁毖冨櫨鐞涖劌宕熼敍姘付娴犲爼�?/ 閸愬懓绔熺捄?/ �?gap �?density ladder */
 .settings-fields-stack {
   gap: var(--space-2, 6px);
 }
@@ -972,19 +970,19 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-pane--shortcuts,
 .settings-pane--rules,
 .settings-pane--extensions {
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--settings-content-max, 720px);
 }
 /*
- * .settings-cover-content 閸忋劌鐪弽宄扮础閿涙氨鍩楃€圭懓娅掑鍙夋暭�?align-items: stretch�? * 鐎涙劙銆夐棃銏ｅ殰鐏炲懍鑵戦敍灞绢劃婢跺嫪绮庢穱婵堟�?gap/padding 鐟曞棛娲婇敍灞肩瑝閸愬秷�?align-items�? */
+ * .settings-cover-content 閸忋劌鐪弽宄扮础閿涙氨鍩楃€圭懓娅掑鍙夋暭�?align-items: stretch�? * 鐎涙劙銆夐棃銏ｅ殰鐏炲懍鑵戦敍灞绢劃婢跺嫪绮庢穱婵堟�?gap/padding 鐟曞棛娲婇敍灞肩瑝閸愬秷�?align-items�? */
 .settings-cover-content {
   gap: 14px;
   padding: 24px 20px 40px;
   scrollbar-gutter: stable both-edges;
   align-items: stretch;
 }
-/* 鐠佸墽鐤嗛崘鍛瘻闁筋噯绱伴崷鍡氼潡閻晛鑸伴敍娑滆拫鎼存洘瀵滈柦顔绢洣濮濄垹鍟€閸旂姵寮挎�?*/
+/* 鐠佸墽鐤嗛崘鍛瘻闁筋噯绱伴崷鍡氼潡閻晛鑸伴敍娑滆拫鎼存洘瀵滈柦顔绢洣濮濄垹鍟€閸旂姵寮挎�?*/
 .settings-pane .ui-btn,
 .settings-pane .ui-btn-sm,
 .settings-pane .models-btn,
@@ -1009,7 +1007,7 @@ textarea.settings-dialog-textarea:focus-visible {
   font-size: var(--font-size-xs);
   padding: 8px 0 4px;
 }
-/* 閼侯垳锟?/ 妫板嫯顔曢敍姘厬閺傚洦铆閸氭埊绱辨妯款吇鏉烆垰绨抽弮鐘冲伎�?*/
+/* 閼侯垳锟?/ 妫板嫯顔曢敍姘厬閺傚洦铆閸氭埊绱辨妯款吇鏉烆垰绨抽弮鐘冲伎�?*/
 .settings-chip,
 .settings-chip-btn,
 .settings-rule-preset,

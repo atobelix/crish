@@ -1,7 +1,7 @@
-/* chat-approval.css 閳?soft-hint / approval-dock / run-notice / plan-goal ribbons
+/* chat-approval.css �?soft-hint / approval-dock / run-notice / plan-goal ribbons
  * (ChatStatusRibbons 閹碘偓閺堝娼堥敍姝砳bbon / dock / soft-hint) */
 
-/* 閳光偓閳光偓 Soft setup banner閿涙airline only閿涘矂銆夐崘鍛穿鐎电》绱欑粋浣诡剾 toast閿?閳光偓閳光偓 */
+/* 閳光偓閳光偓 Soft setup banner閿涙airline only閿涘矂銆夐崘鍛穿鐎电》绱欑粋浣诡�?toast�?閳光偓閳光偓 */
 /* --- CENTERED PERMISSION DIALOG OVERLAYS --- */
 .global-approval-backdrop {
   position: fixed;
@@ -24,7 +24,7 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.08));
   pointer-events: auto;
-  padding: 16px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -142,7 +142,7 @@
 .tool-row--approval {
   margin: 4px 0 8px;
 }
-/* 鐎光剝澹掗崠鐚寸窗閻欘剛鐝涙禍?footer 韫囶偅宓庨弽蹇ョ幢闂堢姴涔忛敍宀勪缉閸忓秳绗岄妴灞芥礀閸掔増娓堕弬鑸偓宀禔B 闁插秴褰?*/
+/* 鐎光剝澹掗崠鐚寸窗閻欘剛鐝涙�?footer 韫囶偅宓庨弽蹇ョ幢闂堢姴涔忛敍宀勪缉閸忓秳绗岄妴灞芥礀閸掔増娓堕弬鑸偓宀禔B 闁插秴褰?*/
 .inline-approval {
   display: flex;
   flex-direction: column;

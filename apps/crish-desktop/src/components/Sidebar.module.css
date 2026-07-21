@@ -152,3 +152,55 @@
   opacity: 1;
 }
 
+/* Overlay mode */
+.overlay {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  height: 100vh !important;
+  z-index: var(--z-sidebar, 100);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.12));
+}
+
+.overlayBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: calc(var(--z-sidebar, 100) - 1);
+}
+
+.hamburger {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: calc(var(--z-sidebar, 100) + 1);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.hamburger:hover {
+  background: var(--bg-hover);
+}
+
+.hamburgerActive {
+  background: var(--bg-hover);
+}
+
+/* Icon-collapse mode */
+.iconCollapse {
+  width: var(--sidebar-width-collapsed) !important;
+}
+
+.iconCollapse.tempExpanded {
+  width: var(--sidebar-width) !important;
+}
+
