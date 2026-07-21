@@ -4,7 +4,6 @@ import {
   SESSION_TITLE_MAX_LEN,
   deriveSessionTitle,
   fillDefaultSessionTitles,
-  findReusableEmptyShell,
   firstUserMessageText,
   isDefaultSessionTitle,
   isEmptyShellSession,
@@ -220,49 +219,6 @@ describe('sessionTitle shell helpers', () => {
     ).toBe(false);
   });
 
-  it('findReusableEmptyShell prefers folder match and preferId', () => {
-    const sessions = [
-      { id: '1', title: '新会话', folder: 'p1', messages: [] },
-      { id: '2', title: '新会话', folder: 'p2', messages: [] },
-      { id: '3', title: '新会话', folder: 'p2', messages: [] },
-    ];
-    expect(findReusableEmptyShell(sessions, 'p2')).toBe('2');
-    expect(findReusableEmptyShell(sessions, 'missing')).toBe(null);
-    // preferId 优先（同 folder）
-    expect(findReusableEmptyShell(sessions, 'p2', { preferId: '3' })).toBe('3');
-    // preferId 跨 folder 不合格 → 回落同 folder 第一项
-    expect(findReusableEmptyShell(sessions, 'p2', { preferId: '1' })).toBe('2');
-    // excludeId
-    expect(findReusableEmptyShell(sessions, 'p2', { excludeId: '2' })).toBe(
-      '3'
-    );
-    // 归档不可复用
-    expect(
-      findReusableEmptyShell(
-        [
-          {
-            id: 'a',
-            title: '新会话',
-            folder: 'p1',
-            messages: [],
-            isArchived: true,
-          },
-        ],
-        'p1'
-      )
-    ).toBe(null);
-    // 定时标题不可被「新建」复用
-    expect(
-      findReusableEmptyShell(
-        [
-          { id: 'sched', title: '定时 · 巡检', folder: 'p1', messages: [] },
-          { id: 'shell', title: '新会话', folder: 'p1', messages: [] },
-        ],
-        'p1'
-      )
-    ).toBe('shell');
-  });
-
   it('pruneEmptyShellSessions keeps keepIds and identity when unchanged', () => {
     const sessions = [
       { id: 'a', title: '新会话', messages: [] },
@@ -355,6 +311,58 @@ describe('sessionTitle shell helpers', () => {
     expect(next.find((s) => s.id === 'ghost')).toBeUndefined();
   });
 
+  it('prepareSessionsForUi multi empty shells: only active shell + content kept', () => {
+    const sessions = [
+      { id: 'g1', title: '新会话', messages: [] as [] },
+      { id: 'g2', title: 'Untitled', messages: [] as [] },
+      { id: 'keep-active', title: '新会话', messages: [] as [] },
+      {
+        id: 'content',
+        title: '真实',
+        messages: [{ sender: 'user', text: 'hi' }],
+      },
+      { id: 'g3', title: 'New Chat', messages: [] as [] },
+    ];
+    const next = prepareSessionsForUi(sessions, 'keep-active');
+    expect(next.map((s) => s.id)).toEqual(['keep-active', 'content']);
+  });
+
+  it('prepareSessionsForUi with null active drops all default empty shells', () => {
+    const sessions = [
+      { id: 'g1', title: '新会话', messages: [] as [] },
+      { id: 'g2', title: '新会话', messages: [] as [] },
+      {
+        id: 'content',
+        title: '真实',
+        messages: [{ sender: 'user', text: 'hi' }],
+      },
+      { id: 'pinned', title: '新会话', messages: [] as [], isPinned: true },
+      { id: 'sched', title: '定时 · 巡检', messages: [] as [] },
+    ];
+    const next = prepareSessionsForUi(sessions, null);
+    expect(next.map((s) => s.id)).toEqual(['content', 'pinned', 'sched']);
+  });
+
+  it('prepareSessionsForUi with pending draft sentinel drops all default empty shells', () => {
+    const sessions = [
+      { id: 'g1', title: '新会话', messages: [] as [] },
+      { id: 'g2', title: 'Untitled', messages: [] as [] },
+      {
+        id: 'content',
+        title: '真实',
+        messages: [{ sender: 'user', text: 'hi' }],
+      },
+    ];
+    // pending draft 不 keep 任何空壳 id（与侧栏 shouldList=false 对齐）
+    expect(
+      prepareSessionsForUi(sessions, '__pending_draft__').map((s) => s.id)
+    ).toEqual(['content']);
+    // 空字符串 active 同 null：不残留默认空壳
+    expect(prepareSessionsForUi(sessions, '').map((s) => s.id)).toEqual([
+      'content',
+    ]);
+  });
+
   it('prepareSessionsForUi returns same ref when nothing to change', () => {
     const sessions = [
       {
@@ -419,18 +427,6 @@ describe('sessionTitle shell helpers', () => {
     expect(
       sessionListDisplayTitle({ title: '定时 · 任务', messages: [] })
     ).toBe('定时 · 任务');
-  });
-
-  it('findReusableEmptyShell without folder returns first non-archived shell', () => {
-    const sessions = [
-      { id: 'archived', title: '新会话', messages: [], isArchived: true },
-      { id: 'first', title: '新会话', folder: 'p1', messages: [] },
-      { id: 'second', title: '新会话', folder: 'p2', messages: [] },
-    ];
-    expect(findReusableEmptyShell(sessions)).toBe('first');
-    expect(findReusableEmptyShell(sessions, null, { preferId: 'second' })).toBe(
-      'second'
-    );
   });
 });
 

@@ -1,63 +1,33 @@
-import { useEffect, useReducer, useRef } from 'react';
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
+/**
+ * 会话域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
+ * 权威状态与 actions 在 layoutStore + sessionActions；本文件只导出域 API。
+ */
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { useShallow } from '../store/useShallowSelector';
-import { withDevtools } from './middleware/withDevtools';
-import { withLogger } from './middleware/withLogger';
-import { withAutoIndex } from './autoIndexMiddleware';
-
-import { seedSessions } from './layoutHelpers';
-import { sanitizeSessionSeed } from './layoutStore';
+import { useLayoutStore } from './layoutStore';
 import { sidebarSessionsEqual } from './sessionListEqual';
-import type { SessionState, SessionAgent } from './types';
-import type { SessionActions, SessionStoreSlice } from './sessionActions';
-import { createSessionActions } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import type {
+  SessionState,
+  SessionAgent,
+  SessionGoalTask,
+  SessionGoalMode,
+} from './types';
+import type { SessionActions } from './sessionActions';
+import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import {
-  getSessionById as getSessionByIdFromIndex,
-  getSessionIndex as getSessionIndexFromIndex,
-  type SessionsIndexed,
-} from './sessionIndex';
+  resolveSessionProgressItems,
+  computeChecklistProgress,
+  findCurrentLiveTool,
+  type ProgressSummary,
+  type LiveToolInfo,
+} from '../api/sessionProgressApi';
+import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 
-const _sessionSeed = sanitizeSessionSeed(seedSessions());
+const EMPTY_AGENTS_ARRAY: SessionAgent[] = [];
 
-type SessionStoreData = SessionsIndexed & {
-  folderOrder: string[];
-  activeSessionId: string;
-  activeAgentId: string | null;
-  panelAgentId: string | null;
-  composerDrafts: Record<string, string>;
-  terminalBySession: Record<string, string[]>;
-  terminalLines: string[];
-};
+/** 与 layout 同引用：切片式 facade，禁止第二份 sessions 真相源 */
+export const useSessionStore = useLayoutStore;
 
-type SessionStore = SessionStoreData & SessionActions;
-
-const _sessionData: SessionStoreData = {
-  sessions: _sessionSeed.sessions,
-  sessionsById: _sessionSeed.sessionsById,
-  folderOrder: _sessionSeed.folderOrder,
-  activeSessionId: _sessionSeed.activeSessionId,
-  activeAgentId: null,
-  panelAgentId: null,
-  composerDrafts: {},
-  terminalBySession: {},
-  terminalLines: [],
-};
-
-export const useSessionStore = create<SessionStore>()(
-  withDevtools(
-    withLogger(
-      withAutoIndex(
-        immer((set, get) => ({
-          ..._sessionData,
-          ...createSessionActions(set, get),
-        })),
-      ),
-    ),
-    'SessionStore',
-  ),
-);
 export type SessionFacadeState = {
   sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
@@ -72,38 +42,48 @@ export type SessionFacadeState = {
 
 export type SessionFacade = SessionFacadeState & SessionActions;
 
-export const selectSessions = (s: Pick<SessionFacadeState, 'sessions'>) => s.sessions;
+export const selectSessions = (s: Pick<SessionFacadeState, 'sessions'>) =>
+  s.sessions;
 
-export const selectSessionsById = (s: Pick<SessionFacadeState, 'sessionsById'>) =>
-  s.sessionsById;
+export const selectSessionsById = (
+  s: Pick<SessionFacadeState, 'sessionsById'>
+) => s.sessionsById;
 
-export const selectActiveSessionId = (s: Pick<SessionFacadeState, 'activeSessionId'>) =>
-  s.activeSessionId;
+export const selectActiveSessionId = (
+  s: Pick<SessionFacadeState, 'activeSessionId'>
+) => s.activeSessionId;
 
 export const selectFolderOrder = (s: Pick<SessionFacadeState, 'folderOrder'>) =>
   s.folderOrder;
 
-export const selectActiveAgentId = (s: Pick<SessionFacadeState, 'activeAgentId'>) =>
-  s.activeAgentId;
+export const selectActiveAgentId = (
+  s: Pick<SessionFacadeState, 'activeAgentId'>
+) => s.activeAgentId;
 
-export const selectPanelAgentId = (s: Pick<SessionFacadeState, 'panelAgentId'>) =>
-  s.panelAgentId;
+export const selectPanelAgentId = (
+  s: Pick<SessionFacadeState, 'panelAgentId'>
+) => s.panelAgentId;
 
 export const selectActiveSession = (
-  s: Pick<SessionFacadeState, 'sessions' | 'sessionsById' | 'activeSessionId'>,
+  s: Pick<SessionFacadeState, 'sessions' | 'sessionsById' | 'activeSessionId'>
 ): SessionState | undefined => getSessionByIdFromIndex(s, s.activeSessionId);
 
 export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
   return useSessionStore(
-    selector as (state: ReturnType<typeof useSessionStore.getState>) => T,
+    selector as (state: ReturnType<typeof useSessionStore.getState>) => T
   );
 }
 
 export function useSidebarSessions(searching: boolean): SessionState[] {
   const equal = (a: SessionState[], b: SessionState[]) =>
     sidebarSessionsEqual(a, b, searching);
-  const snapshotRef = useRef<SessionState[]>(useSessionStore.getState().sessions);
-  if (searching || !equal(snapshotRef.current, useSessionStore.getState().sessions)) {
+  const snapshotRef = useRef<SessionState[]>(
+    useSessionStore.getState().sessions
+  );
+  if (
+    searching ||
+    !equal(snapshotRef.current, useSessionStore.getState().sessions)
+  ) {
     snapshotRef.current = useSessionStore.getState().sessions;
   }
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -113,7 +93,11 @@ export function useSidebarSessions(searching: boolean): SessionState[] {
   useEffect(() => {
     return useSessionStore.subscribe((state) => {
       const next = state.sessions;
-      const eq = sidebarSessionsEqual(snapshotRef.current, next, searchingRef.current);
+      const eq = sidebarSessionsEqual(
+        snapshotRef.current,
+        next,
+        searchingRef.current
+      );
       if (!eq) {
         snapshotRef.current = next;
         bump();
@@ -144,6 +128,62 @@ export function usePanelAgentId(): string | null {
   return useSessionStore((s) => s.panelAgentId);
 }
 
+export function useSessionAgents(sessionId?: string | null): SessionAgent[] {
+  return useSessionStore(
+    useShallow((s) => {
+      const id = sessionId || s.activeSessionId;
+      return s.sessionsById[id]?.agents || EMPTY_AGENTS_ARRAY;
+    })
+  );
+}
+
+export function useSessionAgentById(
+  agentId: string | null | undefined,
+  sessionId?: string | null
+): SessionAgent | undefined {
+  return useSessionStore(
+    useShallow((s) => {
+      if (!agentId) return undefined;
+      const parentId = sessionId || s.activeSessionId;
+      const parentSess = parentId ? s.sessionsById[parentId] : undefined;
+      const agentInParent = parentSess?.agents?.find((a) => a.id === agentId);
+      if (agentInParent) return agentInParent;
+      for (const sess of Object.values(s.sessionsById)) {
+        const a = sess.agents?.find((item) => item.id === agentId);
+        if (a) return a;
+      }
+      return undefined;
+    })
+  );
+}
+
+export function useActiveSessionProgress(): {
+  items: SessionGoalTask[];
+  progress: ProgressSummary;
+  goalMode: SessionGoalMode | null;
+  liveTool: LiveToolInfo | null;
+} {
+  const activeSession = useActiveSession();
+  return useMemo(() => {
+    const items = resolveSessionProgressItems(activeSession);
+    const progress = computeChecklistProgress(items);
+    const goalMode = activeSession?.goalMode?.active
+      ? activeSession.goalMode
+      : null;
+    const liveTool = findCurrentLiveTool(activeSession);
+    return {
+      items,
+      progress,
+      goalMode,
+      liveTool,
+    };
+  }, [activeSession]);
+}
+
+/**
+ * 域投影：LayoutStore 结构上包含 SessionFacade 全部字段与 actions。
+ * 门禁要求 get*StoreState 使用 `as unknown as` 窄化到命名 Facade（禁止 any）。
+ */
 export function getSessionStoreState(): SessionFacade {
   return useSessionStore.getState() as unknown as SessionFacade;
 }
@@ -168,7 +208,7 @@ export function getSessionIndex(sessionId: string): number {
 
 export function getSessionAgent(
   sessionId: string,
-  agentId: string,
+  agentId: string
 ): SessionAgent | undefined {
   const sess = getSessionById(sessionId);
   return sess?.agents?.find((a) => a.id === agentId);
@@ -185,7 +225,6 @@ export {
   partitionSidebarSessions,
   groupUnpinnedByProject,
   isPlaceholderEmptySession,
-  findReusableEmptySession,
   isSessionEmpty,
 } from './sessionIndex';
 
@@ -207,5 +246,6 @@ export {
 export type { SessionActions } from './sessionActions';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
 
-import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
-sessionRuntimeRegistry.registerActiveIdResolver(() => useSessionStore.getState().activeSessionId);
+sessionRuntimeRegistry.registerActiveIdResolver(
+  () => useSessionStore.getState().activeSessionId
+);

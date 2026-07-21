@@ -5,14 +5,12 @@ import {
   CHAT_EMPTY_KINDS,
   CHAT_EMPTY_QUICK_PROMPTS,
   CHAT_EMPTY_TITLES,
-  EMPTY_SHELL_CUE_LABELS,
   chatEmptyKindAriaLabel,
   isChatEmptyKind,
   resolveChatEmptyActionLabel,
   resolveChatEmptyCopy,
   resolveChatEmptyKind,
   resolveChatEmptyPrimaryAction,
-  resolveEmptyShellReuseCue,
   resolveNeedsKeySoftHintText,
   resolveNeedsModelSoftHintText,
   shouldShowChatEmptyShell,
@@ -31,7 +29,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 0,
         displayCount: 0,
         mainSurface: 'scheduled',
-      }),
+      })
     ).toBeNull();
   });
 
@@ -41,7 +39,7 @@ describe('resolveChatEmptyKind', () => {
         hasActiveSession: false,
         messageCount: 0,
         displayCount: 0,
-      }),
+      })
     ).toBe('no-session');
   });
 
@@ -52,7 +50,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 5,
         displayCount: 0,
         filterQuery: 'xyz',
-      }),
+      })
     ).toBe('filter-empty');
   });
 
@@ -63,7 +61,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 3,
         displayCount: 3,
         filterQuery: '  ',
-      }),
+      })
     ).toBeNull();
   });
 
@@ -74,7 +72,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 0,
         displayCount: 0,
         filterQuery: '',
-      }),
+      })
     ).toBe('session-empty');
   });
 
@@ -86,7 +84,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 0,
         displayCount: 0,
         filterQuery: 'anything',
-      }),
+      })
     ).toBe('session-empty');
   });
 
@@ -97,7 +95,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 4,
         displayCount: 2,
         filterQuery: 'hi',
-      }),
+      })
     ).toBeNull();
   });
 
@@ -108,7 +106,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 10,
         displayCount: 0,
         filterQuery: 'q',
-      }),
+      })
     ).toBe('no-session');
   });
 
@@ -119,7 +117,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: Number.NaN,
         displayCount: -3,
         filterQuery: 'q',
-      }),
+      })
     ).toBe('session-empty');
   });
 
@@ -130,7 +128,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 2.9,
         displayCount: 0.4,
         filterQuery: 'x',
-      }),
+      })
     ).toBe('filter-empty');
   });
 
@@ -141,7 +139,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 1,
         displayCount: 1,
         mainSurface: 'chat',
-      }),
+      })
     ).toBeNull();
   });
 
@@ -152,7 +150,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 0,
         displayCount: 0,
         messagesLoading: true,
-      }),
+      })
     ).toBeNull();
     // 水合中即使带着 filter 也不闪 filter-empty
     expect(
@@ -162,7 +160,7 @@ describe('resolveChatEmptyKind', () => {
         displayCount: 0,
         filterQuery: 'x',
         messagesLoading: true,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -173,7 +171,7 @@ describe('resolveChatEmptyKind', () => {
         messageCount: 0,
         displayCount: 0,
         messagesLoading: true,
-      }),
+      })
     ).toBe('no-session');
   });
 
@@ -185,7 +183,7 @@ describe('resolveChatEmptyKind', () => {
         displayCount: 0,
         messagesLoading: true,
         mainSurface: 'scheduled',
-      }),
+      })
     ).toBeNull();
   });
 });
@@ -197,14 +195,14 @@ describe('shouldShowChatEmptyShell', () => {
         hasActiveSession: false,
         messageCount: 0,
         displayCount: 0,
-      }),
+      })
     ).toBe(true);
     expect(
       shouldShowChatEmptyShell({
         hasActiveSession: true,
         messageCount: 2,
         displayCount: 2,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowChatEmptyShell({
@@ -212,7 +210,7 @@ describe('shouldShowChatEmptyShell', () => {
         messageCount: 0,
         displayCount: 0,
         messagesLoading: true,
-      }),
+      })
     ).toBe(false);
   });
 });
@@ -220,14 +218,17 @@ describe('shouldShowChatEmptyShell', () => {
 describe('truncateFilterPreview', () => {
   it('trims and truncates long queries', () => {
     expect(truncateFilterPreview('  ab  ')).toBe('ab');
-    expect(truncateFilterPreview('x'.repeat(30), 10)).toBe(`${'x'.repeat(10)}…`);
+    expect(truncateFilterPreview('x'.repeat(30), 10)).toBe(
+      `${'x'.repeat(10)}…`
+    );
   });
 
   it('returns empty for blank input; non-positive max falls back', () => {
     expect(truncateFilterPreview('   ')).toBe('');
-    expect(truncateFilterPreview('hello-world', 0).endsWith('…') || truncateFilterPreview('hello-world', 0).length <= 24).toBe(
-      true,
-    );
+    expect(
+      truncateFilterPreview('hello-world', 0).endsWith('…') ||
+        truncateFilterPreview('hello-world', 0).length <= 24
+    ).toBe(true);
   });
 });
 
@@ -284,11 +285,11 @@ describe('resolveChatEmptyPrimaryAction', () => {
 
   it('hides no-session action under first-run', () => {
     expect(
-      resolveChatEmptyPrimaryAction('no-session', { firstRunOpen: true }),
+      resolveChatEmptyPrimaryAction('no-session', { firstRunOpen: true })
     ).toBeNull();
     // filter-empty 不受 firstRun 影响（过滤条与向导可并存）
     expect(
-      resolveChatEmptyPrimaryAction('filter-empty', { firstRunOpen: true }),
+      resolveChatEmptyPrimaryAction('filter-empty', { firstRunOpen: true })
     ).toBe('clear-filter');
   });
 });
@@ -300,7 +301,7 @@ describe('resolveChatEmptyCopy', () => {
       expect(c.title).toBe(CHAT_EMPTY_TITLES[kind]);
     }
     const titles = CHAT_EMPTY_KINDS.map(
-      (kind) => resolveChatEmptyCopy({ kind }).title,
+      (kind) => resolveChatEmptyCopy({ kind }).title
     );
     expect(new Set(titles).size).toBe(3);
   });
@@ -428,8 +429,14 @@ describe('resolveChatEmptyCopy', () => {
   });
 
   it('engineOk null/true keeps ready welcome (no offline false-positive)', () => {
-    const unknown = resolveChatEmptyCopy({ kind: 'session-empty', engineOk: null });
-    const ready = resolveChatEmptyCopy({ kind: 'session-empty', engineOk: true });
+    const unknown = resolveChatEmptyCopy({
+      kind: 'session-empty',
+      engineOk: null,
+    });
+    const ready = resolveChatEmptyCopy({
+      kind: 'session-empty',
+      engineOk: true,
+    });
     expect(unknown.showQuickPrompts).toBe(true);
     expect(ready.showQuickPrompts).toBe(true);
     expect(unknown.sub).not.toMatch(/引擎未就绪/);
@@ -437,10 +444,18 @@ describe('resolveChatEmptyCopy', () => {
   });
 
   it('only no-session / filter-empty expose actionLabel; session-empty never does', () => {
-    expect(resolveChatEmptyCopy({ kind: 'no-session' }).actionLabel).toBeTruthy();
-    expect(resolveChatEmptyCopy({ kind: 'filter-empty' }).actionLabel).toBeTruthy();
-    expect(resolveChatEmptyCopy({ kind: 'session-empty' }).actionLabel).toBeUndefined();
-    expect(resolveChatEmptyCopy({ kind: 'session-empty' }).primaryAction).toBeNull();
+    expect(
+      resolveChatEmptyCopy({ kind: 'no-session' }).actionLabel
+    ).toBeTruthy();
+    expect(
+      resolveChatEmptyCopy({ kind: 'filter-empty' }).actionLabel
+    ).toBeTruthy();
+    expect(
+      resolveChatEmptyCopy({ kind: 'session-empty' }).actionLabel
+    ).toBeUndefined();
+    expect(
+      resolveChatEmptyCopy({ kind: 'session-empty' }).primaryAction
+    ).toBeNull();
   });
 
   it('copy.primaryAction always agrees with resolveChatEmptyPrimaryAction', () => {
@@ -454,9 +469,11 @@ describe('resolveChatEmptyCopy', () => {
     for (const c of cases) {
       const copy = resolveChatEmptyCopy(c);
       expect(copy.primaryAction).toBe(
-        resolveChatEmptyPrimaryAction(c.kind, { firstRunOpen: c.firstRunOpen }),
+        resolveChatEmptyPrimaryAction(c.kind, { firstRunOpen: c.firstRunOpen })
       );
-      expect(copy.actionLabel).toBe(resolveChatEmptyActionLabel(copy.primaryAction));
+      expect(copy.actionLabel).toBe(
+        resolveChatEmptyActionLabel(copy.primaryAction)
+      );
     }
   });
 
@@ -467,7 +484,10 @@ describe('resolveChatEmptyCopy', () => {
       expect(c.title.length).toBeLessThan(12);
     }
     // 离线副文案仍可扫视
-    const offline = resolveChatEmptyCopy({ kind: 'session-empty', engineOk: false });
+    const offline = resolveChatEmptyCopy({
+      kind: 'session-empty',
+      engineOk: false,
+    });
     expect(offline.sub.length).toBeLessThan(28);
   });
 });
@@ -479,7 +499,7 @@ describe('soft-hint coordination with empty', () => {
         needsKeySetup: true,
         firstRunOpen: true,
         engineOk: true,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -489,7 +509,7 @@ describe('soft-hint coordination with empty', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -499,7 +519,7 @@ describe('soft-hint coordination with empty', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: true,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -509,7 +529,7 @@ describe('soft-hint coordination with empty', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: null,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -518,8 +538,10 @@ describe('soft-hint coordination with empty', () => {
     const compact = resolveNeedsKeySoftHintText({ onEmptySurface: true });
     expect(compact.length).toBeLessThan(full.length);
     expect(compact).toMatch(/密钥/);
-    expect(resolveNeedsModelSoftHintText({ onEmptySurface: true }).length).toBeLessThan(
-      resolveNeedsModelSoftHintText({ onEmptySurface: false }).length,
+    expect(
+      resolveNeedsModelSoftHintText({ onEmptySurface: true }).length
+    ).toBeLessThan(
+      resolveNeedsModelSoftHintText({ onEmptySurface: false }).length
     );
   });
 
@@ -530,14 +552,14 @@ describe('soft-hint coordination with empty', () => {
         needsKeySetup: false,
         firstRunOpen: false,
         engineOk: true,
-      }),
+      })
     ).toBe(true);
     expect(
       shouldShowNeedsModelSoftHint({
         needsModelSetup: true,
         firstRunOpen: true,
         engineOk: true,
-      }),
+      })
     ).toBe(false);
   });
 });
@@ -566,13 +588,16 @@ describe('shouldShowEmptyQuickPrompts', () => {
 
   it('hides on first-run, loading, and daemon offline', () => {
     expect(
-      shouldShowEmptyQuickPrompts({ kind: 'session-empty', firstRunOpen: true }),
+      shouldShowEmptyQuickPrompts({ kind: 'session-empty', firstRunOpen: true })
     ).toBe(false);
     expect(
-      shouldShowEmptyQuickPrompts({ kind: 'session-empty', messagesLoading: true }),
+      shouldShowEmptyQuickPrompts({
+        kind: 'session-empty',
+        messagesLoading: true,
+      })
     ).toBe(false);
     expect(
-      shouldShowEmptyQuickPrompts({ kind: 'session-empty', engineOk: false }),
+      shouldShowEmptyQuickPrompts({ kind: 'session-empty', engineOk: false })
     ).toBe(false);
   });
 
@@ -589,51 +614,9 @@ describe('shouldShowEmptyQuickPrompts', () => {
     ];
     for (const m of matrix) {
       const copy = resolveChatEmptyCopy({ kind: 'session-empty', ...m });
-      expect(
-        shouldShowEmptyQuickPrompts({ kind: 'session-empty', ...m }),
-      ).toBe(copy.showQuickPrompts);
-    }
-  });
-});
-
-describe('resolveEmptyShellReuseCue (prune/reuse Chinese labels)', () => {
-  it('returns null when no shell lifecycle signal', () => {
-    expect(resolveEmptyShellReuseCue({})).toBeNull();
-    expect(resolveEmptyShellReuseCue({ willReuse: false, didPrunePeers: false })).toBeNull();
-  });
-
-  it('willReuse wins over prune and active shell', () => {
-    const cue = resolveEmptyShellReuseCue({
-      willReuse: true,
-      didPrunePeers: true,
-      activeIsEmptyShell: true,
-    });
-    expect(cue).toEqual({
-      code: 'willReuse',
-      label: EMPTY_SHELL_CUE_LABELS.willReuse,
-    });
-    expect(cue?.label).toMatch(/复用|空白/);
-  });
-
-  it('prunedPeers then activeShell', () => {
-    expect(
-      resolveEmptyShellReuseCue({ didPrunePeers: true, activeIsEmptyShell: true }),
-    ).toEqual({
-      code: 'prunedPeers',
-      label: EMPTY_SHELL_CUE_LABELS.prunedPeers,
-    });
-    expect(resolveEmptyShellReuseCue({ activeIsEmptyShell: true })).toEqual({
-      code: 'activeShell',
-      label: EMPTY_SHELL_CUE_LABELS.activeShell,
-    });
-  });
-
-  it('labels are short Chinese and pairwise distinct', () => {
-    const labels = Object.values(EMPTY_SHELL_CUE_LABELS);
-    expect(new Set(labels).size).toBe(labels.length);
-    for (const l of labels) {
-      expect(l.length).toBeLessThan(16);
-      expect(l).toMatch(/会话|空白/);
+      expect(shouldShowEmptyQuickPrompts({ kind: 'session-empty', ...m })).toBe(
+        copy.showQuickPrompts
+      );
     }
   });
 });
@@ -707,7 +690,9 @@ describe('three-state exclusive matrix', () => {
     ];
     for (const row of table) {
       expect(resolveChatEmptyKind(row.input), row.name).toBe(row.want);
-      expect(shouldShowChatEmptyShell(row.input), row.name).toBe(row.want != null);
+      expect(shouldShowChatEmptyShell(row.input), row.name).toBe(
+        row.want != null
+      );
     }
   });
 });

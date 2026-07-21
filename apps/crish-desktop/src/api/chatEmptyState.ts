@@ -10,7 +10,7 @@
  * - soft-hint / FirstRun 独占「配密钥」；engine-down 独占引擎引导
  * - 空态只做对话面（选项目 / 清除过滤 / 新建会话），不重复密钥/引擎引导
  * - 水合 loading 中不闪欢迎空壳（避免幽灵「开始对话」）
- * - 空会话：清晰 CTA；不渲染远程幽灵壳（由 prune/reuse + loading 抑制配合）
+ * - 空会话：清晰 CTA；不渲染远程幽灵壳（由 prune + loading 抑制配合）
  */
 
 export type ChatEmptyKind = 'no-session' | 'filter-empty' | 'session-empty';
@@ -47,21 +47,6 @@ export const CHAT_EMPTY_ARIA_LABELS: Readonly<Record<ChatEmptyKind, string>> = {
   'session-empty': '会话为空，可以开始对话',
 };
 
-/**
- * 空壳 prune / reuse 旁注（中文短标签）。
- * 真正的剪枝/复用在 sessionTitle；此处只给 UI 线索，禁止长段说明。
- */
-export const EMPTY_SHELL_CUE_LABELS = {
-  /** createSession 将复用当前/同 folder 空白 */
-  willReuse: '将复用空白会话',
-  /** 已剪掉非保留幽灵壳 */
-  prunedPeers: '已清理多余空白会话',
-  /** 当前活动即为默认可复用空壳 */
-  activeShell: '当前为空白会话',
-} as const;
-
-export type EmptyShellCueCode = keyof typeof EMPTY_SHELL_CUE_LABELS;
-
 /** 运行时守卫：外部字符串 / data 属性回读 */
 export function isChatEmptyKind(value: unknown): value is ChatEmptyKind {
   return (
@@ -74,7 +59,7 @@ export function isChatEmptyKind(value: unknown): value is ChatEmptyKind {
 /** kind → 主行动（不依赖 copy 分支，避免 UI 漏接） */
 export function resolveChatEmptyPrimaryAction(
   kind: ChatEmptyKind,
-  opts?: { firstRunOpen?: boolean },
+  opts?: { firstRunOpen?: boolean }
 ): ChatEmptyPrimaryAction {
   if (kind === 'no-session') {
     // FirstRun 盖层打开时隐藏「新建对话」，避免与向导抢 CTA
@@ -86,7 +71,7 @@ export function resolveChatEmptyPrimaryAction(
 
 /** 主行动 → 中文按钮文案；null 行动无标签 */
 export function resolveChatEmptyActionLabel(
-  action: ChatEmptyPrimaryAction,
+  action: ChatEmptyPrimaryAction
 ): string | undefined {
   if (!action) return undefined;
   return CHAT_EMPTY_ACTION_LABELS[action];
@@ -126,7 +111,7 @@ export type ChatEmptyResolveInput = {
  * - 无会话时 loading 不掩盖 no-session（仍需「新建对话」CTA）
  */
 export function resolveChatEmptyKind(
-  input: ChatEmptyResolveInput,
+  input: ChatEmptyResolveInput
 ): ChatEmptyKind | null {
   if (input.mainSurface === 'scheduled') return null;
   if (!input.hasActiveSession) return 'no-session';
@@ -151,7 +136,7 @@ export function resolveChatEmptyKind(
  * 与 resolveChatEmptyKind 同契约；显式命名便于调用方扫读。
  */
 export function shouldShowChatEmptyShell(
-  input: ChatEmptyResolveInput,
+  input: ChatEmptyResolveInput
 ): boolean {
   return resolveChatEmptyKind(input) != null;
 }
@@ -222,7 +207,9 @@ export function resolveChatEmptyCopy(input: ChatEmptyCopyInput): ChatEmptyCopy {
 
   switch (kind) {
     case 'no-session': {
-      const primaryAction = resolveChatEmptyPrimaryAction(kind, { firstRunOpen });
+      const primaryAction = resolveChatEmptyPrimaryAction(kind, {
+        firstRunOpen,
+      });
       return {
         kind,
         title: CHAT_EMPTY_TITLES['no-session'],
@@ -305,31 +292,6 @@ export function resolveChatEmptyCopy(input: ChatEmptyCopyInput): ChatEmptyCopy {
       return _exhaustive;
     }
   }
-}
-
-/**
- * 空壳复用/剪枝旁注文案。
- * 优先级：willReuse > prunedPeers > activeShell；均无则 null（不叠欢迎面）。
- * 调用方在 createSession / setActive 路径决定布尔，本函数只出中文短标签。
- */
-export function resolveEmptyShellReuseCue(opts: {
-  /** 即将新建时会复用已有空壳 */
-  willReuse?: boolean;
-  /** 刚剪掉非保留幽灵壳 */
-  didPrunePeers?: boolean;
-  /** 当前活动会话本身是默认可复用空壳 */
-  activeIsEmptyShell?: boolean;
-}): { code: EmptyShellCueCode; label: string } | null {
-  if (opts.willReuse) {
-    return { code: 'willReuse', label: EMPTY_SHELL_CUE_LABELS.willReuse };
-  }
-  if (opts.didPrunePeers) {
-    return { code: 'prunedPeers', label: EMPTY_SHELL_CUE_LABELS.prunedPeers };
-  }
-  if (opts.activeIsEmptyShell) {
-    return { code: 'activeShell', label: EMPTY_SHELL_CUE_LABELS.activeShell };
-  }
-  return null;
 }
 
 /**

@@ -42,7 +42,6 @@ export {
   partitionSidebarSessions,
   groupUnpinnedByProject,
   isPlaceholderEmptySession,
-  findReusableEmptySession,
   isSessionEmpty,
   sessionShellEqual,
   sidebarSessionsEqual,
@@ -140,3 +139,10 @@ export type {
 } from './types';
 
 export type { LayoutStore } from './layoutStore';
+
+export { useRustCoreStore } from './rustCoreStore';
+export type {
+  RustCoreStore,
+  RustCoreSlice,
+  RustCoreActions,
+} from './rustCoreStore';

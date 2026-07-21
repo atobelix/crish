@@ -445,7 +445,8 @@ describe('sessionActions create/prune paths', () => {
     expect(st.sessionsById['active-content']).toBeDefined();
   });
 
-  it('enterDraftMode sets sentinel without growing sessions', () => {
+  // ── Phase 2 draft 契约（enter → 连点 → commit → setActive）────────────
+  it('enterDraftMode: sessions length unchanged; active is pending sentinel', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
         [
@@ -458,29 +459,48 @@ describe('sessionActions create/prune paths', () => {
         'hist'
       )
     );
+    const beforeLen = h.getState().sessions.length;
     h.actions.enterDraftMode('proj-a');
     const st = h.getState();
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(st.activeSessionId).toBe('__pending_draft__');
     expect(isPendingDraft(st.activeSessionId)).toBe(true);
     expect(st.draftFolder).toBe('proj-a');
+    expect(st.sessions).toHaveLength(beforeLen);
     expect(st.sessions).toHaveLength(1);
     expect(st.sessionsById.hist).toBeDefined();
+    expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
     expect(st.activeAgentId).toBeNull();
     expect(st.panelAgentId).toBeNull();
   });
 
-  it('setDraftFolder / clearDraft manage draft binding', () => {
-    const h = makeHarnessFromState(makeStateFromSessions([], ''));
-    h.actions.enterDraftMode('folder-1');
-    h.actions.setDraftFolder('folder-2');
-    expect(h.getState().draftFolder).toBe('folder-2');
-    h.actions.clearDraft();
+  it('enterDraftMode x3: sessions still unchanged (no mint on multi-click)', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'hist',
+            title: '历史',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'hist'
+      )
+    );
+    const beforeIds = h.getState().sessions.map((s) => s.id);
+    h.actions.enterDraftMode('f-a');
+    h.actions.enterDraftMode('f-b');
+    h.actions.enterDraftMode('f-c');
     const st = h.getState();
-    expect(st.draftFolder).toBe('');
-    expect(st.activeSessionId).toBe('');
+    expect(st.sessions).toHaveLength(beforeIds.length);
+    expect(st.sessions.map((s) => s.id)).toEqual(beforeIds);
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    // 最后一次 enter 的 folder 生效
+    expect(st.draftFolder).toBe('f-c');
+    expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
   });
 
-  it('commitDraftIfNeeded mints from draft; no-op when real active', () => {
+  it('commitDraftIfNeeded: sessions+1; active real id; draftFolder cleared', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
         [
@@ -493,34 +513,93 @@ describe('sessionActions create/prune paths', () => {
         'real'
       )
     );
-    // 非草稿：返回当前真实 active
+    // 非草稿：返回当前真实 active，sessions 不变
     expect(h.actions.commitDraftIfNeeded()).toBe('real');
     expect(h.getState().sessions).toHaveLength(1);
 
     h.actions.enterDraftMode('proj-commit');
-    expect(h.getState().sessions).toHaveLength(1); // 仍不增
+    expect(h.getState().sessions).toHaveLength(1);
+    expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+
     const id = h.actions.commitDraftIfNeeded({ title: '首条标题' });
     expect(id).toBeTruthy();
     expect(isPendingDraft(id)).toBe(false);
+    expect(id).not.toBe(PENDING_DRAFT_SESSION_ID);
     const st = h.getState();
     expect(st.activeSessionId).toBe(id);
+    expect(isPendingDraft(st.activeSessionId)).toBe(false);
     expect(st.draftFolder).toBe('');
-    expect(st.sessionsById[id]?.folder).toBe('常规会话'); // demo 模式
     expect(st.sessionsById[id]?.title).toBe('首条标题');
     // 历史 + 新 mint
+    expect(st.sessions).toHaveLength(2);
     expect(st.sessions.map((s) => s.id).sort()).toEqual(['real', id].sort());
   });
 
-  it('setActiveSessionId allows pending draft and clears draftFolder on real switch', () => {
+  it('commitDraftIfNeeded uses draftFolder as sess.folder', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'hist',
+            title: '历史',
+            folder: 'other-folder',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'hist'
+      )
+    );
+    const enterFolder = 'proj-from-enter';
+    h.actions.enterDraftMode(enterFolder);
+    expect(h.getState().draftFolder).toBe(enterFolder);
+
+    const id = h.actions.commitDraftIfNeeded({ title: '绑定 folder' });
+    const sess = h.getState().sessionsById[id];
+    expect(sess).toBeDefined();
+    // 契约：folder 取 enter 时的 draftFolder，非活动历史会话 folder
+    expect(sess.folder).toBe(enterFolder);
+    expect(sess.folder).not.toBe('other-folder');
+    expect(h.getState().draftFolder).toBe('');
+  });
+
+  it('setActive to real session clears draftFolder', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions([emptyShell({ id: 'a' })], 'a')
     );
     h.actions.enterDraftMode('f1');
     expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(h.getState().draftFolder).toBe('f1');
+
     h.actions.setActiveSessionId('a');
     const st = h.getState();
     expect(st.activeSessionId).toBe('a');
     expect(st.draftFolder).toBe('');
+  });
+
+  it('setActiveSessionId(pending) is allowed even when not in sessions list', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 'a' })], 'a', 'pre-existing')
+    );
+    // 直接 setActive 到哨兵：不得因「不在 sessions 列表」而拒绝
+    h.actions.setActiveSessionId(PENDING_DRAFT_SESSION_ID);
+    const st = h.getState();
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(isPendingDraft(st.activeSessionId)).toBe(true);
+    // 仍在草稿态时不强制清 draftFolder（仅切到真实/空才清）
+    expect(st.draftFolder).toBe('pre-existing');
+    expect(st.sessions).toHaveLength(1);
+    expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
+  });
+
+  it('setDraftFolder / clearDraft manage draft binding', () => {
+    const h = makeHarnessFromState(makeStateFromSessions([], ''));
+    h.actions.enterDraftMode('folder-1');
+    h.actions.setDraftFolder('folder-2');
+    expect(h.getState().draftFolder).toBe('folder-2');
+    h.actions.clearDraft();
+    const st = h.getState();
+    expect(st.draftFolder).toBe('');
+    expect(st.activeSessionId).toBe('');
   });
 
   it('setActiveSessionId switches terminal view without dropping peer shells', () => {

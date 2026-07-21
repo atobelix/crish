@@ -70,7 +70,6 @@ import {
 import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
 import { extractCommandForMatch } from '../api/commandPermissions';
 import { messageMatchesSearch } from '../api/sessionSearch';
-import { isEmptyShellSession } from '../api/sessionTitle';
 import { isPendingDraft } from '../store/draftSession';
 import { isFirstRunOverlayOpen } from './FirstRunWizard';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
@@ -784,13 +783,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
     const messagesLoading = messagesLoadingCandidate && !hydrateTimedOut;
 
-    /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」）；草稿哨兵不算 */
-    const shellActiveIsEmpty = useSessionField((s) => {
-      if (isPendingDraft(s.activeSessionId)) return false;
-      const active = s.sessionsById[s.activeSessionId];
-      return active ? isEmptyShellSession(active) : false;
-    });
-
     const emptyKind = resolveChatEmptyKind({
       hasActiveSession:
         Boolean(activeSessionId) && !isPendingDraft(activeSessionId),
@@ -984,7 +976,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               firstRunOpen={firstRunOpen}
               engineOk={engineOk}
               messagesLoading={messagesLoading}
-              shellActiveIsEmpty={shellActiveIsEmpty}
               showProjectPicker={showProjectPicker}
               onShowProjectPicker={setShowProjectPicker}
               onProjectChanged={() => setProjectTick((n) => n + 1)}

@@ -3,7 +3,6 @@ import {
   isDefaultSessionTitle,
   isEmptyShellSession,
   isScheduledSessionTitle,
-  findReusableEmptyShell,
 } from './sessionTitle';
 import {
   DEFAULT_DAILY_TIME,
@@ -39,9 +38,11 @@ import {
 describe('scheduledSessionTitle', () => {
   it('prefixes workflow name with system marker', () => {
     expect(scheduledSessionTitle('每日 PR 总结')).toBe('定时 · 每日 PR 总结');
-    expect(scheduledSessionTitle('每日 PR 总结').startsWith(SCHEDULED_SESSION_TITLE_PREFIX)).toBe(
-      true,
-    );
+    expect(
+      scheduledSessionTitle('每日 PR 总结').startsWith(
+        SCHEDULED_SESSION_TITLE_PREFIX
+      )
+    ).toBe(true);
   });
 
   it('falls back when name empty', () => {
@@ -65,34 +66,26 @@ describe('scheduledSessionTitle', () => {
     expect(title.startsWith('定时 ·')).toBe(true);
   });
 
-  it('is not a default title — will not pollute empty-shell reuse / 新建', () => {
+  it('is not a default title — will not be treated as empty shell / 新建 placeholder', () => {
     const title = scheduledSessionTitle('代码体检');
     expect(isScheduledSessionTitle(title)).toBe(true);
     expect(isDefaultSessionTitle(title)).toBe(false);
+    // 定时占位：非默认标题 → 不是 isEmptyShellSession，剪枝不会当幽灵壳清掉
     expect(
       isEmptyShellSession({
         title,
         messages: [],
         isPinned: false,
-      }),
+      })
     ).toBe(false);
-    // 「新建」只会复用默认标题空壳，不会吃掉定时占位
+    // 对比：默认「新会话」空壳仍会被识别
     expect(
-      findReusableEmptyShell(
-        [
-          { id: 'sched', title, folder: 'p1', messages: [] },
-          { id: 'shell', title: '新会话', folder: 'p1', messages: [] },
-        ],
-        'p1',
-      ),
-    ).toBe('shell');
-    // 仅有定时占位时，找不到可复用空壳 → 新建会真开新 id，不污染定时标题
-    expect(
-      findReusableEmptyShell(
-        [{ id: 'sched', title, folder: 'p1', messages: [] }],
-        'p1',
-      ),
-    ).toBeNull();
+      isEmptyShellSession({
+        title: '新会话',
+        messages: [],
+        isPinned: false,
+      })
+    ).toBe(true);
   });
 });
 
@@ -126,14 +119,24 @@ describe('workflowTriggerOkMessage', () => {
 describe('workflowActionErrorMessage', () => {
   it('maps not_connected via network callback', () => {
     expect(
-      workflowActionErrorMessage('not_connected', '触发失败', () => '请先连接引擎'),
+      workflowActionErrorMessage(
+        'not_connected',
+        '触发失败',
+        () => '请先连接引擎'
+      )
     ).toBe('请先连接引擎');
   });
 
   it('prefers explicit error then fallback', () => {
-    expect(workflowActionErrorMessage('boom', '触发失败', () => 'net')).toBe('boom');
-    expect(workflowActionErrorMessage('', '触发失败', () => 'net')).toBe('触发失败');
-    expect(workflowActionErrorMessage(undefined, '创建失败', () => 'net')).toBe('创建失败');
+    expect(workflowActionErrorMessage('boom', '触发失败', () => 'net')).toBe(
+      'boom'
+    );
+    expect(workflowActionErrorMessage('', '触发失败', () => 'net')).toBe(
+      '触发失败'
+    );
+    expect(workflowActionErrorMessage(undefined, '创建失败', () => 'net')).toBe(
+      '创建失败'
+    );
   });
 });
 
@@ -199,7 +202,7 @@ describe('parseIntervalMinutes', () => {
     expect(parseIntervalMinutes(30)).toBe(30);
     expect(parseIntervalMinutes('15')).toBe(15);
     expect(parseIntervalMinutes(String(WORKFLOW_INTERVAL_MINUTES_MAX))).toBe(
-      WORKFLOW_INTERVAL_MINUTES_MAX,
+      WORKFLOW_INTERVAL_MINUTES_MAX
     );
   });
 
@@ -276,7 +279,7 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
       });
     }
     expect(
-      validateWorkflowSchedule({ type: 'intervalMinutes', intervalMinutes: 15 }),
+      validateWorkflowSchedule({ type: 'intervalMinutes', intervalMinutes: 15 })
     ).toEqual({
       ok: true,
       schedule: { type: 'intervalMinutes', intervalMinutes: 15 },
@@ -284,13 +287,15 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
   });
 
   it('guards bad daily / interval / timezone', () => {
-    expect(validateWorkflowSchedule({ type: 'daily', time: '25:99' }).ok).toBe(false);
+    expect(validateWorkflowSchedule({ type: 'daily', time: '25:99' }).ok).toBe(
+      false
+    );
     expect(
       validateWorkflowSchedule({
         type: 'daily',
         time: '09:00',
         timezone: 'Not/AZone',
-      }).ok,
+      }).ok
     ).toBe(false);
     const zero = validateWorkflowSchedule({
       type: 'intervalMinutes',
@@ -299,7 +304,10 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
     expect(zero.ok).toBe(false);
     if (zero.ok === false) expect(zero.error).toMatch(/间隔分钟/);
     expect(
-      validateWorkflowSchedule({ type: 'intervalMinutes', intervalMinutes: 'x' }).ok,
+      validateWorkflowSchedule({
+        type: 'intervalMinutes',
+        intervalMinutes: 'x',
+      }).ok
     ).toBe(false);
     expect(validateWorkflowSchedule('nope').ok).toBe(false);
   });
@@ -324,13 +332,26 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
   });
 
   it('normalize falls back to manual on bad input', () => {
-    expect(normalizeWorkflowSchedule({ type: 'cron', expression: '0 * * * *' })).toEqual({
+    expect(
+      normalizeWorkflowSchedule({ type: 'cron', expression: '0 * * * *' })
+    ).toEqual({
       type: 'manual',
     });
-    expect(normalizeWorkflowSchedule({ type: 'intervalMinutes', intervalMinutes: -1 })).toEqual({
+    expect(
+      normalizeWorkflowSchedule({
+        type: 'intervalMinutes',
+        intervalMinutes: -1,
+      })
+    ).toEqual({
       type: 'manual',
     });
-    expect(normalizeWorkflowSchedule({ type: 'daily', time: '10:00', timezone: 'UTC' })).toEqual({
+    expect(
+      normalizeWorkflowSchedule({
+        type: 'daily',
+        time: '10:00',
+        timezone: 'UTC',
+      })
+    ).toEqual({
       type: 'daily',
       time: '10:00',
       timezone: 'UTC',
@@ -344,7 +365,9 @@ describe('validateWorkflowDraft', () => {
     expect(validateWorkflowDraft(base)).toBe('请填写名称与提示词');
     expect(validateWorkflowDraft({ ...base, name: 'n' })).toBe('请填写提示词');
     expect(validateWorkflowDraft({ ...base, prompt: 'p' })).toBe('请填写名称');
-    expect(validateWorkflowDraft({ ...base, name: 'n', prompt: 'p' })).toBeNull();
+    expect(
+      validateWorkflowDraft({ ...base, name: 'n', prompt: 'p' })
+    ).toBeNull();
     expect(validateWorkflowDraft(null)).toBe('请填写名称与提示词');
   });
 
@@ -357,7 +380,7 @@ describe('validateWorkflowDraft', () => {
         prompt: 'p',
         scheduleType: 'daily',
         dailyTime: '25:00',
-      }),
+      })
     ).toMatch(/HH:mm/);
     expect(
       validateWorkflowDraft({
@@ -366,7 +389,7 @@ describe('validateWorkflowDraft', () => {
         prompt: 'p',
         scheduleType: 'daily',
         dailyTime: '09:00',
-      }),
+      })
     ).toBeNull();
     expect(
       validateWorkflowDraft({
@@ -375,7 +398,7 @@ describe('validateWorkflowDraft', () => {
         prompt: 'p',
         scheduleType: 'intervalMinutes',
         intervalMinutes: '',
-      }),
+      })
     ).toMatch(/间隔/);
     expect(
       validateWorkflowDraft({
@@ -384,7 +407,7 @@ describe('validateWorkflowDraft', () => {
         prompt: 'p',
         scheduleType: 'intervalMinutes',
         intervalMinutes: '0',
-      }),
+      })
     ).toMatch(/间隔/);
     expect(
       validateWorkflowDraft({
@@ -393,7 +416,7 @@ describe('validateWorkflowDraft', () => {
         prompt: 'p',
         scheduleType: 'intervalMinutes',
         intervalMinutes: '45',
-      }),
+      })
     ).toBeNull();
   });
 });
@@ -410,44 +433,62 @@ describe('empty jobs Chinese labels', () => {
   });
 
   it('resolveWorkflowJobsEmptyCopy covers loading / empty / filter / surfaces', () => {
-    expect(resolveWorkflowJobsEmptyCopy({ loading: true, totalCount: 0 })).toEqual({
+    expect(
+      resolveWorkflowJobsEmptyCopy({ loading: true, totalCount: 0 })
+    ).toEqual({
       title: '加载中…',
     });
-    expect(resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'list' })).toEqual({
+    expect(
+      resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'list' })
+    ).toEqual({
       title: '暂无任务',
       hint: '用上方模板创建',
     });
-    expect(resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'settings' })).toEqual({
+    expect(
+      resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'settings' })
+    ).toEqual({
       title: '暂无计划任务',
     });
-    expect(resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'runtime' })?.title).toMatch(
-      /引擎 workflow/,
-    );
     expect(
-      resolveWorkflowJobsEmptyCopy({ totalCount: 3, filteredCount: 0, surface: 'settings' }),
+      resolveWorkflowJobsEmptyCopy({ totalCount: 0, surface: 'runtime' })?.title
+    ).toMatch(/引擎 workflow/);
+    expect(
+      resolveWorkflowJobsEmptyCopy({
+        totalCount: 3,
+        filteredCount: 0,
+        surface: 'settings',
+      })
     ).toEqual({ title: '没有符合筛选的任务' });
-    expect(resolveWorkflowJobsEmptyCopy({ totalCount: 2, filteredCount: 2 })).toBeNull();
+    expect(
+      resolveWorkflowJobsEmptyCopy({ totalCount: 2, filteredCount: 2 })
+    ).toBeNull();
   });
 });
 
 describe('scheduleLabel / buildScheduleFromDraft', () => {
   it('labels known schedule types', () => {
     expect(scheduleLabel({ type: 'manual' })).toBe('手动');
-    expect(scheduleLabel({ type: 'daily', time: '09:00', timezone: 'Asia/Shanghai' })).toBe(
-      '每天 09:00 (Asia/Shanghai)',
-    );
-    expect(scheduleLabel({ type: 'intervalMinutes', intervalMinutes: 30 })).toBe('每 30 分钟');
+    expect(
+      scheduleLabel({ type: 'daily', time: '09:00', timezone: 'Asia/Shanghai' })
+    ).toBe('每天 09:00 (Asia/Shanghai)');
+    expect(
+      scheduleLabel({ type: 'intervalMinutes', intervalMinutes: 30 })
+    ).toBe('每 30 分钟');
     expect(scheduleLabel(undefined)).toBe('手动');
   });
 
   it('guards bad schedule fields in labels', () => {
     expect(scheduleLabel({ type: 'daily', time: '99:99' })).toBe('每天 —');
-    expect(scheduleLabel({ type: 'intervalMinutes', intervalMinutes: 0 })).toBe('间隔');
-    expect(scheduleLabel({ type: 'intervalMinutes' })).toBe('间隔');
-    expect(scheduleLabel({ type: 'cron', cronExpression: '*/15 * * * *' })).toMatch(
-      /cron · 每 15 分钟/,
+    expect(scheduleLabel({ type: 'intervalMinutes', intervalMinutes: 0 })).toBe(
+      '间隔'
     );
-    expect(scheduleLabel({ type: 'cron', expression: 'bad' })).toBe('高级 · cron（无效）');
+    expect(scheduleLabel({ type: 'intervalMinutes' })).toBe('间隔');
+    expect(
+      scheduleLabel({ type: 'cron', cronExpression: '*/15 * * * *' })
+    ).toMatch(/cron · 每 15 分钟/);
+    expect(scheduleLabel({ type: 'cron', expression: 'bad' })).toBe(
+      '高级 · cron（无效）'
+    );
     expect(scheduleLabel({ type: 'fileWatch' })).toBe('高级 · fileWatch');
   });
 
@@ -455,9 +496,11 @@ describe('scheduleLabel / buildScheduleFromDraft', () => {
     const base = emptyWorkflowDraft();
     expect(base.dailyTime).toBe(DEFAULT_DAILY_TIME);
     expect(base.intervalMinutes).toBe(String(DEFAULT_INTERVAL_MINUTES));
-    expect(buildScheduleFromDraft({ ...base, scheduleType: 'manual' })).toEqual({
-      type: 'manual',
-    });
+    expect(buildScheduleFromDraft({ ...base, scheduleType: 'manual' })).toEqual(
+      {
+        type: 'manual',
+      }
+    );
     const daily = buildScheduleFromDraft({
       ...base,
       scheduleType: 'daily',
@@ -469,7 +512,7 @@ describe('scheduleLabel / buildScheduleFromDraft', () => {
         ...base,
         scheduleType: 'intervalMinutes',
         intervalMinutes: '15',
-      }),
+      })
     ).toEqual({ type: 'intervalMinutes', intervalMinutes: 15 });
     // bad interval → default 30
     expect(
@@ -477,18 +520,25 @@ describe('scheduleLabel / buildScheduleFromDraft', () => {
         ...base,
         scheduleType: 'intervalMinutes',
         intervalMinutes: 'nope',
-      }),
-    ).toEqual({ type: 'intervalMinutes', intervalMinutes: DEFAULT_INTERVAL_MINUTES });
+      })
+    ).toEqual({
+      type: 'intervalMinutes',
+      intervalMinutes: DEFAULT_INTERVAL_MINUTES,
+    });
     // H:mm → HH:mm
     expect(
       buildScheduleFromDraft({
         ...base,
         scheduleType: 'daily',
         dailyTime: '9:00',
-      }),
+      })
     ).toMatchObject({ type: 'daily', time: '09:00' });
     // nullish draft → manual
-    expect(buildScheduleFromDraft(null as unknown as ReturnType<typeof emptyWorkflowDraft>)).toEqual({
+    expect(
+      buildScheduleFromDraft(
+        null as unknown as ReturnType<typeof emptyWorkflowDraft>
+      )
+    ).toEqual({
       type: 'manual',
     });
   });

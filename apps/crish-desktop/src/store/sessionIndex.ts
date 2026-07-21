@@ -11,7 +11,6 @@
 
 import {
   EMPTY_SESSION_TITLE,
-  findReusableEmptyShell,
   isDefaultSessionTitle,
   isEmptyShellSession,
   sessionHasListableContent,
@@ -366,31 +365,6 @@ export function isPlaceholderEmptySession(
 ): boolean {
   if (s.isArchived) return false;
   return isEmptyShellSession(s);
-}
-
-export type FindReusableEmptyOpts = {
-  /** 优先匹配的 folder（项目 id / GENERAL） */
-  folder?: string;
-  /** 排除的 id */
-  excludeId?: string;
-  /** 优先复用该 id（通常为当前 active 空壳） */
-  preferId?: string;
-};
-
-/**
- * 找可复用的空「新会话」，避免连点新建刷屏。
- * 委托 sessionTitle.findReusableEmptyShell（同 folder 不跨项目；preferId / excludeId 透传）。
- */
-export function findReusableEmptySession(
-  sessions: SessionState[],
-  opts: FindReusableEmptyOpts = {}
-): SessionState | undefined {
-  const id = findReusableEmptyShell(sessions, opts.folder, {
-    excludeId: opts.excludeId,
-    preferId: opts.preferId,
-  });
-  if (!id) return undefined;
-  return sessions.find((s) => s.id === id);
 }
 
 // ── 轻量搜索 filter keys（标题 / folder / id；非消息全文）────────────

@@ -323,7 +323,10 @@ function dropTerminalForSession(
   }
 }
 
-/** 剪空壳并在引用变化时 reindex；顺带 GC 已消失会话的 terminal 缓冲 */
+/**
+ * GC 空壳（非 reuse）：剪掉 keepIds 外的幽灵空壳，引用变化时 reindex。
+ * 顺带 GC 已消失会话的 terminal 缓冲。禁止当作「复用空壳」入口。
+ */
 function pruneEmptyShellsInPlace(
   state: SessionStoreSlice,
   keepIds: Iterable<string>
@@ -473,9 +476,9 @@ export function createSessionActions<T extends SessionStoreSlice>(
 
     setSessions: (sessions) =>
       set((state) => {
-        // 与 hydrate/diskMirror 同源：fillDefault + shellPruneKeepIds(active)
-        // keep 仅 active：daemon sync / 落盘恢复后不应保留多余幽灵；定时真实标题不剪
-        // 不 invent 远程空壳：prepare 内 prune 会丢掉非 keep 的默认幽灵
+        // 与 hydrate/diskMirror 同源：fillDefault + GC 空壳（非 reuse）
+        // keep 仅真实 active；pending draft / null → 剪掉全部默认空壳
+        // 定时真实标题不剪；不 invent 远程空壳
         state.sessions = prepareSessionsForUi(
           sessions,
           state.activeSessionId || null
@@ -965,6 +968,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
             state.draftFolder = '';
           }
           applyTitleIfDefault(existing, requestedTitle);
+          // GC 其它空壳（非 reuse）；activate 时只 keep 本 id
           pruneEmptyShellsInPlace(
             state,
             shellPruneKeepIds(id, prevActive, { activating: activate })
@@ -976,9 +980,10 @@ export function createSessionActions<T extends SessionStoreSlice>(
           ? getSessionById(state, state.activeSessionId)
           : null;
         const currentFolder = activeSess?.folder;
-        // 草稿 commit 路径会传 opts.folder；否则 draftFolder → 活动 folder → 项目
+        // 草稿 commit 路径会传 opts.folder；demo 无显式 folder 时回落「常规会话」
+        // 显式 opts.folder 必须优先（commit 绑定 draftFolder 契约）
         const defaultFolder = isDemoMode()
-          ? '常规会话'
+          ? opts?.folder || '常规会话'
           : opts?.folder ||
             currentFolder ||
             state.draftFolder ||
@@ -1036,7 +1041,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
             ? state.terminalBySession[fallback] || []
             : [];
         }
-        // 删后剪其它幽灵空壳；保留新活动（及非 activating 无需旧 active）
+        // 删后 GC 其它幽灵空壳（非 reuse）；保留新活动
         pruneEmptyShellsInPlace(
           state,
           shellPruneKeepIds(state.activeSessionId || null, null, {
@@ -1085,6 +1090,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
           state.terminalLines = fallback
             ? state.terminalBySession[fallback] || []
             : [];
+          // GC 空壳（非 reuse）；keep 新活动 fallback
           pruneEmptyShellsInPlace(
             state,
             shellPruneKeepIds(fallback || null, null, { activating: true })
@@ -1138,7 +1144,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
         state.activeAgentId = null;
         state.panelAgentId = null;
         state.terminalLines = [];
-        // 与 setActive 同源：激活后剪掉其它幽灵空壳（含空父壳）
+        // 与 setActive 同源：激活后 GC 其它幽灵空壳（含空父壳；非 reuse）
         pruneEmptyShellsInPlace(
           state,
           shellPruneKeepIds(newSess.id, null, { activating: true })

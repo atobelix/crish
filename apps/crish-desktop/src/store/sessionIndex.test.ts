@@ -9,7 +9,6 @@ import {
   ensureSessionsById,
   filterSessionsBySearchKeys,
   filterSidebarSessions,
-  findReusableEmptySession,
   getSessionById,
   getSessionEmptyShellFlags,
   getSessionIndex,
@@ -304,29 +303,6 @@ describe('empty shell flags (title-consistent)', () => {
     expect(contentFlags.displayTitle).not.toBe(EMPTY_SESSION_TITLE);
     expect(contentFlags.displayTitle.toLowerCase()).toContain('parser');
   });
-
-  it('findReusableEmptySession respects folder / excludeId / preferId', () => {
-    const a = sess('a', EMPTY_SESSION_TITLE);
-    a.folder = 'general';
-    const b = sess('b', EMPTY_SESSION_TITLE);
-    b.folder = 'proj';
-    const c = sess('c', EMPTY_SESSION_TITLE);
-    c.folder = 'proj';
-
-    expect(findReusableEmptySession([a, b, c], { folder: 'proj' })?.id).toBe(
-      'b'
-    );
-    expect(
-      findReusableEmptySession([a, b, c], { folder: 'proj', preferId: 'c' })?.id
-    ).toBe('c');
-    expect(
-      findReusableEmptySession([a, b, c], { folder: 'proj', excludeId: 'b' })
-        ?.id
-    ).toBe('c');
-    expect(
-      findReusableEmptySession([a], { folder: 'missing' })
-    ).toBeUndefined();
-  });
 });
 
 describe('search filter keys', () => {
@@ -386,9 +362,6 @@ describe('sidebar empty-session helpers', () => {
     });
     // 空壳（含 active）不进侧栏；置顶 / 定时 / 有内容保留
     expect(filtered.map((s) => s.id).sort()).toEqual(['c', 'p', 'sch']);
-
-    const reuse = findReusableEmptySession([a, b], { folder: 'general' });
-    expect(reuse?.id).toBe('a');
   });
 
   it('filterSidebarSessions drops archived even when activeSessionId matches', () => {

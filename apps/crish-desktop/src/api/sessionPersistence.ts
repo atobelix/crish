@@ -895,7 +895,8 @@ export function hydrateSessionsFromDisk(): {
   // 草稿哨兵 / 非法 active → null（不 hydrate 幽灵）
   const activeRaw =
     activeLoaded && !isPendingDraft(activeLoaded) ? activeLoaded : null;
-  // 与 setSessions 对齐：先补默认标题，再按 active keep 剪空壳（定时真实标题不剪）
+  // 与 setSessions 对齐：fillDefault + GC 空壳（非 reuse）
+  // active 仅 keep 当前空壳（若有）；null/pending → 剪掉全部默认空壳；定时真实标题不剪
   const prepared = prepareSessionsForUi(sessions, activeRaw);
   const activeSessionId =
     activeRaw && prepared.some((s) => s.id === activeRaw) ? activeRaw : null;

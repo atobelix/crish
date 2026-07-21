@@ -679,6 +679,54 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(h.activeSessionId).toBe(id);
   });
 
+  it('hydrate GC non-active empty shells; null active drops all shells', () => {
+    const activeShell = `shell-active-${Date.now()}`;
+    const ghostA = `shell-ghost-a-${Date.now()}`;
+    const ghostB = `shell-ghost-b-${Date.now()}`;
+    const contentId = `content-${Date.now()}`;
+    const baseEntry = (id: string, title: string, messageCount: number) => ({
+      id,
+      title,
+      folder: DEFAULT_SESSION_FOLDER,
+      isPinned: false,
+      isArchived: false,
+      timestamp: '',
+      updatedAt: messageCount > 0 ? 10 : 1,
+      messageCount,
+    });
+    saveSessionIndex([
+      baseEntry(activeShell, EMPTY_SESSION_TITLE, 0),
+      baseEntry(ghostA, EMPTY_SESSION_TITLE, 0),
+      baseEntry(ghostB, EMPTY_SESSION_TITLE, 0),
+      baseEntry(contentId, '真实标题', 1),
+    ]);
+    saveSessionBody(contentId, [
+      baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
+    ]);
+
+    // active = 其一空壳 → 只 keep 该空壳 + 有内容（GC 其它幽灵）
+    saveActiveSessionId(activeShell);
+    const hActive = hydrateSessionsFromDisk();
+    expect(hActive.sessions.map((s) => s.id).sort()).toEqual(
+      [activeShell, contentId].sort()
+    );
+    expect(hActive.activeSessionId).toBe(activeShell);
+
+    // active = null → 无默认空壳残留
+    saveSessionIndex([
+      baseEntry(ghostA, EMPTY_SESSION_TITLE, 0),
+      baseEntry(ghostB, EMPTY_SESSION_TITLE, 0),
+      baseEntry(contentId, '真实标题', 1),
+    ]);
+    saveSessionBody(contentId, [
+      baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
+    ]);
+    saveActiveSessionId(''); // 清除 active
+    const hNull = hydrateSessionsFromDisk();
+    expect(hNull.sessions.map((s) => s.id)).toEqual([contentId]);
+    expect(hNull.activeSessionId).toBeNull();
+  });
+
   it('persistAllSessions writes index/body and purges orphan bodies', async () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'orphan',

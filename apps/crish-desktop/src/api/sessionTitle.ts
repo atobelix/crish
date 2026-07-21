@@ -204,48 +204,8 @@ export function shellPruneKeepIds(
   return ids;
 }
 
-export type FindReusableEmptyShellOpts = {
-  /** 优先复用该 id（通常为当前 active 空壳），避免切到另一个幽灵 */
-  preferId?: string | null;
-  /** 排除的 id（例如显式新建时避开） */
-  excludeId?: string | null;
-};
-
-/**
- * 查找可复用的空壳，避免连点「新建」刷出多个幽灵。
- * - 指定 folder：仅同 folder 复用（不跨项目）
- * - 未指定 folder：返回第一个未归档空壳
- * - preferId 命中且合格时优先返回
- */
-export function findReusableEmptyShell(
-  sessions: Array<ShellSessionLike & { id: string }>,
-  folder?: string | null,
-  opts?: FindReusableEmptyShellOpts
-): string | null {
-  const wantFolder = Boolean(folder);
-  const excludeId = opts?.excludeId || null;
-  const preferId = opts?.preferId || null;
-
-  const matches = (s: ShellSessionLike & { id: string }): boolean => {
-    if (excludeId && s.id === excludeId) return false;
-    if (s.isArchived) return false;
-    if (!isEmptyShellSession(s)) return false;
-    if (wantFolder && s.folder !== folder) return false;
-    return true;
-  };
-
-  if (preferId) {
-    const preferred = sessions.find((s) => s.id === preferId);
-    if (preferred && matches(preferred)) return preferred.id;
-  }
-
-  for (const s of sessions) {
-    if (matches(s)) return s.id;
-  }
-  return null;
-}
-
 // ── 标题推导：sanitize / 长度 / 碰撞 ─────────────────────────────────
+// findReusableEmptyShell 已删除（Phase2 / pending-draft ADR：禁止 reuse 空壳；prune 仅 GC）
 
 /**
  * 清洗用户输入为侧栏标题原料（不截断、不回落默认）。
@@ -443,8 +403,11 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
 
 /**
  * hydrate / setSessions / disk restore 共用：
- * 先从消息补默认标题，再按 active 剪非保留空壳。
- * 与 setSessions 策略一致：keep 仅 active（activating），定时真实标题不会被剪。
+ * 先从消息补默认标题，再按 active 剪非保留空壳（GC，非 reuse）。
+ * - keepIds：显式 opts.keepIds 优先；否则仅 keep 真实 active（activating）
+ * - active 为 pending draft 哨兵 `__pending_draft__` 或 null/空 → 不 keep 任何空壳
+ * - 非空壳 / 置顶 / 定时真实标题 本就不会被 prune
+ * 与侧栏 shouldListSessionInSidebar=false 的幽灵空壳对齐：hydrate 后尽量不残留。
  */
 export function prepareSessionsForUi<
   T extends ShellSessionLike & { id: string },
@@ -454,9 +417,14 @@ export function prepareSessionsForUi<
   opts?: { keepIds?: Iterable<string> | null }
 ): T[] {
   const filled = fillDefaultSessionTitles(sessions) as T[];
+  // pending draft 哨兵不对应 sessions[] 条目；勿当 keep id（语义收口，避免误 keep）
+  // 字符串比较避免 api/sessionTitle → store 依赖；与 draftSession.PENDING_DRAFT_SESSION_ID 对齐
+  const active =
+    activeSessionId && activeSessionId !== '__pending_draft__'
+      ? activeSessionId
+      : null;
   const keepIds =
-    opts?.keepIds ??
-    shellPruneKeepIds(activeSessionId || null, null, { activating: true });
+    opts?.keepIds ?? shellPruneKeepIds(active, null, { activating: true });
   return pruneEmptyShellSessions(filled, { keepIds });
 }
 

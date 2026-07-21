@@ -16,10 +16,15 @@ export type WorkflowSchedule =
 export const WORKFLOW_SCHEDULE_TYPES = [
   { value: 'manual' as const, label: '手动', hint: '仅手动触发，不自动运行' },
   { value: 'daily' as const, label: '每天', hint: '每日固定时刻（本机时区）' },
-  { value: 'intervalMinutes' as const, label: '间隔（分钟）', hint: '按分钟周期轮询执行' },
+  {
+    value: 'intervalMinutes' as const,
+    label: '间隔（分钟）',
+    hint: '按分钟周期轮询执行',
+  },
 ];
 
-export type WorkflowScheduleType = (typeof WORKFLOW_SCHEDULE_TYPES)[number]['value'];
+export type WorkflowScheduleType =
+  (typeof WORKFLOW_SCHEDULE_TYPES)[number]['value'];
 
 /** 新建表单草稿字段（设置页 / 主区面板共用） */
 export type WorkflowScheduleDraft = {
@@ -132,7 +137,7 @@ export type WorkflowJobsEmptyKind = keyof typeof WORKFLOW_JOBS_EMPTY_LABELS;
 
 /** 取单一空态标签 */
 export function workflowJobsEmptyLabel(
-  kind: WorkflowJobsEmptyKind = 'list',
+  kind: WorkflowJobsEmptyKind = 'list'
 ): string {
   return WORKFLOW_JOBS_EMPTY_LABELS[kind] ?? WORKFLOW_JOBS_EMPTY_LABELS.list;
 }
@@ -209,7 +214,7 @@ export function tryNormalizeDailyTime(value: unknown): string | null {
  */
 export function normalizeDailyTime(
   value: unknown,
-  fallback: string = DEFAULT_DAILY_TIME,
+  fallback: string = DEFAULT_DAILY_TIME
 ): string {
   const normalized = tryNormalizeDailyTime(value);
   if (normalized) return normalized;
@@ -237,7 +242,10 @@ export function isValidIanaTimezone(value: unknown): boolean {
 export function parseIntervalMinutes(raw: unknown): number | null {
   if (typeof raw === 'number') {
     if (!Number.isFinite(raw) || !Number.isInteger(raw)) return null;
-    if (raw < WORKFLOW_INTERVAL_MINUTES_MIN || raw > WORKFLOW_INTERVAL_MINUTES_MAX) {
+    if (
+      raw < WORKFLOW_INTERVAL_MINUTES_MIN ||
+      raw > WORKFLOW_INTERVAL_MINUTES_MAX
+    ) {
       return null;
     }
     return raw;
@@ -301,7 +309,11 @@ function isValidCronField(field: string, min: number, max: number): boolean {
       if (!/^\d{1,2}$/.test(a) || !/^\d{1,2}$/.test(b)) return false;
       const lo = Number(a);
       const hi = Number(b);
-      if (!cronPartInRange(lo, min, max) || !cronPartInRange(hi, min, max) || lo > hi) {
+      if (
+        !cronPartInRange(lo, min, max) ||
+        !cronPartInRange(hi, min, max) ||
+        lo > hi
+      ) {
         return false;
       }
     } else {
@@ -313,8 +325,7 @@ function isValidCronField(field: string, min: number, max: number): boolean {
 }
 
 export type CronValidationResult =
-  | { ok: true; expression: string }
-  | { ok: false; error: string };
+  { ok: true; expression: string } | { ok: false; error: string };
 
 /**
  * 校验标准 5 字段 cron 表达式（展示/守卫用；引擎当前不下发 cron）。
@@ -334,7 +345,10 @@ export function validateCronExpression(expr: unknown): CronValidationResult {
   }
   const fields = raw.split(' ');
   if (fields.length === 6) {
-    return { ok: false, error: '不支持 6 字段（含秒）cron，请用 5 字段：分 时 日 月 周' };
+    return {
+      ok: false,
+      error: '不支持 6 字段（含秒）cron，请用 5 字段：分 时 日 月 周',
+    };
   }
   if (fields.length !== 5) {
     return {
@@ -378,14 +392,15 @@ export function cronExpressionLabel(expr: unknown): string {
 }
 
 export type ScheduleValidationResult =
-  | { ok: true; schedule: WorkflowSchedule }
-  | { ok: false; error: string };
+  { ok: true; schedule: WorkflowSchedule } | { ok: false; error: string };
 
 /**
  * 守卫坏调度：仅放行引擎支持的 manual / daily / intervalMinutes。
  * cron 即使表达式合法也拒绝下发（引擎未支持），返回中文错误。
  */
-export function validateWorkflowSchedule(raw: unknown): ScheduleValidationResult {
+export function validateWorkflowSchedule(
+  raw: unknown
+): ScheduleValidationResult {
   if (raw == null) {
     return { ok: true, schedule: { type: 'manual' } };
   }
@@ -411,9 +426,14 @@ export function validateWorkflowSchedule(raw: unknown): ScheduleValidationResult
     }
     const tzRaw = o.timezone;
     const timezone =
-      typeof tzRaw === 'string' && tzRaw.trim() ? tzRaw.trim() : defaultTimezone();
+      typeof tzRaw === 'string' && tzRaw.trim()
+        ? tzRaw.trim()
+        : defaultTimezone();
     if (!isValidIanaTimezone(timezone)) {
-      return { ok: false, error: '时区无效，请使用 IANA 名称（如 Asia/Shanghai）' };
+      return {
+        ok: false,
+        error: '时区无效，请使用 IANA 名称（如 Asia/Shanghai）',
+      };
     }
     return { ok: true, schedule: { type: 'daily', time, timezone } };
   }
@@ -428,12 +448,14 @@ export function validateWorkflowSchedule(raw: unknown): ScheduleValidationResult
         error: `间隔分钟须为 ${WORKFLOW_INTERVAL_MINUTES_MIN}–${WORKFLOW_INTERVAL_MINUTES_MAX} 的整数`,
       };
     }
-    return { ok: true, schedule: { type: 'intervalMinutes', intervalMinutes: n } };
+    return {
+      ok: true,
+      schedule: { type: 'intervalMinutes', intervalMinutes: n },
+    };
   }
 
   if (t === 'cron') {
-    const expr =
-      o.expression ?? o.cron ?? o.cronExpression ?? o.expr ?? '';
+    const expr = o.expression ?? o.cron ?? o.cronExpression ?? o.expr ?? '';
     const cv = validateCronExpression(expr);
     if (cv.ok === false) {
       return { ok: false, error: cv.error };
@@ -470,7 +492,7 @@ export function normalizeWorkflowSchedule(raw: unknown): WorkflowSchedule {
  * 返回中文错误；通过则 null。
  */
 export function validateWorkflowDraft(
-  draft: WorkflowScheduleDraft | null | undefined,
+  draft: WorkflowScheduleDraft | null | undefined
 ): string | null {
   if (!draft || typeof draft !== 'object') {
     return '请填写名称与提示词';
@@ -515,7 +537,9 @@ export function emptyWorkflowDraft(): WorkflowScheduleDraft {
  * 草稿 → 引擎 schedule。坏字段软回落（合法默认），不抛。
  * 严格错误请先调 validateWorkflowDraft。
  */
-export function buildScheduleFromDraft(draft: WorkflowScheduleDraft): WorkflowSchedule {
+export function buildScheduleFromDraft(
+  draft: WorkflowScheduleDraft
+): WorkflowSchedule {
   if (!draft || typeof draft !== 'object') {
     return { type: 'manual' };
   }
@@ -565,14 +589,15 @@ export async function listWorkflows(): Promise<WorkflowDefinition[]> {
     const res = (await client.request(
       { type: 'list-workflows' },
       'workflows-listed',
-      10_000,
+      10_000
     )) as Record<string, unknown>;
     const list = res.workflows;
     if (!Array.isArray(list)) return [];
     return list
       .map((w) => {
         const o = w as WorkflowDefinition;
-        if (!o || typeof o !== 'object' || typeof o.id !== 'string') return null;
+        if (!o || typeof o !== 'object' || typeof o.id !== 'string')
+          return null;
         return {
           ...o,
           id: o.id,
@@ -590,7 +615,9 @@ export async function listWorkflows(): Promise<WorkflowDefinition[]> {
 /**
  * 调度中文标签。坏字段守卫：无效时刻/间隔不展示脏值；cron 走可读标签。
  */
-export function scheduleLabel(schedule?: WorkflowSchedule | Record<string, unknown>): string {
+export function scheduleLabel(
+  schedule?: WorkflowSchedule | Record<string, unknown>
+): string {
   if (!schedule || typeof schedule !== 'object') return '手动';
   const o = schedule as Record<string, unknown>;
   const t = String(o.type || 'manual');
@@ -609,7 +636,8 @@ export function scheduleLabel(schedule?: WorkflowSchedule | Record<string, unkno
   }
   if (t === 'intervalMinutes') {
     const m =
-      parseIntervalMinutes(o.intervalMinutes) ?? parseIntervalMinutes(o.minutes);
+      parseIntervalMinutes(o.intervalMinutes) ??
+      parseIntervalMinutes(o.minutes);
     return m != null ? `每 ${m} 分钟` : '间隔';
   }
   if (t === 'manual') return '手动';
@@ -649,7 +677,7 @@ export async function createWorkflow(input: {
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       },
       'workflow-created',
-      12_000,
+      12_000
     )) as Record<string, unknown>;
     return { ok: true, workflow: res.workflow as WorkflowDefinition };
   } catch (e) {
@@ -666,7 +694,7 @@ export async function updateWorkflow(
     schedule?: WorkflowSchedule;
     enabled?: boolean;
     cwd?: string;
-  },
+  }
 ): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
   const client = await ensureClient();
   if (!client) return { ok: false, error: 'not_connected' };
@@ -678,7 +706,7 @@ export async function updateWorkflow(
         ...patch,
       },
       'workflow-updated',
-      12_000,
+      12_000
     )) as Record<string, unknown>;
     return { ok: true, workflow: res.workflow as WorkflowDefinition };
   } catch (e) {
@@ -688,7 +716,7 @@ export async function updateWorkflow(
 }
 
 export async function deleteWorkflow(
-  workflowId: string,
+  workflowId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const client = await ensureClient();
   if (!client) return { ok: false, error: 'not_connected' };
@@ -696,7 +724,7 @@ export async function deleteWorkflow(
     await client.request(
       { type: 'delete-workflow', workflowId },
       'workflow-deleted',
-      10_000,
+      10_000
     );
     return { ok: true };
   } catch (e) {
@@ -706,20 +734,27 @@ export async function deleteWorkflow(
 }
 
 export async function triggerWorkflow(
-  workflowId: string,
-): Promise<{ ok: boolean; error?: string; runId?: string; sessionId?: string }> {
+  workflowId: string
+): Promise<{
+  ok: boolean;
+  error?: string;
+  runId?: string;
+  sessionId?: string;
+}> {
   const client = await ensureClient();
   if (!client) return { ok: false, error: 'not_connected' };
   try {
     const res = (await client.request(
       { type: 'trigger-workflow', workflowId },
       'workflow-triggered',
-      15_000,
+      15_000
     )) as Record<string, unknown>;
     const accepted = (res as { accepted?: Record<string, unknown> }).accepted;
     const run =
       (res as { run?: Record<string, unknown> }).run ||
-      (accepted && typeof accepted === 'object' ? (accepted as { run?: Record<string, unknown> }).run : undefined);
+      (accepted && typeof accepted === 'object'
+        ? (accepted as { run?: Record<string, unknown> }).run
+        : undefined);
     const runId =
       typeof res.runId === 'string'
         ? res.runId
@@ -753,7 +788,7 @@ export type WorkflowRunEntry = {
 };
 
 export async function listWorkflowRuns(
-  workflowId?: string,
+  workflowId?: string
 ): Promise<WorkflowRunEntry[]> {
   const client = await ensureClient();
   if (!client) return [];
@@ -764,7 +799,7 @@ export async function listWorkflowRuns(
         ...(workflowId ? { workflowId } : {}),
       },
       'workflow-runs-listed',
-      10_000,
+      10_000
     )) as Record<string, unknown>;
     const list = res.runs;
     if (!Array.isArray(list)) return [];
@@ -772,7 +807,12 @@ export async function listWorkflowRuns(
       .map((r) => {
         if (!r || typeof r !== 'object') return null;
         const o = r as Record<string, unknown>;
-        const id = typeof o.runId === 'string' ? o.runId : typeof o.id === 'string' ? o.id : '';
+        const id =
+          typeof o.runId === 'string'
+            ? o.runId
+            : typeof o.id === 'string'
+              ? o.id
+              : '';
         const wf =
           typeof o.workflowId === 'string' ? o.workflowId : workflowId || '';
         if (!id) return null;
@@ -780,7 +820,8 @@ export async function listWorkflowRuns(
           workflowId: wf,
           runId: id,
           sessionId: typeof o.sessionId === 'string' ? o.sessionId : undefined,
-          scheduledFor: typeof o.scheduledFor === 'string' ? o.scheduledFor : undefined,
+          scheduledFor:
+            typeof o.scheduledFor === 'string' ? o.scheduledFor : undefined,
           startedAt: typeof o.startedAt === 'string' ? o.startedAt : undefined,
           status: typeof o.status === 'string' ? o.status : undefined,
           error: typeof o.error === 'string' ? o.error : undefined,
@@ -795,10 +836,19 @@ export async function listWorkflowRuns(
 
 export function workflowRunStatusLabel(status?: string): string {
   const s = (status || '').toLowerCase().trim();
-  if (s === 'running' || s === 'accepted' || s === 'pending' || s === 'in_progress') {
+  if (
+    s === 'running' ||
+    s === 'accepted' ||
+    s === 'pending' ||
+    s === 'in_progress'
+  ) {
     return '运行中';
   }
-  if (s === 'awaiting-approval' || s === 'awaiting_approval' || s === 'awaitingapproval') {
+  if (
+    s === 'awaiting-approval' ||
+    s === 'awaiting_approval' ||
+    s === 'awaitingapproval'
+  ) {
     return '待审批';
   }
   if (s === 'completed' || s === 'success' || s === 'succeeded' || s === 'ok') {
@@ -811,7 +861,7 @@ export function workflowRunStatusLabel(status?: string): string {
 
 /**
  * 定时运行关联会话的侧栏标题前缀（与 sessionTitle.isScheduledSessionTitle 对齐）。
- * 必须是非默认标题，避免 findReusableEmptyShell / 剪枝把占位当成「新会话」空壳。
+ * 必须是非默认标题，避免 pruneEmptyShellSessions / isEmptyShellSession 把占位当成「新会话」空壳。
  */
 export const SCHEDULED_SESSION_TITLE_PREFIX = '定时 ·';
 
@@ -820,7 +870,7 @@ const SCHEDULED_SESSION_TITLE_MAX = 48;
 
 /**
  * 定时运行关联会话的侧栏标题。
- * 用真实标题（非「新会话」），避免被空壳复用/剪枝逻辑污染「新建对话」。
+ * 用真实标题（非「新会话」），避免被空壳剪枝逻辑污染「新建对话」。
  * - 剥离已有「定时 ·」前缀，避免叠成「定时 · 定时 · x」
  * - 空名回落「定时 · 任务」
  */
@@ -846,7 +896,7 @@ export function scheduledSessionTitle(workflowName?: string | null): string {
  * 注意：此函数不依赖 sessionTitle 模块，避免循环引用；判定规则与 isDefault/isScheduled 对齐。
  */
 export function canReplaceSessionTitleWithScheduled(
-  currentTitle?: string | null,
+  currentTitle?: string | null
 ): boolean {
   const t = String(currentTitle ?? '').trim();
   if (!t) return true;
@@ -890,7 +940,7 @@ export function workflowTriggerOkMessage(runId?: string | null): string {
 export function workflowActionErrorMessage(
   error: string | undefined,
   fallback: string,
-  networkMsg: () => string,
+  networkMsg: () => string
 ): string {
   if (error === 'not_connected') return networkMsg();
   const t = String(error || '').trim();
