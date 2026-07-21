@@ -15,6 +15,7 @@
     "packages/decision-engine"
   ],
   "scripts": {
+    "prepare": "husky",
     "dev:desktop": "npm --workspace @crish/crish-desktop run dev",
     "dev:workbench": "npm --workspace @crish/agent-workbench run tauri -- dev",
     "dev:cli": "npm --workspace @crish/agent-workbench run cli",
@@ -48,32 +49,43 @@
     "check:orchestrator": "tsc -p packages/agent-orchestrator/tsconfig.json --noEmit",
     "check:daemon": "tsc -p packages/agent-daemon/tsconfig.json --noEmit",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
+    "typecheck": "tsc --noEmit --project apps/crish-desktop/tsconfig.json",
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
     "test:desktop-helpers": "vitest run apps/crish-desktop/src/api apps/crish-desktop/src/store",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && stylelint 'apps/crish-desktop/src/**/*.css'",
     "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\"",
     "lint": "eslint .",
+    "check:all": "npm run typecheck && npm run lint:all && npm run test:coverage",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "esbuild": "^0.27.7",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.1.0",
     "prettier": "^3.5.1",
     "tsc-alias": "^1.8.16",
-    "typescript-eslint": "^8.25.0",
     "tsx": "^4.22.4",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.25.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
     "ws": "^8.21.0"
   }
 }

@@ -8,3 +8,5 @@
 export { fsyncPath, fsyncPathAsync, fsyncDirectoryPath, fsyncDirectoryPathAsync, isExpectedDirectoryFsyncFailure } from "./fsync";
 export { JsonlAppendBatcher } from "./jsonl-append-batcher";
 export type { JsonlAppendBatcherOptions } from "./jsonl-append-batcher";
+export { retryWithBackoff, calculateBackoff } from "./retry";
+export type { RetryOptions } from "./retry";

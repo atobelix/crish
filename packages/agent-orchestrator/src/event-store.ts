@@ -4,7 +4,8 @@ import { createReadStream, type ReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline";
-import { AsyncMutex, isRecord, JsonlAppendBatcher, LruMap, MAX_ORCHESTRATOR_EVENTS, MAX_ORCHESTRATOR_SESSIONS } from "@crish/shared-utils";
+import { AsyncMutex, isRecord, LruMap, MAX_ORCHESTRATOR_EVENTS, MAX_ORCHESTRATOR_SESSIONS, retryWithBackoff } from "@crish/shared-utils";
+import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 import {
   ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION,
   ORCHESTRATOR_PROTOCOL_VERSION,
@@ -341,11 +342,55 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    */
   private static readonly TAIL_BOOTSTRAP_EVENT_COUNT = 1000;
 
+  /** 已注册的信号处理器 cleanup 函数，防止重复注册 */
+  private signalCleanup: (() => void) | undefined;
+
   constructor(
     private readonly filePath: string,
     private readonly options: FileOrchestratorEventStoreOptions = {}
   ) {
     this.indexFlushIntervalMs = options.indexFlushIntervalMs ?? 5_000;
+  }
+
+  /**
+   * 注册进程信号处理器（SIGTERM / SIGINT），进程退出时异步 flush 数据。
+   * 建议在应用启动注册，避免进程被 SIGTERM/SIGINT 杀死时丢失 pending 事件。
+   * 调用 close() 或本方法返回的 cleanup 函数可解除注册。
+   *
+   * @returns cleanup 函数，调用后解除信号处理器
+   */
+  installSignalHandlers(): () => void {
+    if (this.signalCleanup) return this.signalCleanup;
+
+    const doFlush = async () => {
+      try {
+        await this.close();
+      } catch {
+        // 尽力 flush，不阻塞进程退出
+      }
+    };
+
+    const onSigTerm = () => { doFlush().finally(() => process.exit(0)); };
+    const onSigInt = () => { doFlush().finally(() => process.exit(0)); };
+    const onExit = () => {
+      // 同步兜底：exit 事件中只能做同步操作
+      if (this.appendBatcher?.pendingRecords && this.appendBatcher.pendingRecords > 0) {
+        try { this.appendBatcher.flush(); } catch { /* ignore */ }
+      }
+    };
+
+    process.on("SIGTERM", onSigTerm);
+    process.on("SIGINT", onSigInt);
+    process.on("exit", onExit);
+
+    this.signalCleanup = () => {
+      process.off("SIGTERM", onSigTerm);
+      process.off("SIGINT", onSigInt);
+      process.off("exit", onExit);
+      this.signalCleanup = undefined;
+    };
+
+    return this.signalCleanup;
   }
 
   /**
@@ -401,7 +446,10 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         // 直接取 currentFileSize，batcher.append 仅向 pending buffer 追加，不改变
         // 文件不变式（每次 append 都带 "\n"，文件始终以 "\n" 结尾）。
         const batcher = await this.ensureAppendBatcher();
-        await batcher.append(serialized);
+        await retryWithBackoff(
+          () => batcher.append(serialized),
+          { maxAttempts: 3, baseMs: 200, maxMs: 1500 }
+        );
         const byteOffset = this.currentFileSize;
         this.currentFileSize += byteLength;
 
@@ -680,10 +728,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       entries,
     };
 
-    await mkdir(dirname(indexPath), { recursive: true });
-    const tempPath = `${indexPath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tempPath, `${JSON.stringify(file)}\n`, "utf8");
-    await rename(tempPath, indexPath);
+    await retryWithBackoff(
+      async () => {
+        await mkdir(dirname(indexPath), { recursive: true });
+        const tempPath = `${indexPath}.${process.pid}.${Date.now()}.tmp`;
+        await writeFile(tempPath, `${JSON.stringify(file)}\n`, "utf8");
+        await rename(tempPath, indexPath);
+      },
+      { maxAttempts: 3, baseMs: 200, maxMs: 1500 }
+    );
   }
 
   /**
@@ -979,10 +1032,14 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   async close(): Promise<void> {
     this.acceptingAppends = false;
-    await this.flush();
+    try {
+      await this.flush();
+    } catch { /* isolate flush failure */ }
     // 关闭前确保索引已持久化
     if (this.indexDirty) {
-      await this.flushIndex();
+      try {
+        await this.flushIndex();
+      } catch { /* isolate flushIndex failure */ }
     }
     // 释放批量追加写入器
     if (this.appendBatcher) {
@@ -1355,10 +1412,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         ...(summary.lastMessagePreview !== undefined ? { lastMessagePreview: summary.lastMessagePreview } : {})
       }))
     };
-    await mkdir(dirname(filePath), { recursive: true });
-    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tempPath, `${JSON.stringify(index)}\n`, "utf8");
-    await rename(tempPath, filePath);
+    await retryWithBackoff(
+      async () => {
+        await mkdir(dirname(filePath), { recursive: true });
+        const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+        await writeFile(tempPath, `${JSON.stringify(index)}\n`, "utf8");
+        await rename(tempPath, filePath);
+      },
+      { maxAttempts: 3, baseMs: 200, maxMs: 1500 }
+    );
   }
 }
 

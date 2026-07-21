@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { isRecord, errorMessage, fsyncPathAsync, fsyncDirectoryPathAsync, isNodeError, clone, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { isRecord, errorMessage, isNodeError, clone, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { fsyncPathAsync, fsyncDirectoryPathAsync } from "@crish/shared-utils/node";
 import {
   PlanDocumentPatchError,
   PlanDocumentValidationError,

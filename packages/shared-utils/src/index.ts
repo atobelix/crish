@@ -13,6 +13,8 @@ export { BoundedMap, LruMap } from "./bounded-map";
 export { AsyncMutex, AsyncSemaphore } from "./async-mutex";
 export { deepEqual, shallowEqual } from "./deep-equal";
 export { BoundedArray } from "./bounded-array";
+export { retryWithBackoff, calculateBackoff } from "./retry";
+export type { RetryOptions } from "./retry";
 
 // ── 内存管理 ──
 export {
@@ -66,7 +68,7 @@ export type { MemoryPressureLevel, MemoryManagerOptions } from "./memory-manager
 export { ObjectPool } from "./object-pool";
 
 // ── 背压系统 ──
-export { TokenBucket, Semaphore, CircuitBreaker } from "./backpressure";
+export { TokenBucket, Semaphore, CircuitBreaker, CircuitBreakerOpenError } from "./backpressure";
 export type { CircuitState, CircuitBreakerState } from "./backpressure";
 
 // ── 平台自适应层 ──

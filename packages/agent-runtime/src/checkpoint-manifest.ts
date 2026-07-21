@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, stat as statFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
-import { AsyncMutex, isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, isNodeError } from "@crish/shared-utils";
+import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 import type { ConversationBoundaryCheckpointSource, ConversationBoundaryManifestRecord } from "./conversation-boundary-manifest";
 import type { GitCheckpoint, GitCheckpointToolCall } from "./git-versioning";
 import { nowIso } from "./session";

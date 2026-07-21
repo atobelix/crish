@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolArtifact } from "@crish/shared-types";
@@ -232,7 +231,7 @@ function isWindowsUncPath(path: string): boolean {
  * tmp 文件名含 pid + 时间戳 + UUID，避免并发碰撞；与目标同目录保证 rename 原子。
  */
 async function atomicWriteFile(targetPath: string, data: string | Buffer): Promise<void> {
-  const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
   await writeFile(tmpPath, data);
   await rename(tmpPath, targetPath);
 }

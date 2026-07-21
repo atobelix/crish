@@ -69,6 +69,7 @@ export class AsyncMutex {
         waiter: () => {
           if (signal?.aborted) {
             reject(new Error("AbortError: mutex acquire aborted while waiting"));
+            this.release();
             return;
           }
           this.locked = true;
@@ -152,6 +153,7 @@ export class AsyncSemaphore {
         waiter: () => {
           if (signal?.aborted) {
             reject(new Error("AbortError: semaphore acquire aborted while waiting"));
+            this.release();
             return;
           }
           this.active += 1;

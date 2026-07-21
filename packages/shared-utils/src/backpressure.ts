@@ -1,3 +1,10 @@
+export class CircuitBreakerOpenError extends Error {
+  constructor(name: string) {
+    super(`Circuit breaker "${name}" is open`);
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
 export class TokenBucket {
   private tokens: number;
   private lastRefill: number;
@@ -169,5 +176,19 @@ export class CircuitBreaker {
     cb.lastFailureTime = state.lastFailureTime;
     cb.halfOpenSuccesses = state.halfOpenSuccesses;
     return cb;
+  }
+
+  async call<T>(fn: () => Promise<T>): Promise<T> {
+    if (!this.allowRequest()) {
+      throw new CircuitBreakerOpenError('unknown');
+    }
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
   }
 }

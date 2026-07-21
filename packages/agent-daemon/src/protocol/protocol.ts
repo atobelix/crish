@@ -656,6 +656,9 @@ export function validateOutboundMessage(
 export function encodeOutboundMessage(
   message: DaemonOutboundMessage
 ): ProtocolValidationResult<string> {
+  const validation = validateOutboundMessage(message);
+  if (!validation.ok) return validation;
+
   let payload: string;
 
   try {
@@ -674,9 +677,6 @@ export function encodeOutboundMessage(
       { path: "$", message: "JSON.stringify returned undefined" },
     ]);
   }
-
-  const validation = validateOutboundMessage(message);
-  if (!validation.ok) return validation;
 
   return ok(payload);
 }

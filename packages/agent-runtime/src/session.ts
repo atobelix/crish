@@ -5,7 +5,8 @@ import { createInterface } from "node:readline";
 import type { AgentEvent, AgentMessage, ContextCompressionRecord } from "@crish/shared-types";
 import { SessionError } from "@crish/shared-types";
 import type { SessionEntry, SessionHeader, SessionPersistenceStore } from "./types";
-import { AsyncMutex, BoundedMap, errorMessage, isRecord, JsonlAppendBatcher, IN_MEMORY_SESSION_STORE_CAPACITY } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, errorMessage, isRecord, IN_MEMORY_SESSION_STORE_CAPACITY } from "@crish/shared-utils";
+import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 
 const SESSION_FILE_VERSION = 1;
 const SMALL_FILE_THRESHOLD = 1024 * 1024; // 1MB

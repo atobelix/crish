@@ -17,6 +17,14 @@ export const SUBAGENT_DEPTH_HARD_CAP = 32;
 
 export type DaemonSubagentMode = "research" | "implement" | "verify";
 
+export type SubagentMode = "foreground" | "background";
+
+export interface DaemonSubagentForkOptions {
+  mode?: SubagentMode;
+  maxConcurrency?: number;
+  failFast?: boolean;
+}
+
 export interface DaemonSubagentRunRequest {
   id: string;
   sessionId: string;
@@ -92,6 +100,7 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         description: { type: "string", description: "Short human-readable task label." },
         mode: { type: "string", enum: ["research", "implement", "verify"] },
         forkPolicy: { type: "string", enum: ["task-only", "summary", "full"] },
+        forkMode: { type: "string", enum: ["foreground", "background"], description: "Run mode: foreground (await completion) or background (fire-and-forget). Default foreground." },
         taskId: { type: "string", description: "Optional stable identifier to resume a sub-agent task across turns." },
         task_id: { type: "string", description: "Alias for taskId." }
       },
@@ -114,6 +123,7 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       const description = stringField(input, "description") ?? prompt.slice(0, 120);
       const mode = subagentMode(input);
       const forkPolicy = forkPolicyField(input) ?? "summary";
+      const forkMode: SubagentMode = stringField(input, "forkMode") === "background" ? "background" : "foreground";
       const taskId = stringField(input, "taskId") || stringField(input, "task_id");
       
       const subagentRunId = createId("subrun");
@@ -176,6 +186,7 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
           subagentDescription: description,
           subagentMode: mode,
           subagentForkPolicy: forkPolicy,
+          subagentForkMode: forkMode,
           permissionMode: options.permissionMode,
           prompt,
           systemPrompt: contextPack.stablePrefix,
@@ -200,6 +211,44 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         toolUses: 0,
         turns: 0
       };
+
+      if (forkMode === "background") {
+        emitBridge({ ...base, phase: "started" });
+        consumeSubagentEvents(handle.events, base, emitBridge, state)
+          .catch((cause) => {
+            const errMsg = cause instanceof Error ? cause.message : String(cause);
+            console.error("[subagent-background] error:", errMsg);
+            state.status = "failed";
+            state.error = errMsg;
+          })
+          .finally(() => {
+            context.signal.removeEventListener("abort", onAbort);
+            try {
+              const summary = buildCompletionSummary(description, mode, state);
+              emitBridge({
+                ...base,
+                phase: "ended",
+                status: state.status,
+                summary,
+                ...(state.error ? { error: state.error } : {})
+              });
+            } catch { /* ignore */ }
+          });
+        return {
+          text: `Sub-agent started in background: ${subagentRunId}`,
+          json: {
+            subagentRunId,
+            subagentId,
+            parentRunId: options.parentRunId,
+            parentSessionId: options.parentSessionId,
+            parentToolCallId: context.toolCallId,
+            description,
+            mode,
+            status: "running",
+            forkMode: "background"
+          }
+        };
+      }
 
       let started = false;
       let summary = "";
@@ -290,6 +339,35 @@ export function readDaemonSubagentBridgeUpdate(value: unknown): DaemonSubagentBr
   }
 
   return undefined;
+}
+
+export async function spawnBatch(
+  requests: StartRunRequest[],
+  startRun: (request: StartRunRequest) => Promise<OrchestratorRunHandle>,
+  options?: { maxConcurrency?: number; failFast?: boolean }
+): Promise<OrchestratorRunHandle[]> {
+  const maxConcurrency = options?.maxConcurrency ?? 4;
+  const results: OrchestratorRunHandle[] = [];
+  const errors: Error[] = [];
+
+  for (let i = 0; i < requests.length; i += maxConcurrency) {
+    const batch = requests.slice(i, i + maxConcurrency);
+    const batchResults = await Promise.allSettled(
+      batch.map((req) => startRun(req))
+    );
+
+    for (const result of batchResults) {
+      if (result.status === "fulfilled") {
+        results.push(result.value);
+      } else {
+        errors.push(result.reason);
+        if (options?.failFast) throw result.reason;
+      }
+    }
+  }
+
+  if (errors.length > 0 && results.length === 0) throw errors[0];
+  return results;
 }
 
 export function readDaemonSubagentBridgeUpdateFromAgentEvent(

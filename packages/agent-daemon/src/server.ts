@@ -57,6 +57,7 @@ import {
 } from "./server-handlers.js";
 import { RunHandler } from "./handlers/run-handlers.js";
 import { DaemonSubagentBridge } from "./daemon-subagent-bridge.js";
+import { readDaemonSubagentBridgeUpdateFromAgentEvent } from "./subagent-runtime.js";
 import { DaemonLifecycleTracker } from "./daemon-lifecycle.js";
 import { WorkflowScheduler } from "./workflow-scheduler.js";
 import type { WorkflowSchedulerTickResult } from "./workflow-scheduler.js";
@@ -145,6 +146,7 @@ export class DaemonServer {
     this.sessionMetadataStore = new FileSessionMetadataStore(resolveDaemonSessionMetadataStorePath(this.config));
     this.approvalQueue = new ApprovalQueue({ defaultTimeoutMs: this.config.approvalTimeoutMs });
     this.eventStore = new DaemonEventStore(this.eventLogPath);
+    this.eventStore.installSignalHandlers();
     this.backgroundTasks = new DaemonBackgroundTaskManager({
       defaultWorkspaceRoot: this.config.defaultCwd,
       managerOptions: { defaultTimeoutMs: 30 * 60_000, maxOutputBytes: 500_000 },
@@ -229,6 +231,7 @@ export class DaemonServer {
 
     try {
       await this.orchestrator.restoreFromEventStore();
+      await this.rebuildActiveSubagentsFromEventStore();
     } catch (error) {
       this.lifecycle.recordError({
         code: "EVENT_STORE_RESTORE_FAILED",
@@ -410,6 +413,9 @@ export class DaemonServer {
     });
     ws.on("close", (code, reason) => {
       this.handleDisconnect(ws, code, reason);
+      ws.removeAllListeners("message");
+      ws.removeAllListeners("ping");
+      ws.removeAllListeners("pong");
     });
     ws.on("error", (error) => {
       this.lifecycle.recordError({
@@ -510,6 +516,36 @@ export class DaemonServer {
       serverName: "crish-daemon",
       capabilities: ["run-task", "approval", "pending-input", "workflow", "git", "plan-document"],
     });
+
+    for (const sub of this.subagentBridge?.getActiveSubagentsSnapshot() ?? []) {
+      this.clients.send(ws, {
+        type: "subagent-started",
+        runId: sub.runId,
+        subagentId: sub.subagentId,
+        subagentRunId: sub.subagentRunId,
+        parentToolCallId: sub.parentToolCallId,
+        description: sub.description,
+        mode: sub.mode,
+      });
+    }
+  }
+
+  private async rebuildActiveSubagentsFromEventStore(): Promise<void> {
+    const activeRuns = this.orchestrator.listRuns().filter(
+      (run) => run.status === "running" || run.status === "queued" || run.status === "awaiting-approval"
+    );
+    for (const run of activeRuns) {
+      const events = await this.orchestrator.readRunEvents(run.id);
+      for (const event of events) {
+        if (event.type !== "runtime-event") continue;
+        const agentEvent = (event.payload as { event?: unknown }).event;
+        if (!agentEvent || typeof agentEvent !== "object") continue;
+        const update = readDaemonSubagentBridgeUpdateFromAgentEvent(agentEvent as never);
+        if (update?.phase === "started") {
+          this.subagentBridge.rebuildStarted(update, run.id);
+        }
+      }
+    }
   }
 
   private handleDisconnect(ws: WebSocket, code: number, reason: Buffer): void {

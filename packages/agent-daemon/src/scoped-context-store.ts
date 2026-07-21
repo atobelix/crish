@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPathAsync, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
+import { isRecord, errorMessage, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
+import { fsyncPathAsync } from "@crish/shared-utils/node";
 import type {
   DaemonScopedContextDiagnostic,
   DaemonScopedContextStoreStatus,

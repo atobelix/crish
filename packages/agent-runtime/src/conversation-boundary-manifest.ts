@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, stat as statFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { nowIso } from "./session";
-import { AsyncMutex, isNodeError, JsonlAppendBatcher } from "@crish/shared-utils";
+import { AsyncMutex, isNodeError } from "@crish/shared-utils";
+import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 
 export type ConversationBoundaryCheckpointSource = "runtime" | "tool" | "external" | "unknown";

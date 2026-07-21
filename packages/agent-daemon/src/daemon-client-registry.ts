@@ -74,6 +74,7 @@ export class DaemonClientRegistry {
     if (client) {
       this.clients.delete(ws);
     }
+    this.failedTransports.delete(ws);
     return client;
   }
 

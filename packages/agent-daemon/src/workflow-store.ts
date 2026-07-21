@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { isRecord, errorMessage, fsyncPathAsync, fsyncDirectoryPathAsync, isNodeError, clone, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { isRecord, errorMessage, isNodeError, clone, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { fsyncPathAsync, fsyncDirectoryPathAsync } from "@crish/shared-utils/node";
 import type {
   WorkflowDefinition,
   WorkflowRunEntry,

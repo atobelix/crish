@@ -24,6 +24,8 @@ export class MemoryManager {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly opts: Required<MemoryManagerOptions>;
   private started = false;
+  private pressureDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly PRESSURE_DEBOUNCE_MS = 5000;
 
   constructor(opts?: MemoryManagerOptions) {
     this.opts = { ...DEFAULTS, ...opts };
@@ -87,8 +89,21 @@ export class MemoryManager {
   }
 
   private handlePressure(level: MemoryPressureLevel): void {
-    if (level <= this.shrinkLevel) return;
-    this.shrinkLevel = level;
+    // Debounce: skip if already processing a pressure event
+    if (this.pressureDebounceTimer !== null) return;
+
+    this.pressureDebounceTimer = setTimeout(() => {
+      this.pressureDebounceTimer = null;
+    }, MemoryManager.PRESSURE_DEBOUNCE_MS);
+
+    // Downgrade: pressure decreased, restore cache budget partially
+    if (level < this.shrinkLevel) {
+      this.shrinkLevel = level;
+    } else if (level > this.shrinkLevel) {
+      this.shrinkLevel = level;
+    } else {
+      return;
+    }
 
     const ratios: Record<MemoryPressureLevel, number> = {
       0: 1.0,
@@ -108,7 +123,7 @@ export class MemoryManager {
 
     if (level >= 2) {
       try {
-        if (typeof globalThis.gc === "function") (globalThis as any).gc();
+        (globalThis as any).gc?.();
       } catch {
         // GC not available
       }

@@ -11,6 +11,7 @@ type Broadcast = (message: DaemonOutboundMessage) => void;
 
 interface ActiveSubagent {
   runId: string;
+  subagentId: string;
   subagentRunId: string;
   parentToolCallId: string;
   description: string;
@@ -45,6 +46,7 @@ export class DaemonSubagentBridge {
     if (update.phase === "started") {
       this.activeSubagents.set(update.subagentId, {
         runId,
+        subagentId: update.subagentId,
         subagentRunId: update.subagentRunId,
         parentToolCallId: update.parentToolCallId,
         description: update.description,
@@ -154,5 +156,26 @@ export class DaemonSubagentBridge {
   /** 诊断用：当前追踪中的子代理数量。 */
   get size(): number {
     return this.activeSubagents.size;
+  }
+
+  /** 返回当前活跃子代理的快照，供重新连接的客户端回放状态。 */
+  getActiveSubagentsSnapshot(): ActiveSubagent[] {
+    return [...this.activeSubagents.values()];
+  }
+
+  /**
+   * 从事件存储重建时调用：将子代理启动事件恢复到活跃追踪中。
+   * 不广播消息，仅恢复内部状态。
+   */
+  rebuildStarted(update: DaemonSubagentBridgeUpdate, runId: string): void {
+    if (update.phase !== "started") return;
+    this.activeSubagents.set(update.subagentId, {
+      runId,
+      subagentId: update.subagentId,
+      subagentRunId: update.subagentRunId,
+      parentToolCallId: update.parentToolCallId,
+      description: update.description,
+      mode: update.mode,
+    });
   }
 }

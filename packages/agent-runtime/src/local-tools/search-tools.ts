@@ -50,8 +50,9 @@ export function createSearchFilesTool(
         visitedFiles += 1;
         const fileStat = await stat(filePath);
         if (fileStat.size > maxFileBytes) continue;
-        const bytes = await readFile(filePath).catch(() => Buffer.alloc(0));
-        if (bytes.byteLength === 0) continue;
+        const raw = await readFile(filePath).catch(() => new Uint8Array(0));
+        if (raw.byteLength === 0) continue;
+        const bytes = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength);
         const decoded = decodeTextBuffer(bytes);
         if (decoded.encoding === "binary" || !decoded.text) continue;
         const text = decoded.text;

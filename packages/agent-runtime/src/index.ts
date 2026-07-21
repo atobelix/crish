@@ -36,6 +36,8 @@ export * from "./provider-openai-compatible";
 export * from "./provider-stream-contract";
 export * from "./preview-queue";
 export * from "./plugin-registry";
+export type { PluginManifest as FsPluginManifest, PluginAPI } from "./plugin-fs-registry";
+export { PluginRegistry as FsPluginRegistry, pluginRegistry } from "./plugin-fs-registry";
 export * from "./rich-read";
 export * from "./resource-uri";
 export * from "./lsp-tools";

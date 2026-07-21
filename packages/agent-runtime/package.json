@@ -16,6 +16,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./plugin-registry": {
+      "development": {
+        "types": "./src/plugin-fs-registry.ts",
+        "import": "./src/plugin-fs-registry.ts",
+        "default": "./src/plugin-fs-registry.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [

@@ -45,6 +45,10 @@ export class DaemonEventStore implements OrchestratorEventStore {
     await this.delegate.close();
   }
 
+  installSignalHandlers(): () => void {
+    return this.delegate.installSignalHandlers();
+  }
+
   getFailure(): OrchestratorEventStoreError | undefined {
     return this._failure;
   }

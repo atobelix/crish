@@ -35,6 +35,7 @@ import { createId } from "../session";
 import type { ConnectionManager } from "../provider-transport/connection-manager";
 import { StreamRecovery, StreamRecoveryError } from "../provider-transport/stream-recovery";
 import type { TokenTracker } from "../provider-transport/token-tracker";
+import { CircuitBreaker, CircuitBreakerOpenError, retryWithBackoff } from "@crish/shared-utils";
 
 // ─── 调用结果 ─────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ export class ProviderCallGateway {
   private readonly connectionManager: ConnectionManager | undefined;
   private readonly streamRecovery: StreamRecovery | undefined;
   private readonly tokenTracker: TokenTracker | undefined;
+  private readonly breakers = new Map<string, CircuitBreaker>();
 
   constructor(options?: ProviderCallGatewayOptions) {
     this.connectionManager = options?.connectionManager;
@@ -65,6 +67,13 @@ export class ProviderCallGateway {
     this.streamRecovery = this.connectionManager
       ? new StreamRecovery()
       : undefined;
+  }
+
+  private getBreaker(providerId: string): CircuitBreaker {
+    if (!this.breakers.has(providerId)) {
+      this.breakers.set(providerId, new CircuitBreaker(5, 30000, 1));
+    }
+    return this.breakers.get(providerId)!;
   }
 
   /**
@@ -83,6 +92,11 @@ export class ProviderCallGateway {
     provider: AgentProvider,
     request: AgentProviderRequest
   ): AsyncGenerator<ProviderStreamContractEvent, ProviderCallResult> {
+    const breaker = this.getBreaker(provider.id);
+    if (!breaker.allowRequest()) {
+      throw new CircuitBreakerOpenError(provider.id);
+    }
+
     const streamEvents: ProviderStreamContractEvent[] = [];
 
     let text = "";
@@ -107,7 +121,17 @@ export class ProviderCallGateway {
       );
     } else {
       // 向后兼容：直接使用 provider 的裸流
-      rawStream = provider.stream(request);
+      rawStream = await retryWithBackoff(
+        () => Promise.resolve(provider.stream(request)),
+        {
+          maxAttempts: 3,
+          baseMs: 1000,
+          shouldRetry: (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            return /network|timeout|5\d{2}|econnrefused|econnreset|socket/i.test(msg);
+          },
+        }
+      );
     }
 
     const contractStream = normalizeAndCoalesceProviderStreamEvents(rawStream, {
@@ -176,6 +200,13 @@ export class ProviderCallGateway {
         finishReason = "error";
         error = err instanceof Error ? err.message : String(err);
       }
+    }
+
+    // 记录断路器结果
+    if (finishReason === "error" || error) {
+      breaker.onFailure();
+    } else {
+      breaker.onSuccess();
     }
 
     const response: ProviderResponse = {

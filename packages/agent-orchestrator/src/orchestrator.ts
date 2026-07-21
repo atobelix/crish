@@ -3,6 +3,7 @@ import {
   compactJsonObject, isRecord, clone, BoundedMap, RingBuffer,
   MAX_ORCHESTRATOR_SESSIONS, MAX_ORCHESTRATOR_RUNS, MAX_ORCHESTRATOR_PENDING_INPUTS, MAX_ORCHESTRATOR_DIAGNOSTICS, MAX_ORCHESTRATOR_EVENTS,
 } from "@crish/shared-utils";
+import { pluginRegistry } from "@crish/agent-runtime/plugin-registry";
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type AgentOrchestratorOptions,
@@ -89,6 +90,7 @@ export class AgentOrchestrator {
       })
     );
     this.sessions.set(session.id, session);
+    await this.notifySessionStart(session.id);
     return session;
   }
 
@@ -314,7 +316,7 @@ export class AgentOrchestrator {
     this.activeRuns.set(run.id, active);
 
     this.emitToRun(active, "run-queued", { run: run as unknown as JsonObject });
-    void (kind === "goal" ? this.driveGoalRun(active, session, request) : this.driveRun(active, session, request));
+    (kind === "goal" ? this.driveGoalRun(active, session, request) : this.driveRun(active, session, request));
 
     return {
       runId: run.id,
@@ -658,6 +660,19 @@ export class AgentOrchestrator {
     } finally {
       if (active.engine === engine) {
         active.engine = undefined;
+      }
+    }
+  }
+
+  private async notifySessionStart(sessionId: string): Promise<void> {
+    for (const plugin of pluginRegistry.list()) {
+      const api = pluginRegistry.get(plugin.name);
+      if (api?.onSessionStart) {
+        try {
+          await api.onSessionStart(sessionId);
+        } catch (e) {
+          console.error(`[Plugin] ${plugin.name}.onSessionStart error:`, e);
+        }
       }
     }
   }

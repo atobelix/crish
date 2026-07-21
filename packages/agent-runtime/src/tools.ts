@@ -13,6 +13,7 @@ import type {
   RuntimePermissionPolicy,
   ToolSource
 } from "./types";
+import { globalToolRegistry } from "./tool-registry";
 import {
   createTrustZonePermissionPolicy,
   type CreatePermissionPolicyMode,
@@ -50,6 +51,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
 };
 
 export function defineTool(tool: AgentTool): AgentTool {
+  globalToolRegistry.register(tool);
   return tool;
 }
 

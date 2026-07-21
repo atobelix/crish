@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
-import { AsyncMutex, BoundedMap, isNodeError, JsonlAppendBatcher, RingBuffer, IN_MEMORY_MEMORY_ENTRIES } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, isNodeError, RingBuffer, IN_MEMORY_MEMORY_ENTRIES } from "@crish/shared-utils";
+import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentTool } from "./types";
 

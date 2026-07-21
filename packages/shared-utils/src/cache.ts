@@ -104,6 +104,10 @@ export class LruCache<K, V> implements CacheProvider<K, V> {
     }
   }
 
+  /**
+   * Removes oldest ~90% of entries, retaining most recent ~10%.
+   * Map iterates in insertion order so deleting from .keys().next() evicts oldest first — correct.
+   */
   emergencyClear(): void {
     const keepCount = Math.max(1, Math.floor(this.maxEntries * 0.1));
     while (this.map.size > keepCount) {
