@@ -6,11 +6,16 @@
  * workflow background runs, and related admission control.
  */
 
-import type { WebSocket } from "ws";
-import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import { errorMessage, compactJsonObject } from "@crish/shared-utils";
-import type { JsonObject, AgentEvent, AgentMessage, RuntimeCheckpointRecord } from "@crish/shared-types";
+import type { WebSocket } from 'ws';
+import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { errorMessage, compactJsonObject } from '@crish/shared-utils';
+import type {
+  JsonObject,
+  AgentEvent,
+  AgentMessage,
+  RuntimeCheckpointRecord,
+} from '@crish/shared-types';
 import {
   CheckpointManifestService,
   ConversationBoundaryManifestService,
@@ -18,44 +23,46 @@ import {
   findSessionLeafId,
   JsonlSessionStore,
   type SessionEntry,
-} from "@crish/agent-runtime";
+} from '@crish/agent-runtime';
 import {
   AgentOrchestrator,
   type OrchestratorEvent,
   type RunStatus,
-} from "@crish/agent-orchestrator";
-import { ApprovalQueue } from "../approval-queue.js";
-import { DaemonApprovalHandler } from "../daemon-approval-handler.js";
+} from '@crish/agent-orchestrator';
+import { ApprovalQueue } from '../approval-queue.js';
+import { DaemonApprovalHandler } from '../daemon-approval-handler.js';
 import {
   broadcastApprovalRequested as broadcastApprovalRequestedExtracted,
   broadcastExpiredApprovalResolved as broadcastExpiredApprovalResolvedExtracted,
-} from "./session-handlers.js";
+} from './session-handlers.js';
 import type {
   CancelRunMessage,
   DaemonConfig,
   DaemonCorrelationFields,
   DaemonOutboundMessage,
-  DaemonProviderStatusSnapshot,
   ListMutationLeasesMessage,
   RunTaskMessage,
   WorkflowDefinition,
   WorkflowRunEntry,
   WorkflowRunStatus,
-} from "../types.js";
-import { DaemonRuntimeFactory } from "../server-runtime-factory.js";
-import type { DaemonSubagentBridge } from "../daemon-subagent-bridge.js";
+} from '../types.js';
+import { DaemonRuntimeFactory } from '../server-runtime-factory.js';
+import type { DaemonSubagentBridge } from '../daemon-subagent-bridge.js';
+import { DaemonWorkflowNotFoundError } from './workflow-handlers.js';
+import type {
+  WorkflowDueRun,
+  WorkflowRunAccepted,
+} from '../workflow-scheduler.js';
 import {
-  DaemonWorkflowNotFoundError,
-} from "./workflow-handlers.js";
-import type { WorkflowDueRun, WorkflowRunAccepted } from "../workflow-scheduler.js";
-import { WorkflowStoreConflictError, type WorkflowStore } from "../workflow-store.js";
-import {
-  runtimeSessionStorePath,
-} from "../conversation-rewind-boundary.js";
+  WorkflowStoreConflictError,
+  type WorkflowStore,
+} from '../workflow-store.js';
+import { runtimeSessionStorePath } from '../conversation-rewind-boundary.js';
 import {
   resolveDaemonCheckpointManifestPath,
   resolveDaemonConversationBoundaryManifestPath,
-} from "../persistence.js";
+} from '../persistence.js';
+import { StreamBackpressureRegistry } from '../stream-backpressure.js';
 
 // ─── Transport abstraction ─────────────────────────────────
 
@@ -81,14 +88,14 @@ export interface OrchestratedRunInput {
   prompt: string;
   cwd: string;
   mode?: string;
-  workspaceMode?: "project" | "none";
+  workspaceMode?: 'project' | 'none';
   visibleGoal?: string;
   budgetDifficulty?: string;
   runTokenBudget?: number;
   maxRounds?: number;
   maxStalledRounds?: number;
   backgroundDrainTimeoutMs?: number;
-  permissionMode?: "ask" | "auto" | "full-access" | "plan" | "unattended";
+  permissionMode?: 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended';
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
@@ -96,11 +103,11 @@ export interface OrchestratedRunInput {
   projectTags?: string[];
   packageNames?: string[];
   mcpDisabledTools?: Record<string, string[]>;
-  scopedContextConfig?: RunTaskMessage["scopedContextConfig"];
+  scopedContextConfig?: RunTaskMessage['scopedContextConfig'];
   /** OpenAI-style multimodal parts from desktop */
-  content?: RunTaskMessage["content"];
+  content?: RunTaskMessage['content'];
   hasImages?: boolean;
-  attachments?: RunTaskMessage["attachments"];
+  attachments?: RunTaskMessage['attachments'];
   metadata?: JsonObject;
   correlation?: DaemonCorrelationFields;
   prechecked?: boolean;
@@ -113,7 +120,11 @@ export interface OrchestratedRunInput {
 
 export interface RunEventSink {
   send(message: DaemonOutboundMessage): void;
-  sendError(code: string, message: string, correlation?: DaemonCorrelationFields): void;
+  sendError(
+    code: string,
+    message: string,
+    correlation?: DaemonCorrelationFields
+  ): void;
   dispose(): void;
 }
 
@@ -136,7 +147,7 @@ export class DaemonRunPreflightError extends Error {
     readonly runId: string
   ) {
     super(message);
-    this.name = "DaemonRunPreflightError";
+    this.name = 'DaemonRunPreflightError';
   }
 }
 
@@ -150,11 +161,14 @@ export interface RunHandlerOptions {
   transport: DaemonMessageTransport;
   subagentBridge: DaemonSubagentBridge;
   workflowStore: WorkflowStore;
+  /** Optional shared registry; defaults to an internal instance. */
+  streamBackpressure?: StreamBackpressureRegistry;
   recordDiagnostic?(input: {
     code: string;
     message: string;
-    source: "daemon" | "websocket" | "client" | "event-store" | "provider" | "mcp";
-    severity?: "warning" | "error";
+    source:
+      'daemon' | 'websocket' | 'client' | 'event-store' | 'provider' | 'mcp';
+    severity?: 'warning' | 'error';
     detail?: string;
     metadata?: JsonObject;
   }): void;
@@ -164,8 +178,14 @@ export class RunHandler {
   private readonly workflowScheduleLeases = new Set<string>();
   private readonly workflowBackgroundTasks = new Set<Promise<void>>();
   private readonly runAdmissionLeases = new Set<string>();
+  private readonly backpressure: StreamBackpressureRegistry;
+  /** Originating WebSocket per active run (for resume flush). */
+  private readonly activeRunSockets = new Map<string, WebSocket | undefined>();
 
-  constructor(private readonly options: RunHandlerOptions) {}
+  constructor(private readonly options: RunHandlerOptions) {
+    this.backpressure =
+      options.streamBackpressure ?? new StreamBackpressureRegistry();
+  }
 
   // ─── Public API ────────────────────────────────────────────
 
@@ -175,9 +195,12 @@ export class RunHandler {
     msg: RunTaskMessage & DaemonCorrelationFields
   ): Promise<void> {
     const runId = msg.runId || `run-${Date.now()}`;
-    const workspaceMode = msg.workspaceMode ?? (msg.cwd ? "project" : "none");
-    const cwd = workspaceMode === "none" ? this.options.config.noProjectCwd : msg.cwd || this.options.config.defaultCwd;
-    if (workspaceMode === "none") {
+    const workspaceMode = msg.workspaceMode ?? (msg.cwd ? 'project' : 'none');
+    const cwd =
+      workspaceMode === 'none'
+        ? this.options.config.noProjectCwd
+        : msg.cwd || this.options.config.defaultCwd;
+    if (workspaceMode === 'none') {
       await mkdir(cwd, { recursive: true });
     }
 
@@ -197,8 +220,8 @@ export class RunHandler {
       maxStalledRounds: msg.maxStalledRounds,
       backgroundDrainTimeoutMs: msg.backgroundDrainTimeoutMs,
       permissionMode: msg.permissionMode,
-      workspaceRoot: workspaceMode === "none" ? cwd : msg.workspaceRoot,
-      projectRoot: workspaceMode === "none" ? undefined : msg.projectRoot,
+      workspaceRoot: workspaceMode === 'none' ? cwd : msg.workspaceRoot,
+      projectRoot: workspaceMode === 'none' ? undefined : msg.projectRoot,
       projectMarkers: msg.projectMarkers,
       projectFiles: msg.projectFiles,
       projectTags: msg.projectTags,
@@ -214,8 +237,43 @@ export class RunHandler {
 
   handleCancelRun(msg: CancelRunMessage): void {
     this.options.orchestrator.cancelRun(msg.runId);
-    this.options.approvalQueue.clearRun(msg.runId, "run-cancelled");
+    this.options.approvalQueue.clearRun(msg.runId, 'run-cancelled');
+    this.backpressure.clearRun(msg.runId);
     console.log(`[Daemon] Run cancelled: ${msg.runId}`);
+  }
+
+  /**
+   * Pause outbound event push for a run (client backpressure).
+   * Events are buffered (drop-oldest) and the for-await loop waits.
+   */
+  pauseStream(runId: string): void {
+    if (!runId) return;
+    this.backpressure.pause(runId);
+    console.info(`[Daemon] Stream paused for run ${runId}`);
+  }
+
+  /**
+   * Resume outbound event push; flush any buffered messages to the originating socket.
+   */
+  resumeStream(runId: string): void {
+    if (!runId) return;
+    const buffered = this.backpressure.resume(runId);
+    const ws = this.activeRunSockets.get(runId);
+    for (const message of buffered) {
+      const outbound = message as DaemonOutboundMessage;
+      if (ws && ws.readyState === ws.OPEN) {
+        this.options.transport.send(ws, outbound);
+      } else {
+        this.options.transport.broadcast(outbound);
+      }
+    }
+    if (buffered.length > 0) {
+      console.info(
+        `[Daemon] Stream resumed for run ${runId}; flushed ${buffered.length} buffered message(s)`
+      );
+    } else {
+      console.info(`[Daemon] Stream resumed for run ${runId}`);
+    }
   }
 
   handleListMutationLeases(
@@ -227,7 +285,7 @@ export class RunHandler {
       ws,
       correlateResponse(
         {
-          type: "mutation-leases-listed",
+          type: 'mutation-leases-listed',
           leases,
         },
         msg
@@ -243,7 +301,9 @@ export class RunHandler {
     clientId?: string;
     ws?: WebSocket;
   }): Promise<WorkflowRunAccepted> {
-    const workflow = await this.options.workflowStore.getWorkflow(input.workflowId);
+    const workflow = await this.options.workflowStore.getWorkflow(
+      input.workflowId
+    );
     if (!workflow) {
       throw new DaemonWorkflowNotFoundError(input.workflowId);
     }
@@ -253,10 +313,16 @@ export class RunHandler {
     const sessionId = input.sessionId ?? runId;
     const scheduledFor = input.scheduledFor ?? now.toISOString();
     const startedAt = now.toISOString();
-    const scheduleLeaseKey = workflowScheduleLeaseKey(workflow.id, scheduledFor);
+    const scheduleLeaseKey = workflowScheduleLeaseKey(
+      workflow.id,
+      scheduledFor
+    );
 
     if (!this.acquireWorkflowScheduleLease(scheduleLeaseKey)) {
-      const existingRun = await this.findWorkflowRunBySchedule(workflow.id, scheduledFor);
+      const existingRun = await this.findWorkflowRunBySchedule(
+        workflow.id,
+        scheduledFor
+      );
       if (existingRun) return workflowRunAccepted(existingRun);
       throw new WorkflowStoreConflictError(
         `Workflow run is already being accepted for ${workflow.id} at ${scheduledFor}`
@@ -273,13 +339,13 @@ export class RunHandler {
         sessionId,
         scheduledFor,
         startedAt,
-        status: "running",
+        status: 'running',
       });
 
       this.startWorkflowRunInBackground({
         workflow,
         run,
-        clientId: input.clientId ?? "daemon-scheduler",
+        clientId: input.clientId ?? 'daemon-scheduler',
         admissionLease,
       });
       admissionLease = undefined;
@@ -289,7 +355,10 @@ export class RunHandler {
       return workflowRunAccepted(run);
     } catch (error) {
       if (error instanceof WorkflowStoreConflictError) {
-        const existingRun = await this.findWorkflowRunBySchedule(workflow.id, scheduledFor);
+        const existingRun = await this.findWorkflowRunBySchedule(
+          workflow.id,
+          scheduledFor
+        );
         if (existingRun) return workflowRunAccepted(existingRun);
       }
       throw error;
@@ -299,7 +368,10 @@ export class RunHandler {
     }
   }
 
-  async triggerDueWorkflow(due: WorkflowDueRun, now: Date): Promise<WorkflowRunAccepted> {
+  async triggerDueWorkflow(
+    due: WorkflowDueRun,
+    now: Date
+  ): Promise<WorkflowRunAccepted> {
     return this.triggerWorkflowRun({
       workflowId: due.workflow.id,
       scheduledFor: due.scheduledFor,
@@ -314,10 +386,12 @@ export class RunHandler {
       return;
     }
 
-    const settled = Promise.allSettled([...this.workflowBackgroundTasks]).then(() => "settled" as const);
-    const timedOut = delay(timeoutMs).then(() => "timed-out" as const);
+    const settled = Promise.allSettled([...this.workflowBackgroundTasks]).then(
+      () => 'settled' as const
+    );
+    const timedOut = delay(timeoutMs).then(() => 'timed-out' as const);
     const result = await Promise.race([settled, timedOut]);
-    if (result === "timed-out" && this.workflowBackgroundTasks.size > 0) {
+    if (result === 'timed-out' && this.workflowBackgroundTasks.size > 0) {
       console.warn(
         `[Daemon] Timed out waiting for ${this.workflowBackgroundTasks.size} background workflow run(s)`
       );
@@ -339,7 +413,9 @@ export class RunHandler {
 
   // ─── Private: Run orchestration ────────────────────────────
 
-  private async runOrchestratedTask(input: OrchestratedRunInput): Promise<void> {
+  private async runOrchestratedTask(
+    input: OrchestratedRunInput
+  ): Promise<void> {
     let eventSink: RunEventSink | undefined;
     let admissionLease = input.admissionLease;
     let boundaryContext: ConversationBoundaryEmissionContext | undefined;
@@ -347,14 +423,20 @@ export class RunHandler {
       admissionLease ??= this.acquireRunAdmission(input.runId);
       console.log(`[Daemon] Starting orchestrated run: ${input.runId}`);
 
-      const scopedContextConfig = scopedContextConfigJson(input.scopedContextConfig);
+      const scopedContextConfig = scopedContextConfigJson(
+        input.scopedContextConfig
+      );
       const runTaskConfig = runTaskConfigSnapshot(input);
       const initialUserMessageId = createBackendUserMessageId(input.runId);
-      const runPromptMessage = createRunPromptMessage(input.prompt, initialUserMessageId, {
-        content: input.content,
-        hasImages: input.hasImages,
-        attachments: input.attachments,
-      });
+      const runPromptMessage = createRunPromptMessage(
+        input.prompt,
+        initialUserMessageId,
+        {
+          content: input.content,
+          hasImages: input.hasImages,
+          attachments: input.attachments,
+        }
+      );
       const runRequest = {
         id: input.runId,
         sessionId: input.sessionId,
@@ -365,26 +447,47 @@ export class RunHandler {
           prompt: input.prompt,
           initialUserMessageId,
           ...(input.mode ? { mode: input.mode } : {}),
-          ...(input.workspaceMode ? { workspaceMode: input.workspaceMode } : {}),
+          ...(input.workspaceMode
+            ? { workspaceMode: input.workspaceMode }
+            : {}),
           ...(input.visibleGoal ? { visibleGoal: input.visibleGoal } : {}),
-          ...(input.budgetDifficulty ? { budgetDifficulty: input.budgetDifficulty } : {}),
-          ...(input.runTokenBudget ? { runTokenBudget: input.runTokenBudget } : {}),
+          ...(input.budgetDifficulty
+            ? { budgetDifficulty: input.budgetDifficulty }
+            : {}),
+          ...(input.runTokenBudget
+            ? { runTokenBudget: input.runTokenBudget }
+            : {}),
           ...(input.maxRounds ? { maxRounds: input.maxRounds } : {}),
-          ...(input.maxStalledRounds ? { maxStalledRounds: input.maxStalledRounds } : {}),
-          ...(input.backgroundDrainTimeoutMs !== undefined ? { backgroundDrainTimeoutMs: input.backgroundDrainTimeoutMs } : {}),
-          ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
-          ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
+          ...(input.maxStalledRounds
+            ? { maxStalledRounds: input.maxStalledRounds }
+            : {}),
+          ...(input.backgroundDrainTimeoutMs !== undefined
+            ? { backgroundDrainTimeoutMs: input.backgroundDrainTimeoutMs }
+            : {}),
+          ...(input.permissionMode
+            ? { permissionMode: input.permissionMode }
+            : {}),
+          ...(input.workspaceRoot
+            ? { workspaceRoot: input.workspaceRoot }
+            : {}),
           ...(input.projectRoot ? { projectRoot: input.projectRoot } : {}),
-          ...(input.projectMarkers ? { projectMarkers: input.projectMarkers } : {}),
+          ...(input.projectMarkers
+            ? { projectMarkers: input.projectMarkers }
+            : {}),
           ...(input.projectFiles ? { projectFiles: input.projectFiles } : {}),
           ...(input.projectTags ? { projectTags: input.projectTags } : {}),
           ...(input.packageNames ? { packageNames: input.packageNames } : {}),
-          ...(input.mcpDisabledTools ? { mcpDisabledTools: input.mcpDisabledTools } : {}),
+          ...(input.mcpDisabledTools
+            ? { mcpDisabledTools: input.mcpDisabledTools }
+            : {}),
           ...(scopedContextConfig ? { scopedContextConfig } : {}),
           ...(runTaskConfig ? { runTaskConfig } : {}),
           ...(input.hasImages ? { hasImages: true } : {}),
           ...(input.content?.length
-            ? { hasMultimodalContent: true, multimodalPartCount: input.content.length }
+            ? {
+                hasMultimodalContent: true,
+                multimodalPartCount: input.content.length,
+              }
             : {}),
           clientId: input.clientId,
         },
@@ -395,7 +498,9 @@ export class RunHandler {
             goal: {
               visibleGoal: input.visibleGoal ?? input.prompt,
               ...(input.maxRounds ? { maxRounds: input.maxRounds } : {}),
-              ...(input.maxStalledRounds ? { maxStalledRounds: input.maxStalledRounds } : {}),
+              ...(input.maxStalledRounds
+                ? { maxStalledRounds: input.maxStalledRounds }
+                : {}),
             },
           })
         : await this.options.orchestrator.startRun(runRequest);
@@ -410,59 +515,66 @@ export class RunHandler {
         workspaceRoot: input.workspaceRoot ?? input.cwd,
       });
 
-      await input.onStarted?.({ runId: handle.runId, sessionId: handle.sessionId });
+      await input.onStarted?.({
+        runId: handle.runId,
+        sessionId: handle.sessionId,
+      });
 
       for await (const orchestratorEvent of handle.events) {
-        if (orchestratorEvent.type === "run-failed") {
-          terminal = "failed";
-          terminalError = stringPayload(orchestratorEvent.payload, "error") ?? "Run failed";
-          eventSink.sendError(
-            "RUN_ERROR",
-            terminalError,
-            input.correlation
-          );
-          this.options.approvalQueue.clearRun(input.runId, "run-failed");
+        // Client backpressure: block pull/push until STREAM_RESUME (bounds memory via wait gate).
+        await this.backpressure.waitIfPaused(input.runId);
+
+        if (orchestratorEvent.type === 'run-failed') {
+          terminal = 'failed';
+          terminalError =
+            stringPayload(orchestratorEvent.payload, 'error') ?? 'Run failed';
+          eventSink.sendError('RUN_ERROR', terminalError, input.correlation);
+          this.options.approvalQueue.clearRun(input.runId, 'run-failed');
           // 推送 run-terminal 事件给客户端
           this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
-            type: "run-terminal",
+            type: 'run-terminal',
             runId: input.runId,
             sessionId: input.sessionId,
-            terminal: "failed",
+            terminal: 'failed',
             error: terminalError,
             timestamp: orchestratorEvent.timestamp,
           });
           continue;
         }
 
-        if (orchestratorEvent.type === "run-completed") {
-          terminal = "completed";
+        if (orchestratorEvent.type === 'run-completed') {
+          terminal = 'completed';
           // 推送 run-terminal 事件给客户端
           this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
-            type: "run-terminal",
+            type: 'run-terminal',
             runId: input.runId,
             sessionId: input.sessionId,
-            terminal: "completed",
+            terminal: 'completed',
             timestamp: orchestratorEvent.timestamp,
           });
         }
-        if (orchestratorEvent.type === "run-cancelled") {
-          terminal = "cancelled";
+        if (orchestratorEvent.type === 'run-cancelled') {
+          terminal = 'cancelled';
           // 推送 run-terminal 事件给客户端
           this.sendRunEvent(eventSink, input.runId, orchestratorEvent, {
-            type: "run-terminal",
+            type: 'run-terminal',
             runId: input.runId,
             sessionId: input.sessionId,
-            terminal: "cancelled",
+            terminal: 'cancelled',
             timestamp: orchestratorEvent.timestamp,
           });
         }
 
-        if (orchestratorEvent.type !== "runtime-event") {
+        if (orchestratorEvent.type !== 'runtime-event') {
           continue;
         }
 
         const event = orchestratorEvent.payload.event as unknown as AgentEvent;
-        if (!event || typeof event !== "object" || typeof (event as { type?: unknown }).type !== "string") {
+        if (
+          !event ||
+          typeof event !== 'object' ||
+          typeof (event as { type?: unknown }).type !== 'string'
+        ) {
           continue;
         }
 
@@ -470,12 +582,12 @@ export class RunHandler {
 
         this.options.subagentBridge.processAgentEvent(event, input.runId);
 
-        if (event.type === "approval-requested") {
-          await input.onWorkflowStatus?.("awaiting-approval");
+        if (event.type === 'approval-requested') {
+          await input.onWorkflowStatus?.('awaiting-approval');
           this.broadcastApprovalRequested(event, input.runId);
         }
-        if (event.type === "approval-resolved") {
-          await input.onWorkflowStatus?.("running");
+        if (event.type === 'approval-resolved') {
+          await input.onWorkflowStatus?.('running');
           this.broadcastExpiredApprovalResolved(event);
         }
 
@@ -484,21 +596,36 @@ export class RunHandler {
 
       const currentRun = this.options.orchestrator.getRun(input.runId);
       terminal ??= workflowStatusFromRunStatus(currentRun?.status);
-      await input.onTerminal?.(terminal ?? "completed", terminalError);
+      await input.onTerminal?.(terminal ?? 'completed', terminalError);
       eventSink.dispose();
 
       console.log(`[Daemon] Completed orchestrated run: ${input.runId}`);
     } catch (error) {
       eventSink?.dispose();
       if (error instanceof DaemonRunPreflightError) {
-        this.sendError(input.ws, error.code, error.message, error.runId, input.correlation);
+        this.sendError(
+          input.ws,
+          error.code,
+          error.message,
+          error.runId,
+          input.correlation
+        );
         return;
       }
-      console.error(`[Daemon] Error in orchestrated run ${input.runId}:`, error);
-      this.sendError(input.ws, "RUN_ERROR", errorMessage(error), input.runId, input.correlation);
-      this.options.approvalQueue.clearRun(input.runId, "run-error");
+      console.error(
+        `[Daemon] Error in orchestrated run ${input.runId}:`,
+        error
+      );
+      this.sendError(
+        input.ws,
+        'RUN_ERROR',
+        errorMessage(error),
+        input.runId,
+        input.correlation
+      );
+      this.options.approvalQueue.clearRun(input.runId, 'run-error');
       DaemonApprovalHandler.clearRun(input.runId);
-      await input.onTerminal?.("failed", errorMessage(error));
+      await input.onTerminal?.('failed', errorMessage(error));
     } finally {
       // 异常路径兜底清理：
       // - approvalQueue 已在 catch 中 clearRun（run-error），这里再清一次保证幂等覆盖正常完成路径
@@ -506,9 +633,11 @@ export class RunHandler {
       //   （事件流中断 / orchestrator 提前结束迭代），否则 activeSubagents Map 累积孤儿条目
       // - boundaryContext 的 runtime store 句柄必须释放：findRuntimeMessageEntry /
       //   readCurrentRuntimeLeafId 复用同一个 JsonlSessionStore 实例，run 结束时关闭避免句柄泄漏
-      this.options.approvalQueue.clearRun(input.runId, "run-finalize");
+      this.options.approvalQueue.clearRun(input.runId, 'run-finalize');
       this.options.subagentBridge.clearRun(input.runId);
       DaemonApprovalHandler.clearRun(input.runId);
+      this.backpressure.clearRun(input.runId);
+      this.activeRunSockets.delete(input.runId);
       admissionLease?.release();
       await boundaryContext?.dispose();
     }
@@ -519,8 +648,8 @@ export class RunHandler {
   private assertCanStartRun(runId: string): void {
     if (!this.options.runtimeFactory.hasProviderFactory()) {
       throw new DaemonRunPreflightError(
-        "NO_PROVIDER",
-        "Provider factory not configured. Call setProviderFactory() first.",
+        'NO_PROVIDER',
+        'Provider factory not configured. Call setProviderFactory() first.',
         runId
       );
     }
@@ -529,7 +658,7 @@ export class RunHandler {
     const max = this.options.config.maxConcurrentRuns;
     if (max > 0 && this.activeRunCount() >= max) {
       throw new DaemonRunPreflightError(
-        "MAX_CONCURRENT_RUNS",
+        'MAX_CONCURRENT_RUNS',
         `Max concurrent runs (${max}) reached.`,
         runId
       );
@@ -553,21 +682,26 @@ export class RunHandler {
   // ─── Private: Event broadcasting ───────────────────────────
 
   private broadcastApprovalRequested(
-    event: Extract<AgentEvent, { type: "approval-requested" }>,
+    event: Extract<AgentEvent, { type: 'approval-requested' }>,
     runId: string
   ): void {
-    broadcastApprovalRequestedExtracted(event, runId, this.options.approvalQueue, this.options.transport);
+    broadcastApprovalRequestedExtracted(
+      event,
+      runId,
+      this.options.approvalQueue,
+      this.options.transport
+    );
   }
 
   private broadcastExpiredApprovalResolved(
-    event: Extract<AgentEvent, { type: "approval-resolved" }>
+    event: Extract<AgentEvent, { type: 'approval-resolved' }>
   ): void {
     broadcastExpiredApprovalResolvedExtracted(event, this.options.transport);
   }
 
   private broadcastWorkflowRunUpdated(run: WorkflowRunEntry): void {
     this.options.transport.broadcast({
-      type: "workflow-run-updated",
+      type: 'workflow-run-updated',
       runId: run.runId,
       workflowRunId: run.runId,
       workflowId: run.workflowId,
@@ -584,7 +718,7 @@ export class RunHandler {
     event: AgentEvent
   ): void {
     eventSink.send({
-      type: "event",
+      type: 'event',
       runId,
       orchestratorEventId: orchestratorEvent.id,
       sequence: orchestratorEvent.sequence,
@@ -604,7 +738,7 @@ export class RunHandler {
       this.options.transport.sendError(ws, code, message, runId, correlation);
     } else {
       this.options.transport.broadcast({
-        type: "error",
+        type: 'error',
         code,
         message,
         runId,
@@ -616,14 +750,17 @@ export class RunHandler {
   // ─── Private: Event sink ───────────────────────────────────
 
   private createRunEventSink(input: OrchestratedRunInput): RunEventSink {
+    this.activeRunSockets.set(input.runId, input.ws);
+
     if (!input.ws) {
       return {
         send: (message) => {
+          if (this.backpressure.tryBuffer(input.runId, message)) return;
           if (
             !process.env.VITEST &&
-            message.type === "event" &&
-            (message.event.type.startsWith("tool-batch-") ||
-              message.event.type.startsWith("checkpoint-"))
+            message.type === 'event' &&
+            (message.event.type.startsWith('tool-batch-') ||
+              message.event.type.startsWith('checkpoint-'))
           ) {
             return;
           }
@@ -631,13 +768,15 @@ export class RunHandler {
         },
         sendError: (code, message, correlation) =>
           this.options.transport.broadcast({
-            type: "error",
+            type: 'error',
             code,
             message,
             runId: input.runId,
             ...correlationFrom(correlation ?? {}),
           }),
-        dispose: () => {},
+        dispose: () => {
+          this.activeRunSockets.delete(input.runId);
+        },
       };
     }
 
@@ -649,10 +788,10 @@ export class RunHandler {
         `[Daemon] Run ${input.runId} lost originating WebSocket subscription; run remains daemon-owned`
       );
       this.options.recordDiagnostic?.({
-        code: "RUN_STREAM_SUBSCRIPTION_LOST",
+        code: 'RUN_STREAM_SUBSCRIPTION_LOST',
         message: `Originating WebSocket subscription lost for run ${input.runId}; run remains active in daemon ownership`,
-        source: "websocket",
-        severity: "warning",
+        source: 'websocket',
+        severity: 'warning',
         metadata: {
           runId: input.runId,
           sessionId: input.sessionId,
@@ -662,7 +801,7 @@ export class RunHandler {
         },
       });
     };
-    input.ws.once("close", markSubscriptionLost);
+    input.ws.once('close', markSubscriptionLost);
     const ensureSubscribed = (): boolean => {
       if (!subscribed) return false;
       if (input.ws?.readyState === input.ws?.OPEN) return true;
@@ -672,24 +811,40 @@ export class RunHandler {
 
     return {
       send: (message) => {
-        if (ensureSubscribed() && !this.options.transport.send(input.ws!, message)) {
+        if (this.backpressure.tryBuffer(input.runId, message)) return;
+        if (
+          ensureSubscribed() &&
+          !this.options.transport.send(input.ws!, message)
+        ) {
           markSubscriptionLost();
         }
       },
       sendError: (code, message, correlation) => {
-        if (ensureSubscribed() && !this.options.transport.sendError(input.ws!, code, message, input.runId, correlation)) {
+        if (
+          ensureSubscribed() &&
+          !this.options.transport.sendError(
+            input.ws!,
+            code,
+            message,
+            input.runId,
+            correlation
+          )
+        ) {
           markSubscriptionLost();
         }
       },
       dispose: () => {
-        input.ws?.off("close", markSubscriptionLost);
+        input.ws?.off('close', markSubscriptionLost);
+        this.activeRunSockets.delete(input.runId);
       },
     };
   }
 
   // ─── Private: Workflow background runs ─────────────────────
 
-  private startWorkflowRunInBackground(input: WorkflowBackgroundRunInput): void {
+  private startWorkflowRunInBackground(
+    input: WorkflowBackgroundRunInput
+  ): void {
     const task = this.runOrchestratedTask({
       clientId: input.clientId,
       runId: input.run.runId,
@@ -706,33 +861,46 @@ export class RunHandler {
       detached: true,
       admissionLease: input.admissionLease,
       onWorkflowStatus: async (status) => {
-        await this.updateAndBroadcastWorkflowRun(input.workflow.id, input.run.runId, {
-          status,
-          error: undefined,
-        });
+        await this.updateAndBroadcastWorkflowRun(
+          input.workflow.id,
+          input.run.runId,
+          {
+            status,
+            error: undefined,
+          }
+        );
       },
       onTerminal: async (status, error) => {
-        await this.updateAndBroadcastWorkflowRun(input.workflow.id, input.run.runId, {
-          status,
-          error,
-        });
+        await this.updateAndBroadcastWorkflowRun(
+          input.workflow.id,
+          input.run.runId,
+          {
+            status,
+            error,
+          }
+        );
       },
     });
 
     const tracked = task
       .catch(async (error) => {
-        console.error(`[Daemon] Background workflow run ${input.run.runId} failed:`, error);
-        await this
-          .updateAndBroadcastWorkflowRun(input.workflow.id, input.run.runId, {
-            status: "failed",
+        console.error(
+          `[Daemon] Background workflow run ${input.run.runId} failed:`,
+          error
+        );
+        await this.updateAndBroadcastWorkflowRun(
+          input.workflow.id,
+          input.run.runId,
+          {
+            status: 'failed',
             error: errorMessage(error),
-          })
-          .catch((storeError) => {
-            console.error(
-              `[Daemon] Failed to persist failed workflow run ${input.run.runId}:`,
-              storeError
-            );
-          });
+          }
+        ).catch((storeError) => {
+          console.error(
+            `[Daemon] Failed to persist failed workflow run ${input.run.runId}:`,
+            storeError
+          );
+        });
       })
       .finally(() => {
         this.workflowBackgroundTasks.delete(tracked);
@@ -753,7 +921,8 @@ export class RunHandler {
     scheduledFor: string
   ): Promise<WorkflowRunEntry | undefined> {
     return (await this.options.workflowStore.listRuns(workflowId)).find(
-      (run) => run.workflowId === workflowId && run.scheduledFor === scheduledFor
+      (run) =>
+        run.workflowId === workflowId && run.scheduledFor === scheduledFor
     );
   }
 
@@ -762,7 +931,11 @@ export class RunHandler {
     runId: string,
     patch: { status?: WorkflowRunStatus; error?: string }
   ): Promise<WorkflowRunEntry | undefined> {
-    const run = await this.options.workflowStore.updateRun(workflowId, runId, patch);
+    const run = await this.options.workflowStore.updateRun(
+      workflowId,
+      runId,
+      patch
+    );
     if (run) {
       this.broadcastWorkflowRunUpdated(run);
     }
@@ -773,33 +946,46 @@ export class RunHandler {
 // ─── Standalone helper functions ───────────────────────────
 
 function isActiveRunStatus(status: RunStatus): boolean {
-  return status === "queued" || status === "running" || status === "awaiting-approval" || status === "cancelling";
-}
-
-function shouldStartGoalRun(
-  msg: Pick<RunTaskMessage, "mode" | "visibleGoal" | "maxRounds" | "maxStalledRounds">
-): boolean {
   return (
-    msg.mode === "goal" ||
-    msg.mode === "long-run" ||
-    typeof msg.visibleGoal === "string" ||
-    (typeof msg.maxRounds === "number" && msg.maxRounds > 1) ||
-    typeof msg.maxStalledRounds === "number"
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'awaiting-approval' ||
+    status === 'cancelling'
   );
 }
 
-function workflowStatusFromRunStatus(status: RunStatus | undefined): WorkflowRunStatus | undefined {
-  if (status === "completed") return "completed";
-  if (status === "failed") return "failed";
-  if (status === "cancelled") return "cancelled";
-  if (status === "awaiting-approval") return "awaiting-approval";
-  if (status === "queued" || status === "running" || status === "cancelling") {
-    return "running";
+function shouldStartGoalRun(
+  msg: Pick<
+    RunTaskMessage,
+    'mode' | 'visibleGoal' | 'maxRounds' | 'maxStalledRounds'
+  >
+): boolean {
+  return (
+    msg.mode === 'goal' ||
+    msg.mode === 'long-run' ||
+    typeof msg.visibleGoal === 'string' ||
+    (typeof msg.maxRounds === 'number' && msg.maxRounds > 1) ||
+    typeof msg.maxStalledRounds === 'number'
+  );
+}
+
+function workflowStatusFromRunStatus(
+  status: RunStatus | undefined
+): WorkflowRunStatus | undefined {
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  if (status === 'cancelled') return 'cancelled';
+  if (status === 'awaiting-approval') return 'awaiting-approval';
+  if (status === 'queued' || status === 'running' || status === 'cancelling') {
+    return 'running';
   }
   return undefined;
 }
 
-function workflowScheduleLeaseKey(workflowId: string, scheduledFor: string): string {
+function workflowScheduleLeaseKey(
+  workflowId: string,
+  scheduledFor: string
+): string {
   return `${workflowId}\0${scheduledFor}`;
 }
 
@@ -822,32 +1008,41 @@ export function correlateResponse<T extends DaemonOutboundMessage>(
   };
 }
 
-export function correlationFrom(input: DaemonCorrelationFields): DaemonCorrelationFields {
+export function correlationFrom(
+  input: DaemonCorrelationFields
+): DaemonCorrelationFields {
   return {
     ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
-    ...(input.correlationId !== undefined ? { correlationId: input.correlationId } : {}),
+    ...(input.correlationId !== undefined
+      ? { correlationId: input.correlationId }
+      : {}),
   };
 }
 
-function stringMetadata(metadata: JsonObject | undefined, key: string): string | undefined {
+function stringMetadata(
+  metadata: JsonObject | undefined,
+  key: string
+): string | undefined {
   const value = metadata?.[key];
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
 function stringPayload(payload: JsonObject, key: string): string | undefined {
   const value = payload[key];
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
 function scopedContextConfigJson(
-  config: RunTaskMessage["scopedContextConfig"] | undefined
+  config: RunTaskMessage['scopedContextConfig'] | undefined
 ): JsonObject | undefined {
   if (!config) return undefined;
   return compactJsonObject({
     userEnabledIds: jsonStringArray(config.userEnabledIds),
     userDisabledIds: jsonStringArray(config.userDisabledIds),
     includeRecommendationHints: jsonBoolean(config.includeRecommendationHints),
-    includeAncestorContextFiles: jsonBoolean(config.includeAncestorContextFiles),
+    includeAncestorContextFiles: jsonBoolean(
+      config.includeAncestorContextFiles
+    ),
     includeProjectSkillDirs: jsonBoolean(config.includeProjectSkillDirs),
     includeWorkspaceSkillDirs: jsonBoolean(config.includeWorkspaceSkillDirs),
     includeGlobalSkillDirs: jsonBoolean(config.includeGlobalSkillDirs),
@@ -863,16 +1058,18 @@ function scopedContextConfigJson(
   });
 }
 
-function runTaskConfigSnapshot(input: Pick<
-  OrchestratedRunInput,
-  | "visibleGoal"
-  | "workspaceMode"
-  | "budgetDifficulty"
-  | "runTokenBudget"
-  | "maxRounds"
-  | "maxStalledRounds"
-  | "backgroundDrainTimeoutMs"
->): JsonObject | undefined {
+function runTaskConfigSnapshot(
+  input: Pick<
+    OrchestratedRunInput,
+    | 'visibleGoal'
+    | 'workspaceMode'
+    | 'budgetDifficulty'
+    | 'runTokenBudget'
+    | 'maxRounds'
+    | 'maxStalledRounds'
+    | 'backgroundDrainTimeoutMs'
+  >
+): JsonObject | undefined {
   const snapshot = compactJsonObject({
     visibleGoal: input.visibleGoal,
     workspaceMode: input.workspaceMode,
@@ -890,7 +1087,7 @@ function jsonStringArray(value: string[] | undefined): string[] | undefined {
 }
 
 function jsonBoolean(value: boolean | undefined): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function createBackendUserMessageId(runId: string): string {
@@ -905,18 +1102,21 @@ function createBackendUserMessageId(runId: string): string {
  */
 function isRewindBoundaryUserMessage(message: AgentMessage): boolean {
   const metadata = message.metadata;
-  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
-    if (metadata.kind === "daemon-user-message-boundary") return true;
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    if (metadata.kind === 'daemon-user-message-boundary') return true;
     if (
-      metadata.kind === "runtime-synthesis-nudge" ||
-      metadata.generatedBy === "agent-runtime-synthesis" ||
+      metadata.kind === 'runtime-synthesis-nudge' ||
+      metadata.generatedBy === 'agent-runtime-synthesis' ||
       metadata.synthetic === true ||
       metadata.internal === true
     ) {
       return false;
     }
   }
-  if (typeof message.id === "string" && message.id.startsWith("user_boundary_")) {
+  if (
+    typeof message.id === 'string' &&
+    message.id.startsWith('user_boundary_')
+  ) {
     return true;
   }
   const text = userMessagePlainText(message);
@@ -928,18 +1128,26 @@ function isRewindBoundaryUserMessage(message: AgentMessage): boolean {
 
 function userMessagePlainText(message: AgentMessage): string {
   return (message.blocks ?? [])
-    .filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block): block is { type: 'text'; text: string } =>
+        block.type === 'text' && typeof block.text === 'string'
+    )
     .map((block) => block.text)
-    .join("\n")
+    .join('\n')
     .trim();
 }
 
 function isRuntimeInternalUserPrompt(text: string): boolean {
   if (!text) return false;
-  if (text.startsWith("【系统】")) return true;
-  if (text.includes("请基于以上工具结果") && text.includes("不要再调用工具")) return true;
-  if (text.includes("轮次将尽") && text.includes("不要再调用工具")) return true;
-  if (text.includes("请仅基于已完成的工具结果给出结论") && text.includes("不要再调用工具")) return true;
+  if (text.startsWith('【系统】')) return true;
+  if (text.includes('请基于以上工具结果') && text.includes('不要再调用工具'))
+    return true;
+  if (text.includes('轮次将尽') && text.includes('不要再调用工具')) return true;
+  if (
+    text.includes('请仅基于已完成的工具结果给出结论') &&
+    text.includes('不要再调用工具')
+  )
+    return true;
   return false;
 }
 
@@ -947,10 +1155,10 @@ function createRunPromptMessage(
   prompt: string,
   userMessageId: string,
   multimodal?: {
-    content?: RunTaskMessage["content"];
+    content?: RunTaskMessage['content'];
     hasImages?: boolean;
-    attachments?: RunTaskMessage["attachments"];
-  },
+    attachments?: RunTaskMessage['attachments'];
+  }
 ): AgentMessage {
   const hasImages =
     Boolean(multimodal?.hasImages) ||
@@ -958,14 +1166,14 @@ function createRunPromptMessage(
       multimodal?.content?.some(
         (part) =>
           part &&
-          typeof part === "object" &&
-          (part as { type?: string }).type === "image_url",
-      ),
+          typeof part === 'object' &&
+          (part as { type?: string }).type === 'image_url'
+      )
     );
   const metadata: JsonObject = {
-    kind: "daemon-user-message-boundary",
+    kind: 'daemon-user-message-boundary',
     boundaryId: userMessageId,
-    generatedBy: "agent-daemon",
+    generatedBy: 'agent-daemon',
   };
   if (multimodal?.content?.length) {
     // OpenAI-style parts for provider vision path (array is valid JsonValue)
@@ -973,23 +1181,33 @@ function createRunPromptMessage(
   }
   if (hasImages) metadata.hasImages = true;
   if (multimodal?.attachments?.length) {
-    metadata.attachments = multimodal.attachments as unknown as JsonObject[string];
+    metadata.attachments =
+      multimodal.attachments as unknown as JsonObject[string];
   }
-  const message = createTextMessage("user", prompt, metadata);
+  const message = createTextMessage('user', prompt, metadata);
   return {
     ...message,
     id: userMessageId,
   };
 }
 
-function checkpointReference(checkpoint: RuntimeCheckpointRecord): string | undefined {
-  return checkpoint.manifestPath ?? stringMetadata(checkpoint.metadata, "refName") ?? stringMetadata(checkpoint.metadata, "manifestPath");
+function checkpointReference(
+  checkpoint: RuntimeCheckpointRecord
+): string | undefined {
+  return (
+    checkpoint.manifestPath ??
+    stringMetadata(checkpoint.metadata, 'refName') ??
+    stringMetadata(checkpoint.metadata, 'manifestPath')
+  );
 }
 
-function checkpointWorkspaceRoot(checkpoint: RuntimeCheckpointRecord, fallback: string): string {
+function checkpointWorkspaceRoot(
+  checkpoint: RuntimeCheckpointRecord,
+  fallback: string
+): string {
   return (
-    stringMetadata(checkpoint.metadata, "workspaceRoot") ??
-    stringMetadata(checkpoint.metadata, "repositoryRoot") ??
+    stringMetadata(checkpoint.metadata, 'workspaceRoot') ??
+    stringMetadata(checkpoint.metadata, 'repositoryRoot') ??
     fallback
   );
 }
@@ -1013,11 +1231,14 @@ function checkpointMetadata(checkpoint: RuntimeCheckpointRecord): JsonObject {
 }
 
 function safeIdSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "run";
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'run';
 }
 
 function stringArrayValue(value: unknown): string[] | undefined {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === 'string')
+  ) {
     return undefined;
   }
   return value.length > 0 ? value : undefined;
@@ -1030,7 +1251,7 @@ async function delay(ms: number): Promise<void> {
 // ─── ConversationBoundaryEmissionContext ────────────────────
 
 interface ConversationBoundaryEmissionContextOptions {
-  config: Pick<DaemonConfig, "sessionEventLogDir">;
+  config: Pick<DaemonConfig, 'sessionEventLogDir'>;
   sessionId: string;
   runId: string;
   cwd: string;
@@ -1051,14 +1272,22 @@ class ConversationBoundaryEmissionContext {
    */
   private runtimeStore: JsonlSessionStore | undefined;
 
-  constructor(private readonly options: ConversationBoundaryEmissionContextOptions) {
+  constructor(
+    private readonly options: ConversationBoundaryEmissionContextOptions
+  ) {
     this.boundaryManifest = new ConversationBoundaryManifestService({
-      manifestPath: resolveDaemonConversationBoundaryManifestPath(options.config),
+      manifestPath: resolveDaemonConversationBoundaryManifestPath(
+        options.config
+      ),
     });
     this.checkpointManifest = new CheckpointManifestService({
       manifestPath: resolveDaemonCheckpointManifestPath(options.config),
     });
-    this.runtimeStorePath = runtimeSessionStorePath(options.config, options.sessionId, options.cwd);
+    this.runtimeStorePath = runtimeSessionStorePath(
+      options.config,
+      options.sessionId,
+      options.cwd
+    );
   }
 
   /**
@@ -1072,13 +1301,18 @@ class ConversationBoundaryEmissionContext {
 
   private getRuntimeStore(): JsonlSessionStore {
     if (!this.runtimeStore) {
-      this.runtimeStore = new JsonlSessionStore(this.runtimeStorePath, { mode: "append" });
+      this.runtimeStore = new JsonlSessionStore(this.runtimeStorePath, {
+        mode: 'append',
+      });
     }
     return this.runtimeStore;
   }
 
-  async observe(orchestratorEvent: OrchestratorEvent, event: AgentEvent): Promise<void> {
-    if (event.type === "message-end" && event.message.role === "user") {
+  async observe(
+    orchestratorEvent: OrchestratorEvent,
+    event: AgentEvent
+  ): Promise<void> {
+    if (event.type === 'message-end' && event.message.role === 'user') {
       // Runtime synthesis nudges are role=user but not real product turns.
       // Still refresh the active boundary leaf so rewind targets include post-tool work.
       if (!isRewindBoundaryUserMessage(event.message)) {
@@ -1090,18 +1324,21 @@ class ConversationBoundaryEmissionContext {
       return;
     }
 
-    if (event.type === "checkpoint-created") {
+    if (event.type === 'checkpoint-created') {
       await this.observeCheckpoint(event.checkpoint, event.timestamp);
       await this.refreshLatestLeaf(orchestratorEvent);
       return;
     }
 
-    if (event.type === "message-end") {
+    if (event.type === 'message-end') {
       await this.refreshLatestLeaf(orchestratorEvent, event.message.id);
     }
   }
 
-  private async observeUserMessage(orchestratorEvent: OrchestratorEvent, message: AgentMessage): Promise<void> {
+  private async observeUserMessage(
+    orchestratorEvent: OrchestratorEvent,
+    message: AgentMessage
+  ): Promise<void> {
     if (this.emittedUserMessageIds.has(message.id)) {
       return;
     }
@@ -1128,7 +1365,7 @@ class ConversationBoundaryEmissionContext {
       changedPaths: [],
       createdAt: orchestratorEvent.timestamp,
       metadata: compactJsonObject({
-        source: "daemon-orchestrated-run",
+        source: 'daemon-orchestrated-run',
         runtimeSessionStorePath: this.runtimeStorePath,
       }),
     });
@@ -1137,7 +1374,10 @@ class ConversationBoundaryEmissionContext {
     this.latestBoundaryUserMessageId = message.id;
   }
 
-  private async observeCheckpoint(checkpoint: RuntimeCheckpointRecord, createdAt: string): Promise<void> {
+  private async observeCheckpoint(
+    checkpoint: RuntimeCheckpointRecord,
+    createdAt: string
+  ): Promise<void> {
     if (!this.latestBoundaryUserMessageId) {
       return;
     }
@@ -1158,28 +1398,39 @@ class ConversationBoundaryEmissionContext {
       },
       checkpointId: checkpoint.id,
       checkpointRef,
-      workspaceRoot: checkpointWorkspaceRoot(checkpoint, this.options.workspaceRoot),
+      workspaceRoot: checkpointWorkspaceRoot(
+        checkpoint,
+        this.options.workspaceRoot
+      ),
       changedPaths: checkpointChangedPaths(checkpoint),
-      source: "runtime",
+      source: 'runtime',
       createdAt,
       metadata: checkpointMetadata(checkpoint),
     });
   }
 
-  private async findRuntimeMessageEntry(messageId: string): Promise<Extract<SessionEntry, { type: "message" }> | undefined> {
+  private async findRuntimeMessageEntry(
+    messageId: string
+  ): Promise<Extract<SessionEntry, { type: 'message' }> | undefined> {
     const entries = await this.getRuntimeStore().readAll();
     return entries.find(
-      (entry): entry is Extract<SessionEntry, { type: "message" }> =>
-        entry.type === "message" && entry.message.id === messageId
+      (entry): entry is Extract<SessionEntry, { type: 'message' }> =>
+        entry.type === 'message' && entry.message.id === messageId
     );
   }
 
-  private async refreshLatestLeaf(orchestratorEvent: OrchestratorEvent, messageId?: string): Promise<void> {
+  private async refreshLatestLeaf(
+    orchestratorEvent: OrchestratorEvent,
+    messageId?: string
+  ): Promise<void> {
     const latest = await this.boundaryManifest.findLatest({
       sessionId: this.options.sessionId,
       runId: this.options.runId,
     });
-    if (!latest || (messageId !== undefined && latest.userMessageId === messageId)) {
+    if (
+      !latest ||
+      (messageId !== undefined && latest.userMessageId === messageId)
+    ) {
       return;
     }
 
@@ -1192,9 +1443,13 @@ class ConversationBoundaryEmissionContext {
       sessionId: latest.sessionId,
       runId: latest.runId,
       userMessageId: latest.userMessageId,
-      ...(latest.sessionTreeLeafIdBefore !== undefined ? { sessionTreeLeafIdBefore: latest.sessionTreeLeafIdBefore } : {}),
+      ...(latest.sessionTreeLeafIdBefore !== undefined
+        ? { sessionTreeLeafIdBefore: latest.sessionTreeLeafIdBefore }
+        : {}),
       sessionTreeLeafIdAfter: leafId,
-      ...(latest.runtimeLeafIdBefore !== undefined ? { runtimeLeafIdBefore: latest.runtimeLeafIdBefore } : {}),
+      ...(latest.runtimeLeafIdBefore !== undefined
+        ? { runtimeLeafIdBefore: latest.runtimeLeafIdBefore }
+        : {}),
       runtimeLeafIdAfter: leafId,
       eventSequence: orchestratorEvent.sequence,
       workspaceRoot: latest.workspaceRoot,
@@ -1210,6 +1465,8 @@ class ConversationBoundaryEmissionContext {
   }
 
   private async readCurrentRuntimeLeafId(): Promise<string | undefined> {
-    return findSessionLeafId(await this.getRuntimeStore().readAll()) ?? undefined;
+    return (
+      findSessionLeafId(await this.getRuntimeStore().readAll()) ?? undefined
+    );
   }
 }

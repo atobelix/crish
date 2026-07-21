@@ -3,7 +3,7 @@
  * 定义 WebSocket 消息协议和内部数据结构
  */
 
-import type { JsonObject, AgentEvent } from "@crish/shared-types";
+import type { JsonObject, AgentEvent } from '@crish/shared-types';
 import type {
   CheckpointManifestRecord,
   ConversationBoundaryManifestRecord,
@@ -23,7 +23,7 @@ import type {
   ScopedContextResolverProject,
   ScopedContextScope,
   ScopedContextSource,
-} from "@crish/agent-runtime";
+} from '@crish/agent-runtime';
 import type {
   ConversationRewindCheckpointTarget,
   ConversationRewindPlan,
@@ -36,10 +36,10 @@ import type {
   RunStatus,
   OrchestratorSessionRecord,
   SessionTreeEntry,
-} from "@crish/agent-orchestrator";
-import type { SessionAction, SessionActionReceipt } from "@crish/shared-types";
-import { homedir } from "node:os";
-import { join } from "node:path";
+} from '@crish/agent-orchestrator';
+import type { SessionAction, SessionActionReceipt } from '@crish/shared-types';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // ==================== WebSocket 消息协议 ====================
 
@@ -49,6 +49,8 @@ export type DaemonInboundMessage = (
   | ApproveToolMessage
   | DenyToolMessage
   | CancelRunMessage
+  | StreamPauseMessage
+  | StreamResumeMessage
   | HelloMessage
   | PingMessage
   | GetStatusMessage
@@ -105,7 +107,8 @@ export type DaemonInboundMessage = (
   | ResolveScopedContextMessage
   | ProbeProviderModelsMessage
   | ProbeProviderChatMessage
-) & DaemonCorrelationFields;
+) &
+  DaemonCorrelationFields;
 
 /** Daemon → 客户端的消息类型 */
 export type DaemonOutboundMessage = (
@@ -172,7 +175,8 @@ export type DaemonOutboundMessage = (
   | ScopedContextResolvedMessage
   | ProviderModelsProbedMessage
   | ProviderChatProbedMessage
-) & DaemonCorrelationFields;
+) &
+  DaemonCorrelationFields;
 
 // ---- 入站消息 ----
 
@@ -183,9 +187,9 @@ export interface DaemonCorrelationFields {
 
 /** OpenAI-style multimodal content part on run-task (light vision bridge) */
 export type RunTaskContentPart =
-  | { type: "text"; text: string }
+  | { type: 'text'; text: string }
   | {
-      type: "image_url";
+      type: 'image_url';
       image_url: { url: string; detail?: string };
       name?: string;
       mime?: string;
@@ -193,12 +197,12 @@ export type RunTaskContentPart =
   | JsonObject;
 
 export interface RunTaskMessage {
-  type: "run-task";
+  type: 'run-task';
   runId: string;
   sessionId?: string;
   prompt: string;
   mode?: string;
-  workspaceMode?: "project" | "none";
+  workspaceMode?: 'project' | 'none';
   cwd?: string;
   visibleGoal?: string;
   budgetDifficulty?: string;
@@ -213,7 +217,7 @@ export interface RunTaskMessage {
    * plan = 仅 T0；写操作 soft-deny
    * unattended = T0-T2 自动、T3/T4 soft-deny（无 UI 批处理）
    */
-  permissionMode?: "ask" | "auto" | "full-access" | "plan" | "unattended";
+  permissionMode?: 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended';
   workspaceRoot?: string;
   projectRoot?: string;
   projectMarkers?: string[];
@@ -234,76 +238,88 @@ export interface RunTaskMessage {
   /** 客户端标记：本轮含图片附件 */
   hasImages?: boolean;
   /** 轻量附件元数据（无 dataUrl） */
-  attachments?: Array<{ name?: string; mime?: string; kind?: string } & JsonObject>;
+  attachments?: Array<
+    { name?: string; mime?: string; kind?: string } & JsonObject
+  >;
 }
 
 export interface ApproveToolMessage {
-  type: "approve-tool";
+  type: 'approve-tool';
   toolCallId: string;
   /** 审批范围："project" = 在项目中允许, "always" = 始终允许 */
-  scope?: "project" | "always";
+  scope?: 'project' | 'always';
 }
 
 export interface DenyToolMessage {
-  type: "deny-tool";
+  type: 'deny-tool';
   toolCallId: string;
 }
 
 export interface CancelRunMessage {
-  type: "cancel-run";
+  type: 'cancel-run';
+  runId: string;
+}
+
+export interface StreamPauseMessage {
+  type: 'stream-pause';
+  runId: string;
+}
+
+export interface StreamResumeMessage {
+  type: 'stream-resume';
   runId: string;
 }
 
 export interface EnqueuePendingInputMessage {
-  type: "enqueue-pending-input";
+  type: 'enqueue-pending-input';
   sessionId: string;
   text: string;
   runId?: string;
   mode?: PendingInputMode;
   inputId?: string;
-  source?: PendingInputRecord["source"];
+  source?: PendingInputRecord['source'];
   metadata?: JsonObject;
 }
 
 export interface CancelPendingInputMessage {
-  type: "cancel-pending-input";
+  type: 'cancel-pending-input';
   inputId: string;
   sessionId?: string;
   reason?: string;
 }
 
 export interface DispatchPendingInputMessage {
-  type: "dispatch-pending-input";
+  type: 'dispatch-pending-input';
   inputId: string;
   sessionId?: string;
   targetRunId?: string;
 }
 
 export interface ListPendingInputsMessage {
-  type: "list-pending-inputs";
+  type: 'list-pending-inputs';
   sessionId?: string;
 }
 
 export interface HelloMessage {
-  type: "hello";
+  type: 'hello';
   protocolVersion: number;
   clientName?: string;
 }
 
 export interface PingMessage {
-  type: "ping";
+  type: 'ping';
 }
 
 export interface GetStatusMessage {
-  type: "get-status";
+  type: 'get-status';
 }
 
 export interface ListCapabilitiesMessage {
-  type: "list-capabilities";
+  type: 'list-capabilities';
 }
 
 export interface UpdateConfigMessage {
-  type: "update-config";
+  type: 'update-config';
   apiKey?: string;
   baseUrl?: string;
   model?: string;
@@ -313,14 +329,14 @@ export interface UpdateConfigMessage {
 }
 
 export interface ProbeProviderModelsMessage {
-  type: "probe-provider-models";
+  type: 'probe-provider-models';
   profileId: string;
   baseUrl: string;
   apiKey: string;
 }
 
 export interface ProbeProviderChatMessage {
-  type: "probe-provider-chat";
+  type: 'probe-provider-chat';
   profileId: string;
   baseUrl: string;
   apiKey: string;
@@ -328,18 +344,18 @@ export interface ProbeProviderChatMessage {
 }
 
 export interface ListSessionsMessage {
-  type: "list-sessions";
+  type: 'list-sessions';
   includeArchived?: boolean;
   includeDeleted?: boolean;
 }
 
 export interface ListRunsMessage {
-  type: "list-runs";
+  type: 'list-runs';
   sessionId?: string;
 }
 
 export interface ReadSessionEventsMessage {
-  type: "read-session-events";
+  type: 'read-session-events';
   sessionId: string;
   afterSequence?: number;
   lastEventId?: string;
@@ -348,7 +364,7 @@ export interface ReadSessionEventsMessage {
 }
 
 export interface ReadRunEventsMessage {
-  type: "read-run-events";
+  type: 'read-run-events';
   runId: string;
   afterSequence?: number;
   lastEventId?: string;
@@ -358,16 +374,16 @@ export interface ReadRunEventsMessage {
 }
 
 export interface GetRunSnapshotMessage {
-  type: "get-run-snapshot";
+  type: 'get-run-snapshot';
   runId: string;
 }
 
 export interface ListWorkflowsMessage {
-  type: "list-workflows";
+  type: 'list-workflows';
 }
 
 export interface CreateWorkflowMessage {
-  type: "create-workflow";
+  type: 'create-workflow';
   id?: string;
   name: string;
   prompt: string;
@@ -379,7 +395,7 @@ export interface CreateWorkflowMessage {
 }
 
 export interface UpdateWorkflowMessage {
-  type: "update-workflow";
+  type: 'update-workflow';
   workflowId: string;
   name?: string;
   prompt?: string;
@@ -391,44 +407,44 @@ export interface UpdateWorkflowMessage {
 }
 
 export interface DeleteWorkflowMessage {
-  type: "delete-workflow";
+  type: 'delete-workflow';
   workflowId: string;
 }
 
 export interface TriggerWorkflowMessage {
-  type: "trigger-workflow";
+  type: 'trigger-workflow';
   workflowId: string;
   runId?: string;
   sessionId?: string;
 }
 
 export interface ListWorkflowRunsMessage {
-  type: "list-workflow-runs";
+  type: 'list-workflow-runs';
   workflowId?: string;
 }
 
 export interface GitStatusMessage {
-  type: "git-status";
+  type: 'git-status';
   cwd?: string;
 }
 
 export interface GitDiffMessage {
-  type: "git-diff";
+  type: 'git-diff';
   cwd?: string;
   path?: string;
   staged?: boolean;
 }
 
 export interface ListPlanDocumentsMessage {
-  type: "list-plan-documents";
+  type: 'list-plan-documents';
 }
 
 export interface CreatePlanDocumentMessage extends CreatePlanDocumentInput {
-  type: "create-plan-document";
+  type: 'create-plan-document';
 }
 
 export interface CreateRequirementsAlignmentPlanMessage {
-  type: "create-requirements-alignment-plan";
+  type: 'create-requirements-alignment-plan';
   id?: string;
   title?: string;
   goal: string;
@@ -437,40 +453,40 @@ export interface CreateRequirementsAlignmentPlanMessage {
   assumptions?: string[];
   acceptance?: string[];
   risks?: string[];
-  source?: "user" | "assistant" | "slash-command" | "workflow" | "system";
+  source?: 'user' | 'assistant' | 'slash-command' | 'workflow' | 'system';
   metadata?: JsonObject;
 }
 
 export interface GetPlanDocumentMessage {
-  type: "get-plan-document";
+  type: 'get-plan-document';
   documentId: string;
 }
 
 export interface PatchPlanDocumentMessage {
-  type: "patch-plan-document";
+  type: 'patch-plan-document';
   documentId: string;
   patch: PlanDocumentPatch;
 }
 
 export interface DeletePlanDocumentMessage {
-  type: "delete-plan-document";
+  type: 'delete-plan-document';
   documentId: string;
 }
 
 export interface ListMutationLeasesMessage {
-  type: "list-mutation-leases";
+  type: 'list-mutation-leases';
   cwd?: string;
 }
 
 export interface ListBackgroundTasksMessage {
-  type: "list-background-tasks";
+  type: 'list-background-tasks';
   includeHistory?: boolean;
-  state?: DaemonBackgroundTaskSnapshot["state"];
+  state?: DaemonBackgroundTaskSnapshot['state'];
   limit?: number;
 }
 
 export interface StartBackgroundTaskMessage {
-  type: "start-background-task";
+  type: 'start-background-task';
   command: string;
   cwd?: string;
   workspaceRoot?: string;
@@ -480,54 +496,54 @@ export interface StartBackgroundTaskMessage {
 }
 
 export interface CancelBackgroundTaskMessage {
-  type: "cancel-background-task";
+  type: 'cancel-background-task';
   taskId: string;
 }
 
 export interface GetBackgroundTaskHistoryMessage {
-  type: "get-background-task-history";
-  state?: DaemonBackgroundTaskSnapshot["state"];
+  type: 'get-background-task-history';
+  state?: DaemonBackgroundTaskSnapshot['state'];
   limit?: number;
 }
 
 export interface ListArtifactsMessage {
-  type: "list-artifacts";
+  type: 'list-artifacts';
   sessionId?: string;
 }
 
 export interface GetArtifactContentMessage {
-  type: "get-artifact-content";
+  type: 'get-artifact-content';
   artifactUri: string;
 }
 
 export interface ListMemoriesMessage {
-  type: "list-memories";
+  type: 'list-memories';
   scope?: string;
 }
 
 export interface DeleteMemoryMessage {
-  type: "delete-memory";
+  type: 'delete-memory';
   memoryId: string;
 }
 
 export interface ListCheckpointsMessage {
-  type: "list-checkpoints";
+  type: 'list-checkpoints';
   runId?: string;
   sessionId?: string;
 }
 
 export interface RestoreCheckpointMessage {
-  type: "restore-checkpoint";
+  type: 'restore-checkpoint';
   checkpointId: string;
 }
 
 export interface GetCheckpointDiffMessage {
-  type: "get-checkpoint-diff";
+  type: 'get-checkpoint-diff';
   checkpointId: string;
 }
 
 export interface ResolveConversationRewindBoundaryMessage {
-  type: "resolve-conversation-rewind-boundary";
+  type: 'resolve-conversation-rewind-boundary';
   sessionId: string;
   userMessageId?: string;
   latestUserMessage?: boolean;
@@ -535,7 +551,7 @@ export interface ResolveConversationRewindBoundaryMessage {
 }
 
 export interface PreviewConversationRewindMessage {
-  type: "preview-conversation-rewind";
+  type: 'preview-conversation-rewind';
   sessionId: string;
   targetLeafId: string | null;
   entries: SessionTreeEntry[];
@@ -545,7 +561,7 @@ export interface PreviewConversationRewindMessage {
 }
 
 export interface PreviewConversationRewindByBoundaryMessage {
-  type: "preview-conversation-rewind-by-boundary";
+  type: 'preview-conversation-rewind-by-boundary';
   sessionId: string;
   userMessageId?: string;
   latestUserMessage?: boolean;
@@ -555,7 +571,7 @@ export interface PreviewConversationRewindByBoundaryMessage {
 }
 
 export interface ApplyConversationRewindMessage {
-  type: "apply-conversation-rewind";
+  type: 'apply-conversation-rewind';
   sessionId: string;
   targetLeafId?: string | null;
   entries?: SessionTreeEntry[];
@@ -568,53 +584,53 @@ export interface ApplyConversationRewindMessage {
 }
 
 export interface ApplySessionActionMessage {
-  type: "apply-session-action";
+  type: 'apply-session-action';
   action: SessionAction;
 }
 
 export interface SendToSubagentMessage {
-  type: "send-to-subagent";
+  type: 'send-to-subagent';
   subagentRunId: string;
   message: string;
 }
 
 export interface GetSubagentStatusMessage {
-  type: "get-subagent-status";
+  type: 'get-subagent-status';
   subagentRunId: string;
 }
 
 export interface StartMcpServerMessage {
-  type: "start-mcp-server";
+  type: 'start-mcp-server';
   serverId: string;
 }
 
 export interface StopMcpServerMessage {
-  type: "stop-mcp-server";
+  type: 'stop-mcp-server';
   serverId: string;
 }
 
 export interface ListMcpServersMessage {
-  type: "list-mcp-servers";
+  type: 'list-mcp-servers';
 }
 
 export interface GetScopedContextMessage {
-  type: "get-scoped-context";
+  type: 'get-scoped-context';
   scope?: ScopedContextScope;
   kind?: ScopedContextKind;
 }
 
 export interface UpsertScopedContextMessage {
-  type: "upsert-scoped-context";
+  type: 'upsert-scoped-context';
   record: ScopedContextRecord;
 }
 
 export interface DeleteScopedContextMessage {
-  type: "delete-scoped-context";
+  type: 'delete-scoped-context';
   recordId: string;
 }
 
 export interface ResolveScopedContextMessage extends ScopedContextResolverProject {
-  type: "resolve-scoped-context";
+  type: 'resolve-scoped-context';
   userEnabledIds?: string[];
   userDisabledIds?: string[];
   scopedContextConfig?: ScopedContextRuntimeConfig;
@@ -626,7 +642,7 @@ export interface ResolveScopedContextMessage extends ScopedContextResolverProjec
 export const DAEMON_HANDSHAKE_PROTOCOL_VERSION = 1;
 
 export interface DaemonReadyMessage {
-  type: "daemon-ready";
+  type: 'daemon-ready';
   port: number;
   /** Handshake protocol version — must match the version the Tauri client expects. */
   protocolVersion: number;
@@ -637,7 +653,7 @@ export interface DaemonReadyMessage {
 }
 
 export interface EventMessage {
-  type: "event";
+  type: 'event';
   runId: string;
   orchestratorEventId?: string;
   sequence?: number;
@@ -646,7 +662,7 @@ export interface EventMessage {
 }
 
 export interface ApprovalRequestedMessage {
-  type: "approval-requested";
+  type: 'approval-requested';
   runId: string;
   toolCallId: string;
   toolName: string;
@@ -662,11 +678,11 @@ export interface ApprovalRequestedMessage {
   metadata?: JsonObject;
 }
 
-export type ApprovalProtocolDecision = "approved" | "denied" | "expired";
-export type ApprovalProtocolStatus = "pending" | ApprovalProtocolDecision;
+export type ApprovalProtocolDecision = 'approved' | 'denied' | 'expired';
+export type ApprovalProtocolStatus = 'pending' | ApprovalProtocolDecision;
 
 export interface ApprovalResolvedMessage {
-  type: "approval-resolved";
+  type: 'approval-resolved';
   toolCallId: string;
   decision: ApprovalProtocolDecision;
   reason?: string;
@@ -674,25 +690,25 @@ export interface ApprovalResolvedMessage {
 }
 
 export interface ErrorMessage {
-  type: "error";
+  type: 'error';
   code: string;
   message: string;
   runId?: string;
 }
 
 export interface WelcomeMessage {
-  type: "welcome";
+  type: 'welcome';
   protocolVersion: number;
   serverName: string;
   capabilities: string[];
 }
 
 export interface PongMessage {
-  type: "pong";
+  type: 'pong';
 }
 
 export interface StatusResponseMessage {
-  type: "status-response";
+  type: 'status-response';
   lifecycle: DaemonLifecycleSnapshot;
   activeRuns: Array<{
     runId: string;
@@ -709,23 +725,23 @@ export interface StatusResponseMessage {
 }
 
 export type DaemonCapabilityState =
-  | "implemented"
-  | "experimental"
-  | "unsupported"
-  | "degraded"
-  | "backend-not-wired";
+  | 'implemented'
+  | 'experimental'
+  | 'unsupported'
+  | 'degraded'
+  | 'backend-not-wired';
 
 export type DaemonCapabilityOwner =
-  | "agent-daemon"
-  | "agent-runtime"
-  | "agent-orchestrator"
-  | "workbench"
-  | "tauri";
+  | 'agent-daemon'
+  | 'agent-runtime'
+  | 'agent-orchestrator'
+  | 'workbench'
+  | 'tauri';
 
 export interface DaemonCapabilityDiagnostic {
   code: string;
   message: string;
-  severity: "info" | "warning" | "error";
+  severity: 'info' | 'warning' | 'error';
   updatedAt: string;
   detail?: string;
   metadata?: JsonObject;
@@ -750,7 +766,7 @@ export interface DaemonCapabilitySnapshot {
 }
 
 export interface CapabilitiesResponseMessage {
-  type: "capabilities-response";
+  type: 'capabilities-response';
   snapshot: DaemonCapabilitySnapshot;
 }
 
@@ -775,17 +791,13 @@ export interface ApprovalStatusSnapshot {
   metadata?: JsonObject;
 }
 
-export type DaemonLifecycleState = "starting" | "ready" | "stopping" | "stopped" | "degraded";
+export type DaemonLifecycleState =
+  'starting' | 'ready' | 'stopping' | 'stopped' | 'degraded';
 
 export type DaemonLifecycleDiagnosticSource =
-  | "daemon"
-  | "websocket"
-  | "client"
-  | "event-store"
-  | "provider"
-  | "mcp";
+  'daemon' | 'websocket' | 'client' | 'event-store' | 'provider' | 'mcp';
 
-export type DaemonLifecycleDiagnosticSeverity = "warning" | "error";
+export type DaemonLifecycleDiagnosticSeverity = 'warning' | 'error';
 
 export interface DaemonLifecycleDiagnostic {
   code: string;
@@ -807,7 +819,7 @@ export interface DaemonClientDisconnectSnapshot {
 }
 
 export interface DaemonEventStoreStatusSnapshot {
-  status: "ok" | "failed";
+  status: 'ok' | 'failed';
   path: string;
   failure?: DaemonLifecycleDiagnostic;
 }
@@ -832,23 +844,20 @@ export interface DaemonLifecycleSnapshot {
   mcpReadiness: DaemonMcpReadiness;
 }
 
-export type DaemonProviderCredentialMode = "direct" | "auto";
+export type DaemonProviderCredentialMode = 'direct' | 'auto';
 
-export type DaemonProviderReadiness =
-  | "ready"
-  | "missing"
-  | "unknown";
+export type DaemonProviderReadiness = 'ready' | 'missing' | 'unknown';
 
-export type DaemonSystemPromptWireMode = "native-system-role" | "user-prefix";
+export type DaemonSystemPromptWireMode = 'native-system-role' | 'user-prefix';
 
 export type DaemonProviderApiKeySource =
-  | "default"
-  | "env"
-  | "runtime-update"
-  | "user-config"
-  | "workspace-config"
-  | "unset"
-  | "unknown";
+  | 'default'
+  | 'env'
+  | 'runtime-update'
+  | 'user-config'
+  | 'workspace-config'
+  | 'unset'
+  | 'unknown';
 
 export interface DaemonProviderRedactedApiKeyStatus {
   hasApiKey: boolean;
@@ -873,8 +882,9 @@ export interface DaemonProviderGatewayStatusSnapshot {
   code?: string;
   selectedRouteId?: string;
   selectedProviderId?: string;
-  selectedEndpointSupport?: "responses" | "chat-completions" | "auto";
-  selectedStreamingSupport?: "streaming" | "non-streaming" | "optional" | "unknown";
+  selectedEndpointSupport?: 'responses' | 'chat-completions' | 'auto';
+  selectedStreamingSupport?:
+    'streaming' | 'non-streaming' | 'optional' | 'unknown';
   selectedCredentialSource?: JsonObject;
   lastSuccess?: JsonObject;
   lastFailure?: JsonObject;
@@ -900,7 +910,8 @@ export interface DaemonProviderStatusSnapshot {
   updatedAt: string;
 }
 
-export type DaemonMcpReadiness = "ready" | "degraded" | "starting" | "stopped" | "unknown";
+export type DaemonMcpReadiness =
+  'ready' | 'degraded' | 'starting' | 'stopped' | 'unknown';
 
 export interface DaemonMcpStatusSnapshot {
   configured: boolean;
@@ -913,26 +924,26 @@ export interface DaemonMcpStatusSnapshot {
 }
 
 export interface ConfigUpdatedMessage {
-  type: "config-updated";
+  type: 'config-updated';
   updatedFields: string[];
 }
 
 export interface ProviderModelsProbedMessage {
-  type: "provider-models-probed";
+  type: 'provider-models-probed';
   ok: boolean;
   models: string[];
   error?: string;
 }
 
 export interface ProviderChatProbedMessage {
-  type: "provider-chat-probed";
+  type: 'provider-chat-probed';
   ok: boolean;
   latencyMs?: number;
   error?: string;
 }
 
 export interface SubagentStartedMessage {
-  type: "subagent-started";
+  type: 'subagent-started';
   runId: string;
   subagentId: string;
   subagentRunId: string;
@@ -942,17 +953,17 @@ export interface SubagentStartedMessage {
 }
 
 export interface SubagentEndedMessage {
-  type: "subagent-ended";
+  type: 'subagent-ended';
   runId: string;
   subagentId: string;
   subagentRunId: string;
   parentToolCallId: string;
-  status: "completed" | "failed";
+  status: 'completed' | 'failed';
   summary: string;
 }
 
 export interface SubagentEventMessage {
-  type: "subagent-event";
+  type: 'subagent-event';
   runId: string;
   subagentId: string;
   subagentRunId: string;
@@ -961,7 +972,7 @@ export interface SubagentEventMessage {
 }
 
 export interface SessionsListedMessage {
-  type: "sessions-listed";
+  type: 'sessions-listed';
   sessions: OrchestratorSessionRecord[];
   summaries?: DaemonSessionSummary[];
   eventLog?: OrchestratorEventLogMetadata;
@@ -969,13 +980,13 @@ export interface SessionsListedMessage {
 }
 
 export interface RunsListedMessage {
-  type: "runs-listed";
+  type: 'runs-listed';
   runs: OrchestratorRunRecord[];
   sessionId?: string;
 }
 
 export interface SessionEventsMessage {
-  type: "session-events";
+  type: 'session-events';
   sessionId: string;
   events: OrchestratorEvent[];
   eventLog: OrchestratorEventLogMetadata;
@@ -989,7 +1000,7 @@ export interface SessionEventsMessage {
 }
 
 export interface RunEventsMessage {
-  type: "run-events";
+  type: 'run-events';
   runId: string;
   events: OrchestratorEvent[];
   eventLog: OrchestratorEventLogMetadata;
@@ -1028,25 +1039,25 @@ export interface DaemonSessionSummary {
 export type DaemonPendingInputRecord = PendingInputRecord;
 
 export interface PendingInputQueuedMessage {
-  type: "pending-input-queued";
+  type: 'pending-input-queued';
   input: DaemonPendingInputRecord;
   event: OrchestratorEvent;
 }
 
 export interface PendingInputCancelledMessage {
-  type: "pending-input-cancelled";
+  type: 'pending-input-cancelled';
   input: DaemonPendingInputRecord;
   event: OrchestratorEvent;
 }
 
 export interface PendingInputDispatchedMessage {
-  type: "pending-input-dispatched";
+  type: 'pending-input-dispatched';
   input: DaemonPendingInputRecord;
   event: OrchestratorEvent;
 }
 
 export interface PendingInputsListedMessage {
-  type: "pending-inputs-listed";
+  type: 'pending-inputs-listed';
   inputs: DaemonPendingInputRecord[];
   sessionId?: string;
 }
@@ -1057,11 +1068,11 @@ export interface DaemonSessionListDiagnostics {
   summaryCount: number;
   metadataCount: number;
   filteredOutCount: number;
-  summarySource: "event-store" | "unavailable";
+  summarySource: 'event-store' | 'unavailable';
 }
 
 export interface RunSnapshotMessage {
-  type: "run-snapshot";
+  type: 'run-snapshot';
   runId: string;
   snapshot: DaemonTaskSnapshot;
 }
@@ -1076,15 +1087,16 @@ export interface DaemonEventReplayCursor {
 }
 
 export interface DaemonEventCursorDiagnostic {
-  code: "EVENT_LOG_CURSOR_MISMATCH";
+  code: 'EVENT_LOG_CURSOR_MISMATCH';
   message: string;
-  severity: "warning";
+  severity: 'warning';
   previous?: DaemonEventReplayCursor;
   current: OrchestratorEventLogMetadata;
   replayedFromSequence: number;
 }
 
-export type DaemonEventReadMode = "incremental" | "full-replay" | "cursor-replay";
+export type DaemonEventReadMode =
+  'incremental' | 'full-replay' | 'cursor-replay';
 
 export interface DaemonEventReadDiagnostics {
   mode: DaemonEventReadMode;
@@ -1099,27 +1111,27 @@ export interface DaemonEventReadDiagnostics {
 }
 
 export interface WorkflowsListedMessage {
-  type: "workflows-listed";
+  type: 'workflows-listed';
   workflows: WorkflowDefinition[];
 }
 
 export interface WorkflowCreatedMessage {
-  type: "workflow-created";
+  type: 'workflow-created';
   workflow: WorkflowDefinition;
 }
 
 export interface WorkflowUpdatedMessage {
-  type: "workflow-updated";
+  type: 'workflow-updated';
   workflow: WorkflowDefinition;
 }
 
 export interface WorkflowDeletedMessage {
-  type: "workflow-deleted";
+  type: 'workflow-deleted';
   workflowId: string;
 }
 
 export interface WorkflowTriggeredMessage {
-  type: "workflow-triggered";
+  type: 'workflow-triggered';
   accepted: true;
   runId: string;
   workflowRunId: string;
@@ -1127,7 +1139,7 @@ export interface WorkflowTriggeredMessage {
 }
 
 export interface WorkflowRunUpdatedMessage {
-  type: "workflow-run-updated";
+  type: 'workflow-run-updated';
   runId: string;
   workflowRunId: string;
   workflowId: string;
@@ -1135,14 +1147,14 @@ export interface WorkflowRunUpdatedMessage {
 }
 
 export interface WorkflowRunsListedMessage {
-  type: "workflow-runs-listed";
+  type: 'workflow-runs-listed';
   runs: WorkflowRunEntry[];
   workflowId?: string;
 }
 
 export interface DaemonGitStatusFile {
   path: string;
-  status: "A" | "M" | "D" | "U" | "R" | "C" | "?" | "!" | "mixed";
+  status: 'A' | 'M' | 'D' | 'U' | 'R' | 'C' | '?' | '!' | 'mixed';
   index: string;
   worktree: string;
   staged: boolean;
@@ -1153,7 +1165,7 @@ export interface DaemonGitStatusFile {
 }
 
 export interface GitStatusResponseMessage {
-  type: "git-status-response";
+  type: 'git-status-response';
   cwd: string;
   found: boolean;
   repositoryRoot?: string;
@@ -1170,7 +1182,7 @@ export interface GitStatusResponseMessage {
 }
 
 export interface GitDiffResponseMessage {
-  type: "git-diff-response";
+  type: 'git-diff-response';
   cwd: string;
   repositoryRoot?: string;
   path?: string;
@@ -1181,33 +1193,33 @@ export interface GitDiffResponseMessage {
 }
 
 export interface PlanDocumentsListedMessage {
-  type: "plan-documents-listed";
+  type: 'plan-documents-listed';
   documents: PlanDocumentSummary[];
 }
 
 export interface PlanDocumentCreatedMessage {
-  type: "plan-document-created";
+  type: 'plan-document-created';
   document: PlanDocument;
 }
 
 export interface PlanDocumentMessage {
-  type: "plan-document";
+  type: 'plan-document';
   document: PlanDocument;
 }
 
 export interface PlanDocumentPatchedMessage {
-  type: "plan-document-patched";
+  type: 'plan-document-patched';
   document: PlanDocument;
 }
 
 export interface PlanDocumentDeletedMessage {
-  type: "plan-document-deleted";
+  type: 'plan-document-deleted';
   documentId: string;
 }
 
 export interface MutationLeaseSnapshot {
   token: string;
-  scope: { type: "workspace" } | { type: "files"; paths: string[] };
+  scope: { type: 'workspace' } | { type: 'files'; paths: string[] };
   owner?: {
     runId?: string;
     sessionId?: string;
@@ -1222,39 +1234,39 @@ export interface MutationLeaseSnapshot {
 }
 
 export interface MutationLeasesListedMessage {
-  type: "mutation-leases-listed";
+  type: 'mutation-leases-listed';
   leases: MutationLeaseSnapshot[];
 }
 
 export interface DaemonBackgroundTaskDiagnostic {
   code: string;
   message: string;
-  severity: "info" | "warning" | "error";
+  severity: 'info' | 'warning' | 'error';
   updatedAt: string;
   detail?: string;
   metadata?: JsonObject;
 }
 
 export interface BackgroundTasksListedMessage {
-  type: "background-tasks-listed";
+  type: 'background-tasks-listed';
   tasks: DaemonBackgroundTaskSnapshot[];
   diagnostics: DaemonBackgroundTaskDiagnostic[];
 }
 
 export interface BackgroundTaskStartedMessage {
-  type: "background-task-started";
+  type: 'background-task-started';
   task: DaemonBackgroundTaskSnapshot;
   diagnostics: DaemonBackgroundTaskDiagnostic[];
 }
 
 export interface BackgroundTaskCancelledMessage {
-  type: "background-task-cancelled";
+  type: 'background-task-cancelled';
   task: DaemonBackgroundTaskSnapshot;
   diagnostics: DaemonBackgroundTaskDiagnostic[];
 }
 
 export interface BackgroundTaskHistoryMessage {
-  type: "background-task-history";
+  type: 'background-task-history';
   tasks: DaemonBackgroundTaskSnapshot[];
   diagnostics: DaemonBackgroundTaskDiagnostic[];
 }
@@ -1270,12 +1282,12 @@ export interface ArtifactRecord {
 }
 
 export interface ArtifactsListedMessage {
-  type: "artifacts-listed";
+  type: 'artifacts-listed';
   artifacts: ArtifactRecord[];
 }
 
 export interface ArtifactContentMessage {
-  type: "artifact-content";
+  type: 'artifact-content';
   artifactUri: string;
   content: string;
   mimeType?: string;
@@ -1291,12 +1303,12 @@ export interface MemoryRecord {
 }
 
 export interface MemoriesListedMessage {
-  type: "memories-listed";
+  type: 'memories-listed';
   memories: MemoryRecord[];
 }
 
 export interface MemoryDeletedMessage {
-  type: "memory-deleted";
+  type: 'memory-deleted';
   memoryId: string;
 }
 
@@ -1310,7 +1322,7 @@ export interface CheckpointRecord {
 }
 
 export interface CheckpointsListedMessage {
-  type: "checkpoints-listed";
+  type: 'checkpoints-listed';
   checkpoints: CheckpointRecord[];
 }
 
@@ -1322,13 +1334,13 @@ export interface ChangedFileRecord {
 }
 
 export interface CheckpointDiffMessage {
-  type: "checkpoint-diff";
+  type: 'checkpoint-diff';
   checkpointId: string;
   files: ChangedFileRecord[];
 }
 
 export interface CheckpointRestoredMessage {
-  type: "checkpoint-restored";
+  type: 'checkpoint-restored';
   checkpointId: string;
   runId: string;
 }
@@ -1340,11 +1352,11 @@ export interface ConversationRewindActiveSubagentRecord {
 }
 
 export type ConversationRewindBoundaryMissingFact =
-  | ConversationRewindTargetFacts["missingFacts"][number]
-  | "boundary-record"
-  | "checkpoint-manifest-record"
-  | "session-record"
-  | "session-tree-entries";
+  | ConversationRewindTargetFacts['missingFacts'][number]
+  | 'boundary-record'
+  | 'checkpoint-manifest-record'
+  | 'session-record'
+  | 'session-tree-entries';
 
 export interface ConversationRewindBoundaryDiagnostic {
   code: string;
@@ -1355,8 +1367,8 @@ export interface ConversationRewindBoundaryDiagnostic {
 }
 
 export interface ConversationRewindBoundaryMessage {
-  type: "conversation-rewind-boundary";
-  status: "ok" | "blocked";
+  type: 'conversation-rewind-boundary';
+  status: 'ok' | 'blocked';
   sessionId: string;
   userMessageId?: string;
   latestUserMessage: boolean;
@@ -1372,10 +1384,11 @@ export interface ConversationRewindBoundaryMessage {
 
 export type ConversationRewindPlanSnapshot = ConversationRewindPlan;
 
-export type ConversationRewindApplyStepStatus = "applied" | "deferred" | "unsupported" | "skipped" | "failed";
+export type ConversationRewindApplyStepStatus =
+  'applied' | 'deferred' | 'unsupported' | 'skipped' | 'failed';
 
 export interface ConversationRewindApplyStepResult {
-  type: ConversationRewindPlanSnapshot["steps"][number]["type"];
+  type: ConversationRewindPlanSnapshot['steps'][number]['type'];
   status: ConversationRewindApplyStepStatus;
   code?: string;
   message?: string;
@@ -1384,30 +1397,30 @@ export interface ConversationRewindApplyStepResult {
 }
 
 export interface ConversationRewindPreviewMessage {
-  type: "conversation-rewind-preview";
+  type: 'conversation-rewind-preview';
   sessionId: string;
   plan: ConversationRewindPlanSnapshot;
 }
 
 export interface ConversationRewindAppliedMessage {
-  type: "conversation-rewind-applied";
+  type: 'conversation-rewind-applied';
   sessionId: string;
   plan: ConversationRewindPlanSnapshot;
   stepResults: ConversationRewindApplyStepResult[];
 }
 
 export interface SessionActionReceiptMessage extends SessionActionReceipt {
-  type: "session-action-receipt";
+  type: 'session-action-receipt';
 }
 
 export interface SubagentMessageSentMessage {
-  type: "subagent-message-sent";
+  type: 'subagent-message-sent';
   subagentRunId: string;
   accepted: boolean;
 }
 
 export interface SubagentStatusMessage {
-  type: "subagent-status";
+  type: 'subagent-status';
   subagentRunId: string;
   status: string;
   progress?: string;
@@ -1425,23 +1438,23 @@ export interface McpServerRecord {
 }
 
 export interface McpServersListedMessage {
-  type: "mcp-servers-listed";
+  type: 'mcp-servers-listed';
   servers: McpServerRecord[];
 }
 
 export interface McpServerStartedMessage {
-  type: "mcp-server-started";
+  type: 'mcp-server-started';
   serverId: string;
   state: string;
 }
 
 export interface McpServerStoppedMessage {
-  type: "mcp-server-stopped";
+  type: 'mcp-server-stopped';
   serverId: string;
   state: string;
 }
 
-export type DaemonScopedContextStoreStatus = "ok" | "degraded";
+export type DaemonScopedContextStoreStatus = 'ok' | 'degraded';
 
 export interface DaemonScopedContextDiagnostic {
   code: string;
@@ -1452,7 +1465,7 @@ export interface DaemonScopedContextDiagnostic {
 }
 
 export interface DaemonScopedContextResourceDiagnostic {
-  severity: "warning";
+  severity: 'warning';
   path: string;
   message: string;
 }
@@ -1499,11 +1512,11 @@ export interface ScopedContextQueryResult {
 }
 
 export interface ScopedContextResponseMessage extends ScopedContextQueryResult {
-  type: "scoped-context-response";
+  type: 'scoped-context-response';
 }
 
 export interface ScopedContextUpsertedMessage {
-  type: "scoped-context-upserted";
+  type: 'scoped-context-upserted';
   status: DaemonScopedContextStoreStatus;
   record: ScopedContextRecord;
   persisted: boolean;
@@ -1511,7 +1524,7 @@ export interface ScopedContextUpsertedMessage {
 }
 
 export interface ScopedContextDeletedMessage {
-  type: "scoped-context-deleted";
+  type: 'scoped-context-deleted';
   status: DaemonScopedContextStoreStatus;
   recordId: string;
   deleted: boolean;
@@ -1519,7 +1532,7 @@ export interface ScopedContextDeletedMessage {
 }
 
 export interface ScopedContextResolvedMessage {
-  type: "scoped-context-resolved";
+  type: 'scoped-context-resolved';
   status: DaemonScopedContextStoreStatus;
   stableContext: PromptAssemblyContextBlock[];
   recommended: ScopedContextCandidate[];
@@ -1533,9 +1546,9 @@ export interface ScopedContextResolvedMessage {
 }
 
 export type WorkflowSchedule =
-  | { type: "manual" }
-  | { type: "daily"; time: string; timezone: string }
-  | { type: "intervalMinutes"; intervalMinutes: number };
+  | { type: 'manual' }
+  | { type: 'daily'; time: string; timezone: string }
+  | { type: 'intervalMinutes'; intervalMinutes: number };
 
 export interface WorkflowDefinition {
   id: string;
@@ -1550,7 +1563,8 @@ export interface WorkflowDefinition {
   metadata: JsonObject;
 }
 
-export type WorkflowRunStatus = "running" | "awaiting-approval" | "completed" | "failed" | "cancelled";
+export type WorkflowRunStatus =
+  'running' | 'awaiting-approval' | 'completed' | 'failed' | 'cancelled';
 
 export interface WorkflowRunEntry {
   workflowId: string;
@@ -1563,15 +1577,15 @@ export interface WorkflowRunEntry {
 }
 
 export type DaemonTaskSnapshotStatus =
-  | "queued"
-  | "running"
-  | "awaiting-approval"
-  | "cancelling"
-  | "cancelled"
-  | "completed"
-  | "failed";
+  | 'queued'
+  | 'running'
+  | 'awaiting-approval'
+  | 'cancelling'
+  | 'cancelled'
+  | 'completed'
+  | 'failed';
 
-export type DaemonTaskMessageRole = "system" | "user" | "assistant";
+export type DaemonTaskMessageRole = 'system' | 'user' | 'assistant';
 
 export interface DaemonTaskMessageSnapshot {
   id: string;
@@ -1585,7 +1599,7 @@ export interface DaemonTaskSnapshotToolCall {
   id: string;
   name: string;
   input: JsonObject;
-  status: "pending" | "running" | "approval-required" | "completed" | "failed";
+  status: 'pending' | 'running' | 'approval-required' | 'completed' | 'failed';
   summary?: string;
   startedAt: string;
   updatedAt: string;
@@ -1599,7 +1613,7 @@ export interface DaemonTaskSnapshotApproval {
   input: JsonObject;
   summary: string;
   requestedAt: string;
-  status: "pending";
+  status: 'pending';
   risk?: string;
   riskReason?: string;
   requiresDoubleConfirm?: boolean;
@@ -1609,9 +1623,9 @@ export interface DaemonTaskSnapshotApproval {
 
 export interface DaemonBackgroundTaskSnapshot {
   id: string;
-  kind: "command";
+  kind: 'command';
   title: string;
-  state: "running" | "succeeded" | "failed" | "cancelled" | "timed-out";
+  state: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out';
   command: string;
   cwd?: string;
   startedAt?: string;
@@ -1730,12 +1744,12 @@ export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
   runtimeIdleTimeoutMs: 5 * 60 * 1000, // 5 分钟
   approvalTimeoutMs: 5 * 60 * 1000,
   defaultCwd: process.cwd(),
-  noProjectCwd: join(defaultDaemonDataDir(), "no-project-workspace"),
-  sessionEventLogDir: join(defaultDaemonDataDir(), "events"),
-  workflowStorePath: join(defaultDaemonDataDir(), "workflows.json"),
-  planDocumentStorePath: join(defaultDaemonDataDir(), "plan-documents.json"),
-  scopedContextStorePath: join(defaultDaemonDataDir(), "scoped-context.json"),
-  memoryStorePath: join(defaultDaemonDataDir(), "memories.jsonl"),
+  noProjectCwd: join(defaultDaemonDataDir(), 'no-project-workspace'),
+  sessionEventLogDir: join(defaultDaemonDataDir(), 'events'),
+  workflowStorePath: join(defaultDaemonDataDir(), 'workflows.json'),
+  planDocumentStorePath: join(defaultDaemonDataDir(), 'plan-documents.json'),
+  scopedContextStorePath: join(defaultDaemonDataDir(), 'scoped-context.json'),
+  memoryStorePath: join(defaultDaemonDataDir(), 'memories.jsonl'),
   workflowSchedulerIntervalMs: 30_000,
 };
 
@@ -1744,13 +1758,13 @@ function defaultDaemonDataDir(): string {
     return process.env.CRISH_DAEMON_HOME;
   }
 
-  if (process.platform === "win32" && process.env.LOCALAPPDATA) {
-    return join(process.env.LOCALAPPDATA, "Crish", "agent-daemon");
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    return join(process.env.LOCALAPPDATA, 'Crish', 'agent-daemon');
   }
 
   if (process.env.XDG_STATE_HOME) {
-    return join(process.env.XDG_STATE_HOME, "crish", "agent-daemon");
+    return join(process.env.XDG_STATE_HOME, 'crish', 'agent-daemon');
   }
 
-  return join(homedir(), ".crish", "agent-daemon");
+  return join(homedir(), '.crish', 'agent-daemon');
 }

@@ -1,8 +1,11 @@
-import { WebSocketServer, type RawData, type WebSocket } from "ws";
-import type { AddressInfo } from "node:net";
-import type { JsonObject, JsonValue } from "@crish/shared-types";
-import type { AgentRuntimeOptions, McpServerDefinition } from "@crish/agent-runtime";
-import { errorMessage, TokenBucket } from "@crish/shared-utils";
+import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import type { AddressInfo } from 'node:net';
+import type { JsonObject, JsonValue } from '@crish/shared-types';
+import type {
+  AgentRuntimeOptions,
+  McpServerDefinition,
+} from '@crish/agent-runtime';
+import { errorMessage, TokenBucket } from '@crish/shared-utils';
 import {
   AgentOrchestrator,
   type OrchestratorEvent,
@@ -10,7 +13,7 @@ import {
   type OrchestratorRunHandle,
   type RunStatus,
   type StartRunRequest,
-} from "@crish/agent-orchestrator";
+} from '@crish/agent-orchestrator';
 import type {
   DaemonConfig,
   DaemonCorrelationFields,
@@ -18,8 +21,8 @@ import type {
   DaemonLifecycleSnapshot,
   DaemonMcpStatusSnapshot,
   DaemonProviderStatusSnapshot,
-} from "./types.js";
-import { ApprovalQueue } from "./approval-queue.js";
+} from './types.js';
+import { ApprovalQueue } from './approval-queue.js';
 import {
   normalizeDaemonConfig,
   resolveDaemonEventLogPath,
@@ -30,42 +33,51 @@ import {
   resolveDaemonScopedContextStorePath,
   resolveDaemonSessionMetadataStorePath,
   resolveDaemonWorkflowStorePath,
-} from "./persistence.js";
+} from './persistence.js';
 import {
   formatProtocolValidationError,
   validateInboundMessage,
-} from "./protocol/protocol.js";
+} from './protocol/protocol.js';
 import {
   DaemonClientRegistry,
   type ConnectedClient,
   type DaemonClientTransportDiagnostic,
-} from "./daemon-client-registry.js";
-import { DaemonEventStore } from "./server-event-store.js";
+} from './daemon-client-registry.js';
+import { DaemonEventStore } from './server-event-store.js';
 import {
   DaemonRuntimeFactory,
   type DaemonMcpLifecycleManagerFactory,
   type DaemonToolFactory,
-} from "./server-runtime-factory.js";
+} from './server-runtime-factory.js';
 import {
   DaemonCheckpointManifestAdapter,
   DaemonJsonlMemoryAdapter,
   type DaemonProductAdapters,
-} from "./daemon-product-adapters.js";
+} from './daemon-product-adapters.js';
 import {
   DaemonRequestHandlers,
   type DaemonRuntimeConfigUpdate,
-} from "./server-handlers.js";
-import { RunHandler } from "./handlers/run-handlers.js";
-import { DaemonSubagentBridge } from "./daemon-subagent-bridge.js";
-import { readDaemonSubagentBridgeUpdateFromAgentEvent } from "./subagent-runtime.js";
-import { DaemonLifecycleTracker } from "./daemon-lifecycle.js";
-import { WorkflowScheduler } from "./workflow-scheduler.js";
-import type { WorkflowSchedulerTickResult } from "./workflow-scheduler.js";
-import { FileWorkflowStore } from "./workflow-store.js";
-import { FilePlanDocumentStore } from "./plan-document-store.js";
-import { FileScopedContextStore } from "./scoped-context-store.js";
-import { FileSessionMetadataStore } from "./session-metadata-store.js";
-import { DaemonBackgroundTaskManager } from "./background-task-manager.js";
+} from './server-handlers.js';
+import { RunHandler } from './handlers/run-handlers.js';
+import { DaemonSubagentBridge } from './daemon-subagent-bridge.js';
+import { readDaemonSubagentBridgeUpdateFromAgentEvent } from './subagent-runtime.js';
+import { DaemonLifecycleTracker } from './daemon-lifecycle.js';
+import { WorkflowScheduler } from './workflow-scheduler.js';
+import type { WorkflowSchedulerTickResult } from './workflow-scheduler.js';
+import { FileWorkflowStore } from './workflow-store.js';
+import { FilePlanDocumentStore } from './plan-document-store.js';
+import { FileScopedContextStore } from './scoped-context-store.js';
+import { FileSessionMetadataStore } from './session-metadata-store.js';
+import { DaemonBackgroundTaskManager } from './background-task-manager.js';
+import {
+  BINARY_FRAME_CAPABILITY,
+  BinaryFrameType,
+  decodeBinaryFrame,
+  decodeMetaBodyPayload,
+  encodeBinaryFrame,
+  looksLikeBinaryFrame,
+  type BinaryFrameTypeCode,
+} from './binary-frame.js';
 
 export interface DaemonServerOptions {
   productAdapters?: DaemonProductAdapters;
@@ -94,9 +106,14 @@ export class DaemonServer {
   private runtimeFactory!: DaemonRuntimeFactory;
   private backgroundTasks!: DaemonBackgroundTaskManager;
   private requestHandlers!: DaemonRequestHandlers;
+  private runHandler!: RunHandler;
   private subagentBridge!: DaemonSubagentBridge;
   private configUpdateHandler?: (update: DaemonRuntimeConfigUpdate) => void;
-  private pendingProviderFactory?: (runId: string, cwd: string) => AgentRuntimeOptions["provider"] | Promise<AgentRuntimeOptions["provider"]>;
+  private pendingProviderFactory?: (
+    runId: string,
+    cwd: string
+  ) =>
+    AgentRuntimeOptions['provider'] | Promise<AgentRuntimeOptions['provider']>;
   private pendingToolFactory?: DaemonToolFactory;
   private stopPromise?: Promise<void>;
   private workflowSchedulerTimer?: NodeJS.Timeout;
@@ -112,7 +129,11 @@ export class DaemonServer {
   }
 
   setProviderFactory(
-    factory: (runId: string, cwd: string) => AgentRuntimeOptions["provider"] | Promise<AgentRuntimeOptions["provider"]>
+    factory: (
+      runId: string,
+      cwd: string
+    ) =>
+      AgentRuntimeOptions['provider'] | Promise<AgentRuntimeOptions['provider']>
   ): void {
     if (this.runtimeFactory) {
       this.runtimeFactory.setProviderFactory(factory);
@@ -129,7 +150,9 @@ export class DaemonServer {
     }
   }
 
-  setConfigUpdateHandler(handler: (update: DaemonRuntimeConfigUpdate) => void): void {
+  setConfigUpdateHandler(
+    handler: (update: DaemonRuntimeConfigUpdate) => void
+  ): void {
     this.configUpdateHandler = handler;
   }
 
@@ -137,19 +160,33 @@ export class DaemonServer {
     this.lifecycle = new DaemonLifecycleTracker();
     this.clients = new DaemonClientRegistry({
       maxBufferedBytes: this.options.maxClientBufferedBytes,
-      onDiagnostic: (diagnostic) => this.recordClientTransportDiagnostic(diagnostic),
+      onDiagnostic: (diagnostic) =>
+        this.recordClientTransportDiagnostic(diagnostic),
     });
     this.eventLogPath = resolveDaemonEventLogPath(this.config);
-    this.workflowStore = new FileWorkflowStore(resolveDaemonWorkflowStorePath(this.config));
-    this.planDocumentStore = new FilePlanDocumentStore(resolveDaemonPlanDocumentStorePath(this.config));
-    this.scopedContextStore = new FileScopedContextStore(resolveDaemonScopedContextStorePath(this.config));
-    this.sessionMetadataStore = new FileSessionMetadataStore(resolveDaemonSessionMetadataStorePath(this.config));
-    this.approvalQueue = new ApprovalQueue({ defaultTimeoutMs: this.config.approvalTimeoutMs });
+    this.workflowStore = new FileWorkflowStore(
+      resolveDaemonWorkflowStorePath(this.config)
+    );
+    this.planDocumentStore = new FilePlanDocumentStore(
+      resolveDaemonPlanDocumentStorePath(this.config)
+    );
+    this.scopedContextStore = new FileScopedContextStore(
+      resolveDaemonScopedContextStorePath(this.config)
+    );
+    this.sessionMetadataStore = new FileSessionMetadataStore(
+      resolveDaemonSessionMetadataStorePath(this.config)
+    );
+    this.approvalQueue = new ApprovalQueue({
+      defaultTimeoutMs: this.config.approvalTimeoutMs,
+    });
     this.eventStore = new DaemonEventStore(this.eventLogPath);
     this.eventStore.installSignalHandlers();
     this.backgroundTasks = new DaemonBackgroundTaskManager({
       defaultWorkspaceRoot: this.config.defaultCwd,
-      managerOptions: { defaultTimeoutMs: 30 * 60_000, maxOutputBytes: 500_000 },
+      managerOptions: {
+        defaultTimeoutMs: 30 * 60_000,
+        maxOutputBytes: 500_000,
+      },
     });
     this.runtimeFactory = new DaemonRuntimeFactory({
       config: this.config,
@@ -157,11 +194,16 @@ export class DaemonServer {
       sessionStoreDir: resolveDaemonRuntimeSessionDir(this.config),
       scopedContextStore: this.scopedContextStore,
       productAdapters: {
-        checkpoint: new DaemonCheckpointManifestAdapter({ manifestPath: resolveDaemonCheckpointManifestPath(this.config) }),
-        memory: new DaemonJsonlMemoryAdapter({ storePath: resolveDaemonMemoryStorePath(this.config) }),
+        checkpoint: new DaemonCheckpointManifestAdapter({
+          manifestPath: resolveDaemonCheckpointManifestPath(this.config),
+        }),
+        memory: new DaemonJsonlMemoryAdapter({
+          storePath: resolveDaemonMemoryStorePath(this.config),
+        }),
         ...this.options.productAdapters,
       },
-      getBackgroundCommandManager: (cwd) => this.backgroundTasks.getManagerForCwd(cwd),
+      getBackgroundCommandManager: (cwd) =>
+        this.backgroundTasks.getManagerForCwd(cwd),
       mcpServers: this.options.mcpServers,
       mcpLifecycleManagerFactory: this.options.mcpLifecycleManagerFactory,
       mcpStartupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs,
@@ -188,9 +230,9 @@ export class DaemonServer {
     });
     this.subagentBridge = new DaemonSubagentBridge(
       (message) => this.clients.broadcast(message),
-      this.approvalQueue,
+      this.approvalQueue
     );
-    const runHandler = new RunHandler({
+    this.runHandler = new RunHandler({
       orchestrator: this.orchestrator,
       approvalQueue: this.approvalQueue,
       config: this.config,
@@ -201,7 +243,7 @@ export class DaemonServer {
       recordDiagnostic: (input) => this.lifecycle.recordError(input),
     });
     this.requestHandlers = new DaemonRequestHandlers({
-      runHandler,
+      runHandler: this.runHandler,
       orchestrator: this.orchestrator,
       approvalQueue: this.approvalQueue,
       config: this.config,
@@ -220,7 +262,10 @@ export class DaemonServer {
     this.workflowScheduler = new WorkflowScheduler({
       store: this.workflowStore,
       triggerWorkflow: (due, now) => {
-        this.assertEventStoreAvailableForNewRun(undefined, "scheduled-workflow");
+        this.assertEventStoreAvailableForNewRun(
+          undefined,
+          'scheduled-workflow'
+        );
         return this.requestHandlers.triggerDueWorkflow(due, now);
       },
     });
@@ -234,9 +279,9 @@ export class DaemonServer {
       await this.rebuildActiveSubagentsFromEventStore();
     } catch (error) {
       this.lifecycle.recordError({
-        code: "EVENT_STORE_RESTORE_FAILED",
+        code: 'EVENT_STORE_RESTORE_FAILED',
         message: `Failed to restore daemon event store: ${errorMessage(error)}`,
-        source: "event-store",
+        source: 'event-store',
         detail: errorDetail(error),
       });
       this.lifecycle.markStopped();
@@ -247,7 +292,7 @@ export class DaemonServer {
       let settled = false;
       this.wss = new WebSocketServer({ port: this.config.port });
 
-      this.wss.on("listening", () => {
+      this.wss.on('listening', () => {
         const address = this.wss.address() as AddressInfo;
         this.port = address.port;
         this.lifecycle.markReady(this.port);
@@ -257,12 +302,12 @@ export class DaemonServer {
         resolve(this.port);
       });
 
-      this.wss.on("error", (error) => {
-        console.error("[Daemon] Server error:", error);
+      this.wss.on('error', (error) => {
+        console.error('[Daemon] Server error:', error);
         this.lifecycle.recordError({
-          code: "WEBSOCKET_SERVER_ERROR",
+          code: 'WEBSOCKET_SERVER_ERROR',
           message: `WebSocket server error: ${error.message}`,
-          source: "websocket",
+          source: 'websocket',
           detail: error.stack,
         });
         if (!settled) {
@@ -272,10 +317,10 @@ export class DaemonServer {
         }
       });
 
-      this.wss.on("connection", (ws) => this.handleConnection(ws));
+      this.wss.on('connection', (ws) => this.handleConnection(ws));
 
-      this.wss.on("close", () => {
-        console.log("[Daemon] Server closed");
+      this.wss.on('close', () => {
+        console.log('[Daemon] Server closed');
         if (!this.stopPromise) {
           this.lifecycle.markStopped();
         }
@@ -292,46 +337,88 @@ export class DaemonServer {
     this.lifecycle.markStopping();
     this.stopWorkflowSchedulerLoop();
     const failures: unknown[] = [];
-    await this.runStopStep("WORKFLOW_SCHEDULER_DRAIN_FAILED", "Failed to drain workflow scheduler tick", () =>
-      this.waitForWorkflowSchedulerTick(2_000), failures);
-    this.approvalQueue.clearAll("daemon-shutdown");
-    this.cancelActiveRuns("daemon-shutdown");
-    for (const client of this.clients.closeAll(1001, "Daemon shutting down")) {
-      this.lifecycle.recordClientDisconnected(client, 1001, "Daemon shutting down");
+    await this.runStopStep(
+      'WORKFLOW_SCHEDULER_DRAIN_FAILED',
+      'Failed to drain workflow scheduler tick',
+      () => this.waitForWorkflowSchedulerTick(2_000),
+      failures
+    );
+    this.approvalQueue.clearAll('daemon-shutdown');
+    this.cancelActiveRuns('daemon-shutdown');
+    for (const client of this.clients.closeAll(1001, 'Daemon shutting down')) {
+      this.lifecycle.recordClientDisconnected(
+        client,
+        1001,
+        'Daemon shutting down'
+      );
     }
 
-    await this.runStopStep("WEBSOCKET_CLOSE_FAILED", "Failed to close WebSocket server", () =>
-      this.closeWebSocketServer(), failures);
-    await this.runStopStep("ACTIVE_RUN_SETTLE_FAILED", "Failed to settle active runs", () =>
-      this.waitForActiveRunsToSettle("daemon-shutdown", 5_000), failures);
-    await this.runStopStep("WORKFLOW_BACKGROUND_RUN_DRAIN_FAILED", "Failed to drain background workflow runs", () =>
-      this.requestHandlers.waitForBackgroundWorkflowRuns(5_000), failures);
-    await this.runStopStep("MESSAGE_TASK_DRAIN_FAILED", "Failed to drain daemon message tasks", () =>
-      this.waitForMessageTasks(5_000), failures);
-    await this.runStopStep("BACKGROUND_TASKS_DISPOSE_FAILED", "Failed to dispose background tasks", () =>
-      this.disposeBackgroundTasks(), failures);
-    await this.runStopStep("RUNTIME_FACTORY_CLOSE_FAILED", "Failed to close daemon runtime factory", () =>
-      this.runtimeFactory.close(), failures);
-    await this.runStopStep("EVENT_STORE_CLOSE_FAILED", "Failed to close daemon event store", () =>
-      this.eventStore.close(), failures);
+    await this.runStopStep(
+      'WEBSOCKET_CLOSE_FAILED',
+      'Failed to close WebSocket server',
+      () => this.closeWebSocketServer(),
+      failures
+    );
+    await this.runStopStep(
+      'ACTIVE_RUN_SETTLE_FAILED',
+      'Failed to settle active runs',
+      () => this.waitForActiveRunsToSettle('daemon-shutdown', 5_000),
+      failures
+    );
+    await this.runStopStep(
+      'WORKFLOW_BACKGROUND_RUN_DRAIN_FAILED',
+      'Failed to drain background workflow runs',
+      () => this.requestHandlers.waitForBackgroundWorkflowRuns(5_000),
+      failures
+    );
+    await this.runStopStep(
+      'MESSAGE_TASK_DRAIN_FAILED',
+      'Failed to drain daemon message tasks',
+      () => this.waitForMessageTasks(5_000),
+      failures
+    );
+    await this.runStopStep(
+      'BACKGROUND_TASKS_DISPOSE_FAILED',
+      'Failed to dispose background tasks',
+      () => this.disposeBackgroundTasks(),
+      failures
+    );
+    await this.runStopStep(
+      'RUNTIME_FACTORY_CLOSE_FAILED',
+      'Failed to close daemon runtime factory',
+      () => this.runtimeFactory.close(),
+      failures
+    );
+    await this.runStopStep(
+      'EVENT_STORE_CLOSE_FAILED',
+      'Failed to close daemon event store',
+      () => this.eventStore.close(),
+      failures
+    );
 
     if (failures.length > 0) {
       throw failures[0];
     }
 
     this.lifecycle.markStopped();
-    console.log("[Daemon] Server stopped");
+    console.log('[Daemon] Server stopped');
   }
 
   getApprovalQueue(): ApprovalQueue {
     return this.approvalQueue;
   }
 
-  async readSessionEvents(sessionId: string, afterSequence?: number): Promise<OrchestratorEvent[]> {
+  async readSessionEvents(
+    sessionId: string,
+    afterSequence?: number
+  ): Promise<OrchestratorEvent[]> {
     return this.orchestrator.readSessionEvents(sessionId, afterSequence);
   }
 
-  async readRunEvents(runId: string, afterSequence?: number): Promise<OrchestratorEvent[]> {
+  async readRunEvents(
+    runId: string,
+    afterSequence?: number
+  ): Promise<OrchestratorEvent[]> {
     return this.orchestrator.readRunEvents(runId, afterSequence);
   }
 
@@ -374,11 +461,12 @@ export class DaemonServer {
     providerStatus?: DaemonProviderStatusSnapshot;
     mcpStatus?: DaemonMcpStatusSnapshot;
   }): DaemonLifecycleSnapshot {
-    const providerStatus = input?.providerStatus ?? this.runtimeFactory.getProviderStatusSnapshot();
-    const mcpStatus = input?.mcpStatus ?? this.runtimeFactory.getMcpStatusSnapshot();
+    const providerStatus =
+      input?.providerStatus ?? this.runtimeFactory.getProviderStatusSnapshot();
+    const mcpStatus =
+      input?.mcpStatus ?? this.runtimeFactory.getMcpStatusSnapshot();
     const activeRunCount =
-      input?.activeRunCount ??
-      this.orchestrator.countActiveRuns();
+      input?.activeRunCount ?? this.orchestrator.countActiveRuns();
 
     return this.lifecycle.snapshot({
       activeRunCount,
@@ -396,32 +484,34 @@ export class DaemonServer {
       return;
     }
     this.lifecycle.recordClientConnected(client);
-    console.log(`[Daemon] Client connected: ${client.id} (total: ${this.clients.size})`);
+    console.log(
+      `[Daemon] Client connected: ${client.id} (total: ${this.clients.size})`
+    );
 
     // 协议握手：客户端应发送 hello 消息
     // 如果 5 秒内未收到 hello，关闭连接
     const handshakeTimer = setTimeout(() => {
       if (ws.readyState === ws.OPEN) {
-        ws.close(4002, "Handshake timeout: expected hello message");
+        ws.close(4002, 'Handshake timeout: expected hello message');
       }
     }, 5_000);
     handshakeTimer.unref?.();
 
-    ws.on("message", (data) => {
+    ws.on('message', (data) => {
       clearTimeout(handshakeTimer);
       this.trackMessageTask(this.handleMessage(ws, data));
     });
-    ws.on("close", (code, reason) => {
+    ws.on('close', (code, reason) => {
       this.handleDisconnect(ws, code, reason);
-      ws.removeAllListeners("message");
-      ws.removeAllListeners("ping");
-      ws.removeAllListeners("pong");
+      ws.removeAllListeners('message');
+      ws.removeAllListeners('ping');
+      ws.removeAllListeners('pong');
     });
-    ws.on("error", (error) => {
+    ws.on('error', (error) => {
       this.lifecycle.recordError({
-        code: "CLIENT_SOCKET_ERROR",
+        code: 'CLIENT_SOCKET_ERROR',
         message: `Client ${client.id} socket error: ${error.message}`,
-        source: "client",
+        source: 'client',
         detail: error.stack,
         metadata: { clientId: client.id },
       });
@@ -429,34 +519,50 @@ export class DaemonServer {
     });
 
     // 使用 WebSocket 协议内置 ping/pong
-    ws.on("ping", (data) => {
+    ws.on('ping', (data) => {
       ws.pong(data);
     });
   }
 
   private async handleMessage(ws: WebSocket, data: RawData): Promise<void> {
-    const msgBytes = Buffer.byteLength(data.toString());
-    if (!this.connectionLimiter.tryConsume(1) || !this.byteLimiter.tryConsume(msgBytes)) {
-      ws.send(JSON.stringify({ type: "error", code: "RATE_LIMITED", message: "Too many requests" }));
+    const buffer = rawDataToBuffer(data);
+    const msgBytes = buffer.byteLength;
+    if (
+      !this.connectionLimiter.tryConsume(1) ||
+      !this.byteLimiter.tryConsume(msgBytes)
+    ) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          code: 'RATE_LIMITED',
+          message: 'Too many requests',
+        })
+      );
       return;
     }
 
-    const parsed = parseClientMessage(data);
+    // Binary frame path (CR magic) — large artifacts without base64-in-JSON
+    if (looksLikeBinaryFrame(buffer)) {
+      await this.handleBinaryFrame(ws, buffer);
+      return;
+    }
+
+    const parsed = parseClientMessage(buffer);
     if (!parsed.ok) {
       const client = this.clients.get(ws);
       this.lifecycle.recordError({
-        code: "CLIENT_PARSE_ERROR",
+        code: 'CLIENT_PARSE_ERROR',
         message: parsed.message,
-        source: "client",
+        source: 'client',
         ...(client ? { metadata: { clientId: client.id } } : {}),
       });
-      this.clients.sendError(ws, "PARSE_ERROR", parsed.message);
+      this.clients.sendError(ws, 'PARSE_ERROR', parsed.message);
       return;
     }
 
     // 协议握手：处理 hello 消息
     const raw = parsed.value as Record<string, unknown>;
-    if (raw.type === "hello") {
+    if (raw.type === 'hello') {
       this.handleHello(ws, raw);
       return;
     }
@@ -476,24 +582,30 @@ export class DaemonServer {
     const client = this.clients.get(ws);
     if (!client) return;
 
-    if (this.rejectDurableRunWhenEventStoreFailed(ws, client, validation.value)) {
+    if (
+      this.rejectDurableRunWhenEventStoreFailed(ws, client, validation.value)
+    ) {
       return;
     }
 
     try {
-      await this.requestHandlers.handleInboundMessage(ws, client, validation.value);
+      await this.requestHandlers.handleInboundMessage(
+        ws,
+        client,
+        validation.value
+      );
     } catch (error) {
-      console.error("[Daemon] Client message handler failed:", error);
+      console.error('[Daemon] Client message handler failed:', error);
       this.lifecycle.recordError({
-        code: "DAEMON_MESSAGE_HANDLER_ERROR",
+        code: 'DAEMON_MESSAGE_HANDLER_ERROR',
         message: `Daemon message handler failed: ${errorMessage(error)}`,
-        source: "daemon",
+        source: 'daemon',
         detail: errorDetail(error),
         metadata: { clientId: client.id },
       });
       this.clients.sendError(
         ws,
-        "DAEMON_ERROR",
+        'DAEMON_ERROR',
         error instanceof Error ? error.message : String(error),
         undefined,
         validation.value
@@ -502,24 +614,36 @@ export class DaemonServer {
   }
 
   private handleHello(ws: WebSocket, message: Record<string, unknown>): void {
-    const clientVersion = typeof message.protocolVersion === "number" ? message.protocolVersion : 0;
+    const clientVersion =
+      typeof message.protocolVersion === 'number' ? message.protocolVersion : 0;
     const serverVersion = 2;
 
     if (clientVersion < 1) {
-      ws.close(4003, `Protocol version ${clientVersion} not supported. Server requires version >= 1`);
+      ws.close(
+        4003,
+        `Protocol version ${clientVersion} not supported. Server requires version >= 1`
+      );
       return;
     }
 
     this.clients.send(ws, {
-      type: "welcome",
+      type: 'welcome',
       protocolVersion: serverVersion,
-      serverName: "crish-daemon",
-      capabilities: ["run-task", "approval", "pending-input", "workflow", "git", "plan-document"],
+      serverName: 'crish-daemon',
+      capabilities: [
+        'run-task',
+        'approval',
+        'pending-input',
+        'workflow',
+        'git',
+        'plan-document',
+        BINARY_FRAME_CAPABILITY,
+      ],
     });
 
     for (const sub of this.subagentBridge?.getActiveSubagentsSnapshot() ?? []) {
       this.clients.send(ws, {
-        type: "subagent-started",
+        type: 'subagent-started',
         runId: sub.runId,
         subagentId: sub.subagentId,
         subagentRunId: sub.subagentRunId,
@@ -530,19 +654,277 @@ export class DaemonServer {
     }
   }
 
-  private async rebuildActiveSubagentsFromEventStore(): Promise<void> {
-    const activeRuns = this.orchestrator.listRuns().filter(
-      (run) => run.status === "running" || run.status === "queued" || run.status === "awaiting-approval"
+  /**
+   * Inbound CR binary frames. Decode without exploding; stream control + blobs
+   * get a STREAM_ACK receipt (binary). Full stream recovery is client-side (3.3).
+   */
+  private async handleBinaryFrame(
+    ws: WebSocket,
+    buffer: Buffer
+  ): Promise<void> {
+    const client = this.clients.get(ws);
+    const decoded = decodeBinaryFrame(buffer);
+    if (!decoded.ok) {
+      this.lifecycle.recordError({
+        code: 'CLIENT_BINARY_FRAME_ERROR',
+        message: decoded.error,
+        source: 'client',
+        ...(client ? { metadata: { clientId: client.id } } : {}),
+      });
+      this.clients.sendError(ws, 'BINARY_FRAME_ERROR', decoded.error);
+      return;
+    }
+
+    const frame = decoded.frame;
+    try {
+      switch (frame.type) {
+        case BinaryFrameType.STREAM_PAUSE:
+        case BinaryFrameType.STREAM_RESUME: {
+          let runId = '';
+          if (frame.payload.byteLength > 0) {
+            try {
+              const meta = JSON.parse(frame.payload.toString('utf8')) as {
+                runId?: unknown;
+              };
+              runId = typeof meta.runId === 'string' ? meta.runId : '';
+            } catch {
+              /* ignore invalid meta — still ACK */
+            }
+          }
+          if (frame.type === BinaryFrameType.STREAM_PAUSE) {
+            this.runHandler.pauseStream(runId);
+          } else {
+            this.runHandler.resumeStream(runId);
+          }
+          console.info(
+            `[Daemon] binary ${frame.typeName} from ${client?.id ?? 'unknown'} runId=${runId || '(none)'}`
+          );
+          this.sendBinaryAck(ws, {
+            ok: true,
+            type: frame.typeName,
+            runId,
+            receivedAt: Date.now(),
+          });
+          return;
+        }
+
+        case BinaryFrameType.STREAM_ACK: {
+          const note =
+            frame.payload.byteLength > 0
+              ? frame.payload.toString('utf8').slice(0, 256)
+              : '';
+          console.info(
+            `[Daemon] binary ${frame.typeName} from ${client?.id ?? 'unknown'}${note ? `: ${note}` : ''}`
+          );
+          this.sendBinaryAck(ws, {
+            ok: true,
+            type: frame.typeName,
+            receivedAt: Date.now(),
+          });
+          return;
+        }
+
+        case BinaryFrameType.CONTROL_JSON: {
+          let control: unknown;
+          try {
+            control = JSON.parse(frame.payload.toString('utf8'));
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            this.clients.sendError(
+              ws,
+              'BINARY_CONTROL_JSON_ERROR',
+              `Invalid CONTROL_JSON payload: ${message}`
+            );
+            return;
+          }
+          if (
+            control !== null &&
+            typeof control === 'object' &&
+            !Array.isArray(control)
+          ) {
+            const raw = control as Record<string, unknown>;
+            if (raw.type === 'hello') {
+              this.handleHello(ws, raw);
+              return;
+            }
+            const validation = validateInboundMessage(control);
+            if (!validation.ok) {
+              this.clients.sendError(
+                ws,
+                validation.error.code,
+                formatProtocolValidationError(validation.error),
+                undefined,
+                correlationFromRawMessage(control)
+              );
+              return;
+            }
+            if (!client) return;
+            await this.requestHandlers.handleInboundMessage(
+              ws,
+              client,
+              validation.value
+            );
+          }
+          return;
+        }
+
+        case BinaryFrameType.FILE_PATCH:
+        case BinaryFrameType.DIFF_TEXT: {
+          const metaBody = decodeMetaBodyPayload(frame.payload);
+          if (!metaBody.ok) {
+            this.sendBinaryAck(ws, {
+              ok: true,
+              type: frame.typeName,
+              bodyBytes: frame.payload.byteLength,
+              meta: null,
+            });
+            return;
+          }
+          this.sendBinaryAck(ws, {
+            ok: true,
+            type: frame.typeName,
+            bodyBytes: metaBody.body.byteLength,
+            meta: metaBody.meta,
+          });
+          return;
+        }
+
+        case BinaryFrameType.TOOL_BLOB: {
+          this.sendBinaryAck(ws, {
+            ok: true,
+            type: frame.typeName,
+            bodyBytes: frame.payload.byteLength,
+          });
+          return;
+        }
+
+        default: {
+          this.clients.sendError(
+            ws,
+            'BINARY_FRAME_UNSUPPORTED',
+            `Unhandled binary frame type: ${frame.typeName}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error('[Daemon] binary frame handler failed:', error);
+      this.lifecycle.recordError({
+        code: 'DAEMON_BINARY_FRAME_HANDLER_ERROR',
+        message: `Binary frame handler failed: ${errorMessage(error)}`,
+        source: 'daemon',
+        detail: errorDetail(error),
+        ...(client
+          ? { metadata: { clientId: client.id, frameType: frame.typeName } }
+          : {}),
+      });
+      this.clients.sendError(
+        ws,
+        'DAEMON_ERROR',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /** STREAM_ACK binary receipt with UTF-8 JSON payload. */
+  private sendBinaryAck(
+    ws: WebSocket,
+    receipt: Record<string, unknown>
+  ): boolean {
+    return this.sendBinaryFrame(
+      ws,
+      BinaryFrameType.STREAM_ACK,
+      Buffer.from(JSON.stringify(receipt), 'utf8')
     );
-    for (const run of activeRuns) {
-      const events = await this.orchestrator.readRunEvents(run.id);
-      for (const event of events) {
-        if (event.type !== "runtime-event") continue;
+  }
+
+  /** Send a CR binary frame (WS binary). No-op if socket not open. */
+  private sendBinaryFrame(
+    ws: WebSocket,
+    type: BinaryFrameTypeCode,
+    payload: Buffer
+  ): boolean {
+    if (ws.readyState !== ws.OPEN) return false;
+    try {
+      const frame = encodeBinaryFrame(type, payload);
+      ws.send(frame);
+      return true;
+    } catch (error) {
+      console.error('[Daemon] failed to send binary frame:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Rebuild active subagent projections after restore.
+   *
+   * Prefer the single-scan projections collected by orchestrator.restoreFromEventStore
+   * (consumeRestoredSubagentRuntimeEvents) — zero extra event-log I/O.
+   * Fallback: one streaming/full pass over the event store for still-active runs
+   * (never N×readRun cold scans).
+   */
+  private async rebuildActiveSubagentsFromEventStore(): Promise<void> {
+    // Projections gathered during restore for runs that were non-terminal at end-of-log
+    // (before interrupt). Apply them so reconnecting clients can see pre-restart state.
+    const restored = this.orchestrator.consumeRestoredSubagentRuntimeEvents();
+    for (const proj of restored) {
+      if (!proj.agentEvent || typeof proj.agentEvent !== 'object') continue;
+      const update = readDaemonSubagentBridgeUpdateFromAgentEvent(
+        proj.agentEvent as never
+      );
+      if (update?.phase === 'started') {
+        this.subagentBridge.rebuildStarted(update, proj.runId);
+      }
+    }
+
+    const activeRuns = this.orchestrator
+      .listRuns()
+      .filter(
+        (run) =>
+          run.status === 'running' ||
+          run.status === 'queued' ||
+          run.status === 'awaiting-approval'
+      );
+    if (activeRuns.length === 0) return;
+
+    const activeRunIds = new Set(activeRuns.map((run) => run.id));
+    // Single scan fallback — never N full-file readRun cold scans.
+    const store = this.eventStore as {
+      readAllStreaming?: (
+        afterSequence?: number
+      ) => AsyncIterable<import('@crish/agent-orchestrator').OrchestratorEvent>;
+      readAll?: (
+        afterSequence?: number
+      ) => Promise<import('@crish/agent-orchestrator').OrchestratorEvent[]>;
+    };
+    if (typeof store.readAllStreaming === 'function') {
+      for await (const event of store.readAllStreaming(0)) {
+        if (!event.runId || !activeRunIds.has(event.runId)) continue;
+        if (event.type !== 'runtime-event') continue;
         const agentEvent = (event.payload as { event?: unknown }).event;
-        if (!agentEvent || typeof agentEvent !== "object") continue;
-        const update = readDaemonSubagentBridgeUpdateFromAgentEvent(agentEvent as never);
-        if (update?.phase === "started") {
-          this.subagentBridge.rebuildStarted(update, run.id);
+        if (!agentEvent || typeof agentEvent !== 'object') continue;
+        const update = readDaemonSubagentBridgeUpdateFromAgentEvent(
+          agentEvent as never
+        );
+        if (update?.phase === 'started') {
+          this.subagentBridge.rebuildStarted(update, event.runId);
+        }
+      }
+      return;
+    }
+
+    if (typeof store.readAll === 'function') {
+      const all = await store.readAll(0);
+      for (const event of all) {
+        if (!event.runId || !activeRunIds.has(event.runId)) continue;
+        if (event.type !== 'runtime-event') continue;
+        const agentEvent = (event.payload as { event?: unknown }).event;
+        if (!agentEvent || typeof agentEvent !== 'object') continue;
+        const update = readDaemonSubagentBridgeUpdateFromAgentEvent(
+          agentEvent as never
+        );
+        if (update?.phase === 'started') {
+          this.subagentBridge.rebuildStarted(update, event.runId);
         }
       }
     }
@@ -561,7 +943,7 @@ export class DaemonServer {
   private trackMessageTask(task: Promise<void>): void {
     const tracked = task
       .catch((error) => {
-        console.error("[Daemon] Unhandled client message task failure:", error);
+        console.error('[Daemon] Unhandled client message task failure:', error);
       })
       .finally(() => {
         this.messageTasks.delete(tracked);
@@ -577,8 +959,10 @@ export class DaemonServer {
     }
   }
 
-  private async startDurableRun(request: StartRunRequest): Promise<OrchestratorRunHandle> {
-    this.assertEventStoreAvailableForNewRun(request.id, "subagent");
+  private async startDurableRun(
+    request: StartRunRequest
+  ): Promise<OrchestratorRunHandle> {
+    this.assertEventStoreAvailableForNewRun(request.id, 'subagent');
     return this.orchestrator.startRun(request);
   }
 
@@ -596,22 +980,22 @@ export class DaemonServer {
       return false;
     }
 
-    const runId = message.type === "run-task" ? message.runId : message.runId;
+    const runId = message.type === 'run-task' ? message.runId : message.runId;
     console.warn(
       `[Daemon] Rejecting ${message.type} because event store is degraded: ${failure.message}`
     );
     this.clients.sendError(
       ws,
-      "EVENT_STORE_DEGRADED",
+      'EVENT_STORE_DEGRADED',
       degradedRunRejectionMessage(failure),
       runId,
       message
     );
     this.lifecycle.recordError({
-      code: "EVENT_STORE_DEGRADED_RUN_REJECTED",
+      code: 'EVENT_STORE_DEGRADED_RUN_REJECTED',
       message: `Rejected durable run while event store is degraded: ${failure.message}`,
-      source: "event-store",
-      severity: "warning",
+      source: 'event-store',
+      severity: 'warning',
       detail: failure.stack,
       metadata: {
         clientId: client.id,
@@ -633,10 +1017,10 @@ export class DaemonServer {
     }
 
     this.lifecycle.recordError({
-      code: "EVENT_STORE_DEGRADED_RUN_REJECTED",
+      code: 'EVENT_STORE_DEGRADED_RUN_REJECTED',
       message: `Rejected durable run while event store is degraded: ${failure.message}`,
-      source: "event-store",
-      severity: "warning",
+      source: 'event-store',
+      severity: 'warning',
       detail: failure.stack,
       metadata: {
         requestType,
@@ -651,14 +1035,16 @@ export class DaemonServer {
     this.lifecycle.recordError({
       code: eventStoreFailureCode(failure),
       message: failure.message,
-      source: "event-store",
-      severity: "error",
+      source: 'event-store',
+      severity: 'error',
       detail: failure.stack,
       metadata: eventStoreFailureMetadata(failure, this.eventLogPath),
     });
   }
 
-  private recordClientTransportDiagnostic(diagnostic: DaemonClientTransportDiagnostic): void {
+  private recordClientTransportDiagnostic(
+    diagnostic: DaemonClientTransportDiagnostic
+  ): void {
     this.lifecycle.recordError({
       code: diagnostic.code,
       message: diagnostic.message,
@@ -674,7 +1060,10 @@ export class DaemonServer {
   }
 
   private startWorkflowSchedulerLoop(): void {
-    if (this.workflowSchedulerTimer || this.config.workflowSchedulerIntervalMs <= 0) {
+    if (
+      this.workflowSchedulerTimer ||
+      this.config.workflowSchedulerIntervalMs <= 0
+    ) {
       return;
     }
 
@@ -682,30 +1071,36 @@ export class DaemonServer {
       void this.tickScheduler().catch((error) => {
         if (error instanceof DaemonEventStoreDegradedError) {
           this.lifecycle.recordError({
-            code: "EVENT_STORE_DEGRADED_RUN_REJECTED",
+            code: 'EVENT_STORE_DEGRADED_RUN_REJECTED',
             message: error.message,
-            source: "event-store",
-            severity: "warning",
+            source: 'event-store',
+            severity: 'warning',
             detail: error.stack,
             metadata: {
               ...(error.runId ? { runId: error.runId } : {}),
               ...eventStoreFailureMetadata(error.failure, this.eventLogPath),
             },
           });
-          console.warn("[Daemon] Workflow scheduler skipped durable run:", error.message);
+          console.warn(
+            '[Daemon] Workflow scheduler skipped durable run:',
+            error.message
+          );
           return;
         }
         this.lifecycle.recordError({
-          code: "WORKFLOW_SCHEDULER_TICK_FAILED",
+          code: 'WORKFLOW_SCHEDULER_TICK_FAILED',
           message: `Workflow scheduler tick failed: ${errorMessage(error)}`,
-          source: "daemon",
+          source: 'daemon',
           detail: errorDetail(error),
         });
-        console.error("[Daemon] Workflow scheduler tick failed:", error);
+        console.error('[Daemon] Workflow scheduler tick failed:', error);
       });
     };
 
-    this.workflowSchedulerTimer = setInterval(runTick, this.config.workflowSchedulerIntervalMs);
+    this.workflowSchedulerTimer = setInterval(
+      runTick,
+      this.config.workflowSchedulerIntervalMs
+    );
     this.workflowSchedulerTimer.unref?.();
     runTick();
   }
@@ -724,13 +1119,15 @@ export class DaemonServer {
     }
 
     const settled = this.workflowSchedulerTickTask.then(
-      () => "settled" as const,
-      () => "settled" as const
+      () => 'settled' as const,
+      () => 'settled' as const
     );
-    const timedOut = delay(timeoutMs).then(() => "timed-out" as const);
+    const timedOut = delay(timeoutMs).then(() => 'timed-out' as const);
     const result = await Promise.race([settled, timedOut]);
-    if (result === "timed-out") {
-      console.warn("[Daemon] Shutdown timed out waiting for workflow scheduler tick");
+    if (result === 'timed-out') {
+      console.warn(
+        '[Daemon] Shutdown timed out waiting for workflow scheduler tick'
+      );
     }
   }
 
@@ -750,13 +1147,18 @@ export class DaemonServer {
     });
   }
 
-  private async waitForActiveRunsToSettle(reason: string, timeoutMs: number): Promise<void> {
+  private async waitForActiveRunsToSettle(
+    reason: string,
+    timeoutMs: number
+  ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (this.orchestrator.countActiveRuns() === 0) {
         return;
       }
-      const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
+      const activeRuns = this.orchestrator
+        .listRuns()
+        .filter((run) => isActiveRunStatus(run.status));
       for (const run of activeRuns) {
         this.orchestrator.cancelRun(run.id, reason);
       }
@@ -764,9 +1166,11 @@ export class DaemonServer {
     }
 
     if (this.orchestrator.countActiveRuns() > 0) {
-      const activeRuns = this.orchestrator.listRuns().filter((run) => isActiveRunStatus(run.status));
+      const activeRuns = this.orchestrator
+        .listRuns()
+        .filter((run) => isActiveRunStatus(run.status));
       console.warn(
-        `[Daemon] Shutdown timed out waiting for active runs: ${activeRuns.map((run) => `${run.id}:${run.status}`).join(", ")}`
+        `[Daemon] Shutdown timed out waiting for active runs: ${activeRuns.map((run) => `${run.id}:${run.status}`).join(', ')}`
       );
     }
   }
@@ -776,11 +1180,15 @@ export class DaemonServer {
       return;
     }
 
-    const settled = Promise.allSettled([...this.messageTasks]).then(() => "settled" as const);
-    const timedOut = delay(timeoutMs).then(() => "timed-out" as const);
+    const settled = Promise.allSettled([...this.messageTasks]).then(
+      () => 'settled' as const
+    );
+    const timedOut = delay(timeoutMs).then(() => 'timed-out' as const);
     const result = await Promise.race([settled, timedOut]);
-    if (result === "timed-out" && this.messageTasks.size > 0) {
-      console.warn(`[Daemon] Shutdown timed out waiting for ${this.messageTasks.size} message task(s)`);
+    if (result === 'timed-out' && this.messageTasks.size > 0) {
+      console.warn(
+        `[Daemon] Shutdown timed out waiting for ${this.messageTasks.size} message task(s)`
+      );
     }
   }
 
@@ -807,7 +1215,7 @@ export class DaemonServer {
       this.lifecycle.recordError({
         code,
         message: `${message}: ${errorMessage(error)}`,
-        source: code === "EVENT_STORE_CLOSE_FAILED" ? "event-store" : "daemon",
+        source: code === 'EVENT_STORE_CLOSE_FAILED' ? 'event-store' : 'daemon',
         detail: errorDetail(error),
       });
       failures.push(error);
@@ -815,48 +1223,72 @@ export class DaemonServer {
   }
 }
 
-function parseClientMessage(data: RawData): ParseMessageResult {
-  const buffer = Array.isArray(data)
-    ? Buffer.concat(data)
-    : Buffer.isBuffer(data)
-      ? data
-      : Buffer.from(data);
+function rawDataToBuffer(data: RawData): Buffer {
+  if (Array.isArray(data)) {
+    return Buffer.concat(data);
+  }
+  if (Buffer.isBuffer(data)) {
+    return data;
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data);
+  }
+  // SharedArrayBuffer / ArrayBufferView / string
+  return Buffer.from(data as Buffer | string | Uint8Array);
+}
+
+function parseClientMessage(data: RawData | Buffer): ParseMessageResult {
+  const buffer = Buffer.isBuffer(data) ? data : rawDataToBuffer(data);
 
   try {
-    return { ok: true, value: JSON.parse(buffer.toString("utf8")) };
+    return { ok: true, value: JSON.parse(buffer.toString('utf8')) };
   } catch (error) {
     return { ok: false, message: `Invalid JSON: ${(error as Error).message}` };
   }
 }
 
 function isActiveRunStatus(status: RunStatus): boolean {
-  return status === "queued" || status === "running" || status === "awaiting-approval" || status === "cancelling";
+  return (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'awaiting-approval' ||
+    status === 'cancelling'
+  );
 }
 
 function isNewDurableRunMessage(
   message: DaemonInboundMessage
-): message is Extract<DaemonInboundMessage, { type: "run-task" | "trigger-workflow" }> {
-  return message.type === "run-task" || message.type === "trigger-workflow";
+): message is Extract<
+  DaemonInboundMessage,
+  { type: 'run-task' | 'trigger-workflow' }
+> {
+  return message.type === 'run-task' || message.type === 'trigger-workflow';
 }
 
 class DaemonEventStoreDegradedError extends Error {
-  readonly code = "EVENT_STORE_DEGRADED";
+  readonly code = 'EVENT_STORE_DEGRADED';
 
   constructor(
     readonly runId: string | undefined,
     readonly failure: OrchestratorEventStoreError
   ) {
     super(degradedRunRejectionMessage(failure));
-    this.name = "DaemonEventStoreDegradedError";
+    this.name = 'DaemonEventStoreDegradedError';
   }
 }
 
-function degradedRunRejectionMessage(failure: OrchestratorEventStoreError): string {
+function degradedRunRejectionMessage(
+  failure: OrchestratorEventStoreError
+): string {
   return `Daemon event store is degraded; durable run start rejected. ${failure.message}`;
 }
 
-function eventStoreFailureCode(failure: OrchestratorEventStoreError): "EVENT_STORE_CLOSED" | "EVENT_STORE_WRITE_FAILED" {
-  return failure.kind === "closed" ? "EVENT_STORE_CLOSED" : "EVENT_STORE_WRITE_FAILED";
+function eventStoreFailureCode(
+  failure: OrchestratorEventStoreError
+): 'EVENT_STORE_CLOSED' | 'EVENT_STORE_WRITE_FAILED' {
+  return failure.kind === 'closed'
+    ? 'EVENT_STORE_CLOSED'
+    : 'EVENT_STORE_WRITE_FAILED';
 }
 
 function eventStoreFailureMetadata(
@@ -881,16 +1313,16 @@ function diagnosticMetadata(metadata: Record<string, unknown>): JsonObject {
 function toDiagnosticJsonValue(value: unknown): JsonValue {
   if (
     value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
   ) {
     return Number.isNaN(value) ? null : value;
   }
   if (Array.isArray(value)) {
     return value.map((item) => toDiagnosticJsonValue(item));
   }
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     const result: JsonObject = {};
     for (const [key, nested] of Object.entries(value)) {
       result[key] = toDiagnosticJsonValue(nested);
@@ -904,27 +1336,28 @@ async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-
 function errorDetail(error: unknown): string | undefined {
   return error instanceof Error ? error.stack : undefined;
 }
 
-function correlationFromRawMessage(value: unknown): DaemonCorrelationFields | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function correlationFromRawMessage(
+  value: unknown
+): DaemonCorrelationFields | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
 
   const record = value as Record<string, unknown>;
   return {
-    ...(typeof record.requestId === "string" && record.requestId.length > 0
+    ...(typeof record.requestId === 'string' && record.requestId.length > 0
       ? { requestId: record.requestId }
       : {}),
-    ...(typeof record.correlationId === "string" && record.correlationId.length > 0
+    ...(typeof record.correlationId === 'string' &&
+    record.correlationId.length > 0
       ? { correlationId: record.correlationId }
       : {}),
   };
 }
 
 type ParseMessageResult =
-  | { ok: true; value: unknown }
-  | { ok: false; message: string };
+  { ok: true; value: unknown } | { ok: false; message: string };
