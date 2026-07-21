@@ -19,6 +19,7 @@ import { sessionSyncService } from './services/SessionSyncService';
 import { crossTabCoordinator } from './services/CrossTabCoordinator';
 import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
+import { telemetry } from './services/TelemetryService';
 
 export function bootstrapServices(): () => void {
   const cleanups: Array<() => void> = [];
@@ -32,9 +33,9 @@ export function bootstrapServices(): () => void {
   connectionManager.connect().catch(() => {});
 
   // 4. Register daemon connection listener for StreamRecovery
-  const unsubStreamRecovery = eventBus.on('daemon:connection:change', (event) => {
-    const payload = event.payload as { phase?: string };
-    if (payload?.phase === 'ready') {
+  const unsubStreamRecovery = eventBus.on('daemon:connection:change', (payload) => {
+    const p = payload as { phase?: string };
+    if (p?.phase === 'ready') {
       streamRecovery.recoverAllStreams().catch(() => {});
     }
   });
@@ -48,11 +49,19 @@ export function bootstrapServices(): () => void {
   // 6. Start CrossTabCoordinator (leader election, cross-tab sync)
   crossTabCoordinator.init();
 
+  // 6b. Wire TelemetryService to EventBus — log all events for debugging
+  const unsubTelemetry = eventBus.onAny((event) => {
+    if (process.env.NODE_ENV === 'development' || (event.payload as any)?.severity === 'error') {
+      telemetry.debug('eventbus', `Event: ${event.type}`, { source: event.source });
+    }
+  });
+  cleanups.push(unsubTelemetry);
+
   // 7. Wire ErrorStore to EventBus — map daemon connection state
-  const unsubErrorStore = eventBus.on('daemon:connection:change', (event) => {
-    const payload = event.payload as { phase?: string };
-    if (!payload?.phase) return;
-    switch (payload.phase) {
+  const unsubErrorStore = eventBus.on('daemon:connection:change', (payload) => {
+    const p = payload as { phase?: string };
+    if (!p?.phase) return;
+    switch (p.phase) {
       case 'ready':
         errorStore.setConnectionStatus('connected');
         break;

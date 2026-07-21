@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AppErrorBoundary snapshots > renders compact variant 1`] = `
+<div
+  style="display: contents;"
+>
+  <div>
+    child content
+  </div>
+</div>
+`;
+
+exports[`AppErrorBoundary snapshots > renders minimal variant 1`] = `
+<div
+  style="display: contents;"
+>
+  <div>
+    child
+  </div>
+</div>
+`;

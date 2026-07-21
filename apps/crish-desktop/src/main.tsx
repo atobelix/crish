@@ -1,10 +1,19 @@
 import { initSsrGlobals } from './createSsrGlobals';
+import { memoryManager } from '@crish/shared-utils/browser';
 import './index.css';
+import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
 
 // 必须在任何模块前执行 — 替换 appMode / productMode 的同步 localStorage 读
 initSsrGlobals();
 
+// CSS token runtime injection — keeps JS source of truth in sync with CSS
+document.documentElement.style.setProperty('--sidebar-width', `${SIDEBAR_WIDTH_DEFAULT}px`);
+document.documentElement.style.setProperty('--chat-col-max', `${CHAT_COL_MAX}px`);
+
 async function startup() {
+  // Phase 0: 等待 ServiceRegistry / ConfigService 初始化
+  await import('./bootstrap-orchestrator').then((m) => m.ready);
+
   // Phase 1: 并行初始化最小依赖（失败不阻塞渲染）
   try {
     await import('./bootstrap-core').then(({ bootstrapCore }) => bootstrapCore());
@@ -36,6 +45,8 @@ async function startup() {
     }
     return;
   }
+
+  memoryManager.start();
 
   const root = createRoot(document.getElementById('root')!);
 
@@ -78,6 +89,20 @@ async function startup() {
     ...window.__crish_perf,
     firstPaint: performance.now(),
   };
+
+  if (import.meta.env.DEV) {
+    const p = (window as any).__crish_perf;
+    p.marks = {} as Record<string, number[]>;
+    p.budgetExceeded = (entry: { name: string; duration: number; budget: number }) => {
+      if (!p.marks[entry.name]) {
+        p.marks[entry.name] = [];
+      }
+      p.marks[entry.name].push(entry.duration);
+      if (p.marks[entry.name].length > 100) {
+        p.marks[entry.name].shift();
+      }
+    };
+  }
 }
 
 startup();

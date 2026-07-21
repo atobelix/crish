@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
 import { useLayoutStore } from './store/layoutStore';
 import { getSessionById } from './store/sessionStore';
+import { bootstrapStores } from './store/bootstrapStores';
 import {
   archiveSession,
   branchSession,
@@ -23,8 +24,12 @@ import { createDebounced } from './api/debouncedValue';
 import { getActiveModelId, getActiveProfileId } from './api/providerProfiles';
 import { collapseToolColumnPreserve } from './store/layoutHelpers';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { TelemetryDialog } from './components/TelemetryDialog';
+import { telemetry } from './services/TelemetryService';
+import { Tooltip } from './components/Tooltip';
 import { formatBranchUndoToast, useToastQueue } from './hooks/useToastQueue';
 import { shouldShowFirstRunWizard } from './components/FirstRunWizard';
+import styles from './App.module.css';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/Sidebar';
@@ -86,18 +91,17 @@ function App() {
   const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
 
-  const workspaces = useLayoutStore((s) => s.workspaces);
-  const activeWorkspaceIndex = useLayoutStore((s) => s.activeWorkspaceIndex);
-  const activeWorkspace = workspaces[activeWorkspaceIndex];
-
-  const isRightSidebarCollapsed = useMemo(() => {
-    if (!activeWorkspace) return true;
-    const toolCol = activeWorkspace.columns.find((c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-'));
+  const isRightSidebarCollapsed = useLayoutStore((s) => {
+    const w = s.workspaces[s.activeWorkspaceIndex];
+    if (!w) return true;
+    const toolCol = w.columns.find((c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-'));
     if (!toolCol) return true;
     return toolCol.widthRatio < 0.08;
-  }, [activeWorkspace]);
+  });
 
   const toggleRightSidebar = useCallback(() => {
+    const state = useLayoutStore.getState();
+    const activeWorkspace = state.workspaces[state.activeWorkspaceIndex];
     if (!activeWorkspace) return;
     const wsId = activeWorkspace.id;
     const toolCol = activeWorkspace.columns.find((c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-'));
@@ -107,17 +111,18 @@ function App() {
       const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
       focusOrOpenPanel(wsId, activeCardId);
     } else {
-      useLayoutStore.setState((state) => {
-        const w = state.workspaces.find((x) => x.id === wsId);
+      useLayoutStore.setState((st) => {
+        const w = st.workspaces.find((x) => x.id === wsId);
         if (!w) return;
         collapseToolColumnPreserve(w);
       });
     }
-  }, [activeWorkspace]);
+  }, []);
 
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
-  const [skipLinkFocused, setSkipLinkFocused] = useState(false);
+  const [showTelemetry, setShowTelemetry] = useState(false);
+  const [showCrashPrompt, setShowCrashPrompt] = useState(false);
   const [sessionSearchInput, setSessionSearchInput] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const searchDebounceRef = useRef(
@@ -190,6 +195,17 @@ function App() {
     return () => {
       cleanup();
     };
+  }, []);
+
+  useEffect(() => {
+    if (telemetry.hasPreviousCrash()) {
+      setShowCrashPrompt(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const cleanup = bootstrapStores();
+    return () => cleanup();
   }, []);
 
   useEffect(() => {
@@ -374,37 +390,41 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const svc = ShortcutService.getInstance();
+    svc.init(document);
+
     const openTab = (tab: SettingsTabType) => {
       openSettings(tab);
     };
-    const handleKeyDown = (e: KeyboardEvent) => {
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showCheatsheet) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCheatsheet(false);
+        return;
+      }
+      if (showSettingsOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowSettingsOverlay(false);
+        return;
+      }
+      if (showFirstRun) {
+        e.stopPropagation();
+        return;
+      }
+    };
+    document.addEventListener('keydown', handleEscape, true);
+
+    const unsub = svc.onMatch(({ actionId, originalEvent: e }) => {
       const target = e.target as HTMLElement | null;
       const inEditable =
         !!target &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable);
-
-      if (e.key === 'Escape') {
-        if (showCheatsheet) {
-          e.preventDefault();
-          setShowCheatsheet(false);
-          return;
-        }
-        if (showSettingsOverlay) {
-          e.preventDefault();
-          setShowSettingsOverlay(false);
-          return;
-        }
-        if (showFirstRun) {
-          return;
-        }
-      }
-
-      const result = ShortcutService.getInstance().handleKeyDown(e);
-      if (!result) return;
-
-      const { actionId } = result;
 
       if (inEditable && !['toggle_settings', 'toggle_sidebar', 'toggle_runtime', 'cheatsheet'].includes(actionId)) {
         return;
@@ -485,12 +505,20 @@ function App() {
           e.preventDefault();
           setShowCheatsheet((v) => !v);
           return;
+        case 'export_logs':
+          e.preventDefault();
+          setShowTelemetry(true);
+          return;
         default:
           break;
       }
+    });
+
+    return () => {
+      unsub();
+      document.removeEventListener('keydown', handleEscape, true);
+      svc.destroy();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     handleShowToast,
     showCheatsheet,
@@ -555,56 +583,30 @@ function App() {
     >
       <a
         href="#crish-main"
-        onFocus={() => setSkipLinkFocused(true)}
-        onBlur={() => setSkipLinkFocused(false)}
-        style={
-          skipLinkFocused
-            ? {
-                position: 'absolute',
-                zIndex: 100000,
-                top: 8,
-                left: 8,
-                padding: '6px 12px',
-                background: 'var(--bg-elevated, #fff)',
-                color: 'var(--text-primary, #111)',
-                borderRadius: 6,
-                boxShadow: '0 2px 8px rgba(0,0,0,.12)',
-                textDecoration: 'none',
-                fontSize: 13,
-              }
-            : {
-                position: 'absolute',
-                width: 1,
-                height: 1,
-                padding: 0,
-                margin: -1,
-                overflow: 'hidden',
-                clip: 'rect(0, 0, 0, 0)',
-                whiteSpace: 'nowrap',
-                border: 0,
-              }
-        }
+        className={styles.skipLink}
       >
-        跳到主内容
+        跳转到主要内容
       </a>
 
       {showFirstRun && (
-        <Suspense fallback={<SkeletonFallback height={400} />}>
-          <FirstRunWizard
-            onDone={() => {
-              setShowFirstRun(false);
-              const model = getActiveModelId();
-              const profileId = getActiveProfileId();
-              if (model && profileId) {
-                emitUiEvent('model-changed', { profileId, model });
-              }
-            }}
-            onOpenSettings={() => {
-              setShowFirstRun(false);
-              openSettings('models');
-            }}
-          />
-        </Suspense>
+        <AppErrorBoundary compact title="首次运行向导出错">
+          <Suspense fallback={<SkeletonFallback height={400} />}>
+            <FirstRunWizard
+              onDone={() => {
+                setShowFirstRun(false);
+                const model = getActiveModelId();
+                const profileId = getActiveProfileId();
+                if (model && profileId) {
+                  emitUiEvent('model-changed', { profileId, model });
+                }
+              }}
+              onOpenSettings={() => {
+                setShowFirstRun(false);
+                openSettings('models');
+              }}
+            />
+          </Suspense>
+        </AppErrorBoundary>
       )}
 
       {shellChromeMode !== 'inset' ? (
@@ -615,45 +617,48 @@ function App() {
           data-tauri-drag-region
         >
           <div className="app-header-left" data-tauri-drag-region>
-            <button
-              type="button"
-              className="header-btn no-drag"
-              title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-              aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-              aria-expanded={!sidebarCollapsed}
-              aria-controls="crish-sidebar"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            >
-              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
-                <IconSidebarLeft size={15} aria-hidden="true" />
-              </Suspense>
-            </button>
+            <Tooltip content={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+              <button
+                type="button"
+                className="header-btn no-drag"
+                aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+                aria-expanded={!sidebarCollapsed}
+                aria-controls="crish-sidebar"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              >
+                <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                  <IconSidebarLeft size={15} aria-hidden="true" />
+                </Suspense>
+              </button>
+            </Tooltip>
           </div>
           <div className="app-header-right no-drag" role="toolbar" aria-label="顶栏操作">
-            <button
-              type="button"
-              className={`header-btn no-drag ${!isRightSidebarCollapsed ? 'active' : ''}`}
-              title={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-              aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-              aria-pressed={!isRightSidebarCollapsed}
-              onClick={toggleRightSidebar}
-            >
-              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
-                <IconSidebarRight size={15} aria-hidden="true" />
-              </Suspense>
-            </button>
-            <button
-              type="button"
-              className="header-btn"
-              onClick={() => setShowCheatsheet(true)}
-              title="快捷键与帮助"
-              aria-label="快捷键与帮助"
-              aria-haspopup="dialog"
-            >
-              <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
-                <LucideHelpCircle size={16} aria-hidden="true" />
-              </Suspense>
-            </button>
+            <Tooltip content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}>
+              <button
+                type="button"
+                className={`header-btn no-drag ${!isRightSidebarCollapsed ? 'active' : ''}`}
+                aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+                aria-pressed={!isRightSidebarCollapsed}
+                onClick={toggleRightSidebar}
+              >
+                <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                  <IconSidebarRight size={15} aria-hidden="true" />
+                </Suspense>
+              </button>
+            </Tooltip>
+            <Tooltip content="快捷键与帮助">
+              <button
+                type="button"
+                className="header-btn"
+                onClick={() => setShowCheatsheet(true)}
+                aria-label="快捷键与帮助"
+                aria-haspopup="dialog"
+              >
+                <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                  <LucideHelpCircle size={16} aria-hidden="true" />
+                </Suspense>
+              </button>
+            </Tooltip>
 
             <div
               className="window-controls no-drag"
@@ -661,42 +666,45 @@ function App() {
               aria-label="窗口控制"
               data-tauri-drag-region="false"
             >
-              <button
-                type="button"
-                className="win-btn no-drag"
-                title="最小化"
-                aria-label="最小化窗口"
-                data-tauri-drag-region="false"
-                onClick={() => void winCtl('minimize')}
-              >
-                <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
-                  <LucideMinus size={16} aria-hidden="true" />
-                </Suspense>
-              </button>
-              <button
-                type="button"
-                className="win-btn no-drag"
-                title="最大化"
-                aria-label="最大化或还原窗口"
-                data-tauri-drag-region="false"
-                onClick={() => void winCtl('toggleMaximize')}
-              >
-                <Suspense fallback={<SkeletonFallback width={14} height={14} />}>
-                  <LucideSquare size={14} aria-hidden="true" />
-                </Suspense>
-              </button>
-              <button
-                type="button"
-                className="win-btn close no-drag"
-                title="关闭"
-                aria-label="关闭窗口"
-                data-tauri-drag-region="false"
-                onClick={() => void winCtl('close')}
-              >
-                <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
-                  <LucideX size={16} aria-hidden="true" />
-                </Suspense>
-              </button>
+              <Tooltip content="最小化">
+                <button
+                  type="button"
+                  className="win-btn no-drag"
+                  aria-label="最小化窗口"
+                  data-tauri-drag-region="false"
+                  onClick={() => void winCtl('minimize')}
+                >
+                  <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                    <LucideMinus size={16} aria-hidden="true" />
+                  </Suspense>
+                </button>
+              </Tooltip>
+              <Tooltip content="最大化">
+                <button
+                  type="button"
+                  className="win-btn no-drag"
+                  aria-label="最大化或还原窗口"
+                  data-tauri-drag-region="false"
+                  onClick={() => void winCtl('toggleMaximize')}
+                >
+                  <Suspense fallback={<SkeletonFallback width={14} height={14} />}>
+                    <LucideSquare size={14} aria-hidden="true" />
+                  </Suspense>
+                </button>
+              </Tooltip>
+              <Tooltip content="关闭">
+                <button
+                  type="button"
+                  className="win-btn close no-drag"
+                  aria-label="关闭窗口"
+                  data-tauri-drag-region="false"
+                  onClick={() => void winCtl('close')}
+                >
+                  <Suspense fallback={<SkeletonFallback width={16} height={16} />}>
+                    <LucideX size={16} aria-hidden="true" />
+                  </Suspense>
+                </button>
+              </Tooltip>
             </div>
           </div>
         </header>
@@ -708,19 +716,20 @@ function App() {
           data-tauri-drag-region
         >
           <div className="ws-titlebar-rail" data-tauri-drag-region>
-            <button
-              type="button"
-              className="header-btn no-drag ws-titlebar-sidebar-btn"
-              title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-              aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-              aria-expanded={!sidebarCollapsed}
-              aria-controls="crish-sidebar"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            >
-              <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
-                <IconSidebarLeft size={15} aria-hidden="true" />
-              </Suspense>
-            </button>
+            <Tooltip content={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+              <button
+                type="button"
+                className="header-btn no-drag ws-titlebar-sidebar-btn"
+                aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+                aria-expanded={!sidebarCollapsed}
+                aria-controls="crish-sidebar"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              >
+                <Suspense fallback={<SkeletonFallback width={15} height={15} />}>
+                  <IconSidebarLeft size={15} aria-hidden="true" />
+                </Suspense>
+              </button>
+            </Tooltip>
           </div>
           <div className="ws-titlebar-main" data-tauri-drag-region>
             <AppErrorBoundary compact title="工作区标签出错">
@@ -818,15 +827,77 @@ function App() {
 
 
       <div role="region" aria-label="通知" aria-live="polite">
-        <Suspense fallback={null}>
-          <ToastStack toasts={toasts} onDismiss={dismissToast} />
-        </Suspense>
+        <AppErrorBoundary variant="minimal" title="通知出错">
+          <Suspense fallback={null}>
+            <ToastStack toasts={toasts} onDismiss={dismissToast} />
+          </Suspense>
+        </AppErrorBoundary>
       </div>
 
+      {showCrashPrompt && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.4)',
+          }}
+          role="presentation"
+          onClick={() => setShowCrashPrompt(false)}
+        >
+          <div
+            style={{
+              background: 'var(--bg-surface, #1e1e2e)',
+              borderRadius: 12, padding: 24, maxWidth: 420,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              color: 'var(--fg-default, #e0e0e0)',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+            role="alertdialog"
+            aria-label="异常退出检测"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 12px 0', fontSize: 18, fontWeight: 600 }}>检测到上次异常退出</h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: 14, lineHeight: 1.5, color: 'var(--fg-muted, #999)' }}>
+              是否导出诊断日志以帮助排查问题？
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  fontSize: 14, background: 'var(--bg-muted, rgba(255,255,255,0.08))',
+                  color: 'var(--fg-default, #e0e0e0)',
+                }}
+                onClick={() => { setShowCrashPrompt(false); telemetry.clear(); }}
+              >
+                忽略
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  fontSize: 14, fontWeight: 500,
+                  background: 'var(--accent-color, #4a9eff)', color: '#fff',
+                }}
+                onClick={() => { telemetry.downloadLog(); setShowCrashPrompt(false); }}
+              >
+                导出诊断日志
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTelemetry && (
+        <TelemetryDialog onClose={() => setShowTelemetry(false)} />
+      )}
+
       {showCheatsheet && (
-        <Suspense fallback={<SkeletonFallback height={300} />}>
-          <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
-        </Suspense>
+        <AppErrorBoundary compact title="快捷键帮助出错">
+          <Suspense fallback={<SkeletonFallback height={300} />}>
+            <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
+          </Suspense>
+        </AppErrorBoundary>
       )}
 
       {showSettingsOverlay && (

@@ -1,0 +1,536 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
+<div
+  class="_toolStack_3f3761 tool-stack"
+>
+  <div
+    class="_toolRow_3f3761 _isError_3f3761 is-error _isCollapsed_3f3761 is-collapsed tool-row"
+    data-default-collapsed="true"
+    data-tool-id="tool_error"
+    data-tool-label="构建项目"
+    data-tool-status="失败"
+  >
+    <div
+      aria-controls="tool-result-tool_error"
+      aria-expanded="false"
+      aria-label="构建项目，失败，已折叠，按 Enter 或空格展开"
+      class="_toolRowHead_3f3761 tool-row-head"
+      role="button"
+      tabindex="0"
+    >
+      <span
+        class="_toolRowHeadMain_3f3761"
+      >
+        <span
+          aria-hidden="true"
+          class="_toolRowIcoSlot_3f3761"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-circle-x"
+            fill="none"
+            height="14"
+            stroke="var(--accent-red, #ef4444)"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.6"
+            viewBox="0 0 24 24"
+            width="14"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+            />
+            <path
+              d="m15 9-6 6"
+            />
+            <path
+              d="m9 9 6 6"
+            />
+          </svg>
+        </span>
+        <span
+          class="_toolRowText_3f3761"
+        >
+          <span
+            class="_toolRowSummary_3f3761"
+          >
+            构建项目
+          </span>
+        </span>
+      </span>
+      <span
+        class="_toolRowChevronSlot_3f3761 _isToggle_3f3761"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-chevron-right _toolRowChevron_3f3761"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="12"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m9 18 6-6-6-6"
+          />
+        </svg>
+      </span>
+    </div>
+    <div
+      class="_toolBody_3f3761"
+    >
+      <div
+        class="_toolBodyInner_3f3761"
+      >
+        <div
+          aria-label="失败的工具输出"
+          class="_toolResultBody_3f3761"
+          id="tool-result-tool_error"
+          role="region"
+        >
+          <pre
+            aria-label="命令"
+            class="_toolResultPre_3f3761 _toolResultPreCmd_3f3761"
+          >
+            npm run build
+          </pre>
+          <pre
+            class="_toolResultPre_3f3761"
+          >
+            Error: build failed - syntax error in src/index.ts
+          </pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
+<div
+  class="_toolStack_3f3761 tool-stack"
+>
+  <div
+    aria-busy="true"
+    class="_toolRow_3f3761 _isRunning_3f3761 is-running _isCollapsed_3f3761 is-collapsed tool-row"
+    data-default-collapsed="true"
+    data-tool-id="tool_running"
+    data-tool-label="运行测试"
+    data-tool-status="运行中"
+  >
+    <div
+      aria-label="运行测试，运行中"
+      class="_toolRowHead_3f3761 _toolRowHeadStatic_3f3761 tool-row-head tool-row-head-static"
+      style="cursor: default;"
+    >
+      <span
+        class="_toolRowHeadMain_3f3761"
+      >
+        <span
+          aria-hidden="true"
+          class="_toolRowIcoSlot_3f3761"
+        >
+          <span
+            aria-hidden="true"
+            class="_toolRowLive_3f3761"
+          >
+            <span
+              class="loading-spinner"
+              style="width: 10px; height: 10px; border-width: 1.5px;"
+            />
+          </span>
+        </span>
+        <span
+          class="_toolRowText_3f3761"
+        >
+          <span
+            class="_toolRowSummary_3f3761"
+          >
+            运行测试
+          </span>
+        </span>
+      </span>
+      <span
+        class="_toolRowChevronSlot_3f3761 "
+      />
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
+<div
+  class="_toolStack_3f3761 tool-stack"
+>
+  <div
+    class="_toolRow_3f3761  _isCollapsed_3f3761 is-collapsed tool-row"
+    data-default-collapsed="true"
+    data-tool-id="tool_success"
+    data-tool-label="查看 main.ts"
+    data-tool-status="完成"
+  >
+    <div
+      aria-controls="tool-result-tool_success"
+      aria-expanded="false"
+      aria-label="查看 main.ts，完成，已折叠，按 Enter 或空格展开"
+      class="_toolRowHead_3f3761 tool-row-head"
+      role="button"
+      tabindex="0"
+    >
+      <span
+        class="_toolRowHeadMain_3f3761"
+      >
+        <span
+          aria-hidden="true"
+          class="_toolRowIcoSlot_3f3761"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-circle-check"
+            fill="none"
+            height="14"
+            stroke="var(--accent-green, #22c55e)"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.6"
+            viewBox="0 0 24 24"
+            width="14"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+            />
+            <path
+              d="m9 12 2 2 4-4"
+            />
+          </svg>
+        </span>
+        <span
+          class="_toolRowText_3f3761"
+        >
+          <span
+            class="_toolRowSummary_3f3761"
+          >
+            查看 
+            <span
+              class="_toolPathWrap_3f3761"
+            >
+              <button
+                class="_toolPathLink_3f3761"
+                type="button"
+              >
+                main.ts
+              </button>
+              <span
+                class="_toolPathActions_3f3761"
+              >
+                <button
+                  aria-label="在文件面板打开"
+                  class="_toolPathAction_3f3761"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-panel-right-open"
+                    fill="none"
+                    height="14"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      height="18"
+                      rx="2"
+                      width="18"
+                      x="3"
+                      y="3"
+                    />
+                    <path
+                      d="M15 3v18"
+                    />
+                    <path
+                      d="m10 15-3-3 3-3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  aria-label="复制路径"
+                  class="_toolPathAction_3f3761"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-copy"
+                    fill="none"
+                    height="14"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      height="14"
+                      rx="2"
+                      ry="2"
+                      width="14"
+                      x="8"
+                      y="8"
+                    />
+                    <path
+                      d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                    />
+                  </svg>
+                </button>
+              </span>
+            </span>
+          </span>
+        </span>
+      </span>
+      <span
+        class="_toolRowChevronSlot_3f3761 _isToggle_3f3761"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-chevron-right _toolRowChevron_3f3761"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="12"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m9 18 6-6-6-6"
+          />
+        </svg>
+      </span>
+    </div>
+    <div
+      class="_toolBody_3f3761"
+    >
+      <div
+        class="_toolBodyInner_3f3761"
+      >
+        <div
+          aria-label="完成的工具输出"
+          class="_toolResultBody_3f3761"
+          id="tool-result-tool_success"
+          role="region"
+        >
+          <pre
+            class="_toolResultPre_3f3761"
+          >
+            file content loaded
+          </pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
+<div
+  class="_toolStack_3f3761 tool-stack"
+>
+  <div
+    class="_toolRow_3f3761  _isCollapsed_3f3761 is-collapsed tool-row"
+    data-default-collapsed="true"
+    data-tool-id="tool_duration"
+    data-tool-label="修改 utils.ts"
+    data-tool-status="完成"
+  >
+    <div
+      aria-controls="tool-result-tool_duration"
+      aria-expanded="false"
+      aria-label="修改 utils.ts，完成，已折叠，按 Enter 或空格展开"
+      class="_toolRowHead_3f3761 tool-row-head"
+      role="button"
+      tabindex="0"
+    >
+      <span
+        class="_toolRowHeadMain_3f3761"
+      >
+        <span
+          aria-hidden="true"
+          class="_toolRowIcoSlot_3f3761"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-circle-check"
+            fill="none"
+            height="14"
+            stroke="var(--accent-green, #22c55e)"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.6"
+            viewBox="0 0 24 24"
+            width="14"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+            />
+            <path
+              d="m9 12 2 2 4-4"
+            />
+          </svg>
+        </span>
+        <span
+          class="_toolRowText_3f3761"
+        >
+          <span
+            class="_toolRowSummary_3f3761"
+          >
+            修改 
+            <span
+              class="_toolPathWrap_3f3761"
+            >
+              <button
+                class="_toolPathLink_3f3761"
+                type="button"
+              >
+                utils.ts
+              </button>
+              <span
+                class="_toolPathActions_3f3761"
+              >
+                <button
+                  aria-label="在文件面板打开"
+                  class="_toolPathAction_3f3761"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-panel-right-open"
+                    fill="none"
+                    height="14"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      height="18"
+                      rx="2"
+                      width="18"
+                      x="3"
+                      y="3"
+                    />
+                    <path
+                      d="M15 3v18"
+                    />
+                    <path
+                      d="m10 15-3-3 3-3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  aria-label="复制路径"
+                  class="_toolPathAction_3f3761"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-copy"
+                    fill="none"
+                    height="14"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      height="14"
+                      rx="2"
+                      ry="2"
+                      width="14"
+                      x="8"
+                      y="8"
+                    />
+                    <path
+                      d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                    />
+                  </svg>
+                </button>
+              </span>
+            </span>
+          </span>
+        </span>
+      </span>
+      <span
+        class="_toolRowChevronSlot_3f3761 _isToggle_3f3761"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-chevron-right _toolRowChevron_3f3761"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="12"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m9 18 6-6-6-6"
+          />
+        </svg>
+      </span>
+    </div>
+    <div
+      class="_toolBody_3f3761"
+    >
+      <div
+        class="_toolBodyInner_3f3761"
+      >
+        <div
+          aria-label="完成的工具输出"
+          class="_toolResultBody_3f3761"
+          id="tool-result-tool_duration"
+          role="region"
+        >
+          <pre
+            class="_toolResultPre_3f3761"
+          >
+            Applied 3 changes:
+- Added import
+- Refactored helper
+- Updated types
+          </pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;

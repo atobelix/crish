@@ -4,36 +4,24 @@
 #   npm run check:store-types
 #   npm run test:core
 #   npm run test:desktop-helpers
-name: ci
-
-on:
-  push:
-    branches: [main, master, 'refactor/**']
-  pull_request:
-    branches: [main, master, 'refactor/**']
-
+name: CI
+on: [push, pull_request]
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
-      - name: Install
-        run: npm ci
-      - name: Lint check
-        run: npm run lint
-      - name: Typecheck core packages (runtime/orchestrator/daemon/workbench/desktop)
-        run: npm run check:core
-      - name: Store type hygiene (no set as any in layoutStore)
-        run: npm run check:store-types
-      - name: Build packages
-        run: npm run build:packages
-      - name: Unit tests
-        run: npm run test
+          node-version: 20
+      - run: npm ci
+      - run: npm run lint:all
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build --if-present
 
   rust-check:
     runs-on: ubuntu-latest

@@ -96,7 +96,7 @@ export interface FileInfo {
 // ==================== JS Fallback Implementations ====================
 
 async function jsSha256Hex(data: Uint8Array): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hash = await crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -104,7 +104,7 @@ async function jsSha256Hex(data: Uint8Array): Promise<string> {
 }
 
 async function jsSha256Full(data: Uint8Array): Promise<HashResult> {
-  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hash = await crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
   const hashBytes = new Uint8Array(hash);
   const hex = Array.from(hashBytes)
     .map((b) => b.toString(16).padStart(2, "0"))

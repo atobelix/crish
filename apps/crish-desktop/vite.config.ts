@@ -101,6 +101,10 @@ function crishHttpProxyPlugin(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    'process.env': {},
+    'process.platform': JSON.stringify(process.platform || 'win32'),
+  },
   plugins: [react(), crishHttpProxyPlugin()],
   resolve: {
     alias: {

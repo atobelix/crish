@@ -1,0 +1,128 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ToastStack snapshots > renders multiple toasts 1`] = `
+<div
+  class="_toastStack_ca2678"
+>
+  <div
+    aria-live="polite"
+    class="_toastAlert_ca2678"
+    role="status"
+  >
+    <span>
+      第一条通知
+    </span>
+    <button
+      aria-label="关闭通知"
+      class="_toastDismissBtn_ca2678"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ×
+      </span>
+    </button>
+  </div>
+  <div
+    aria-live="polite"
+    class="_toastAlert_ca2678"
+    role="status"
+  >
+    <span>
+      第二条通知
+    </span>
+    <button
+      aria-label="关闭通知"
+      class="_toastDismissBtn_ca2678"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ×
+      </span>
+    </button>
+  </div>
+  <div
+    aria-live="polite"
+    class="_toastAlert_ca2678"
+    role="status"
+  >
+    <span>
+      警告信息
+    </span>
+    <button
+      aria-label="关闭通知"
+      class="_toastDismissBtn_ca2678"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ×
+      </span>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ToastStack snapshots > renders single toast 1`] = `
+<div
+  class="_toastStack_ca2678"
+>
+  <div
+    aria-live="polite"
+    class="_toastAlert_ca2678"
+    role="status"
+  >
+    <span>
+      操作成功
+    </span>
+    <button
+      aria-label="关闭通知"
+      class="_toastDismissBtn_ca2678"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ×
+      </span>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ToastStack snapshots > renders toast with undo 1`] = `
+<div
+  class="_toastStack_ca2678"
+>
+  <div
+    aria-live="assertive"
+    class="_toastAlert_ca2678"
+    role="status"
+  >
+    <span>
+      文件已删除
+    </span>
+    <button
+      class="_toastUndoBtn_ca2678"
+      type="button"
+    >
+      撤销
+    </button>
+    <button
+      aria-label="关闭通知"
+      class="_toastDismissBtn_ca2678"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ×
+      </span>
+    </button>
+  </div>
+</div>
+`;
