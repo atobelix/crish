@@ -21,6 +21,7 @@ import { setAsyncItem, removeAsyncItem, keyIndexManager } from './asyncStorage';
 import { coerceSessionTimestamp } from './sessionTime';
 import { EMPTY_SESSION_TITLE, prepareSessionsForUi } from './sessionTitle';
 import { normalizeAssistantTimeline } from './toolPresentation';
+import { isPendingDraft } from '../store/draftSession';
 
 export const SESSION_INDEX_KEY = 'crish_session_index_v1';
 export const SESSION_BODY_PREFIX = 'crish_session_body_v1:';
@@ -759,7 +760,8 @@ export function loadActiveSessionId(): string | null {
 }
 
 export function saveActiveSessionId(id: string): void {
-  if (!id || !String(id).trim()) {
+  // 草稿哨兵不落盘：启动后归一为空活动
+  if (!id?.trim() || isPendingDraft(id)) {
     localStorage.removeItem(ACTIVE_KEY);
     return;
   }
@@ -889,7 +891,10 @@ export function hydrateSessionsFromDisk(): {
     };
   });
 
-  const activeRaw = loadActiveSessionId();
+  const activeLoaded = loadActiveSessionId();
+  // 草稿哨兵 / 非法 active → null（不 hydrate 幽灵）
+  const activeRaw =
+    activeLoaded && !isPendingDraft(activeLoaded) ? activeLoaded : null;
   // 与 setSessions 对齐：先补默认标题，再按 active keep 剪空壳（定时真实标题不剪）
   const prepared = prepareSessionsForUi(sessions, activeRaw);
   const activeSessionId =

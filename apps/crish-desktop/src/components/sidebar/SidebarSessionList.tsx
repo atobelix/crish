@@ -9,14 +9,17 @@ import React, {
   useState,
 } from 'react';
 import { prepare, layout } from '@chenglou/pretext';
-import * as Lucide from 'lucide-react';
 import type { SessionState } from '../../store/layoutStore';
 import {
   groupUnpinnedByProject,
   partitionSidebarSessions,
 } from '../../store/sessionIndex';
-import { GENERAL_FOLDER, openProject, type ProjectEntry } from '../../api/projectStore';
-import { createSession, getSessionStoreState } from '../../api/storeAccess';
+import {
+  GENERAL_FOLDER,
+  openProject,
+  type ProjectEntry,
+} from '../../api/projectStore';
+import { enterDraftMode, getSessionStoreState } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,
@@ -49,6 +52,16 @@ import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { Tooltip } from '../settings/SettingsUI';
 import styles from './SidebarSessionList.module.css';
+import {
+  ChevronDown,
+  ChevronsUpDown,
+  FilePlus2,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  MessageCirclePlus,
+  MoreHorizontal,
+} from 'lucide-react';
 
 /** 去重：同 id 只保留首次出现，避免 store 抖动产生幽灵双行 */
 function dedupeSessionsById(list: SessionState[]): SessionState[] {
@@ -82,7 +95,8 @@ const SessionRowTime = memo(function SessionRowTime({
   const timeLabel = formatSessionListTime(s, nowTick);
   const timeAbsolute = formatSessionListAbsoluteTime(s, nowTick);
   const activityMs = sessionLastActivityMs(s);
-  const timeDateTime = activityMs > 0 ? new Date(activityMs).toISOString() : undefined;
+  const timeDateTime =
+    activityMs > 0 ? new Date(activityMs).toISOString() : undefined;
   if (!timeLabel) return null;
   return (
     <Tooltip content={timeAbsolute || timeLabel}>
@@ -102,7 +116,7 @@ const SessionRowTime = memo(function SessionRowTime({
 /** 从行元素合成右键坐标（键盘菜单 / 更多按钮） */
 function syntheticContextMenuEvent(
   el: HTMLElement | null,
-  base?: React.MouseEvent | React.KeyboardEvent,
+  base?: React.MouseEvent | React.KeyboardEvent
 ): React.MouseEvent {
   const targetEl =
     base && base.currentTarget && base.currentTarget !== el
@@ -117,7 +131,11 @@ function syntheticContextMenuEvent(
         : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
       : 0;
   const clientY =
-    rect != null ? (isTargetButton ? rect.bottom + 4 : rect.top + rect.height / 2) : 0;
+    rect != null
+      ? isTargetButton
+        ? rect.bottom + 4
+        : rect.top + rect.height / 2
+      : 0;
   const preventDefault = () => {
     if (base && 'preventDefault' in base) base.preventDefault();
   };
@@ -166,7 +184,7 @@ export interface SidebarSessionListProps {
     sessionId: string,
     targetSessionId: string | null,
     targetFolder: string,
-    isPinned: boolean,
+    isPinned: boolean
   ) => void;
   /** 开始内联重命名 */
   onStartRename?: (sessionId: string) => void;
@@ -196,10 +214,10 @@ function useSessionListWindow(
   listRef: React.RefObject<HTMLElement | null>,
   enabled: boolean,
   ensureIndex: number | null = null,
-  getHeight?: HeightGetter,
+  getHeight?: HeightGetter
 ): SessionListWindowRange {
   const [range, setRange] = useState<SessionListWindowRange>(() =>
-    FULL_RANGE(count),
+    FULL_RANGE(count)
   );
 
   useEffect(() => {
@@ -217,7 +235,7 @@ function useSessionListWindow(
           listOffsetTop: 0,
           ensureIndex,
           getHeight,
-        }),
+        })
       );
       return;
     }
@@ -226,9 +244,7 @@ function useSessionListWindow(
     const update = () => {
       // 每次从 ref 读 list，避免 effect 捕获到 null 后永不更新 offset
       const listEl = listRef.current;
-      const listOffsetTop = listEl
-        ? measureListOffsetTop(scrollEl, listEl)
-        : 0;
+      const listOffsetTop = listEl ? measureListOffsetTop(scrollEl, listEl) : 0;
       const next = computeSessionListWindow({
         count,
         scrollTop: scrollEl.scrollTop,
@@ -238,7 +254,7 @@ function useSessionListWindow(
         getHeight,
       });
       setRange((prev) =>
-        sessionListWindowRangeEqual(prev, next) ? prev : next,
+        sessionListWindowRangeEqual(prev, next) ? prev : next
       );
     };
 
@@ -280,7 +296,7 @@ type SessionRowProps = {
   onStartSessionDrag: (
     e: React.PointerEvent,
     sessionId: string,
-    folderName?: string,
+    folderName?: string
   ) => void;
   onStartRename?: (sessionId: string) => void;
   onCommitRename: (sessionId: string) => void;
@@ -347,7 +363,7 @@ const SessionRow = memo(function SessionRow({
       const ev = syntheticContextMenuEvent(rowRef.current, base);
       onContextMenuSession(ev, s.id);
     },
-    [onContextMenuSession, s.id],
+    [onContextMenuSession, s.id]
   );
 
   const isMultiLine = rowHeight > SIDEBAR_SESSION_ROW_HEIGHT;
@@ -368,11 +384,7 @@ const SessionRow = memo(function SessionRow({
         ref={rowRef}
         role="treeitem"
         aria-selected={sessionActive}
-        aria-label={
-          isRunning
-            ? `${displayText}，处理中`
-            : displayText
-        }
+        aria-label={isRunning ? `${displayText}，处理中` : displayText}
         // 活动行可聚焦；其余 -1，靠 ↑↓ 漫游（避免 Tab 扫过整表）
         tabIndex={sessionActive ? 0 : -1}
         className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${snippet ? styles.hasSearchSnippet : ''} ${isRenaming ? styles.isRenaming : ''} ${isMultiLine ? styles.multiLine : ''}`}
@@ -450,9 +462,15 @@ const SessionRow = memo(function SessionRow({
           />
         ) : (
           <>
-            <Tooltip content={snippet ? `${displayText}\n${snippet}` : displayText}>
+            <Tooltip
+              content={snippet ? `${displayText}\n${snippet}` : displayText}
+            >
               <span className={styles.sessionTextCol}>
-                <span className={`${styles.sessionText} ${isMultiLine ? styles.sessionTextMultiLine : ''}`}>{displayText}</span>
+                <span
+                  className={`${styles.sessionText} ${isMultiLine ? styles.sessionTextMultiLine : ''}`}
+                >
+                  {displayText}
+                </span>
                 {snippet ? (
                   <span className={styles.sessionSearchSnippet} aria-hidden>
                     {snippet}
@@ -485,7 +503,11 @@ const SessionRow = memo(function SessionRow({
                         openRowMenu(e);
                       }}
                     >
-                      <Lucide.MoreHorizontal size={16} strokeWidth={1.75} aria-hidden />
+                      <MoreHorizontal
+                        size={16}
+                        strokeWidth={1.75}
+                        aria-hidden
+                      />
                     </button>
                   </Tooltip>
                 </>
@@ -517,17 +539,17 @@ function WindowedSessionUl({
   const safe = clampSessionListWindowRange(range, sessions.length);
   if (!safe.windowed) {
     return (
-       <ul
-         ref={listRef}
-         className={className}
-         role="tree"
-         aria-label={ariaLabel}
-         data-windowed="0"
-         data-window-count={sessions.length}
-         aria-rowcount={sessions.length}
-       >
-         {sessions.map((s) => renderRow(s))}
-       </ul>
+      <ul
+        ref={listRef}
+        className={className}
+        role="tree"
+        aria-label={ariaLabel}
+        data-windowed="0"
+        data-window-count={sessions.length}
+        aria-rowcount={sessions.length}
+      >
+        {sessions.map((s) => renderRow(s))}
+      </ul>
     );
   }
   const slice = sessions.slice(safe.start, safe.end);
@@ -535,9 +557,9 @@ function WindowedSessionUl({
     <ul
       ref={listRef}
       className={`${className} ${styles.sessionListWindowed}`}
-       role="tree"
-       aria-label={ariaLabel}
-       data-windowed="1"
+      role="tree"
+      aria-label={ariaLabel}
+      data-windowed="1"
       data-window-start={safe.start}
       data-window-end={safe.end}
       data-window-count={sessions.length}
@@ -583,41 +605,50 @@ function DragReorderSection({
   const listRef = useRef<HTMLDivElement>(null);
   const flipRectsRef = useRef<Map<string, DOMRect>>(new Map());
 
-  const items = useMemo(() => sessions.map(s => ({ id: s.id })), [sessions]);
+  const items = useMemo(() => sessions.map((s) => ({ id: s.id })), [sessions]);
 
-  const handleReorder = useCallback((fromIndex: number, toIndex: number) => {
-    const list = listRef.current;
-    if (list) {
-      const rects = new Map<string, DOMRect>();
-      list.querySelectorAll<HTMLElement>('[data-session-id]').forEach(el => {
-        const id = el.getAttribute('data-session-id');
-        if (id) rects.set(id, el.getBoundingClientRect());
-      });
-      flipRectsRef.current = rects;
-    }
-    const fromSession = sessions[fromIndex];
-    const toSession = sessions[toIndex];
-    if (!fromSession) return;
-    onMoveSessionRealtime(
-      fromSession.id,
-      toSession?.id ?? null,
-      folderName ?? fromSession.folder ?? '会话',
-      isPinned ?? fromSession.isPinned,
-    );
-  }, [sessions, folderName, isPinned, onMoveSessionRealtime]);
+  const handleReorder = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const list = listRef.current;
+      if (list) {
+        const rects = new Map<string, DOMRect>();
+        list
+          .querySelectorAll<HTMLElement>('[data-session-id]')
+          .forEach((el) => {
+            const id = el.getAttribute('data-session-id');
+            if (id) rects.set(id, el.getBoundingClientRect());
+          });
+        flipRectsRef.current = rects;
+      }
+      const fromSession = sessions[fromIndex];
+      const toSession = sessions[toIndex];
+      if (!fromSession) return;
+      onMoveSessionRealtime(
+        fromSession.id,
+        toSession?.id ?? null,
+        folderName ?? fromSession.folder ?? '会话',
+        isPinned ?? fromSession.isPinned
+      );
+    },
+    [sessions, folderName, isPinned, onMoveSessionRealtime]
+  );
 
-  const { dragIndex, dropIndex, onDragStart, onDragOver, onDrop, onDragEnd } = useDragReorder({
-    items,
-    onReorder: handleReorder,
-  });
+  const { dragIndex, dropIndex, onDragStart, onDragOver, onDrop, onDragEnd } =
+    useDragReorder({
+      items,
+      onReorder: handleReorder,
+    });
 
-  const handleKeyboardReorder = useCallback((sessionId: string, dir: -1 | 1) => {
-    const idx = sessions.findIndex(s => s.id === sessionId);
-    if (idx < 0) return;
-    const targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= sessions.length) return;
-    handleReorder(idx, targetIdx);
-  }, [sessions, handleReorder]);
+  const handleKeyboardReorder = useCallback(
+    (sessionId: string, dir: -1 | 1) => {
+      const idx = sessions.findIndex((s) => s.id === sessionId);
+      if (idx < 0) return;
+      const targetIdx = idx + dir;
+      if (targetIdx < 0 || targetIdx >= sessions.length) return;
+      handleReorder(idx, targetIdx);
+    },
+    [sessions, handleReorder]
+  );
 
   // FLIP animation on reorder
   useEffect(() => {
@@ -626,7 +657,7 @@ function DragReorderSection({
     const list = listRef.current;
     if (!list) return;
     requestAnimationFrame(() => {
-      list.querySelectorAll<HTMLElement>('[data-session-id]').forEach(el => {
+      list.querySelectorAll<HTMLElement>('[data-session-id]').forEach((el) => {
         const id = el.getAttribute('data-session-id');
         if (!id) return;
         const prev = rects.get(id);
@@ -640,7 +671,13 @@ function DragReorderSection({
         requestAnimationFrame(() => {
           el.style.transform = '';
           el.style.transition = 'transform 200ms ease';
-          el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+          el.addEventListener(
+            'transitionend',
+            () => {
+              el.style.transition = '';
+            },
+            { once: true }
+          );
         });
       });
       flipRectsRef.current = new Map();
@@ -650,11 +687,14 @@ function DragReorderSection({
   return (
     <div ref={listRef} style={{ display: 'contents' }}>
       {sessions.map((s, idx) => {
-        const isDropTarget = dragIndex !== null && dragIndex !== idx && dropIndex === idx;
+        const isDropTarget =
+          dragIndex !== null && dragIndex !== idx && dropIndex === idx;
         return (
           <React.Fragment key={s.id}>
             {isDropTarget && (
-              <div className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`} />
+              <div
+                className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`}
+              />
             )}
             {React.cloneElement(renderRow(s) as React.ReactElement, {
               dragHandlers: {
@@ -672,7 +712,9 @@ function DragReorderSection({
         );
       })}
       {dragIndex !== null && dropIndex === sessions.length && (
-        <div className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`} />
+        <div
+          className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`}
+        />
       )}
     </div>
   );
@@ -695,7 +737,8 @@ function readSidebarContentWidth(): number {
   if (typeof document === 'undefined') return 228;
   try {
     const val = getComputedStyle(document.documentElement)
-      .getPropertyValue('--sidebar-width').trim();
+      .getPropertyValue('--sidebar-width')
+      .trim();
     return Math.max(180, (parseInt(val, 10) || 260) - 32);
   } catch {
     return 228;
@@ -709,7 +752,7 @@ function readSidebarContentWidth(): number {
 function measureSessionRowHeight(
   displayText: string,
   font: string,
-  width: number,
+  width: number
 ): number {
   if (!font || width <= 0 || !displayText) return SIDEBAR_SESSION_ROW_HEIGHT;
   try {
@@ -729,7 +772,7 @@ function measureSessionRowHeight(
  * - 子 agent 不嵌套展示
  * - Phase 2：Pretext 精确测量长标题行高
  */
-const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
+const SidebarSessionListInner: React.FC<SidebarSessionListProps> = ({
   sessions,
   activeSessionId,
   searchQuery,
@@ -750,20 +793,25 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   onToggleProjectsSection,
   onOpenProject,
   onSortBtnClick,
-  onNewSession,
-  onAddProject,
+  onNewSession: _onNewSession,
+  onAddProject: _onAddProject,
   onMoveSessionRealtime,
   onStartRename,
   onCommitRename,
   onCancelRename,
 }) => {
+  void _groupType;
+  void _onNewSession;
+  void _onAddProject;
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(
-    null,
+    null
   );
   const [dragOverPinned, setDragOverPinned] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [renameDraft, setRenameDraft] = useState('');
-  const [expandedProjectFolders, setExpandedProjectFolders] = useState<Record<string, boolean>>({});
+  const [expandedProjectFolders, setExpandedProjectFolders] = useState<
+    Record<string, boolean>
+  >({});
   const [showAllGeneralSessions, setShowAllGeneralSessions] = useState(false);
 
   const pinnedZoneRef = useRef<HTMLDivElement>(null);
@@ -777,27 +825,28 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
   // 空壳过滤 + pinned 筛选：统一走 sessionIndex.partitionSidebarSessions
   // 再扫：统计「未归档输入 vs 壳滤后」差 → data-shell-hidden（与 pinned 筛选解耦）
   // 去重 id：杜绝幽灵双行
-  const { visible: visibleSessions, shellHiddenCount, inputListedCount } =
-    useMemo(() => {
-      const unique = dedupeSessionsById(sessions);
-      const nonArchivedCount = unique.reduce(
-        (n, s) => n + (s.isArchived ? 0 : 1),
-        0,
-      );
-      const listedAll = partitionSidebarSessions(unique, {
-        activeSessionId,
-        filterType: 'all',
-      }).visible;
-      const visible =
-        filterType === 'pinned'
-          ? listedAll.filter((s) => s.isPinned)
-          : listedAll;
-      return {
-        visible: dedupeSessionsById(visible),
-        shellHiddenCount: Math.max(0, nonArchivedCount - listedAll.length),
-        inputListedCount: nonArchivedCount,
-      };
-    }, [sessions, activeSessionId, filterType]);
+  const {
+    visible: visibleSessions,
+    shellHiddenCount,
+    inputListedCount,
+  } = useMemo(() => {
+    const unique = dedupeSessionsById(sessions);
+    const nonArchivedCount = unique.reduce(
+      (n, s) => n + (s.isArchived ? 0 : 1),
+      0
+    );
+    const listedAll = partitionSidebarSessions(unique, {
+      activeSessionId,
+      filterType: 'all',
+    }).visible;
+    const visible =
+      filterType === 'pinned' ? listedAll.filter((s) => s.isPinned) : listedAll;
+    return {
+      visible: dedupeSessionsById(visible),
+      shellHiddenCount: Math.max(0, nonArchivedCount - listedAll.length),
+      inputListedCount: nonArchivedCount,
+    };
+  }, [sessions, activeSessionId, filterType]);
 
   // 相对时间刷新：可见会话驱动；贴「刚刚」边界；页签隐藏降频，可见时立即重算
   useEffect(() => {
@@ -872,7 +921,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     }
     if (sortType === 'name') {
       return [...list].sort((a, b) =>
-        sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b)),
+        sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b))
       );
     }
     // 活动降序 + id 稳定 tiebreak，窗口化切片不因等时抖动
@@ -881,11 +930,11 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
   const pinnedSessions = useMemo(
     () => sortedSessions.filter((s) => s.isPinned),
-    [sortedSessions],
+    [sortedSessions]
   );
   const unpinned = useMemo(
     () => sortedSessions.filter((s) => !s.isPinned),
-    [sortedSessions],
+    [sortedSessions]
   );
 
   // 置顶为空时自动折叠
@@ -897,7 +946,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
   const { byProjectId, general: generalSessions } = useMemo(
     () => groupUnpinnedByProject(unpinned, projects),
-    [unpinned, projects],
+    [unpinned, projects]
   );
 
   // 活动会话在「对话」列表中的下标：窗口化时强制挂载，避免 DOM 被裁掉
@@ -963,7 +1012,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       if (!s) return SIDEBAR_SESSION_ROW_HEIGHT;
       return rowHeightById.get(s.id) ?? SIDEBAR_SESSION_ROW_HEIGHT;
     },
-    [generalSessions, rowHeightById],
+    [generalSessions, rowHeightById]
   );
 
   // 窗口化：仅「对话」长列表；搜索/拖拽关闭以保证 snippet 行高与 drop target
@@ -980,7 +1029,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     generalListRef,
     generalWindowEnabled,
     activeGeneralIndex,
-    getGeneralHeight,
+    getGeneralHeight
   );
 
   // 渲染用 range：钳位 + ensure 活动下标（双保险，防 hook 首帧 listOffset 偏差）
@@ -992,7 +1041,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       base,
       generalSessions.length,
       undefined,
-      getGeneralHeight,
+      getGeneralHeight
     );
     if (
       activeGeneralIndex != null &&
@@ -1003,7 +1052,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
         activeGeneralIndex,
         generalSessions.length,
         undefined,
-        getGeneralHeight,
+        getGeneralHeight
       );
     }
     return r;
@@ -1027,9 +1076,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
     const scrollEl = sessionListRef.current;
     if (!scrollEl) return;
     const listEl = generalListRef.current;
-    const listOffsetTop = listEl
-      ? measureListOffsetTop(scrollEl, listEl)
-      : 0;
+    const listOffsetTop = listEl ? measureListOffsetTop(scrollEl, listEl) : 0;
     const nextTop = scrollTopToRevealIndex({
       index: activeGeneralIndex,
       count: generalSessions.length,
@@ -1075,7 +1122,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             ? CSS.escape(fromId)
             : fromId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const row = sessionListRef.current?.querySelector(
-          `[data-session-id="${safeFrom}"] .session-item`,
+          `[data-session-id="${safeFrom}"] .session-item`
         ) as HTMLElement | null;
         row?.focus({ preventScroll: true });
         return;
@@ -1091,13 +1138,13 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
               ? CSS.escape(id)
               : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const row = sessionListRef.current?.querySelector(
-            `[data-session-id="${safe}"] .session-item`,
+            `[data-session-id="${safe}"] .session-item`
           ) as HTMLElement | null;
           row?.focus({ preventScroll: true });
         });
       });
     },
-    [navSessionIds, activeSessionId, searchQuery, onSelectSession],
+    [navSessionIds, activeSessionId, searchQuery, onSelectSession]
   );
 
   const startSessionDrag = useCallback(
@@ -1122,7 +1169,8 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
           setActiveDragItem({ type: 'session', sessionId, folderName });
           if (el) {
             dragOverlay = el.cloneNode(true) as HTMLDivElement;
-            dragOverlay.className = styles.sidebarDragGhost || 'sidebar-drag-ghost';
+            dragOverlay.className =
+              styles.sidebarDragGhost || 'sidebar-drag-ghost';
             dragOverlay.style.cssText = `position:fixed;width:${elRect?.width ?? 180}px;`;
             document.body.appendChild(dragOverlay);
           }
@@ -1149,7 +1197,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             sessionId,
             targetSessionId,
             folderName || '会话',
-            true,
+            true
           );
         } else {
           const targetFolderEl = hoveredEl.closest('[data-folder-name]');
@@ -1161,7 +1209,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
             sessionId,
             targetSessionId,
             targetFolder,
-            false,
+            false
           );
         }
       };
@@ -1176,14 +1224,14 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
     },
-    [onMoveSessionRealtime, renamingSessionId],
+    [onMoveSessionRealtime, renamingSessionId]
   );
 
   const commitRename = useCallback(
     (sessionId: string) => {
       onCommitRename?.(sessionId, renameDraft.trim());
     },
-    [onCommitRename, renameDraft],
+    [onCommitRename, renameDraft]
   );
 
   const onRenameDraftChange = useCallback((v: string) => {
@@ -1236,7 +1284,7 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
       commitRename,
       onCancelRename,
       navigateSession,
-    ],
+    ]
   );
 
   const isSearchEmpty = isSearching && sortedSessions.length === 0;
@@ -1245,75 +1293,78 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
 
   return (
     <NowTickContext.Provider value={nowTick}>
-    <div
-      ref={sessionListRef}
-      className={styles.listScroll}
-      data-shell-hidden={shellHiddenCount}
-      data-session-input={inputListedCount}
-      data-session-visible={visibleSessions.length}
-      data-session-sorted={sortedSessions.length}
-      data-general-windowed={
-        generalWindowEnabled && generalRenderRange.windowed ? '1' : '0'
-      }
-      data-general-count={generalSessions.length}
-      data-general-window-start={
-        generalRenderRange.windowed ? generalRenderRange.start : 0
-      }
-      data-general-window-end={
-        generalRenderRange.windowed
-          ? generalRenderRange.end
-          : generalSessions.length
-      }
-    >
-      {/* 全局空态：搜索无命中 / 列表无会话 — 避免分区空提示堆叠 */}
-      {isSearchEmpty ? (
-        <div
-          className={styles.emptyHint}
-          role="status"
-          data-empty="search"
-          style={{ padding: '16px 12px', textAlign: 'center' }}
-        >
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>无匹配会话</div>
-          <div className={styles.subtle}>试试其他关键词，或清空搜索</div>
-        </div>
-      ) : null}
-      {isAllEmpty ? (
-        <div
-          className={styles.emptyHint}
-          role="status"
-          data-empty="all"
-          style={{ padding: '16px 12px', textAlign: 'center' }}
-        >
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>暂无会话</div>
-          <div className={styles.subtle}>点击右上角 + 新建对话</div>
-        </div>
-      ) : null}
-
-      {/* 1) 置顶 */}
-      {!isSearchEmpty && !isAllEmpty ? (
-        <section className={styles.section} aria-label="置顶会话">
-          <button
-            type="button"
-            className={styles.sectionLabel}
-            onClick={onTogglePinned}
-            aria-expanded={!pinnedCollapsed}
-            aria-controls="sb-pinned-zone"
-            style={{ width: '100%', cursor: 'pointer' }}
+      <div
+        ref={sessionListRef}
+        className={styles.listScroll}
+        data-shell-hidden={shellHiddenCount}
+        data-session-input={inputListedCount}
+        data-session-visible={visibleSessions.length}
+        data-session-sorted={sortedSessions.length}
+        data-general-windowed={
+          generalWindowEnabled && generalRenderRange.windowed ? '1' : '0'
+        }
+        data-general-count={generalSessions.length}
+        data-general-window-start={
+          generalRenderRange.windowed ? generalRenderRange.start : 0
+        }
+        data-general-window-end={
+          generalRenderRange.windowed
+            ? generalRenderRange.end
+            : generalSessions.length
+        }
+      >
+        {/* 全局空态：搜索无命中 / 列表无会话 — 避免分区空提示堆叠 */}
+        {isSearchEmpty ? (
+          <div
+            className={styles.emptyHint}
+            role="status"
+            data-empty="search"
+            style={{ padding: '16px 12px', textAlign: 'center' }}
           >
-            <span>置顶</span>
-            <Lucide.ChevronDown
-              size={14}
-              className={pinnedCollapsed ? styles.chevCollapsed : ''}
-              aria-hidden
-            />
-          </button>
-          <div className={styles.accordionWrapper} data-expanded={!pinnedCollapsed ? 'true' : 'false'}>
-            <div className={styles.accordionInner}>
-              <div
-                id="sb-pinned-zone"
-                ref={pinnedZoneRef}
-                className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
-              >
+            <div style={{ fontWeight: 500, marginBottom: 4 }}>无匹配会话</div>
+            <div className={styles.subtle}>试试其他关键词，或清空搜索</div>
+          </div>
+        ) : null}
+        {isAllEmpty ? (
+          <div
+            className={styles.emptyHint}
+            role="status"
+            data-empty="all"
+            style={{ padding: '16px 12px', textAlign: 'center' }}
+          >
+            <div style={{ fontWeight: 500, marginBottom: 4 }}>暂无会话</div>
+            <div className={styles.subtle}>点击右上角 + 新建对话</div>
+          </div>
+        ) : null}
+
+        {/* 1) 置顶 */}
+        {!isSearchEmpty && !isAllEmpty ? (
+          <section className={styles.section} aria-label="置顶会话">
+            <button
+              type="button"
+              className={styles.sectionLabel}
+              onClick={onTogglePinned}
+              aria-expanded={!pinnedCollapsed}
+              aria-controls="sb-pinned-zone"
+              style={{ width: '100%', cursor: 'pointer' }}
+            >
+              <span>置顶</span>
+              <ChevronDown
+                size={14}
+                className={pinnedCollapsed ? styles.chevCollapsed : ''}
+                aria-hidden
+              />
+            </button>
+            <div
+              className={styles.accordionWrapper}
+              data-expanded={!pinnedCollapsed ? 'true' : 'false'}
+            >
+              <div className={styles.accordionInner}>
+                <div
+                  id="sb-pinned-zone"
+                  ref={pinnedZoneRef}
+                  className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
+                >
                   {pinnedSessions.length > 0 ? (
                     <ul
                       className={`${styles.pinnedList} ${styles.folderSessions}`}
@@ -1328,283 +1379,369 @@ const _SidebarSessionList: React.FC<SidebarSessionListProps> = ({
                       />
                     </ul>
                   ) : (
-                  <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
-                    {filterType === 'pinned'
-                      ? '还没有置顶 of 对话'
-                      : '置顶的对话会出现在这里'}
-                  </div>
-                )}
+                    <div
+                      className={`${styles.emptyHint} ${styles.subtle}`}
+                      role="status"
+                    >
+                      {filterType === 'pinned'
+                        ? '还没有置顶 of 对话'
+                        : '置顶的对话会出现在这里'}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      {/* 2) 项目 — 仅「全部」范围显示，避免「仅置顶」时空项目噪音 */}
-      {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
-        <section className={styles.section} aria-label="项目">
-          <div
-            className={styles.sectionLabelRow}
-            onClick={onToggleProjectsSection}
-            style={{ cursor: 'pointer' }}
-          >
-            <div className={styles.sectionLabelLeft}>
-              <button
-                type="button"
-                className={styles.sectionLabel}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleProjectsSection();
-                }}
-                aria-expanded={!projectsSectionCollapsed}
-              >
-                <span>项目</span>
-                <Lucide.ChevronDown
-                  size={14}
-                  className={
-                    projectsSectionCollapsed ? styles.chevCollapsed : ''
-                  }
-                  aria-hidden
-                />
-              </button>
-            </div>
-            <div className={styles.sectionLabelRight}>
-              <Tooltip content="管理与选择项目">
+        {/* 2) 项目 — 仅「全部」范围显示，避免「仅置顶」时空项目噪音 */}
+        {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
+          <section className={styles.section} aria-label="项目">
+            <div
+              className={styles.sectionLabelRow}
+              onClick={onToggleProjectsSection}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className={styles.sectionLabelLeft}>
                 <button
                   type="button"
-                  className={styles.sectionNew}
-                  aria-label="管理与选择项目"
+                  className={styles.sectionLabel}
                   onClick={(e) => {
                     e.stopPropagation();
-                    emitUiEvent('open-project-picker');
+                    onToggleProjectsSection();
                   }}
+                  aria-expanded={!projectsSectionCollapsed}
                 >
-                  <Lucide.FolderPlus size={14} strokeWidth={1.75} aria-hidden />
+                  <span>项目</span>
+                  <ChevronDown
+                    size={14}
+                    className={
+                      projectsSectionCollapsed ? styles.chevCollapsed : ''
+                    }
+                    aria-hidden
+                  />
                 </button>
-              </Tooltip>
-            </div>
-          </div>
-          <div className={styles.accordionWrapper} data-expanded={!projectsSectionCollapsed ? 'true' : 'false'}>
-            <div className={styles.accordionInner}>
-              {projects.map((p) => {
-                const open = !collapsedProjects[p.id];
-                const sess = byProjectId[p.id] || [];
-                return (
-                  <div
-                    key={p.id}
-                    className={styles.folderGroup}
-                    data-folder-name={p.id}
+              </div>
+              <div className={styles.sectionLabelRight}>
+                <Tooltip content="管理与选择项目">
+                  <button
+                    type="button"
+                    className={styles.sectionNew}
+                    aria-label="管理与选择项目"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      emitUiEvent('open-project-picker');
+                    }}
                   >
-                    <div className={styles.folderHeaderRow}>
-                      <button
-                        type="button"
-                        className={styles.folderHeader}
-                        aria-expanded={open}
-                        onClick={() => {
-                          onToggleProjectCollapsed(p.id);
-                        }}
-                      >
-                        {open ? (
-                          <Lucide.FolderOpen size={16} strokeWidth={1.75} aria-hidden />
-                        ) : (
-                          <Lucide.Folder size={16} strokeWidth={1.75} aria-hidden />
-                        )}
-                        <span className={styles.folderName}>{p.name}</span>
-                      </button>
-                      <Tooltip content="在此项目新建对话">
+                    <FolderPlus size={14} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+            <div
+              className={styles.accordionWrapper}
+              data-expanded={!projectsSectionCollapsed ? 'true' : 'false'}
+            >
+              <div className={styles.accordionInner}>
+                {projects.map((p) => {
+                  const open = !collapsedProjects[p.id];
+                  const sess = byProjectId[p.id] || [];
+                  return (
+                    <div
+                      key={p.id}
+                      className={styles.folderGroup}
+                      data-folder-name={p.id}
+                    >
+                      <div className={styles.folderHeaderRow}>
                         <button
                           type="button"
-                          className={styles.folderNewSession}
-                          aria-label={`在 ${p.name} 新建对话`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openProject(p.id);
-                            onOpenProject(p.id);
-                            createSession({ folder: p.id });
+                          className={styles.folderHeader}
+                          aria-expanded={open}
+                          onClick={() => {
+                            onToggleProjectCollapsed(p.id);
                           }}
                         >
-                          <Lucide.FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
+                          {open ? (
+                            <FolderOpen
+                              size={16}
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
+                          ) : (
+                            <Folder size={16} strokeWidth={1.75} aria-hidden />
+                          )}
+                          <span className={styles.folderName}>{p.name}</span>
                         </button>
-                      </Tooltip>
-                    </div>
-                    <div className={styles.accordionWrapper} data-expanded={open ? 'true' : 'false'}>
-                      <div className={styles.accordionInner}>
-                        {sess.length > 0 ? (
-                          <ul
-                            className={`${styles.pinnedList} ${styles.folderSessions}`}
-                           role="tree"
-                           aria-label={`${p.name} 会话`}
+                        <Tooltip content="在此项目新建对话">
+                          <button
+                            type="button"
+                            className={styles.folderNewSession}
+                            aria-label={`在 ${p.name} 新建对话`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openProject(p.id);
+                              onOpenProject(p.id);
+                              enterDraftMode(p.id);
+                            }}
                           >
-                            {sess.length <= 6 ? (
-                              <DragReorderSection
-                                sessions={sess}
-                                folderName={p.id}
-                                onMoveSessionRealtime={onMoveSessionRealtime}
-                                renderRow={(s) => renderSessionItem(s, true)}
-                              />
-                            ) : (
-                              <>
+                            <FilePlus2
+                              size={14}
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
+                          </button>
+                        </Tooltip>
+                      </div>
+                      <div
+                        className={styles.accordionWrapper}
+                        data-expanded={open ? 'true' : 'false'}
+                      >
+                        <div className={styles.accordionInner}>
+                          {sess.length > 0 ? (
+                            <ul
+                              className={`${styles.pinnedList} ${styles.folderSessions}`}
+                              role="tree"
+                              aria-label={`${p.name} 会话`}
+                            >
+                              {sess.length <= 6 ? (
                                 <DragReorderSection
-                                  sessions={expandedProjectFolders[p.id] ? sess : sess.slice(0, 6)}
+                                  sessions={sess}
                                   folderName={p.id}
                                   onMoveSessionRealtime={onMoveSessionRealtime}
                                   renderRow={(s) => renderSessionItem(s, true)}
                                 />
-                                <div className={styles.accordionWrapper} data-expanded={expandedProjectFolders[p.id] ? 'true' : 'false'}>
-                                  <div className={styles.accordionInner}>
-                                    <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>
-                                      {sess.slice(6).map((s) => renderSessionItem(s, true))}
-                                    </ul>
-                                  </div>
-                                </div>
-                                <li className={styles.sessionItemWrap}>
-                                  <button
-                                    type="button"
-                                    className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
-                                    style={{ color: 'var(--text-tertiary)' }}
-                                    onClick={() => {
-                                      setExpandedProjectFolders((prev) => ({
-                                        ...prev,
-                                        [p.id]: !prev[p.id],
-                                      }));
-                                    }}
+                              ) : (
+                                <>
+                                  <DragReorderSection
+                                    sessions={
+                                      expandedProjectFolders[p.id]
+                                        ? sess
+                                        : sess.slice(0, 6)
+                                    }
+                                    folderName={p.id}
+                                    onMoveSessionRealtime={
+                                      onMoveSessionRealtime
+                                    }
+                                    renderRow={(s) =>
+                                      renderSessionItem(s, true)
+                                    }
+                                  />
+                                  <div
+                                    className={styles.accordionWrapper}
+                                    data-expanded={
+                                      expandedProjectFolders[p.id]
+                                        ? 'true'
+                                        : 'false'
+                                    }
                                   >
-                                    {expandedProjectFolders[p.id] ? '收起' : `查看全部 (${sess.length})`}
-                                  </button>
-                                </li>
-                              </>
-                            )}
-                          </ul>
-                        ) : null}
+                                    <div className={styles.accordionInner}>
+                                      <ul
+                                        className={`${styles.pinnedList} ${styles.folderSessions}`}
+                                        style={{ paddingTop: 3 }}
+                                      >
+                                        {sess
+                                          .slice(6)
+                                          .map((s) =>
+                                            renderSessionItem(s, true)
+                                          )}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                  <li className={styles.sessionItemWrap}>
+                                    <button
+                                      type="button"
+                                      className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
+                                      style={{ color: 'var(--text-tertiary)' }}
+                                      onClick={() => {
+                                        setExpandedProjectFolders((prev) => ({
+                                          ...prev,
+                                          [p.id]: !prev[p.id],
+                                        }));
+                                      }}
+                                    >
+                                      {expandedProjectFolders[p.id]
+                                        ? '收起'
+                                        : `查看全部 (${sess.length})`}
+                                    </button>
+                                  </li>
+                                </>
+                              )}
+                            </ul>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+                {projects.length === 0 && (
+                  <div
+                    className={`${styles.emptyHint} ${styles.subtle}`}
+                    role="status"
+                  >
+                    点击分区旁 + 添加本地项目
                   </div>
-                );
-              })}
-              {projects.length === 0 && (
-                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
-                  点击分区旁 + 添加本地项目
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      {/* 3) 对话（可窗口化） */}
-      {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
-        <section className={styles.section} aria-label="对话">
-          <div
-            className={styles.sectionLabelRow}
-            onClick={onToggleGeneral}
-            style={{ cursor: 'pointer' }}
-          >
-            <div className={styles.sectionLabelLeft}>
-              <button
-                type="button"
-                className={styles.sectionLabel}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleGeneral();
-                }}
-                aria-expanded={!generalCollapsed}
-              >
-                <span>对话</span>
-                <Lucide.ChevronDown
-                  size={14}
-                  className={generalCollapsed ? styles.chevCollapsed : ''}
-                  aria-hidden
-                />
-              </button>
-              <Tooltip content="排序与过滤">
+        {/* 3) 对话（可窗口化） */}
+        {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
+          <section className={styles.section} aria-label="对话">
+            <div
+              className={styles.sectionLabelRow}
+              onClick={onToggleGeneral}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className={styles.sectionLabelLeft}>
                 <button
                   type="button"
-                  className={styles.sectionSort}
-                  aria-label="排序与过滤"
-                  aria-haspopup="menu"
+                  className={styles.sectionLabel}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSortBtnClick(e);
+                    onToggleGeneral();
                   }}
+                  aria-expanded={!generalCollapsed}
                 >
-                  <Lucide.ChevronsUpDown size={14} strokeWidth={1.75} aria-hidden />
+                  <span>对话</span>
+                  <ChevronDown
+                    size={14}
+                    className={generalCollapsed ? styles.chevCollapsed : ''}
+                    aria-hidden
+                  />
                 </button>
-              </Tooltip>
-            </div>
-            <div className={styles.sectionLabelRight}>
-              <Tooltip content="新建常规对话">
-                <button
-                  type="button"
-                  className={styles.sectionNew}
-                  aria-label="新建常规对话"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    createSession({ folder: GENERAL_FOLDER });
-                  }}
-                >
-                  <Lucide.MessageCirclePlus size={14} strokeWidth={1.75} aria-hidden />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-          <div className={styles.accordionWrapper} data-expanded={!generalCollapsed ? 'true' : 'false'}>
-            <div className={styles.accordionInner}>
-              {generalSessions.length > 0 ? (
-                <>
-                  {generalWindowEnabled ? (
-                    <WindowedSessionUl
-                      sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
-                      range={generalRenderRange}
-                      listRef={generalListRef}
-                      className={`${styles.pinnedList} ${styles.folderSessions}`}
-                      renderRow={renderSessionItem}
-                      ariaLabel="对话列表"
+                <Tooltip content="排序与过滤">
+                  <button
+                    type="button"
+                    className={styles.sectionSort}
+                    aria-label="排序与过滤"
+                    aria-haspopup="menu"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSortBtnClick(e);
+                    }}
+                  >
+                    <ChevronsUpDown size={14} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className={styles.sectionLabelRight}>
+                <Tooltip content="新建常规对话">
+                  <button
+                    type="button"
+                    className={styles.sectionNew}
+                    aria-label="新建常规对话"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      enterDraftMode(GENERAL_FOLDER);
+                    }}
+                  >
+                    <MessageCirclePlus
+                      size={14}
+                      strokeWidth={1.75}
+                      aria-hidden
                     />
-                  ) : (
-                    <ul className={`${styles.pinnedList} ${styles.folderSessions}`} role="tree" aria-label="对话列表" data-windowed="0" data-window-count={generalSessions.length}>
-                      <DragReorderSection
-                        sessions={showAllGeneralSessions || generalSessions.length <= 10 ? generalSessions : generalSessions.slice(0, 10)}
-                        folderName={GENERAL_FOLDER}
-                        onMoveSessionRealtime={onMoveSessionRealtime}
-                        renderRow={(s) => renderSessionItem(s)}
-                      />
-                    </ul>
-                  )}
-                  {generalSessions.length > 10 && !showAllGeneralSessions && (
-                    <div className={styles.accordionWrapper} data-expanded={showAllGeneralSessions ? 'true' : 'false'}>
-                      <div className={styles.accordionInner}>
-                        <ul className={`${styles.pinnedList} ${styles.folderSessions}`} style={{ paddingTop: 3 }}>
-                          {generalSessions.slice(10).map((s) => renderSessionItem(s))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                  {generalSessions.length > 10 && (
-                    <div style={{ paddingLeft: 10, paddingRight: 8, marginTop: 4 }}>
-                      <button
-                        type="button"
-                        className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
-                        style={{ color: 'var(--text-tertiary)' }}
-                        onClick={() => setShowAllGeneralSessions((v) => !v)}
-                      >
-                        {showAllGeneralSessions ? '收起' : `查看全部 (${generalSessions.length})`}
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className={`${styles.emptyHint} ${styles.subtle}`} role="status">
-                  不在项目中的对话会出现在这里
-                </div>
-              )}
+                  </button>
+                </Tooltip>
+              </div>
             </div>
-          </div>
-        </section>
-      ) : null}
-    </div>
+            <div
+              className={styles.accordionWrapper}
+              data-expanded={!generalCollapsed ? 'true' : 'false'}
+            >
+              <div className={styles.accordionInner}>
+                {generalSessions.length > 0 ? (
+                  <>
+                    {generalWindowEnabled ? (
+                      <WindowedSessionUl
+                        sessions={
+                          showAllGeneralSessions || generalSessions.length <= 10
+                            ? generalSessions
+                            : generalSessions.slice(0, 10)
+                        }
+                        range={generalRenderRange}
+                        listRef={generalListRef}
+                        className={`${styles.pinnedList} ${styles.folderSessions}`}
+                        renderRow={renderSessionItem}
+                        ariaLabel="对话列表"
+                      />
+                    ) : (
+                      <ul
+                        className={`${styles.pinnedList} ${styles.folderSessions}`}
+                        role="tree"
+                        aria-label="对话列表"
+                        data-windowed="0"
+                        data-window-count={generalSessions.length}
+                      >
+                        <DragReorderSection
+                          sessions={
+                            showAllGeneralSessions ||
+                            generalSessions.length <= 10
+                              ? generalSessions
+                              : generalSessions.slice(0, 10)
+                          }
+                          folderName={GENERAL_FOLDER}
+                          onMoveSessionRealtime={onMoveSessionRealtime}
+                          renderRow={(s) => renderSessionItem(s)}
+                        />
+                      </ul>
+                    )}
+                    {generalSessions.length > 10 && !showAllGeneralSessions && (
+                      <div
+                        className={styles.accordionWrapper}
+                        data-expanded={
+                          showAllGeneralSessions ? 'true' : 'false'
+                        }
+                      >
+                        <div className={styles.accordionInner}>
+                          <ul
+                            className={`${styles.pinnedList} ${styles.folderSessions}`}
+                            style={{ paddingTop: 3 }}
+                          >
+                            {generalSessions
+                              .slice(10)
+                              .map((s) => renderSessionItem(s))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                    {generalSessions.length > 10 && (
+                      <div
+                        style={{
+                          paddingLeft: 10,
+                          paddingRight: 8,
+                          marginTop: 4,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
+                          style={{ color: 'var(--text-tertiary)' }}
+                          onClick={() => setShowAllGeneralSessions((v) => !v)}
+                        >
+                          {showAllGeneralSessions
+                            ? '收起'
+                            : `查看全部 (${generalSessions.length})`}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div
+                    className={`${styles.emptyHint} ${styles.subtle}`}
+                    role="status"
+                  >
+                    不在项目中的对话会出现在这里
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
+      </div>
     </NowTickContext.Provider>
   );
 };
 
-export const SidebarSessionList = memo(_SidebarSessionList);
-
+export const SidebarSessionList = memo(SidebarSessionListInner);

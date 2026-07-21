@@ -36,6 +36,16 @@ describe('resolveStreamSessionId (empty session — no invent remote)', () => {
   it('trims whitespace-only ids', () => {
     expect(resolveStreamSessionId('  sess-x  ', null)).toBe('sess-x');
   });
+
+  it('returns null for pending draft sentinel (never stream on draft)', () => {
+    expect(resolveStreamSessionId('__pending_draft__', 'sess-b')).toBe(
+      'sess-b'
+    );
+    expect(resolveStreamSessionId(null, '__pending_draft__')).toBeNull();
+    expect(
+      resolveStreamSessionId('__pending_draft__', '__pending_draft__')
+    ).toBeNull();
+  });
 });
 
 describe('canStreamLocalSession', () => {
@@ -103,23 +113,27 @@ describe('buildTerminalToolPatches', () => {
   it('stop: only incomplete tools → error / 已停止', () => {
     const patches = buildTerminalToolPatches(tools, 'stop');
     expect(patches.map((p) => p.id).sort()).toEqual(
-      ['t-pend', 't-run', 't-run-real'].sort(),
+      ['t-pend', 't-run', 't-run-real'].sort()
     );
     expect(patches.find((p) => p.id === 't-run')?.output).toBe('执行中…');
     expect(patches.find((p) => p.id === 't-pend')?.output).toBe('已停止');
-    expect(patches.find((p) => p.id === 't-run-real')?.output).toBe('partial log');
+    expect(patches.find((p) => p.id === 't-run-real')?.output).toBe(
+      'partial log'
+    );
     expect(patches.every((p) => p.status === 'error')).toBe(true);
   });
 
   it('complete: pending_approval and running placeholders get honest copy', () => {
     const patches = buildTerminalToolPatches(tools, 'complete');
     expect(patches.find((p) => p.id === 't-pend')?.output).toBe(
-      '回合结束时仍待确认',
+      '回合结束时仍待确认'
     );
     expect(patches.find((p) => p.id === 't-run')?.output).toBe(
-      '回合结束时工具未返回结果',
+      '回合结束时工具未返回结果'
     );
-    expect(patches.find((p) => p.id === 't-run-real')?.output).toBe('partial log');
+    expect(patches.find((p) => p.id === 't-run-real')?.output).toBe(
+      'partial log'
+    );
   });
 
   it('error reason uses failure-oriented copy', () => {
@@ -128,11 +142,13 @@ describe('buildTerminalToolPatches', () => {
         { id: 'a', status: 'pending_approval' },
         { id: 'b', status: 'running', output: '运行中' },
       ],
-      'error',
+      'error'
     );
-    expect(patches.find((p) => p.id === 'a')?.output).toBe('运行失败时仍待确认');
+    expect(patches.find((p) => p.id === 'a')?.output).toBe(
+      '运行失败时仍待确认'
+    );
     expect(patches.find((p) => p.id === 'b')?.output).toBe(
-      '运行失败时工具未返回结果',
+      '运行失败时工具未返回结果'
     );
   });
 
@@ -145,9 +161,12 @@ describe('buildTerminalToolPatches', () => {
   it('skips tools without id', () => {
     expect(
       buildTerminalToolPatches(
-        [{ id: '', status: 'running' }, { id: 'ok', status: 'running' }],
-        'stop',
-      ),
+        [
+          { id: '', status: 'running' },
+          { id: 'ok', status: 'running' },
+        ],
+        'stop'
+      )
     ).toEqual([{ id: 'ok', status: 'error', output: '已停止' }]);
   });
 });

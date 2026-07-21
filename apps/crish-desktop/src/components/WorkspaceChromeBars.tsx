@@ -15,7 +15,6 @@ import React, {
   useState,
 } from 'react';
 import styles from './WorkspaceChromeBars.module.css';
-import * as Lucide from 'lucide-react';
 import {
   GENERAL_FOLDER,
   canonicalSessionFolder,
@@ -37,14 +36,42 @@ import {
   sessionBelongsToWorkspace,
   type WorkspaceTab,
 } from '../api/workspaceChromeTabs';
-import { EMPTY_SESSION_TITLE, sessionListDisplayTitle } from '../api/sessionTitle';
-import { createSession, focusOrOpenPanel, setActiveSessionId } from '../api/storeAccess';
+import {
+  EMPTY_SESSION_TITLE,
+  sessionListDisplayTitle,
+} from '../api/sessionTitle';
+import {
+  enterDraftMode,
+  focusOrOpenPanel,
+  setActiveSessionId,
+  setDraftFolder,
+} from '../api/storeAccess';
 import { useLayoutStore } from '../store/layoutStore';
-import { collapseToolColumnPreserve, isChatColumn } from '../store/layoutHelpers';
-import { getSessionById, selectActiveSessionId, useSessionField } from '../store/sessionStore';
+import {
+  collapseToolColumnPreserve,
+  isChatColumn,
+} from '../store/layoutHelpers';
+import {
+  getSessionById,
+  selectActiveSessionId,
+  useSessionField,
+} from '../store/sessionStore';
+import { isPendingDraft } from '../store/draftSession';
 import { emitUiEvent } from '../api/uiEvents';
 import { IconSidebarRight } from './SidebarToggleIcons';
 import { Tooltip } from './Tooltip';
+import {
+  Folder,
+  FolderPlus,
+  MessageSquarePlus,
+  MessagesSquare,
+  Minus,
+  MoreHorizontal,
+  Pin,
+  Plus,
+  Square,
+  X,
+} from 'lucide-react';
 
 type Props = {
   onAddProject?: () => void;
@@ -122,9 +149,7 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
   const sessionsInWorkspace = useMemo(() => {
     return sessions
       .filter(
-        (s) =>
-          !s.isArchived &&
-          sessionBelongsToWorkspace(s.folder, folderKey),
+        (s) => !s.isArchived && sessionBelongsToWorkspace(s.folder, folderKey)
       )
       .sort((a, b) => {
         // 置顶优先，再按时间戳（timestamp 可能是 ISO 字符串）
@@ -154,9 +179,20 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
     else openProject(tab.id);
 
     const key = tab.id;
-    const existing = useLayoutStore.getState().sessions.filter((s) => !s.isArchived);
+    // 草稿态切工作区：只换 folder 绑定，不抢 active / 不 mint
+    const curActive = useLayoutStore.getState().activeSessionId;
+    if (isPendingDraft(curActive)) {
+      setDraftFolder(tab.kind === 'general' ? GENERAL_FOLDER : tab.id);
+      setProjectTick((n) => n + 1);
+      setTabsTick((n) => n + 1);
+      return;
+    }
+
+    const existing = useLayoutStore
+      .getState()
+      .sessions.filter((s) => !s.isArchived);
     let ids = getOpenSessionTabIds(key).filter((id) =>
-      existing.some((s) => s.id === id),
+      existing.some((s) => s.id === id)
     );
     if (ids.length === 0) {
       const inFolder = existing
@@ -179,9 +215,7 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
     // 不因顺序激活「最旧」；优先保留当前会话（若在本区），否则取末尾（最近打开）
     const cur = useLayoutStore.getState().activeSessionId;
     const pick =
-      (cur && ids.includes(cur) ? cur : null) ||
-      ids[ids.length - 1] ||
-      null;
+      (cur && ids.includes(cur) ? cur : null) || ids[ids.length - 1] || null;
     if (pick) setActiveSessionId(pick);
     setProjectTick((n) => n + 1);
     setTabsTick((n) => n + 1);
@@ -194,7 +228,7 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
       openSessionTab(folderKey, sessionId);
       setTabsTick((n) => n + 1);
     },
-    [folderKey],
+    [folderKey]
   );
 
   const onCloseSession = useCallback(
@@ -204,26 +238,23 @@ function useWorkspaceChromeState(onAddProject?: () => void) {
       const { nextActiveId } = closeSessionTab(
         folderKey,
         sessionId,
-        activeSessionId,
+        activeSessionId
       );
       if (nextActiveId) setActiveSessionId(nextActiveId);
       setTabsTick((n) => n + 1);
     },
-    [activeSessionId, folderKey],
+    [activeSessionId, folderKey]
   );
 
   const onNewSession = useCallback(() => {
-    const activeSess = activeSessionId ? getSessionById(activeSessionId) : null;
+    const activeSess =
+      activeSessionId && !isPendingDraft(activeSessionId)
+        ? getSessionById(activeSessionId)
+        : null;
     const folder = activeSess?.folder || getActiveProjectId() || GENERAL_FOLDER;
-    const id = createSession({
-      title: EMPTY_SESSION_TITLE,
-      folder,
-      activate: true,
-    });
-    if (id) {
-      openSessionTab(folder, id);
-      setTabsTick((n) => n + 1);
-    }
+    // 用户「新对话」→ 草稿；真会话在首条发送时 commit
+    enterDraftMode(folder);
+    setTabsTick((n) => n + 1);
   }, [activeSessionId]);
 
   const onAdd = useCallback(() => {
@@ -315,7 +346,8 @@ export const WorkspaceStrip: React.FC<Props> = ({
   onWinClose,
 }) => {
   const s = useWorkspaceChromeState(onAddProject);
-  const { isRightSidebarCollapsed, toggleRightSidebar } = useRightSidebarState();
+  const { isRightSidebarCollapsed, toggleRightSidebar } =
+    useRightSidebarState();
   const showTrail = true; // Always show trail for the right sidebar toggle button
   const add = useChromeAddMenu();
 
@@ -340,16 +372,23 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 onClick={() => s.selectWorkspace(tab)}
               >
                 {tab.kind === 'project' ? (
-                  <Lucide.Folder size={13} strokeWidth={1.75} aria-hidden />
+                  <Folder size={13} strokeWidth={1.75} aria-hidden />
                 ) : (
-                  <Lucide.MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
+                  <MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
                 )}
-                <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.label}</span>
+                <span
+                  className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
+                >
+                  {tab.label}
+                </span>
               </button>
             </Tooltip>
           );
         })}
-        <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
+        <div
+          className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`}
+          ref={add.wrapRef}
+        >
           <Tooltip content="添加">
             <button
               type="button"
@@ -360,7 +399,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
               aria-controls={add.menuId}
               onClick={() => add.setOpen((v) => !v)}
             >
-              <Lucide.Plus size={14} strokeWidth={2} aria-hidden />
+              <Plus size={14} strokeWidth={2} aria-hidden />
             </button>
           </Tooltip>
           {add.open ? (
@@ -379,8 +418,10 @@ export const WorkspaceStrip: React.FC<Props> = ({
                   s.onAdd();
                 }}
               >
-                <Lucide.FolderPlus size={16} strokeWidth={1.75} aria-hidden />
-                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
+                <FolderPlus size={16} strokeWidth={1.75} aria-hidden />
+                <span
+                  className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}
+                >
                   <span>添加本地项目</span>
                 </span>
               </button>
@@ -397,8 +438,10 @@ export const WorkspaceStrip: React.FC<Props> = ({
                   });
                 }}
               >
-                <Lucide.MessagesSquare size={16} strokeWidth={1.75} aria-hidden />
-                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
+                <MessagesSquare size={16} strokeWidth={1.75} aria-hidden />
+                <span
+                  className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}
+                >
                   <span>切换到「对话」</span>
                 </span>
               </button>
@@ -412,7 +455,9 @@ export const WorkspaceStrip: React.FC<Props> = ({
           role="toolbar"
           aria-label="顶栏操作"
         >
-          <Tooltip content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}>
+          <Tooltip
+            content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+          >
             <button
               type="button"
               className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
@@ -431,7 +476,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 aria-label="快捷键与帮助"
                 onClick={onOpenHelp}
               >
-                <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+                <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
               </button>
             </Tooltip>
           ) : null}
@@ -443,7 +488,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 aria-label="最小化窗口"
                 onClick={onWinMinimize}
               >
-                <Lucide.Minus size={14} strokeWidth={1.75} aria-hidden />
+                <Minus size={14} strokeWidth={1.75} aria-hidden />
               </button>
             </Tooltip>
           ) : null}
@@ -455,7 +500,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 aria-label="最大化或还原窗口"
                 onClick={onWinMaximize}
               >
-                <Lucide.Square size={12} strokeWidth={1.75} aria-hidden />
+                <Square size={12} strokeWidth={1.75} aria-hidden />
               </button>
             </Tooltip>
           ) : null}
@@ -467,7 +512,7 @@ export const WorkspaceStrip: React.FC<Props> = ({
                 aria-label="关闭窗口"
                 onClick={onWinClose}
               >
-                <Lucide.X size={14} strokeWidth={1.75} aria-hidden />
+                <X size={14} strokeWidth={1.75} aria-hidden />
               </button>
             </Tooltip>
           ) : null}
@@ -481,7 +526,6 @@ export const WorkspaceStrip: React.FC<Props> = ({
 export const SessionStrip: React.FC<Props> = ({ className }) => {
   const s = useWorkspaceChromeState();
   const add = useChromeAddMenu();
-  const { isRightSidebarCollapsed, toggleRightSidebar } = useRightSidebarState();
 
   return (
     <div
@@ -506,9 +550,18 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
                   onClick={() => s.selectSession(tab.sessionId)}
                 >
                   {tab.pinned ? (
-                    <Lucide.Pin size={12} strokeWidth={2} aria-hidden className={`${styles.wsChromePin} ws-chrome-pin`} />
+                    <Pin
+                      size={12}
+                      strokeWidth={2}
+                      aria-hidden
+                      className={`${styles.wsChromePin} ws-chrome-pin`}
+                    />
                   ) : null}
-                  <span className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}>{tab.title}</span>
+                  <span
+                    className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
+                  >
+                    {tab.title}
+                  </span>
                 </button>
               </Tooltip>
               <Tooltip content="关闭标签">
@@ -518,13 +571,16 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
                   aria-label={`关闭会话标签 ${tab.title}`}
                   onClick={(e) => s.onCloseSession(tab.sessionId, e)}
                 >
-                  <Lucide.X size={12} strokeWidth={2} aria-hidden />
+                  <X size={12} strokeWidth={2} aria-hidden />
                 </button>
               </Tooltip>
             </div>
           );
         })}
-        <div className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`} ref={add.wrapRef}>
+        <div
+          className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`}
+          ref={add.wrapRef}
+        >
           <Tooltip content="新建">
             <button
               type="button"
@@ -535,7 +591,7 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
               aria-controls={add.menuId}
               onClick={() => add.setOpen((v) => !v)}
             >
-              <Lucide.Plus size={15} strokeWidth={2} aria-hidden />
+              <Plus size={15} strokeWidth={2} aria-hidden />
             </button>
           </Tooltip>
           {add.open ? (
@@ -554,8 +610,10 @@ export const SessionStrip: React.FC<Props> = ({ className }) => {
                   s.onNewSession();
                 }}
               >
-                <Lucide.MessageSquarePlus size={16} strokeWidth={1.75} aria-hidden />
-                <span className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}>
+                <MessageSquarePlus size={16} strokeWidth={1.75} aria-hidden />
+                <span
+                  className={`${styles.wsChromeAddItemText} ws-chrome-add-item-text`}
+                >
                   <span>新建对话</span>
                 </span>
               </button>
@@ -572,7 +630,11 @@ export const WorkspaceChromeBars: React.FC<Props> = (props) => {
   if (props.variant === 'workspace') return <WorkspaceStrip {...props} />;
   if (props.variant === 'sessions') return <SessionStrip {...props} />;
   return (
-    <div className={`${styles.wsChrome} ws-chrome ${props.className || ''}`} role="navigation" aria-label="工作台标签">
+    <div
+      className={`${styles.wsChrome} ws-chrome ${props.className || ''}`}
+      role="navigation"
+      aria-label="工作台标签"
+    >
       <WorkspaceStrip {...props} />
       <SessionStrip {...props} />
     </div>

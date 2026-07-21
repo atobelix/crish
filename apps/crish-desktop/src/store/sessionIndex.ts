@@ -488,9 +488,9 @@ export type FilterSidebarSessionsOpts = {
 
 /**
  * 侧栏防御性过滤：
- * - 非活动 + 默认标题 + 无消息 → 隐藏
- * - 活动空壳 / 有内容 / 真实标题 / 置顶 → 显示
- * - 可选 searchQuery：再按轻量 keys 收窄（活动会话仍保留）
+ * - 归档 / 空壳默认标题 → 隐藏（草稿由 PENDING_DRAFT 处理）
+ * - 置顶 / 定时标题 / 有内容 / 真实标题 → 显示
+ * - 可选 searchQuery：再按轻量 keys 收窄（已列表的活动会话仍保留）
  * 不删除 store 数据，仅 UI 投影（与 shouldListSessionInSidebar 一致）。
  *
  * SidebarSessionList / 其它侧栏投影应优先调用本函数，避免散落手写 filter。

@@ -9,14 +9,9 @@ import {
   MAX_FOLDERS,
 } from '@crish/shared-utils/browser';
 import { isDemoMode } from '../api/appMode';
-import {
-  GENERAL_FOLDER,
-  canonicalSessionFolder,
-  getActiveProjectId,
-} from '../api/projectStore';
+import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import {
   EMPTY_SESSION_TITLE,
-  findReusableEmptyShell,
   isDefaultSessionTitle,
   isEmptyShellSession,
   maybeAutoTitleFromMessages,
@@ -48,6 +43,7 @@ import {
   saveMessageSnapshot,
 } from './messageSnapshotsBridge';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
+import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 
 /** 手动 rename / 分叉标题码点上限（略宽于侧栏自动标题 28） */
 const MANUAL_SESSION_TITLE_MAX_LEN = 48;
@@ -59,6 +55,8 @@ const MANUAL_SESSION_TITLE_MAX_LEN = 48;
 export interface SessionStoreSlice extends SessionsIndexed {
   folderOrder: string[];
   activeSessionId: string;
+  /** 草稿态绑定的 folder；commit 时写入真会话。非草稿时为 '' */
+  draftFolder: string;
   activeAgentId: string | null;
   panelAgentId: string | null;
   terminalLines: string[];
@@ -72,6 +70,17 @@ export interface SessionActions {
   setActiveSessionId: (id: string) => void;
   setActiveAgentId: (id: string | null) => void;
   setPanelAgentId: (id: string | null) => void;
+  /** 进入草稿态：active = 哨兵，sessions 不增条目 */
+  enterDraftMode: (folder?: string) => void;
+  /** 更新草稿绑定 folder（项目切换时） */
+  setDraftFolder: (folder: string) => void;
+  /** 退出草稿：清空 draftFolder；若 active 为草稿则清空 active */
+  clearDraft: () => void;
+  /**
+   * 若 active 为草稿则 mint 真会话并返回 id；
+   * 否则返回当前真实 active 或 ''。
+   */
+  commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => string;
   upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
   patchSessionAgent: (
     sessionId: string,
@@ -85,6 +94,8 @@ export interface SessionActions {
   ) => void;
   renameSession: (sessionId: string, title: string) => void;
   /**
+   * mint | attach explicitId | activate:false 系统占位。
+   * **禁止** reuse empty shell（见 session-pending-draft-adr）。
    * @param opts.activate 默认 true。定时任务占位会话传 false，避免抢走当前对话焦点。
    */
   createSession: (opts?: {
@@ -332,23 +343,6 @@ function pruneEmptyShellsInPlace(
   }
 }
 
-/**
- * createSession 复用路径：find 与 set 之间壳可能被写消息 / 置顶 / 改标题 / 归档。
- * 须在 draft 内再验一次；不合格则零写入，由调用方 mint 新会话。
- */
-function isStillReusableEmptyShell(
-  sess: SessionState,
-  folder: string
-): boolean {
-  if (sess.isArchived) return false;
-  if (!isEmptyShellSession(sess)) return false;
-  // 与 findReusableEmptyShell 同 folder 契约（含幽灵 proj-* 规范后比较）
-  if (canonicalSessionFolder(sess.folder) !== canonicalSessionFolder(folder)) {
-    return false;
-  }
-  return true;
-}
-
 /** 若标题仍默认且消息可推导，写中文安全短标题（可选碰撞后缀） */
 function maybeAutoTitleSession(
   state: SessionsIndexed,
@@ -372,7 +366,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>,
   get: SessionStoreGet<T>
 ): SessionActions {
-  return {
+  const actions: SessionActions = {
     setComposerDraft: (sessionId, draft) =>
       set((state) => {
         if (!sessionId) return;
@@ -816,14 +810,22 @@ export function createSessionActions<T extends SessionStoreSlice>(
     setActiveSessionId: (id) => {
       const nextId = typeof id === 'string' ? id : '';
       set((state) => {
-        // 活动安全：非空 id 必须已在列表中，禁止指到幽灵 id
-        if (nextId && !getSessionById(state, nextId)) {
+        // 活动安全：非空非草稿 id 必须已在列表中；草稿哨兵豁免
+        if (
+          nextId &&
+          !isPendingDraft(nextId) &&
+          !getSessionById(state, nextId)
+        ) {
           return;
         }
         // 切换只改焦点与终端视图；绝不 prune 空「新会话」
         // （否则用户连建多个对话一切换就丢，体感像「掉对话」）
         const same = state.activeSessionId === nextId;
         state.activeSessionId = nextId;
+        // 切到真实会话（或清空）时释放草稿 folder 绑定
+        if (!isPendingDraft(nextId)) {
+          state.draftFolder = '';
+        }
         if (!same) {
           state.activeAgentId = null; // 主列永不挂 agent
           state.panelAgentId = null; // 切会话清侧栏 agent 焦点，避免串会话
@@ -832,8 +834,8 @@ export function createSessionActions<T extends SessionStoreSlice>(
             : [];
         }
       });
-      // 正式版：切换会话时同步工作区 cwd（folder = projectId 或 对话）
-      if (!isDemoMode() && nextId) {
+      // 正式版：仅真实会话同步工作区 cwd / 引擎水合（草稿无 list 条目）
+      if (!isDemoMode() && nextId && !isPendingDraft(nextId)) {
         const sess = getSessionById(get(), nextId);
         if (sess) {
           void import('../api/projectStore').then(
@@ -876,6 +878,58 @@ export function createSessionActions<T extends SessionStoreSlice>(
       }
     },
 
+    enterDraftMode: (folder) => {
+      set((state) => {
+        state.activeSessionId = PENDING_DRAFT_SESSION_ID;
+        state.draftFolder =
+          (typeof folder === 'string' && folder.trim()) ||
+          getActiveProjectId() ||
+          GENERAL_FOLDER ||
+          '';
+        state.activeAgentId = null;
+        state.panelAgentId = null;
+        state.terminalLines = [];
+      });
+    },
+
+    setDraftFolder: (folder) => {
+      set((state) => {
+        state.draftFolder = typeof folder === 'string' ? folder : '';
+      });
+    },
+
+    clearDraft: () => {
+      set((state) => {
+        if (isPendingDraft(state.activeSessionId)) {
+          state.activeSessionId = '';
+          state.activeAgentId = null;
+          state.panelAgentId = null;
+          state.terminalLines = [];
+        }
+        state.draftFolder = '';
+      });
+    },
+
+    commitDraftIfNeeded: (opts) => {
+      const st = get();
+      if (!isPendingDraft(st.activeSessionId)) {
+        return st.activeSessionId && getSessionById(st, st.activeSessionId)
+          ? st.activeSessionId
+          : '';
+      }
+      const folder =
+        opts?.folder ||
+        st.draftFolder ||
+        getActiveProjectId() ||
+        GENERAL_FOLDER;
+      // reuse 已删：直接 mint；createSession 激活时会清 draftFolder
+      return actions.createSession({
+        title: opts?.title,
+        folder,
+        activate: true,
+      });
+    },
+
     renameSession: (sessionId, title) =>
       set((state) => {
         const sess = getSessionById(state, sessionId);
@@ -896,75 +950,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
       const requestedTitle = normalizeWritableSessionTitle(opts?.title);
       const initialTitle = requestedTitle || EMPTY_SESSION_TITLE;
 
-      // 用户点「新建」(activate:true) 未指定 id：优先复用同 folder 空壳。
-      // activate:false 后台建壳绝不复用——否则会误吞用户空白活动会话 / 侧栏幽灵。
-      // 不 invent 远程壳：只复用本地已有 isEmptyShellSession 条目。
-      if (!explicitId && activate) {
-        const projectId = getActiveProjectId();
-        const activeId = get().activeSessionId;
-        const activeSess = activeId ? getSessionById(get(), activeId) : null;
-        // 若当前活动会话本身就是未发送信息的空壳：优先直接迁移到目标 folder 并保持激活，不刷双空壳
-        if (
-          activeId &&
-          activeSess &&
-          isEmptyShellSession(activeSess) &&
-          (!activeSess.messages || activeSess.messages.length === 0)
-        ) {
-          const targetFolder = isDemoMode()
-            ? '常规会话'
-            : opts?.folder || activeSess.folder || projectId || GENERAL_FOLDER;
-          set((state) => {
-            const existing = getSessionById(state, activeId);
-            if (existing) {
-              existing.folder = targetFolder;
-              existing.timestamp = nowIsoTimestamp();
-              applyTitleIfDefault(existing, requestedTitle);
-              // 复用活动空壳时剪掉 peer 幽灵，避免侧栏刷屏
-              const prevActive = state.activeSessionId;
-              pruneEmptyShellsInPlace(
-                state,
-                shellPruneKeepIds(activeId, prevActive, { activating: true })
-              );
-            }
-          });
-          return activeId;
-        }
-
-        const currentFolder = activeSess?.folder;
-        const defaultFolder = isDemoMode()
-          ? '常规会话'
-          : opts?.folder || currentFolder || projectId || GENERAL_FOLDER;
-        const reuseId = findReusableEmptyShell(get().sessions, defaultFolder, {
-          preferId: activeId || null,
-        });
-        if (reuseId) {
-          let reused = false;
-          set((state) => {
-            const existing = getSessionById(state, reuseId);
-            if (!existing) return;
-            // draft 内再验：空壳 + 同 folder（拒绝跨项目脏复用 / 竞态写消息）
-            if (isStillReusableEmptyShell(existing, defaultFolder)) {
-              applyTitleIfDefault(existing, requestedTitle);
-              existing.timestamp = nowIsoTimestamp();
-              if (opts?.folder) existing.folder = opts.folder;
-              const prevActive = state.activeSessionId;
-              state.activeSessionId = reuseId;
-              state.activeAgentId = null;
-              state.panelAgentId = null;
-              state.terminalLines = state.terminalBySession[reuseId] || [];
-              pruneEmptyShellsInPlace(
-                state,
-                shellPruneKeepIds(reuseId, prevActive, { activating: true })
-              );
-              reused = true;
-            }
-          });
-          if (reused) {
-            return reuseId;
-          }
-        }
-      }
-
+      // mint | attach explicitId | activate:false — 禁止 reuse empty shell
       const id = explicitId || `sess-${Date.now()}`;
       set((state) => {
         // 已存在：可选激活（定时 workflow 复用引擎 sessionId 时常 activate:false）
@@ -976,6 +962,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
             state.activeAgentId = null;
             state.panelAgentId = null;
             state.terminalLines = state.terminalBySession[id] || [];
+            state.draftFolder = '';
           }
           applyTitleIfDefault(existing, requestedTitle);
           pruneEmptyShellsInPlace(
@@ -989,9 +976,14 @@ export function createSessionActions<T extends SessionStoreSlice>(
           ? getSessionById(state, state.activeSessionId)
           : null;
         const currentFolder = activeSess?.folder;
+        // 草稿 commit 路径会传 opts.folder；否则 draftFolder → 活动 folder → 项目
         const defaultFolder = isDemoMode()
           ? '常规会话'
-          : opts?.folder || currentFolder || projectId || GENERAL_FOLDER;
+          : opts?.folder ||
+            currentFolder ||
+            state.draftFolder ||
+            projectId ||
+            GENERAL_FOLDER;
         const sess: SessionState = {
           id,
           title: initialTitle,
@@ -1003,7 +995,6 @@ export function createSessionActions<T extends SessionStoreSlice>(
           messages: [],
         };
         // mint 新会话：不 prune 既有空壳（否则连建多会话一切换就丢）
-        // 连点刷屏仅靠 reuse 路径剪 peer
         state.sessions.unshift(sess);
         reindexSessionsById(state);
         if (
@@ -1017,6 +1008,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
           state.activeAgentId = null;
           state.panelAgentId = null;
           state.terminalLines = [];
+          state.draftFolder = '';
         }
       });
       return id;
@@ -1211,4 +1203,5 @@ export function createSessionActions<T extends SessionStoreSlice>(
         });
       }),
   };
+  return actions;
 }

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ProjectPickerMenu.module.css';
 import {
   addProjectFromPath,
+  GENERAL_FOLDER,
   getActiveProjectId,
   listProjects,
   openProject,
@@ -10,7 +10,17 @@ import {
   setNoProject,
   type ProjectEntry,
 } from '../api/projectStore';
+import { getSessionStoreState, setDraftFolder } from '../api/storeAccess';
+import { isPendingDraft } from '../store/draftSession';
 import { Tooltip } from './Tooltip';
+import { Check, ChevronRight, Folder, Plus, Search, X } from 'lucide-react';
+
+/** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
+function syncDraftFolderOnProjectChange(folder: string): void {
+  if (isPendingDraft(getSessionStoreState().activeSessionId)) {
+    setDraftFolder(folder);
+  }
+}
 
 type Props = {
   open: boolean;
@@ -23,9 +33,17 @@ type Props = {
  */
 async function pickFolderNative(title?: string): Promise<string | null> {
   try {
-    const mod: any = await (Function('return import("@tauri-apps/plugin-dialog")')() as Promise<any>).catch(
-      () => null,
-    );
+    const mod = (await (
+      Function('return import("@tauri-apps/plugin-dialog")')() as Promise<{
+        open?: (
+          opts: Record<string, unknown>
+        ) => Promise<string | string[] | null>;
+      }>
+    ).catch(() => null)) as {
+      open?: (
+        opts: Record<string, unknown>
+      ) => Promise<string | string[] | null>;
+    } | null;
     if (mod?.open) {
       const selected = await mod.open({
         directory: true,
@@ -40,7 +58,11 @@ async function pickFolderNative(title?: string): Promise<string | null> {
   return null;
 }
 
-export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged }) => {
+export const ProjectPickerMenu: React.FC<Props> = ({
+  open,
+  onClose,
+  onChanged,
+}) => {
   const [q, setQ] = useState('');
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [showAddCascade, setShowAddCascade] = useState(false);
@@ -85,7 +107,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
     (p) =>
       !q.trim() ||
       p.name.toLowerCase().includes(q.toLowerCase()) ||
-      p.path.toLowerCase().includes(q.toLowerCase()),
+      p.path.toLowerCase().includes(q.toLowerCase())
   );
 
   const handlePickFolder = async () => {
@@ -136,9 +158,12 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header Search Box */}
-      <div className={styles.searchWrapper} onMouseEnter={() => setShowAddCascade(false)}>
+      <div
+        className={styles.searchWrapper}
+        onMouseEnter={() => setShowAddCascade(false)}
+      >
         <div className={styles.searchBox}>
-          <Lucide.Search size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
+          <Search size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
           <input
             className={styles.searchInput}
             value={q}
@@ -150,25 +175,26 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
       </div>
 
       {/* Projects List Scroll Area */}
-      <div className={styles.scrollArea} onMouseEnter={() => setShowAddCascade(false)}>
+      <div
+        className={styles.scrollArea}
+        onMouseEnter={() => setShowAddCascade(false)}
+      >
         {filtered.map((p) => {
           const selected = p.id === activeId;
           return (
-            <div
-              key={p.id}
-              className={styles.projectRow}
-            >
+            <div key={p.id} className={styles.projectRow}>
               <button
                 type="button"
                 className={`sort-filter-option ${selected ? 'is-on' : ''}`}
                 style={{ paddingRight: '28px' }}
                 onClick={() => {
                   openProject(p.id);
+                  syncDraftFolderOnProjectChange(p.id);
                   onChanged?.();
                   onClose();
                 }}
               >
-                <Lucide.Folder
+                <Folder
                   size={14}
                   style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
                 />
@@ -183,9 +209,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 >
                   {p.name}
                 </span>
-                {selected && (
-                  <Lucide.Check size={14} className={styles.rowCheck} />
-                )}
+                {selected && <Check size={14} className={styles.rowCheck} />}
               </button>
 
               {/* Delete hover-only button */}
@@ -200,7 +224,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                     onChanged?.();
                   }}
                 >
-                  <Lucide.X size={12} />
+                  <X size={12} />
                 </button>
               </Tooltip>
             </div>
@@ -222,7 +246,13 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
       </div>
 
       {/* Divider */}
-      <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 2px' }} />
+      <div
+        style={{
+          height: '1px',
+          background: 'var(--border-subtle)',
+          margin: '4px 2px',
+        }}
+      />
 
       {/* Footer Option: New/Add Project */}
       <div
@@ -234,16 +264,18 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
           className="sort-filter-option"
           disabled={busy}
           style={{
-            background: showAddCascade ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined
+            background: showAddCascade
+              ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
+              : undefined,
           }}
           onClick={() => setShowAddCascade(!showAddCascade)}
         >
-          <Lucide.Plus
+          <Plus
             size={14}
             style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
           />
           <span style={{ flex: 1 }}>新建项目</span>
-          <Lucide.ChevronRight
+          <ChevronRight
             size={14}
             style={{ marginLeft: 'auto', flexShrink: 0, opacity: 0.5 }}
           />
@@ -255,7 +287,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
             className="sort-filter-flyout"
             style={{
               position: 'absolute',
-              top: '-4px', /* Perfectly aligns the top of the flyout with the top of the parent button row */
+              top: '-4px' /* Perfectly aligns the top of the flyout with the top of the parent button row */,
               left: 'calc(100% + 4px)',
               width: '160px',
               display: 'flex',
@@ -272,7 +304,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 className="sort-filter-option"
                 onClick={handleCreateEmptyProject}
               >
-                <Lucide.Plus
+                <Plus
                   size={14}
                   style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
                 />
@@ -285,7 +317,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
                 className="sort-filter-option"
                 onClick={handlePickFolder}
               >
-                <Lucide.Folder
+                <Folder
                   size={14}
                   style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
                 />
@@ -307,15 +339,30 @@ export const ProjectPickerMenu: React.FC<Props> = ({ open, onClose, onChanged })
           style={{ display: 'flex', alignItems: 'center' }}
           onClick={() => {
             setNoProject();
+            syncDraftFolderOnProjectChange(GENERAL_FOLDER);
             onChanged?.();
             onClose();
           }}
         >
-          <Lucide.X
+          <X
             size={14}
-            style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7, display: 'block' }}
+            style={{
+              marginRight: '6px',
+              flexShrink: 0,
+              opacity: 0.7,
+              display: 'block',
+            }}
           />
-          <span style={{ display: 'inline-flex', alignItems: 'center', height: '14px', lineHeight: '14px' }}>不在项目中工作</span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: '14px',
+              lineHeight: '14px',
+            }}
+          >
+            不在项目中工作
+          </span>
         </button>
       </div>
     </div>

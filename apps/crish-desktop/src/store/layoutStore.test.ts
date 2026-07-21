@@ -132,7 +132,7 @@ describe('layoutStore pure helpers — type fidelity & safe defaults', () => {
         { taskName: 'no-id', elapsedSeconds: 1 },
         { id: 'w2', taskName: 99, elapsedSeconds: 'x' },
         null,
-      ]),
+      ])
     ).toEqual([
       { id: 'w1', taskName: 'a', elapsedSeconds: 0 },
       { id: 'w2', taskName: '', elapsedSeconds: 0 },
@@ -153,7 +153,7 @@ describe('empty workspace seed & no ghost panels', () => {
     expect(list.length).toBe(1);
     expect(list[0]!.id).toBe(DEFAULT_WORKSPACE_ID);
     const cards = list[0]!.columns.flatMap((c) =>
-      c.groups.flatMap((g) => g.cards.map((x) => x.id)),
+      c.groups.flatMap((g) => g.cards.map((x) => x.id))
     );
     expect(cards).toContain('chat');
     expect(cards).not.toContain('settings');
@@ -206,7 +206,7 @@ describe('empty workspace seed & no ghost panels', () => {
     };
     const clean = stripGhostPanelsFromWorkspace(dirty);
     const ids = clean.columns.flatMap((c) =>
-      c.groups.flatMap((g) => g.cards.map((x) => x.id)),
+      c.groups.flatMap((g) => g.cards.map((x) => x.id))
     );
     expect(ids).toContain('chat');
     expect(ids).toContain('preview');
@@ -239,7 +239,7 @@ describe('empty workspace seed & no ghost panels', () => {
     };
     const clean = stripGhostPanelsFromWorkspace(onlyGhost);
     const ids = clean.columns.flatMap((c) =>
-      c.groups.flatMap((g) => g.cards.map((x) => x.id)),
+      c.groups.flatMap((g) => g.cards.map((x) => x.id))
     );
     expect(ids).toContain('chat');
     expect(ids).not.toContain('settings');
@@ -258,7 +258,17 @@ describe('empty workspace seed & no ghost panels', () => {
 
   it('sanitizeSessionSeed clears ghost activeSessionId', () => {
     const a = sanitizeSessionSeed({
-      sessions: [{ id: 's1', title: 't', folder: 'f', isPinned: false, isArchived: false, timestamp: '', messages: [] }],
+      sessions: [
+        {
+          id: 's1',
+          title: 't',
+          folder: 'f',
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          messages: [],
+        },
+      ],
       activeSessionId: 'missing',
       folderOrder: ['f', '', 'g'],
     });
@@ -273,6 +283,26 @@ describe('empty workspace seed & no ghost panels', () => {
     });
     expect(empty.activeSessionId).toBe('');
     expect(Object.keys(empty.sessionsById)).toHaveLength(0);
+  });
+
+  it('sanitizeSessionSeed clears pending draft sentinel', () => {
+    const s = sanitizeSessionSeed({
+      sessions: [
+        {
+          id: 's1',
+          title: 't',
+          folder: 'f',
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          messages: [],
+        },
+      ],
+      activeSessionId: '__pending_draft__',
+      folderOrder: ['f'],
+    });
+    expect(s.activeSessionId).toBe('');
+    expect(s.sessionsById.s1?.id).toBe('s1');
   });
 });
 
@@ -292,7 +322,9 @@ describe('useLayoutStore initial invariants', () => {
     expect(s.diffFiles).toEqual([]);
 
     const ids = s.workspaces.flatMap((ws) =>
-      ws.columns.flatMap((c) => c.groups.flatMap((g) => g.cards.map((x) => x.id))),
+      ws.columns.flatMap((c) =>
+        c.groups.flatMap((g) => g.cards.map((x) => x.id))
+      )
     );
     expect(ids).not.toContain('settings');
     expect(ids).not.toContain('runtime');
@@ -309,7 +341,9 @@ describe('useLayoutStore initial invariants', () => {
   });
 
   it('settingsActiveTab is a known tab', () => {
-    expect(isSettingsTabType(useLayoutStore.getState().settingsActiveTab)).toBe(true);
+    expect(isSettingsTabType(useLayoutStore.getState().settingsActiveTab)).toBe(
+      true
+    );
   });
 });
 

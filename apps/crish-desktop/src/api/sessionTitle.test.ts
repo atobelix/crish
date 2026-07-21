@@ -76,49 +76,53 @@ describe('sessionTitle shell helpers', () => {
 
   it('isEmptyShellSession ignores pinned and content', () => {
     expect(
-      isEmptyShellSession({ title: '新会话', messages: [], isPinned: false }),
+      isEmptyShellSession({ title: '新会话', messages: [], isPinned: false })
     ).toBe(true);
     expect(
-      isEmptyShellSession({ title: '新会话', messages: [], isPinned: true }),
+      isEmptyShellSession({ title: '新会话', messages: [], isPinned: true })
     ).toBe(false);
     expect(
       isEmptyShellSession({
         title: '新会话',
         messages: [{ sender: 'user', text: 'hi' }],
-      }),
+      })
     ).toBe(false);
     // 仅空白 text 的消息不算实质内容 → 仍是空壳
     expect(
       isEmptyShellSession({
         title: '新会话',
         messages: [{ sender: 'user', text: '   ' }],
-      }),
+      })
     ).toBe(true);
     // 空白 thinking / 空 toolCalls 仍是空壳
     expect(
       isEmptyShellSession({
         title: '新会话',
-        messages: [{ sender: 'assistant', text: '', thinking: '  ', toolCalls: [] }],
-      }),
+        messages: [
+          { sender: 'assistant', text: '', thinking: '  ', toolCalls: [] },
+        ],
+      })
     ).toBe(true);
     // messages/agents 为 null/undefined 视为无内容
     expect(
-      isEmptyShellSession({ title: '新会话', messages: null, agents: null }),
+      isEmptyShellSession({ title: '新会话', messages: null, agents: null })
     ).toBe(true);
     expect(isEmptyShellSession({ title: 'New Session' })).toBe(true);
     // 有 toolCalls 视为实质内容
     expect(
       isEmptyShellSession({
         title: '新会话',
-        messages: [{ sender: 'assistant', text: '', toolCalls: [{ id: 't1' }] }],
-      }),
+        messages: [
+          { sender: 'assistant', text: '', toolCalls: [{ id: 't1' }] },
+        ],
+      })
     ).toBe(false);
     // 仅有 thinking 亦不当空壳（水合半成品）
     expect(
       isEmptyShellSession({
         title: '新会话',
         messages: [{ sender: 'assistant', text: '', thinking: 'plan…' }],
-      }),
+      })
     ).toBe(false);
     // 有 agent 不当空壳
     expect(
@@ -126,7 +130,7 @@ describe('sessionTitle shell helpers', () => {
         title: '新会话',
         messages: [],
         agents: [{ id: 'a1' }],
-      }),
+      })
     ).toBe(false);
   });
 
@@ -136,13 +140,13 @@ describe('sessionTitle shell helpers', () => {
         title: '定时 · 每日 PR 总结',
         messages: [],
         isPinned: false,
-      }),
+      })
     ).toBe(false);
     expect(
       isEmptyShellSession({
         title: '定时 · 任务',
         messages: [],
-      }),
+      })
     ).toBe(false);
     // 定时空消息壳：prune 后仍保留
     const kept = pruneEmptyShellSessions(
@@ -150,7 +154,7 @@ describe('sessionTitle shell helpers', () => {
         { id: 'sched', title: '定时 · 巡检', messages: [] },
         { id: 'ghost', title: '新会话', messages: [] },
       ],
-      { keepIds: [] },
+      { keepIds: [] }
     );
     expect(kept.map((s) => s.id)).toEqual(['sched']);
   });
@@ -158,26 +162,26 @@ describe('sessionTitle shell helpers', () => {
   it('sessionHasListableContent requires substance', () => {
     expect(sessionHasListableContent({ messages: [] })).toBe(false);
     expect(
-      sessionHasListableContent({ messages: [{ sender: 'user', text: '' }] }),
+      sessionHasListableContent({ messages: [{ sender: 'user', text: '' }] })
     ).toBe(false);
     expect(
       sessionHasListableContent({
         messages: [{ sender: 'user', text: 'x' }],
-      }),
+      })
     ).toBe(true);
     expect(sessionHasListableContent({ agents: [{}] })).toBe(true);
     expect(
       sessionHasListableContent({
         messages: [{ sender: 'assistant', thinking: 'draft' }],
-      }),
+      })
     ).toBe(true);
   });
 
-  it('shouldListSessionInSidebar keeps active shell only', () => {
+  it('shouldListSessionInSidebar hides empty default-title shells', () => {
     const shell = { id: 'a', title: '新会话', messages: [] as [] };
-    expect(shouldListSessionInSidebar(shell, 'a')).toBe(true);
-    // 非活动空壳也要列表，否则一切换就「丢对话」
-    expect(shouldListSessionInSidebar(shell, 'other')).toBe(true);
+    // 空壳默认标题：active / 非 active 均不列表（草稿由 PENDING_DRAFT 处理）
+    expect(shouldListSessionInSidebar(shell, 'a')).toBe(false);
+    expect(shouldListSessionInSidebar(shell, 'other')).toBe(false);
     expect(
       shouldListSessionInSidebar(
         {
@@ -185,16 +189,35 @@ describe('sessionTitle shell helpers', () => {
           title: '有内容',
           messages: [{ sender: 'user', text: 'x' }],
         },
-        'other',
-      ),
+        'other'
+      )
     ).toBe(true);
     // 定时后台会话始终可列表
     expect(
       shouldListSessionInSidebar(
         { id: 's', title: '定时 · 任务', messages: [] },
-        'other',
-      ),
+        'other'
+      )
     ).toBe(true);
+    // 置顶空壳仍列表
+    expect(
+      shouldListSessionInSidebar(
+        { id: 'p', title: '新会话', messages: [], isPinned: true },
+        'other'
+      )
+    ).toBe(true);
+    // 归档双重保险
+    expect(
+      shouldListSessionInSidebar(
+        {
+          id: 'ar',
+          title: '有内容',
+          messages: [{ sender: 'user', text: 'x' }],
+          isArchived: true,
+        },
+        'ar'
+      )
+    ).toBe(false);
   });
 
   it('findReusableEmptyShell prefers folder match and preferId', () => {
@@ -206,23 +229,27 @@ describe('sessionTitle shell helpers', () => {
     expect(findReusableEmptyShell(sessions, 'p2')).toBe('2');
     expect(findReusableEmptyShell(sessions, 'missing')).toBe(null);
     // preferId 优先（同 folder）
-    expect(
-      findReusableEmptyShell(sessions, 'p2', { preferId: '3' }),
-    ).toBe('3');
+    expect(findReusableEmptyShell(sessions, 'p2', { preferId: '3' })).toBe('3');
     // preferId 跨 folder 不合格 → 回落同 folder 第一项
-    expect(
-      findReusableEmptyShell(sessions, 'p2', { preferId: '1' }),
-    ).toBe('2');
+    expect(findReusableEmptyShell(sessions, 'p2', { preferId: '1' })).toBe('2');
     // excludeId
-    expect(
-      findReusableEmptyShell(sessions, 'p2', { excludeId: '2' }),
-    ).toBe('3');
+    expect(findReusableEmptyShell(sessions, 'p2', { excludeId: '2' })).toBe(
+      '3'
+    );
     // 归档不可复用
     expect(
       findReusableEmptyShell(
-        [{ id: 'a', title: '新会话', folder: 'p1', messages: [], isArchived: true }],
-        'p1',
-      ),
+        [
+          {
+            id: 'a',
+            title: '新会话',
+            folder: 'p1',
+            messages: [],
+            isArchived: true,
+          },
+        ],
+        'p1'
+      )
     ).toBe(null);
     // 定时标题不可被「新建」复用
     expect(
@@ -231,8 +258,8 @@ describe('sessionTitle shell helpers', () => {
           { id: 'sched', title: '定时 · 巡检', folder: 'p1', messages: [] },
           { id: 'shell', title: '新会话', folder: 'p1', messages: [] },
         ],
-        'p1',
-      ),
+        'p1'
+      )
     ).toBe('shell');
   });
 
@@ -282,14 +309,14 @@ describe('sessionTitle shell helpers', () => {
       shellPruneKeepIds('new', 'old', {
         activating: true,
         extraKeepIds: ['extra', 'new'],
-      }),
+      })
     ).toEqual(['new', 'extra']);
     // activate:false 后台建会话：primary + active + extra
     expect(
       shellPruneKeepIds('sched', 'active', {
         activating: false,
         extraKeepIds: ['other'],
-      }),
+      })
     ).toEqual(['sched', 'active', 'other']);
   });
 
@@ -317,7 +344,11 @@ describe('sessionTitle shell helpers', () => {
       },
     ];
     const next = prepareSessionsForUi(sessions, 'active-shell');
-    expect(next.map((s) => s.id)).toEqual(['active-shell', 'with-msg', 'sched']);
+    expect(next.map((s) => s.id)).toEqual([
+      'active-shell',
+      'with-msg',
+      'sched',
+    ]);
     // 有消息的默认标题被推导
     expect(next.find((s) => s.id === 'with-msg')?.title).toContain('帮我写');
     // 定时保留；活动空壳保留；幽灵剪掉
@@ -352,37 +383,41 @@ describe('sessionTitle shell helpers', () => {
     expect(deriveSessionTitle('/help')).toBe('新会话');
     expect(deriveSessionTitle('/cmd 真实问题')).toBe('真实问题');
     expect(deriveSessionTitle('x'.repeat(40)).endsWith('…')).toBe(true);
-    expect(deriveSessionTitle('x'.repeat(40)).length).toBe(SESSION_TITLE_MAX_LEN + 1); // 28 + …
+    expect(deriveSessionTitle('x'.repeat(40)).length).toBe(
+      SESSION_TITLE_MAX_LEN + 1
+    ); // 28 + …
 
-    expect(maybeAutoTitleFromMessages('用户改名', [{ sender: 'user', text: 'hi' }])).toBe(
-      null,
-    );
-    expect(maybeAutoTitleFromMessages('新会话', [{ sender: 'user', text: '/help' }])).toBe(
-      null,
-    );
+    expect(
+      maybeAutoTitleFromMessages('用户改名', [{ sender: 'user', text: 'hi' }])
+    ).toBe(null);
+    expect(
+      maybeAutoTitleFromMessages('新会话', [{ sender: 'user', text: '/help' }])
+    ).toBe(null);
     expect(
       maybeAutoTitleFromMessages('新会话', [
         { sender: 'assistant', text: 'ignore me' },
         { sender: 'user', text: '帮我写单测' },
-      ]),
+      ])
     ).toContain('帮我写');
 
     expect(
       sessionListDisplayTitle({
         title: '真实侧栏名',
         messages: [{ sender: 'user', text: '应被忽略' }],
-      }),
+      })
     ).toBe('真实侧栏名');
     expect(
       sessionListDisplayTitle({
         title: '新会话',
         messages: [{ sender: 'user', text: '从消息展示' }],
-      }),
+      })
     ).toContain('从消息');
     expect(sessionListDisplayTitle({ title: '', messages: [] })).toBe('新会话');
-    expect(sessionListDisplayTitle({ title: '', messages: [] })).toBe(EMPTY_SESSION_TITLE);
+    expect(sessionListDisplayTitle({ title: '', messages: [] })).toBe(
+      EMPTY_SESSION_TITLE
+    );
     expect(
-      sessionListDisplayTitle({ title: '定时 · 任务', messages: [] }),
+      sessionListDisplayTitle({ title: '定时 · 任务', messages: [] })
     ).toBe('定时 · 任务');
   });
 
@@ -394,7 +429,7 @@ describe('sessionTitle shell helpers', () => {
     ];
     expect(findReusableEmptyShell(sessions)).toBe('first');
     expect(findReusableEmptyShell(sessions, null, { preferId: 'second' })).toBe(
-      'second',
+      'second'
     );
   });
 });
@@ -421,7 +456,9 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
 
   it('truncateSessionTitle is codepoint-safe for CJK and emoji', () => {
     expect(truncateSessionTitle('短', 28)).toBe('短');
-    expect(truncateSessionTitle('测'.repeat(30), 10)).toBe(`${'测'.repeat(10)}…`);
+    expect(truncateSessionTitle('测'.repeat(30), 10)).toBe(
+      `${'测'.repeat(10)}…`
+    );
     // emoji 代理对：按码点截断，不出现半个 surrogate
     const emoji = '🙂'.repeat(5);
     const cut = truncateSessionTitle(emoji, 3);
@@ -440,13 +477,16 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
     expect(deriveSessionTitle('/only')).toBe(EMPTY_SESSION_TITLE);
     // 中文不损坏
     expect(deriveSessionTitle('帮我重构 sessionTitle 模块')).toBe(
-      '帮我重构 sessionTitle 模块',
+      '帮我重构 sessionTitle 模块'
     );
     // 超长中文截断
-    const longZh = '这是一段非常非常非常非常非常非常非常非常长的中文用户首条消息用于侧栏';
+    const longZh =
+      '这是一段非常非常非常非常非常非常非常非常长的中文用户首条消息用于侧栏';
     const derived = deriveSessionTitle(longZh);
     expect(derived.endsWith('…')).toBe(true);
-    expect(Array.from(derived.replace(/…$/, '')).length).toBe(SESSION_TITLE_MAX_LEN);
+    expect(Array.from(derived.replace(/…$/, '')).length).toBe(
+      SESSION_TITLE_MAX_LEN
+    );
     // 自定义 maxLen
     expect(deriveSessionTitle('一二三四五六', 4)).toBe('一二三四…');
     // 句末标点洗净
@@ -462,36 +502,40 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
         { sender: 'user', text: '  ' },
         { sender: 'user', text: '\u200B\u200B' },
         { sender: 'user', text: '首条有效' },
-      ]),
+      ])
     ).toBe('首条有效');
     // 纯双向控制 / LRM-RLM 亦跳过，与 sanitize 不可见集对齐
     expect(
       firstUserMessageText([
         { sender: 'user', text: '\u200E\u200F\u202A\u202C' },
         { sender: 'user', text: '真实正文' },
-      ]),
+      ])
     ).toBe('真实正文');
     expect(
-      firstUserMessageText([{ sender: 'user', text: '/cmd 带命令的正文' }]),
+      firstUserMessageText([{ sender: 'user', text: '/cmd 带命令的正文' }])
     ).toBe('/cmd 带命令的正文');
   });
 
   it('withTitleCollisionSuffix appends 2, 3… for Chinese and English', () => {
     expect(withTitleCollisionSuffix('帮我写 PR', [])).toBe('帮我写 PR');
     expect(withTitleCollisionSuffix('帮我写 PR', ['其他'])).toBe('帮我写 PR');
-    expect(withTitleCollisionSuffix('帮我写 PR', ['帮我写 PR'])).toBe('帮我写 PR 2');
+    expect(withTitleCollisionSuffix('帮我写 PR', ['帮我写 PR'])).toBe(
+      '帮我写 PR 2'
+    );
     expect(
-      withTitleCollisionSuffix('帮我写 PR', ['帮我写 PR', '帮我写 PR 2']),
+      withTitleCollisionSuffix('帮我写 PR', ['帮我写 PR', '帮我写 PR 2'])
     ).toBe('帮我写 PR 3');
     // 空 base → 清晰空会话标题再碰撞
     expect(withTitleCollisionSuffix('', [])).toBe(EMPTY_SESSION_TITLE);
     expect(withTitleCollisionSuffix('  ', ['新会话'])).toBe('新会话 2');
     // 英文
-    expect(withTitleCollisionSuffix('Refactor', ['Refactor', 'Refactor 2'])).toBe(
-      'Refactor 3',
-    );
+    expect(
+      withTitleCollisionSuffix('Refactor', ['Refactor', 'Refactor 2'])
+    ).toBe('Refactor 3');
     // existing 含 null/空白忽略
-    expect(withTitleCollisionSuffix('A', [null, undefined, '  ', 'A'])).toBe('A 2');
+    expect(withTitleCollisionSuffix('A', [null, undefined, '  ', 'A'])).toBe(
+      'A 2'
+    );
   });
 
   it('maybeAutoTitleFromMessages optional collision via existingTitles', () => {
@@ -500,21 +544,21 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
     expect(
       maybeAutoTitleFromMessages('新会话', msgs, {
         existingTitles: ['同一问题'],
-      }),
+      })
     ).toBe('同一问题 2');
     // excludeTitle 避免与自身碰撞
     expect(
       maybeAutoTitleFromMessages('同一问题', msgs, {
         existingTitles: ['同一问题', '其他'],
         excludeTitle: '同一问题',
-      }),
+      })
     ).toBe(null); // 非默认标题，不改
     // 默认标题 + 排除旧默认
     expect(
       maybeAutoTitleFromMessages('新会话', msgs, {
         existingTitles: ['新会话', '同一问题'],
         excludeTitle: '新会话',
-      }),
+      })
     ).toBe('同一问题 2');
   });
 
@@ -542,7 +586,9 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
     expect(plain.find((s) => s.id === 'b')?.title).toBe('重复主题');
     expect(plain.find((s) => s.id === 'c')?.title).toBe('用户手改');
 
-    const unique = fillDefaultSessionTitles(sessions, { resolveCollisions: true });
+    const unique = fillDefaultSessionTitles(sessions, {
+      resolveCollisions: true,
+    });
     expect(unique.find((s) => s.id === 'a')?.title).toBe('重复主题');
     expect(unique.find((s) => s.id === 'b')?.title).toBe('重复主题 2');
     // 用户手改不覆盖
@@ -552,19 +598,32 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
   it('empty session title is clear 新会话 — no ghost labels', () => {
     expect(EMPTY_SESSION_TITLE).toBe('新会话');
     expect(deriveSessionTitle('')).toBe('新会话');
-    expect(sessionListDisplayTitle({ title: null as unknown as string, messages: [] })).toBe(
-      '新会话',
+    expect(
+      sessionListDisplayTitle({
+        title: null as unknown as string,
+        messages: [],
+      })
+    ).toBe('新会话');
+    expect(sessionListDisplayTitle({ title: 'Untitled', messages: [] })).toBe(
+      '新会话'
     );
-    expect(sessionListDisplayTitle({ title: 'Untitled', messages: [] })).toBe('新会话');
-    expect(sessionListDisplayTitle({ title: 'No Title', messages: [] })).toBe('新会话');
+    expect(sessionListDisplayTitle({ title: 'No Title', messages: [] })).toBe(
+      '新会话'
+    );
     // 展示层把「未命名*」幽灵回落为清晰「新会话」
-    expect(sessionListDisplayTitle({ title: '未命名', messages: [] })).toBe(EMPTY_SESSION_TITLE);
+    expect(sessionListDisplayTitle({ title: '未命名', messages: [] })).toBe(
+      EMPTY_SESSION_TITLE
+    );
     expect(sessionListDisplayTitle({ title: '未命名会话', messages: [] })).toBe(
-      EMPTY_SESSION_TITLE,
+      EMPTY_SESSION_TITLE
     );
     // 未命名空壳可被 prune
     expect(
-      isEmptyShellSession({ title: '未命名会话', messages: [], isPinned: false }),
+      isEmptyShellSession({
+        title: '未命名会话',
+        messages: [],
+        isPinned: false,
+      })
     ).toBe(true);
     // 不发明「未命名会话」等幽灵
     expect(deriveSessionTitle('/ping')).not.toMatch(/未命名|untitled|ghost/i);

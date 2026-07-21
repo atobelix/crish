@@ -1,12 +1,9 @@
 import { produce } from 'immer';
 import { describe, expect, it, vi } from 'vitest';
 import { GENERAL_FOLDER } from '../api/projectStore';
-import * as sessionTitleApi from '../api/sessionTitle';
-import {
-  createSessionActions,
-  type SessionStoreSlice,
-} from './sessionActions';
+import { createSessionActions, type SessionStoreSlice } from './sessionActions';
 import { buildSessionsById } from './sessionIndex';
+import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import type { SessionMessage, SessionState } from './types';
 
 // setActiveSessionId 正式版会动态 import projectStore 并 dispatch window 事件；
@@ -19,7 +16,9 @@ vi.mock('../api/appMode', async (importOriginal) => {
   };
 });
 
-function makeMessage(partial: Partial<SessionMessage> & Pick<SessionMessage, 'id'>): SessionMessage {
+function makeMessage(
+  partial: Partial<SessionMessage> & Pick<SessionMessage, 'id'>
+): SessionMessage {
   return {
     sender: 'assistant',
     timestamp: 1,
@@ -28,7 +27,7 @@ function makeMessage(partial: Partial<SessionMessage> & Pick<SessionMessage, 'id
 }
 
 function emptyShell(
-  partial: Partial<SessionState> & { id: string },
+  partial: Partial<SessionState> & { id: string }
 ): SessionState {
   return {
     title: '新会话',
@@ -44,12 +43,14 @@ function emptyShell(
 function makeStateFromSessions(
   sessions: SessionState[],
   activeSessionId: string,
+  draftFolder = ''
 ): SessionStoreSlice {
   return {
     sessions,
     sessionsById: buildSessionsById(sessions),
     folderOrder: Array.from(new Set(sessions.map((s) => s.folder))),
     activeSessionId,
+    draftFolder,
     activeAgentId: null,
     panelAgentId: null,
     terminalLines: [],
@@ -107,7 +108,11 @@ function makeHarnessFromState(initial: SessionStoreSlice) {
 describe('sessionActions message no-op short-circuit', () => {
   it('updateMessageText same string does not replace state tree', () => {
     const h = makeHarness([
-      makeMessage({ id: 'm1', text: 'hello', blocks: [{ type: 'text', content: 'hello' }] }),
+      makeMessage({
+        id: 'm1',
+        text: 'hello',
+        blocks: [{ type: 'text', content: 'hello' }],
+      }),
     ]);
     const before = h.getState();
     h.actions.updateMessageText('s1', 'm1', 'hello');
@@ -177,11 +182,13 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({
             id: 'content',
             title: '新会话',
-            messages: [makeMessage({ id: 'm', sender: 'user', text: '有正文' })],
+            messages: [
+              makeMessage({ id: 'm', sender: 'user', text: '有正文' }),
+            ],
           }),
         ],
-        'active',
-      ),
+        'active'
+      )
     );
     h.actions.setSessions(h.getState().sessions);
     const ids = h.getState().sessions.map((s) => s.id);
@@ -197,8 +204,8 @@ describe('sessionActions create/prune paths', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
         [emptyShell({ id: 'active-shell' }), emptyShell({ id: 'other-ghost' })],
-        'active-shell',
-      ),
+        'active-shell'
+      )
     );
     const schedId = h.actions.createSession({
       id: 'wf-sched-1',
@@ -213,7 +220,7 @@ describe('sessionActions create/prune paths', () => {
     expect(st.sessionsById['wf-sched-1']?.title).toBe('定时 · 每日 PR 总结');
     // activate:false 后台建壳不误删用户空壳 / 其它幽灵
     expect(st.sessions.map((s) => s.id).sort()).toEqual(
-      ['active-shell', 'other-ghost', 'wf-sched-1'].sort(),
+      ['active-shell', 'other-ghost', 'wf-sched-1'].sort()
     );
   });
 
@@ -230,8 +237,8 @@ describe('sessionActions create/prune paths', () => {
             messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
           }),
         ],
-        'old-active',
-      ),
+        'old-active'
+      )
     );
     const newId = h.actions.createSession({
       id: 'brand-new',
@@ -252,9 +259,15 @@ describe('sessionActions create/prune paths', () => {
   it('createSession does not reuse scheduled empty-looking session as shell', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
-        [emptyShell({ id: 'sched', title: '定时 · 任务', folder: GENERAL_FOLDER })],
-        'sched',
-      ),
+        [
+          emptyShell({
+            id: 'sched',
+            title: '定时 · 任务',
+            folder: GENERAL_FOLDER,
+          }),
+        ],
+        'sched'
+      )
     );
     // 无 explicit id：若复用逻辑误把定时当壳，会返回 sched
     const id = h.actions.createSession({
@@ -276,18 +289,20 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({ id: 'b' }),
           emptyShell({ id: 'sched', title: '定时 · x' }),
         ],
-        'a',
-      ),
+        'a'
+      )
     );
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     expect(st.activeSessionId).toBe('b');
     // 切换只改焦点，空「新会话」仍保留（用户可再点回来）
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(['a', 'b', 'sched'].sort());
+    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+      ['a', 'b', 'sched'].sort()
+    );
   });
 
-  it('createSession activate:true reuses active empty shell and prunes peers', () => {
-    // demo 模式 createSession 固定 folder=常规会话；壳必须同 folder 才可复用
+  it('createSession activate:true always mints (never reuses empty shell)', () => {
+    // draft 契约：无 reuse；mint 新 id 且保留既有空壳（连建不丢）
     const demoFolder = '常规会话';
     const h = makeHarnessFromState(
       makeStateFromSessions(
@@ -301,18 +316,19 @@ describe('sessionActions create/prune paths', () => {
             messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
           }),
         ],
-        'active-shell',
-      ),
+        'active-shell'
+      )
     );
-    // 无 explicit id：应复用当前活动空壳，而非再 mint 新 id
     const id = h.actions.createSession({ activate: true });
-    expect(id).toBe('active-shell');
+    expect(id).not.toBe('active-shell');
+    expect(id).not.toBe('peer-ghost');
     const st = h.getState();
-    expect(st.activeSessionId).toBe('active-shell');
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
-      ['active-shell', 'content'].sort(),
-    );
-    expect(st.sessionsById['peer-ghost']).toBeUndefined();
+    expect(st.activeSessionId).toBe(id);
+    expect(st.sessionsById[id]).toBeDefined();
+    // mint 不 prune peer / 旧活动空壳
+    expect(st.sessionsById['active-shell']).toBeDefined();
+    expect(st.sessionsById['peer-ghost']).toBeDefined();
+    expect(st.sessionsById.content).toBeDefined();
   });
 
   it('createSession activate:false without id never reuses empty shell', () => {
@@ -320,8 +336,8 @@ describe('sessionActions create/prune paths', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
         [emptyShell({ id: 'active-shell', folder: demoFolder })],
-        'active-shell',
-      ),
+        'active-shell'
+      )
     );
     const id = h.actions.createSession({
       title: '后台壳',
@@ -345,14 +361,14 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({ id: 'pinned-ghost', isPinned: true }),
           emptyShell({ id: 'b' }),
         ],
-        'a',
-      ),
+        'a'
+      )
     );
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     // 切换不 prune：空壳 a 与 pinned 都保留
     expect(st.sessions.map((s) => s.id).sort()).toEqual(
-      ['a', 'b', 'pinned-ghost'].sort(),
+      ['a', 'b', 'pinned-ghost'].sort()
     );
   });
 
@@ -364,8 +380,8 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({ id: 'target' }),
           emptyShell({ id: 'sched', title: '定时 · keep' }),
         ],
-        'old',
-      ),
+        'old'
+      )
     );
     const id = h.actions.createSession({
       id: 'target',
@@ -375,11 +391,11 @@ describe('sessionActions create/prune paths', () => {
     const st = h.getState();
     expect(st.activeSessionId).toBe('target');
     expect(st.sessions.map((s) => s.id).sort()).toEqual(
-      ['sched', 'target'].sort(),
+      ['sched', 'target'].sort()
     );
   });
 
-  it('createSession aborts stale reuse when shell is no longer empty (race)', () => {
+  it('createSession never swallows content session as shell', () => {
     const demoFolder = '常规会话';
     const h = makeHarnessFromState(
       makeStateFromSessions(
@@ -387,19 +403,14 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({
             id: 'was-shell',
             folder: demoFolder,
-            // 已有正文：find 若仍返回该 id（竞态脏读），draft 内须拒绝复用
             messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
           }),
         ],
-        'was-shell',
-      ),
+        'was-shell'
+      )
     );
-    const spy = vi
-      .spyOn(sessionTitleApi, 'findReusableEmptyShell')
-      .mockReturnValue('was-shell');
     const id = h.actions.createSession({ activate: true });
-    spy.mockRestore();
-    // 不得吞掉已有正文的会话
+    // mint 新 id，不改动已有正文
     expect(id).not.toBe('was-shell');
     const st = h.getState();
     expect(st.sessionsById['was-shell']).toBeDefined();
@@ -408,32 +419,7 @@ describe('sessionActions create/prune paths', () => {
     expect(st.sessionsById[id]).toBeDefined();
   });
 
-  it('createSession aborts stale reuse when shell folder no longer matches', () => {
-    const demoFolder = '常规会话';
-    const h = makeHarnessFromState(
-      makeStateFromSessions(
-        [emptyShell({ id: 'other-proj', folder: 'project-x' })],
-        '',
-      ),
-    );
-    const spy = vi
-      .spyOn(sessionTitleApi, 'findReusableEmptyShell')
-      .mockReturnValue('other-proj');
-    const id = h.actions.createSession({
-      activate: true,
-      // demo 模式 find/复检 folder 固定为 常规会话
-    });
-    spy.mockRestore();
-    // 拒绝跨 folder 脏复用；mint 新 id 并激活
-    expect(id).not.toBe('other-proj');
-    expect(h.getState().activeSessionId).toBe(id);
-    // mint 的新壳在 demo 下归 常规会话
-    expect(h.getState().sessionsById[id]?.folder).toBe(demoFolder);
-    // mint 不跨剪其它 folder 空壳
-    expect(h.getState().sessionsById['other-proj']).toBeDefined();
-  });
-
-  it('createSession activate:true reuses peer empty shell when active has content', () => {
+  it('createSession mints even when peer empty shell exists', () => {
     const demoFolder = '常规会话';
     const h = makeHarnessFromState(
       makeStateFromSessions(
@@ -446,16 +432,95 @@ describe('sessionActions create/prune paths', () => {
           }),
           emptyShell({ id: 'peer-shell', folder: demoFolder }),
         ],
-        'active-content',
-      ),
+        'active-content'
+      )
     );
     const id = h.actions.createSession({ activate: true });
-    expect(id).toBe('peer-shell');
+    // 草稿契约：不复用 peer，始终 mint
+    expect(id).not.toBe('peer-shell');
+    expect(id).not.toBe('active-content');
     const st = h.getState();
-    expect(st.activeSessionId).toBe('peer-shell');
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
-      ['active-content', 'peer-shell'].sort(),
+    expect(st.activeSessionId).toBe(id);
+    expect(st.sessionsById['peer-shell']).toBeDefined();
+    expect(st.sessionsById['active-content']).toBeDefined();
+  });
+
+  it('enterDraftMode sets sentinel without growing sessions', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'hist',
+            title: '历史',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'hist'
+      )
     );
+    h.actions.enterDraftMode('proj-a');
+    const st = h.getState();
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(isPendingDraft(st.activeSessionId)).toBe(true);
+    expect(st.draftFolder).toBe('proj-a');
+    expect(st.sessions).toHaveLength(1);
+    expect(st.sessionsById.hist).toBeDefined();
+    expect(st.activeAgentId).toBeNull();
+    expect(st.panelAgentId).toBeNull();
+  });
+
+  it('setDraftFolder / clearDraft manage draft binding', () => {
+    const h = makeHarnessFromState(makeStateFromSessions([], ''));
+    h.actions.enterDraftMode('folder-1');
+    h.actions.setDraftFolder('folder-2');
+    expect(h.getState().draftFolder).toBe('folder-2');
+    h.actions.clearDraft();
+    const st = h.getState();
+    expect(st.draftFolder).toBe('');
+    expect(st.activeSessionId).toBe('');
+  });
+
+  it('commitDraftIfNeeded mints from draft; no-op when real active', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'real',
+            title: '真会话',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
+          }),
+        ],
+        'real'
+      )
+    );
+    // 非草稿：返回当前真实 active
+    expect(h.actions.commitDraftIfNeeded()).toBe('real');
+    expect(h.getState().sessions).toHaveLength(1);
+
+    h.actions.enterDraftMode('proj-commit');
+    expect(h.getState().sessions).toHaveLength(1); // 仍不增
+    const id = h.actions.commitDraftIfNeeded({ title: '首条标题' });
+    expect(id).toBeTruthy();
+    expect(isPendingDraft(id)).toBe(false);
+    const st = h.getState();
+    expect(st.activeSessionId).toBe(id);
+    expect(st.draftFolder).toBe('');
+    expect(st.sessionsById[id]?.folder).toBe('常规会话'); // demo 模式
+    expect(st.sessionsById[id]?.title).toBe('首条标题');
+    // 历史 + 新 mint
+    expect(st.sessions.map((s) => s.id).sort()).toEqual(['real', id].sort());
+  });
+
+  it('setActiveSessionId allows pending draft and clears draftFolder on real switch', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 'a' })], 'a')
+    );
+    h.actions.enterDraftMode('f1');
+    expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    h.actions.setActiveSessionId('a');
+    const st = h.getState();
+    expect(st.activeSessionId).toBe('a');
+    expect(st.draftFolder).toBe('');
   });
 
   it('setActiveSessionId switches terminal view without dropping peer shells', () => {
@@ -466,8 +531,8 @@ describe('sessionActions create/prune paths', () => {
           emptyShell({ id: 'b' }),
           emptyShell({ id: 'ghost' }),
         ],
-        'a',
-      ),
+        'a'
+      )
     );
     const st0 = h.getState();
     st0.terminalBySession = {
@@ -478,7 +543,9 @@ describe('sessionActions create/prune paths', () => {
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     // 会话与各会话 terminal 缓冲均保留；仅当前 terminalLines 切到 b
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(['a', 'b', 'ghost'].sort());
+    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+      ['a', 'b', 'ghost'].sort()
+    );
     expect(st.terminalBySession.ghost).toEqual(['keep-ghost']);
     expect(st.terminalBySession.a).toEqual(['keep-a']);
     expect(st.terminalBySession.b).toEqual(['keep-b']);
@@ -496,8 +563,8 @@ describe('sessionActions create/prune paths', () => {
           }),
           emptyShell({ id: 'ghost' }),
         ],
-        'src',
-      ),
+        'src'
+      )
     );
     h.actions.branchSession('src', '分叉标题');
     const st = h.getState();
@@ -522,8 +589,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
           emptyShell({ id: 'victim' }),
           emptyShell({ id: 'ghost' }),
         ],
-        'victim',
-      ),
+        'victim'
+      )
     );
     h.getState().terminalBySession = {
       victim: ['line'],
@@ -546,7 +613,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
 
   it('deleteSession empty / missing is a guarded no-op', () => {
     const h = makeHarnessFromState(
-      makeStateFromSessions([emptyShell({ id: 'only' })], 'only'),
+      makeStateFromSessions([emptyShell({ id: 'only' })], 'only')
     );
     expect(h.actions.deleteSession('')).toBe(false);
     expect(h.actions.deleteSession('nope')).toBe(false);
@@ -556,7 +623,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
 
   it('setActiveSessionId ignores unknown id (no ghost active)', () => {
     const h = makeHarnessFromState(
-      makeStateFromSessions([emptyShell({ id: 'a' })], 'a'),
+      makeStateFromSessions([emptyShell({ id: 'a' })], 'a')
     );
     h.actions.setActiveSessionId('missing-id');
     expect(h.getState().activeSessionId).toBe('a');
@@ -577,8 +644,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
             messages: [makeMessage({ id: 'm2', sender: 'user', text: 'b' })],
           }),
         ],
-        'a',
-      ),
+        'a'
+      )
     );
     h.actions.archiveSession('a');
     const st = h.getState();
@@ -588,10 +655,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
 
   it('renameSession sanitizes CJK and strips control / slash noise', () => {
     const h = makeHarnessFromState(
-      makeStateFromSessions(
-        [emptyShell({ id: 's1', title: '新会话' })],
-        's1',
-      ),
+      makeStateFromSessions([emptyShell({ id: 's1', title: '新会话' })], 's1')
     );
     h.actions.renameSession('s1', '  /cmd  \u200B帮我重构模块。  ');
     expect(h.getState().sessionsById.s1.title).toBe('帮我重构模块');
@@ -627,25 +691,30 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
 
   it('addMessage auto-titles default shell from first Chinese user text', () => {
     const h = makeHarnessFromState(
-      makeStateFromSessions(
-        [emptyShell({ id: 's1', title: '新会话' })],
-        's1',
-      ),
+      makeStateFromSessions([emptyShell({ id: 's1', title: '新会话' })], 's1')
     );
-    h.actions.addMessage('ws', 's1', makeMessage({
-      id: 'm1',
-      sender: 'user',
-      text: '帮我写一个排序函数',
-    }));
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'm1',
+        sender: 'user',
+        text: '帮我写一个排序函数',
+      })
+    );
     expect(h.getState().sessionsById.s1.title).toContain('帮我写');
 
     // 用户手改后不再覆盖
     h.actions.renameSession('s1', '我的标题');
-    h.actions.addMessage('ws', 's1', makeMessage({
-      id: 'm2',
-      sender: 'user',
-      text: '另一句',
-    }));
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'm2',
+        sender: 'user',
+        text: '另一句',
+      })
+    );
     expect(h.getState().sessionsById.s1.title).toBe('我的标题');
   });
 
@@ -659,8 +728,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
             messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
           }),
         ],
-        'src',
-      ),
+        'src'
+      )
     );
     // 模拟侧栏 agent 焦点
     const st0 = h.getState();

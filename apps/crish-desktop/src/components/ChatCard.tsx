@@ -21,7 +21,7 @@ import {
   addMessage,
   archiveSession,
   branchSession,
-  createSession,
+  enterDraftMode,
   getSessionStoreState,
   openSettings,
   patchSession,
@@ -70,11 +70,8 @@ import {
 import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
 import { extractCommandForMatch } from '../api/commandPermissions';
 import { messageMatchesSearch } from '../api/sessionSearch';
-import {
-  EMPTY_SESSION_TITLE,
-  findReusableEmptyShell,
-  isEmptyShellSession,
-} from '../api/sessionTitle';
+import { isEmptyShellSession } from '../api/sessionTitle';
+import { isPendingDraft } from '../store/draftSession';
 import { isFirstRunOverlayOpen } from './FirstRunWizard';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 
@@ -160,9 +157,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     const msgFilterInputRef = useRef<HTMLInputElement>(null);
     /** 远程水合超时后放行空态，避免失败路径永久空白 */
     const [hydrateTimedOut, setHydrateTimedOut] = useState(false);
-    /** createSession 刚剪掉多余空壳时的短暂旁注 */
-    const [shellDidPrunePeers, setShellDidPrunePeers] = useState(false);
-    const shellPruneCueTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
       const offs = [
@@ -286,11 +280,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       setShowMsgFilter(false);
       setApprovalBusy(false);
       setHydrateTimedOut(false);
-      setShellDidPrunePeers(false);
-      if (shellPruneCueTimerRef.current != null) {
-        window.clearTimeout(shellPruneCueTimerRef.current);
-        shellPruneCueTimerRef.current = null;
-      }
     }, [activeSessionId]);
 
     useEffect(() => {
@@ -795,24 +784,16 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
     const messagesLoading = messagesLoadingCandidate && !hydrateTimedOut;
 
-    /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」） */
+    /** 当前活动即为默认可复用空壳（旁注「当前为空白会话」）；草稿哨兵不算 */
     const shellActiveIsEmpty = useSessionField((s) => {
+      if (isPendingDraft(s.activeSessionId)) return false;
       const active = s.sessionsById[s.activeSessionId];
       return active ? isEmptyShellSession(active) : false;
     });
-    /**
-     * 无活动会话时：若已有可复用空壳，新建将复用而非再堆幽灵。
-     * 有活动会话时由 shellActiveIsEmpty 表达，不叠 willReuse。
-     */
-    const shellWillReuse = useSessionField((s) => {
-      const active = s.sessionsById[s.activeSessionId];
-      if (s.activeSessionId && active) return false;
-      const sessions = s.sessions;
-      return Boolean(findReusableEmptyShell(sessions));
-    });
 
     const emptyKind = resolveChatEmptyKind({
-      hasActiveSession: Boolean(activeSessionId),
+      hasActiveSession:
+        Boolean(activeSessionId) && !isPendingDraft(activeSessionId),
       messageCount: messages.length,
       displayCount: displayMessages.length,
       filterQuery: localMsgFilter,
@@ -832,22 +813,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             : '对话主区';
 
     const handleCreateSessionFromEmpty = useCallback(() => {
-      const before = getSessionStoreState().sessions;
-      const ghostBefore = before.filter((s) => isEmptyShellSession(s)).length;
-      createSession({ title: EMPTY_SESSION_TITLE });
-      const after = getSessionStoreState().sessions;
-      const ghostAfter = after.filter((s) => isEmptyShellSession(s)).length;
-      // 剪掉了多余空白壳：短暂展示「已清理多余空白会话」旁注（中文 cue）
-      if (ghostBefore > 1 && ghostAfter < ghostBefore) {
-        setShellDidPrunePeers(true);
-        if (shellPruneCueTimerRef.current != null) {
-          window.clearTimeout(shellPruneCueTimerRef.current);
-        }
-        shellPruneCueTimerRef.current = window.setTimeout(() => {
-          setShellDidPrunePeers(false);
-          shellPruneCueTimerRef.current = null;
-        }, 4000);
-      }
+      enterDraftMode();
     }, []);
 
     const composerElement = (
@@ -1018,8 +984,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               firstRunOpen={firstRunOpen}
               engineOk={engineOk}
               messagesLoading={messagesLoading}
-              shellWillReuse={shellWillReuse}
-              shellDidPrunePeers={shellDidPrunePeers}
               shellActiveIsEmpty={shellActiveIsEmpty}
               showProjectPicker={showProjectPicker}
               onShowProjectPicker={setShowProjectPicker}

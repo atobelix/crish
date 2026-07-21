@@ -20,11 +20,13 @@ import {
   listProjects,
   type ProjectEntry,
 } from '../api/projectStore';
+import { sessionListDisplayTitle } from '../api/sessionTitle';
 import {
-  EMPTY_SESSION_TITLE,
-  sessionListDisplayTitle,
-} from '../api/sessionTitle';
-import { getSessionStoreState } from '../api/storeAccess';
+  enterDraftMode,
+  getSessionStoreState,
+  setDraftFolder,
+} from '../api/storeAccess';
+import { isPendingDraft } from '../store/draftSession';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 import { isUpdateAvailable } from '../api/updateStore';
 import { clearAgentPanelFocus } from '../api/openAgentPanel';
@@ -188,7 +190,7 @@ h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px
  * - 导航文案安静；分区标签为 microcaps
  * - 项目 = 文件夹；未分组时对话为扁平最近列表
  * - 底栏：设置 + 可选开发模式芯片，无网关营销文案
- * - 新建仅走 store.createSession（复用空壳，防幽灵会话）
+ * - 新建仅走 enterDraftMode（sessions 不增；首条发送再 commit）
  */
 export const Sidebar: React.FC<SidebarProps> = React.memo(
   ({
@@ -208,7 +210,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
     const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
     const setActiveSessionId = useLayoutStore((s) => s.setActiveSessionId);
-    const createSession = useLayoutStore((s) => s.createSession);
     const pinSession = useLayoutStore((s) => s.pinSession);
     const unpinSession = useLayoutStore((s) => s.unpinSession);
     const archiveSession = useLayoutStore((s) => s.archiveSession);
@@ -260,7 +261,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const menuRef = useRef<HTMLDivElement>(null);
     const sortMenuRef = useRef<HTMLDivElement>(null);
     const sidebarRef = useRef<HTMLDivElement>(null);
-    /** 连点「新对话」防抖：createSession 已复用空壳，仍避免同帧重复 emit */
+    /** 连点「新对话」防抖：enterDraftMode 不增 sessions，仍避免同帧重复 emit */
     const newSessionLockRef = useRef(false);
 
     // 持久化排序/分组/筛选，刷新后恢复
@@ -509,8 +510,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     );
 
     /**
-     * 唯一新建入口：仅 store.createSession（内部复用空壳 + 剪枝同伴，误触不刷幽灵列表）。
-     * 不自造 session id、不走 slash/聊天流。标题统一 EMPTY_SESSION_TITLE。
+     * 唯一新建入口：enterDraftMode（sessions 不增条目；首条发送再 commit）。
+     * 不自造 session id、不走 slash/聊天流。
      * 若当前筛「仅置顶」，切回全部，否则新建未置顶会话会被 partition 滤掉、侧栏无反馈。
      * 再扫：展开「对话」区，保证活动空壳在窗口化/折叠后仍可见。
      */
@@ -520,8 +521,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       try {
         if (filterType === 'pinned') setFilterType('all');
         setGeneralCollapsed(false);
-        // activate 默认 true → 复用同 folder 空壳；无则 mint 一条「新会话」
-        createSession({ title: EMPTY_SESSION_TITLE });
+        // 用户「新对话」→ 草稿哨兵；folder 绑当前活动项目
+        enterDraftMode(getActiveProjectId() || undefined);
         setActiveNav('chat');
         setRenamingSessionId(null);
         emitUiEvent('open-chat');
@@ -531,7 +532,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           newSessionLockRef.current = false;
         });
       }
-    }, [createSession, filterType]);
+    }, [filterType]);
 
     const handleCommitRename = useCallback(
       (sessionId: string, title: string) => {
@@ -573,6 +574,10 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const handleOpenProject = useCallback((id: string) => {
       setActiveProjectId(id);
       setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
+      // 草稿态切项目：只更新 folder 绑定，不 mint 真会话
+      if (isPendingDraft(getSessionStoreState().activeSessionId)) {
+        setDraftFolder(id);
+      }
     }, []);
 
     const handleToggleProjectCollapsed = useCallback((id: string) => {

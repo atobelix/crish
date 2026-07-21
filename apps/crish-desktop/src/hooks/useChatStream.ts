@@ -9,7 +9,9 @@ import {
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionMessage } from '../store/layoutStore';
 import { getSessionById } from '../store/sessionStore';
+import { isPendingDraft } from '../store/draftSession';
 import {
+  commitDraftIfNeeded,
   createSession as createSessionCmd,
   getActiveSessionId,
   openSettings,
@@ -164,7 +166,9 @@ export function resolveStreamSessionId(
   const pick = (v?: string | null): string | null => {
     if (typeof v !== 'string') return null;
     const t = v.trim();
-    return t ? t : null;
+    // 草稿哨兵无真实 session 条目，流式路径不得把它当 sid
+    if (!t || isPendingDraft(t)) return null;
+    return t;
   };
   return pick(override) ?? pick(activeId);
 }
@@ -1539,12 +1543,23 @@ export function useChatStream(
         const globalText = rulesLinesToText(next, '# 全局规则');
         void syncRulesToDaemon({ globalText });
 
-        // 本地空壳复用 / 新建；绝不 invent 远程 id 写时间线
-        let learnSid = resolveStreamSessionId(null, activeSessionId);
-        if (!learnSid) {
-          learnSid = createSessionCmd({ title: '新会话' });
+        // 草稿则 commit；否则解析 active；仍无则 mint。绝不 invent 远程 id 写时间线
+        let learnSid = '';
+        if (isPendingDraft(activeSessionId)) {
+          learnSid =
+            commitDraftIfNeeded({
+              title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+            }) || '';
+        } else {
+          learnSid = resolveStreamSessionId(null, activeSessionId) || '';
+          if (!learnSid) {
+            learnSid =
+              commitDraftIfNeeded() ||
+              createSessionCmd({ title: '新会话' }) ||
+              '';
+          }
         }
-        learnSid = resolveStreamSessionId(learnSid, null);
+        learnSid = resolveStreamSessionId(learnSid, null) || '';
         if (
           !learnSid ||
           !canStreamLocalSession(learnSid, !!getSessionById(learnSid))
@@ -1582,10 +1597,20 @@ export function useChatStream(
     }
 
     // 对话流路径才创建会话（导航 / 缺参 / skill 失败 / learn 已全部 return）
-    // createSession 只复用本地空壳或 mint 本地 id，不 invent 远程 daemon 壳
-    let sessionId = resolveStreamSessionId(null, activeSessionId);
-    if (!sessionId) {
-      sessionId = createSessionCmd({ title: '新会话' }) || '';
+    // pending draft → commit mint；无活动 → commit 或 createSession；不 invent 远程壳
+    let sessionId = '';
+    if (isPendingDraft(activeSessionId)) {
+      sessionId =
+        commitDraftIfNeeded({
+          title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+        }) || '';
+    } else {
+      sessionId = resolveStreamSessionId(null, activeSessionId) || '';
+      if (!sessionId) {
+        // 无活动会话：先草稿再提交，或直接 createSession mint
+        sessionId =
+          commitDraftIfNeeded() || createSessionCmd({ title: '新会话' }) || '';
+      }
     }
     if (
       !sessionId ||

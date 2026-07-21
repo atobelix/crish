@@ -3,7 +3,13 @@ import { immer } from 'zustand/middleware/immer';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
-import type { Settings, CronJob, McpServer, ProviderInfo } from '../api/clientApi';
+import { withAutoIndex } from './autoIndexMiddleware';
+import type {
+  Settings,
+  CronJob,
+  McpServer,
+  ProviderInfo,
+} from '../api/clientApi';
 import { isDemoMode } from '../api/appMode';
 import { persistAllSessions } from '../api/sessionPersistence';
 import {
@@ -38,7 +44,10 @@ import type {
   CardGroupState,
   SettingsTabType,
 } from './types';
-import { MAX_TERMINAL_SESSIONS, MAX_DIFF_FILES } from '@crish/shared-utils/browser';
+import {
+  MAX_TERMINAL_SESSIONS,
+  MAX_DIFF_FILES,
+} from '@crish/shared-utils/browser';
 import {
   appendTerminalLine,
   collapseToolColumnToTabs,
@@ -60,19 +69,22 @@ import {
   type DraggedTabState,
 } from './workspaceActions';
 import { buildSessionsById } from './sessionIndex';
+import { isPendingDraft } from './draftSession';
 
 // ── Type fidelity: named state shapes (no inline litter / drift) ─────────────
 
 /** UI 密度三档 — 与 tokens `[data-ui-size]` / 设置外观一致 */
 export type UiSize = 'small' | 'medium' | 'large';
 
-export const UI_SIZE_IDS = ['small', 'medium', 'large'] as const satisfies readonly UiSize[];
+export const UI_SIZE_IDS = [
+  'small',
+  'medium',
+  'large',
+] as const satisfies readonly UiSize[];
 
 export const DEFAULT_UI_SIZE: UiSize = 'medium';
 
-export type {
-  ShellChromeMode,
-} from '../api/shellChrome';
+export type { ShellChromeMode } from '../api/shellChrome';
 export {
   DEFAULT_SHELL_CHROME,
   SHELL_CHROME_IDS,
@@ -196,7 +208,7 @@ export function isSettingsTabType(v: unknown): v is SettingsTabType {
 /** 未知 tab → fallback（默认 profile）；不静默落到非法 id */
 export function parseSettingsTab(
   raw: unknown,
-  fallback: SettingsTabType = DEFAULT_SETTINGS_TAB,
+  fallback: SettingsTabType = DEFAULT_SETTINGS_TAB
 ): SettingsTabType {
   return isSettingsTabType(raw) ? raw : fallback;
 }
@@ -204,7 +216,7 @@ export function parseSettingsTab(
 /** 清洗 token 用量：非负、有限；缺失字段回落 base */
 export function sanitizeTokenUsage(
   raw: Partial<TokenUsageState> | TokenUsageState | null | undefined,
-  base: TokenUsageState = DEFAULT_TOKEN_USAGE,
+  base: TokenUsageState = DEFAULT_TOKEN_USAGE
 ): TokenUsageState {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -225,7 +237,7 @@ export function sanitizeTokenUsage(
 }
 
 function isWorkerLike(
-  w: unknown,
+  w: unknown
 ): w is { id: string; taskName?: unknown; elapsedSeconds?: unknown } {
   if (w == null || typeof w !== 'object') return false;
   if (!('id' in w)) return false;
@@ -279,7 +291,9 @@ function readStoredTabModeEnabled(): boolean {
  * 去掉浮层/别名幽灵卡（settings、runtime 不进列；browser→preview；plan→tasks）。
  * 空 group / 空工具列剪掉；始终保证至少一列 chat，否则回落 createDefaultWorkspace。
  */
-export function stripGhostPanelsFromWorkspace(ws: WorkspaceState): WorkspaceState {
+export function stripGhostPanelsFromWorkspace(
+  ws: WorkspaceState
+): WorkspaceState {
   const nextColumns: ColumnState[] = [];
 
   for (const col of ws.columns) {
@@ -330,7 +344,7 @@ export function stripGhostPanelsFromWorkspace(ws: WorkspaceState): WorkspaceStat
   }
   // 保证至少一列含 chat 卡
   const hasChatCard = nextColumns.some((col) =>
-    col.groups.some((g) => g.cards.some((c) => c.id === 'chat')),
+    col.groups.some((g) => g.cards.some((c) => c.id === 'chat'))
   );
   if (!hasChatCard) {
     return createDefaultWorkspace(ws.id || DEFAULT_WORKSPACE_ID);
@@ -340,7 +354,7 @@ export function stripGhostPanelsFromWorkspace(ws: WorkspaceState): WorkspaceStat
 
 /** 非空工作区种子：默认 id + 去 ghost 面板 */
 export function seedInitialWorkspaces(
-  id: string = DEFAULT_WORKSPACE_ID,
+  id: string = DEFAULT_WORKSPACE_ID
 ): WorkspaceState[] {
   return [stripGhostPanelsFromWorkspace(createDefaultWorkspace(id))];
 }
@@ -348,7 +362,7 @@ export function seedInitialWorkspaces(
 /** 空数组 / null → 重种；否则逐区 strip ghost 后若仍空则重种 */
 export function ensureNonEmptyWorkspaces(
   workspaces: WorkspaceState[] | null | undefined,
-  id: string = DEFAULT_WORKSPACE_ID,
+  id: string = DEFAULT_WORKSPACE_ID
 ): WorkspaceState[] {
   if (!workspaces || workspaces.length === 0) {
     return seedInitialWorkspaces(id);
@@ -360,7 +374,7 @@ export function ensureNonEmptyWorkspaces(
 /** activeWorkspaceIndex 夹到 [0, len-1]；空切片视为 0 */
 export function clampActiveWorkspaceIndex(
   workspaces: readonly WorkspaceState[],
-  index: number,
+  index: number
 ): number {
   if (workspaces.length === 0) return 0;
   const i = finiteNumber(index, 0);
@@ -369,7 +383,7 @@ export function clampActiveWorkspaceIndex(
 
 /**
  * 会话种子后处理：sessionsById 对齐、active 仅在存在时保留、
- * 空列表无 ghost active；folderOrder 去空串。
+ * 空列表无 ghost active；pending draft 哨兵归一为空；folderOrder 去空串。
  */
 export function sanitizeSessionSeed(seed: {
   sessions: SessionState[];
@@ -385,6 +399,10 @@ export function sanitizeSessionSeed(seed: {
   const sessionsById = buildSessionsById(sessions);
   let activeSessionId =
     typeof seed.activeSessionId === 'string' ? seed.activeSessionId : '';
+  // 草稿不落盘/启动归一：pending 哨兵 → 无活动
+  if (isPendingDraft(activeSessionId)) {
+    activeSessionId = '';
+  }
   if (!activeSessionId || !sessionsById[activeSessionId]) {
     activeSessionId = '';
   }
@@ -419,6 +437,8 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   sessionsById: Record<string, SessionState>;
   folderOrder: string[];
   activeSessionId: string;
+  /** 草稿态绑定的 folder；非草稿为 '' */
+  draftFolder: string;
   /** 当前聚焦的子 agent（null = 看主对话） */
   activeAgentId: string | null;
   /** 右侧「协作 agent」面板要展示的 agent id */
@@ -445,7 +465,9 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   /** 本轮工具产生的多文件 diff（H2）；H3 可接 git-diff */
   diffFiles: FileDiff[];
   setActiveDiffSource: (diff: FileDiff | null) => void;
-  setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
+  setDiffFiles: (
+    files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])
+  ) => void;
   pushDiffFile: (diff: FileDiff) => void;
   /** 从变更列表移除（拒绝 / 已应用后清理） */
   removeDiffFile: (filePath: string) => void;
@@ -515,259 +537,346 @@ export const useLayoutStore = create<LayoutStore>()(
   withDevtools(
     withLogger(
       withPersist(
-        immer((set, get) => ({
-    workspaces: _initialWorkspaces,
-    activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
-    tabModeEnabled: _initialTabMode,
-    uiSize: _initialUiSize,
-    shellChromeMode: _initialShellChrome,
-    chatMainSurface: 'chat',
-    sidebarCollapsed: false,
-    hydrationComplete: false,
-    sessions: _sessionSeed.sessions,
-    sessionsById: _sessionSeed.sessionsById,
-    folderOrder: _sessionSeed.folderOrder,
-    activeSessionId: _sessionSeed.activeSessionId,
-    // 无活动会话时绝不挂 ghost agent 焦点
-    activeAgentId: null,
-    panelAgentId: null,
-    draggedTab: null,
-    dropPreview: null,
+        withAutoIndex(
+          immer((set, get) => ({
+            workspaces: _initialWorkspaces,
+            activeWorkspaceIndex: clampActiveWorkspaceIndex(
+              _initialWorkspaces,
+              0
+            ),
+            tabModeEnabled: _initialTabMode,
+            uiSize: _initialUiSize,
+            shellChromeMode: _initialShellChrome,
+            chatMainSurface: 'chat',
+            sidebarCollapsed: false,
+            hydrationComplete: false,
+            sessions: _sessionSeed.sessions,
+            sessionsById: _sessionSeed.sessionsById,
+            folderOrder: _sessionSeed.folderOrder,
+            activeSessionId: _sessionSeed.activeSessionId,
+            draftFolder: '',
+            // 无活动会话时绝不挂 ghost agent 焦点
+            activeAgentId: null,
+            panelAgentId: null,
+            draggedTab: null,
+            dropPreview: null,
 
-    showSettingsOverlay: false,
-    settingsActiveTab: DEFAULT_SETTINGS_TAB,
-    // 与设置页 / Composer 共用；hydrate 时 planModeEnabled 必须与之一致
-    permissionMode: _initialPermissionMode,
+            showSettingsOverlay: false,
+            settingsActiveTab: DEFAULT_SETTINGS_TAB,
+            // 与设置页 / Composer 共用；hydrate 时 planModeEnabled 必须与之一致
+            permissionMode: _initialPermissionMode,
 
-    activeDiffSource: null,
-    diffFiles: [],
-    setActiveDiffSource: (diff) => set((state) => {
-      state.activeDiffSource = diff;
-      if (diff) {
-        // 同步进列表（去重 path）
-        upsertDiffFile(state.diffFiles, diff);
-      }
-    }),
-    setDiffFiles: (files) => set((state) => {
-      const next = typeof files === 'function'
-        ? (files as (prev: FileDiff[]) => FileDiff[])(state.diffFiles)
-        : files;
-      state.diffFiles = Array.isArray(next) ? next : [];
-      state.activeDiffSource = state.diffFiles[0] || null;
-    }),
-    pushDiffFile: (diff) => set((state) => {
-      upsertDiffFile(state.diffFiles, diff);
-      state.activeDiffSource = diff;
-    }),
-    removeDiffFile: (filePath) => set((state) => {
-      const path = filePath || '';
-      state.diffFiles = state.diffFiles.filter((f) => f.filePath !== path);
-      if (state.activeDiffSource?.filePath === path) {
-        state.activeDiffSource = state.diffFiles[0] || null;
-      }
-    }),
-    // 刷新后若 permissionMode=plan，ribbon 与引擎需同步点亮（与 permissionMode 同源）
-    planModeEnabled: planModeEnabledFor(_initialPermissionMode),
-    setPermissionMode: (mode) => {
-      set((state) => {
-        state.permissionMode = mode;
-        state.planModeEnabled = planModeEnabledFor(mode);
-        state.planApproved = false;
-      });
-      persistPermissionMode(mode);
-    },
-    setPlanModeEnabled: (enabled) => {
-      let nextMode: PermissionMode = 'ask';
-      set((state) => {
-        // 双向对齐：侧栏/ribbon 开关不得与 permissionMode 分叉
-        nextMode = permissionModeAfterPlanToggle(state.permissionMode, enabled);
-        state.permissionMode = nextMode;
-        state.planModeEnabled = planModeEnabledFor(nextMode);
-        // 与 setPermissionMode 一致：切换时重置「批准执行」
-        state.planApproved = false;
-      });
-      // 与 setPermissionMode 同一持久化入口，保证设置页 ↔ daemon 读同一 key
-      persistPermissionMode(nextMode);
-    },
-    planApproved: false,
-    setPlanApproved: (approved) => set((state) => {
-      state.planApproved = approved;
-    }),
-    commandPermissions: loadCommandPermissions(),
-    addCommandPermission: (cmd) =>
-      set((state) => {
-        state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
-      }),
-    removeCommandPermission: (cmd: string) =>
-      set((state) => {
-        state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
-      }),
-    setCommandPermissions: (list: string[]) =>
-      set((state) => {
-        const next = Array.isArray(list)
-          ? list.filter((c) => typeof c === 'string')
-          : [];
-        state.commandPermissions = next;
-        saveCommandPermissions(next);
-      }),
-    appSettings: null,
-    providers: [],
-    scheduledTasks: [],
-    mcpServers: [],
-    activeWorkers: [],
-    tokenUsage: _initialTokenUsage,
-    killedWorkerIds: [],
+            activeDiffSource: null,
+            diffFiles: [],
+            setActiveDiffSource: (diff) =>
+              set((state) => {
+                state.activeDiffSource = diff;
+                if (diff) {
+                  // 同步进列表（去重 path）
+                  upsertDiffFile(state.diffFiles, diff);
+                }
+              }),
+            setDiffFiles: (files) =>
+              set((state) => {
+                const next =
+                  typeof files === 'function'
+                    ? (files as (prev: FileDiff[]) => FileDiff[])(
+                        state.diffFiles
+                      )
+                    : files;
+                state.diffFiles = Array.isArray(next) ? next : [];
+                state.activeDiffSource = state.diffFiles[0] || null;
+              }),
+            pushDiffFile: (diff) =>
+              set((state) => {
+                upsertDiffFile(state.diffFiles, diff);
+                state.activeDiffSource = diff;
+              }),
+            removeDiffFile: (filePath) =>
+              set((state) => {
+                const path = filePath || '';
+                state.diffFiles = state.diffFiles.filter(
+                  (f) => f.filePath !== path
+                );
+                if (state.activeDiffSource?.filePath === path) {
+                  state.activeDiffSource = state.diffFiles[0] || null;
+                }
+              }),
+            // 刷新后若 permissionMode=plan，ribbon 与引擎需同步点亮（与 permissionMode 同源）
+            planModeEnabled: planModeEnabledFor(_initialPermissionMode),
+            setPermissionMode: (mode) => {
+              set((state) => {
+                state.permissionMode = mode;
+                state.planModeEnabled = planModeEnabledFor(mode);
+                state.planApproved = false;
+              });
+              persistPermissionMode(mode);
+            },
+            setPlanModeEnabled: (enabled) => {
+              let nextMode: PermissionMode = 'ask';
+              set((state) => {
+                // 双向对齐：侧栏/ribbon 开关不得与 permissionMode 分叉
+                nextMode = permissionModeAfterPlanToggle(
+                  state.permissionMode,
+                  enabled
+                );
+                state.permissionMode = nextMode;
+                state.planModeEnabled = planModeEnabledFor(nextMode);
+                // 与 setPermissionMode 一致：切换时重置「批准执行」
+                state.planApproved = false;
+              });
+              // 与 setPermissionMode 同一持久化入口，保证设置页 ↔ daemon 读同一 key
+              persistPermissionMode(nextMode);
+            },
+            planApproved: false,
+            setPlanApproved: (approved) =>
+              set((state) => {
+                state.planApproved = approved;
+              }),
+            commandPermissions: loadCommandPermissions(),
+            addCommandPermission: (cmd) =>
+              set((state) => {
+                state.commandPermissions = persistAddCommandPermission(
+                  state.commandPermissions,
+                  cmd
+                );
+              }),
+            removeCommandPermission: (cmd: string) =>
+              set((state) => {
+                state.commandPermissions = persistRemoveCommandPermission(
+                  state.commandPermissions,
+                  cmd
+                );
+              }),
+            setCommandPermissions: (list: string[]) =>
+              set((state) => {
+                const next = Array.isArray(list)
+                  ? list.filter((c) => typeof c === 'string')
+                  : [];
+                state.commandPermissions = next;
+                saveCommandPermissions(next);
+              }),
+            appSettings: null,
+            providers: [],
+            scheduledTasks: [],
+            mcpServers: [],
+            activeWorkers: [],
+            tokenUsage: _initialTokenUsage,
+            killedWorkerIds: [],
 
-    terminalLines: _initialTerminalLines,
-    terminalBySession: {},
-    composerDrafts: {},
-    manuallyTriggeredWorkers: [],
+            terminalLines: _initialTerminalLines,
+            terminalBySession: {},
+            composerDrafts: {},
+            manuallyTriggeredWorkers: [],
 
-    setProviders: (providers) => set((state) => {
-      state.providers = Array.isArray(providers) ? providers : [];
-    }),
-    setAppSettings: (settings) => set((state) => {
-      state.appSettings = settings;
-    }),
-    setScheduledTasks: (tasks) => set((state) => {
-      state.scheduledTasks = Array.isArray(tasks) ? tasks : [];
-    }),
-    setMcpServers: (servers) => set((state) => {
-      state.mcpServers = Array.isArray(servers) ? servers : [];
-    }),
-    syncTelemetryData: (data: TelemetrySyncPayload) => set((state) => {
-      if (data.tokenUsage) {
-        state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
-      }
+            setProviders: (providers) =>
+              set((state) => {
+                state.providers = Array.isArray(providers) ? providers : [];
+              }),
+            setAppSettings: (settings) =>
+              set((state) => {
+                state.appSettings = settings;
+              }),
+            setScheduledTasks: (tasks) =>
+              set((state) => {
+                state.scheduledTasks = Array.isArray(tasks) ? tasks : [];
+              }),
+            setMcpServers: (servers) =>
+              set((state) => {
+                state.mcpServers = Array.isArray(servers) ? servers : [];
+              }),
+            syncTelemetryData: (data: TelemetrySyncPayload) =>
+              set((state) => {
+                if (data.tokenUsage) {
+                  state.tokenUsage = sanitizeTokenUsage(
+                    data.tokenUsage,
+                    state.tokenUsage
+                  );
+                }
 
-      // Increment elapsedSeconds for manual workers by 2 seconds on every sync
-      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w) => ({
-        id: w.id,
-        taskName: w.taskName,
-        elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
-      }));
+                // Increment elapsedSeconds for manual workers by 2 seconds on every sync
+                state.manuallyTriggeredWorkers =
+                  state.manuallyTriggeredWorkers.map((w) => ({
+                    id: w.id,
+                    taskName: w.taskName,
+                    elapsedSeconds: Math.max(
+                      0,
+                      finiteNumber(w.elapsedSeconds, 0) + 2
+                    ),
+                  }));
 
-      if (data.activeWorkers) {
-        const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-          (w) => !state.killedWorkerIds.includes(w.id),
-        );
-        state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
-      }
-      if (data.mcpServers) {
-        state.mcpServers = Array.isArray(data.mcpServers) ? data.mcpServers : state.mcpServers;
-      }
-      if (data.cronJobs) {
-        state.scheduledTasks = Array.isArray(data.cronJobs) ? data.cronJobs : state.scheduledTasks;
-      }
-    }),
-    addTerminalLine: (line: string, sessionId?: string) => set((state) => {
-      const text = typeof line === 'string' ? line : String(line ?? '');
-      const sid = sessionId || state.activeSessionId || '_global';
-      if (!state.terminalBySession[sid]) state.terminalBySession[sid] = [];
-      appendTerminalLine(state.terminalBySession[sid], text);
-      // 仅当前会话同步到兼容字段
-      if (!sessionId || sessionId === state.activeSessionId || !state.activeSessionId) {
-        state.terminalLines = state.terminalBySession[sid];
-      }
-    }),
-    clearTerminalLines: (sessionId?: string) => set((state) => {
-      const sid = sessionId || state.activeSessionId || '_global';
-      state.terminalBySession[sid] = [];
-      if (!sessionId || sessionId === state.activeSessionId || !state.activeSessionId) {
-        state.terminalLines = [];
-      }
-    }),
-    triggerCronJobNow: (prompt: string) => set((state) => {
-      const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
-      const newWorker: ActiveWorkerState = {
-        id: `worker-manual-${Date.now()}`,
-        taskName: `Cron: ${label}`,
-        elapsedSeconds: 0,
-      };
-      if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
-      if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
-    }),
-    killWorker: (id: string, _taskName: string) => set((state) => {
-      if (!id) return;
-      state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
-      state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
-      if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
-        state.killedWorkerIds.push(id);
-      }
-      // Deduct token usage as a simulated result of termination
-      state.tokenUsage.input = Math.max(0, finiteNumber(state.tokenUsage.input, 0) - 1500);
-      const nextCost = finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
-      state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
-    }),
+                if (data.activeWorkers) {
+                  const live = sanitizeActiveWorkers(data.activeWorkers).filter(
+                    (w) => !state.killedWorkerIds.includes(w.id)
+                  );
+                  state.activeWorkers = [
+                    ...live,
+                    ...state.manuallyTriggeredWorkers,
+                  ];
+                }
+                if (data.mcpServers) {
+                  state.mcpServers = Array.isArray(data.mcpServers)
+                    ? data.mcpServers
+                    : state.mcpServers;
+                }
+                if (data.cronJobs) {
+                  state.scheduledTasks = Array.isArray(data.cronJobs)
+                    ? data.cronJobs
+                    : state.scheduledTasks;
+                }
+              }),
+            addTerminalLine: (line: string, sessionId?: string) =>
+              set((state) => {
+                const text =
+                  typeof line === 'string' ? line : String(line ?? '');
+                const sid = sessionId || state.activeSessionId || '_global';
+                if (!state.terminalBySession[sid])
+                  state.terminalBySession[sid] = [];
+                appendTerminalLine(state.terminalBySession[sid], text);
+                // 仅当前会话同步到兼容字段
+                if (
+                  !sessionId ||
+                  sessionId === state.activeSessionId ||
+                  !state.activeSessionId
+                ) {
+                  state.terminalLines = state.terminalBySession[sid];
+                }
+              }),
+            clearTerminalLines: (sessionId?: string) =>
+              set((state) => {
+                const sid = sessionId || state.activeSessionId || '_global';
+                state.terminalBySession[sid] = [];
+                if (
+                  !sessionId ||
+                  sessionId === state.activeSessionId ||
+                  !state.activeSessionId
+                ) {
+                  state.terminalLines = [];
+                }
+              }),
+            triggerCronJobNow: (prompt: string) =>
+              set((state) => {
+                const label =
+                  typeof prompt === 'string' && prompt.trim()
+                    ? prompt.trim()
+                    : 'task';
+                const newWorker: ActiveWorkerState = {
+                  id: `worker-manual-${Date.now()}`,
+                  taskName: `Cron: ${label}`,
+                  elapsedSeconds: 0,
+                };
+                if (
+                  state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS
+                )
+                  state.manuallyTriggeredWorkers.push(newWorker);
+                if (state.activeWorkers.length < MAX_DIFF_FILES * 2)
+                  state.activeWorkers.push(newWorker);
+              }),
+            killWorker: (id: string, _taskName?: string) =>
+              set((state) => {
+                void _taskName;
+                if (!id) return;
+                state.manuallyTriggeredWorkers =
+                  state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
+                state.activeWorkers = state.activeWorkers.filter(
+                  (w) => w.id !== id
+                );
+                if (
+                  !state.killedWorkerIds.includes(id) &&
+                  state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4
+                ) {
+                  state.killedWorkerIds.push(id);
+                }
+                // Deduct token usage as a simulated result of termination
+                state.tokenUsage.input = Math.max(
+                  0,
+                  finiteNumber(state.tokenUsage.input, 0) - 1500
+                );
+                const nextCost =
+                  finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
+                state.tokenUsage.cost = Math.max(
+                  0,
+                  parseFloat(nextCost.toFixed(4))
+                );
+              }),
 
-    // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
-    ...createSessionActions(set, get),
+            // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
+            ...createSessionActions(set, get),
 
-    // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
-    ...createWorkspaceActions(set, get),
+            // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
+            ...createWorkspaceActions(set, get),
 
-    setUiSize: (size) => {
-      const next = parseUiSize(size);
-      set((state) => {
-        state.uiSize = next;
-      });
-      try {
-        localStorage.setItem(UI_SIZE_STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
-    },
-    setShellChromeMode: (mode) => {
-      const next = parseShellChromeMode(mode);
-      set((state) => {
-        state.shellChromeMode = next;
-      });
-      try {
-        localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
-    },
-    setChatMainSurface: (surface) =>
-      set((state) => {
-        state.chatMainSurface = surface === 'scheduled' ? 'scheduled' : 'chat';
-      }),
-    setSidebarCollapsed: (collapsed) => set((state) => {
-      state.sidebarCollapsed = !!collapsed;
-    }),
-    setTabModeEnabled: (enabled) => {
-      const on = !!enabled;
-      set((state) => {
-        state.tabModeEnabled = on;
-        // 打开合并标签时：把已有右侧堆叠 group 折成同一标签栏（功能做实）
-        if (on) {
-          for (const ws of state.workspaces) {
-            collapseToolColumnToTabs(ws);
-          }
-        }
-      });
-      try {
-        localStorage.setItem(TAB_MODE_STORAGE_KEY, on ? '1' : '0');
-      } catch {
-        /* ignore */
-      }
-    },
-    setShowSettingsOverlay: (show) => set((state) => {
-      state.showSettingsOverlay = !!show;
-    }),
-    setSettingsActiveTab: (tab) => set((state) => {
-      // 非法 tab 不写入，避免设置页空白 ghost
-      if (isSettingsTabType(tab)) {
-        state.settingsActiveTab = tab;
-      }
-    }),
-    openSettings: (tab) => set((state) => {
-      if (tab !== undefined) {
-        state.settingsActiveTab = parseSettingsTab(tab, state.settingsActiveTab);
-      }
-      state.showSettingsOverlay = true;
-    }),
-      })),
+            setUiSize: (size) => {
+              const next = parseUiSize(size);
+              set((state) => {
+                state.uiSize = next;
+              });
+              try {
+                localStorage.setItem(UI_SIZE_STORAGE_KEY, next);
+              } catch {
+                /* ignore */
+              }
+            },
+            setShellChromeMode: (mode) => {
+              const next = parseShellChromeMode(mode);
+              set((state) => {
+                state.shellChromeMode = next;
+              });
+              try {
+                localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next);
+              } catch {
+                /* ignore */
+              }
+            },
+            setChatMainSurface: (surface) =>
+              set((state) => {
+                state.chatMainSurface =
+                  surface === 'scheduled' ? 'scheduled' : 'chat';
+              }),
+            setSidebarCollapsed: (collapsed) =>
+              set((state) => {
+                state.sidebarCollapsed = !!collapsed;
+              }),
+            setTabModeEnabled: (enabled) => {
+              const on = !!enabled;
+              set((state) => {
+                state.tabModeEnabled = on;
+                // 打开合并标签时：把已有右侧堆叠 group 折成同一标签栏（功能做实）
+                if (on) {
+                  for (const ws of state.workspaces) {
+                    collapseToolColumnToTabs(ws);
+                  }
+                }
+              });
+              try {
+                localStorage.setItem(TAB_MODE_STORAGE_KEY, on ? '1' : '0');
+              } catch {
+                /* ignore */
+              }
+            },
+            setShowSettingsOverlay: (show) =>
+              set((state) => {
+                state.showSettingsOverlay = !!show;
+              }),
+            setSettingsActiveTab: (tab) =>
+              set((state) => {
+                // 非法 tab 不写入，避免设置页空白 ghost
+                if (isSettingsTabType(tab)) {
+                  state.settingsActiveTab = tab;
+                }
+              }),
+            openSettings: (tab) =>
+              set((state) => {
+                if (tab !== undefined) {
+                  state.settingsActiveTab = parseSettingsTab(
+                    tab,
+                    state.settingsActiveTab
+                  );
+                }
+                state.showSettingsOverlay = true;
+              }),
+          }))
+        ),
         {
           name: 'crish-layout-v1',
           partialize: (s) => ({
@@ -776,27 +885,51 @@ export const useLayoutStore = create<LayoutStore>()(
             activeWorkspaceIndex: s.activeWorkspaceIndex,
             tabModeEnabled: s.tabModeEnabled,
           }),
-        },
-      ),
+        }
+      )
     ),
-    'LayoutStore',
-  ),
+    'LayoutStore'
+  )
 );
 
 // ── Layout state shape (state-only, excludes actions) ─────────────────────────
 
-export type LayoutStoreState = Pick<LayoutStore,
-  | 'workspaces' | 'activeWorkspaceIndex' | 'tabModeEnabled' | 'uiSize'
-  | 'shellChromeMode' | 'chatMainSurface' | 'sidebarCollapsed'
-  | 'sessions' | 'sessionsById' | 'folderOrder' | 'activeSessionId'
-  | 'activeAgentId' | 'panelAgentId' | 'composerDrafts'
-  | 'draggedTab' | 'dropPreview'
-  | 'showSettingsOverlay' | 'settingsActiveTab' | 'permissionMode'
-  | 'activeDiffSource' | 'diffFiles'
-  | 'planModeEnabled' | 'planApproved' | 'commandPermissions'
-  | 'appSettings' | 'providers' | 'scheduledTasks' | 'mcpServers'
-  | 'activeWorkers' | 'tokenUsage' | 'killedWorkerIds'
-  | 'terminalLines' | 'terminalBySession' | 'manuallyTriggeredWorkers'
+export type LayoutStoreState = Pick<
+  LayoutStore,
+  | 'workspaces'
+  | 'activeWorkspaceIndex'
+  | 'tabModeEnabled'
+  | 'uiSize'
+  | 'shellChromeMode'
+  | 'chatMainSurface'
+  | 'sidebarCollapsed'
+  | 'sessions'
+  | 'sessionsById'
+  | 'folderOrder'
+  | 'activeSessionId'
+  | 'activeAgentId'
+  | 'panelAgentId'
+  | 'composerDrafts'
+  | 'draggedTab'
+  | 'dropPreview'
+  | 'showSettingsOverlay'
+  | 'settingsActiveTab'
+  | 'permissionMode'
+  | 'activeDiffSource'
+  | 'diffFiles'
+  | 'planModeEnabled'
+  | 'planApproved'
+  | 'commandPermissions'
+  | 'appSettings'
+  | 'providers'
+  | 'scheduledTasks'
+  | 'mcpServers'
+  | 'activeWorkers'
+  | 'tokenUsage'
+  | 'killedWorkerIds'
+  | 'terminalLines'
+  | 'terminalBySession'
+  | 'manuallyTriggeredWorkers'
   | 'hydrationComplete'
 >;
 
@@ -812,10 +945,12 @@ export interface WorkspaceLayoutSnapshot {
   activeWorkspaceIndex: number;
 }
 
-export function serializeWorkspaceLayout(state: LayoutStoreState): WorkspaceLayoutSnapshot {
+export function serializeWorkspaceLayout(
+  state: LayoutStoreState
+): WorkspaceLayoutSnapshot {
   return {
     version: 1,
-    workspaces: state.workspaces.map(ws => ({
+    workspaces: state.workspaces.map((ws) => ({
       id: ws.id,
       columns: ws.columns,
     })),
@@ -824,9 +959,15 @@ export function serializeWorkspaceLayout(state: LayoutStoreState): WorkspaceLayo
   };
 }
 
-export function deserializeWorkspaceLayout(snapshot: WorkspaceLayoutSnapshot, state: LayoutStoreState): void {
-  const index = clampActiveWorkspaceIndex(snapshot.workspaces, snapshot.activeWorkspaceIndex);
-  state.workspaces = snapshot.workspaces.map((ws, i) => ({
+export function deserializeWorkspaceLayout(
+  snapshot: WorkspaceLayoutSnapshot,
+  state: LayoutStoreState
+): void {
+  const index = clampActiveWorkspaceIndex(
+    snapshot.workspaces,
+    snapshot.activeWorkspaceIndex
+  );
+  state.workspaces = snapshot.workspaces.map((ws) => ({
     id: ws.id,
     columns: ws.columns,
   }));
@@ -867,7 +1008,9 @@ export function initLayoutStorePersistence(): () => void {
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let diskTimer: ReturnType<typeof setTimeout> | null = null;
   /** 上一份会话域切片：遥测等字段变更时引用不变 → 跳过落盘 */
-  let lastDomain: SessionDomainSlice | null = pickSessionDomain(useLayoutStore.getState());
+  let lastDomain: SessionDomainSlice | null = pickSessionDomain(
+    useLayoutStore.getState()
+  );
 
   const unsub = useLayoutStore.subscribe((state) => {
     const domain = pickSessionDomain(state);
@@ -890,68 +1033,74 @@ export function initLayoutStorePersistence(): () => void {
     if (diskTimer) clearTimeout(diskTimer);
     diskTimer = setTimeout(() => {
       const cur = useLayoutStore.getState();
-      void mirrorSessionsToDisk(cur.sessions, cur.activeSessionId, cur.folderOrder);
+      void mirrorSessionsToDisk(
+        cur.sessions,
+        cur.activeSessionId,
+        cur.folderOrder
+      );
     }, 2500);
   });
 
   // localStorage 空时尝试从磁盘镜像回灌（compare-and-swap：写入前再次确认仍为空）
   if (useLayoutStore.getState().sessions.length === 0) {
-    void restoreSessionsFromDiskMirror().then((restored) => {
-      if (abortController.signal.aborted) return;
+    void restoreSessionsFromDiskMirror()
+      .then((restored) => {
+        if (abortController.signal.aborted) return;
 
-      if (restored?.sessions?.length) {
-        const cur = useLayoutStore.getState();
-        // 用户已新建会话则不覆盖
-        if (cur.sessions.length > 0) return;
+        if (restored?.sessions?.length) {
+          const cur = useLayoutStore.getState();
+          // 用户已新建会话则不覆盖
+          if (cur.sessions.length > 0) return;
 
-        let applied = false;
-        useLayoutStore.setState((state) => {
-          // 二次检查：recipe 内仍空才写入
-          if (state.sessions.length > 0) return;
+          let applied = false;
+          useLayoutStore.setState((state) => {
+            // 二次检查：recipe 内仍空才写入
+            if (state.sessions.length > 0) return;
 
-          const sanitized = sanitizeSessionSeed({
-            sessions: restored.sessions,
-            activeSessionId: restored.activeSessionId,
-            folderOrder: restored.folderOrder,
+            const sanitized = sanitizeSessionSeed({
+              sessions: restored.sessions,
+              activeSessionId: restored.activeSessionId,
+              folderOrder: restored.folderOrder,
+            });
+            state.sessions = sanitized.sessions;
+            state.sessionsById = sanitized.sessionsById;
+            state.activeSessionId = sanitized.activeSessionId;
+            state.folderOrder = sanitized.folderOrder.length
+              ? sanitized.folderOrder
+              : state.folderOrder;
+            // 回灌后清 ghost agent 焦点（会话集合已变）
+            state.activeAgentId = null;
+            state.panelAgentId = null;
+            // empty workspace seed：若被外部掏空则重种
+            state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
+            state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
+              state.workspaces,
+              state.activeWorkspaceIndex
+            );
+            applied = true;
           });
-          state.sessions = sanitized.sessions;
-          state.sessionsById = sanitized.sessionsById;
-          state.activeSessionId = sanitized.activeSessionId;
-          state.folderOrder = sanitized.folderOrder.length
-            ? sanitized.folderOrder
-            : state.folderOrder;
-          // 回灌后清 ghost agent 焦点（会话集合已变）
-          state.activeAgentId = null;
-          state.panelAgentId = null;
-          // empty workspace seed：若被外部掏空则重种
-          state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
-          state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
-            state.workspaces,
-            state.activeWorkspaceIndex,
-          );
-          applied = true;
-        });
 
-        // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
-        if (!applied) return;
-        try {
-          const after = useLayoutStore.getState();
-          persistAllSessions(
-            after.sessions,
-            after.activeSessionId,
-            after.folderOrder,
-          );
-        } catch {
-          /* ignore */
+          // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
+          if (!applied) return;
+          try {
+            const after = useLayoutStore.getState();
+            persistAllSessions(
+              after.sessions,
+              after.activeSessionId,
+              after.folderOrder
+            );
+          } catch {
+            /* ignore */
+          }
         }
-      }
-    }).finally(() => {
-      if (!abortController.signal.aborted) {
-        useLayoutStore.setState((state) => {
-          state.hydrationComplete = true;
-        });
-      }
-    });
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) {
+          useLayoutStore.setState((state) => {
+            state.hydrationComplete = true;
+          });
+        }
+      });
   } else {
     useLayoutStore.setState((state) => {
       state.hydrationComplete = true;

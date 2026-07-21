@@ -139,22 +139,23 @@ export function isEmptyShellSession(s: ShellSessionLike): boolean {
 
 /**
  * 侧栏是否展示：
- * - 非归档均显示（含空「新会话」）
- * - 否则用户连建后一切换就找不到，体感像「掉对话」
- * - 连点新建刷屏靠 createSession 复用同壳，不靠侧栏隐藏
- * 归档由 filterSidebarSessions 剔除。
+ * - 置顶 / 定时标题 / 有实质内容 / 非默认标题 → 显示
+ * - 空壳默认标题 → 不显示（草稿由 PENDING_DRAFT 处理）
+ * - activeSessionId 不参与判定（保留签名兼容 filterSidebarSessions）
+ * 归档由 filterSidebarSessions 剔除；此处 isArchived 为双重保险。
  */
 export function shouldListSessionInSidebar(
   s: ShellSessionLike & { id: string },
   activeSessionId?: string | null
 ): boolean {
-  void activeSessionId; // 保留签名兼容 filterSidebarSessions
+  void activeSessionId;
+  if (s.isArchived) return false;
   if (s.isPinned) return true;
   if (isScheduledSessionTitle(s.title)) return true;
   if (sessionHasListableContent(s)) return true;
   if (!isDefaultSessionTitle(s.title)) return true;
-  // 空壳默认标题也展示，避免切换后「丢对话」；刷屏靠 createSession 复用
-  return true;
+  // 空壳默认标题：不显示（草稿由 PENDING_DRAFT 处理）
+  return false;
 }
 
 /**
