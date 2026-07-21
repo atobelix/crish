@@ -280,6 +280,14 @@ export function validateRunTaskMessage(
     }
   }
 
+  const systemPrompt = optionalString(
+    input,
+    'systemPrompt',
+    '$.systemPrompt',
+    issues,
+    { nonEmpty: true }
+  );
+
   if (issues.length > 0) return invalid('Invalid run-task message', issues);
 
   return ok({
@@ -287,6 +295,7 @@ export function validateRunTaskMessage(
     runId: runId ?? '',
     ...(sessionId !== undefined ? { sessionId } : {}),
     prompt: prompt as string,
+    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     ...(mode !== undefined ? { mode } : {}),
     ...(workspaceMode !== undefined ? { workspaceMode } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
@@ -471,6 +480,12 @@ export function validateUpdateConfigMessage(
     issues
   );
   const stream = optionalBoolean(input, 'stream', '$.stream', issues);
+  const mcpServers = optionalMcpServersField(
+    input,
+    'mcpServers',
+    '$.mcpServers',
+    issues
+  );
 
   if (issues.length > 0)
     return invalid('Invalid update-config message', issues);
@@ -483,7 +498,67 @@ export function validateUpdateConfigMessage(
     ...(credentialMode !== undefined ? { credentialMode } : {}),
     ...(endpoint !== undefined ? { endpoint } : {}),
     ...(stream !== undefined ? { stream } : {}),
+    ...(mcpServers !== undefined ? { mcpServers } : {}),
   });
+}
+
+function optionalMcpServersField(
+  input: UnknownRecord,
+  key: string,
+  path: string,
+  issues: ProtocolValidationIssue[]
+): UpdateConfigMessage['mcpServers'] | undefined {
+  if (!(key in input) || input[key] === undefined) return undefined;
+  const value = input[key];
+  if (!Array.isArray(value)) {
+    issues.push({ path, message: 'Expected array of MCP server configs' });
+    return undefined;
+  }
+  const servers: NonNullable<UpdateConfigMessage['mcpServers']> = [];
+  for (let i = 0; i < value.length; i += 1) {
+    const item = value[i];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      issues.push({ path: `${path}[${i}]`, message: 'Expected object' });
+      continue;
+    }
+    const o = item as UnknownRecord;
+    const name =
+      typeof o.name === 'string'
+        ? o.name.trim()
+        : typeof o.id === 'string'
+          ? o.id.trim()
+          : '';
+    if (!name) {
+      issues.push({
+        path: `${path}[${i}].name`,
+        message: 'Expected non-empty name',
+      });
+      continue;
+    }
+    const entry: NonNullable<UpdateConfigMessage['mcpServers']>[number] = {
+      name,
+    };
+    if (typeof o.label === 'string' && o.label.trim())
+      entry.label = o.label.trim();
+    if (typeof o.transport === 'string' && o.transport.trim())
+      entry.transport = o.transport.trim();
+    if (typeof o.command === 'string' && o.command.trim())
+      entry.command = o.command.trim();
+    if (Array.isArray(o.args)) {
+      entry.args = o.args.filter((a): a is string => typeof a === 'string');
+    }
+    if (o.env && typeof o.env === 'object' && !Array.isArray(o.env)) {
+      const env: Record<string, string> = {};
+      for (const [k, v] of Object.entries(o.env as Record<string, unknown>)) {
+        if (typeof v === 'string') env[k] = v;
+      }
+      if (Object.keys(env).length > 0) entry.env = env;
+    }
+    if (typeof o.cwd === 'string' && o.cwd.trim()) entry.cwd = o.cwd.trim();
+    if (typeof o.url === 'string' && o.url.trim()) entry.url = o.url.trim();
+    servers.push(entry);
+  }
+  return servers;
 }
 
 export function validateDaemonReadyMessage(

@@ -3,12 +3,51 @@
  * checklist 解析规则与 TasksCard 共用本模块，保证进度一致。
  */
 
-import type { SessionGoalMode, SessionGoalTask, SessionState } from '../store/types';
+import type {
+  SessionGoalMode,
+  SessionGoalTask,
+  SessionState,
+} from '../store/types';
 
-export const GOAL_DEFAULT_MAX_ITERATIONS = 5;
+/**
+ * 桌面 goalMode 默认上限；与引擎 `DEFAULT_GOAL_MAX_ROUNDS`（12）对齐。
+ * run-task.maxRounds 默认取此值。
+ */
+export const GOAL_DEFAULT_MAX_ITERATIONS = 12;
+
+/** 引擎 stall 上限（与 orchestrator DEFAULT_GOAL_MAX_STALLED_ROUNDS 一致） */
+export const GOAL_DEFAULT_MAX_STALLED_ROUNDS = 2;
 
 /** 伪任务噪音：进度源应丢弃（与 TasksCard 一致） */
 const PSEUDO_TASK_RE = /^本轮(总结|小结|回顾)/;
+
+/**
+ * 构造 run-task 的 goal 字段（mode/visibleGoal/maxRounds/maxStalledRounds）。
+ * 供 createStreamSession 透传，触发 daemon startGoalRun / driveGoalRun。
+ */
+export function buildGoalRunTaskFields(input: {
+  goal: string;
+  maxIterations?: number;
+}): {
+  mode: 'goal';
+  visibleGoal: string;
+  maxRounds: number;
+  maxStalledRounds: number;
+} {
+  const goal = (input.goal || '').trim();
+  const maxRounds =
+    typeof input.maxIterations === 'number' &&
+    Number.isFinite(input.maxIterations) &&
+    input.maxIterations > 0
+      ? Math.floor(input.maxIterations)
+      : GOAL_DEFAULT_MAX_ITERATIONS;
+  return {
+    mode: 'goal',
+    visibleGoal: goal,
+    maxRounds,
+    maxStalledRounds: GOAL_DEFAULT_MAX_STALLED_ROUNDS,
+  };
+}
 
 export function replyLooksGoalDone(text: string): boolean {
   const t = (text || '').trim();
@@ -17,8 +56,12 @@ export function replyLooksGoalDone(text: string): boolean {
 }
 
 /** 将 goalMode.tasks 中未完成项注入续写提示 */
-export function formatOpenGoalTasksForPrompt(tasks: SessionGoalTask[] | undefined): string {
-  const open = (tasks || []).filter((t) => t && !t.done && (t.text || '').trim());
+export function formatOpenGoalTasksForPrompt(
+  tasks: SessionGoalTask[] | undefined
+): string {
+  const open = (tasks || []).filter(
+    (t) => t && !t.done && (t.text || '').trim()
+  );
   if (!open.length) return '';
   return [
     '当前未完成任务清单（请继续推进；每轮结束用 markdown checklist 更新 `- [ ]` / `- [x]`）：',
@@ -32,14 +75,14 @@ export function buildGoalModePrefix(
   goal: string,
   iteration: number,
   maxIterations: number,
-  tasks?: SessionGoalTask[],
+  tasks?: SessionGoalTask[]
 ): string {
   const openBlock = formatOpenGoalTasksForPrompt(tasks);
   return [
     '[目标模式 · 系统指令]',
     `你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。`,
     `目标：${goal}`,
-    `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在 8 轮内完成）。`,
+    `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在上限内完成）。`,
     '请工作直至目标实质完成；不要半途停下或只列计划而不执行。',
     '请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。',
     '若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。',
@@ -57,7 +100,9 @@ export function buildGoalModePrefix(
  * - `- [ ]` / `- [x]` / `* [ ]` / `* [X]`
  * - 丢弃「本轮总结」类伪任务
  */
-export function parseChecklistTasks(text: string | undefined | null): SessionGoalTask[] {
+export function parseChecklistTasks(
+  text: string | undefined | null
+): SessionGoalTask[] {
   if (!text) return [];
   const tasks: SessionGoalTask[] = [];
   const lines = text.split(/\r?\n/);
@@ -77,7 +122,9 @@ export function parseChecklistTasks(text: string | undefined | null): SessionGoa
 }
 
 /** 进度计数（TasksCard / goal ribbon 共用） */
-export function computeGoalTaskProgress(tasks: SessionGoalTask[] | undefined | null): {
+export function computeGoalTaskProgress(
+  tasks: SessionGoalTask[] | undefined | null
+): {
   total: number;
   done: number;
   pct: number;
@@ -92,20 +139,32 @@ export function computeGoalTaskProgress(tasks: SessionGoalTask[] | undefined | n
 /** 合并助手 checklist 到 goalMode（纯函数，不写 store） */
 export function mergeGoalTasksFromAssistantText(
   gm: SessionGoalMode,
-  assistantText: string,
+  assistantText: string
 ): SessionGoalMode {
   const items = parseChecklistTasks(assistantText);
   if (!items.length) return gm;
   return { ...gm, tasks: items };
 }
 
-/** 完成时把未勾任务也标 done，避免 ribbon 消失而 TasksCard 仍显示缺口 */
+/**
+ * 将未勾任务标 done 并收口 active。
+ * ⚠️ 仅在 tasks 已实质完成（或调用方有证据）时使用；
+ * 禁止因文案 DONE 无证据时强制勾满（假完成）。
+ */
 export function markAllGoalTasksDone(gm: SessionGoalMode): SessionGoalMode {
-  const tasks = (gm.tasks || []).map((t) => (t.done ? t : { ...t, done: true }));
+  const tasks = (gm.tasks || []).map((t) =>
+    t.done ? t : { ...t, done: true }
+  );
   return { ...gm, active: false, tasks };
 }
 
-export type GoalStopReason = 'cancelled' | 'inactive' | 'queued' | 'done' | 'max_iter';
+/** 收口 active，**不**强制勾满 tasks（保留真实缺口） */
+export function deactivateGoalMode(gm: SessionGoalMode): SessionGoalMode {
+  return { ...gm, active: false };
+}
+
+export type GoalStopReason =
+  'cancelled' | 'inactive' | 'queued' | 'done' | 'max_iter';
 
 export type GoalContinueDecision =
   | {
@@ -132,7 +191,13 @@ export function goalStopAllowsToast(reason: GoalStopReason): boolean {
 
 /**
  * 根据当前会话与助手终稿决定是否自动续写（纯函数）。
- * 任务清单解析与 TasksCard 同源（parseChecklistTasks / markAllGoalTasksDone）。
+ * 任务清单解析与 TasksCard 同源（parseChecklistTasks）。
+ *
+ * 完成门禁（反假完成）：
+ * - checklist 全 done → done（不强制 markAll；tasks 已全勾）
+ * - 文案 DONE 且 **无 tasks** → done（无清单可验，允许收口）
+ * - 文案 DONE 但 tasks 非空且未全 done → **不** done；继续推进或 max_iter 停机并保留缺口
+ * - 禁止仅因 DONE 调用 markAllGoalTasksDone
  */
 export function decideGoalContinuation(input: {
   cancelled: boolean;
@@ -149,7 +214,7 @@ export function decideGoalContinuation(input: {
   }
 
   const hasQueued = input.session?.messages?.some(
-    (m) => m.sender === 'user' && m.status === 'queued',
+    (m) => m.sender === 'user' && m.status === 'queued'
   );
   if (hasQueued) {
     // 先处理用户排队消息；tasks 可能已由调用方 sync；不 toast
@@ -159,15 +224,20 @@ export function decideGoalContinuation(input: {
   // 与 TasksCard 同源：从助手 markdown checklist 刷新 goalMode.tasks
   gm = mergeGoalTasksFromAssistantText(gm, input.assistantText);
 
-  const allTasksDone =
-    Array.isArray(gm.tasks) && gm.tasks.length > 0 && gm.tasks.every((t) => t.done);
+  const tasks = Array.isArray(gm.tasks) ? gm.tasks : [];
+  const hasTasks = tasks.length > 0;
+  const allTasksDone = hasTasks && tasks.every((t) => t.done);
+  const looksDone = replyLooksGoalDone(input.assistantText);
+  // 文案 DONE 但清单仍有未完成项 → 假完成信号，不得 stop:done
+  const prematureDoneClaim = looksDone && hasTasks && !allTasksDone;
 
-  if (replyLooksGoalDone(input.assistantText) || allTasksDone) {
+  // 真完成：清单全勾；或无清单时允许文案 DONE 收口（无 tasks 可证伪）
+  if (allTasksDone || (looksDone && !hasTasks)) {
     return {
       action: 'stop',
       reason: 'done',
-      // 完成：TasksCard 与 ribbon 同步收口；成功不 toast
-      goalMode: markAllGoalTasksDone(gm),
+      // 不 markAllGoalTasksDone：避免无证据强制勾满；全勾时 tasks 已 done
+      goalMode: deactivateGoalMode(gm),
     };
   }
 
@@ -177,10 +247,12 @@ export function decideGoalContinuation(input: {
     return {
       action: 'stop',
       reason: 'max_iter',
-      // 保留已解析 tasks，便于 TasksCard 展示缺口
+      // 保留已解析 tasks（含未完成缺口），便于 TasksCard 展示；不因 DONE 勾满
       goalMode: { ...gm, active: false, iteration: nextIter },
       // 达上限属异常停机，短 toast（不进 runNotice 错误流）
-      toast: `目标已达上限（${maxIter} 轮）`,
+      toast: prematureDoneClaim
+        ? `目标已达上限（${maxIter} 轮）；文案 DONE 但任务未全部完成`
+        : `目标已达上限（${maxIter} 轮）`,
     };
   }
 
@@ -190,7 +262,9 @@ export function decideGoalContinuation(input: {
     iteration: nextIter,
     maxIterations: maxIter,
   };
-  const displayText = '继续推进目标，若已完成请明确说明 DONE';
+  const displayText = prematureDoneClaim
+    ? '任务清单仍有未完成项，请继续推进（勿仅因文案 DONE 停机）'
+    : '继续推进目标，若已完成请明确说明 DONE';
   const modelText = [
     buildGoalModePrefix(gm.goal, nextIter, maxIter, nextGm.tasks),
     displayText,
@@ -200,7 +274,7 @@ export function decideGoalContinuation(input: {
 
 export function createInitialGoalMode(
   goal: string,
-  maxIterations = GOAL_DEFAULT_MAX_ITERATIONS,
+  maxIterations = GOAL_DEFAULT_MAX_ITERATIONS
 ): SessionGoalMode {
   const g = goal.trim();
   return {
@@ -218,7 +292,8 @@ export function createInitialGoalMode(
 // ---------------------------------------------------------------------------
 
 /** Lifecycle phase for goal mode orchestration */
-export type GoalLifecyclePhase = 'idle' | 'active' | 'paused' | 'blocked' | 'completed';
+export type GoalLifecyclePhase =
+  'idle' | 'active' | 'paused' | 'blocked' | 'completed';
 
 /**
  * Controller-local lifecycle snapshot.
@@ -298,14 +373,15 @@ export function createIdleGoalLifecycle(): GoalLifecycleState {
 /** Fresh active lifecycle from a goal string (enter path) */
 export function createActiveGoalLifecycle(
   goal: string,
-  maxIterations = GOAL_DEFAULT_MAX_ITERATIONS,
+  maxIterations = GOAL_DEFAULT_MAX_ITERATIONS
 ): GoalLifecycleState {
   const g = goal.trim();
   return {
     phase: 'active',
     goal: g,
     iteration: 0,
-    maxIterations: maxIterations > 0 ? maxIterations : GOAL_DEFAULT_MAX_ITERATIONS,
+    maxIterations:
+      maxIterations > 0 ? maxIterations : GOAL_DEFAULT_MAX_ITERATIONS,
     tasks: g ? [{ id: 'goal-root', text: g, done: false }] : [],
     progressMessages: [],
     lastMessage: null,
@@ -320,7 +396,7 @@ export function createActiveGoalLifecycle(
  * Empty/whitespace blocked_reason is treated as absent.
  */
 export function validateGoalUpdateExclusivity(
-  update: GoalUpdatePayload,
+  update: GoalUpdatePayload
 ): { ok: true } | { ok: false; reason: 'completed_and_blocked' } {
   const blocked = (update.blocked_reason || '').trim();
   if (update.completed === true && blocked) {
@@ -332,7 +408,7 @@ export function validateGoalUpdateExclusivity(
 /** Append a progress message (trim, skip empty, cap length) */
 export function appendGoalProgressMessage(
   state: GoalLifecycleState,
-  message: string | undefined | null,
+  message: string | undefined | null
 ): GoalLifecycleState {
   const msg = (message || '').trim();
   if (!msg) return state;
@@ -360,7 +436,8 @@ export function formatGoalProgressMessage(input: {
   const { total, done, pct } = computeGoalTaskProgress(input.tasks);
   const goalLabel = (input.goal || '').trim() || '目标';
   const round = `第 ${Math.max(0, input.iteration) + 1}/${Math.max(1, input.maxIterations)} 轮`;
-  const taskPart = total > 0 ? `任务 ${done}/${total}（${pct}%）` : '暂无任务清单';
+  const taskPart =
+    total > 0 ? `任务 ${done}/${total}（${pct}%）` : '暂无任务清单';
 
   switch (input.phase) {
     case 'idle':
@@ -384,7 +461,7 @@ export function formatGoalProgressMessage(input: {
 
 /** Bridge lifecycle → session store shape (null when idle) */
 export function goalLifecycleToSessionMode(
-  state: GoalLifecycleState,
+  state: GoalLifecycleState
 ): SessionGoalMode | null {
   if (state.phase === 'idle') return null;
   return {
@@ -398,7 +475,7 @@ export function goalLifecycleToSessionMode(
 
 /** Bridge session store shape → lifecycle (unknown → idle) */
 export function sessionModeToGoalLifecycle(
-  gm: SessionGoalMode | null | undefined,
+  gm: SessionGoalMode | null | undefined
 ): GoalLifecycleState {
   if (!gm) return createIdleGoalLifecycle();
   const maxIterations = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
@@ -470,12 +547,12 @@ function canEnterFrom(phase: GoalLifecyclePhase): boolean {
  */
 export function transitionGoalLifecycle(
   state: GoalLifecycleState,
-  event: GoalLifecycleEvent,
+  event: GoalLifecycleEvent
 ): GoalTransitionResult {
   const finish = (
     outcome: GoalTransitionOutcome,
     reason: string | null,
-    next: GoalLifecycleState,
+    next: GoalLifecycleState
   ): GoalTransitionResult => ({
     outcome,
     reason,
@@ -502,15 +579,22 @@ export function transitionGoalLifecycle(
       if (state.phase === 'idle') return finish('noop', 'already_idle', state);
       if (state.phase === 'completed') {
         // Terminal success already exited auto-loop; clear to idle for re-enter
-        return finish('applied', 'cleared_completed', createIdleGoalLifecycle());
+        return finish(
+          'applied',
+          'cleared_completed',
+          createIdleGoalLifecycle()
+        );
       }
       return finish('applied', 'exited', createIdleGoalLifecycle());
     }
 
     case 'pause': {
-      if (state.phase === 'idle') return finish('illegal', 'not_running', state);
-      if (state.phase === 'completed') return finish('illegal', 'already_completed', state);
-      if (state.phase === 'paused') return finish('noop', 'already_paused', state);
+      if (state.phase === 'idle')
+        return finish('illegal', 'not_running', state);
+      if (state.phase === 'completed')
+        return finish('illegal', 'already_completed', state);
+      if (state.phase === 'paused')
+        return finish('noop', 'already_paused', state);
       if (state.phase === 'blocked') {
         // Soft pause from blocked keeps blockedReason but moves to paused? No —
         // stay blocked (stronger terminal-stuck); treat as noop.
@@ -529,9 +613,12 @@ export function transitionGoalLifecycle(
     }
 
     case 'resume': {
-      if (state.phase === 'idle') return finish('illegal', 'not_running', state);
-      if (state.phase === 'completed') return finish('illegal', 'already_completed', state);
-      if (state.phase === 'active') return finish('noop', 'already_active', state);
+      if (state.phase === 'idle')
+        return finish('illegal', 'not_running', state);
+      if (state.phase === 'completed')
+        return finish('illegal', 'already_completed', state);
+      if (state.phase === 'active')
+        return finish('noop', 'already_active', state);
       // paused | blocked → active; clear blocked on resume
       return finish('applied', 'resumed', {
         ...state,
@@ -546,23 +633,31 @@ export function transitionGoalLifecycle(
         return finish(
           'illegal',
           state.phase === 'completed' ? 'already_completed' : 'not_running',
-          state,
+          state
         );
       }
       const msg = (event.message || '').trim();
       if (!msg) return finish('noop', 'empty_message', state);
-      return finish('applied', 'progress_logged', appendGoalProgressMessage(state, msg));
+      return finish(
+        'applied',
+        'progress_logged',
+        appendGoalProgressMessage(state, msg)
+      );
     }
 
     case 'complete': {
-      if (state.phase === 'idle') return finish('illegal', 'not_running', state);
-      if (state.phase === 'completed') return finish('noop', 'already_completed', state);
+      if (state.phase === 'idle')
+        return finish('illegal', 'not_running', state);
+      if (state.phase === 'completed')
+        return finish('noop', 'already_completed', state);
       let next: GoalLifecycleState = {
         ...state,
         phase: 'completed',
         completed: true,
         blockedReason: null, // exclusivity: success clears blocked
-        tasks: (state.tasks || []).map((t) => (t.done ? t : { ...t, done: true })),
+        tasks: (state.tasks || []).map((t) =>
+          t.done ? t : { ...t, done: true }
+        ),
       };
       const msg = (event.message || '').trim() || '目标已完成';
       next = appendGoalProgressMessage(next, msg);
@@ -595,12 +690,12 @@ export function transitionGoalLifecycle(
  */
 export function applyGoalUpdate(
   state: GoalLifecycleState,
-  update: GoalUpdatePayload,
+  update: GoalUpdatePayload
 ): GoalTransitionResult {
   const finish = (
     outcome: GoalTransitionOutcome,
     reason: string | null,
-    next: GoalLifecycleState,
+    next: GoalLifecycleState
   ): GoalTransitionResult => ({
     outcome,
     reason,
@@ -633,7 +728,7 @@ export function applyGoalUpdate(
       return finish(
         'applied',
         'progress_on_completed',
-        appendGoalProgressMessage(state, message),
+        appendGoalProgressMessage(state, message)
       );
     }
     let next: GoalLifecycleState = {
@@ -641,7 +736,9 @@ export function applyGoalUpdate(
       phase: 'completed',
       completed: true,
       blockedReason: null,
-      tasks: (state.tasks || []).map((t) => (t.done ? t : { ...t, done: true })),
+      tasks: (state.tasks || []).map((t) =>
+        t.done ? t : { ...t, done: true }
+      ),
     };
     next = appendGoalProgressMessage(next, message || '目标已完成');
     return finish('applied', 'completed', next);
@@ -650,7 +747,8 @@ export function applyGoalUpdate(
   // Failure / stuck — exclusive path (no completed)
   if (hasBlocked) {
     if (state.phase === 'idle') return finish('illegal', 'not_running', state);
-    if (state.phase === 'completed') return finish('illegal', 'already_completed', state);
+    if (state.phase === 'completed')
+      return finish('illegal', 'already_completed', state);
     let next: GoalLifecycleState = {
       ...state,
       phase: 'blocked',
@@ -668,17 +766,21 @@ export function applyGoalUpdate(
     return finish(
       'illegal',
       state.phase === 'completed' ? 'already_completed' : 'not_running',
-      state,
+      state
     );
   }
-  return finish('applied', 'progress_logged', appendGoalProgressMessage(state, message));
+  return finish(
+    'applied',
+    'progress_logged',
+    appendGoalProgressMessage(state, message)
+  );
 }
 
 /** Convenience: enter */
 export function enterGoalMode(
   state: GoalLifecycleState,
   goal: string,
-  maxIterations?: number,
+  maxIterations?: number
 ): GoalTransitionResult {
   return transitionGoalLifecycle(state, { type: 'enter', goal, maxIterations });
 }
@@ -691,12 +793,14 @@ export function exitGoalMode(state: GoalLifecycleState): GoalTransitionResult {
 /** Convenience: pause (soft; not blocked) */
 export function pauseGoalMode(
   state: GoalLifecycleState,
-  reason?: string,
+  reason?: string
 ): GoalTransitionResult {
   return transitionGoalLifecycle(state, { type: 'pause', reason });
 }
 
 /** Convenience: resume from paused/blocked */
-export function resumeGoalMode(state: GoalLifecycleState): GoalTransitionResult {
+export function resumeGoalMode(
+  state: GoalLifecycleState
+): GoalTransitionResult {
   return transitionGoalLifecycle(state, { type: 'resume' });
 }

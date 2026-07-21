@@ -2,8 +2,8 @@
  * 引擎 MCP 列表与启停（正式版扩展服务）
  *
  * 契约：ENGINE-MCP（见 docs/plans/2026-07-product-trust-topdown.md §1 / §4）
- * - list：依赖引擎 lastMcpStatus；未配置时常空
- * - start/stop：库存 McpLifecycleManager 通常无 startServer/stopServer → 诚实禁用
+ * - list：有 mcpServers 注入时非空（含 idle state=configured）
+ * - start/stop：R1 已对齐 lifecycle.startServer/stopServer；有配置时 canStartStop 可 true
  * - 正式模式禁止用 clientApi.saveMcpServer 冒充引擎配置
  *
  * R4-A2 (2026-07)：MCP SDK 直连客户端（mcpClientManager），用于直接管理 stdio MCP 服务器。
@@ -136,7 +136,7 @@ function mapServer(o: Record<string, unknown>, i: number): McpServerInfo {
   const toolsRaw = o.tools ?? o.toolNames ?? o.cachedTools;
   const tools = Array.isArray(toolsRaw)
     ? toolsRaw.map((t) =>
-        typeof t === 'string' ? t : String((t as { name?: string }).name || t),
+        typeof t === 'string' ? t : String((t as { name?: string }).name || t)
       )
     : [];
   const toolCount =
@@ -186,8 +186,9 @@ export function isMcpStartStopUnsupportedError(input: unknown): boolean {
   if (!text) return false;
   return (
     /not supported|unsupported|unsupported_capability|no such method|is not a function|mcp server (start|stop) not supported/.test(
-      text,
-    ) || /startserver|stopserver/.test(text) && /not|missing|undefined/.test(text)
+      text
+    ) ||
+    (/startserver|stopserver/.test(text) && /not|missing|undefined/.test(text))
   );
 }
 
@@ -219,7 +220,7 @@ export async function fetchMcpLifecycleCapability(opts?: {
     const res = (await client.request(
       { type: 'list-capabilities' },
       'capabilities-response',
-      8_000,
+      8_000
     )) as Record<string, unknown>;
     const lifecycle = parseMcpLifecycleFromCapsResponse(res);
     listCapsCache = {
@@ -251,7 +252,7 @@ export async function fetchMcpStatus(): Promise<McpStatusSnapshot> {
     const status = (await client.request(
       { type: 'get-status' },
       'status-response',
-      8_000,
+      8_000
     )) as Record<string, unknown>;
     const mcp = status.mcpStatus as Record<string, unknown> | undefined;
     if (!mcp || typeof mcp !== 'object') return { configured: false };
@@ -291,7 +292,7 @@ export async function listMcpServers(): Promise<McpListResult> {
     const res = (await client.request(
       { type: 'list-mcp-servers' },
       'mcp-servers-listed',
-      10_000,
+      10_000
     )) as Record<string, unknown>;
 
     const list = Array.isArray(res.servers) ? res.servers : [];
@@ -327,11 +328,13 @@ export async function listMcpServers(): Promise<McpListResult> {
 /**
  * 探测列表与启停是否可用（不发起真实 start/stop，除非此前已记住失败）。
  * - list 成功 → canList
+ * - 列表能返回 servers 且 start 未记过 unsupported → 允许 canStartStop
  * - 未配置且列表空 / capability unsupported / 曾记过 unsupported → canStartStop false
+ * - experimental 不再一律 false（R1 已对齐 startServer/stopServer）
  * @param listResult 可选；传入可避免重复 list-mcp-servers
  */
 export async function probeMcpControl(
-  listResult?: McpListResult,
+  listResult?: McpListResult
 ): Promise<McpControlProbe> {
   const list = listResult ?? (await listMcpServers());
   const canList = list.ok;
@@ -356,9 +359,10 @@ export async function probeMcpControl(
   const configured = list.configured || list.servers.length > 0;
   const emptyUnconfigured = list.servers.length === 0 && !configured;
 
-  // capability unsupported（常见：daemon 未注入 mcpServers）
+  // 仅真正 unsupported / 后端未接线时禁用；experimental/implemented/degraded 允许启停
   const capBlocksStart =
-    capabilityState === 'unsupported' || capabilityState === 'backend-not-wired';
+    capabilityState === 'unsupported' ||
+    capabilityState === 'backend-not-wired';
 
   let canStartStop = true;
   let message: string | undefined;
@@ -373,12 +377,10 @@ export async function probeMcpControl(
       (emptyUnconfigured
         ? '引擎侧未配置 MCP 服务；列表为空时无法从界面启停'
         : START_STOP_UNSUPPORTED_HINT);
-  } else if (capabilityState === 'experimental') {
-    // 协议存在但库存 manager 通常无 startServer/stopServer；保守禁用，避免点了必失败
-    canStartStop = false;
-    message =
-      capabilityReason?.trim() ||
-      START_STOP_UNSUPPORTED_HINT;
+  } else if (list.servers.length > 0 || configured) {
+    // list 非空或已配置：允许启停（experimental 不再一刀切禁用）
+    canStartStop = true;
+    message = capabilityReason?.trim();
   }
 
   return {
@@ -390,7 +392,9 @@ export async function probeMcpControl(
   };
 }
 
-export async function startMcpServer(serverId: string): Promise<McpControlResult> {
+export async function startMcpServer(
+  serverId: string
+): Promise<McpControlResult> {
   if (rememberedStartStopUnsupported) {
     return {
       ok: false,
@@ -413,7 +417,7 @@ export async function startMcpServer(serverId: string): Promise<McpControlResult
     const res = (await client.request(
       { type: 'start-mcp-server', serverId },
       'mcp-server-started',
-      30_000,
+      30_000
     )) as Record<string, unknown>;
     return {
       ok: true,
@@ -441,7 +445,9 @@ export async function startMcpServer(serverId: string): Promise<McpControlResult
   }
 }
 
-export async function stopMcpServer(serverId: string): Promise<McpControlResult> {
+export async function stopMcpServer(
+  serverId: string
+): Promise<McpControlResult> {
   if (rememberedStartStopUnsupported) {
     return {
       ok: false,
@@ -464,7 +470,7 @@ export async function stopMcpServer(serverId: string): Promise<McpControlResult>
     const res = (await client.request(
       { type: 'stop-mcp-server', serverId },
       'mcp-server-stopped',
-      20_000,
+      20_000
     )) as Record<string, unknown>;
     return {
       ok: true,
@@ -504,7 +510,7 @@ export function mcpStateLabel(state: string | undefined): string {
 }
 
 export function mcpStateKind(
-  state: string | undefined,
+  state: string | undefined
 ): 'ok' | 'warn' | 'err' | 'idle' {
   const s = (state || '').toLowerCase();
   if (s === 'ready' || s === 'running' || s === 'connected') return 'ok';
@@ -532,7 +538,7 @@ export type DirectMcpServerConfig = {
 export type DirectMcpToolInfo = {
   name: string;
   description?: string;
-  inputSchema: any;
+  inputSchema: Record<string, unknown>;
 };
 
 export type DirectMcpConnectResult = {
@@ -549,7 +555,7 @@ export type DirectMcpListToolsResult = {
 
 export type DirectMcpCallToolResult = {
   ok: boolean;
-  result: any;
+  result: unknown;
   error?: string;
 };
 
@@ -561,7 +567,7 @@ export type DirectMcpDisconnectResult = {
 
 export async function connectDirectMcpServer(
   serverId: string,
-  config: DirectMcpServerConfig,
+  config: DirectMcpServerConfig
 ): Promise<DirectMcpConnectResult> {
   try {
     await mcpClientManager.connect(serverId, config);
@@ -573,7 +579,7 @@ export async function connectDirectMcpServer(
 }
 
 export async function disconnectDirectMcpServer(
-  serverId: string,
+  serverId: string
 ): Promise<DirectMcpDisconnectResult> {
   try {
     await mcpClientManager.disconnect(serverId);
@@ -590,7 +596,7 @@ export async function disconnectAllDirectMcpServers(): Promise<void> {
 }
 
 export async function getDirectMcpTools(
-  serverId: string,
+  serverId: string
 ): Promise<DirectMcpListToolsResult> {
   try {
     const tools = await mcpClientManager.listTools(serverId);
@@ -604,7 +610,7 @@ export async function getDirectMcpTools(
 export async function callDirectMcpTool(
   serverId: string,
   toolName: string,
-  args: any,
+  args: Record<string, unknown>
 ): Promise<DirectMcpCallToolResult> {
   try {
     const result = await mcpClientManager.callTool(serverId, toolName, args);

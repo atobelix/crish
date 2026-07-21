@@ -30,7 +30,10 @@ import {
   setSessionMessageStatus,
   updateMessageToolCall,
 } from '../api/storeAccess';
-import type { ShowToastFn } from '../hooks/useToastQueue';
+import {
+  formatBranchUndoToast,
+  type ShowToastFn,
+} from '../hooks/useToastQueue';
 import { isDemoMode } from '../api/appMode';
 import { fetchEngineStatus, type EngineStatus } from '../api/engineConfig';
 import {
@@ -317,6 +320,46 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         handleExportMarkdown();
       });
     }, [handleExportMarkdown]);
+
+    /**
+     * card-header ChatHeaderMore → open-conversation-rewind
+     * 仅走 daemon preview；失败/缺 facts 诚实 toast，禁止本地假成功。
+     */
+    useEffect(() => {
+      return onUiEvent('open-conversation-rewind', () => {
+        void (async () => {
+          const sid = activeSessionId;
+          if (!sid || sid.startsWith('__pending')) {
+            onShowToast('当前无可用会话，无法回溯');
+            return;
+          }
+          try {
+            const { previewConversationRewind } =
+              await import('../api/conversationRewindApi');
+            const preview = await previewConversationRewind({ sessionId: sid });
+            if (!preview.ok) {
+              onShowToast(
+                preview.error
+                  ? `回溯预览失败：${preview.error}`
+                  : '回溯预览失败：引擎未返回边界事实'
+              );
+              return;
+            }
+            // v1：预览成功后提示用户；完整 apply 面板可后续接 preview 字段
+            const rawType =
+              typeof preview.raw.type === 'string'
+                ? preview.raw.type
+                : 'preview';
+            onShowToast(
+              `已收到回溯预览（${rawType}）。确认应用请使用引擎 apply-conversation-rewind；缺 leaf 事实时不会改写会话。`
+            );
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            onShowToast(`回溯不可用：${msg}`);
+          }
+        })();
+      });
+    }, [activeSessionId, onShowToast]);
 
     /** 本会话文本过滤（与侧栏/高亮共用 messageMatchesSearch；含 blocks） */
     const displayMessages = useMemo(() => {
@@ -712,7 +755,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             window.setTimeout(() => setApprovalBusy(false), 200);
           });
       },
-      [activeSessionId, approvalBusy]
+      [activeSessionId, approvalBusy, onShowToast]
     );
 
     const handleApprovalDeny = useCallback(
@@ -722,17 +765,173 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         const mid = String(msgId || '').trim();
         if (!tid || !mid) return;
         setApprovalBusy(true);
+        // 乐观摘 pending；send 失败须回滚，与批准失败路径对称
         updateMessageToolCall(activeSessionId, mid, tid, {
           status: 'error',
           output: '已拒绝',
         });
         void import('../api/daemonChatBridge')
           .then(({ daemonDenyTool }) => daemonDenyTool(tid))
+          .catch(() => {
+            updateMessageToolCall(activeSessionId, mid, tid, {
+              status: 'pending_approval',
+              output: '拒绝未送达',
+            });
+            onShowToast?.('拒绝未送达，请重试');
+          })
           .finally(() => {
             window.setTimeout(() => setApprovalBusy(false), 200);
           });
       },
-      [activeSessionId, approvalBusy]
+      [activeSessionId, approvalBusy, onShowToast]
+    );
+
+    /**
+     * 批量审批：一次 busy 锁，对 bar 内 toolIds 并行 approve/deny。
+     * 不走单条 handle* 的 early-return（否则第 2 项会被 busy 挡住）。
+     * toolIds 优先；缺省时按 msgIds 收集该消息全部 pending_approval。
+     */
+    const resolveBatchPairs = useCallback(
+      (msgIds: string[], toolIds?: string[]) => {
+        if (!activeSessionId) return [] as { toolId: string; msgId: string }[];
+        const sess = getSessionById(activeSessionId);
+        if (!sess?.messages?.length) return [];
+        const pairs: { toolId: string; msgId: string }[] = [];
+        const seen = new Set<string>();
+
+        if (toolIds && toolIds.length > 0) {
+          const n = Math.min(toolIds.length, msgIds.length || toolIds.length);
+          for (let i = 0; i < n; i++) {
+            const tid = String(toolIds[i] || '').trim();
+            const mid = String(msgIds[i] ?? msgIds[0] ?? '').trim();
+            if (!tid || !mid || seen.has(tid)) continue;
+            seen.add(tid);
+            pairs.push({ toolId: tid, msgId: mid });
+          }
+          return pairs;
+        }
+
+        const targetMsgs = new Set(
+          msgIds.map((id) => String(id || '').trim()).filter(Boolean)
+        );
+        for (const m of sess.messages) {
+          const mid = String(m.id || '').trim();
+          if (!mid || !targetMsgs.has(mid)) continue;
+          for (const tc of m.toolCalls || []) {
+            if (tc.status !== 'pending_approval') continue;
+            const tid = String(tc.id || '').trim();
+            if (!tid || seen.has(tid)) continue;
+            seen.add(tid);
+            pairs.push({ toolId: tid, msgId: mid });
+          }
+        }
+        return pairs;
+      },
+      [activeSessionId]
+    );
+
+    const handleBatchApprove = useCallback(
+      (msgIds: string[], toolIds: string[] = []) => {
+        if (!activeSessionId || approvalBusy) return;
+        const pairs = resolveBatchPairs(msgIds, toolIds);
+        if (pairs.length === 0) return;
+        setApprovalBusy(true);
+        for (const { toolId, msgId } of pairs) {
+          updateMessageToolCall(activeSessionId, msgId, toolId, {
+            status: 'running',
+            output: '执行中…',
+          });
+        }
+        void import('../api/daemonChatBridge')
+          .then(async ({ daemonApproveTool }) => {
+            const results = await Promise.allSettled(
+              pairs.map(({ toolId }) => daemonApproveTool(toolId))
+            );
+            let failCount = 0;
+            results.forEach((r, i) => {
+              if (r.status === 'rejected') {
+                failCount += 1;
+                const { toolId, msgId } = pairs[i];
+                updateMessageToolCall(activeSessionId, msgId, toolId, {
+                  status: 'error',
+                  output: '批准失败',
+                });
+              }
+            });
+            if (failCount > 0) {
+              onShowToast?.(
+                failCount === pairs.length
+                  ? '批量批准失败，请重试'
+                  : `${failCount} 个工具批准失败，请重试`
+              );
+            }
+          })
+          .catch(() => {
+            for (const { toolId, msgId } of pairs) {
+              updateMessageToolCall(activeSessionId, msgId, toolId, {
+                status: 'error',
+                output: '批准失败',
+              });
+            }
+            onShowToast?.('批量批准失败，请重试');
+          })
+          .finally(() => {
+            window.setTimeout(() => setApprovalBusy(false), 200);
+          });
+      },
+      [activeSessionId, approvalBusy, onShowToast, resolveBatchPairs]
+    );
+
+    const handleBatchDeny = useCallback(
+      (msgIds: string[], toolIds: string[] = []) => {
+        if (!activeSessionId || approvalBusy) return;
+        const pairs = resolveBatchPairs(msgIds, toolIds);
+        if (pairs.length === 0) return;
+        setApprovalBusy(true);
+        for (const { toolId, msgId } of pairs) {
+          updateMessageToolCall(activeSessionId, msgId, toolId, {
+            status: 'error',
+            output: '已拒绝',
+          });
+        }
+        void import('../api/daemonChatBridge')
+          .then(async ({ daemonDenyTool }) => {
+            const results = await Promise.allSettled(
+              pairs.map(({ toolId }) => daemonDenyTool(toolId))
+            );
+            let failCount = 0;
+            results.forEach((r, i) => {
+              if (r.status === 'rejected') {
+                failCount += 1;
+                const { toolId, msgId } = pairs[i];
+                updateMessageToolCall(activeSessionId, msgId, toolId, {
+                  status: 'pending_approval',
+                  output: '拒绝未送达',
+                });
+              }
+            });
+            if (failCount > 0) {
+              onShowToast?.(
+                failCount === pairs.length
+                  ? '批量拒绝未送达，请重试'
+                  : `${failCount} 个工具拒绝未送达，请重试`
+              );
+            }
+          })
+          .catch(() => {
+            for (const { toolId, msgId } of pairs) {
+              updateMessageToolCall(activeSessionId, msgId, toolId, {
+                status: 'pending_approval',
+                output: '拒绝未送达',
+              });
+            }
+            onShowToast?.('批量拒绝未送达，请重试');
+          })
+          .finally(() => {
+            window.setTimeout(() => setApprovalBusy(false), 200);
+          });
+      },
+      [activeSessionId, approvalBusy, onShowToast, resolveBatchPairs]
     );
 
     // 子 agent 只在侧栏打开，主对话列永不被 AgentCard 覆盖；主列始终渲染 chat-body（永不 blank）
@@ -1037,14 +1236,14 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 runStreamingAssistant(userText, userMsgId);
               }}
               onBranch={() => {
-                // 分叉可撤销：toast + Undo；列表聚焦新会话
+                // 本机 UI 副本（非引擎分叉）；toast 诚实文案 + Undo 归档新副本
                 if (!activeSessionId) return;
                 const oldId = activeSessionId;
                 const base = activeSessionTitle || '会话';
                 const newTitle = `${base} - 分支`;
                 branchSession(activeSessionId, newTitle);
                 const newBranchId = getSessionStoreState().activeSessionId;
-                onShowToast(`已分叉: ${base}`, () => {
+                onShowToast(formatBranchUndoToast(base), () => {
                   if (newBranchId && newBranchId !== oldId) {
                     archiveSession(newBranchId);
                   }
@@ -1060,6 +1259,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               onOpenDiffPanel={() => openSidePanel('diff')}
               onApprovalAllow={handleApprovalAllow}
               onApprovalDeny={handleApprovalDeny}
+              onBatchApprove={handleBatchApprove}
+              onBatchDeny={handleBatchDeny}
             />
           )}
         </div>

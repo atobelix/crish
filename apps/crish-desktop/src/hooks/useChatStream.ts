@@ -62,6 +62,7 @@ import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
 import {
   buildGoalModePrefix,
+  buildGoalRunTaskFields,
   createInitialGoalMode,
   decideGoalContinuation,
   GOAL_DEFAULT_MAX_ITERATIONS,
@@ -830,6 +831,19 @@ export function useChatStream(
       }
     };
 
+    // Goal 投影 → run-task：active goalMode 时每条消息（含续写/drain）都带 mode/goal 参数
+    const goalOpts = (() => {
+      const liveGm = getSessionById(sid)?.goalMode;
+      if (!liveGm?.active || !(liveGm.goal || '').trim()) return undefined;
+      return buildGoalRunTaskFields({
+        goal: liveGm.goal,
+        maxIterations: liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS,
+      });
+    })();
+    const mergedStreamOptions: StreamRequestOptions | undefined = goalOpts
+      ? { ...streamOptions, ...goalOpts }
+      : streamOptions;
+
     cancelFn = streamAssistantResponseApi(
       input,
       {
@@ -1343,7 +1357,7 @@ export function useChatStream(
       },
       sid,
       assistantMsgId,
-      streamOptions
+      mergedStreamOptions
     );
 
     // 若开流期间被同步 supersede（极罕见），立刻收掉本轮句柄

@@ -72,6 +72,8 @@ export const RUN_TASK_FIELDS = [
   'content',
   'hasImages',
   'attachments',
+  // responseStyle / desktop system guidance → runtime systemPrompt
+  'systemPrompt',
 ] as const;
 
 export const APPROVE_TOOL_FIELDS = [
@@ -116,6 +118,7 @@ export const UPDATE_CONFIG_FIELDS = [
   'credentialMode',
   'endpoint',
   'stream',
+  'mcpServers',
 ] as const;
 export const PROBE_PROVIDER_MODELS_FIELDS = [
   'type',

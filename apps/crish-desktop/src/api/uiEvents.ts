@@ -25,6 +25,8 @@ export type UiEventMap = {
   'toggle-msg-filter': void;
   /** 聊天顶栏 ⋯：导出当前会话 Markdown */
   'export-session-md': void;
+  /** 聊天顶栏 ⋯：打开对话回溯预览（daemon experimental） */
+  'open-conversation-rewind': void;
   /** 活动服务商/模型已切换（设置页或底栏 Picker） */
   'model-changed': { profileId: string; model: string };
   /** 服务商列表/密钥/模型表变更（设置页保存后刷新选择器） */
@@ -42,7 +44,9 @@ export type UiEventDetail<K extends UiEventName> = UiEventMap[K] extends void
   ? undefined
   : UiEventMap[K];
 
-export type UiEventHandler<K extends UiEventName> = (detail: UiEventDetail<K>) => void;
+export type UiEventHandler<K extends UiEventName> = (
+  detail: UiEventDetail<K>
+) => void;
 
 /** DOM 事件名前缀（与存量 crish-* CustomEvent 一致） */
 export const UI_EVENT_PREFIX = 'crish-' as const;
@@ -63,6 +67,7 @@ export const UI_EVENT_NAMES = [
   'update-changed',
   'toggle-msg-filter',
   'export-session-md',
+  'open-conversation-rewind',
   'model-changed',
   'profiles-changed',
   'focus-composer',
@@ -72,12 +77,15 @@ export const UI_EVENT_NAMES = [
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);
 
 /** 是否需要携带 detail（非 void） */
-type HasDetail<K extends UiEventName> = UiEventMap[K] extends void ? false : true;
+type HasDetail<K extends UiEventName> = UiEventMap[K] extends void
+  ? false
+  : true;
 
 /** emit 可选参：有载荷时必填，void 时可选 */
-type EmitArgs<K extends UiEventName> = HasDetail<K> extends true
-  ? [detail: UiEventMap[K]]
-  : [detail?: UiEventMap[K]];
+type EmitArgs<K extends UiEventName> =
+  HasDetail<K> extends true
+    ? [detail: UiEventMap[K]]
+    : [detail?: UiEventMap[K]];
 
 /** 运行时类型守卫：仅接受 UiEventMap 注册短名 */
 export function isUiEventName(name: unknown): name is UiEventName {
@@ -109,7 +117,7 @@ function getWindow(): (Window & typeof globalThis) | undefined {
 /** 单订阅者异常隔离，避免拖垮同事件其余 handler */
 function invokeHandler<K extends UiEventName>(
   handler: UiEventHandler<K>,
-  detail: UiEventDetail<K>,
+  detail: UiEventDetail<K>
 ): void {
   try {
     handler(detail);
@@ -122,7 +130,10 @@ function invokeHandler<K extends UiEventName>(
  * 派发 UI 事件。void 类事件可不传 detail；有载荷时第二参为该载荷。
  * @returns 是否成功 dispatch（无 window / 未知名 / 抛错 → false）
  */
-export function emitUiEvent<K extends UiEventName>(name: K, ...args: EmitArgs<K>): boolean {
+export function emitUiEvent<K extends UiEventName>(
+  name: K,
+  ...args: EmitArgs<K>
+): boolean {
   // 防御性：调用方若强转 string 传入未知名，拒绝派发
   if (!isUiEventName(name)) return false;
   const w = getWindow();
@@ -146,7 +157,7 @@ export function emitUiEvent<K extends UiEventName>(name: K, ...args: EmitArgs<K>
  */
 export function onUiEvent<K extends UiEventName>(
   name: K,
-  handler: UiEventHandler<K>,
+  handler: UiEventHandler<K>
 ): () => void {
   if (!isUiEventName(name) || typeof handler !== 'function') {
     return () => undefined;
@@ -160,7 +171,8 @@ export function onUiEvent<K extends UiEventName>(
   let active = true;
   const listener = (ev: Event) => {
     if (!active) return;
-    const detail = (ev as CustomEvent<UiEventMap[K]>).detail as UiEventDetail<K>;
+    const detail = (ev as CustomEvent<UiEventMap[K]>)
+      .detail as UiEventDetail<K>;
     invokeHandler(handler, detail);
   };
 
@@ -185,7 +197,7 @@ export function onUiEvent<K extends UiEventName>(
  */
 export function onceUiEvent<K extends UiEventName>(
   name: K,
-  handler: UiEventHandler<K>,
+  handler: UiEventHandler<K>
 ): () => void {
   if (!isUiEventName(name) || typeof handler !== 'function') {
     return () => undefined;
@@ -211,9 +223,9 @@ export function onceUiEvent<K extends UiEventName>(
  * 一次订阅多个事件，返回统一 off（幂等）。
  * 仅对 handlers 中出现的键建立监听；忽略 undefined 槽位。
  */
-export function onUiEvents(
-  handlers: { [K in UiEventName]?: UiEventHandler<K> },
-): () => void {
+export function onUiEvents(handlers: {
+  [K in UiEventName]?: UiEventHandler<K>;
+}): () => void {
   if (!handlers || typeof handlers !== 'object') {
     return () => undefined;
   }

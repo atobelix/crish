@@ -108,6 +108,8 @@ export interface OrchestratedRunInput {
   content?: RunTaskMessage['content'];
   hasImages?: boolean;
   attachments?: RunTaskMessage['attachments'];
+  /** Response-style / desktop system prompt → runtime systemPrompt */
+  systemPrompt?: string;
   metadata?: JsonObject;
   correlation?: DaemonCorrelationFields;
   prechecked?: boolean;
@@ -228,6 +230,7 @@ export class RunHandler {
       content: msg.content,
       hasImages: msg.hasImages,
       attachments: msg.attachments,
+      systemPrompt: msg.systemPrompt,
       packageNames: msg.packageNames,
       mcpDisabledTools: msg.mcpDisabledTools,
       scopedContextConfig: msg.scopedContextConfig,
@@ -446,6 +449,7 @@ export class RunHandler {
           ...input.metadata,
           prompt: input.prompt,
           initialUserMessageId,
+          ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
           ...(input.mode ? { mode: input.mode } : {}),
           ...(input.workspaceMode
             ? { workspaceMode: input.workspaceMode }

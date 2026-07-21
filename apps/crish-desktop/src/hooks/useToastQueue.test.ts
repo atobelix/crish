@@ -61,7 +61,7 @@ describe('normalizeToastMessage', () => {
 describe('createToastId / createToastItem', () => {
   it('createToastId is deterministic with injected now/rand', () => {
     expect(createToastId(1_700_000_000_000, 'abc123')).toBe(
-      'toast-1700000000000-abc123',
+      'toast-1700000000000-abc123'
     );
   });
 
@@ -105,9 +105,13 @@ describe('toastDedupeKey / findDuplicateToastIndex', () => {
 describe('undo toast shape', () => {
   it('formatArchiveUndoToast / formatBranchUndoToast match policy prefixes', () => {
     expect(formatArchiveUndoToast('某会话')).toBe('已归档: 某会话');
-    expect(formatBranchUndoToast('某会话 - 分支')).toBe('已分叉: 某会话 - 分支');
+    expect(formatBranchUndoToast('某会话 - 分支')).toBe(
+      '已分叉: 某会话 - 分支（仅本地副本，非引擎会话分叉）'
+    );
     expect(formatArchiveUndoToast('  ')).toBe('已归档: 会话');
-    expect(formatBranchUndoToast('')).toBe('已分叉: 会话');
+    expect(formatBranchUndoToast('')).toBe(
+      '已分叉: 会话（仅本地副本，非引擎会话分叉）'
+    );
   });
 
   it('isUndoToastShape recognizes archive/branch only', () => {
@@ -175,7 +179,8 @@ describe('error-only filters', () => {
 });
 
 describe('trimToastQueue / removeToastById', () => {
-  const mk = (id: string): AppToast => createToastItem(`err-${id}`, undefined, id);
+  const mk = (id: string): AppToast =>
+    createToastItem(`err-${id}`, undefined, id);
 
   it('trimToastQueue is no-op under max', () => {
     const q = [mk('1'), mk('2')];
@@ -206,8 +211,14 @@ describe('trimToastQueue / removeToastById', () => {
 
 describe('enqueueToast (policy + dedupe + max)', () => {
   it('drops empty and success without onUndo', () => {
-    expect(enqueueToast([], '')).toEqual({ kind: 'drop', reason: 'drop-empty' });
-    expect(enqueueToast([], '   ')).toEqual({ kind: 'drop', reason: 'drop-empty' });
+    expect(enqueueToast([], '')).toEqual({
+      kind: 'drop',
+      reason: 'drop-empty',
+    });
+    expect(enqueueToast([], '   ')).toEqual({
+      kind: 'drop',
+      reason: 'drop-empty',
+    });
     expect(enqueueToast([], '已保存')).toEqual({
       kind: 'drop',
       reason: 'drop-success',
@@ -344,10 +355,16 @@ describe('enqueueToast (policy + dedupe + max)', () => {
     const a = enqueueToast([], '失败 A', undefined, { id: 'a', maxQueue: 2 });
     expect(a.kind).toBe('enqueue');
     if (a.kind !== 'enqueue') return;
-    const b = enqueueToast(a.next, '失败 B', undefined, { id: 'b', maxQueue: 2 });
+    const b = enqueueToast(a.next, '失败 B', undefined, {
+      id: 'b',
+      maxQueue: 2,
+    });
     expect(b.kind).toBe('enqueue');
     if (b.kind !== 'enqueue') return;
-    const c = enqueueToast(b.next, '失败 C', undefined, { id: 'c', maxQueue: 2 });
+    const c = enqueueToast(b.next, '失败 C', undefined, {
+      id: 'c',
+      maxQueue: 2,
+    });
     expect(c.kind).toBe('enqueue');
     if (c.kind !== 'enqueue') return;
     expect(c.evictedIds).toEqual(['a']);

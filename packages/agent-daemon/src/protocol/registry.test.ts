@@ -271,9 +271,10 @@ function extractCases(
     throw new Error(`Unable to find source region: ${startMarker}`);
   }
 
-  return [...source.slice(start, end).matchAll(/case\s+"([^"]+)":/g)].map(
-    (match) => match[1]
-  );
+  // Accept both case "x": and case 'x': (server-handlers uses single quotes).
+  return [
+    ...source.slice(start, end).matchAll(/case\s+['"]([^'"]+)['"]\s*:/g),
+  ].map((match) => match[1]);
 }
 
 function collectGroupMessageCapabilities(

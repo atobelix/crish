@@ -1,9 +1,22 @@
-import type { JsonObject, AgentEvent, AgentMessage, DiagnosticRecord } from "@crish/shared-types";
+import type {
+  JsonObject,
+  AgentEvent,
+  AgentMessage,
+  DiagnosticRecord,
+} from '@crish/shared-types';
 import {
-  compactJsonObject, isRecord, clone, BoundedMap, RingBuffer,
-  MAX_ORCHESTRATOR_SESSIONS, MAX_ORCHESTRATOR_RUNS, MAX_ORCHESTRATOR_PENDING_INPUTS, MAX_ORCHESTRATOR_DIAGNOSTICS, MAX_ORCHESTRATOR_EVENTS,
-} from "@crish/shared-utils";
-import { pluginRegistry } from "@crish/agent-runtime/plugin-registry";
+  compactJsonObject,
+  isRecord,
+  clone,
+  BoundedMap,
+  RingBuffer,
+  MAX_ORCHESTRATOR_SESSIONS,
+  MAX_ORCHESTRATOR_RUNS,
+  MAX_ORCHESTRATOR_PENDING_INPUTS,
+  MAX_ORCHESTRATOR_DIAGNOSTICS,
+  MAX_ORCHESTRATOR_EVENTS,
+} from '@crish/shared-utils';
+import { pluginRegistry } from '@crish/agent-runtime/plugin-registry';
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type AgentOrchestratorOptions,
@@ -26,7 +39,6 @@ import {
   type OrchestratorSessionRecord,
   type PendingInputRecord,
   type PendingInputResult,
-  type ProviderErrorResult,
   type RecordConversationRewindAuditRequest,
   type RecordConversationRewindAuditResult,
   type RunOutcome,
@@ -34,30 +46,42 @@ import {
   type RunEngine,
   type RunStatus,
   type StartGoalRunRequest,
-  type StartRunRequest
-} from "./types";
-import { isTerminalRunStatus, transitionRunStatus } from "./state-machine";
+  type StartRunRequest,
+} from './types';
+import { isTerminalRunStatus, transitionRunStatus } from './state-machine';
 import {
   advanceGoalStallState,
   assessGoalRound,
   createGoalRunState,
   defaultGoalContinuationDecider,
-  updateGoalState
-} from "./goal-continuation";
+  updateGoalState,
+} from './goal-continuation';
 import {
   EventScanGoalStrategy,
-  createDefaultProviderErrorHandler
-} from "./event-scan-goal-strategy";
-import { summarizeOrchestratorSessionEvents } from "./session-summary";
-
-/** @deprecated Use MAX_ORCHESTRATOR_SESSIONS from @crish/shared-utils */
-const _UNUSED = 0;
+  createDefaultProviderErrorHandler,
+} from './event-scan-goal-strategy';
+import { summarizeOrchestratorSessionEvents } from './session-summary';
+import {
+  asStateSnapshotStore,
+  ORCHESTRATOR_STATE_SNAPSHOT_SCHEMA_VERSION,
+  ORCHESTRATOR_STATE_SNAPSHOT_TYPE,
+  type OrchestratorStateSnapshot,
+  type RestoredSubagentRuntimeEvent,
+} from './state-snapshot';
 
 export class AgentOrchestrator {
-  private readonly sessions = new BoundedMap<string, OrchestratorSessionRecord>(MAX_ORCHESTRATOR_SESSIONS);
-  private readonly runs = new BoundedMap<string, OrchestratorRunRecord>(MAX_ORCHESTRATOR_RUNS);
-  private readonly pendingInputs = new BoundedMap<string, PendingInputRecord>(MAX_ORCHESTRATOR_PENDING_INPUTS);
-  private readonly activeRuns = new BoundedMap<string, ActiveRun>(MAX_ORCHESTRATOR_RUNS);
+  private readonly sessions = new BoundedMap<string, OrchestratorSessionRecord>(
+    MAX_ORCHESTRATOR_SESSIONS
+  );
+  private readonly runs = new BoundedMap<string, OrchestratorRunRecord>(
+    MAX_ORCHESTRATOR_RUNS
+  );
+  private readonly pendingInputs = new BoundedMap<string, PendingInputRecord>(
+    MAX_ORCHESTRATOR_PENDING_INPUTS
+  );
+  private readonly activeRuns = new BoundedMap<string, ActiveRun>(
+    MAX_ORCHESTRATOR_RUNS
+  );
   private readonly eventStore: OrchestratorEventStore;
   private sequence = 0;
 
@@ -67,26 +91,60 @@ export class AgentOrchestrator {
    * 当 storeEvent 写入失败时，错误信息会被推入此数组，
    * 外部可通过 diagnostics() 查询。
    */
-  private readonly diagnosticsRing: DiagnosticRecord[] = new Array(MAX_ORCHESTRATOR_DIAGNOSTICS);
+  private readonly diagnosticsRing: DiagnosticRecord[] = new Array(
+    MAX_ORCHESTRATOR_DIAGNOSTICS
+  );
   private diagCursor = 0;
 
+  /**
+   * Subagent runtime-events collected during the single restore scan for runs that
+   * were still non-terminal at end-of-log (before interrupt). Daemon consumes these
+   * via {@link consumeRestoredSubagentRuntimeEvents} — no N×readRun cold scans.
+   */
+  private restoredSubagentRuntimeEvents: RestoredSubagentRuntimeEvent[] = [];
+
+  /** Serialize snapshot writes; never block the hot path on snapshot I/O failures. */
+  private snapshotWriteChain: Promise<void> = Promise.resolve();
+
+  /** Last restore path taken (for tests / diagnostics). */
+  private lastRestoreMode: 'snapshot-incremental' | 'full-replay' | 'empty' =
+    'empty';
+
   constructor(private readonly options: AgentOrchestratorOptions) {
-    this.eventStore = options.eventStore ?? new InMemoryOrchestratorEventStore();
+    this.eventStore =
+      options.eventStore ?? new InMemoryOrchestratorEventStore();
   }
 
-  async createSession(request: CreateSessionRequest): Promise<OrchestratorSessionRecord> {
+  /** How the most recent restoreFromEventStore completed. */
+  getLastRestoreMode(): 'snapshot-incremental' | 'full-replay' | 'empty' {
+    return this.lastRestoreMode;
+  }
+
+  /**
+   * Drain subagent projections gathered during restore (single event scan).
+   * Subsequent calls return an empty array.
+   */
+  consumeRestoredSubagentRuntimeEvents(): RestoredSubagentRuntimeEvent[] {
+    const events = this.restoredSubagentRuntimeEvents;
+    this.restoredSubagentRuntimeEvents = [];
+    return events;
+  }
+
+  async createSession(
+    request: CreateSessionRequest
+  ): Promise<OrchestratorSessionRecord> {
     const now = this.now();
     const session: OrchestratorSessionRecord = {
-      id: request.id ?? this.createId("session"),
+      id: request.id ?? this.createId('session'),
       cwd: request.cwd,
       createdAt: now,
       updatedAt: now,
-      status: "open",
-      metadata: request.metadata
+      status: 'open',
+      metadata: request.metadata,
     };
     await this.storeEvent(
-      this.event("session-created", session.id, undefined, {
-        session: session as unknown as JsonObject
+      this.event('session-created', session.id, undefined, {
+        session: session as unknown as JsonObject,
       })
     );
     this.sessions.set(session.id, session);
@@ -104,11 +162,21 @@ export class AgentOrchestrator {
 
   listPendingInputs(sessionId?: string): PendingInputRecord[] {
     return [...this.pendingInputs.values()]
-      .filter((input) => input.status === "pending" && (!sessionId || input.sessionId === sessionId))
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+      .filter(
+        (input) =>
+          input.status === 'pending' &&
+          (!sessionId || input.sessionId === sessionId)
+      )
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) ||
+          left.id.localeCompare(right.id)
+      );
   }
 
-  async enqueuePendingInput(request: EnqueuePendingInputRequest): Promise<PendingInputResult> {
+  async enqueuePendingInput(
+    request: EnqueuePendingInputRequest
+  ): Promise<PendingInputResult> {
     const session = this.sessions.get(request.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${request.sessionId}`);
@@ -116,25 +184,30 @@ export class AgentOrchestrator {
 
     const text = request.text.trim();
     if (!text) {
-      throw new Error("Pending input text cannot be empty");
+      throw new Error('Pending input text cannot be empty');
     }
 
     const now = this.now();
     const input: PendingInputRecord = {
-      id: request.id ?? this.createId("pending_input"),
+      id: request.id ?? this.createId('pending_input'),
       sessionId: request.sessionId,
       ...(request.runId ? { runId: request.runId } : {}),
       text,
-      mode: request.mode ?? "after-current-run",
-      status: "pending",
+      mode: request.mode ?? 'after-current-run',
+      status: 'pending',
       createdAt: now,
       updatedAt: now,
-      source: request.source ?? "workbench",
-      ...(request.metadata ? { metadata: request.metadata } : {})
+      source: request.source ?? 'workbench',
+      ...(request.metadata ? { metadata: request.metadata } : {}),
     };
-    const event = this.event("pending-input-created", request.sessionId, request.runId, {
-      input: input as unknown as JsonObject
-    });
+    const event = this.event(
+      'pending-input-created',
+      request.sessionId,
+      request.runId,
+      {
+        input: input as unknown as JsonObject,
+      }
+    );
     await this.storeEvent(event);
     this.pendingInputs.set(input.id, input);
     session.updatedAt = now;
@@ -144,42 +217,64 @@ export class AgentOrchestrator {
     return { input, event };
   }
 
-  async cancelPendingInput(request: CancelPendingInputRequest): Promise<PendingInputResult> {
+  async cancelPendingInput(
+    request: CancelPendingInputRequest
+  ): Promise<PendingInputResult> {
     const input = this.pendingInputs.get(request.id);
-    if (!input || input.status !== "pending") {
+    if (!input || input.status !== 'pending') {
       throw new Error(`Pending input not found: ${request.id}`);
     }
     if (request.sessionId && input.sessionId !== request.sessionId) {
-      throw new Error(`Pending input ${request.id} does not belong to session ${request.sessionId}`);
+      throw new Error(
+        `Pending input ${request.id} does not belong to session ${request.sessionId}`
+      );
     }
 
-    const updated = this.updatePendingInputStatus(input, "cancelled");
-    const event = this.event("pending-input-cancelled", updated.sessionId, updated.runId, {
-      input: updated as unknown as JsonObject,
-      inputId: updated.id,
-      ...(request.reason ? { reason: request.reason } : {})
-    });
+    const updated = this.updatePendingInputStatus(input, 'cancelled');
+    const event = this.event(
+      'pending-input-cancelled',
+      updated.sessionId,
+      updated.runId,
+      {
+        input: updated as unknown as JsonObject,
+        inputId: updated.id,
+        ...(request.reason ? { reason: request.reason } : {}),
+      }
+    );
     await this.storeEvent(event);
     this.pendingInputs.set(updated.id, updated);
     this.sessions.get(updated.sessionId)!.updatedAt = updated.updatedAt;
     return { input: updated, event };
   }
 
-  async dispatchPendingInput(request: DispatchPendingInputRequest): Promise<PendingInputResult> {
+  async dispatchPendingInput(
+    request: DispatchPendingInputRequest
+  ): Promise<PendingInputResult> {
     const input = this.pendingInputs.get(request.id);
-    if (!input || input.status !== "pending") {
+    if (!input || input.status !== 'pending') {
       throw new Error(`Pending input not found: ${request.id}`);
     }
     if (request.sessionId && input.sessionId !== request.sessionId) {
-      throw new Error(`Pending input ${request.id} does not belong to session ${request.sessionId}`);
+      throw new Error(
+        `Pending input ${request.id} does not belong to session ${request.sessionId}`
+      );
     }
 
-    const updated = this.updatePendingInputStatus(input, "dispatched", request.targetRunId);
-    const event = this.event("pending-input-dispatched", updated.sessionId, request.targetRunId ?? updated.runId, {
-      input: updated as unknown as JsonObject,
-      inputId: updated.id,
-      ...(request.targetRunId ? { targetRunId: request.targetRunId } : {})
-    });
+    const updated = this.updatePendingInputStatus(
+      input,
+      'dispatched',
+      request.targetRunId
+    );
+    const event = this.event(
+      'pending-input-dispatched',
+      updated.sessionId,
+      request.targetRunId ?? updated.runId,
+      {
+        input: updated as unknown as JsonObject,
+        inputId: updated.id,
+        ...(request.targetRunId ? { targetRunId: request.targetRunId } : {}),
+      }
+    );
     await this.storeEvent(event);
     this.pendingInputs.set(updated.id, updated);
     this.sessions.get(updated.sessionId)!.updatedAt = updated.updatedAt;
@@ -193,16 +288,21 @@ export class AgentOrchestrator {
     return summarizeOrchestratorSessionEvents(await this.readAllEvents());
   }
 
-  async moveSessionLeaf(request: MoveSessionLeafRequest): Promise<MoveSessionLeafResult> {
+  async moveSessionLeaf(
+    request: MoveSessionLeafRequest
+  ): Promise<MoveSessionLeafResult> {
     const session = this.sessions.get(request.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${request.sessionId}`);
     }
 
     const fromLeafId = session.currentLeafId;
-    if (request.expectedCurrentLeafId !== undefined && fromLeafId !== request.expectedCurrentLeafId) {
+    if (
+      request.expectedCurrentLeafId !== undefined &&
+      fromLeafId !== request.expectedCurrentLeafId
+    ) {
       throw new Error(
-        `Session ${request.sessionId} current leaf mismatch: expected ${request.expectedCurrentLeafId}, got ${fromLeafId ?? "none"}`
+        `Session ${request.sessionId} current leaf mismatch: expected ${request.expectedCurrentLeafId}, got ${fromLeafId ?? 'none'}`
       );
     }
 
@@ -211,26 +311,31 @@ export class AgentOrchestrator {
         session,
         fromLeafId: fromLeafId ?? null,
         toLeafId: request.targetLeafId,
-        changed: false
+        changed: false,
       };
     }
 
     const updatedSession: OrchestratorSessionRecord = {
       ...session,
-      updatedAt: this.now()
+      updatedAt: this.now(),
     };
     if (request.targetLeafId === null) {
       delete updatedSession.currentLeafId;
     } else {
       updatedSession.currentLeafId = request.targetLeafId;
     }
-    const event = this.event("session-leaf-moved", updatedSession.id, undefined, {
-      session: updatedSession as unknown as JsonObject,
-      fromLeafId: fromLeafId ?? null,
-      toLeafId: request.targetLeafId,
-      ...(request.reason ? { reason: request.reason } : {}),
-      ...(request.metadata ? { metadata: request.metadata } : {})
-    });
+    const event = this.event(
+      'session-leaf-moved',
+      updatedSession.id,
+      undefined,
+      {
+        session: updatedSession as unknown as JsonObject,
+        fromLeafId: fromLeafId ?? null,
+        toLeafId: request.targetLeafId,
+        ...(request.reason ? { reason: request.reason } : {}),
+        ...(request.metadata ? { metadata: request.metadata } : {}),
+      }
+    );
 
     await this.storeEvent(event);
     this.sessions.set(updatedSession.id, updatedSession);
@@ -239,7 +344,7 @@ export class AgentOrchestrator {
       fromLeafId: fromLeafId ?? null,
       toLeafId: request.targetLeafId,
       event,
-      changed: true
+      changed: true,
     };
   }
 
@@ -250,7 +355,12 @@ export class AgentOrchestrator {
       throw new Error(`Session not found: ${request.sessionId}`);
     }
 
-    const event = this.event("conversation-rewind-audit", request.sessionId, undefined, request.payload);
+    const event = this.event(
+      'conversation-rewind-audit',
+      request.sessionId,
+      undefined,
+      request.payload
+    );
     await this.storeEvent(event);
     return { event };
   }
@@ -260,7 +370,9 @@ export class AgentOrchestrator {
   }
 
   listRuns(sessionId?: string): OrchestratorRunRecord[] {
-    return [...this.runs.values()].filter((run) => !sessionId || run.sessionId === sessionId);
+    return [...this.runs.values()].filter(
+      (run) => !sessionId || run.sessionId === sessionId
+    );
   }
 
   /**
@@ -281,59 +393,75 @@ export class AgentOrchestrator {
   }
 
   async startRun(request: StartRunRequest): Promise<OrchestratorRunHandle> {
-    return this.startRunWithDriver(request, "task");
+    return this.startRunWithDriver(request, 'task');
   }
 
-  async startGoalRun(request: StartGoalRunRequest): Promise<OrchestratorRunHandle> {
-    return this.startRunWithDriver(request, "goal");
+  async startGoalRun(
+    request: StartGoalRunRequest
+  ): Promise<OrchestratorRunHandle> {
+    return this.startRunWithDriver(request, 'goal');
   }
 
-  private async startRunWithDriver(request: StartGoalRunRequest, kind: "task" | "goal"): Promise<OrchestratorRunHandle> {
+  private async startRunWithDriver(
+    request: StartGoalRunRequest,
+    kind: 'task' | 'goal'
+  ): Promise<OrchestratorRunHandle> {
     const session = await this.resolveSession(request);
     const now = this.now();
     const run: OrchestratorRunRecord = {
-      id: request.id ?? this.createId("run"),
+      id: request.id ?? this.createId('run'),
       sessionId: session.id,
       cwd: request.cwd,
-      status: "queued",
+      status: 'queued',
       createdAt: now,
       updatedAt: now,
       kind,
-      ...(kind === "goal"
+      ...(kind === 'goal'
         ? {
             goal: createGoalRunState({
               goal: request.goal,
-              fallbackVisibleGoal: promptSummary(request.input)
-            })
+              fallbackVisibleGoal: promptSummary(request.input),
+            }),
           }
         : {}),
-      metadata: request.metadata
+      metadata: request.metadata,
     };
     this.runs.set(run.id, run);
 
     const queue = new AsyncQueue<OrchestratorEvent>();
-    const active: ActiveRun = { run, queue, pendingEmits: new BoundedMap<Promise<void>, true>(MAX_ORCHESTRATOR_EVENTS), emitChain: Promise.resolve() };
+    const active: ActiveRun = {
+      run,
+      queue,
+      pendingEmits: new BoundedMap<Promise<void>, true>(
+        MAX_ORCHESTRATOR_EVENTS
+      ),
+      emitChain: Promise.resolve(),
+    };
     this.activeRuns.set(run.id, active);
 
-    this.emitToRun(active, "run-queued", { run: run as unknown as JsonObject });
-    (kind === "goal" ? this.driveGoalRun(active, session, request) : this.driveRun(active, session, request));
+    this.emitToRun(active, 'run-queued', { run: run as unknown as JsonObject });
+    if (kind === 'goal') {
+      void this.driveGoalRun(active, session, request);
+    } else {
+      void this.driveRun(active, session, request);
+    }
 
     return {
       runId: run.id,
       sessionId: session.id,
-      events: queue
+      events: queue,
     };
   }
 
-  cancelRun(runId: string, reason = "cancelled-by-user"): boolean {
+  cancelRun(runId: string, reason = 'cancelled-by-user'): boolean {
     const active = this.activeRuns.get(runId);
     const run = this.runs.get(runId);
     if (!run || !active) return false;
     if (isTerminalRunStatus(run.status)) return false;
 
-    this.updateRun(run, "cancelling");
+    this.updateRun(run, 'cancelling');
     active.engine?.abort(reason);
-    this.emitToRun(active, "run-cancel-requested", { reason });
+    this.emitToRun(active, 'run-cancel-requested', { reason });
     return true;
   }
 
@@ -348,10 +476,10 @@ export class AgentOrchestrator {
     const trimmed = text.trim();
     if (!trimmed) return false;
     const message: AgentMessage = {
-      id: this.createId("user"),
-      role: "user",
+      id: this.createId('user'),
+      role: 'user',
       createdAt: this.now(),
-      blocks: [{ type: "text", text: trimmed }],
+      blocks: [{ type: 'text', text: trimmed }],
     };
     active.engine.enqueueSteerInput(message);
     return true;
@@ -363,18 +491,33 @@ export class AgentOrchestrator {
     return Boolean(active?.engine && !isTerminalRunStatus(active.run.status));
   }
 
-  async readSessionEvents(sessionId: string, afterSequence?: number, options?: OrchestratorEventReadOptions): Promise<OrchestratorEvent[]> {
+  async readSessionEvents(
+    sessionId: string,
+    afterSequence?: number,
+    options?: OrchestratorEventReadOptions
+  ): Promise<OrchestratorEvent[]> {
     return this.eventStore.readSession(sessionId, afterSequence, options);
   }
 
-  async readRunEvents(runId: string, afterSequence?: number, options?: OrchestratorEventReadOptions): Promise<OrchestratorEvent[]> {
+  async readRunEvents(
+    runId: string,
+    afterSequence?: number,
+    options?: OrchestratorEventReadOptions
+  ): Promise<OrchestratorEvent[]> {
     if (this.eventStore.readRun) {
       return this.eventStore.readRun(runId, afterSequence, options);
     }
     const run = this.runs.get(runId);
     if (!run) return [];
-    const events = await this.eventStore.readSession(run.sessionId, afterSequence);
-    return collectEvents(events, (event) => event.runId === runId, options?.maxEvents);
+    const events = await this.eventStore.readSession(
+      run.sessionId,
+      afterSequence
+    );
+    return collectEvents(
+      events,
+      (event) => event.runId === runId,
+      options?.maxEvents
+    );
   }
 
   async getEventLogMetadata(): Promise<OrchestratorEventLogMetadata> {
@@ -385,60 +528,221 @@ export class AgentOrchestrator {
   }
 
   async restoreFromEventStore(): Promise<void> {
-    // 流式回放优先：避免将整个 JSONL 加载进内存数组。
-    // FileOrchestratorEventStore.readAllStreaming 用 createReadStream + readline
-    // 逐行解析并 yield，内存占用与单条事件成正比而非与历史总量成正比。
-    // 不支持流式（如 InMemoryOrchestratorEventStore）时退化为 readAll。
-    // 注意：必须完整回放所有事件以恢复所有 session/run 状态，
-    // bootstrapFromTail 只读尾部 1000 条会丢失早期 session，故不在此使用。
+    // Restore strategy:
+    // 1) If a valid durable state snapshot exists: load projection → set sequence
+    //    → stream only events with sequence > snapshot.lastSequence (incremental).
+    // 2) Otherwise: full streaming (or readAll) replay for correctness.
+    // bootstrapFromTail is NOT used here — it would drop early sessions.
+    // After restore, schedule an async snapshot write (does not block ready).
+    this.restoredSubagentRuntimeEvents = [];
     let maxSequence = this.sequence;
-    const replayStates = new BoundedMap<string, RestoredRunReplayState>(MAX_ORCHESTRATOR_SESSIONS);
-    const stream = streamingEventIterable(this.eventStore);
-    if (stream) {
-      for await (const event of stream) {
-        maxSequence = Math.max(maxSequence, event.sequence);
-        this.applyStoredEvent(event, replayStates);
-      }
-    } else {
-      const events = await this.readAllEvents();
-      for (const event of events) {
-        maxSequence = Math.max(maxSequence, event.sequence);
-        this.applyStoredEvent(event, replayStates);
+    const replayStates = new BoundedMap<string, RestoredRunReplayState>(
+      MAX_ORCHESTRATOR_SESSIONS
+    );
+    // runId → subagentId → latest started runtime agentEvent (for daemon rebuild)
+    const subagentStarts = new Map<string, Map<string, unknown>>();
+
+    const snapshotStore = asStateSnapshotStore(this.eventStore);
+    let snapshot: OrchestratorStateSnapshot | null = null;
+    if (snapshotStore) {
+      try {
+        snapshot = await snapshotStore.loadStateSnapshot();
+      } catch {
+        snapshot = null;
       }
     }
 
+    if (snapshot) {
+      this.applyStateSnapshot(snapshot);
+      maxSequence = snapshot.lastSequence;
+      this.sequence = snapshot.lastSequence;
+      this.lastRestoreMode = 'snapshot-incremental';
+      if (snapshot.activeSubagentProjections) {
+        for (const proj of snapshot.activeSubagentProjections) {
+          const key =
+            subagentKeyFromAgentEvent(proj.agentEvent) ??
+            `anon_${subagentStarts.size}`;
+          let bySub = subagentStarts.get(proj.runId);
+          if (!bySub) {
+            bySub = new Map();
+            subagentStarts.set(proj.runId, bySub);
+          }
+          bySub.set(key, proj.agentEvent);
+        }
+      }
+    } else {
+      this.lastRestoreMode = 'full-replay';
+    }
+
+    const afterSequence = maxSequence;
+    let appliedAny = false;
+    const stream = streamingEventIterable(this.eventStore, afterSequence);
+    if (stream) {
+      for await (const event of stream) {
+        appliedAny = true;
+        maxSequence = Math.max(maxSequence, event.sequence);
+        this.applyStoredEvent(event, replayStates);
+        trackSubagentStartFromEvent(event, subagentStarts);
+      }
+    } else {
+      const events = await this.readAllEvents(afterSequence);
+      for (const event of events) {
+        appliedAny = true;
+        maxSequence = Math.max(maxSequence, event.sequence);
+        this.applyStoredEvent(event, replayStates);
+        trackSubagentStartFromEvent(event, subagentStarts);
+      }
+    }
+
+    if (!snapshot && !appliedAny && maxSequence === 0) {
+      this.lastRestoreMode = 'empty';
+    }
+
     this.sequence = maxSequence;
+
+    // Capture subagent projections for runs still non-terminal before interrupt.
+    const projections: RestoredSubagentRuntimeEvent[] = [];
+    for (const [runId, bySub] of subagentStarts) {
+      const run = this.runs.get(runId);
+      if (!run || isTerminalRunStatus(run.status)) continue;
+      for (const agentEvent of bySub.values()) {
+        projections.push({ runId, agentEvent });
+      }
+    }
+    this.restoredSubagentRuntimeEvents = projections;
+
     await this.interruptRestoredActiveRuns();
+    // Only persist when restore actually produced state — avoids creating an empty
+    // event-log header solely for snapshot metadata on a brand-new daemon.
+    if (this.sequence > 0 || this.sessions.size > 0 || this.runs.size > 0) {
+      try {
+        await this.persistStateSnapshot();
+      } catch {
+        // Snapshot write failures must not fail restore readiness.
+      }
+    }
   }
 
-  private async driveRun(active: ActiveRun, session: OrchestratorSessionRecord, request: StartRunRequest): Promise<void> {
+  /**
+   * Persist current sessions/runs/pendingInputs as a durable snapshot (async-safe).
+   * Exposed for tests and explicit flush points (e.g. shutdown).
+   */
+  async persistStateSnapshot(): Promise<boolean> {
+    const snapshotStore = asStateSnapshotStore(this.eventStore);
+    if (!snapshotStore) return false;
+    let metadata: OrchestratorEventLogMetadata;
+    try {
+      metadata = await this.getEventLogMetadata();
+    } catch {
+      return false;
+    }
+    const snapshot: OrchestratorStateSnapshot = {
+      type: ORCHESTRATOR_STATE_SNAPSHOT_TYPE,
+      schemaVersion: ORCHESTRATOR_STATE_SNAPSHOT_SCHEMA_VERSION,
+      eventLogId: metadata.eventLogId,
+      generation: metadata.generation,
+      lastSequence: this.sequence,
+      writtenAt: this.now(),
+      sessions: this.listSessions().map((session) => clone(session)),
+      runs: this.listRuns().map((run) => clone(run)),
+      pendingInputs: [...this.pendingInputs.values()].map((input) =>
+        clone(input)
+      ),
+      ...(this.restoredSubagentRuntimeEvents.length > 0
+        ? { activeSubagentProjections: [...this.restoredSubagentRuntimeEvents] }
+        : {}),
+    };
+    await snapshotStore.writeStateSnapshot(snapshot);
+    return true;
+  }
+
+  private snapshotWriteCoalesced = false;
+
+  private scheduleStateSnapshotWrite(): void {
+    // Coalesce bursty terminal events (multi-run interrupt, rapid completes)
+    // into a single trailing snapshot write.
+    if (this.snapshotWriteCoalesced) return;
+    this.snapshotWriteCoalesced = true;
+    this.snapshotWriteChain = this.snapshotWriteChain
+      .then(async () => {
+        this.snapshotWriteCoalesced = false;
+        try {
+          await this.persistStateSnapshot();
+        } catch {
+          // Snapshot write failures must not affect run correctness.
+        }
+      })
+      .catch(() => {
+        this.snapshotWriteCoalesced = false;
+      });
+  }
+
+  /** Wait for any scheduled (async) snapshot writes to finish — tests / shutdown. */
+  async flushStateSnapshotWrites(): Promise<void> {
+    await this.snapshotWriteChain;
+  }
+
+  private applyStateSnapshot(snapshot: OrchestratorStateSnapshot): void {
+    for (const session of snapshot.sessions) {
+      this.sessions.set(session.id, clone(session));
+    }
+    for (const run of snapshot.runs) {
+      this.runs.set(run.id, clone(run));
+    }
+    for (const input of snapshot.pendingInputs) {
+      this.pendingInputs.set(input.id, clone(input));
+    }
+    this.sequence = snapshot.lastSequence;
+  }
+
+  private async driveRun(
+    active: ActiveRun,
+    session: OrchestratorSessionRecord,
+    request: StartRunRequest
+  ): Promise<void> {
     const run = active.run;
     try {
-      const engine = await this.options.createRunEngine({ runId: run.id, session, run });
+      const engine = await this.options.createRunEngine({
+        runId: run.id,
+        session,
+        run,
+      });
       active.engine = engine;
       if (active.persistenceFailed) return;
-      this.updateRun(run, "running", { startedAt: this.now() });
-      this.emitToRun(active, "run-started", { run: run as unknown as JsonObject });
+      this.updateRun(run, 'running', { startedAt: this.now() });
+      this.emitToRun(active, 'run-started', {
+        run: run as unknown as JsonObject,
+      });
 
       for await (const runtimeEvent of engine.run(request.input)) {
         if (active.persistenceFailed) break;
         this.applyRuntimeEventStatus(active, runtimeEvent);
-        this.emitToRun(active, "runtime-event", {
-          event: runtimeEvent as unknown as JsonObject
-        });
-        // Persist/broadcast before the next status transition so concurrent event
-        // consumers observe intermediate states (e.g. awaiting-approval) at delivery time,
-        // and so persistenceFailed is visible before more runtime work continues.
-        await this.waitForPendingEmits(active);
+        const durable = !isNonDurableRuntimeDelta(runtimeEvent);
+        this.emitToRun(
+          active,
+          'runtime-event',
+          { event: runtimeEvent as unknown as JsonObject },
+          { durable }
+        );
+        // Durable events: await persist so intermediate statuses (e.g. awaiting-approval)
+        // and persistenceFailed are visible before more runtime work continues.
+        // Streaming deltas (message-delta / thought-delta) skip event-store append and
+        // do not block the drive loop; audit/replay relies on message-end + lifecycle events.
+        if (durable) {
+          await this.waitForPendingEmits(active);
+        }
       }
 
       if (!active.persistenceFailed && !isTerminalRunStatus(run.status)) {
-        const completion = run.status === "cancelling" ? cancelledCompletion("cancelled") : completedCompletion();
+        const completion =
+          run.status === 'cancelling'
+            ? cancelledCompletion('cancelled')
+            : completedCompletion();
         this.updateRun(run, completion.status, {
           finishedAt: this.now(),
           outcome: completion.outcome,
           reason: completion.reason,
-          outcomeDetail: completion.outcomeDetail
+          outcomeDetail: completion.outcomeDetail,
         });
       }
       if (!active.persistenceFailed) {
@@ -446,13 +750,16 @@ export class AgentOrchestrator {
       }
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : String(cause);
-      const completion = run.status === "cancelling" ? cancelledCompletion("cancelled", error) : failedCompletion("run-engine-error", error);
+      const completion =
+        run.status === 'cancelling'
+          ? cancelledCompletion('cancelled', error)
+          : failedCompletion('run-engine-error', error);
       this.updateRun(run, completion.status, {
         finishedAt: this.now(),
         outcome: completion.outcome,
         reason: completion.reason,
         outcomeDetail: completion.outcomeDetail,
-        error
+        error,
       });
       this.emitRunTerminalEvent(active, error);
     } finally {
@@ -462,33 +769,61 @@ export class AgentOrchestrator {
     }
   }
 
-  private async driveGoalRun(active: ActiveRun, session: OrchestratorSessionRecord, request: StartGoalRunRequest): Promise<void> {
+  private async driveGoalRun(
+    active: ActiveRun,
+    session: OrchestratorSessionRecord,
+    request: StartGoalRunRequest
+  ): Promise<void> {
     const run = active.run;
-    const strategy = request.goalLoopStrategy
-      ?? this.options.defaultGoalLoopStrategy
-      ?? new EventScanGoalStrategy();
-    const decideGoalContinuation = this.options.decideGoalContinuation ?? defaultGoalContinuationDecider;
-    const maxTransientProviderErrors = Math.max(6, Math.ceil((requiredGoal(run).maxRounds) * 0.75));
+    const strategy =
+      request.goalLoopStrategy ??
+      this.options.defaultGoalLoopStrategy ??
+      new EventScanGoalStrategy();
+    // Custom continuation decider is available via options; EventScanGoalStrategy
+    // currently owns assessRound. Keep fallback wired for strategy adapters.
+    void (
+      this.options.decideGoalContinuation ?? defaultGoalContinuationDecider
+    );
+    const maxTransientProviderErrors = Math.max(
+      6,
+      Math.ceil(requiredGoal(run).maxRounds * 0.75)
+    );
     const providerBackoffMs = this.options.providerRateLimitBackoffMs ?? 90_000;
-    const handleProviderError = strategy.handleProviderError
-      ?? createDefaultProviderErrorHandler({ maxTransientErrors: maxTransientProviderErrors, backoffMs: providerBackoffMs });
+    const handleProviderError =
+      strategy.handleProviderError ??
+      createDefaultProviderErrorHandler({
+        maxTransientErrors: maxTransientProviderErrors,
+        backoffMs: providerBackoffMs,
+      });
     let currentPrompt = request.input;
     let consecutiveTransientProviderErrors = 0;
 
     try {
-      this.updateRun(run, "running", { startedAt: this.now() });
-      this.updateRunGoal(run, updateGoalState(requiredGoal(run), { status: "running" }));
-      this.emitToRun(active, "run-started", { run: run as unknown as JsonObject });
+      this.updateRun(run, 'running', { startedAt: this.now() });
+      this.updateRunGoal(
+        run,
+        updateGoalState(requiredGoal(run), { status: 'running' })
+      );
+      this.emitToRun(active, 'run-started', {
+        run: run as unknown as JsonObject,
+      });
 
       while (!isTerminalRunStatus(run.status)) {
         if (active.persistenceFailed) break;
-        if (hasRunStatus(run, "cancelling")) break;
+        if (hasRunStatus(run, 'cancelling')) break;
         const goal = requiredGoal(run);
         if (goal.completedRounds >= goal.maxRounds) {
-          this.completeGoalRun(active, blockedCompletion("goal-max-rounds", `Goal reached the maximum round limit: ${goal.maxRounds}`), {
-            status: "blocked",
-            stoppedReason: "max-rounds"
-          });
+          this.completeGoalRun(
+            active,
+            blockedCompletion(
+              'goal-max-rounds',
+              `Goal reached the maximum round limit: ${goal.maxRounds}`
+            ),
+            {
+              status: 'blocked',
+              stoppedReason: 'max-rounds',
+            }
+          );
           break;
         }
 
@@ -496,58 +831,72 @@ export class AgentOrchestrator {
         this.updateRunGoal(
           run,
           updateGoalState(goal, {
-            status: "running",
-            currentRound: roundIndex
+            status: 'running',
+            currentRound: roundIndex,
           })
         );
-        this.emitToRun(active, "goal-round-started", {
+        this.emitToRun(active, 'goal-round-started', {
           run: run as unknown as JsonObject,
-          round: { index: roundIndex }
+          round: { index: roundIndex },
         });
 
-        const { events: roundEvents, roundContext } = await this.driveGoalRound(active, session, currentPrompt, strategy);
+        const { events: roundEvents, roundContext } = await this.driveGoalRound(
+          active,
+          session,
+          currentPrompt,
+          strategy
+        );
         if (isTerminalRunStatus(run.status)) break;
+        if (hasRunStatus(run, 'cancelling')) break;
+
+        // -- Provider error handling BEFORE completedRounds++ --
+        // retry/backoff 不得先占一轮配额（与 countAsProductive: false / 「retry 不 increment」对齐）
+        const providerError = handleProviderError({
+          events: roundEvents,
+          roundIndex,
+          consecutiveTransientErrors: consecutiveTransientProviderErrors,
+        });
+        if (providerError) {
+          if (providerError.action === 'fatal') {
+            const completion = failedCompletion(
+              'provider-error',
+              providerError.reason
+            );
+            this.completeGoalRun(active, completion, {
+              status: 'failed',
+              stoppedReason: 'error',
+            });
+            break;
+          }
+          if (
+            providerError.action === 'backoff' ||
+            providerError.action === 'retry'
+          ) {
+            consecutiveTransientProviderErrors += 1;
+            const backoffMs = providerError.backoffMs ?? 0;
+            if (backoffMs > 0) {
+              await new Promise<void>((resolve) =>
+                setTimeout(resolve, backoffMs)
+              );
+            }
+            // 非 productive 重试：不 increment completedRounds、不发 goal-round-completed
+            if (providerError.countAsProductive !== true) {
+              continue;
+            }
+          }
+        }
+        consecutiveTransientProviderErrors = 0;
 
         this.updateRunGoal(
           run,
           updateGoalState(requiredGoal(run), {
-            completedRounds: roundIndex + 1
+            completedRounds: roundIndex + 1,
           })
         );
-        this.emitToRun(active, "goal-round-completed", {
+        this.emitToRun(active, 'goal-round-completed', {
           run: run as unknown as JsonObject,
-          round: { index: roundIndex, eventCount: roundEvents.length }
+          round: { index: roundIndex, eventCount: roundEvents.length },
         });
-
-        if (hasRunStatus(run, "cancelling")) break;
-
-        // -- Provider error handling (unified for all strategies) --
-        const providerError = handleProviderError({
-          events: roundEvents,
-          roundIndex,
-          consecutiveTransientErrors: consecutiveTransientProviderErrors
-        });
-        if (providerError) {
-          if (providerError.action === "fatal") {
-            const completion = failedCompletion("provider-error", providerError.reason);
-            this.completeGoalRun(active, completion, { status: "failed", stoppedReason: "error" });
-            break;
-          }
-          if (providerError.action === "backoff" || providerError.action === "retry") {
-            consecutiveTransientProviderErrors += 1;
-            const backoffMs = providerError.backoffMs ?? 0;
-            if (backoffMs > 0) {
-              await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
-            }
-            if (providerError.action === "retry") {
-              // Retry the same round without incrementing completedRounds
-              continue;
-            }
-            // backoff: continue to next round (which will retry with the same prompt)
-            continue;
-          }
-        }
-        consecutiveTransientProviderErrors = 0;
 
         // -- Strategy-based assessment and continuation --
         const decision = await strategy.assessRound({
@@ -556,37 +905,48 @@ export class AgentOrchestrator {
           roundIndex,
           prompt: currentPrompt,
           events: roundEvents,
-          roundContext
+          roundContext,
         });
-        const assessment = assessGoalRound({ run, roundIndex, events: roundEvents });
+        const assessment = assessGoalRound({
+          run,
+          roundIndex,
+          events: roundEvents,
+        });
 
         const progressSignature = strategy.computeProgressSignature({
           decision,
           events: roundEvents,
-          roundContext
+          roundContext,
         });
         const decisionWithSignature: GoalContinuationDecision = {
           ...decision,
-          progressSignature
+          progressSignature,
         };
 
         const nextGoal = advanceGoalStallState(
           updateGoalState(requiredGoal(run), {
-            lastDecision: decisionWithSignature
+            lastDecision: decisionWithSignature,
           }),
           decisionWithSignature
         );
         this.updateRunGoal(run, nextGoal);
-        this.emitToRun(active, "goal-continuation-decided", {
+        this.emitToRun(active, 'goal-continuation-decided', {
           run: run as unknown as JsonObject,
           decision: decisionWithSignature as unknown as JsonObject,
           assessment: assessment as unknown as JsonObject,
-          round: { index: roundIndex }
+          round: { index: roundIndex },
         });
 
-        const goalCompletion = completionFromGoalDecision(decisionWithSignature, requiredGoal(run));
+        const goalCompletion = completionFromGoalDecision(
+          decisionWithSignature,
+          requiredGoal(run)
+        );
         if (goalCompletion) {
-          this.completeGoalRun(active, goalCompletion.completion, goalCompletion.goalPatch);
+          this.completeGoalRun(
+            active,
+            goalCompletion.completion,
+            goalCompletion.goalPatch
+          );
           break;
         }
 
@@ -596,19 +956,24 @@ export class AgentOrchestrator {
           roundIndex,
           goalState: requiredGoal(run),
           events: roundEvents,
-          roundContext
+          roundContext,
         });
-        currentPrompt = enrichedPrompt ?? decisionWithSignature.prompt ?? currentPrompt;
+        currentPrompt =
+          enrichedPrompt ?? decisionWithSignature.prompt ?? currentPrompt;
       }
 
       if (!active.persistenceFailed && !isTerminalRunStatus(run.status)) {
         const completion =
-          run.status === "cancelling"
-            ? cancelledCompletion("cancelled")
-            : blockedCompletion("goal-max-rounds", `Goal reached the maximum round limit: ${requiredGoal(run).maxRounds}`);
+          run.status === 'cancelling'
+            ? cancelledCompletion('cancelled')
+            : blockedCompletion(
+                'goal-max-rounds',
+                `Goal reached the maximum round limit: ${requiredGoal(run).maxRounds}`
+              );
         this.completeGoalRun(active, completion, {
-          status: completion.outcome === "cancelled" ? "cancelled" : "blocked",
-          stoppedReason: completion.outcome === "cancelled" ? "cancelled" : "max-rounds"
+          status: completion.outcome === 'cancelled' ? 'cancelled' : 'blocked',
+          stoppedReason:
+            completion.outcome === 'cancelled' ? 'cancelled' : 'max-rounds',
         });
       } else if (!active.persistenceFailed) {
         this.finalizeGoalFromTerminalRun(run);
@@ -619,10 +984,14 @@ export class AgentOrchestrator {
       }
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : String(cause);
-      const completion = run.status === "cancelling" ? cancelledCompletion("cancelled", error) : failedCompletion("run-engine-error", error);
+      const completion =
+        run.status === 'cancelling'
+          ? cancelledCompletion('cancelled', error)
+          : failedCompletion('run-engine-error', error);
       this.completeGoalRun(active, completion, {
-        status: completion.outcome === "cancelled" ? "cancelled" : "failed",
-        stoppedReason: completion.outcome === "cancelled" ? "cancelled" : "error"
+        status: completion.outcome === 'cancelled' ? 'cancelled' : 'failed',
+        stoppedReason:
+          completion.outcome === 'cancelled' ? 'cancelled' : 'error',
       });
       this.emitRunTerminalEvent(active, error);
     } finally {
@@ -635,11 +1004,15 @@ export class AgentOrchestrator {
   private async driveGoalRound(
     active: ActiveRun,
     session: OrchestratorSessionRecord,
-    prompt: StartRunRequest["input"],
+    prompt: StartRunRequest['input'],
     strategy: GoalLoopStrategy
   ): Promise<{ events: AgentEvent[]; roundContext?: unknown }> {
     const run = active.run;
-    const engine = await this.options.createRunEngine({ runId: run.id, session, run });
+    const engine = await this.options.createRunEngine({
+      runId: run.id,
+      session,
+      run,
+    });
     active.engine = engine;
     const events: AgentEvent[] = [];
     let roundContext: unknown;
@@ -650,12 +1023,24 @@ export class AgentOrchestrator {
         if (strategy.onRoundEvent) {
           roundContext = strategy.onRoundEvent(runtimeEvent, roundContext);
         }
-        this.applyRuntimeEventStatus(active, runtimeEvent, { agentStopCompletes: false });
-        this.emitToRun(active, "runtime-event", {
-          event: runtimeEvent as unknown as JsonObject
+        this.applyRuntimeEventStatus(active, runtimeEvent, {
+          agentStopCompletes: false,
         });
-        await this.waitForPendingEmits(active);
+        const durable = !isNonDurableRuntimeDelta(runtimeEvent);
+        this.emitToRun(
+          active,
+          'runtime-event',
+          { event: runtimeEvent as unknown as JsonObject },
+          { durable }
+        );
+        // Same graded persistence as driveRun: non-durable deltas stream live without
+        // serializing the round loop on event-store I/O.
+        if (durable) {
+          await this.waitForPendingEmits(active);
+        }
       }
+      // Flush trailing non-durable deltas (and any durable emits) before the round ends.
+      await this.waitForPendingEmits(active);
       return { events, roundContext };
     } finally {
       if (active.engine === engine) {
@@ -677,7 +1062,9 @@ export class AgentOrchestrator {
     }
   }
 
-  private async resolveSession(request: StartRunRequest): Promise<OrchestratorSessionRecord> {
+  private async resolveSession(
+    request: StartRunRequest
+  ): Promise<OrchestratorSessionRecord> {
     if (request.sessionId) {
       const existing = this.sessions.get(request.sessionId);
       if (existing) {
@@ -685,7 +1072,7 @@ export class AgentOrchestrator {
         existing.cwd = request.cwd;
         existing.metadata = compactJsonObject({
           ...(existing.metadata ?? {}),
-          ...sessionMetadataFromRunRequest(request)
+          ...sessionMetadataFromRunRequest(request),
         });
         return existing;
       }
@@ -693,7 +1080,7 @@ export class AgentOrchestrator {
     return await this.createSession({
       id: request.sessionId,
       cwd: request.cwd,
-      metadata: sessionMetadataFromRunRequest(request)
+      metadata: sessionMetadataFromRunRequest(request),
     });
   }
 
@@ -705,33 +1092,47 @@ export class AgentOrchestrator {
     const run = active.run;
     if (isTerminalRunStatus(run.status)) return undefined;
 
-    if (runtimeEvent.type === "approval-requested") {
-      this.updateRun(run, "awaiting-approval", {
-        reason: "awaiting-approval",
-        outcomeDetail: runtimeEvent.request as unknown as JsonObject
+    if (runtimeEvent.type === 'approval-requested') {
+      this.updateRun(run, 'awaiting-approval', {
+        reason: 'awaiting-approval',
+        outcomeDetail: runtimeEvent.request as unknown as JsonObject,
       });
       return undefined;
     }
-    if (runtimeEvent.type === "approval-resolved" && run.status === "awaiting-approval") {
-      this.updateRun(run, "running", { reason: undefined, outcomeDetail: undefined });
+    if (
+      runtimeEvent.type === 'approval-resolved' &&
+      run.status === 'awaiting-approval'
+    ) {
+      this.updateRun(run, 'running', {
+        reason: undefined,
+        outcomeDetail: undefined,
+      });
       return undefined;
     }
 
-    if (runtimeEvent.type === "provider-diagnostic" && isProviderFailureDiagnostic(runtimeEvent.diagnostic)) {
-      active.lastProviderFailure = runtimeEvent.diagnostic as unknown as JsonObject;
+    if (
+      runtimeEvent.type === 'provider-diagnostic' &&
+      isProviderFailureDiagnostic(runtimeEvent.diagnostic)
+    ) {
+      active.lastProviderFailure =
+        runtimeEvent.diagnostic as unknown as JsonObject;
       return undefined;
     }
 
-    const completion = completionFromRuntimeEvent(runtimeEvent, active.lastProviderFailure, {
-      agentStopCompletes: options.agentStopCompletes ?? true
-    });
+    const completion = completionFromRuntimeEvent(
+      runtimeEvent,
+      active.lastProviderFailure,
+      {
+        agentStopCompletes: options.agentStopCompletes ?? true,
+      }
+    );
     if (completion) {
       this.updateRun(run, completion.status, {
         finishedAt: this.now(),
         outcome: completion.outcome,
         reason: completion.reason,
         outcomeDetail: completion.outcomeDetail,
-        ...(completion.error ? { error: completion.error } : {})
+        ...(completion.error ? { error: completion.error } : {}),
       });
     }
     return completion;
@@ -741,7 +1142,15 @@ export class AgentOrchestrator {
     run: OrchestratorRunRecord,
     status: RunStatus,
     extra: Partial<
-      Pick<OrchestratorRunRecord, "startedAt" | "finishedAt" | "outcome" | "reason" | "outcomeDetail" | "error">
+      Pick<
+        OrchestratorRunRecord,
+        | 'startedAt'
+        | 'finishedAt'
+        | 'outcome'
+        | 'reason'
+        | 'outcomeDetail'
+        | 'error'
+      >
     > = {}
   ): void {
     run.status = transitionRunStatus(run.status, status);
@@ -749,7 +1158,10 @@ export class AgentOrchestrator {
     applyRunPatch(run, extra);
   }
 
-  private updateRunGoal(run: OrchestratorRunRecord, goal: OrchestratorGoalRunState): void {
+  private updateRunGoal(
+    run: OrchestratorRunRecord,
+    goal: OrchestratorGoalRunState
+  ): void {
     run.goal = goal;
     run.updatedAt = this.now();
   }
@@ -766,48 +1178,77 @@ export class AgentOrchestrator {
       outcome: completion.outcome,
       reason: completion.reason,
       outcomeDetail: completion.outcomeDetail,
-      ...(completion.error ? { error: completion.error } : {})
+      ...(completion.error ? { error: completion.error } : {}),
     });
   }
 
   private finalizeGoalFromTerminalRun(run: OrchestratorRunRecord): void {
     if (!run.goal) return;
-    if (run.goal.status !== "running" && run.goal.status !== "queued") return;
-    if (run.status === "cancelled") {
-      this.updateRunGoal(run, updateGoalState(run.goal, { status: "cancelled", stoppedReason: "cancelled" }));
+    if (run.goal.status !== 'running' && run.goal.status !== 'queued') return;
+    if (run.status === 'cancelled') {
+      this.updateRunGoal(
+        run,
+        updateGoalState(run.goal, {
+          status: 'cancelled',
+          stoppedReason: 'cancelled',
+        })
+      );
       return;
     }
-    if (run.outcome === "blocked") {
-      this.updateRunGoal(run, updateGoalState(run.goal, { status: "blocked", stoppedReason: goalStoppedReasonFromRun(run) }));
+    if (run.outcome === 'blocked') {
+      this.updateRunGoal(
+        run,
+        updateGoalState(run.goal, {
+          status: 'blocked',
+          stoppedReason: goalStoppedReasonFromRun(run),
+        })
+      );
       return;
     }
-    if (run.status === "failed") {
-      this.updateRunGoal(run, updateGoalState(run.goal, { status: "failed", stoppedReason: "error" }));
+    if (run.status === 'failed') {
+      this.updateRunGoal(
+        run,
+        updateGoalState(run.goal, { status: 'failed', stoppedReason: 'error' })
+      );
       return;
     }
-    if (run.status === "completed") {
-      this.updateRunGoal(run, updateGoalState(run.goal, { status: "completed", stoppedReason: "complete" }));
+    if (run.status === 'completed') {
+      this.updateRunGoal(
+        run,
+        updateGoalState(run.goal, {
+          status: 'completed',
+          stoppedReason: 'complete',
+        })
+      );
     }
   }
 
   private emitRunTerminalEvent(active: ActiveRun, error?: string): void {
     const run = active.run;
-    if (run.status === "cancelled") {
-      this.emitToRun(active, "run-cancelled", terminalPayload(run, error));
+    if (run.status === 'cancelled') {
+      this.emitToRun(active, 'run-cancelled', terminalPayload(run, error));
       return;
     }
-    if (run.status === "failed") {
-      this.emitToRun(active, "run-failed", terminalPayload(run, error));
+    if (run.status === 'failed') {
+      this.emitToRun(active, 'run-failed', terminalPayload(run, error));
       return;
     }
-    if (run.status === "completed") {
-      this.emitToRun(active, "run-completed", terminalPayload(run));
+    if (run.status === 'completed') {
+      this.emitToRun(active, 'run-completed', terminalPayload(run));
       return;
     }
-    throw new Error(`Run ${run.id} ended with non-terminal status ${run.status}`);
+    throw new Error(
+      `Run ${run.id} ended with non-terminal status ${run.status}`
+    );
   }
 
-  private emitToRun(active: ActiveRun, type: OrchestratorEvent["type"], payload: JsonObject): void {
+  private emitToRun(
+    active: ActiveRun,
+    type: OrchestratorEvent['type'],
+    payload: JsonObject,
+    options: { durable?: boolean } = {}
+  ): void {
+    const durable = options.durable !== false;
     let event: OrchestratorEvent;
     try {
       event = this.event(type, active.run.sessionId, active.run.id, payload);
@@ -819,38 +1260,59 @@ export class AgentOrchestrator {
         cause instanceof Error ? cause.message : String(cause)
       );
       this.pushDiagnostic({
-        code: "EVENT_SERIALIZATION_FAILED",
+        code: 'EVENT_SERIALIZATION_FAILED',
         message: cause instanceof Error ? cause.message : String(cause),
-        severity: "warning",
+        severity: 'warning',
         detail: { eventType: type, runId: active.run.id },
       });
       return;
     }
-    const task = active.emitChain.then(() => this.persistAndBroadcast(active, event));
+    const task = active.emitChain.then(() =>
+      this.persistAndBroadcast(active, event, { durable })
+    );
     active.emitChain = task.catch(() => undefined);
-    void task.then(() => {
-      active.pendingEmits.delete(task);
-    }, () => {
-      active.pendingEmits.delete(task);
-    });
+    void task.then(
+      () => {
+        active.pendingEmits.delete(task);
+      },
+      () => {
+        active.pendingEmits.delete(task);
+      }
+    );
     active.pendingEmits.set(task, true);
   }
 
-  private async persistAndBroadcast(active: ActiveRun, event: OrchestratorEvent): Promise<void> {
-    try {
-      await this.storeEvent(event);
-    } catch (cause) {
-      this.failRunForPersistenceFailure(active, event, cause);
+  private async persistAndBroadcast(
+    active: ActiveRun,
+    event: OrchestratorEvent,
+    options: { durable?: boolean } = {}
+  ): Promise<void> {
+    const durable = options.durable !== false;
+    // Non-durable streaming deltas: broadcast to live subscribers only.
+    // They are intentionally omitted from the orchestrator event log — full message
+    // content is recovered from message-end (and other lifecycle) events on restore.
+    if (durable) {
+      try {
+        await this.storeEvent(event);
+      } catch (cause) {
+        this.failRunForPersistenceFailure(active, event, cause);
+        return;
+      }
+    }
+    if (active.persistenceFailed && event.type !== 'run-failed') {
       return;
     }
-    if (active.persistenceFailed && event.type !== "run-failed") {
-      return;
+    if (durable) {
+      active.run.lastEventId = event.id;
     }
-    active.run.lastEventId = event.id;
     active.queue.push(event);
   }
 
-  private failRunForPersistenceFailure(active: ActiveRun, failedEvent: OrchestratorEvent, cause: unknown): void {
+  private failRunForPersistenceFailure(
+    active: ActiveRun,
+    failedEvent: OrchestratorEvent,
+    cause: unknown
+  ): void {
     const run = active.run;
     if (active.persistenceFailed) return;
     active.persistenceFailed = true;
@@ -861,33 +1323,38 @@ export class AgentOrchestrator {
       this.updateRunGoal(
         run,
         updateGoalState(run.goal, {
-          status: "failed",
-          stoppedReason: "error"
+          status: 'failed',
+          stoppedReason: 'error',
         })
       );
     }
     if (isTerminalRunStatus(run.status)) {
-      run.status = "failed";
+      run.status = 'failed';
       run.updatedAt = this.now();
       applyRunPatch(run, {
         finishedAt: this.now(),
-        outcome: "failed",
-        reason: "event-store-write-failed",
+        outcome: 'failed',
+        reason: 'event-store-write-failed',
         outcomeDetail: detail,
-        error: message
+        error: message,
       });
     } else {
-      this.updateRun(run, "failed", {
+      this.updateRun(run, 'failed', {
         finishedAt: this.now(),
-        outcome: "failed",
-        reason: "event-store-write-failed",
+        outcome: 'failed',
+        reason: 'event-store-write-failed',
         outcomeDetail: detail,
-        error: message
+        error: message,
       });
     }
-    active.engine?.abort("event-store-write-failed");
+    active.engine?.abort('event-store-write-failed');
 
-    const event = this.event("run-failed", run.sessionId, run.id, terminalPayload(run, message));
+    const event = this.event(
+      'run-failed',
+      run.sessionId,
+      run.id,
+      terminalPayload(run, message)
+    );
     active.run.lastEventId = event.id;
     active.queue.push(event);
   }
@@ -899,10 +1366,15 @@ export class AgentOrchestrator {
     }
   }
 
-  private event(type: OrchestratorEvent["type"], sessionId: string, runId: string | undefined, payload: JsonObject): OrchestratorEvent {
+  private event(
+    type: OrchestratorEvent['type'],
+    sessionId: string,
+    runId: string | undefined,
+    payload: JsonObject
+  ): OrchestratorEvent {
     return {
       protocolVersion: ORCHESTRATOR_PROTOCOL_VERSION,
-      id: this.createId("event"),
+      id: this.createId('event'),
       sequence: ++this.sequence,
       type,
       sessionId,
@@ -910,8 +1382,10 @@ export class AgentOrchestrator {
       timestamp: this.now(),
       payload: {
         ...payload,
-        ...(payload.run && typeof payload.run === "object" ? { run: { ...payload.run } } : {})
-      }
+        ...(payload.run && typeof payload.run === 'object'
+          ? { run: { ...payload.run } }
+          : {}),
+      },
     };
   }
 
@@ -920,17 +1394,30 @@ export class AgentOrchestrator {
       await this.eventStore.append(event);
     } catch (cause) {
       this.pushDiagnostic({
-        code: "EVENT_STORE_WRITE_FAILED",
+        code: 'EVENT_STORE_WRITE_FAILED',
         message: cause instanceof Error ? cause.message : String(cause),
-        severity: "error",
-        detail: { eventId: event.id, eventType: event.type, timestamp: event.timestamp },
+        severity: 'error',
+        detail: {
+          eventId: event.id,
+          eventType: event.type,
+          timestamp: event.timestamp,
+        },
       });
       throw cause;
+    }
+    // Snapshot on terminal run / session lifecycle — not on every delta.
+    if (
+      event.type === 'run-completed' ||
+      event.type === 'run-failed' ||
+      event.type === 'run-cancelled'
+    ) {
+      this.scheduleStateSnapshotWrite();
     }
   }
 
   private pushDiagnostic(record: DiagnosticRecord): void {
-    this.diagnosticsRing[this.diagCursor % MAX_ORCHESTRATOR_DIAGNOSTICS] = record;
+    this.diagnosticsRing[this.diagCursor % MAX_ORCHESTRATOR_DIAGNOSTICS] =
+      record;
     this.diagCursor++;
   }
 
@@ -944,12 +1431,18 @@ export class AgentOrchestrator {
     return result;
   }
 
-  async readAllEvents(afterSequence?: number, options?: OrchestratorEventReadOptions): Promise<OrchestratorEvent[]> {
+  async readAllEvents(
+    afterSequence?: number,
+    options?: OrchestratorEventReadOptions
+  ): Promise<OrchestratorEvent[]> {
     if (!this.eventStore.readAll) return [];
     return this.eventStore.readAll(afterSequence, options);
   }
 
-  private applyStoredEvent(event: OrchestratorEvent, replayStates: BoundedMap<string, RestoredRunReplayState>): void {
+  private applyStoredEvent(
+    event: OrchestratorEvent,
+    replayStates: BoundedMap<string, RestoredRunReplayState>
+  ): void {
     const restoredSession = sessionRecordFromPayload(event);
     if (restoredSession) {
       this.sessions.set(restoredSession.id, restoredSession);
@@ -976,19 +1469,26 @@ export class AgentOrchestrator {
     if (event.timestamp > run.updatedAt) {
       run.updatedAt = event.timestamp;
     }
-    if (event.type === "run-cancel-requested" && !isTerminalRunStatus(run.status)) {
-      run.status = "cancelling";
+    if (
+      event.type === 'run-cancel-requested' &&
+      !isTerminalRunStatus(run.status)
+    ) {
+      run.status = 'cancelling';
     }
-    if (event.type === "runtime-event" && !isTerminalRunStatus(run.status)) {
-      applyStoredRuntimeEventStatus(run, event, replayStateForRun(replayStates, run.id));
+    if (event.type === 'runtime-event' && !isTerminalRunStatus(run.status)) {
+      applyStoredRuntimeEventStatus(
+        run,
+        event,
+        replayStateForRun(replayStates, run.id)
+      );
     }
   }
 
   private applyStoredPendingInputEvent(event: OrchestratorEvent): void {
     if (
-      event.type !== "pending-input-created" &&
-      event.type !== "pending-input-cancelled" &&
-      event.type !== "pending-input-dispatched"
+      event.type !== 'pending-input-created' &&
+      event.type !== 'pending-input-cancelled' &&
+      event.type !== 'pending-input-dispatched'
     ) {
       return;
     }
@@ -999,31 +1499,37 @@ export class AgentOrchestrator {
 
   private updatePendingInputStatus(
     input: PendingInputRecord,
-    status: Exclude<PendingInputRecord["status"], "pending">,
+    status: Exclude<PendingInputRecord['status'], 'pending'>,
     runId?: string
   ): PendingInputRecord {
     return {
       ...input,
       ...(runId ? { runId } : {}),
       status,
-      updatedAt: this.now()
+      updatedAt: this.now(),
     };
   }
 
   private async interruptRestoredActiveRuns(): Promise<void> {
     for (const run of this.runs.values()) {
-      if (isTerminalRunStatus(run.status) || this.activeRuns.has(run.id)) continue;
+      if (isTerminalRunStatus(run.status) || this.activeRuns.has(run.id))
+        continue;
 
       const previousStatus = run.status;
       const previousReason = run.reason;
       const previousOutcomeDetail = run.outcomeDetail;
-      const completion = interruptedCompletion(previousStatus, previousReason, previousOutcomeDetail);
+      const completion = interruptedCompletion(
+        previousStatus,
+        previousReason,
+        previousOutcomeDetail
+      );
       if (run.goal) {
         this.updateRunGoal(
           run,
           updateGoalState(run.goal, {
-            status: completion.status === "cancelled" ? "cancelled" : "failed",
-            stoppedReason: completion.status === "cancelled" ? "cancelled" : "error"
+            status: completion.status === 'cancelled' ? 'cancelled' : 'failed',
+            stoppedReason:
+              completion.status === 'cancelled' ? 'cancelled' : 'error',
           })
         );
       }
@@ -1032,10 +1538,15 @@ export class AgentOrchestrator {
         outcome: completion.outcome,
         reason: completion.reason,
         outcomeDetail: completion.outcomeDetail,
-        error: completion.error
+        error: completion.error,
       });
 
-      const event = this.event(completion.status === "cancelled" ? "run-cancelled" : "run-failed", run.sessionId, run.id, terminalPayload(run));
+      const event = this.event(
+        completion.status === 'cancelled' ? 'run-cancelled' : 'run-failed',
+        run.sessionId,
+        run.id,
+        terminalPayload(run)
+      );
       run.lastEventId = event.id;
       await this.storeEvent(event);
     }
@@ -1070,20 +1581,40 @@ export class InMemoryOrchestratorEventStore implements OrchestratorEventStore {
     return summarizeOrchestratorSessionEvents(this.events);
   }
 
-  readAll(afterSequence = 0, options: OrchestratorEventReadOptions = {}): OrchestratorEvent[] {
-    return collectEvents(this.events, (event) => event.sequence > afterSequence, options.maxEvents);
-  }
-
-  readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): OrchestratorEvent[] {
+  readAll(
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = {}
+  ): OrchestratorEvent[] {
     return collectEvents(
       this.events,
-      (event) => event.sessionId === sessionId && event.sequence > afterSequence,
+      (event) => event.sequence > afterSequence,
       options.maxEvents
     );
   }
 
-  readRun(runId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): OrchestratorEvent[] {
-    return collectEvents(this.events, (event) => event.runId === runId && event.sequence > afterSequence, options.maxEvents);
+  readSession(
+    sessionId: string,
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = {}
+  ): OrchestratorEvent[] {
+    return collectEvents(
+      this.events,
+      (event) =>
+        event.sessionId === sessionId && event.sequence > afterSequence,
+      options.maxEvents
+    );
+  }
+
+  readRun(
+    runId: string,
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = {}
+  ): OrchestratorEvent[] {
+    return collectEvents(
+      this.events,
+      (event) => event.runId === runId && event.sequence > afterSequence,
+      options.maxEvents
+    );
   }
 }
 
@@ -1107,22 +1638,92 @@ function collectEvents(
  * OrchestratorEventStore 公共接口不包含 readAllStreaming（仅 FileOrchestratorEventStore
  * 等基于文件的实现提供）。通过结构性检查暴露该方法，使 restoreFromEventStore 能
  * 优先流式回放，而 InMemoryOrchestratorEventStore 等内存实现则回退到 readAll。
+ *
+ * @param afterSequence only yield events with sequence greater than this value
+ *   (incremental restore after a durable state snapshot).
  */
 function streamingEventIterable(
-  store: OrchestratorEventStore
+  store: OrchestratorEventStore,
+  afterSequence = 0
 ): AsyncIterable<OrchestratorEvent> | undefined {
   const candidate = store as unknown as { readAllStreaming?: unknown };
-  if (typeof candidate.readAllStreaming !== "function") return undefined;
-  const invoke = candidate.readAllStreaming as () => AsyncIterable<OrchestratorEvent>;
-  return invoke.call(store);
+  if (typeof candidate.readAllStreaming !== 'function') return undefined;
+  const invoke = candidate.readAllStreaming as (
+    after?: number
+  ) => AsyncIterable<OrchestratorEvent>;
+  return invoke.call(store, afterSequence);
+}
+
+/**
+ * Track subagent "started" runtime-events during restore for daemon rebuild.
+ * Clears tracking when the parent run reaches a terminal orchestrator event.
+ */
+function trackSubagentStartFromEvent(
+  event: OrchestratorEvent,
+  subagentStarts: Map<string, Map<string, unknown>>
+): void {
+  if (!event.runId) return;
+
+  if (
+    event.type === 'run-completed' ||
+    event.type === 'run-failed' ||
+    event.type === 'run-cancelled'
+  ) {
+    subagentStarts.delete(event.runId);
+    return;
+  }
+
+  if (event.type !== 'runtime-event') return;
+  const agentEvent = event.payload.event;
+  if (!isRecord(agentEvent)) return;
+
+  // Heuristic matching daemon subagent bridge: tool-update with started phase in json.
+  if (agentEvent.type !== 'tool-update' || !isRecord(agentEvent.update)) return;
+  const json = agentEvent.update.json;
+  if (!isRecord(json)) return;
+  if (json.phase === 'ended' || json.phase === 'failed') {
+    const subId =
+      typeof json.subagentId === 'string' ? json.subagentId : undefined;
+    if (subId) {
+      subagentStarts.get(event.runId)?.delete(subId);
+    }
+    return;
+  }
+  if (json.phase !== 'started') return;
+  const subId =
+    typeof json.subagentId === 'string' && json.subagentId.length > 0
+      ? json.subagentId
+      : subagentKeyFromAgentEvent(agentEvent);
+  if (!subId) return;
+  let bySub = subagentStarts.get(event.runId);
+  if (!bySub) {
+    bySub = new Map();
+    subagentStarts.set(event.runId, bySub);
+  }
+  bySub.set(subId, agentEvent);
+}
+
+function subagentKeyFromAgentEvent(agentEvent: unknown): string | undefined {
+  if (
+    !isRecord(agentEvent) ||
+    agentEvent.type !== 'tool-update' ||
+    !isRecord(agentEvent.update)
+  ) {
+    return undefined;
+  }
+  const json = agentEvent.update.json;
+  if (!isRecord(json)) return undefined;
+  return typeof json.subagentId === 'string' && json.subagentId.length > 0
+    ? json.subagentId
+    : undefined;
 }
 
 function inMemoryEventLogMetadata(): OrchestratorEventLogMetadata {
   return {
-    eventLogId: "in-memory",
+    eventLogId: 'in-memory',
     generation: 1,
     schemaVersion: 1,
-    protocolVersion: ORCHESTRATOR_PROTOCOL_VERSION
+    protocolVersion: ORCHESTRATOR_PROTOCOL_VERSION,
   };
 }
 
@@ -1130,16 +1731,22 @@ function hasRunStatus(run: OrchestratorRunRecord, status: RunStatus): boolean {
   return run.status === status;
 }
 
-function goalStoppedReasonFromRun(run: OrchestratorRunRecord): NonNullable<OrchestratorGoalRunState["stoppedReason"]> {
-  if (run.reason === "goal-max-rounds") return "max-rounds";
-  if (run.reason === "goal-stalled") return "stalled";
-  if (run.reason === "cancelled" || run.reason === "aborted") return "cancelled";
-  if (run.reason === "goal-completed") return "complete";
-  if (run.outcome === "failed") return "error";
-  return "blocked";
+function goalStoppedReasonFromRun(
+  run: OrchestratorRunRecord
+): NonNullable<OrchestratorGoalRunState['stoppedReason']> {
+  if (run.reason === 'goal-max-rounds') return 'max-rounds';
+  if (run.reason === 'goal-stalled') return 'stalled';
+  if (run.reason === 'cancelled' || run.reason === 'aborted')
+    return 'cancelled';
+  if (run.reason === 'goal-completed') return 'complete';
+  if (run.outcome === 'failed') return 'error';
+  return 'blocked';
 }
 
-function replayStateForRun(states: BoundedMap<string, RestoredRunReplayState>, runId: string): RestoredRunReplayState {
+function replayStateForRun(
+  states: BoundedMap<string, RestoredRunReplayState>,
+  runId: string
+): RestoredRunReplayState {
   const existing = states.get(runId);
   if (existing) return existing;
   const created: RestoredRunReplayState = {};
@@ -1153,34 +1760,47 @@ function applyStoredRuntimeEventStatus(
   replayState: RestoredRunReplayState
 ): void {
   const runtimeEvent = event.payload.event;
-  if (!isRecord(runtimeEvent) || typeof runtimeEvent.type !== "string") return;
+  if (!isRecord(runtimeEvent) || typeof runtimeEvent.type !== 'string') return;
 
-  if (run.status !== "cancelling" && runtimeEvent.type === "approval-requested" && isRecord(runtimeEvent.request)) {
-    run.status = "awaiting-approval";
-    run.reason = "awaiting-approval";
+  if (
+    run.status !== 'cancelling' &&
+    runtimeEvent.type === 'approval-requested' &&
+    isRecord(runtimeEvent.request)
+  ) {
+    run.status = 'awaiting-approval';
+    run.reason = 'awaiting-approval';
     run.outcomeDetail = runtimeEvent.request as JsonObject;
     return;
   }
 
-  if (run.status !== "cancelling" && runtimeEvent.type === "approval-resolved" && run.status === "awaiting-approval") {
-    run.status = "running";
+  if (
+    run.status !== 'cancelling' &&
+    runtimeEvent.type === 'approval-resolved' &&
+    run.status === 'awaiting-approval'
+  ) {
+    run.status = 'running';
     delete run.reason;
     delete run.outcomeDetail;
     return;
   }
 
   if (
-    runtimeEvent.type === "provider-diagnostic" &&
+    runtimeEvent.type === 'provider-diagnostic' &&
     isStoredProviderDiagnostic(runtimeEvent.diagnostic) &&
     isProviderFailureDiagnostic(runtimeEvent.diagnostic)
   ) {
-    replayState.lastProviderFailure = runtimeEvent.diagnostic as unknown as JsonObject;
+    replayState.lastProviderFailure =
+      runtimeEvent.diagnostic as unknown as JsonObject;
     return;
   }
 
-  const completion = completionFromRuntimeEvent(runtimeEvent as AgentEvent, replayState.lastProviderFailure, {
-    agentStopCompletes: run.kind !== "goal" && run.status !== "cancelling"
-  });
+  const completion = completionFromRuntimeEvent(
+    runtimeEvent as AgentEvent,
+    replayState.lastProviderFailure,
+    {
+      agentStopCompletes: run.kind !== 'goal' && run.status !== 'cancelling',
+    }
+  );
   if (!completion) return;
 
   run.status = completion.status;
@@ -1190,34 +1810,48 @@ function applyStoredRuntimeEventStatus(
   run.updatedAt = event.timestamp;
   applyRunPatch(run, {
     outcomeDetail: completion.outcomeDetail,
-    error: completion.error
+    error: completion.error,
   });
   applyStoredTerminalGoalStatus(run, completion);
 }
 
-function applyStoredTerminalGoalStatus(run: OrchestratorRunRecord, completion: RunCompletion): void {
+function applyStoredTerminalGoalStatus(
+  run: OrchestratorRunRecord,
+  completion: RunCompletion
+): void {
   if (!run.goal) return;
-  if (completion.status === "cancelled") {
-    run.goal = updateGoalState(run.goal, { status: "cancelled", stoppedReason: "cancelled" });
+  if (completion.status === 'cancelled') {
+    run.goal = updateGoalState(run.goal, {
+      status: 'cancelled',
+      stoppedReason: 'cancelled',
+    });
     return;
   }
-  if (completion.status === "failed") {
-    run.goal = updateGoalState(run.goal, { status: "failed", stoppedReason: "error" });
+  if (completion.status === 'failed') {
+    run.goal = updateGoalState(run.goal, {
+      status: 'failed',
+      stoppedReason: 'error',
+    });
     return;
   }
-  if (completion.status === "completed") {
-    run.goal = updateGoalState(run.goal, { status: "completed", stoppedReason: "complete" });
+  if (completion.status === 'completed') {
+    run.goal = updateGoalState(run.goal, {
+      status: 'completed',
+      stoppedReason: 'complete',
+    });
   }
 }
 
-function sessionRecordFromPayload(event: OrchestratorEvent): OrchestratorSessionRecord | undefined {
+function sessionRecordFromPayload(
+  event: OrchestratorEvent
+): OrchestratorSessionRecord | undefined {
   const value = event.payload.session;
   if (!isRecord(value)) return undefined;
   if (
-    typeof value.id !== "string" ||
-    typeof value.cwd !== "string" ||
-    typeof value.createdAt !== "string" ||
-    typeof value.updatedAt !== "string" ||
+    typeof value.id !== 'string' ||
+    typeof value.cwd !== 'string' ||
+    typeof value.createdAt !== 'string' ||
+    typeof value.updatedAt !== 'string' ||
     !isSessionStatus(value.status)
   ) {
     return undefined;
@@ -1229,13 +1863,17 @@ function sessionRecordFromPayload(event: OrchestratorEvent): OrchestratorSession
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     status: value.status,
-    ...(typeof value.currentLeafId === "string" ? { currentLeafId: value.currentLeafId } : {}),
-    ...(isRecord(value.metadata) ? { metadata: value.metadata as JsonObject } : {})
+    ...(typeof value.currentLeafId === 'string'
+      ? { currentLeafId: value.currentLeafId }
+      : {}),
+    ...(isRecord(value.metadata)
+      ? { metadata: value.metadata as JsonObject }
+      : {}),
   };
 }
 
 interface RunCompletion {
-  status: Extract<RunStatus, "completed" | "cancelled" | "failed">;
+  status: Extract<RunStatus, 'completed' | 'cancelled' | 'failed'>;
   outcome: RunOutcome;
   reason: RunOutcomeReason;
   outcomeDetail?: JsonObject;
@@ -1244,18 +1882,21 @@ interface RunCompletion {
 
 function completedCompletion(): RunCompletion {
   return {
-    status: "completed",
-    outcome: "completed",
-    reason: "completed"
+    status: 'completed',
+    outcome: 'completed',
+    reason: 'completed',
   };
 }
 
-function cancelledCompletion(reason: Extract<RunOutcomeReason, "cancelled" | "aborted">, error?: string): RunCompletion {
+function cancelledCompletion(
+  reason: Extract<RunOutcomeReason, 'cancelled' | 'aborted'>,
+  error?: string
+): RunCompletion {
   return {
-    status: "cancelled",
-    outcome: "cancelled",
+    status: 'cancelled',
+    outcome: 'cancelled',
     reason,
-    ...(error ? { error } : {})
+    ...(error ? { error } : {}),
   };
 }
 
@@ -1265,115 +1906,149 @@ function interruptedCompletion(
   previousOutcomeDetail?: JsonObject
 ): RunCompletion {
   const outcomeDetail = compactJsonObject({
-    kind: "interrupted",
-    reason: "daemon-restarted",
+    kind: 'interrupted',
+    reason: 'daemon-restarted',
     previousStatus,
     previousReason,
-    previousOutcomeDetail
+    previousOutcomeDetail,
   });
-  if (previousStatus === "cancelling") {
+  if (previousStatus === 'cancelling') {
     return {
-      status: "cancelled",
-      outcome: "cancelled",
-      reason: "daemon-restarted",
+      status: 'cancelled',
+      outcome: 'cancelled',
+      reason: 'daemon-restarted',
       outcomeDetail,
-      error: "Run cancellation was interrupted by daemon restart."
+      error: 'Run cancellation was interrupted by daemon restart.',
     };
   }
   return {
-    status: "failed",
-    outcome: "failed",
-    reason: "daemon-restarted",
+    status: 'failed',
+    outcome: 'failed',
+    reason: 'daemon-restarted',
     outcomeDetail,
-    error: "Run was interrupted by daemon restart."
+    error: 'Run was interrupted by daemon restart.',
   };
 }
 
-function failedCompletion(reason: Extract<RunOutcomeReason, "agent-error" | "provider-error" | "runtime-error" | "max-turns" | "intervention-required" | "run-engine-error" | "event-store-write-failed">, error?: string, outcomeDetail?: JsonObject): RunCompletion {
+function failedCompletion(
+  reason: Extract<
+    RunOutcomeReason,
+    | 'agent-error'
+    | 'provider-error'
+    | 'runtime-error'
+    | 'max-turns'
+    | 'intervention-required'
+    | 'run-engine-error'
+    | 'event-store-write-failed'
+  >,
+  error?: string,
+  outcomeDetail?: JsonObject
+): RunCompletion {
   return {
-    status: "failed",
-    outcome: "failed",
+    status: 'failed',
+    outcome: 'failed',
     reason,
     ...(error ? { error } : {}),
-    ...(outcomeDetail ? { outcomeDetail } : {})
+    ...(outcomeDetail ? { outcomeDetail } : {}),
   };
 }
 
 function blockedCompletion(
-  reason: Extract<RunOutcomeReason, "goal-blocked" | "goal-max-rounds" | "goal-stalled">,
+  reason: Extract<
+    RunOutcomeReason,
+    'goal-blocked' | 'goal-max-rounds' | 'goal-stalled'
+  >,
   error: string,
   outcomeDetail?: JsonObject
 ): RunCompletion {
   return {
-    status: "failed",
-    outcome: "blocked",
+    status: 'failed',
+    outcome: 'blocked',
     reason,
     error,
-    ...(outcomeDetail ? { outcomeDetail } : {})
+    ...(outcomeDetail ? { outcomeDetail } : {}),
   };
 }
 
 function completionFromGoalDecision(
   decision: GoalContinuationDecision,
   goal: OrchestratorGoalRunState
-): { completion: RunCompletion; goalPatch: Partial<OrchestratorGoalRunState> } | undefined {
-  if (decision.action === "complete") {
+):
+  | { completion: RunCompletion; goalPatch: Partial<OrchestratorGoalRunState> }
+  | undefined {
+  if (decision.action === 'complete') {
     return {
       completion: {
-        status: "completed",
-        outcome: "completed",
-        reason: "goal-completed",
-        outcomeDetail: goalDecisionDetail(decision)
+        status: 'completed',
+        outcome: 'completed',
+        reason: 'goal-completed',
+        outcomeDetail: goalDecisionDetail(decision),
       },
       goalPatch: {
-        status: "completed",
-        stoppedReason: "complete",
-        lastDecision: decision
-      }
+        status: 'completed',
+        stoppedReason: 'complete',
+        lastDecision: decision,
+      },
     };
   }
 
-  if (decision.action === "block") {
+  if (decision.action === 'block') {
     return {
-      completion: blockedCompletion("goal-blocked", decision.reason, goalDecisionDetail(decision)),
+      completion: blockedCompletion(
+        'goal-blocked',
+        decision.reason,
+        goalDecisionDetail(decision)
+      ),
       goalPatch: {
-        status: "blocked",
-        stoppedReason: "blocked",
-        lastDecision: decision
-      }
+        status: 'blocked',
+        stoppedReason: 'blocked',
+        lastDecision: decision,
+      },
     };
   }
 
   if (!decision.prompt?.trim()) {
     return {
-      completion: blockedCompletion("goal-blocked", "Goal continuation requested without a next prompt.", goalDecisionDetail(decision)),
+      completion: blockedCompletion(
+        'goal-blocked',
+        'Goal continuation requested without a next prompt.',
+        goalDecisionDetail(decision)
+      ),
       goalPatch: {
-        status: "blocked",
-        stoppedReason: "blocked",
-        lastDecision: decision
-      }
+        status: 'blocked',
+        stoppedReason: 'blocked',
+        lastDecision: decision,
+      },
     };
   }
 
   if (goal.stalledRounds >= goal.maxStalledRounds) {
     return {
-      completion: blockedCompletion("goal-stalled", `Goal made no observable progress for ${goal.stalledRounds + 1} rounds.`, goalDecisionDetail(decision)),
+      completion: blockedCompletion(
+        'goal-stalled',
+        `Goal made no observable progress for ${goal.stalledRounds + 1} rounds.`,
+        goalDecisionDetail(decision)
+      ),
       goalPatch: {
-        status: "blocked",
-        stoppedReason: "stalled",
-        lastDecision: decision
-      }
+        status: 'blocked',
+        stoppedReason: 'stalled',
+        lastDecision: decision,
+      },
     };
   }
 
   if (goal.completedRounds >= goal.maxRounds) {
     return {
-      completion: blockedCompletion("goal-max-rounds", `Goal reached the maximum round limit: ${goal.maxRounds}`, goalDecisionDetail(decision)),
+      completion: blockedCompletion(
+        'goal-max-rounds',
+        `Goal reached the maximum round limit: ${goal.maxRounds}`,
+        goalDecisionDetail(decision)
+      ),
       goalPatch: {
-        status: "blocked",
-        stoppedReason: "max-rounds",
-        lastDecision: decision
-      }
+        status: 'blocked',
+        stoppedReason: 'max-rounds',
+        lastDecision: decision,
+      },
     };
   }
 
@@ -1386,7 +2061,7 @@ function goalDecisionDetail(decision: GoalContinuationDecision): JsonObject {
     reason: decision.reason,
     prompt: decision.prompt,
     progressSignature: decision.progressSignature,
-    detail: decision.detail
+    detail: decision.detail,
   });
 }
 
@@ -1395,46 +2070,77 @@ function completionFromRuntimeEvent(
   lastProviderFailure?: JsonObject,
   options: { agentStopCompletes?: boolean } = {}
 ): RunCompletion | undefined {
-  if (runtimeEvent.type === "agent-end") {
-    if (runtimeEvent.reason === "stop") {
-      return options.agentStopCompletes === false ? undefined : completedCompletion();
+  if (runtimeEvent.type === 'agent-end') {
+    if (runtimeEvent.reason === 'stop') {
+      return options.agentStopCompletes === false
+        ? undefined
+        : completedCompletion();
     }
-    if (runtimeEvent.reason === "aborted") {
-      return cancelledCompletion("aborted", runtimeEvent.error);
+    if (runtimeEvent.reason === 'aborted') {
+      return cancelledCompletion('aborted', runtimeEvent.error);
     }
-    if (runtimeEvent.reason === "max-turns") {
-      return failedCompletion("max-turns", runtimeEvent.error ?? "Run reached the maximum turn limit", eventDetail(runtimeEvent));
+    if (runtimeEvent.reason === 'max-turns') {
+      return failedCompletion(
+        'max-turns',
+        runtimeEvent.error ?? 'Run reached the maximum turn limit',
+        eventDetail(runtimeEvent)
+      );
     }
-    return failedCompletion("agent-error", runtimeEvent.error ?? "Agent ended with an error", eventDetail(runtimeEvent));
+    return failedCompletion(
+      'agent-error',
+      runtimeEvent.error ?? 'Agent ended with an error',
+      eventDetail(runtimeEvent)
+    );
   }
 
-  if (runtimeEvent.type === "runtime-error") {
-    const reason = lastProviderFailure ? "provider-error" : "runtime-error";
-    return failedCompletion(reason, runtimeEvent.error, compactJsonObject({ event: runtimeEvent, providerDiagnostic: lastProviderFailure }));
+  if (runtimeEvent.type === 'runtime-error') {
+    const reason = lastProviderFailure ? 'provider-error' : 'runtime-error';
+    return failedCompletion(
+      reason,
+      runtimeEvent.error,
+      compactJsonObject({
+        event: runtimeEvent,
+        providerDiagnostic: lastProviderFailure,
+      })
+    );
   }
 
-  if (runtimeEvent.type === "runtime-intervention-required") {
-    return failedCompletion("intervention-required", runtimeEvent.message, eventDetail(runtimeEvent));
+  if (runtimeEvent.type === 'runtime-intervention-required') {
+    return failedCompletion(
+      'intervention-required',
+      runtimeEvent.message,
+      eventDetail(runtimeEvent)
+    );
   }
 
   return undefined;
 }
 
-function isProviderFailureDiagnostic(diagnostic: Extract<AgentEvent, { type: "provider-diagnostic" }>["diagnostic"]): boolean {
-  return diagnostic.phase === "request-error" || (typeof diagnostic.status === "number" && diagnostic.status >= 400);
+function isProviderFailureDiagnostic(
+  diagnostic: Extract<AgentEvent, { type: 'provider-diagnostic' }>['diagnostic']
+): boolean {
+  return (
+    diagnostic.phase === 'request-error' ||
+    (typeof diagnostic.status === 'number' && diagnostic.status >= 400)
+  );
 }
 
-function isStoredProviderDiagnostic(value: unknown): value is Extract<AgentEvent, { type: "provider-diagnostic" }>["diagnostic"] {
-  return isRecord(value) && typeof value.phase === "string";
+function isStoredProviderDiagnostic(
+  value: unknown
+): value is Extract<AgentEvent, { type: 'provider-diagnostic' }>['diagnostic'] {
+  return isRecord(value) && typeof value.phase === 'string';
 }
 
-function terminalPayload(run: OrchestratorRunRecord, error?: string): JsonObject {
+function terminalPayload(
+  run: OrchestratorRunRecord,
+  error?: string
+): JsonObject {
   return compactJsonObject({
     run,
     outcome: run.outcome,
     reason: run.reason,
     outcomeDetail: run.outcomeDetail,
-    error: error ?? run.error
+    error: error ?? run.error,
   });
 }
 
@@ -1445,33 +2151,49 @@ function requiredGoal(run: OrchestratorRunRecord): OrchestratorGoalRunState {
   return run.goal;
 }
 
-function sessionMetadataFromRunRequest(request: StartRunRequest): JsonObject | undefined {
+function sessionMetadataFromRunRequest(
+  request: StartRunRequest
+): JsonObject | undefined {
   const metadata = compactJsonObject({
-    workspaceMode: stringMetadata(request.metadata, "workspaceMode"),
-    projectRoot: stringMetadata(request.metadata, "projectRoot"),
-    workspaceRoot: stringMetadata(request.metadata, "workspaceRoot")
+    workspaceMode: stringMetadata(request.metadata, 'workspaceMode'),
+    projectRoot: stringMetadata(request.metadata, 'projectRoot'),
+    workspaceRoot: stringMetadata(request.metadata, 'workspaceRoot'),
   });
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
-function stringMetadata(metadata: JsonObject | undefined, key: string): string | undefined {
+function stringMetadata(
+  metadata: JsonObject | undefined,
+  key: string
+): string | undefined {
   const value = metadata?.[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  return typeof value === 'string' && value.trim().length > 0
+    ? value
+    : undefined;
 }
 
-function promptSummary(input: StartRunRequest["input"]): string {
-  if (typeof input === "string") return trimPromptSummary(input);
+function promptSummary(input: StartRunRequest['input']): string {
+  if (typeof input === 'string') return trimPromptSummary(input);
   const textBlocks = input.blocks
-    .filter((block): block is Extract<(typeof input.blocks)[number], { type: "text" | "thought" }> => block.type === "text" || block.type === "thought")
+    .filter(
+      (
+        block
+      ): block is Extract<
+        (typeof input.blocks)[number],
+        { type: 'text' | 'thought' }
+      > => block.type === 'text' || block.type === 'thought'
+    )
     .map((block) => block.text)
-    .join("\n");
+    .join('\n');
   return trimPromptSummary(textBlocks || input.id);
 }
 
 function trimPromptSummary(text: string): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) return "Goal";
-  return normalized.length <= 240 ? normalized : `${normalized.slice(0, 237)}...`;
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return 'Goal';
+  return normalized.length <= 240
+    ? normalized
+    : `${normalized.slice(0, 237)}...`;
 }
 
 function eventDetail(event: AgentEvent): JsonObject {
@@ -1480,9 +2202,21 @@ function eventDetail(event: AgentEvent): JsonObject {
 
 function applyRunPatch(
   run: OrchestratorRunRecord,
-  patch: Partial<Pick<OrchestratorRunRecord, "startedAt" | "finishedAt" | "outcome" | "reason" | "outcomeDetail" | "error">>
+  patch: Partial<
+    Pick<
+      OrchestratorRunRecord,
+      | 'startedAt'
+      | 'finishedAt'
+      | 'outcome'
+      | 'reason'
+      | 'outcomeDetail'
+      | 'error'
+    >
+  >
 ): void {
-  for (const [key, value] of Object.entries(patch) as Array<[keyof typeof patch, unknown]>) {
+  for (const [key, value] of Object.entries(patch) as Array<
+    [keyof typeof patch, unknown]
+  >) {
     if (value === undefined) {
       delete run[key];
     } else {
@@ -1491,16 +2225,18 @@ function applyRunPatch(
   }
 }
 
-function runRecordFromPayload(event: OrchestratorEvent): OrchestratorRunRecord | undefined {
+function runRecordFromPayload(
+  event: OrchestratorEvent
+): OrchestratorRunRecord | undefined {
   const value = event.payload.run;
   if (!isRecord(value)) return undefined;
   if (
-    typeof value.id !== "string" ||
-    typeof value.sessionId !== "string" ||
-    typeof value.cwd !== "string" ||
+    typeof value.id !== 'string' ||
+    typeof value.sessionId !== 'string' ||
+    typeof value.cwd !== 'string' ||
     !isRunStatus(value.status) ||
-    typeof value.createdAt !== "string" ||
-    typeof value.updatedAt !== "string"
+    typeof value.createdAt !== 'string' ||
+    typeof value.updatedAt !== 'string'
   ) {
     return undefined;
   }
@@ -1512,29 +2248,42 @@ function runRecordFromPayload(event: OrchestratorEvent): OrchestratorRunRecord |
     status: value.status,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
-    ...(typeof value.startedAt === "string" ? { startedAt: value.startedAt } : {}),
-    ...(typeof value.finishedAt === "string" ? { finishedAt: value.finishedAt } : {}),
+    ...(typeof value.startedAt === 'string'
+      ? { startedAt: value.startedAt }
+      : {}),
+    ...(typeof value.finishedAt === 'string'
+      ? { finishedAt: value.finishedAt }
+      : {}),
     ...(isRunOutcome(value.outcome) ? { outcome: value.outcome } : {}),
     ...(isRunOutcomeReason(value.reason) ? { reason: value.reason } : {}),
-    ...(isRecord(value.outcomeDetail) ? { outcomeDetail: value.outcomeDetail as JsonObject } : {}),
-    ...(typeof value.error === "string" ? { error: value.error } : {}),
+    ...(isRecord(value.outcomeDetail)
+      ? { outcomeDetail: value.outcomeDetail as JsonObject }
+      : {}),
+    ...(typeof value.error === 'string' ? { error: value.error } : {}),
     ...(isRunKind(value.kind) ? { kind: value.kind } : {}),
     ...(isGoalRunState(value.goal) ? { goal: value.goal } : {}),
-    ...(typeof value.lastEventId === "string" ? { lastEventId: value.lastEventId } : {}),
-    ...(isRecord(value.metadata) ? { metadata: value.metadata as JsonObject } : {})
+    ...(typeof value.lastEventId === 'string'
+      ? { lastEventId: value.lastEventId }
+      : {}),
+    ...(isRecord(value.metadata)
+      ? { metadata: value.metadata as JsonObject }
+      : {}),
   };
 }
 
-function pendingInputRecordFromPayload(value: unknown, event: OrchestratorEvent): PendingInputRecord | undefined {
+function pendingInputRecordFromPayload(
+  value: unknown,
+  event: OrchestratorEvent
+): PendingInputRecord | undefined {
   if (!isRecord(value)) return undefined;
   if (
-    typeof value.id !== "string" ||
-    typeof value.sessionId !== "string" ||
-    typeof value.text !== "string" ||
+    typeof value.id !== 'string' ||
+    typeof value.sessionId !== 'string' ||
+    typeof value.text !== 'string' ||
     !isPendingInputMode(value.mode) ||
     !isPendingInputStatus(value.status) ||
-    typeof value.createdAt !== "string" ||
-    typeof value.updatedAt !== "string"
+    typeof value.createdAt !== 'string' ||
+    typeof value.updatedAt !== 'string'
   ) {
     return undefined;
   }
@@ -1542,107 +2291,168 @@ function pendingInputRecordFromPayload(value: unknown, event: OrchestratorEvent)
   return {
     id: value.id,
     sessionId: value.sessionId,
-    ...(typeof value.runId === "string" ? { runId: value.runId } : event.runId ? { runId: event.runId } : {}),
+    ...(typeof value.runId === 'string'
+      ? { runId: value.runId }
+      : event.runId
+        ? { runId: event.runId }
+        : {}),
     text: value.text,
     mode: value.mode,
     status: value.status,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
-    ...(value.source === "workbench" || value.source === "daemon" || value.source === "automation" ? { source: value.source } : {}),
-    ...(isRecord(value.metadata) ? { metadata: value.metadata as JsonObject } : {})
+    ...(value.source === 'workbench' ||
+    value.source === 'daemon' ||
+    value.source === 'automation'
+      ? { source: value.source }
+      : {}),
+    ...(isRecord(value.metadata)
+      ? { metadata: value.metadata as JsonObject }
+      : {}),
   };
 }
 
-function isPendingInputMode(value: unknown): value is PendingInputRecord["mode"] {
-  return value === "after-current-run" || value === "steer";
+function isPendingInputMode(
+  value: unknown
+): value is PendingInputRecord['mode'] {
+  return value === 'after-current-run' || value === 'steer';
 }
 
-function isPendingInputStatus(value: unknown): value is PendingInputRecord["status"] {
-  return value === "pending" || value === "cancelled" || value === "dispatched";
+function isPendingInputStatus(
+  value: unknown
+): value is PendingInputRecord['status'] {
+  return value === 'pending' || value === 'cancelled' || value === 'dispatched';
 }
 
-function isSessionStatus(value: unknown): value is OrchestratorSessionRecord["status"] {
-  return value === "open" || value === "closed" || value === "archived";
+function isSessionStatus(
+  value: unknown
+): value is OrchestratorSessionRecord['status'] {
+  return value === 'open' || value === 'closed' || value === 'archived';
 }
 
 function isRunStatus(value: unknown): value is RunStatus {
   return (
-    value === "queued" ||
-    value === "running" ||
-    value === "awaiting-approval" ||
-    value === "cancelling" ||
-    value === "cancelled" ||
-    value === "completed" ||
-    value === "failed"
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'awaiting-approval' ||
+    value === 'cancelling' ||
+    value === 'cancelled' ||
+    value === 'completed' ||
+    value === 'failed'
   );
 }
 
 function isRunOutcome(value: unknown): value is RunOutcome {
-  return value === "completed" || value === "blocked" || value === "cancelled" || value === "failed";
+  return (
+    value === 'completed' ||
+    value === 'blocked' ||
+    value === 'cancelled' ||
+    value === 'failed'
+  );
 }
 
 function isRunOutcomeReason(value: unknown): value is RunOutcomeReason {
   return (
-    value === "completed" ||
-    value === "cancelled" ||
-    value === "aborted" ||
-    value === "daemon-restarted" ||
-    value === "goal-completed" ||
-    value === "goal-blocked" ||
-    value === "goal-max-rounds" ||
-    value === "goal-stalled" ||
-    value === "max-turns" ||
-    value === "agent-error" ||
-    value === "provider-error" ||
-    value === "runtime-error" ||
-    value === "intervention-required" ||
-    value === "event-store-write-failed" ||
-    value === "awaiting-approval" ||
-    value === "run-engine-error"
+    value === 'completed' ||
+    value === 'cancelled' ||
+    value === 'aborted' ||
+    value === 'daemon-restarted' ||
+    value === 'goal-completed' ||
+    value === 'goal-blocked' ||
+    value === 'goal-max-rounds' ||
+    value === 'goal-stalled' ||
+    value === 'max-turns' ||
+    value === 'agent-error' ||
+    value === 'provider-error' ||
+    value === 'runtime-error' ||
+    value === 'intervention-required' ||
+    value === 'event-store-write-failed' ||
+    value === 'awaiting-approval' ||
+    value === 'run-engine-error'
   );
 }
 
-function isRunKind(value: unknown): value is OrchestratorRunRecord["kind"] {
-  return value === "task" || value === "goal";
+function isRunKind(value: unknown): value is OrchestratorRunRecord['kind'] {
+  return value === 'task' || value === 'goal';
 }
 
 function isGoalRunState(value: unknown): value is OrchestratorGoalRunState {
   if (!isRecord(value)) return false;
   return (
     isGoalStatus(value.status) &&
-    typeof value.maxRounds === "number" &&
+    typeof value.maxRounds === 'number' &&
     Number.isFinite(value.maxRounds) &&
-    typeof value.maxStalledRounds === "number" &&
+    typeof value.maxStalledRounds === 'number' &&
     Number.isFinite(value.maxStalledRounds) &&
-    typeof value.currentRound === "number" &&
+    typeof value.currentRound === 'number' &&
     Number.isFinite(value.currentRound) &&
-    typeof value.completedRounds === "number" &&
+    typeof value.completedRounds === 'number' &&
     Number.isFinite(value.completedRounds) &&
-    typeof value.stalledRounds === "number" &&
+    typeof value.stalledRounds === 'number' &&
     Number.isFinite(value.stalledRounds) &&
-    (value.visibleGoal === undefined || typeof value.visibleGoal === "string") &&
-    (value.stoppedReason === undefined || isGoalStoppedReason(value.stoppedReason)) &&
-    (value.lastProgressSignature === undefined || typeof value.lastProgressSignature === "string") &&
+    (value.visibleGoal === undefined ||
+      typeof value.visibleGoal === 'string') &&
+    (value.stoppedReason === undefined ||
+      isGoalStoppedReason(value.stoppedReason)) &&
+    (value.lastProgressSignature === undefined ||
+      typeof value.lastProgressSignature === 'string') &&
     (value.lastDecision === undefined || isGoalDecision(value.lastDecision))
   );
 }
 
-function isGoalStatus(value: unknown): value is OrchestratorGoalRunState["status"] {
-  return value === "queued" || value === "running" || value === "completed" || value === "blocked" || value === "cancelled" || value === "failed";
+function isGoalStatus(
+  value: unknown
+): value is OrchestratorGoalRunState['status'] {
+  return (
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'completed' ||
+    value === 'blocked' ||
+    value === 'cancelled' ||
+    value === 'failed'
+  );
 }
 
-function isGoalStoppedReason(value: unknown): value is NonNullable<OrchestratorGoalRunState["stoppedReason"]> {
-  return value === "complete" || value === "blocked" || value === "max-rounds" || value === "stalled" || value === "cancelled" || value === "error";
+function isGoalStoppedReason(
+  value: unknown
+): value is NonNullable<OrchestratorGoalRunState['stoppedReason']> {
+  return (
+    value === 'complete' ||
+    value === 'blocked' ||
+    value === 'max-rounds' ||
+    value === 'stalled' ||
+    value === 'cancelled' ||
+    value === 'error'
+  );
 }
 
 function isGoalDecision(value: unknown): value is GoalContinuationDecision {
   if (!isRecord(value)) return false;
   return (
-    (value.action === "continue" || value.action === "complete" || value.action === "block") &&
-    typeof value.reason === "string" &&
-    (value.prompt === undefined || typeof value.prompt === "string") &&
-    (value.progressSignature === undefined || typeof value.progressSignature === "string") &&
+    (value.action === 'continue' ||
+      value.action === 'complete' ||
+      value.action === 'block') &&
+    typeof value.reason === 'string' &&
+    (value.prompt === undefined || typeof value.prompt === 'string') &&
+    (value.progressSignature === undefined ||
+      typeof value.progressSignature === 'string') &&
     (value.detail === undefined || isRecord(value.detail))
+  );
+}
+
+/**
+ * High-frequency streaming deltas that must not serialize the drive loop on event-store I/O.
+ *
+ * These are still pushed to live run subscribers for UI real-time updates, but are not
+ * appended to the durable orchestrator event log. Audit / restore uses message-end and
+ * other lifecycle events for complete message content.
+ */
+export function isNonDurableRuntimeDelta(runtimeEvent: {
+  type: string;
+}): boolean {
+  return (
+    runtimeEvent.type === 'message-delta' ||
+    runtimeEvent.type === 'thought-delta'
   );
 }
 
@@ -1650,13 +2460,16 @@ function eventStoreFailureMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function eventStoreFailureDetail(failedEvent: OrchestratorEvent, cause: unknown): JsonObject {
+function eventStoreFailureDetail(
+  failedEvent: OrchestratorEvent,
+  cause: unknown
+): JsonObject {
   return compactJsonObject({
-    kind: "event-store-write-failed",
+    kind: 'event-store-write-failed',
     failedEventId: failedEvent.id,
     failedEventType: failedEvent.type,
     failedSequence: failedEvent.sequence,
-    error: eventStoreFailureMessage(cause)
+    error: eventStoreFailureMessage(cause),
   });
 }
 
@@ -1706,7 +2519,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
     return {
-      next: () => this.next()
+      next: () => this.next(),
     };
   }
 

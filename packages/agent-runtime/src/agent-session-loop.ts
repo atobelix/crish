@@ -13,12 +13,9 @@
 import type {
   AgentEvent,
   AgentMessage,
-  ContextCompressionRecord,
   JsonObject,
   PermissionDecision,
   PermissionRequest,
-  RuntimeCheckpointRecord,
-  RuntimeCheckpointRestoreRecord,
   ToolBatchCall,
   ToolBatchResult,
   ToolBatchFailurePolicy,
@@ -26,42 +23,55 @@ import type {
   ToolOutput,
   ToolResultBlock,
   ToolExecutionContext,
-} from "@crish/shared-types";
-import { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS, DEFAULT_MAX_TURNS } from "@crish/shared-types";
-import { RingBuffer } from "@crish/shared-utils";
+} from '@crish/shared-types';
+import {
+  DEFAULT_TOOL_EXECUTION_TIMEOUT_MS,
+  DEFAULT_MAX_TURNS,
+} from '@crish/shared-types';
+import { RingBuffer } from '@crish/shared-utils';
 import type {
   AgentRuntimeOptions,
   AgentTool,
   RuntimePermissionPolicy,
   RuntimePermissionRequest,
-} from "./types";
-import type { ProviderStreamContractEvent } from "./provider-stream-contract";
-import { classifyProviderErrorMessage } from "./provider-openai-compatible";
-import { ConversationEngine, ToolExecutor, ProviderCallGateway, ContextManager, ProgressEventQueue, ProviderResponseConsumer, ContextCompressionGate, SingleToolExecutor } from "./runtime-components";
-import type { ToolExecuteHook } from "./runtime-components";
-import { TokenTracker } from "./provider-transport/token-tracker";
+} from './types';
+import type { ProviderStreamContractEvent } from './provider-stream-contract';
+import { classifyProviderErrorMessage } from './provider-openai-compatible';
+import {
+  ConversationEngine,
+  ToolExecutor,
+  ProviderCallGateway,
+  ContextManager,
+  ProgressEventQueue,
+  ProviderResponseConsumer,
+  ContextCompressionGate,
+  SingleToolExecutor,
+} from './runtime-components';
+import type { ToolExecuteHook } from './runtime-components';
+import { TokenTracker } from './provider-transport/token-tracker';
 import {
   flushEvents,
   withSessionEntryMetadata,
-  isNoProgressAssistant,
   checkpointRecordsFromToolResult,
   checkpointRestoreRecordFromToolResult,
   validationAdviceForToolInput,
-  isExpiredApprovalDecision,
+  buildPermissionDenyToolOutput,
   summarizeToolCall,
   isToolTimeoutCause,
   abortReason,
-  unrefTimer,
-  runtimeSteeringText,
-} from "./runtime-helpers";
+} from './runtime-helpers';
 import {
   assemblePromptForProvider,
   type PromptAssemblyContextBlock,
   type PromptAssemblyMetadata,
-} from "./prompt-assembly";
-import { type ProviderStreamFinishReason } from "./provider-stream-contract";
-import { createId, createTextMessage, nowIso, SessionRecorder } from "./session";
-import { repairToolInput, validateToolInput } from "./tools";
+} from './prompt-assembly';
+import {
+  createId,
+  createTextMessage,
+  nowIso,
+  SessionRecorder,
+} from './session';
+import { repairToolInput, validateToolInput } from './tools';
 import {
   createAgentSessionMachine,
   shouldStopForMaxTurns,
@@ -69,23 +79,21 @@ import {
   type AgentSessionState,
   type AgentSessionEvent,
   type AgentEndReason,
-} from "./state-machine/agent-session";
-import { AgentInputQueue } from "./agent-input-queue";
-import type { ConexStateMachine } from "./state-machine/core";
+} from './state-machine/agent-session';
+import { AgentInputQueue } from './agent-input-queue';
+import type { ConexStateMachine } from './state-machine/core';
 import {
   SteeringCoordinator,
   RecoverySteeringStrategy,
   type SteeringContext,
-  type SteeringPhase,
-  type SteeringAction,
-} from "./steering";
+} from './steering';
 import {
   ExtensionRegistry,
   type AgentHooks as AgentHooksType,
   type HookContext,
   type TurnContext,
   type ErrorContext,
-} from "./hooks";
+} from './hooks';
 
 /** 流式 delta 队列容量上限；超容量覆盖最旧 delta 以提供背压保护。 */
 const DELTA_QUEUE_CAPACITY = 5000;
@@ -99,16 +107,15 @@ interface ToolExecutionReliabilityOptions {
 
 // ─── 辅助函数 ─────────────────────────────────────────────
 
-function runtimeStopReasonFromProviderFinishReason(reason: ProviderStreamFinishReason): "stop" | "tool-call" | "length" | "error" {
-  if (reason === "tool-call" || reason === "length" || reason === "error") return reason;
-  if (reason === "cancelled") return "error";
-  return "stop";
-}
-
-function normalizeToolExecutionOptions(options: AgentRuntimeOptions["toolExecution"]): ToolExecutionReliabilityOptions {
+function normalizeToolExecutionOptions(
+  options: AgentRuntimeOptions['toolExecution']
+): ToolExecutionReliabilityOptions {
   return {
-    timeoutMs: positiveIntegerLocal(options?.timeoutMs, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS),
-    parallelFailurePolicy: options?.parallelFailurePolicy ?? "continue-drain"
+    timeoutMs: positiveIntegerLocal(
+      options?.timeoutMs,
+      DEFAULT_TOOL_EXECUTION_TIMEOUT_MS
+    ),
+    parallelFailurePolicy: options?.parallelFailurePolicy ?? 'continue-drain',
   };
 }
 
@@ -131,24 +138,76 @@ function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
+      signal?.removeEventListener('abort', onAbort);
       resolve();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
       resolve();
     };
-    signal?.addEventListener("abort", onAbort, { once: true });
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
-function conversationNeedsTextSynthesis(conversation: ConversationEngine): boolean {
+/** Internal synthesis / short-prose nudges — never pollute transcript as role:user. */
+const SYNTHESIS_NUDGE_KIND = 'synthesis-nudge';
+
+function createSynthesisNudgeMessage(text: string): AgentMessage {
+  // AgentMessage.role 允许 system；用 system + metadata 标识为内部指令，
+  // 避免旧实现 role:user 被模型/UI 当成真实用户发言。
+  return createTextMessage('system', text, {
+    kind: SYNTHESIS_NUDGE_KIND,
+    internal: true,
+  });
+}
+
+function isSoftOrNonFatalToolError(block: ToolResultBlock): boolean {
+  // 超时 / 用户拒绝 / softDeny 永不 fatal（见 plans/02 §回灌规则）
+  const json = block.output?.json;
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+  const o = json as JsonObject;
+  if (o.softDeny === true) return true;
+  if (o.timedOut === true) return true;
+  if (o.cancelled === true) return true;
+  const code = o.code;
+  if (code === 'approval_expired' || code === 'user_denied') return true;
+  const rte = o.runtimeToolExecution;
+  if (rte && typeof rte === 'object' && !Array.isArray(rte)) {
+    const status = (rte as JsonObject).status;
+    if (status === 'timeout' || status === 'cancelled') return true;
+  }
+  return false;
+}
+
+/** When tool.fatalOnError && isError && not softDeny/timeout/user-deny → abort run. */
+function findFatalToolError(
+  results: ToolResultBlock[],
+  tools: AgentTool[]
+): string | undefined {
+  for (const block of results) {
+    if (!block.isError) continue;
+    const tool = tools.find((t) => t.name === block.toolName);
+    if (!tool?.fatalOnError) continue;
+    if (isSoftOrNonFatalToolError(block)) continue;
+    const text =
+      typeof block.output?.text === 'string' && block.output.text.trim()
+        ? block.output.text.trim().slice(0, 240)
+        : 'unknown error';
+    return `Fatal tool error (${block.toolName}): ${text}`;
+  }
+  return undefined;
+}
+
+function conversationNeedsTextSynthesis(
+  conversation: ConversationEngine
+): boolean {
   const messages = conversation.getMessages();
   if (messages.length === 0) return false;
 
+  // 锚定真实用户输入（跳过 system 收尾注入），避免 synthesis 自身污染判定窗口
   let lastUserIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "user") {
+    if (messages[i]?.role === 'user') {
       lastUserIdx = i;
       break;
     }
@@ -160,14 +219,20 @@ function conversationNeedsTextSynthesis(conversation: ConversationEngine): boole
   let sawTool = false;
   let proseChars = 0;
   for (const m of after) {
-    if (m.role === "tool") {
+    if (m.role === 'tool') {
       sawTool = true;
       continue;
     }
-    if (m.role === "assistant") {
+    if (m.role === 'system' && m.metadata?.kind === SYNTHESIS_NUDGE_KIND) {
+      continue;
+    }
+    if (m.role === 'assistant') {
       for (const b of m.blocks ?? []) {
-        if (b.type === "tool-call") sawTool = true;
-        if (b.type === "text" && typeof (b as { text?: string }).text === "string") {
+        if (b.type === 'tool-call') sawTool = true;
+        if (
+          b.type === 'text' &&
+          typeof (b as { text?: string }).text === 'string'
+        ) {
           proseChars += (b as { text: string }).text.trim().length;
         }
       }
@@ -176,15 +241,28 @@ function conversationNeedsTextSynthesis(conversation: ConversationEngine): boole
   return sawTool && proseChars < 40;
 }
 
-function positiveIntegerLocal(value: number | undefined, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0 && Number.isInteger(value)) return value;
+function positiveIntegerLocal(
+  value: number | undefined,
+  fallback: number
+): number {
+  if (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    Number.isInteger(value)
+  )
+    return value;
   return fallback;
 }
 
 // ─── AgentSessionLoop ─────────────────────────────────────
 
 export class AgentSessionLoop {
-  private readonly machine: ConexStateMachine<AgentSessionState, AgentSessionEvent, AgentSessionContext>;
+  private readonly machine: ConexStateMachine<
+    AgentSessionState,
+    AgentSessionEvent,
+    AgentSessionContext
+  >;
   private readonly toolExecution: ToolExecutionReliabilityOptions;
   private readonly toolExecutor: ToolExecutor;
   private readonly steeringCoordinator: SteeringCoordinator;
@@ -216,7 +294,7 @@ export class AgentSessionLoop {
     private readonly sessionId: string,
     private readonly tokenTracker: TokenTracker,
     permissionPolicy: RuntimePermissionPolicy,
-    extensionRegistry?: ExtensionRegistry,
+    extensionRegistry?: ExtensionRegistry
   ) {
     const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
     this.toolExecution = normalizeToolExecutionOptions(options.toolExecution);
@@ -227,7 +305,10 @@ export class AgentSessionLoop {
     this.machine = createAgentSessionMachine(this.sessionId, maxTurns);
     this.providerConsumer = new ProviderResponseConsumer();
     this.compressionGate = new ContextCompressionGate(contextManager);
-    this.singleToolExecutor = new SingleToolExecutor(this.toolExecution.timeoutMs, []);
+    this.singleToolExecutor = new SingleToolExecutor(
+      this.toolExecution.timeoutMs,
+      []
+    );
     this.permissionPolicy = permissionPolicy;
 
     this.extensionRegistry = extensionRegistry ?? new ExtensionRegistry();
@@ -245,7 +326,7 @@ export class AgentSessionLoop {
       ],
       {
         maxSteeringBudget: recoveryOptions?.maxSteeringMessages ?? 1,
-      },
+      }
     );
   }
 
@@ -255,524 +336,609 @@ export class AgentSessionLoop {
    * 每个 case 只关心"当前状态要做什么"，
    * 下一个状态完全由 send() 的参数决定。
    */
-  async *run(userInput: string | AgentMessage): AsyncGenerator<AgentEvent, AgentMessage[]> {
-    const userMessage = typeof userInput === "string" ? createTextMessage("user", userInput) : userInput;
+  async *run(
+    userInput: string | AgentMessage
+  ): AsyncGenerator<AgentEvent, AgentMessage[]> {
+    const userMessage =
+      typeof userInput === 'string'
+        ? createTextMessage('user', userInput)
+        : userInput;
     this.inputQueue.enqueue(userMessage);
 
     // idle → awaiting-input
-    this.dispatch("INITIALIZED");
+    this.dispatch('INITIALIZED');
 
-    const startEvent: AgentEvent = { type: "agent-start", sessionId: this.sessionId, timestamp: nowIso() };
+    const startEvent: AgentEvent = {
+      type: 'agent-start',
+      sessionId: this.sessionId,
+      timestamp: nowIso(),
+    };
     yield* this.recordEvent(startEvent, this.recorder);
 
-    let endReason: AgentEndReason = "stop";
+    let endReason: AgentEndReason = 'stop';
     let endError: string | undefined;
 
     // ─── 状态机解释器 ───────────────────────────────────────
-    while (!this.machine.is("done")) {
+    while (!this.machine.is('done')) {
       const state = this.machine.getCurrent();
 
       try {
-      switch (state) {
-        // ── awaiting-input: 从队列中取输入，注入对话 ──────────
-        case "awaiting-input": {
-          if (this.abortController.signal.aborted) {
-            this.dispatch("ABORT");
-            endReason = "aborted";
-            break;
-          }
-
-          const input = this.inputQueue.dequeue();
-          if (!input) {
-            this.dispatch("NO_INPUT");
-            break;
-          }
-
-          // 记录用户消息（emit message-start/end + append to conversation）
-          yield* this.recordMessage(input, this.conversation, this.recorder);
-          this.dispatch("INPUT_READY");
-          break;
-        }
-
-        // ── preparing-turn: recovery + compression ──────────
-        case "preparing-turn": {
-          if (this.abortController.signal.aborted) {
-            this.dispatch("ABORT");
-            endReason = "aborted";
-            break;
-          }
-
-          // ★ 智能 Steer 注入点（仅在工具调用迭代时注入，新输入周期由 awaiting-input 处理）
-          if (this.machine.getContext().toolCallCount > 0 && this.inputQueue.hasPending()) {
-            const steerInput = this.inputQueue.dequeue();
-            if (steerInput) {
-              yield* this.recordMessage(steerInput, this.conversation, this.recorder);
+        switch (state) {
+          // ── awaiting-input: 从队列中取输入，注入对话 ──────────
+          case 'awaiting-input': {
+            if (this.abortController.signal.aborted) {
+              this.dispatch('ABORT');
+              endReason = 'aborted';
+              break;
             }
+
+            const input = this.inputQueue.dequeue();
+            if (!input) {
+              this.dispatch('NO_INPUT');
+              break;
+            }
+
+            // 记录用户消息（emit message-start/end + append to conversation）
+            yield* this.recordMessage(input, this.conversation, this.recorder);
+            this.dispatch('INPUT_READY');
+            break;
           }
 
-          const turnIndex = this.machine.getContext().turnIndex + 1;
+          // ── preparing-turn: recovery + compression ──────────
+          case 'preparing-turn': {
+            if (this.abortController.signal.aborted) {
+              this.dispatch('ABORT');
+              endReason = 'aborted';
+              break;
+            }
 
-          // 发射 turn-start
-          yield* this.recordEvent(
-            { type: "turn-start", sessionId: this.sessionId, turnIndex, timestamp: nowIso() },
-            this.recorder
-          );
+            // ★ 智能 Steer 注入点（仅在工具调用迭代时注入，新输入周期由 awaiting-input 处理）
+            if (
+              this.machine.getContext().toolCallCount > 0 &&
+              this.inputQueue.hasPending()
+            ) {
+              const steerInput = this.inputQueue.dequeue();
+              if (steerInput) {
+                yield* this.recordMessage(
+                  steerInput,
+                  this.conversation,
+                  this.recorder
+                );
+              }
+            }
 
-          // 纠偏评估（通过 SteeringCoordinator）
-          const recoveryOptions = this.options.recovery;
-          if (recoveryOptions?.enabled !== false) {
-            const steeringContext: SteeringContext = {
+            const turnIndex = this.machine.getContext().turnIndex + 1;
+
+            // 发射 turn-start
+            yield* this.recordEvent(
+              {
+                type: 'turn-start',
+                sessionId: this.sessionId,
+                turnIndex,
+                timestamp: nowIso(),
+              },
+              this.recorder
+            );
+
+            // 纠偏评估（通过 SteeringCoordinator）
+            const recoveryOptions = this.options.recovery;
+            if (recoveryOptions?.enabled !== false) {
+              const steeringContext: SteeringContext = {
+                messages: this.conversation.getMessages(),
+                turnIndex: this.machine.getContext().turnIndex,
+                steeringCount: this.steeringCoordinator.getSteeringCount(),
+                toolCallCount: this.machine.getContext().toolCallCount,
+                hasPendingInput: this.inputQueue.hasPending(),
+              };
+              // 评估 after-tools 策略（恢复检测：工具错误循环、重复调用）
+              const afterToolsEvaluation = this.steeringCoordinator.evaluate(
+                'after-tools',
+                steeringContext
+              );
+              const afterToolsApplied = this.steeringCoordinator.apply(
+                afterToolsEvaluation.actions,
+                this.sessionId
+              );
+              yield* flushEvents(afterToolsApplied.events);
+              if (afterToolsApplied.interventionRequired) {
+                endReason = 'error';
+                endError = 'Runtime intervention required';
+                this.dispatch('INTERVENTION_REQUIRED');
+                break;
+              }
+              // 评估 before-turn 策略（Goal audit 等）
+              const beforeTurnContext: SteeringContext = {
+                ...steeringContext,
+                steeringCount: this.steeringCoordinator.getSteeringCount(),
+              };
+              const beforeTurnEvaluation = this.steeringCoordinator.evaluate(
+                'before-turn',
+                beforeTurnContext
+              );
+              const beforeTurnApplied = this.steeringCoordinator.apply(
+                beforeTurnEvaluation.actions,
+                this.sessionId
+              );
+              yield* flushEvents(beforeTurnApplied.events);
+              if (beforeTurnApplied.interventionRequired) {
+                endReason = 'error';
+                endError = 'Runtime intervention required';
+                this.dispatch('INTERVENTION_REQUIRED');
+                break;
+              }
+            }
+
+            // 上下文压缩（对外发射 start/end，供桌面与 session 投影）
+            const messagesBeforeCompress =
+              this.conversation.getMessagesMutable();
+            if (this.contextManager.shouldCompress(messagesBeforeCompress)) {
+              yield* this.emitEvent({
+                type: 'context-compression-start',
+                sessionId: this.sessionId,
+                timestamp: nowIso(),
+                reason: 'auto',
+                tokensBefore: messagesBeforeCompress.length,
+              });
+              const compressionResult =
+                await this.compressionGate.maybeCompress(
+                  messagesBeforeCompress
+                );
+              if (compressionResult.compressed) {
+                this.conversation.replaceMessages(compressionResult.messages);
+                if (compressionResult.record) {
+                  await this.recorder.recordCompaction(
+                    compressionResult.record
+                  );
+                }
+                yield* this.emitEvent({
+                  type: 'context-compression-end',
+                  sessionId: this.sessionId,
+                  timestamp: nowIso(),
+                  aborted: false,
+                  ...(compressionResult.record
+                    ? { result: compressionResult.record }
+                    : {}),
+                });
+              } else {
+                yield* this.emitEvent({
+                  type: 'context-compression-end',
+                  sessionId: this.sessionId,
+                  timestamp: nowIso(),
+                  aborted: true,
+                });
+              }
+            }
+
+            this.dispatch('TURN_PREPARED');
+            break;
+          }
+
+          // ── streaming: 调用 Provider，收集助手消息 ────────────
+          case 'streaming': {
+            const callIterator = await this.buildProviderCall();
+            // 流式 delta 经队列边收边 yield，避免只能等整段 message-end
+            // 流式 delta 队列：RingBuffer 提供 O(1) shift 与背压保护（超容量覆盖最旧 delta）。
+            const deltaQueue = new RingBuffer<AgentEvent>(DELTA_QUEUE_CAPACITY);
+            let deltaWaiters: Array<() => void> = [];
+            const wake = () => {
+              const w = deltaWaiters;
+              deltaWaiters = [];
+              for (const r of w) r();
+            };
+            const consumePromise = this.providerConsumer.consume(
+              callIterator,
+              this.tools,
+              this.abortController.signal,
+              (d) => {
+                deltaQueue.pushOverwritingOldest({
+                  type: 'message-delta',
+                  sessionId: this.sessionId,
+                  block:
+                    d.kind === 'thought'
+                      ? {
+                          type: 'thought',
+                          text: d.text,
+                          ...(d.redacted !== undefined
+                            ? { redacted: d.redacted }
+                            : {}),
+                        }
+                      : { type: 'text', text: d.text },
+                  timestamp: nowIso(),
+                } as AgentEvent);
+                wake();
+              }
+            );
+            let consumeResult:
+              | Awaited<ReturnType<ProviderResponseConsumer['consume']>>
+              | undefined;
+            const done = consumePromise.then((r) => {
+              consumeResult = r;
+              wake();
+              return r;
+            });
+            while (true) {
+              while (deltaQueue.size > 0) {
+                const next = deltaQueue.shift()!;
+                yield* this.emitEvent(next);
+              }
+              if (consumeResult) break;
+              await Promise.race([
+                done,
+                new Promise<void>((resolve) => {
+                  deltaWaiters.push(resolve);
+                }),
+              ]);
+            }
+            while (deltaQueue.size > 0) {
+              yield* this.emitEvent(deltaQueue.shift()!);
+            }
+            if (!consumeResult) {
+              consumeResult = await done;
+            }
+
+            // emit 在流期间收集的 provider-diagnostic 事件
+            for (const diagnostic of consumeResult.diagnostics) {
+              yield* this.emitEvent({
+                type: 'provider-diagnostic',
+                sessionId: this.sessionId,
+                diagnostic,
+                timestamp: nowIso(),
+              });
+            }
+
+            const assistantResult = consumeResult.response;
+
+            if (assistantResult.type === 'error') {
+              if (this.abortController.signal.aborted) {
+                endReason = 'aborted';
+                this.dispatch('ABORT');
+                break;
+              }
+              const errMsg = assistantResult.error ?? 'Provider stream failed';
+              // 502 / 网络等瞬时错误：退避重试，不立刻杀死 agent
+              if (
+                isTransientProviderError(errMsg) &&
+                this.providerTransientRetries <
+                  AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES
+              ) {
+                this.providerTransientRetries += 1;
+                const waitMs = 600 * this.providerTransientRetries;
+                yield* this.emitEvent({
+                  type: 'provider-diagnostic',
+                  sessionId: this.sessionId,
+                  diagnostic: {
+                    phase: 'retry',
+                    message: `Transient provider error, retry ${this.providerTransientRetries}/${AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES}: ${errMsg}`,
+                  },
+                  timestamp: nowIso(),
+                } as AgentEvent);
+                await sleepMs(waitMs, this.abortController.signal);
+                this.dispatch('NO_PROGRESS_CONTINUE');
+                break;
+              }
+              // 仍有工具成果：软降级，让模型基于已有结果收尾，而不是整 run 失败
+              if (this.sawToolsThisRun && !this.synthesisNudgeUsed) {
+                this.synthesisNudgeUsed = true;
+                this.inputQueue.enqueue(
+                  createSynthesisNudgeMessage(
+                    `上游模型暂时失败：${errMsg.slice(0, 240)}。请仅基于已完成的工具结果给出结论；不要再调用工具。若必须停止请说明原因。`
+                  )
+                );
+                this.dispatch('INPUT_AVAILABLE');
+                break;
+              }
+              // 致命 provider 错误：走 onError hook，并对外暴露 runtime-error
+              const providerError = new Error(errMsg);
+              const action = this.handleErrorWithHook(providerError, state);
+              yield* this.emitEvent({
+                type: 'runtime-error',
+                sessionId: this.sessionId,
+                timestamp: nowIso(),
+                error: errMsg,
+              });
+              if (action === 'retry') {
+                this.dispatch('NO_PROGRESS_CONTINUE');
+                break;
+              }
+              if (action === 'skip') {
+                this.dispatchErrorRecovery(state);
+                break;
+              }
+              endReason = 'error';
+              endError = errMsg;
+              this.dispatch('PROVIDER_ERROR');
+              break;
+            }
+            // 成功一轮后清零瞬时重试计数
+            this.providerTransientRetries = 0;
+
+            if (assistantResult.type === 'empty-response') {
+              this.dispatch('STEERING_NEEDED');
+              break;
+            }
+
+            // Only "message" type reaches here
+            const msg = this.enrichAssistantMessage(assistantResult.message);
+            this.conversation.appendMessage(msg);
+            const assistantEntry = await this.recorder.recordMessage(msg);
+            yield* this.recordEvent(
+              {
+                type: 'message-end',
+                sessionId: this.sessionId,
+                message: withSessionEntryMetadata(msg, assistantEntry),
+              },
+              this.recorder
+            );
+
+            if (msg.metadata?.stopReason === 'error') {
+              endReason = 'error';
+              endError =
+                typeof msg.metadata.error === 'string'
+                  ? msg.metadata.error
+                  : 'Provider stream failed';
+              this.dispatch('PROVIDER_ERROR');
+              break;
+            }
+
+            // Check for tool calls
+            const toolCalls = msg.blocks.filter(
+              (block): block is ToolCallBlock => block.type === 'tool-call'
+            );
+
+            if (toolCalls.length === 0) {
+              // Assistant 正常停止，无 tool calls
+              this.steeringCoordinator.resetSteeringCount();
+              this.dispatch('NO_TOOL_CALLS');
+              break;
+            }
+
+            // 有 tool calls，进入执行状态
+            this.dispatch('HAS_TOOL_CALLS', { count: toolCalls.length });
+            break;
+          }
+
+          // ── steering-evaluation: 评估并执行纠偏动作 ──────────
+          case 'steering-evaluation': {
+            const steerCtx = this.machine.getContext();
+            const maxSteeringMessages =
+              this.options.recovery?.maxSteeringMessages ?? 3;
+            if (steerCtx.steeringCount > maxSteeringMessages) {
+              endReason = 'error';
+              endError = 'Steering budget exhausted';
+              this.dispatch('STEERING_BUDGET_EXHAUSTED');
+              break;
+            }
+
+            const steeringContext = {
               messages: this.conversation.getMessages(),
-              turnIndex: this.machine.getContext().turnIndex,
-              steeringCount: this.steeringCoordinator.getSteeringCount(),
-              toolCallCount: this.machine.getContext().toolCallCount,
+              turnIndex: steerCtx.turnIndex,
+              steeringCount: steerCtx.steeringCount,
+              toolCallCount: steerCtx.toolCallCount,
               hasPendingInput: this.inputQueue.hasPending(),
             };
-            // 评估 after-tools 策略（恢复检测：工具错误循环、重复调用）
-            const afterToolsEvaluation = this.steeringCoordinator.evaluate("after-tools", steeringContext);
-            const afterToolsApplied = this.steeringCoordinator.apply(afterToolsEvaluation.actions, this.sessionId);
-            yield* flushEvents(afterToolsApplied.events);
-            if (afterToolsApplied.interventionRequired) {
-              endReason = "error";
-              endError = "Runtime intervention required";
-              this.dispatch("INTERVENTION_REQUIRED");
+            const evaluation = this.steeringCoordinator.evaluate(
+              'empty-response',
+              steeringContext
+            );
+
+            if (evaluation.actions.length === 0) {
+              endReason = 'error';
+              endError = 'No steering strategy handled empty response';
+              this.dispatch('STEERING_BUDGET_EXHAUSTED');
               break;
             }
-            // 评估 before-turn 策略（Goal audit 等）
-            const beforeTurnContext: SteeringContext = {
-              ...steeringContext,
-              steeringCount: this.steeringCoordinator.getSteeringCount(),
-            };
-            const beforeTurnEvaluation = this.steeringCoordinator.evaluate("before-turn", beforeTurnContext);
-            const beforeTurnApplied = this.steeringCoordinator.apply(beforeTurnEvaluation.actions, this.sessionId);
-            yield* flushEvents(beforeTurnApplied.events);
-            if (beforeTurnApplied.interventionRequired) {
-              endReason = "error";
-              endError = "Runtime intervention required";
-              this.dispatch("INTERVENTION_REQUIRED");
+
+            const applied = this.steeringCoordinator.apply(
+              evaluation.actions,
+              this.sessionId
+            );
+            yield* flushEvents(applied.events);
+
+            if (applied.interventionRequired) {
+              endReason = 'error';
+              endError = 'Runtime intervention required';
+              this.dispatch('INTERVENTION_REQUIRED');
               break;
             }
+
+            // Re-enter preparing-turn → streaming with injected steering in transcript
+            this.dispatch('STEERING_COMPLETE');
+            break;
           }
 
-          // 上下文压缩（对外发射 start/end，供桌面与 session 投影）
-          const messagesBeforeCompress = this.conversation.getMessagesMutable();
-          if (this.contextManager.shouldCompress(messagesBeforeCompress)) {
-            yield* this.emitEvent({
-              type: "context-compression-start",
-              sessionId: this.sessionId,
-              timestamp: nowIso(),
-              reason: "auto",
-              tokensBefore: messagesBeforeCompress.length,
-            });
-            const compressionResult = await this.compressionGate.maybeCompress(messagesBeforeCompress);
-            if (compressionResult.compressed) {
-              this.conversation.replaceMessages(compressionResult.messages);
-              if (compressionResult.record) {
-                await this.recorder.recordCompaction(compressionResult.record);
-              }
-              yield* this.emitEvent({
-                type: "context-compression-end",
-                sessionId: this.sessionId,
-                timestamp: nowIso(),
-                aborted: false,
-                ...(compressionResult.record ? { result: compressionResult.record } : {}),
-              });
-            } else {
-              yield* this.emitEvent({
-                type: "context-compression-end",
-                sessionId: this.sessionId,
-                timestamp: nowIso(),
-                aborted: true,
-              });
-            }
-          }
-
-          this.dispatch("TURN_PREPARED");
-          break;
-        }
-
-        // ── streaming: 调用 Provider，收集助手消息 ────────────
-        case "streaming": {
-          const callIterator = await this.buildProviderCall();
-          // 流式 delta 经队列边收边 yield，避免只能等整段 message-end
-          // 流式 delta 队列：RingBuffer 提供 O(1) shift 与背压保护（超容量覆盖最旧 delta）。
-          const deltaQueue = new RingBuffer<AgentEvent>(DELTA_QUEUE_CAPACITY);
-          let deltaWaiters: Array<() => void> = [];
-          const wake = () => {
-            const w = deltaWaiters;
-            deltaWaiters = [];
-            for (const r of w) r();
-          };
-          const consumePromise = this.providerConsumer.consume(
-            callIterator,
-            this.tools,
-            this.abortController.signal,
-            (d) => {
-              deltaQueue.pushOverwritingOldest({
-                type: "message-delta",
-                sessionId: this.sessionId,
-                block:
-                  d.kind === "thought"
-                    ? {
-                        type: "thought",
-                        text: d.text,
-                        ...(d.redacted !== undefined ? { redacted: d.redacted } : {}),
-                      }
-                    : { type: "text", text: d.text },
-                timestamp: nowIso(),
-              } as AgentEvent);
-              wake();
-            },
-          );
-          let consumeResult: Awaited<ReturnType<ProviderResponseConsumer["consume"]>> | undefined;
-          const done = consumePromise.then((r) => {
-            consumeResult = r;
-            wake();
-            return r;
-          });
-          while (true) {
-            while (deltaQueue.size > 0) {
-              const next = deltaQueue.shift()!;
-              yield* this.emitEvent(next);
-            }
-            if (consumeResult) break;
-            await Promise.race([
-              done,
-              new Promise<void>((resolve) => {
-                deltaWaiters.push(resolve);
-              }),
-            ]);
-          }
-          while (deltaQueue.size > 0) {
-            yield* this.emitEvent(deltaQueue.shift()!);
-          }
-          if (!consumeResult) {
-            consumeResult = await done;
-          }
-
-          // emit 在流期间收集的 provider-diagnostic 事件
-          for (const diagnostic of consumeResult.diagnostics) {
-            yield* this.emitEvent({
-              type: "provider-diagnostic",
-              sessionId: this.sessionId,
-              diagnostic,
-              timestamp: nowIso(),
-            });
-          }
-
-          const assistantResult = consumeResult.response;
-
-          if (assistantResult.type === "error") {
+          // ── executing-tools: 批量执行工具调用 ─────────────────
+          case 'executing-tools': {
             if (this.abortController.signal.aborted) {
-              endReason = "aborted";
-              this.dispatch("ABORT");
+              this.dispatch('ABORT');
+              endReason = 'aborted';
               break;
             }
-            const errMsg = assistantResult.error ?? "Provider stream failed";
-            // 502 / 网络等瞬时错误：退避重试，不立刻杀死 agent
-            if (
-              isTransientProviderError(errMsg) &&
-              this.providerTransientRetries < AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES
-            ) {
-              this.providerTransientRetries += 1;
-              const waitMs = 600 * this.providerTransientRetries;
-              yield* this.emitEvent({
-                type: "provider-diagnostic",
-                sessionId: this.sessionId,
-                diagnostic: {
-                  phase: "retry",
-                  message: `Transient provider error, retry ${this.providerTransientRetries}/${AgentSessionLoop.MAX_PROVIDER_TRANSIENT_RETRIES}: ${errMsg}`,
-                },
-                timestamp: nowIso(),
-              } as AgentEvent);
-              await sleepMs(waitMs, this.abortController.signal);
-              this.dispatch("NO_PROGRESS_CONTINUE");
-              break;
+
+            // 重新获取 tool calls（从最后一条 assistant 消息）
+            const messages = this.conversation.getMessagesMutable();
+            const lastAssistant = messages
+              .filter((m) => m.role === 'assistant')
+              .pop();
+            const toolCalls = lastAssistant
+              ? lastAssistant.blocks.filter(
+                  (b): b is ToolCallBlock => b.type === 'tool-call'
+                )
+              : [];
+
+            const toolResults = yield* this.executeToolCalls(
+              toolCalls,
+              this.tools,
+              this.recorder
+            );
+            this.sawToolsThisRun = true;
+            if (toolResults.every((block) => !block.isError)) {
+              this.steeringCoordinator.resetSteeringCount();
             }
-            // 仍有工具成果：软降级，让模型基于已有结果收尾，而不是整 run 失败
-            if (this.sawToolsThisRun && !this.synthesisNudgeUsed) {
-              this.synthesisNudgeUsed = true;
-              // 用 system role 注入降级提示——旧实现用 user role 会把这段当成真实用户输入，
-              // 污染后续 turn 的语义（provider 会把它计入用户上下文）。
-              // system role 明确标识为系统指令，不会被当作用户发言。
-              this.inputQueue.enqueue(
-                createTextMessage(
-                  "system",
-                  `上游模型暂时失败：${errMsg.slice(0, 240)}。请仅基于已完成的工具结果给出结论；不要再调用工具。若必须停止请说明原因。`,
-                ),
+            // 同一次 provider 响应中的所有 tool_call 的结果合并为单条 tool 消息：
+            // - AgentMessage.blocks 本就是 AgentMessageBlock[]，多 block 是一等公民
+            // - openai-request-build.ts 的 buildChatMessages / buildResponsesInput 会按
+            //   block 维度展开为多条 wire message（OpenAI 协议要求每条 tool 消息只挂一个
+            //   tool_call_id），因此 wire 层输出与逐条追加完全一致
+            // - Anthropic 原生协议本就要求单条 user 消息携带多个 tool_result block
+            // - context-projection / context-compression / prompt-assembly / runtime-helpers
+            //   均按 block 维度遍历 tool 角色消息，批量结构无需特殊适配
+            // 这样每轮工具批次的消息数从 N+1（assistant + N 条 tool）降为 2，
+            // 消除 N 倍消息膨胀，同时不改变任何 provider 的线上请求体。
+            if (toolResults.length > 0) {
+              const message: AgentMessage = {
+                id: createId('tool'),
+                role: 'tool',
+                createdAt: nowIso(),
+                blocks: toolResults,
+              };
+              yield* this.recordMessage(
+                message,
+                this.conversation,
+                this.recorder
               );
-              this.dispatch("INPUT_AVAILABLE");
+            }
+
+            // fatalOnError：isError 且工具声明 fatal，且非 softDeny/超时/用户拒绝 → 中止 run
+            const fatalToolError = findFatalToolError(toolResults, this.tools);
+            if (fatalToolError) {
+              endReason = 'error';
+              endError = fatalToolError;
+              yield* this.emitEvent({
+                type: 'runtime-error',
+                sessionId: this.sessionId,
+                timestamp: nowIso(),
+                error: fatalToolError,
+              });
+              this.dispatch('ERROR');
               break;
             }
-            // 致命 provider 错误：走 onError hook，并对外暴露 runtime-error
-            const providerError = new Error(errMsg);
-            const action = this.handleErrorWithHook(providerError, state);
-            yield* this.emitEvent({
-              type: "runtime-error",
-              sessionId: this.sessionId,
-              timestamp: nowIso(),
-              error: errMsg,
-            });
-            if (action === "retry") {
-              this.dispatch("NO_PROGRESS_CONTINUE");
-              break;
-            }
-            if (action === "skip") {
-              this.dispatchErrorRecovery(state);
-              break;
-            }
-            endReason = "error";
-            endError = errMsg;
-            this.dispatch("PROVIDER_ERROR");
-            break;
-          }
-          // 成功一轮后清零瞬时重试计数
-          this.providerTransientRetries = 0;
 
-          if (assistantResult.type === "empty-response") {
-            this.dispatch("STEERING_NEEDED");
+            this.dispatch('TOOLS_COMPLETE');
             break;
           }
 
-          // Only "message" type reaches here
-          const msg = this.enrichAssistantMessage(assistantResult.message);
-          this.conversation.appendMessage(msg);
-          const assistantEntry = await this.recorder.recordMessage(msg);
-          yield* this.recordEvent(
-            { type: "message-end", sessionId: this.sessionId, message: withSessionEntryMetadata(msg, assistantEntry) },
-            this.recorder
-          );
+          // ── turn-complete: 发射 turn-end，决定下一步 ──────────
+          case 'turn-complete': {
+            const ctx = this.machine.getContext();
 
-          if (msg.metadata?.stopReason === "error") {
-            endReason = "error";
-            endError = typeof msg.metadata.error === "string" ? msg.metadata.error : "Provider stream failed";
-            this.dispatch("PROVIDER_ERROR");
-            break;
-          }
+            // ★ 唯一的 turn-end 发射点（消除 9 处重复）
+            yield* this.recordEvent(
+              {
+                type: 'turn-end',
+                sessionId: this.sessionId,
+                turnIndex: ctx.turnIndex,
+                timestamp: nowIso(),
+                toolCallCount: ctx.toolCallCount,
+              },
+              this.recorder
+            );
 
-          // Check for tool calls
-          const toolCalls = msg.blocks.filter(
-            (block): block is ToolCallBlock => block.type === "tool-call"
-          );
-
-          if (toolCalls.length === 0) {
-            // Assistant 正常停止，无 tool calls
-            this.steeringCoordinator.resetSteeringCount();
-            this.dispatch("NO_TOOL_CALLS");
-            break;
-          }
-
-          // 有 tool calls，进入执行状态
-          this.dispatch("HAS_TOOL_CALLS", { count: toolCalls.length });
-          break;
-        }
-
-        // ── steering-evaluation: 评估并执行纠偏动作 ──────────
-        case "steering-evaluation": {
-          const steerCtx = this.machine.getContext();
-          const maxSteeringMessages = this.options.recovery?.maxSteeringMessages ?? 3;
-          if (steerCtx.steeringCount > maxSteeringMessages) {
-            endReason = "error";
-            endError = "Steering budget exhausted";
-            this.dispatch("STEERING_BUDGET_EXHAUSTED");
-            break;
-          }
-
-          const steeringContext = {
-            messages: this.conversation.getMessages(),
-            turnIndex: steerCtx.turnIndex,
-            steeringCount: steerCtx.steeringCount,
-            toolCallCount: steerCtx.toolCallCount,
-            hasPendingInput: this.inputQueue.hasPending(),
-          };
-          const evaluation = this.steeringCoordinator.evaluate("empty-response", steeringContext);
-
-          if (evaluation.actions.length === 0) {
-            endReason = "error";
-            endError = "No steering strategy handled empty response";
-            this.dispatch("STEERING_BUDGET_EXHAUSTED");
-            break;
-          }
-
-          const applied = this.steeringCoordinator.apply(evaluation.actions, this.sessionId);
-          yield* flushEvents(applied.events);
-
-          if (applied.interventionRequired) {
-            endReason = "error";
-            endError = "Runtime intervention required";
-            this.dispatch("INTERVENTION_REQUIRED");
-            break;
-          }
-
-          // Re-enter preparing-turn → streaming with injected steering in transcript
-          this.dispatch("STEERING_COMPLETE");
-          break;
-        }
-
-        // ── executing-tools: 批量执行工具调用 ─────────────────
-        case "executing-tools": {
-          if (this.abortController.signal.aborted) {
-            this.dispatch("ABORT");
-            endReason = "aborted";
-            break;
-          }
-
-          // 重新获取 tool calls（从最后一条 assistant 消息）
-          const messages = this.conversation.getMessagesMutable();
-          const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-          const toolCalls = lastAssistant
-            ? lastAssistant.blocks.filter((b): b is ToolCallBlock => b.type === "tool-call")
-            : [];
-
-          const toolResults = yield* this.executeToolCalls(toolCalls, this.tools, this.recorder);
-          this.sawToolsThisRun = true;
-          if (toolResults.every((block) => !block.isError)) {
-            this.steeringCoordinator.resetSteeringCount();
-          }
-          // 同一次 provider 响应中的所有 tool_call 的结果合并为单条 tool 消息：
-          // - AgentMessage.blocks 本就是 AgentMessageBlock[]，多 block 是一等公民
-          // - openai-request-build.ts 的 buildChatMessages / buildResponsesInput 会按
-          //   block 维度展开为多条 wire message（OpenAI 协议要求每条 tool 消息只挂一个
-          //   tool_call_id），因此 wire 层输出与逐条追加完全一致
-          // - Anthropic 原生协议本就要求单条 user 消息携带多个 tool_result block
-          // - context-projection / context-compression / prompt-assembly / runtime-helpers
-          //   均按 block 维度遍历 tool 角色消息，批量结构无需特殊适配
-          // 这样每轮工具批次的消息数从 N+1（assistant + N 条 tool）降为 2，
-          // 消除 N 倍消息膨胀，同时不改变任何 provider 的线上请求体。
-          if (toolResults.length > 0) {
-            const message: AgentMessage = {
-              id: createId("tool"),
-              role: "tool",
-              createdAt: nowIso(),
-              blocks: toolResults
-            };
-            yield* this.recordMessage(message, this.conversation, this.recorder);
-          }
-
-          this.dispatch("TOOLS_COMPLETE");
-          break;
-        }
-
-        // ── turn-complete: 发射 turn-end，决定下一步 ──────────
-        case "turn-complete": {
-          const ctx = this.machine.getContext();
-
-          // ★ 唯一的 turn-end 发射点（消除 9 处重复）
-          yield* this.recordEvent(
-            {
-              type: "turn-end",
-              sessionId: this.sessionId,
-              turnIndex: ctx.turnIndex,
-              timestamp: nowIso(),
-              toolCallCount: ctx.toolCallCount,
-            },
-            this.recorder
-          );
-
-          // 决定下一步
-          if (ctx.abortReason || this.abortController.signal.aborted) {
-            endReason = ctx.endReason === "error" ? "error" : "aborted";
-            endError = endError ?? (ctx.abortReason as string | undefined) ?? (abortReason(this.abortController.signal) as string | undefined);
-            this.dispatch("FINISH");
-          } else if (ctx.endReason === "error") {
-            endReason = "error";
-            this.dispatch("FINISH");
-          } else if (ctx.endReason === "aborted") {
-            endReason = "aborted";
-            this.dispatch("FINISH");
-          } else if (shouldStopForMaxTurns(ctx)) {
-            // 触顶前若仍只有工具没有结论，先抢一轮收尾（仍计入合成预算）
-            if (
+            // 决定下一步
+            if (ctx.abortReason || this.abortController.signal.aborted) {
+              endReason = ctx.endReason === 'error' ? 'error' : 'aborted';
+              endError =
+                endError ??
+                (ctx.abortReason as string | undefined) ??
+                (abortReason(this.abortController.signal) as
+                  string | undefined);
+              this.dispatch('FINISH');
+            } else if (ctx.endReason === 'error') {
+              endReason = 'error';
+              this.dispatch('FINISH');
+            } else if (ctx.endReason === 'aborted') {
+              endReason = 'aborted';
+              this.dispatch('FINISH');
+            } else if (shouldStopForMaxTurns(ctx)) {
+              // 触顶前若仍只有工具没有结论，先抢一轮收尾（仍计入合成预算）
+              if (
+                !this.synthesisNudgeUsed &&
+                this.sawToolsThisRun &&
+                conversationNeedsTextSynthesis(this.conversation)
+              ) {
+                this.synthesisNudgeUsed = true;
+                this.inputQueue.enqueue(
+                  createSynthesisNudgeMessage(
+                    '轮次将尽。请立刻基于已有工具结果给出完整中文总结与建议，不要再调用工具。'
+                  )
+                );
+                this.dispatch('INPUT_AVAILABLE');
+              } else {
+                endReason = 'max-turns';
+                this.dispatch('MAX_TURNS_REACHED');
+              }
+            } else if (this.composedHooks.shouldStopAfterTurn) {
+              // ★ Hook: shouldStopAfterTurn — 如果任何注册的 Hook 返回 true，提前终止
+              const turnCtx: TurnContext = {
+                sessionId: this.sessionId,
+                turnIndex: ctx.turnIndex,
+                maxTurns: ctx.maxTurns,
+                messages: this.conversation.getMessages(),
+                toolCallCount: ctx.toolCallCount,
+                toolCalls: [],
+                cwd: this.options.cwd,
+                hasPendingInput: this.inputQueue.hasPending(),
+                isAborted: this.abortController.signal.aborted,
+              };
+              if (this.composedHooks.shouldStopAfterTurn(turnCtx)) {
+                endReason = 'stop';
+                this.dispatch('SHOULD_STOP');
+              } else if (ctx.toolCallCount > 0) {
+                this.dispatch('NEXT_TURN');
+              } else if (this.inputQueue.hasPending()) {
+                this.dispatch('INPUT_AVAILABLE');
+              } else {
+                this.dispatch('SHOULD_STOP');
+              }
+            } else if (ctx.toolCallCount > 0) {
+              // 工具调用迭代继续：回到 preparing-turn 进行下一轮 provider 调用
+              this.dispatch('NEXT_TURN');
+            } else if (this.inputQueue.hasPending()) {
+              // 无工具调用但有新输入：切换到新输入周期
+              this.dispatch('INPUT_AVAILABLE');
+            } else if (
               !this.synthesisNudgeUsed &&
               this.sawToolsThisRun &&
               conversationNeedsTextSynthesis(this.conversation)
             ) {
+              // 已跑过工具但尚无实质文字结论：注入一次收尾提示，禁止再空停
               this.synthesisNudgeUsed = true;
               this.inputQueue.enqueue(
-                createTextMessage(
-                  "user",
-                  "轮次将尽。请立刻基于已有工具结果给出完整中文总结与建议，不要再调用工具。",
-                ),
+                createSynthesisNudgeMessage(
+                  '请基于以上工具结果，用完整中文给出分析结论与下一步建议。不要再调用工具；若信息不足请明确说明缺什么。'
+                )
               );
-              this.dispatch("INPUT_AVAILABLE");
+              this.dispatch('INPUT_AVAILABLE');
             } else {
-              endReason = "max-turns";
-              this.dispatch("MAX_TURNS_REACHED");
+              // 正常停止
+              this.dispatch('SHOULD_STOP');
             }
-          } else if (this.composedHooks.shouldStopAfterTurn) {
-            // ★ Hook: shouldStopAfterTurn — 如果任何注册的 Hook 返回 true，提前终止
-            const turnCtx: TurnContext = {
-              sessionId: this.sessionId,
-              turnIndex: ctx.turnIndex,
-              maxTurns: ctx.maxTurns,
-              messages: this.conversation.getMessages(),
-              toolCallCount: ctx.toolCallCount,
-              toolCalls: [],
-              cwd: this.options.cwd,
-              hasPendingInput: this.inputQueue.hasPending(),
-              isAborted: this.abortController.signal.aborted,
-            };
-            if (this.composedHooks.shouldStopAfterTurn(turnCtx)) {
-              endReason = "stop";
-              this.dispatch("SHOULD_STOP");
-            } else if (ctx.toolCallCount > 0) {
-              this.dispatch("NEXT_TURN");
-            } else if (this.inputQueue.hasPending()) {
-              this.dispatch("INPUT_AVAILABLE");
-            } else {
-              this.dispatch("SHOULD_STOP");
-            }
-          } else if (ctx.toolCallCount > 0) {
-            // 工具调用迭代继续：回到 preparing-turn 进行下一轮 provider 调用
-            this.dispatch("NEXT_TURN");
-          } else if (this.inputQueue.hasPending()) {
-            // 无工具调用但有新输入：切换到新输入周期
-            this.dispatch("INPUT_AVAILABLE");
-          } else if (
-            !this.synthesisNudgeUsed &&
-            this.sawToolsThisRun &&
-            conversationNeedsTextSynthesis(this.conversation)
-          ) {
-            // 已跑过工具但尚无实质文字结论：注入一次收尾提示，禁止再空停
-            this.synthesisNudgeUsed = true;
-            this.inputQueue.enqueue(
-              createTextMessage(
-                "user",
-                "请基于以上工具结果，用完整中文给出分析结论与下一步建议。不要再调用工具；若信息不足请明确说明缺什么。",
-              ),
-            );
-            this.dispatch("INPUT_AVAILABLE");
-          } else {
-            // 正常停止
-            this.dispatch("SHOULD_STOP");
+            break;
           }
-          break;
-        }
 
-        // ── idle/done: 不应到达 ────────────────────────────
-        default:
-          break;
-      }
+          // ── idle/done: 不应到达 ────────────────────────────
+          default:
+            break;
+        }
       } catch (cause) {
         // 未预期异常：交给 onError hook 决定 retry / skip / abort
         const error = cause instanceof Error ? cause : new Error(String(cause));
         const action = this.handleErrorWithHook(error, state);
         yield* this.emitEvent({
-          type: "runtime-error",
+          type: 'runtime-error',
           sessionId: this.sessionId,
           timestamp: nowIso(),
           error: error.message,
         });
-        if (action === "retry") {
+        if (action === 'retry') {
           // 保持当前状态，下一轮循环重试
           continue;
         }
-        if (action === "skip") {
+        if (action === 'skip') {
           // 跳过本次错误，尽量推进到下一安全状态
           this.dispatchErrorRecovery(state);
           continue;
         }
-        endReason = "error";
+        endReason = 'error';
         endError = error.message;
         this.dispatchFatalError(state);
       }
@@ -780,13 +946,13 @@ export class AgentSessionLoop {
 
     // ─── 收尾 ─────────────────────────────────────────────
     const finalCtx = this.machine.getContext();
-    if (finalCtx.endReason !== "stop") {
+    if (finalCtx.endReason !== 'stop') {
       endReason = finalCtx.endReason;
     }
 
     yield* this.recordEvent(
       {
-        type: "agent-end",
+        type: 'agent-end',
         sessionId: this.sessionId,
         timestamp: nowIso(),
         reason: endReason,
@@ -803,10 +969,23 @@ export class AgentSessionLoop {
     tools: AgentTool[],
     recorder: SessionRecorder
   ): AsyncGenerator<AgentEvent, ToolResultBlock[]> {
-    const self = this;
-    const executeOne: ToolExecuteHook = async function* (toolCall, _tools, _sessionId, _cwd, signal, batchId) {
-      return yield* self.executeSingleTool(toolCall, _tools, batchId, signal, recorder);
-    };
+    const executeOne: ToolExecuteHook = async function* (
+      this: AgentSessionLoop,
+      toolCall,
+      _tools,
+      _sessionId,
+      _cwd,
+      signal,
+      batchId
+    ) {
+      return yield* this.executeSingleTool(
+        toolCall,
+        _tools,
+        batchId,
+        signal,
+        recorder
+      );
+    }.bind(this);
 
     const batchResults: ToolBatchResult[] = yield* relayAndRecord(
       this.toolExecutor.executeBatchWithEvents(
@@ -820,15 +999,13 @@ export class AgentSessionLoop {
       recorder
     );
 
-    return batchResults.map(
-      (result): ToolResultBlock => ({
-        type: "tool-result",
-        toolCallId: result.id,
-        toolName: result.toolName,
-        output: result.output,
-        isError: result.isError,
-      })
-    );
+    return batchResults.map((result): ToolResultBlock => ({
+      type: 'tool-result',
+      toolCallId: result.id,
+      toolName: result.toolName,
+      output: result.output,
+      isError: result.isError,
+    }));
   }
 
   private async *executeSingleTool(
@@ -841,12 +1018,31 @@ export class AgentSessionLoop {
     const startedAt = Date.now();
     const call = this.toBatchCall(toolCall, tools);
 
-    yield* this.emitEvent({ type: "tool-start", sessionId: this.sessionId, batchId, call, timestamp: nowIso() });
+    yield* this.emitEvent({
+      type: 'tool-start',
+      sessionId: this.sessionId,
+      batchId,
+      call,
+      timestamp: nowIso(),
+    });
 
-    const tool = tools.find((candidate) => candidate.name === toolCall.toolName);
+    const tool = tools.find(
+      (candidate) => candidate.name === toolCall.toolName
+    );
     if (!tool) {
-      const result = this.toToolBatchResult(call, startedAt, { text: `Tool not found: ${toolCall.toolName}` }, true);
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      const result = this.toToolBatchResult(
+        call,
+        startedAt,
+        { text: `Tool not found: ${toolCall.toolName}` },
+        true
+      );
+      yield* this.emitEvent({
+        type: 'tool-end',
+        sessionId: this.sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      });
       return result;
     }
 
@@ -866,11 +1062,22 @@ export class AgentSessionLoop {
       const beforeResult = await this.composedHooks.beforeToolCall(hookCtx);
       if (beforeResult.block) {
         const result = this.toToolBatchResult(
-          call, startedAt,
-          { text: beforeResult.reason ?? `Tool call blocked by hook: ${toolCall.toolName}` },
+          call,
+          startedAt,
+          {
+            text:
+              beforeResult.reason ??
+              `Tool call blocked by hook: ${toolCall.toolName}`,
+          },
           true
         );
-        yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+        yield* this.emitEvent({
+          type: 'tool-end',
+          sessionId: this.sessionId,
+          batchId,
+          result,
+          timestamp: nowIso(),
+        });
         return result;
       }
       if (beforeResult.modifiedInput) {
@@ -886,7 +1093,7 @@ export class AgentSessionLoop {
       effectiveInput = repair.input;
       inputModifiedByHook = true;
       yield* this.emitEvent({
-        type: "tool-input-repaired",
+        type: 'tool-input-repaired',
         sessionId: this.sessionId,
         timestamp: nowIso(),
         toolCallId: toolCall.id,
@@ -895,62 +1102,93 @@ export class AgentSessionLoop {
       });
     } else if (inputModifiedByHook) {
       yield* this.emitEvent({
-        type: "tool-input-repaired",
+        type: 'tool-input-repaired',
         sessionId: this.sessionId,
         timestamp: nowIso(),
         toolCallId: toolCall.id,
         toolName: toolCall.toolName,
-        notes: ["beforeToolCall modified tool input"],
+        notes: ['beforeToolCall modified tool input'],
       });
     }
 
-    const effectiveToolCall: ToolCallBlock = { ...toolCall, input: effectiveInput };
+    const effectiveToolCall: ToolCallBlock = {
+      ...toolCall,
+      input: effectiveInput,
+    };
 
     const validationErrors = validateToolInput(tool, effectiveInput);
     if (validationErrors.length > 0) {
-      const advice = validationAdviceForToolInput(tool, effectiveInput, validationErrors);
+      const advice = validationAdviceForToolInput(
+        tool,
+        effectiveInput,
+        validationErrors
+      );
       const result = this.toToolBatchResult(
         call,
         startedAt,
-        { text: [`Tool input validation failed:`, ...validationErrors.map((error) => `- ${error}`), ...advice].join("\n") },
+        {
+          text: [
+            `Tool input validation failed:`,
+            ...validationErrors.map((error) => `- ${error}`),
+            ...advice,
+          ].join('\n'),
+        },
         true
       );
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      yield* this.emitEvent({
+        type: 'tool-end',
+        sessionId: this.sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      });
       return result;
     }
 
-    const permission = yield* this.resolvePermission(tool, effectiveInput, toolCall.id);
-    if (permission.behavior !== "allow") {
-      if (isExpiredApprovalDecision(permission)) {
-        yield* this.emitEvent(
-          {
-            type: "runtime-error",
-            sessionId: this.sessionId,
-            timestamp: nowIso(),
-            error: permission.reason ?? "Approval expired"
-          }
-        );
-        throw new Error(permission.reason ?? "Approval expired");
-      }
-      const result = this.toToolBatchResult(call, startedAt, { text: permission.reason ?? "Tool execution denied" }, true);
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+    const permission = yield* this.resolvePermission(
+      tool,
+      effectiveInput,
+      toolCall.id
+    );
+    if (permission.behavior !== 'allow') {
+      // Approval timeout and user/policy deny share the same soft path:
+      // isError tool-result (softDeny metadata) so the run continues; never throw/abort.
+      const denyOutput = buildPermissionDenyToolOutput(permission);
+      const result = this.toToolBatchResult(call, startedAt, denyOutput, true);
+      yield* this.emitEvent({
+        type: 'tool-end',
+        sessionId: this.sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      });
       return result;
     }
 
     if (signal.aborted) {
       const cause = abortReason(signal);
-      const output = await this.materializeLargeToolOutput(
-        effectiveToolCall,
-        { text: isToolTimeoutCause(cause) ? `Tool execution timed out` : `Tool execution cancelled` }
-      );
+      const output = await this.materializeLargeToolOutput(effectiveToolCall, {
+        text: isToolTimeoutCause(cause)
+          ? `Tool execution timed out`
+          : `Tool execution cancelled`,
+      });
       const result = this.toToolBatchResult(call, startedAt, output, true);
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      yield* this.emitEvent({
+        type: 'tool-end',
+        sessionId: this.sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      });
       return result;
     }
 
     type ToolExecutionItem =
-      | { type: "event"; event: AgentEvent }
-      | { type: "result"; result: Awaited<ReturnType<SingleToolExecutor["execute"]>> };
+      | { type: 'event'; event: AgentEvent }
+      | {
+          type: 'result';
+          result: Awaited<ReturnType<SingleToolExecutor['execute']>>;
+        };
 
     const toolEventQueue = new ProgressEventQueue<ToolExecutionItem>();
     const context: ToolExecutionContext = {
@@ -960,9 +1198,9 @@ export class AgentSessionLoop {
       signal,
       emit: (update) => {
         toolEventQueue.push({
-          type: "event",
+          type: 'event',
           event: {
-            type: "tool-update",
+            type: 'tool-update',
             sessionId: this.sessionId,
             batchId,
             toolCallId: toolCall.id,
@@ -971,32 +1209,36 @@ export class AgentSessionLoop {
           },
         });
       },
-      metadata: { subagentDepth: this.options.subagentDepth ?? 0 }
+      metadata: { subagentDepth: this.options.subagentDepth ?? 0 },
     };
 
-    void this.singleToolExecutor.execute(
-      effectiveToolCall,
-      (input, ctx) => tool.execute(input, ctx),
-      context,
-      signal,
-    ).then(
-      (result) => {
-        toolEventQueue.push({ type: "result", result });
-      },
-      (cause) => {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        toolEventQueue.push({
-          type: "result",
-          result: { output: { text: message }, isError: true },
-        });
-      }
-    );
+    void this.singleToolExecutor
+      .execute(
+        effectiveToolCall,
+        (input, ctx) => tool.execute(input, ctx),
+        context,
+        signal
+      )
+      .then(
+        (result) => {
+          toolEventQueue.push({ type: 'result', result });
+        },
+        (cause) => {
+          const message =
+            cause instanceof Error ? cause.message : String(cause);
+          toolEventQueue.push({
+            type: 'result',
+            result: { output: { text: message }, isError: true },
+          });
+        }
+      );
 
-    let execResult: Awaited<ReturnType<SingleToolExecutor["execute"]>> | undefined;
+    let execResult:
+      Awaited<ReturnType<SingleToolExecutor['execute']>> | undefined;
     while (!execResult) {
       const next = await toolEventQueue.next();
       if (next.done) break;
-      if (next.value.type === "event") {
+      if (next.value.type === 'event') {
         yield* this.emitEvent(next.value.event);
         continue;
       }
@@ -1005,11 +1247,17 @@ export class AgentSessionLoop {
     toolEventQueue.close();
 
     if (!execResult) {
-      execResult = { output: { text: "Tool execution ended without a result" }, isError: true };
+      execResult = {
+        output: { text: 'Tool execution ended without a result' },
+        isError: true,
+      };
     }
 
     if (!execResult.isError) {
-      let materializedOutput = await this.materializeLargeToolOutput(effectiveToolCall, execResult.output);
+      let materializedOutput = await this.materializeLargeToolOutput(
+        effectiveToolCall,
+        execResult.output
+      );
 
       if (this.composedHooks.afterToolCall) {
         const hookCtx: HookContext = {
@@ -1024,68 +1272,110 @@ export class AgentSessionLoop {
         };
         const afterResult = await this.composedHooks.afterToolCall(hookCtx);
         if (afterResult.terminate) {
-          const result = this.toToolBatchResult(call, startedAt, afterResult.modifiedOutput ?? materializedOutput, false);
-          yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
-          this.abortController.abort(afterResult.terminateReason ?? "Terminated by afterToolCall hook");
+          const result = this.toToolBatchResult(
+            call,
+            startedAt,
+            afterResult.modifiedOutput ?? materializedOutput,
+            false
+          );
+          yield* this.emitEvent({
+            type: 'tool-end',
+            sessionId: this.sessionId,
+            batchId,
+            result,
+            timestamp: nowIso(),
+          });
+          this.abortController.abort(
+            afterResult.terminateReason ?? 'Terminated by afterToolCall hook'
+          );
           return result;
         }
         if (afterResult.modifiedOutput) {
-          materializedOutput = await this.materializeLargeToolOutput(effectiveToolCall, afterResult.modifiedOutput);
+          materializedOutput = await this.materializeLargeToolOutput(
+            effectiveToolCall,
+            afterResult.modifiedOutput
+          );
         }
       }
 
-      const result = this.toToolBatchResult(call, startedAt, materializedOutput, false);
-      yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+      const result = this.toToolBatchResult(
+        call,
+        startedAt,
+        materializedOutput,
+        false
+      );
+      yield* this.emitEvent({
+        type: 'tool-end',
+        sessionId: this.sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      });
       yield* this.recordToolCheckpointEvents(result, recorder);
       return result;
     }
 
     // 错误路径 — 保留 SingleToolExecutor 的 timedOut/cancelled 元数据并补齐 runtimeToolExecution
     const rawJson =
-      execResult.output?.json && typeof execResult.output.json === "object" && !Array.isArray(execResult.output.json)
+      execResult.output?.json &&
+      typeof execResult.output.json === 'object' &&
+      !Array.isArray(execResult.output.json)
         ? (execResult.output.json as JsonObject)
         : {};
     const isTimeout = rawJson.timedOut === true;
-    const isCancelled = rawJson.cancelled === true || (signal.aborted && !isTimeout);
+    const isCancelled =
+      rawJson.cancelled === true || (signal.aborted && !isTimeout);
     const causeText = isTimeout
-      ? "Tool execution timed out"
+      ? 'Tool execution timed out'
       : isCancelled
-        ? (typeof execResult.output?.text === "string" && execResult.output.text
-            ? execResult.output.text
-            : "Tool execution cancelled")
-        : (execResult.output?.text ?? "Tool execution error");
+        ? typeof execResult.output?.text === 'string' && execResult.output.text
+          ? execResult.output.text
+          : 'Tool execution cancelled'
+        : (execResult.output?.text ?? 'Tool execution error');
     const structuredJson: JsonObject = {
       ...rawJson,
       timedOut: isTimeout,
       cancelled: isCancelled && !isTimeout,
       runtimeToolExecution: isTimeout
         ? {
-            status: "timeout",
+            status: 'timeout',
             timedOut: true,
             timeoutMs: this.toolExecution.timeoutMs,
             ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
           }
         : isCancelled
           ? {
-              status: "cancelled",
+              status: 'cancelled',
               cancelled: true,
               ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
             }
           : {
-              status: "error",
+              status: 'error',
               ...((rawJson.runtimeToolExecution as object | undefined) ?? {}),
             },
     };
-    const errorOutput = await this.materializeLargeToolOutput(effectiveToolCall, {
-      text: causeText,
-      json: structuredJson,
-    });
+    const errorOutput = await this.materializeLargeToolOutput(
+      effectiveToolCall,
+      {
+        text: causeText,
+        json: structuredJson,
+      }
+    );
     const result = this.toToolBatchResult(call, startedAt, errorOutput, true);
-    yield* this.emitEvent({ type: "tool-end", sessionId: this.sessionId, batchId, result, timestamp: nowIso() });
+    yield* this.emitEvent({
+      type: 'tool-end',
+      sessionId: this.sessionId,
+      batchId,
+      result,
+      timestamp: nowIso(),
+    });
     return result;
   }
 
-  private async materializeLargeToolOutput(toolCall: ToolCallBlock, output: ToolOutput): Promise<ToolOutput> {
+  private async materializeLargeToolOutput(
+    toolCall: ToolCallBlock,
+    output: ToolOutput
+  ): Promise<ToolOutput> {
     return this.contextManager.materializeOutput(toolCall, output);
   }
 
@@ -1129,13 +1419,13 @@ export class AgentSessionLoop {
     // 先判定：allow/deny 不广播 approval-requested（避免只读误弹确认）
     let decision = await this.permissionPolicy.decide(request);
 
-    if (decision.behavior === "allow") {
+    if (decision.behavior === 'allow') {
       return decision;
     }
 
-    if (decision.behavior === "deny") {
+    if (decision.behavior === 'deny') {
       yield* this.emitEvent({
-        type: "approval-resolved",
+        type: 'approval-resolved',
         sessionId: this.sessionId,
         requestId: toolCallId,
         decision,
@@ -1145,7 +1435,7 @@ export class AgentSessionLoop {
     }
 
     // behavior === "ask"：仅此刻请求人工确认并阻塞后续工具
-    if (decision.behavior === "ask" && this.options.approvalHandler) {
+    if (decision.behavior === 'ask' && this.options.approvalHandler) {
       const decisionMetadata: JsonObject = {
         ...(decision.metadata ?? {}),
         ...(decision.reason !== undefined ? { reason: decision.reason } : {}),
@@ -1153,21 +1443,28 @@ export class AgentSessionLoop {
       const requestWithDecisionMetadata: PermissionRequest = {
         ...serializableRequest,
         ...(Object.keys(decisionMetadata).length > 0
-          ? { metadata: { ...(serializableRequest.metadata ?? {}), ...decisionMetadata } }
+          ? {
+              metadata: {
+                ...(serializableRequest.metadata ?? {}),
+                ...decisionMetadata,
+              },
+            }
           : {}),
       };
 
       yield* this.emitEvent({
-        type: "approval-requested",
+        type: 'approval-requested',
         sessionId: this.sessionId,
         request: requestWithDecisionMetadata,
         timestamp: nowIso(),
       });
 
-      decision = await this.options.approvalHandler.requestApproval(requestWithDecisionMetadata);
+      decision = await this.options.approvalHandler.requestApproval(
+        requestWithDecisionMetadata
+      );
 
       yield* this.emitEvent({
-        type: "approval-resolved",
+        type: 'approval-resolved',
         sessionId: this.sessionId,
         requestId: toolCallId,
         decision,
@@ -1178,12 +1475,17 @@ export class AgentSessionLoop {
 
     // ask 但无 handler：安全默认拒绝
     const denied: PermissionDecision = {
-      behavior: "deny",
-      reason: decision.reason ?? "Approval required but no approval handler configured",
-      metadata: { ...(decision.metadata ?? {}), matchedRule: "daemon-ask-no-handler" },
+      behavior: 'deny',
+      reason:
+        decision.reason ??
+        'Approval required but no approval handler configured',
+      metadata: {
+        ...(decision.metadata ?? {}),
+        matchedRule: 'daemon-ask-no-handler',
+      },
     };
     yield* this.emitEvent({
-      type: "approval-resolved",
+      type: 'approval-resolved',
       sessionId: this.sessionId,
       requestId: toolCallId,
       decision: denied,
@@ -1192,30 +1494,34 @@ export class AgentSessionLoop {
     return denied;
   }
 
-  private async *recordToolCheckpointEvents(result: ToolBatchResult, recorder: SessionRecorder): AsyncGenerator<AgentEvent> {
+  private async *recordToolCheckpointEvents(
+    result: ToolBatchResult,
+    recorder: SessionRecorder
+  ): AsyncGenerator<AgentEvent> {
     for (const checkpoint of checkpointRecordsFromToolResult(result)) {
-      await recorder.recordCheckpoint(checkpoint.label, checkpoint as unknown as JsonObject);
-      await this.options.contextCompression?.contextState?.recordCheckpoint?.(checkpoint);
-      yield* this.emitEvent(
-        {
-          type: "checkpoint-created",
-          sessionId: this.sessionId,
-          timestamp: nowIso(),
-          checkpoint
-        }
+      await recorder.recordCheckpoint(
+        checkpoint.label,
+        checkpoint as unknown as JsonObject
       );
+      await this.options.contextCompression?.contextState?.recordCheckpoint?.(
+        checkpoint
+      );
+      yield* this.emitEvent({
+        type: 'checkpoint-created',
+        sessionId: this.sessionId,
+        timestamp: nowIso(),
+        checkpoint,
+      });
     }
 
     const restore = checkpointRestoreRecordFromToolResult(result);
     if (restore) {
-      yield* this.emitEvent(
-        {
-          type: "checkpoint-restored",
-          sessionId: this.sessionId,
-          timestamp: nowIso(),
-          restore
-        }
-      );
+      yield* this.emitEvent({
+        type: 'checkpoint-restored',
+        sessionId: this.sessionId,
+        timestamp: nowIso(),
+        restore,
+      });
     }
   }
 
@@ -1226,18 +1532,23 @@ export class AgentSessionLoop {
       toolName: call.toolName,
       input: call.input,
       summary: summarizeToolCall(tool, call.input, call.toolName),
-      category: tool?.category ?? "internal",
-      concurrency: tool?.concurrency ?? "exclusive"
+      category: tool?.category ?? 'internal',
+      concurrency: tool?.concurrency ?? 'exclusive',
     };
   }
 
-  private toToolBatchResult(call: ToolBatchCall, startedAt: number, output: ToolOutput, isError: boolean): ToolBatchResult {
+  private toToolBatchResult(
+    call: ToolBatchCall,
+    startedAt: number,
+    output: ToolOutput,
+    isError: boolean
+  ): ToolBatchResult {
     return {
       id: call.id,
       toolName: call.toolName,
       output,
       isError,
-      durationMs: Date.now() - startedAt
+      durationMs: Date.now() - startedAt,
     };
   }
 
@@ -1246,11 +1557,22 @@ export class AgentSessionLoop {
     conversation: ConversationEngine,
     recorder: SessionRecorder
   ): AsyncGenerator<AgentEvent> {
-    const start: AgentEvent = { type: "message-start", sessionId: this.sessionId, message };
+    const start: AgentEvent = {
+      type: 'message-start',
+      sessionId: this.sessionId,
+      message,
+    };
     yield* this.recordEvent(start, recorder);
     conversation.appendMessage(message);
     const entry = await recorder.recordMessage(message);
-    yield* this.recordEvent({ type: "message-end", sessionId: this.sessionId, message: withSessionEntryMetadata(message, entry) }, recorder);
+    yield* this.recordEvent(
+      {
+        type: 'message-end',
+        sessionId: this.sessionId,
+        message: withSessionEntryMetadata(message, entry),
+      },
+      recorder
+    );
   }
 
   private projectSystemPromptForProvider(): string | undefined {
@@ -1267,7 +1589,8 @@ export class AgentSessionLoop {
   /** Attach promptAssembly / promptContext metadata expected by product + tests. */
   private enrichAssistantMessage(message: AgentMessage): AgentMessage {
     const promptContextMeta =
-      this.options.promptContext?.metadata && typeof this.options.promptContext.metadata === "object"
+      this.options.promptContext?.metadata &&
+      typeof this.options.promptContext.metadata === 'object'
         ? (this.options.promptContext.metadata as JsonObject)
         : undefined;
     const assembly = this.lastPromptAssembly;
@@ -1296,7 +1619,10 @@ export class AgentSessionLoop {
     return this.contextManager.restoreProviderToolInput(input);
   }
 
-  private async *recordEvent(event: AgentEvent, recorder: SessionRecorder): AsyncGenerator<AgentEvent> {
+  private async *recordEvent(
+    event: AgentEvent,
+    recorder: SessionRecorder
+  ): AsyncGenerator<AgentEvent> {
     await recorder.recordEvent(event);
     yield event;
   }
@@ -1305,7 +1631,11 @@ export class AgentSessionLoop {
     yield event;
   }
 
-  private async emitAndRecord(event: AgentEvent, recorder: SessionRecorder, events?: AgentEvent[]): Promise<void> {
+  private async emitAndRecord(
+    event: AgentEvent,
+    recorder: SessionRecorder,
+    events?: AgentEvent[]
+  ): Promise<void> {
     await recorder.recordEvent(event);
     events?.push(event);
   }
@@ -1323,17 +1653,26 @@ export class AgentSessionLoop {
   /**
    * 构建 Provider 调用，返回流迭代器。
    */
-  private async buildProviderCall(): Promise<AsyncIterable<ProviderStreamContractEvent>> {
+  private async buildProviderCall(): Promise<
+    AsyncIterable<ProviderStreamContractEvent>
+  > {
     const messages = this.conversation.getMessagesMutable();
-    const providerSystemPrompt = this.contextManager.projectSystemPrompt(this.options.systemPrompt);
-    const providerMessages = await this.contextManager.projectForProvider(messages);
+    const providerSystemPrompt = this.contextManager.projectSystemPrompt(
+      this.options.systemPrompt
+    );
+    const providerMessages =
+      await this.contextManager.projectForProvider(messages);
     const promptContext = this.projectPromptContextForProvider();
     const promptAssembly = assemblePromptForProvider({
       systemPrompt: providerSystemPrompt,
       messages: providerMessages,
       tools: this.tools,
-      ...(promptContext.stableContext ? { stableContext: promptContext.stableContext } : {}),
-      ...(promptContext.volatileContext ? { volatileContext: promptContext.volatileContext } : {}),
+      ...(promptContext.stableContext
+        ? { stableContext: promptContext.stableContext }
+        : {}),
+      ...(promptContext.volatileContext
+        ? { volatileContext: promptContext.volatileContext }
+        : {}),
     });
 
     // Stash last assembly metadata for assistant message enrichment
@@ -1355,7 +1694,10 @@ export class AgentSessionLoop {
   /**
    * 通过 Hook 系统处理错误（onError 未注册时默认 abort）
    */
-  private handleErrorWithHook(error: Error, state: string): "retry" | "skip" | "abort" {
+  private handleErrorWithHook(
+    error: Error,
+    state: string
+  ): 'retry' | 'skip' | 'abort' {
     if (this.composedHooks.onError) {
       const errorCtx: ErrorContext = {
         sessionId: this.sessionId,
@@ -1365,7 +1707,7 @@ export class AgentSessionLoop {
       };
       return this.composedHooks.onError(error, errorCtx);
     }
-    return "abort";
+    return 'abort';
   }
 
   /**
@@ -1382,23 +1724,23 @@ export class AgentSessionLoop {
     };
     let ok = false;
     switch (state) {
-      case "preparing-turn":
-        ok = tryDispatch("TURN_PREPARED");
+      case 'preparing-turn':
+        ok = tryDispatch('TURN_PREPARED');
         break;
-      case "streaming":
-        ok = tryDispatch("NO_PROGRESS_CONTINUE");
+      case 'streaming':
+        ok = tryDispatch('NO_PROGRESS_CONTINUE');
         break;
-      case "steering-evaluation":
-        ok = tryDispatch("STEERING_COMPLETE");
+      case 'steering-evaluation':
+        ok = tryDispatch('STEERING_COMPLETE');
         break;
-      case "executing-tools":
-        ok = tryDispatch("TOOLS_COMPLETE");
+      case 'executing-tools':
+        ok = tryDispatch('TOOLS_COMPLETE');
         break;
-      case "awaiting-input":
-        ok = tryDispatch("NO_INPUT");
+      case 'awaiting-input':
+        ok = tryDispatch('NO_INPUT');
         break;
-      case "turn-complete":
-        ok = tryDispatch("SHOULD_STOP");
+      case 'turn-complete':
+        ok = tryDispatch('SHOULD_STOP');
         break;
       default:
         break;
@@ -1418,14 +1760,14 @@ export class AgentSessionLoop {
         return false;
       }
     };
-    if (state === "streaming") {
-      if (tryDispatch("PROVIDER_ERROR")) return;
-    } else if (state === "executing-tools") {
-      if (tryDispatch("ABORT")) return;
-    } else if (state === "turn-complete") {
-      if (tryDispatch("FINISH")) return;
-    } else if (state !== "done") {
-      if (tryDispatch("ERROR")) return;
+    if (state === 'streaming') {
+      if (tryDispatch('PROVIDER_ERROR')) return;
+    } else if (state === 'executing-tools') {
+      if (tryDispatch('ABORT')) return;
+    } else if (state === 'turn-complete') {
+      if (tryDispatch('FINISH')) return;
+    } else if (state !== 'done') {
+      if (tryDispatch('ERROR')) return;
     }
     // 兜底：已在 done 或转移失败时不再抛出
   }

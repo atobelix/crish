@@ -19,6 +19,7 @@ import type {
   DaemonCorrelationFields,
   DaemonInboundMessage,
   DaemonLifecycleSnapshot,
+  DaemonMcpServerConfig,
   DaemonMcpStatusSnapshot,
   DaemonProviderStatusSnapshot,
 } from './types.js';
@@ -34,6 +35,10 @@ import {
   resolveDaemonSessionMetadataStorePath,
   resolveDaemonWorkflowStorePath,
 } from './persistence.js';
+import {
+  buildMcpServerDefinitions,
+  normalizeDaemonMcpServers,
+} from './mcp-config.js';
 import {
   formatProtocolValidationError,
   validateInboundMessage,
@@ -125,7 +130,27 @@ export class DaemonServer {
     config?: Partial<DaemonConfig>,
     private readonly options: DaemonServerOptions = {}
   ) {
-    this.config = normalizeDaemonConfig(config);
+    const normalized = normalizeDaemonConfig(config);
+    // 仅规范化显式传入的 mcpServers；env/默认 mcp.json 由 startDaemon 合并，避免测试侧隐式加载
+    if (normalized.mcpServers?.length) {
+      normalized.mcpServers = normalizeDaemonMcpServers(normalized.mcpServers);
+    } else {
+      normalized.mcpServers = [];
+    }
+    this.config = normalized;
+  }
+
+  /**
+   * 热更新 MCP 配置（可序列化条目 → definitions → factory）。
+   * 供 update-config.mcpServers 使用。
+   */
+  async applyMcpServerConfigs(configs: DaemonMcpServerConfig[]): Promise<void> {
+    const normalized = normalizeDaemonMcpServers(configs);
+    this.config.mcpServers = normalized;
+    if (!this.runtimeFactory) return;
+    await this.runtimeFactory.setMcpServers(
+      buildMcpServerDefinitions(normalized)
+    );
   }
 
   setProviderFactory(
@@ -188,6 +213,10 @@ export class DaemonServer {
         maxOutputBytes: 500_000,
       },
     });
+    // options.mcpServers（已是 definition）优先；否则从 config 可序列化条目构造
+    const mcpServerDefinitions =
+      this.options.mcpServers ??
+      buildMcpServerDefinitions(this.config.mcpServers ?? []);
     this.runtimeFactory = new DaemonRuntimeFactory({
       config: this.config,
       approvalQueue: this.approvalQueue,
@@ -204,7 +233,8 @@ export class DaemonServer {
       },
       getBackgroundCommandManager: (cwd) =>
         this.backgroundTasks.getManagerForCwd(cwd),
-      mcpServers: this.options.mcpServers,
+      mcpServers:
+        mcpServerDefinitions.length > 0 ? mcpServerDefinitions : undefined,
       mcpLifecycleManagerFactory: this.options.mcpLifecycleManagerFactory,
       mcpStartupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs,
       startRun: (request) => this.startDurableRun(request),
@@ -258,6 +288,7 @@ export class DaemonServer {
       getLifecycleSnapshot: (input) => this.getLifecycleSnapshot(input),
       recordDiagnostic: (input) => this.lifecycle.recordError(input),
       getConfigUpdateHandler: () => this.configUpdateHandler,
+      applyMcpServerConfigs: (configs) => this.applyMcpServerConfigs(configs),
     });
     this.workflowScheduler = new WorkflowScheduler({
       store: this.workflowStore,

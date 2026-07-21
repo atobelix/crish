@@ -14,12 +14,15 @@ export interface PluginManifest {
 export interface PluginAPI {
   onSessionStart?(sessionId: string): void | Promise<void>;
   onSessionEnd?(sessionId: string): void | Promise<void>;
-  onToolCall?(toolCall: any): void | Promise<void>;
-  onMessage?(message: any): void | Promise<void>;
+  onToolCall?(toolCall: unknown): void | Promise<void>;
+  onMessage?(message: unknown): void | Promise<void>;
 }
 
 export class PluginRegistry {
-  private plugins = new Map<string, { manifest: PluginManifest; api: PluginAPI }>();
+  private plugins = new Map<
+    string,
+    { manifest: PluginManifest; api: PluginAPI }
+  >();
 
   async discover(dirs?: string[]): Promise<void> {
     const searchDirs = dirs ?? [
@@ -36,9 +39,13 @@ export class PluginRegistry {
           try {
             await access(join(pluginDir, 'plugin.json'));
             await this.load(pluginDir);
-          } catch { /* skip non-plugin dirs */ }
+          } catch {
+            /* skip non-plugin dirs */
+          }
         }
-      } catch { /* dir doesn't exist */ }
+      } catch {
+        /* dir doesn't exist */
+      }
     }
   }
 
@@ -52,6 +59,25 @@ export class PluginRegistry {
       ? manifest.entry
       : join(pluginDir, manifest.entry);
 
+    // Security: same-process dynamic import is unsafe (no worker/sandbox).
+    // Default: register manifest only (data-plane discover). Code load requires
+    // CRISH_ALLOW_UNSAFE_PLUGIN_IMPORT=1 (dev/spike only).
+    const allowUnsafeImport =
+      process.env.CRISH_ALLOW_UNSAFE_PLUGIN_IMPORT === '1' ||
+      process.env.CRISH_ALLOW_UNSAFE_PLUGIN_IMPORT === 'true';
+
+    if (!allowUnsafeImport) {
+      this.plugins.set(manifest.name, {
+        manifest,
+        api: {/* intentionally empty — hooks not executed without sandbox */},
+      });
+      console.info(
+        `[PluginRegistry] registered (no code load): ${manifest.name}@${manifest.version} ` +
+          `(set CRISH_ALLOW_UNSAFE_PLUGIN_IMPORT=1 to enable same-process import — not production-safe)`
+      );
+      return;
+    }
+
     const mod = await import(entryPath);
     const api: PluginAPI = {
       onSessionStart: mod.onSessionStart,
@@ -61,7 +87,9 @@ export class PluginRegistry {
     };
 
     this.plugins.set(manifest.name, { manifest, api });
-    console.info(`[PluginRegistry] loaded: ${manifest.name}@${manifest.version}`);
+    console.warn(
+      `[PluginRegistry] UNSAFE same-process load: ${manifest.name}@${manifest.version} from ${entryPath}`
+    );
   }
 
   get(name: string): PluginAPI | undefined {
@@ -69,7 +97,7 @@ export class PluginRegistry {
   }
 
   list(): PluginManifest[] {
-    return [...this.plugins.values()].map(p => p.manifest);
+    return [...this.plugins.values()].map((p) => p.manifest);
   }
 
   unload(name: string): void {

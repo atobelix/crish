@@ -1,8 +1,15 @@
 /**
  * 设置 · 扩展：插件、MCP、技能；列表内直接查看与配置。
  */
-import React, { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './SettingsExtensionsTab.module.css';
 import { clientApi, type PackageSource } from '../api/clientApi';
 import {
@@ -30,12 +37,13 @@ import { getWorkspacePath } from '../api/projectStore';
 import { setAppSettings } from '../api/storeAccess';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { SettingsPage } from './settings/SettingsUI';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 const SkillsSettingsTab = lazy(() =>
-  import('./SkillsSettingsTab').then((m) => ({ default: m.SkillsSettingsTab })),
+  import('./SkillsSettingsTab').then((m) => ({ default: m.SkillsSettingsTab }))
 );
 const McpSettingsTab = lazy(() =>
-  import('./McpSettingsTab').then((m) => ({ default: m.McpSettingsTab })),
+  import('./McpSettingsTab').then((m) => ({ default: m.McpSettingsTab }))
 );
 
 const SKILLS_CACHE_KEY = 'crish_skills_cache_v1';
@@ -53,7 +61,9 @@ function loadSkillsCache(): DesktopSkill[] {
 function saveSkillsCache(list: DesktopSkill[]) {
   try {
     localStorage.setItem(SKILLS_CACHE_KEY, JSON.stringify(list));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function loadMcpServersCache(): McpServerInfo[] {
@@ -68,7 +78,9 @@ function loadMcpServersCache(): McpServerInfo[] {
 function saveMcpServersCache(list: McpServerInfo[]) {
   try {
     localStorage.setItem(MCP_SERVERS_CACHE_KEY, JSON.stringify(list));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 type Props = {
@@ -97,7 +109,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   const [view, setView] = useState<MainView>('installed');
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(() => loadSkillsCache().length === 0 && loadMcpServersCache().length === 0);
+  const [loading, setLoading] = useState(
+    () => loadSkillsCache().length === 0 && loadMcpServersCache().length === 0
+  );
   const hydratedRef = useRef(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [manage, setManage] = useState<ManageKind>(null);
@@ -110,7 +124,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     fallbackId: string;
   } | null>(null);
   const [toolTick, setToolTick] = useState(0);
-  const [expandedMcpTools, setExpandedMcpTools] = useState<Set<string>>(new Set());
+  const [expandedMcpTools, setExpandedMcpTools] = useState<Set<string>>(
+    new Set()
+  );
 
   const toggleExpandMcpTools = useCallback((id: string) => {
     setExpandedMcpTools((prev) => {
@@ -139,14 +155,16 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
       if (cursor < text.length) parts.push(text.slice(cursor));
       return parts;
     },
-    [query],
+    [query]
   );
 
   const [skills, setSkills] = useState<DesktopSkill[]>(() => loadSkillsCache());
-  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>(() => loadMcpServersCache());
+  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>(() =>
+    loadMcpServersCache()
+  );
   const [packages, setPackages] = useState<(string | PackageSource)[]>([]);
   const [catalogInstalled, setCatalogInstalled] = useState<Set<string>>(() =>
-    loadCatalogInstalledIds(),
+    loadCatalogInstalledIds()
   );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mcpToolBusy, setMcpToolBusy] = useState(false);
@@ -157,11 +175,19 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   const refresh = useCallback(async () => {
     setLoadError(null);
     // 首次进入才显示列表加载中；已有数据时后台刷新不整页卡住
-    if (!hydratedRef.current && skills.length === 0 && mcpServers.length === 0) {
+    if (
+      !hydratedRef.current &&
+      skills.length === 0 &&
+      mcpServers.length === 0
+    ) {
       setLoading(true);
     }
 
-    const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+    const withTimeout = <T,>(
+      p: Promise<T>,
+      ms: number,
+      fallback: T
+    ): Promise<T> =>
       new Promise((resolve) => {
         let done = false;
         const t = window.setTimeout(() => {
@@ -181,7 +207,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             done = true;
             window.clearTimeout(t);
             resolve(fallback);
-          },
+          }
         );
       });
 
@@ -192,17 +218,17 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             skills: [] as DesktopSkill[],
           })),
           4000,
-          { skills: [] as DesktopSkill[] },
+          { skills: [] as DesktopSkill[] }
         ),
         withTimeout(
           listMcpServers().catch(() => ({ servers: [] as McpServerInfo[] })),
           4000,
-          { servers: [] as McpServerInfo[] },
+          { servers: [] as McpServerInfo[] }
         ),
         withTimeout(
           clientApi.getSettingsEx(cwd || '__global__').catch(() => null),
           4000,
-          null,
+          null
         ),
       ]);
       setSkills(skillRes.skills || []);
@@ -283,7 +309,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     for (const entry of EXTENSION_CATALOG) {
       if (!catalogInstalled.has(entry.id)) continue;
       const already = out.some(
-        (x) => x.name.toLowerCase() === entry.name.toLowerCase() && x.kind === entry.kind,
+        (x) =>
+          x.name.toLowerCase() === entry.name.toLowerCase() &&
+          x.kind === entry.kind
       );
       if (already) continue;
       out.push({
@@ -305,7 +333,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     const hit = installed.find(
       (i) =>
         i.kind === pendingExpand.kind &&
-        i.name.toLowerCase() === pendingExpand.name.toLowerCase(),
+        i.name.toLowerCase() === pendingExpand.name.toLowerCase()
     );
     if (hit) {
       setExpand({ scope: 'installed', id: hit.id, mode: pendingExpand.mode });
@@ -335,7 +363,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
         return matchQ(item.name, item.description);
       }),
-    [installed, kindFilter, query],
+    [installed, kindFilter, query]
   );
 
   const catalogFiltered = useMemo(
@@ -344,16 +372,21 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         if (kindFilter !== 'all' && entry.kind !== kindFilter) return false;
         return matchQ(entry.name, entry.description);
       }),
-    [kindFilter, query],
+    [kindFilter, query]
   );
 
   const toggleExpand = (
     scope: 'installed' | 'catalog',
     id: string,
-    mode: ExpandMode,
+    mode: ExpandMode
   ) => {
     setExpand((prev) => {
-      if (prev && prev.scope === scope && prev.id === id && prev.mode === mode) {
+      if (
+        prev &&
+        prev.scope === scope &&
+        prev.id === id &&
+        prev.mode === mode
+      ) {
         return null;
       }
       return { scope, id, mode };
@@ -363,7 +396,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   const isExpanded = (
     scope: 'installed' | 'catalog',
     id: string,
-    mode?: ExpandMode,
+    mode?: ExpandMode
   ) => {
     if (!expand || expand.scope !== scope || expand.id !== id) return false;
     if (mode) return expand.mode === mode;
@@ -375,13 +408,31 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     setBusyId(entry.id);
     try {
       if (entry.kind === 'plugin') {
+        // 仅登记 packages 包名，不执行下载/引擎安装
         const list = [...packages, entry.installRef];
-        const merged = await clientApi.saveSettingsEx(cwd || '__global__', 'global', {
-          packages: list,
-        });
+        const merged = await clientApi.saveSettingsEx(
+          cwd || '__global__',
+          'global',
+          {
+            packages: list,
+          }
+        );
         setPackages(merged.packages || list);
         setAppSettings(merged);
+        markCatalogInstalled(entry.id);
+        setCatalogInstalled(loadCatalogInstalledIds());
+        setView('installed');
+        setPendingExpand({
+          name: entry.name,
+          kind: entry.kind,
+          mode: 'config',
+          fallbackId: entry.id,
+        });
+        await refresh();
+        onShowToast('仅登记包名（未连接引擎安装）');
+        return;
       }
+      // mcp / skill：只写 localStorage 已装 ID，无下载/落盘/引擎注册
       markCatalogInstalled(entry.id);
       setCatalogInstalled(loadCatalogInstalledIds());
       setView('installed');
@@ -392,6 +443,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         fallbackId: entry.id,
       });
       await refresh();
+      onShowToast('仅标记本机已装，未连接引擎安装');
     } catch (e) {
       onShowToast(`安装失败：${errText(e)}`);
     } finally {
@@ -403,13 +455,17 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       if (item.id.startsWith('local-plugin:')) {
         const idx = packages.findIndex(
-          (p, i) => `local-plugin:${i}:${packageName(p)}` === item.id,
+          (p, i) => `local-plugin:${i}:${packageName(p)}` === item.id
         );
         if (idx >= 0) {
           const list = packages.filter((_, i) => i !== idx);
-          const merged = await clientApi.saveSettingsEx(cwd || '__global__', 'global', {
-            packages: list,
-          });
+          const merged = await clientApi.saveSettingsEx(
+            cwd || '__global__',
+            'global',
+            {
+              packages: list,
+            }
+          );
           setPackages(merged.packages || list);
           setAppSettings(merged);
         }
@@ -424,16 +480,24 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
-  const toggleMcpTool = async (serverId: string, tool: string, enabled: boolean) => {
+  const toggleMcpTool = async (
+    serverId: string,
+    tool: string,
+    enabled: boolean
+  ) => {
     if (mcpToolBusy) return;
     setMcpToolBusy(true);
     try {
       const sets = await clientApi.getSettingsEx(cwd || '__global__');
       const prev = sets?.mcpDisabledTools || {};
       const next = applyMcpToolDisabled(prev, serverId, tool, !enabled);
-      const merged = await clientApi.saveSettingsEx(cwd || '__global__', 'global', {
-        mcpDisabledTools: next,
-      });
+      const merged = await clientApi.saveSettingsEx(
+        cwd || '__global__',
+        'global',
+        {
+          mcpDisabledTools: next,
+        }
+      );
       setAppSettings(merged);
       cacheMcpToolDisabled(merged.mcpDisabledTools || next);
       setToolTick((n) => n + 1);
@@ -469,7 +533,10 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     { id: 'skill', label: '技能' },
   ];
 
-  const renderSkillBody = (item: InstalledExtension | CatalogEntry, mode: ExpandMode) => {
+  const renderSkillBody = (
+    item: InstalledExtension | CatalogEntry,
+    mode: ExpandMode
+  ) => {
     const isInstalled = 'skillPath' in item || 'skillRaw' in item;
     const installedItem = isInstalled ? (item as InstalledExtension) : null;
     const entry = !isInstalled ? (item as CatalogEntry) : null;
@@ -514,9 +581,14 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     );
   };
 
-  const renderMcpBody = (item: InstalledExtension | CatalogEntry, mode: ExpandMode) => {
+  const renderMcpBody = (
+    item: InstalledExtension | CatalogEntry,
+    mode: ExpandMode
+  ) => {
     const installedItem =
-      'mcpId' in item || 'mcpTools' in item ? (item as InstalledExtension) : null;
+      'mcpId' in item || 'mcpTools' in item
+        ? (item as InstalledExtension)
+        : null;
     const entry = !installedItem ? (item as CatalogEntry) : null;
 
     if (mode === 'detail') {
@@ -546,9 +618,14 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
           )}
           {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
             <ul className="ext-inline-tool-preview">
-              {installedItem.mcpTools.slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12).map((t) => (
-                <li key={t}>{t}</li>
-              ))}
+              {installedItem.mcpTools
+                .slice(
+                  0,
+                  expandedMcpTools.has(installedItem.id) ? undefined : 12
+                )
+                .map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
               {installedItem.mcpTools.length > 12 ? (
                 <li>
                   <button
@@ -556,7 +633,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                     className="ui-btn ui-btn-ghost ui-btn-sm"
                     onClick={() => toggleExpandMcpTools(installedItem!.id)}
                   >
-                    {expandedMcpTools.has(installedItem.id) ? '收起' : `展开全部（${installedItem.mcpTools.length}）`}
+                    {expandedMcpTools.has(installedItem.id)
+                      ? '收起'
+                      : `展开全部（${installedItem.mcpTools.length}）`}
                   </button>
                 </li>
               ) : null}
@@ -596,41 +675,45 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             </button>
           </div>
         ) : (
-          <p className="ext-detail-desc">安装并连接后可在此启停服务与开关工具。</p>
+          <p className="ext-detail-desc">
+            安装并连接后可在此启停服务与开关工具。
+          </p>
         )}
         {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
           <div className="ext-tool-list" role="list" aria-label="MCP 工具">
-            {installedItem.mcpTools.slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12).map((tool) => {
-              void toolTick;
-              const serverId = installedItem.mcpId || installedItem.id;
-              const off = isMcpToolDisabled(serverId, tool);
-              return (
-                <div
-                  key={tool}
-                  className={`ext-tool-row${off ? ' is-off' : ''}`}
-                  role="listitem"
-                >
-                  <span className="ext-tool-name" title={tool}>
-                    {tool}
-                  </span>
-                  <label className="settings-list-control">
-                    <span className={`ext-detail-meta ${styles.detailMeta}`}>
-                      {off ? '禁用' : '启用'}
+            {installedItem.mcpTools
+              .slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12)
+              .map((tool) => {
+                void toolTick;
+                const serverId = installedItem.mcpId || installedItem.id;
+                const off = isMcpToolDisabled(serverId, tool);
+                return (
+                  <div
+                    key={tool}
+                    className={`ext-tool-row${off ? ' is-off' : ''}`}
+                    role="listitem"
+                  >
+                    <span className="ext-tool-name" title={tool}>
+                      {tool}
                     </span>
-                    <input
-                      type="checkbox"
-                      className="settings-switch"
-                      checked={!off}
-                      disabled={mcpToolBusy}
-                      onChange={(e) => {
-                        void toggleMcpTool(serverId, tool, e.target.checked);
-                      }}
-                      aria-label={`${off ? '启用' : '禁用'}工具 ${tool}`}
-                    />
-                  </label>
-                </div>
-              );
-            })}
+                    <label className="settings-list-control">
+                      <span className={`ext-detail-meta ${styles.detailMeta}`}>
+                        {off ? '禁用' : '启用'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        className="settings-switch"
+                        checked={!off}
+                        disabled={mcpToolBusy}
+                        onChange={(e) => {
+                          void toggleMcpTool(serverId, tool, e.target.checked);
+                        }}
+                        aria-label={`${off ? '启用' : '禁用'}工具 ${tool}`}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             {installedItem.mcpTools.length > 12 ? (
               <div style={{ padding: '4px 0' }}>
                 <button
@@ -638,7 +721,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                   className="ui-btn ui-btn-ghost ui-btn-sm"
                   onClick={() => toggleExpandMcpTools(installedItem!.id)}
                 >
-                  {expandedMcpTools.has(installedItem.id) ? '收起' : `展开全部（${installedItem.mcpTools.length}）`}
+                  {expandedMcpTools.has(installedItem.id)
+                    ? '收起'
+                    : `展开全部（${installedItem.mcpTools.length}）`}
                 </button>
               </div>
             ) : null}
@@ -652,13 +737,14 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     );
   };
 
-  const renderPluginBody = (item: InstalledExtension | CatalogEntry, mode: ExpandMode) => {
+  const renderPluginBody = (
+    item: InstalledExtension | CatalogEntry,
+    mode: ExpandMode
+  ) => {
     const name = item.name;
     const desc = item.description;
     const ref =
-      'installRef' in item && item.installRef
-        ? item.installRef
-        : undefined;
+      'installRef' in item && item.installRef ? item.installRef : undefined;
     return (
       <div className="ext-inline-panel">
         <div className={`ext-detail-md ${styles.detailMdSans}`}>
@@ -677,7 +763,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
   const renderExpandBody = (
     kind: ExtensionKind,
     item: InstalledExtension | CatalogEntry,
-    mode: ExpandMode,
+    mode: ExpandMode
   ) => {
     if (kind === 'skill') return renderSkillBody(item, mode);
     if (kind === 'mcp') return renderMcpBody(item, mode);
@@ -699,7 +785,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
               void refresh();
             }}
           >
-            <Lucide.ArrowLeft size={14} aria-hidden />
+            <ArrowLeft size={14} aria-hidden />
             返回扩展
           </button>
         }
@@ -735,7 +821,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             disabled={loading}
             aria-label="刷新"
           >
-            <Lucide.RefreshCw
+            <RefreshCw
               size={14}
               className={loading ? 'spin' : undefined}
               aria-hidden
@@ -744,8 +830,11 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         </div>
       }
     >
-
-      <div className="ext-toolbar ext-toolbar--one" role="group" aria-label="筛选">
+      <div
+        className="ext-toolbar ext-toolbar--one"
+        role="group"
+        aria-label="筛选"
+      >
         <div className="settings-choice-group" role="group" aria-label="视图">
           <button
             type="button"
@@ -800,14 +889,20 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
       ) : null}
 
       {view === 'installed' ? (
-        <div className="ext-list ext-list--cards" role="list" aria-label="已安装">
+        <div
+          className="ext-list ext-list--cards"
+          role="list"
+          aria-label="已安装"
+        >
           {loading && installedFiltered.length === 0 ? (
             <div className="ext-empty" role="status">
               加载中…
             </div>
           ) : installedFiltered.length === 0 ? (
             <div className="ext-empty" role="status">
-              {query || kindFilter !== 'all' ? '没有匹配的扩展' : '还没有安装扩展'}
+              {query || kindFilter !== 'all'
+                ? '没有匹配的扩展'
+                : '还没有安装扩展'}
               {!(query || kindFilter !== 'all') ? (
                 <button
                   type="button"
@@ -835,8 +930,12 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                   <div className="ext-row ext-row--card ext-row--static">
                     <div className="ext-row-main">
                       <div className="ext-row-title-line">
-                        <span className="ext-kind-badge">{kindLabel(item.kind)}</span>
-                        <span className="ext-row-name">{highlightMatch(item.name)}</span>
+                        <span className="ext-kind-badge">
+                          {kindLabel(item.kind)}
+                        </span>
+                        <span className="ext-row-name">
+                          {highlightMatch(item.name)}
+                        </span>
                         <span className="ext-source-badge">
                           {item.source === 'official'
                             ? '官方'
@@ -845,14 +944,18 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                               : '本机'}
                         </span>
                       </div>
-                      <div className="ext-row-desc">{highlightMatch(item.description)}</div>
+                      <div className="ext-row-desc">
+                        {highlightMatch(item.description)}
+                      </div>
                     </div>
                     <div className="ext-row-actions">
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
                         aria-expanded={detailOpen}
-                        onClick={() => toggleExpand('installed', item.id, 'detail')}
+                        onClick={() =>
+                          toggleExpand('installed', item.id, 'detail')
+                        }
                       >
                         {detailOpen ? '收起' : '详情'}
                       </button>
@@ -860,7 +963,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                         type="button"
                         className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
                         aria-expanded={configOpen}
-                        onClick={() => toggleExpand('installed', item.id, 'config')}
+                        onClick={() =>
+                          toggleExpand('installed', item.id, 'config')
+                        }
                       >
                         {configOpen ? '收起' : '配置'}
                       </button>
@@ -899,7 +1004,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                 installed.some(
                   (i) =>
                     i.kind === entry.kind &&
-                    i.name.toLowerCase() === entry.name.toLowerCase(),
+                    i.name.toLowerCase() === entry.name.toLowerCase()
                 );
               const detailOpen = isExpanded('catalog', entry.id, 'detail');
               return (
@@ -911,8 +1016,12 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                   <div className="ext-row ext-row--card ext-row--static">
                     <div className="ext-row-main">
                       <div className="ext-row-title-line">
-                        <span className="ext-kind-badge">{kindLabel(entry.kind)}</span>
-                        <span className="ext-row-name">{highlightMatch(entry.name)}</span>
+                        <span className="ext-kind-badge">
+                          {kindLabel(entry.kind)}
+                        </span>
+                        <span className="ext-row-name">
+                          {highlightMatch(entry.name)}
+                        </span>
                         <span className="ext-source-badge">
                           {entry.source === 'official' ? '官方' : '三方'}
                         </span>
@@ -920,14 +1029,18 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
                           <span className="ext-installed-mark">已装</span>
                         ) : null}
                       </div>
-                      <div className="ext-row-desc">{highlightMatch(entry.description)}</div>
+                      <div className="ext-row-desc">
+                        {highlightMatch(entry.description)}
+                      </div>
                     </div>
                     <div className="ext-row-actions">
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
                         aria-expanded={detailOpen}
-                        onClick={() => toggleExpand('catalog', entry.id, 'detail')}
+                        onClick={() =>
+                          toggleExpand('catalog', entry.id, 'detail')
+                        }
                       >
                         {detailOpen ? '收起' : '详情'}
                       </button>

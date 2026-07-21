@@ -148,6 +148,9 @@ interface DaemonRequestHandlersOptions {
   }): void;
   getConfigUpdateHandler():
     ((update: DaemonRuntimeConfigUpdate) => void) | undefined;
+  applyMcpServerConfigs?(
+    configs: NonNullable<import('./types.js').UpdateConfigMessage['mcpServers']>
+  ): Promise<void> | void;
 }
 
 export class DaemonRequestHandlers {
@@ -269,7 +272,7 @@ export class DaemonRequestHandlers {
         break;
 
       case 'update-config':
-        handleUpdateConfigExtracted(
+        await handleUpdateConfigExtracted(
           ws,
           msg,
           {
@@ -280,6 +283,9 @@ export class DaemonRequestHandlers {
             activeRunCount: this.options.runHandler.activeRunCount(),
             getLifecycleSnapshot: this.options.getLifecycleSnapshot,
             getConfigUpdateHandler: () => this.options.getConfigUpdateHandler(),
+            applyMcpServerConfigs: this.options.applyMcpServerConfigs
+              ? (configs) => this.options.applyMcpServerConfigs!(configs)
+              : undefined,
           },
           correlateResponse,
           correlationFrom
@@ -740,7 +746,7 @@ export class DaemonRequestHandlers {
         break;
 
       case 'start-mcp-server':
-        handleStartMcpServerExtracted(
+        await handleStartMcpServerExtracted(
           ws,
           msg,
           this.options.runtimeFactory,
@@ -750,7 +756,7 @@ export class DaemonRequestHandlers {
         break;
 
       case 'stop-mcp-server':
-        handleStopMcpServerExtracted(
+        await handleStopMcpServerExtracted(
           ws,
           msg,
           this.options.runtimeFactory,

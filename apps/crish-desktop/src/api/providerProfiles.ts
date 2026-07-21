@@ -6,9 +6,21 @@
  * - 引擎侧同一时刻只有一组生效，通过 update-config 切换
  * - 打开应用时把当前活动 profile 同步回引擎
  * - 活动模型解析：**本机已选优先**，不回落到厂商演示 id（如引擎默认 mimo）
+ *
+ * Provider family 诚实性（Phase1）：
+ * - 原生 Anthropic / Gemini adapter **尚未接线**；引擎生产路径仅
+ *   OpenAI-compatible（`family=openai-compatible` / 缺省即此）。
+ * - 种子里的「Anthropic」壳 = **OpenAI 兼容代理**配置位，不是原生 Messages API。
+ * - 勿把官方 `https://api.anthropic.com` 等原生端点塞进 baseUrl 后指望能通；
+ *   需 Claude 时请填 LiteLLM / OpenRouter 等 OpenAI 兼容代理的 baseUrl。
+ * - 正式列表勿走 clientApi.getProviders（HONEST-HIDE 返回 []）；用本模块。
  */
 
-import { updateEngineConfig, pushRecentModel, type EngineConfigUpdate } from './engineConfig';
+import {
+  updateEngineConfig,
+  pushRecentModel,
+  type EngineConfigUpdate,
+} from './engineConfig';
 import { emitUiEvent } from './uiEvents';
 
 export type AuthType = 'api_key' | 'oauth2' | 'subscription';
@@ -57,6 +69,9 @@ const ACTIVE_MODEL_KEY = 'crish_active_model_id';
 /**
  * 首次空库种子：只提供服务商壳，**不**硬编码具体模型 id。
  * 模型列表由用户扫描 / 手填；避免列表里永远挂着 mimo 等写死项。
+ *
+ * 注意：全部种子均按 **OpenAI-compatible** 路径消费。
+ * 原生 family（anthropic / gemini）未接线前，引擎不会按官方 Anthropic/Gemini 协议发请求。
  */
 const DEFAULT_PROFILES: ProviderProfile[] = [
   {
@@ -95,9 +110,12 @@ const DEFAULT_PROFILES: ProviderProfile[] = [
     hasKey: false,
   },
   {
+    // 非原生 Anthropic：引擎仅 OpenAI-compatible。
+    // baseUrl 请填兼容代理（LiteLLM / OpenRouter 等），不要填官方 api.anthropic.com。
     id: 'anthropic',
-    name: 'Anthropic 兼容',
-    baseUrl: 'https://api.anthropic.com/v1',
+    name: 'Anthropic（OpenAI 兼容代理）',
+    // 空串：强制用户显式填写代理地址，避免误用官方原生端点走 OpenAI 路径。
+    baseUrl: '',
     models: [],
     hasKey: false,
   },
@@ -125,7 +143,8 @@ export const KNOWN_PROFILE_LABELS: Readonly<Record<string, string>> = {
   deepseek: 'DeepSeek 官方',
   qwen: '千问 Qwen Portal',
   openai: 'OpenAI 兼容',
-  anthropic: 'Anthropic 兼容',
+  /** 需 OpenAI 兼容代理；原生 Anthropic Messages API 未接线 */
+  anthropic: 'Anthropic（OpenAI 兼容代理）',
   flowbit: 'Flowbit',
 };
 
@@ -152,7 +171,7 @@ export function normalizeProfileLabelText(raw: unknown): string {
  * 空/纯空白 name 不污染 UI。
  */
 export function profileDisplayLabel(
-  profileOrId: string | Pick<ProviderProfile, 'id' | 'name'> | null | undefined,
+  profileOrId: string | Pick<ProviderProfile, 'id' | 'name'> | null | undefined
 ): string {
   if (profileOrId == null) return UNNAMED_PROFILE_LABEL;
   if (typeof profileOrId === 'string') {
@@ -214,7 +233,7 @@ export function mergeModelIds(...lists: unknown[]): string[] {
 
 /** 供应商是否具备可用密钥标记（纯，不读 LS） */
 export function profileHasKey(
-  p: Pick<Partial<ProviderProfile>, 'hasKey' | 'apiKey'> | null | undefined,
+  p: Pick<Partial<ProviderProfile>, 'hasKey' | 'apiKey'> | null | undefined
 ): boolean {
   if (!p) return false;
   return Boolean(p.hasKey || (typeof p.apiKey === 'string' && p.apiKey.trim()));
@@ -222,7 +241,7 @@ export function profileHasKey(
 
 /** 启用中且 models 非空（纯） */
 export function profileHasUsableModels(
-  p: Pick<ProviderProfile, 'enabled' | 'models'> | null | undefined,
+  p: Pick<ProviderProfile, 'enabled' | 'models'> | null | undefined
 ): boolean {
   if (!p || p.enabled === false) return false;
   return normalizeModelIds(p.models).length > 0;
@@ -233,7 +252,8 @@ export function profileHasUsableModels(
  * 空 catalog 时不得回落 mimo 等演示默认。
  */
 export function isEmptyModelCatalog(
-  profiles: readonly Pick<ProviderProfile, 'enabled' | 'models'>[] | null | undefined,
+  profiles:
+    readonly Pick<ProviderProfile, 'enabled' | 'models'>[] | null | undefined
 ): boolean {
   if (!profiles || profiles.length === 0) return true;
   return !profiles.some((p) => profileHasUsableModels(p));
@@ -244,15 +264,12 @@ export function isEmptyModelCatalog(
  * id 必填；models 去重；name 中文安全 trim。
  */
 export function normalizeProviderProfile(
-  p: Partial<ProviderProfile> & { id: string },
+  p: Partial<ProviderProfile> & { id: string }
 ): ProviderProfile {
   const id = String(p.id ?? '').trim();
   const nameRaw = normalizeProfileLabelText(p.name);
   const name =
-    nameRaw ||
-    (id && KNOWN_PROFILE_LABELS[id]) ||
-    id ||
-    UNNAMED_PROFILE_LABEL;
+    nameRaw || (id && KNOWN_PROFILE_LABELS[id]) || id || UNNAMED_PROFILE_LABEL;
   return {
     id: id || 'unknown',
     name,
@@ -277,13 +294,17 @@ export function normalizeProviderProfiles(list: unknown): ProviderProfile[] {
     const id = String((raw as { id?: unknown }).id ?? '').trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push(normalizeProviderProfile({ ...(raw as Partial<ProviderProfile>), id }));
+    out.push(
+      normalizeProviderProfile({ ...(raw as Partial<ProviderProfile>), id })
+    );
   }
   return out;
 }
 
 /** @internal 兼容旧内部名 */
-function normalizeProfile(p: Partial<ProviderProfile> & { id: string }): ProviderProfile {
+function normalizeProfile(
+  p: Partial<ProviderProfile> & { id: string }
+): ProviderProfile {
   return normalizeProviderProfile(p);
 }
 
@@ -301,7 +322,7 @@ const LEGACY_SEED_MODELS: Readonly<Record<string, readonly string[]>> = {
 
 /** 所有旧种子/演示 model id（跨壳扁平；用于幽灵 active 与 pick 守卫） */
 const LEGACY_SEED_MODEL_ID_SET: ReadonlySet<string> = new Set(
-  Object.values(LEGACY_SEED_MODELS).flatMap((ids) => [...ids]),
+  Object.values(LEGACY_SEED_MODELS).flatMap((ids) => [...ids])
 );
 
 /**
@@ -316,7 +337,9 @@ export function isLegacySeedModelId(model: unknown): boolean {
 
 function sameModelSet(a: string[], b: readonly string[]): boolean {
   const sa = normalizeModelIds(a).slice().sort();
-  const sb = normalizeModelIds([...b]).slice().sort();
+  const sb = normalizeModelIds([...b])
+    .slice()
+    .sort();
   if (sa.length !== sb.length) return false;
   return sa.every((v, i) => v === sb[i]);
 }
@@ -355,15 +378,12 @@ export function clearActiveProfileId(): void {
  * 返回是否清除了 active model。
  */
 export function sanitizeGhostActiveModel(
-  profiles: readonly ProviderProfile[] | null | undefined,
+  profiles: readonly ProviderProfile[] | null | undefined
 ): boolean {
   const mid = (getActiveModelId() || '').trim();
   if (!mid || !isLegacySeedModelId(mid)) return false;
   const listed = (profiles || []).some(
-    (p) =>
-      p &&
-      p.enabled !== false &&
-      normalizeModelIds(p.models).includes(mid),
+    (p) => p && p.enabled !== false && normalizeModelIds(p.models).includes(mid)
   );
   if (listed) return false;
   clearActiveModelId();
@@ -375,20 +395,29 @@ export function loadProfiles(): ProviderProfile[] {
     const raw = localStorage.getItem(PROFILES_KEY);
     if (!raw) {
       saveProfiles(DEFAULT_PROFILES);
-      const seeded = DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+      const seeded = DEFAULT_PROFILES.map((p) => ({
+        ...p,
+        models: [...p.models],
+      }));
       // 空库种子后仍清幽灵演示 active（如历史 LS 残留 mimo）
       sanitizeGhostActiveModel(seeded);
       return seeded;
     }
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr) || arr.length === 0) {
-      const seeded = DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+      const seeded = DEFAULT_PROFILES.map((p) => ({
+        ...p,
+        models: [...p.models],
+      }));
       sanitizeGhostActiveModel(seeded);
       return seeded;
     }
     const normalized = normalizeProviderProfiles(arr);
     if (normalized.length === 0) {
-      const seeded = DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+      const seeded = DEFAULT_PROFILES.map((p) => ({
+        ...p,
+        models: [...p.models],
+      }));
       sanitizeGhostActiveModel(seeded);
       return seeded;
     }
@@ -417,7 +446,7 @@ export function loadProfiles(): ProviderProfile[] {
       // 直接写 LS，避免 saveProfiles 递归触发额外副作用前完成 sanitize
       localStorage.setItem(
         PROFILES_KEY,
-        JSON.stringify(migrated.map((p) => normalizeProviderProfile(p))),
+        JSON.stringify(migrated.map((p) => normalizeProviderProfile(p)))
       );
       try {
         emitUiEvent('profiles-changed');
@@ -429,7 +458,10 @@ export function loadProfiles(): ProviderProfile[] {
     sanitizeGhostActiveModel(migrated);
     return migrated;
   } catch {
-    const seeded = DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+    const seeded = DEFAULT_PROFILES.map((p) => ({
+      ...p,
+      models: [...p.models],
+    }));
     sanitizeGhostActiveModel(seeded);
     return seeded;
   }
@@ -438,7 +470,7 @@ export function loadProfiles(): ProviderProfile[] {
 export function saveProfiles(list: ProviderProfile[]) {
   localStorage.setItem(
     PROFILES_KEY,
-    JSON.stringify(list.map((p) => normalizeProfile(p))),
+    JSON.stringify(list.map((p) => normalizeProfile(p)))
   );
   try {
     emitUiEvent('profiles-changed');
@@ -575,7 +607,10 @@ export function createCustomProfile(input: {
 export function removeProfile(profileId: string): ProviderProfile[] {
   const list = loadProfiles().filter((p) => p.id !== profileId);
   // 至少保留一组默认，避免空列表
-  const next = list.length > 0 ? list : DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+  const next =
+    list.length > 0
+      ? list
+      : DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
   saveProfiles(next);
   if (getActiveProfileId() === profileId) {
     clearActiveProfileId();
@@ -587,7 +622,10 @@ export function removeProfile(profileId: string): ProviderProfile[] {
 /**
  * 启用/禁用供应商。禁用当前活动供应商时清空活动选择，避免幽灵 id。
  */
-export function setProfileEnabled(profileId: string, enabled: boolean): ProviderProfile[] {
+export function setProfileEnabled(
+  profileId: string,
+  enabled: boolean
+): ProviderProfile[] {
   const list = loadProfiles();
   const p = list.find((x) => x.id === profileId);
   if (!p) return list;
@@ -615,7 +653,7 @@ export function setProfileKey(profileId: string, apiKey: string) {
  */
 export async function saveProfileBaseUrl(
   profileId: string,
-  baseUrl: string,
+  baseUrl: string
 ): Promise<{ ok: boolean; error?: string; synced: boolean }> {
   const list = loadProfiles();
   const p = list.find((x) => x.id === profileId);
@@ -644,7 +682,7 @@ export async function saveProfileBaseUrl(
 export async function saveProfileKey(
   profileId: string,
   apiKey: string,
-  opts?: { activateModel?: string },
+  opts?: { activateModel?: string }
 ): Promise<{ ok: boolean; error?: string; synced: boolean }> {
   const key = apiKey.trim();
   if (!key) return { ok: false, error: 'empty_key', synced: false };
@@ -655,16 +693,18 @@ export async function saveProfileKey(
 
   const activeId = getActiveProfileId();
   const shouldSync =
-    activeId === profileId ||
-    !activeId ||
-    Boolean(opts?.activateModel);
+    activeId === profileId || !activeId || Boolean(opts?.activateModel);
 
   if (!shouldSync) {
     return { ok: true, synced: false };
   }
 
-  const model =
-    (opts?.activateModel || getActiveModelId() || profile.models[0] || '').trim();
+  const model = (
+    opts?.activateModel ||
+    getActiveModelId() ||
+    profile.models[0] ||
+    ''
+  ).trim();
   if (!model) {
     // 仅推密钥与地址，等用户再选模型
     const res = await updateEngineConfig({
@@ -712,7 +752,7 @@ export function removeModelFromProfile(profileId: string, model: string) {
 export function renameModelInProfile(
   profileId: string,
   oldModel: string,
-  newModel: string,
+  newModel: string
 ): ProviderProfile[] {
   const from = String(oldModel ?? '').trim();
   const to = String(newModel ?? '').trim();
@@ -778,9 +818,11 @@ export type PickDefaultModelOptions = {
  */
 export function pickDefaultModelSelection(
   profilesInput: readonly ProviderProfile[] | null | undefined,
-  opts?: PickDefaultModelOptions,
+  opts?: PickDefaultModelOptions
 ): ResolvedModelSelection | null {
-  const profiles = (profilesInput || []).filter((p) => p && p.enabled !== false);
+  const profiles = (profilesInput || []).filter(
+    (p) => p && p.enabled !== false
+  );
   if (profiles.length === 0) return null;
 
   // 规范化每条 models，避免脏空白/重复影响 includes 与 [0]
@@ -797,7 +839,10 @@ export function pickDefaultModelSelection(
     if (storedProfileId && storedModel && !requireInList) {
       const p = normalized.find((x) => x.id === storedProfileId);
       // 旧种子/演示 id 未出现在列表中 → 视为幽灵，不冒充已选（防止 mimo 默认）
-      if (p && !(isLegacySeedModelId(storedModel) && !p.models.includes(storedModel))) {
+      if (
+        p &&
+        !(isLegacySeedModelId(storedModel) && !p.models.includes(storedModel))
+      ) {
         return { profileId: p.id, model: storedModel, source: 'stored_active' };
       }
     }
@@ -830,7 +875,11 @@ export function pickDefaultModelSelection(
   if (storedModel) {
     const p = normalized.find((x) => x.models.includes(storedModel));
     if (p) {
-      return { profileId: p.id, model: storedModel, source: 'stored_model_match' };
+      return {
+        profileId: p.id,
+        model: storedModel,
+        source: 'stored_model_match',
+      };
     }
   }
 
@@ -877,7 +926,7 @@ export function pickDefaultModelSelection(
 /** 纯：仅返回 model id，空 catalog → null */
 export function pickDefaultModelId(
   profiles: readonly ProviderProfile[] | null | undefined,
-  opts?: PickDefaultModelOptions,
+  opts?: PickDefaultModelOptions
 ): string | null {
   return pickDefaultModelSelection(profiles, opts)?.model ?? null;
 }
@@ -910,7 +959,7 @@ export function resolveDisplayModelId(engineModel?: string | null): string {
 /** 将活动选择写入 Settings.defaultModel/defaultProvider，避免 hydrate 回落到空/旧值 */
 async function persistSelectionToAppSettings(
   profileId: string,
-  model: string,
+  model: string
 ): Promise<void> {
   try {
     const { clientApi } = await import('./clientApi');
@@ -940,8 +989,12 @@ function notifyModelChanged(profileId: string, model: string) {
 /** 将指定 profile + 模型应用到引擎 */
 export async function activateProfileModel(
   profileId: string,
-  model: string,
-): Promise<{ ok: boolean; error?: string; warning?: 'no_local_key' | 'model_mismatch' }> {
+  model: string
+): Promise<{
+  ok: boolean;
+  error?: string;
+  warning?: 'no_local_key' | 'model_mismatch';
+}> {
   const p = loadProfiles().find((x) => x.id === profileId);
   if (!p) return { ok: false, error: 'profile_not_found' };
 
@@ -1044,7 +1097,7 @@ export type FlatModelChoice = {
  * 不读 LS、不 emit。空 catalog → []。
  */
 export function flattenModelChoicesFrom(
-  profiles: readonly ProviderProfile[] | null | undefined,
+  profiles: readonly ProviderProfile[] | null | undefined
 ): FlatModelChoice[] {
   const out: FlatModelChoice[] = [];
   for (const p of profiles || []) {

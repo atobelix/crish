@@ -109,6 +109,9 @@ export interface ChatMessageListProps {
   onOpenDiffPanel?: () => void;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
+  /** 批量批准/拒绝（BatchApprovalBar；未传则 bar 按钮不显示） */
+  onBatchApprove?: (msgIds: string[], toolIds: string[]) => void;
+  onBatchDeny?: (msgIds: string[], toolIds: string[]) => void;
 }
 
 const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
@@ -132,6 +135,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   onOpenDiffPanel,
   onApprovalAllow,
   onApprovalDeny,
+  onBatchApprove,
+  onBatchDeny,
 }) => {
   /** 按会话保留工具展开态，切换 session 不互相冲掉 */
   const [expandedToolsBySession, setExpandedToolsBySession] = useState<
@@ -517,6 +522,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       onOpenTerminal,
       onApprovalAllow,
       onApprovalDeny,
+      onBatchApprove,
+      onBatchDeny,
     }),
     [
       agents,
@@ -530,6 +537,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       onOpenTerminal,
       onApprovalAllow,
       onApprovalDeny,
+      onBatchApprove,
+      onBatchDeny,
     ]
   );
 

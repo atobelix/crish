@@ -8,16 +8,19 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './ChatHeaderMore.module.css';
-import * as Lucide from 'lucide-react';
 import { emitUiEvent } from '../api/uiEvents';
 import { Tooltip } from './settings/SettingsUI';
+import { FileDown, History, MoreHorizontal, Search } from 'lucide-react';
 
 export type ChatHeaderMoreProps = {
   /** 有活动会话时可导出；false 时隐藏导出项，避免幽灵禁用项 */
   canExport?: boolean;
+  /** 有活动会话时可尝试对话回溯（daemon experimental） */
+  canRewind?: boolean;
 };
 
-const ITEM_SEL = 'button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])';
+const ITEM_SEL =
+  'button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])';
 
 function listMenuItems(root: HTMLElement | null): HTMLButtonElement[] {
   if (!root) return [];
@@ -26,6 +29,7 @@ function listMenuItems(root: HTMLElement | null): HTMLButtonElement[] {
 
 export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
   canExport = true,
+  canRewind = true,
 }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -36,6 +40,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
   const menuId = useId();
   const searchItemId = useId();
   const exportItemId = useId();
+  const rewindItemId = useId();
 
   const closeMenu = useCallback((opts?: { restoreFocus?: boolean }) => {
     const restore = !!opts?.restoreFocus;
@@ -91,7 +96,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
       first?.focus();
     });
     return () => window.cancelAnimationFrame(t);
-  }, [open, canExport]);
+  }, [open, canExport, canRewind]);
 
   const onMenuKeyDown = (e: React.KeyboardEvent) => {
     const items = listMenuItems(menuRef.current);
@@ -130,6 +135,13 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
     closeMenu({ restoreFocus: true });
   };
 
+  const runRewind = () => {
+    if (!canRewind) return;
+    // ChatCard / App 监听：打开回溯预览（daemon preview，禁止本地假成功）
+    emitUiEvent('open-conversation-rewind');
+    closeMenu({ restoreFocus: true });
+  };
+
   const triggerLabel = open ? '关闭更多操作菜单' : '打开更多操作菜单';
 
   return (
@@ -158,7 +170,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
             }
           }}
         >
-          <Lucide.MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+          <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
         </button>
       </Tooltip>
       {open ? (
@@ -183,7 +195,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
               aria-label="搜索本会话消息"
               onClick={runSearch}
             >
-              <Lucide.Search size={14} strokeWidth={1.75} aria-hidden />
+              <Search size={14} strokeWidth={1.75} aria-hidden />
               <span>搜索本会话</span>
             </button>
           </Tooltip>
@@ -199,8 +211,24 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
                 aria-label="导出当前会话为 Markdown"
                 onClick={runExport}
               >
-                <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
+                <FileDown size={14} strokeWidth={1.75} aria-hidden />
                 <span>导出 Markdown</span>
+              </button>
+            </Tooltip>
+          ) : null}
+          {canRewind ? (
+            <Tooltip content="回溯到更早对话边界（引擎 experimental；先 preview 再确认）">
+              <button
+                id={rewindItemId}
+                type="button"
+                className={styles.moreItem}
+                role="menuitem"
+                tabIndex={-1}
+                aria-label="对话回溯"
+                onClick={runRewind}
+              >
+                <History size={14} strokeWidth={1.75} aria-hidden />
+                <span>对话回溯</span>
               </button>
             </Tooltip>
           ) : null}

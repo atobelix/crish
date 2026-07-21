@@ -1,14 +1,30 @@
-import { budgetToolOutputForContext } from "./tool-output-budget";
-import { externalizeToolOutputBlobs, type BlobExternalizationOptions } from "./blob-externalization";
-import type { AgentMessage, AgentMessageBlock, ToolResultBlock } from "@crish/shared-types";
-import type { ToolOutputBudgetRuntimeOptions } from "./types";
+import { budgetToolOutputForContext } from './tool-output-budget';
+import {
+  externalizeToolOutputBlobs,
+  type BlobExternalizationOptions,
+} from './blob-externalization';
+import {
+  guardToolOutputForContext,
+  type ToolOutputGuardOptions,
+} from './tool-output-guard';
+import type {
+  AgentMessage,
+  AgentMessageBlock,
+  ToolResultBlock,
+} from '@crish/shared-types';
+import type { ToolOutputBudgetRuntimeOptions } from './types';
 
 export interface ContextProjectionOptions {
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
   blobExternalization?: false | BlobExternalizationOptions;
+  /** Default: guard enabled. Set false to disable untrusted wrapping. */
+  toolOutputGuard?: false | ToolOutputGuardOptions;
 }
 
-export function projectMessagesForProvider(messages: AgentMessage[], options: ContextProjectionOptions = {}): AgentMessage[] {
+export function projectMessagesForProvider(
+  messages: AgentMessage[],
+  options: ContextProjectionOptions = {}
+): AgentMessage[] {
   return messages.map((message) => projectMessageForProvider(message, options));
 }
 
@@ -19,7 +35,10 @@ export function projectMessagesForProvider(messages: AgentMessage[], options: Co
  * 同一 message 引用在上层 WeakMap 命中时直接复用，避免每轮重复投影。
  * 该函数本身仍是纯函数，无副作用。
  */
-export function projectMessageForProvider(message: AgentMessage, options: ContextProjectionOptions): AgentMessage {
+export function projectMessageForProvider(
+  message: AgentMessage,
+  options: ContextProjectionOptions
+): AgentMessage {
   let changed = false;
   const blocks = message.blocks.map((block) => {
     const projected = projectBlockForProvider(block, options);
@@ -30,19 +49,33 @@ export function projectMessageForProvider(message: AgentMessage, options: Contex
   return changed ? { ...message, blocks } : message;
 }
 
-function projectBlockForProvider(block: AgentMessageBlock, options: ContextProjectionOptions): AgentMessageBlock {
-  if (block.type !== "tool-result") return block;
+function projectBlockForProvider(
+  block: AgentMessageBlock,
+  options: ContextProjectionOptions
+): AgentMessageBlock {
+  if (block.type !== 'tool-result') return block;
   return projectToolResultForProvider(block, options);
 }
 
-function projectToolResultForProvider(block: ToolResultBlock, options: ContextProjectionOptions): ToolResultBlock {
+function projectToolResultForProvider(
+  block: ToolResultBlock,
+  options: ContextProjectionOptions
+): ToolResultBlock {
   const externalized =
-    options.blobExternalization === false || options.blobExternalization === undefined
+    options.blobExternalization === false ||
+    options.blobExternalization === undefined
       ? block.output
-      : externalizeToolOutputBlobs(block.output, options.blobExternalization).value;
-  const output = budgetToolOutputForContext(externalized, {
+      : externalizeToolOutputBlobs(block.output, options.blobExternalization)
+          .value;
+  // Order: externalize → budget → guard wrap (raw transcript not destroyed; projection only)
+  const budgeted = budgetToolOutputForContext(externalized, {
     ...options.toolOutputBudget,
-    toolName: block.toolName
+    toolName: block.toolName,
   });
+  const guardOpts =
+    options.toolOutputGuard === false
+      ? { enabled: false, stripPseudoInstructions: false }
+      : { toolName: block.toolName, ...(options.toolOutputGuard ?? {}) };
+  const output = guardToolOutputForContext(budgeted, guardOpts);
   return output === block.output ? block : { ...block, output };
 }

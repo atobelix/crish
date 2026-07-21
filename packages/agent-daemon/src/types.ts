@@ -241,6 +241,11 @@ export interface RunTaskMessage {
   attachments?: Array<
     { name?: string; mime?: string; kind?: string } & JsonObject
   >;
+  /**
+   * Optional system prompt fragment (e.g. responseStyle guidance).
+   * Mapped into run.metadata.systemPrompt for AgentRuntimeOptions.systemPrompt.
+   */
+  systemPrompt?: string;
 }
 
 export interface ApproveToolMessage {
@@ -326,6 +331,24 @@ export interface UpdateConfigMessage {
   credentialMode?: DaemonProviderCredentialMode;
   endpoint?: OpenAICompatibleEndpoint;
   stream?: boolean;
+  /** 热更新 MCP 服务列表（可序列化配置；adapter 在 daemon 侧重建） */
+  mcpServers?: DaemonMcpServerConfig[];
+}
+
+/**
+ * 可序列化 MCP 服务配置（写入 daemon config / env / mcp.json）。
+ * adapter 不可序列化，由 daemon 在加载时用 stdio 工厂构造。
+ */
+export interface DaemonMcpServerConfig {
+  name: string;
+  label?: string;
+  /** 默认 stdio；非 stdio 目前仅占位 list，start 会 degraded */
+  transport?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
 }
 
 export interface ProbeProviderModelsMessage {
@@ -1736,6 +1759,11 @@ export interface DaemonConfig {
   memoryStorePath: string;
   /** Workflow scheduler polling interval. 0 disables the daemon-owned loop. */
   workflowSchedulerIntervalMs: number;
+  /**
+   * 可选 MCP 服务配置（可序列化）。
+   * startDaemon 也会从 CRISH_MCP_SERVERS / mcp.json 合并；注入 factory 后 list 非空。
+   */
+  mcpServers?: DaemonMcpServerConfig[];
 }
 
 export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
@@ -1751,6 +1779,7 @@ export const DEFAULT_DAEMON_CONFIG: DaemonConfig = {
   scopedContextStorePath: join(defaultDaemonDataDir(), 'scoped-context.json'),
   memoryStorePath: join(defaultDaemonDataDir(), 'memories.jsonl'),
   workflowSchedulerIntervalMs: 30_000,
+  mcpServers: [],
 };
 
 function defaultDaemonDataDir(): string {

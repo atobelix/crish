@@ -435,7 +435,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           break;
         }
         case 'branch': {
-          // 分叉可撤销：toast + Undo 归档新分叉并切回原会话（与顶栏/ESC 路径一致）
+          // 本机 UI 副本（非引擎分叉）；toast 诚实文案 + Undo 归档新副本并切回原会话
           const title = sessionListDisplayTitle(targetSession);
           const newTitle = `${title}${BRANCH_TITLE_SUFFIX}`;
           const oldId = sessionId;

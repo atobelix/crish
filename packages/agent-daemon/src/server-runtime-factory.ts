@@ -1,9 +1,6 @@
-import type {
-  AgentRuntimeOptions,
-  AgentTool,
-} from "@crish/agent-runtime";
-import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { compactJsonObject, BoundedMap } from "@crish/shared-utils";
+import type { AgentRuntimeOptions, AgentTool } from '@crish/agent-runtime';
+import type { JsonObject, JsonValue } from '@crish/shared-types';
+import { compactJsonObject, BoundedMap } from '@crish/shared-utils';
 import {
   BackgroundCommandManager,
   ConfigMerger,
@@ -21,49 +18,47 @@ import {
   type McpLifecycleSnapshot,
   type McpLifecycleStartResult,
   type McpServerDefinition,
-} from "@crish/agent-runtime";
+} from '@crish/agent-runtime';
 import {
   createAgentRuntimeRunEngineFactory,
   type CreateRunEngineInput,
   type OrchestratorRunHandle,
   type RunEngineFactory,
   type StartRunRequest,
-} from "@crish/agent-orchestrator";
-import { createHash } from "node:crypto";
-import { join, resolve } from "node:path";
-import { ApprovalQueue } from "./approval-queue.js";
-import { DaemonApprovalHandler } from "./daemon-approval-handler.js";
+} from '@crish/agent-orchestrator';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { ApprovalQueue } from './approval-queue.js';
+import { DaemonApprovalHandler } from './daemon-approval-handler.js';
 import {
   DEFAULT_MAX_SUBAGENT_DEPTH,
   createDaemonSubagentTool,
   resolveMaxSubagentDepth,
-} from "./subagent-runtime.js";
+} from './subagent-runtime.js';
 import {
   DaemonPermissionPolicy,
   normalizeDaemonPermissionMode,
   type DaemonPermissionMode,
-} from "./daemon-permission-policy.js";
-import type { DaemonConfig, DaemonProviderStatusSnapshot } from "./types.js";
-import type { ScopedContextStore } from "./scoped-context-store.js";
-import {
-  buildDaemonScopedPromptContext,
-} from "./scoped-context-runtime.js";
+} from './daemon-permission-policy.js';
+import type { DaemonConfig, DaemonProviderStatusSnapshot } from './types.js';
+import type { ScopedContextStore } from './scoped-context-store.js';
+import { buildDaemonScopedPromptContext } from './scoped-context-runtime.js';
 import type {
   ArtifactRecord,
   ChangedFileRecord,
   CheckpointRecord,
   MemoryRecord,
-} from "./types.js";
+} from './types.js';
 import {
   createUnsupportedProductSurfaceStatus,
   type DaemonProductAdapters,
   type DaemonProductAdapterStatusSnapshot,
-} from "./daemon-product-adapters.js";
+} from './daemon-product-adapters.js';
 
 export type DaemonProviderFactory = (
   runId: string,
   cwd: string
-) => AgentRuntimeOptions["provider"] | Promise<AgentRuntimeOptions["provider"]>;
+) => AgentRuntimeOptions['provider'] | Promise<AgentRuntimeOptions['provider']>;
 
 export interface DaemonToolFactoryInput {
   cwd: string;
@@ -74,14 +69,14 @@ export interface DaemonToolFactoryInput {
 export type DaemonToolFactory = (input: DaemonToolFactoryInput) => AgentTool[];
 
 export class DaemonUnsupportedCapabilityError extends Error {
-  readonly code = "UNSUPPORTED_CAPABILITY";
+  readonly code = 'UNSUPPORTED_CAPABILITY';
 
   constructor(
     readonly capability: string,
     message: string
   ) {
     super(message);
-    this.name = "DaemonUnsupportedCapabilityError";
+    this.name = 'DaemonUnsupportedCapabilityError';
   }
 }
 
@@ -98,7 +93,7 @@ export type DaemonMcpLifecycleManagerFactory = (
 
 export interface DaemonMcpStatusSnapshot {
   configured: boolean;
-  readiness: "ready" | "degraded" | "starting" | "stopped" | "unknown";
+  readiness: 'ready' | 'degraded' | 'starting' | 'stopped' | 'unknown';
   serverCount: number;
   summary: JsonObject;
   diagnostics: JsonObject[];
@@ -113,6 +108,7 @@ interface DaemonRuntimeFactoryOptions {
   scopedContextStore?: ScopedContextStore;
   productAdapters?: DaemonProductAdapters;
   getBackgroundCommandManager?(cwd: string): BackgroundCommandManager;
+  /** 可变：setMcpServers 热更新会替换 */
   mcpServers?: McpServerDefinition[];
   mcpLifecycleManagerFactory?: DaemonMcpLifecycleManagerFactory;
   mcpStartupGateTimeoutMs?: number;
@@ -137,7 +133,10 @@ export class DaemonRuntimeFactory {
   private providerFactory?: DaemonProviderFactory;
   private providerStatusProvider?: () => DaemonProviderStatusSnapshot;
   private toolFactory?: DaemonToolFactory;
-  private readonly mutationCoordinatorsByCwd = new BoundedMap<string, WorkspaceMutationCoordinator>(MAX_MUTATION_COORDINATORS);
+  private readonly mutationCoordinatorsByCwd = new BoundedMap<
+    string,
+    WorkspaceMutationCoordinator
+  >(MAX_MUTATION_COORDINATORS);
   private readonly mcpManagers = new Set<McpLifecycleManager>();
   private sharedMcpManager?: McpLifecycleManager;
   private lastMcpStatus?: DaemonMcpStatusSnapshot;
@@ -168,11 +167,47 @@ export class DaemonRuntimeFactory {
       this.lastMcpStatus = aggregateMcpStatus([...this.mcpManagers]);
       return this.lastMcpStatus;
     }
+    if (this.sharedMcpManager) {
+      this.lastMcpStatus = aggregateMcpStatus([this.sharedMcpManager]);
+      return this.lastMcpStatus;
+    }
     if (this.lastMcpStatus) return this.lastMcpStatus;
-    if (this.options.mcpLifecycleManagerFactory || (this.options.mcpServers?.length ?? 0) > 0) {
-      return idleMcpStatusSnapshot(this.options.mcpServers?.length ?? 0);
+    if (
+      this.options.mcpLifecycleManagerFactory ||
+      (this.options.mcpServers?.length ?? 0) > 0
+    ) {
+      return idleMcpStatusSnapshot(
+        this.options.mcpServers?.length ?? 0,
+        configuredServersFromDefinitions(this.options.mcpServers)
+      );
     }
     return unconfiguredMcpStatusSnapshot();
+  }
+
+  /**
+   * 热更新 MCP 定义（如 update-config.mcpServers）。
+   * 替换共享 manager；已连接 server 会 teardown 后按新定义重建（lazy，不自动 start）。
+   */
+  async setMcpServers(servers: McpServerDefinition[]): Promise<void> {
+    this.options.mcpServers = servers;
+    if (this.sharedMcpManager) {
+      this.mcpManagers.delete(this.sharedMcpManager);
+      try {
+        await this.sharedMcpManager.teardown();
+      } catch {
+        // best-effort
+      }
+      this.sharedMcpManager = undefined;
+    }
+    if (servers.length === 0) {
+      this.lastMcpStatus = unconfiguredMcpStatusSnapshot();
+      return;
+    }
+    // 仅登记定义，不自动 connect；list 可从 idle/configured 回退
+    this.lastMcpStatus = idleMcpStatusSnapshot(
+      servers.length,
+      configuredServersFromDefinitions(servers)
+    );
   }
 
   getWorkspaceMutationCoordinator(cwd: string): WorkspaceMutationCoordinator {
@@ -188,7 +223,7 @@ export class DaemonRuntimeFactory {
 
   listMutationLeases(): Array<{
     token: string;
-    scope: { type: "workspace" } | { type: "files"; paths: string[] };
+    scope: { type: 'workspace' } | { type: 'files'; paths: string[] };
     owner?: {
       runId?: string;
       sessionId?: string;
@@ -203,7 +238,7 @@ export class DaemonRuntimeFactory {
   }> {
     const allLeases: Array<{
       token: string;
-      scope: { type: "workspace" } | { type: "files"; paths: string[] };
+      scope: { type: 'workspace' } | { type: 'files'; paths: string[] };
       owner?: {
         runId?: string;
         sessionId?: string;
@@ -232,17 +267,19 @@ export class DaemonRuntimeFactory {
     return allLeases;
   }
 
-  getProductAdapterStatusSnapshot(now: Date = new Date()): DaemonProductAdapterStatusSnapshot {
+  getProductAdapterStatusSnapshot(
+    now: Date = new Date()
+  ): DaemonProductAdapterStatusSnapshot {
     return {
       artifacts:
         this.options.productAdapters?.artifact?.status(now) ??
-        createUnsupportedProductSurfaceStatus("artifacts", now),
+        createUnsupportedProductSurfaceStatus('artifacts', now),
       memory:
         this.options.productAdapters?.memory?.status(now) ??
-        createUnsupportedProductSurfaceStatus("memory", now),
+        createUnsupportedProductSurfaceStatus('memory', now),
       checkpoints:
         this.options.productAdapters?.checkpoint?.status(now) ??
-        createUnsupportedProductSurfaceStatus("checkpoints", now),
+        createUnsupportedProductSurfaceStatus('checkpoints', now),
     };
   }
 
@@ -250,19 +287,21 @@ export class DaemonRuntimeFactory {
     const adapter = this.options.productAdapters?.artifact;
     if (!adapter) {
       throw new DaemonUnsupportedCapabilityError(
-        "artifacts",
-        "Artifact listing is not supported because no daemon artifact adapter is configured."
+        'artifacts',
+        'Artifact listing is not supported because no daemon artifact adapter is configured.'
       );
     }
     return adapter.listArtifacts(sessionId);
   }
 
-  async getArtifactContent(artifactUri: string): Promise<{ content: string; mimeType?: string }> {
+  async getArtifactContent(
+    artifactUri: string
+  ): Promise<{ content: string; mimeType?: string }> {
     const adapter = this.options.productAdapters?.artifact;
     if (!adapter) {
       throw new DaemonUnsupportedCapabilityError(
-        "artifacts",
-        "Artifact content retrieval is not supported because no daemon artifact adapter is configured."
+        'artifacts',
+        'Artifact content retrieval is not supported because no daemon artifact adapter is configured.'
       );
     }
     return adapter.getArtifactContent(artifactUri);
@@ -272,8 +311,8 @@ export class DaemonRuntimeFactory {
     const adapter = this.options.productAdapters?.memory;
     if (!adapter) {
       throw new DaemonUnsupportedCapabilityError(
-        "memory",
-        "Memory listing is not supported because no daemon memory adapter is configured."
+        'memory',
+        'Memory listing is not supported because no daemon memory adapter is configured.'
       );
     }
     return adapter.listMemories(scope);
@@ -283,19 +322,22 @@ export class DaemonRuntimeFactory {
     const adapter = this.options.productAdapters?.memory;
     if (!adapter) {
       throw new DaemonUnsupportedCapabilityError(
-        "memory",
-        "Memory deletion is not supported because no daemon memory adapter is configured."
+        'memory',
+        'Memory deletion is not supported because no daemon memory adapter is configured.'
       );
     }
     await adapter.deleteMemory(memoryId);
   }
 
-  async listCheckpoints(runId?: string, sessionId?: string): Promise<CheckpointRecord[]> {
+  async listCheckpoints(
+    runId?: string,
+    sessionId?: string
+  ): Promise<CheckpointRecord[]> {
     const adapter = this.options.productAdapters?.checkpoint;
     if (!adapter) {
       throw new DaemonUnsupportedCapabilityError(
-        "checkpoints",
-        "Checkpoint listing is not supported because no daemon checkpoint adapter is configured."
+        'checkpoints',
+        'Checkpoint listing is not supported because no daemon checkpoint adapter is configured.'
       );
     }
     return adapter.listCheckpoints({ runId, sessionId });
@@ -305,8 +347,8 @@ export class DaemonRuntimeFactory {
     const adapter = this.options.productAdapters?.checkpoint;
     if (!adapter?.restoreCheckpoint) {
       throw new DaemonUnsupportedCapabilityError(
-        "checkpoints",
-        "Checkpoint restore is not supported because no daemon checkpoint restore adapter is configured."
+        'checkpoints',
+        'Checkpoint restore is not supported because no daemon checkpoint restore adapter is configured.'
       );
     }
     return adapter.restoreCheckpoint(checkpointId);
@@ -316,8 +358,8 @@ export class DaemonRuntimeFactory {
     const adapter = this.options.productAdapters?.checkpoint;
     if (!adapter?.getCheckpointDiff) {
       throw new DaemonUnsupportedCapabilityError(
-        "checkpoints",
-        "Checkpoint diff is not supported because no daemon checkpoint diff adapter is configured."
+        'checkpoints',
+        'Checkpoint diff is not supported because no daemon checkpoint diff adapter is configured.'
       );
     }
     return adapter.getCheckpointDiff(checkpointId);
@@ -328,8 +370,8 @@ export class DaemonRuntimeFactory {
     if (!text) return false;
     if (!this.options.steerRun) {
       throw new DaemonUnsupportedCapabilityError(
-        "subagent",
-        "Subagent steer is not wired (missing steerRun on runtime factory)",
+        'subagent',
+        'Subagent steer is not wired (missing steerRun on runtime factory)'
       );
     }
     return this.options.steerRun(subagentRunId, text);
@@ -341,37 +383,52 @@ export class DaemonRuntimeFactory {
     latestError?: string;
   } {
     if (this.options.isRunActive?.(subagentRunId)) {
-      return { status: "running", progress: "active" };
+      return { status: 'running', progress: 'active' };
     }
     const rec = this.options.getRunStatus?.(subagentRunId);
     if (rec) {
       return { status: rec.status };
     }
-    return { status: "unknown" };
+    return { status: 'unknown' };
   }
 
-  startMcpServer(serverId: string): { state: string } {
-    for (const manager of this.mcpManagers) {
-      if (typeof (manager as any).startServer === "function") {
-        try {
-          const result = (manager as any).startServer(serverId);
-          return { state: result?.state ?? "starting" };
-        } catch { /* continue */ }
-      }
+  async startMcpServer(serverId: string): Promise<{ state: string }> {
+    const manager = await this.ensureSharedMcpManagerForControl();
+    if (!manager) {
+      throw new DaemonUnsupportedCapabilityError(
+        'mcp',
+        `MCP server start not supported: ${serverId}`
+      );
     }
-    throw new DaemonUnsupportedCapabilityError("mcp", `MCP server start not supported: ${serverId}`);
+    if (!manager.getServer(serverId)) {
+      // 有 lifecycle 但无此名：返回 unknown（非 unsupported，避免 UI 永久禁用启停）
+      return { state: 'unknown' };
+    }
+    const result = await manager.startServer(serverId);
+    this.mcpManagers.add(manager);
+    this.lastMcpStatus = aggregateMcpStatus(
+      this.mcpManagers.size > 0 ? [...this.mcpManagers] : [manager]
+    );
+    return { state: result.state };
   }
 
-  stopMcpServer(serverId: string): { state: string } {
-    for (const manager of this.mcpManagers) {
-      if (typeof (manager as any).stopServer === "function") {
-        try {
-          const result = (manager as any).stopServer(serverId);
-          return { state: result?.state ?? "stopped" };
-        } catch { /* continue */ }
-      }
+  async stopMcpServer(serverId: string): Promise<{ state: string }> {
+    const manager = await this.ensureSharedMcpManagerForControl();
+    if (!manager) {
+      throw new DaemonUnsupportedCapabilityError(
+        'mcp',
+        `MCP server stop not supported: ${serverId}`
+      );
     }
-    throw new DaemonUnsupportedCapabilityError("mcp", `MCP server stop not supported: ${serverId}`);
+    if (!manager.getServer(serverId)) {
+      return { state: 'unknown' };
+    }
+    const result = await manager.stopServer(serverId);
+    this.mcpManagers.add(manager);
+    this.lastMcpStatus = aggregateMcpStatus(
+      this.mcpManagers.size > 0 ? [...this.mcpManagers] : [manager]
+    );
+    return { state: result.state };
   }
 
   listMcpServers(): Array<{
@@ -383,29 +440,49 @@ export class DaemonRuntimeFactory {
     lastError?: string;
     startedAt?: string;
   }> {
-    if (this.lastMcpStatus?.servers) {
-      return (this.lastMcpStatus.servers as any[]).map((s: any) => ({
-        id: s.id ?? s.name ?? "",
-        name: s.name ?? s.id ?? "",
-        state: s.state ?? "unknown",
-        transport: s.transport ?? undefined,
-        cachedToolCount: s.cachedToolCount ?? s.toolCount ?? undefined,
-        lastError: s.lastError ?? s.error ?? undefined,
-        startedAt: s.startedAt ?? undefined,
+    // 优先 live manager snapshot（含 shared，即使尚未 start 过 run）
+    if (this.mcpManagers.size > 0) {
+      return mapLifecycleServersToList(
+        aggregateMcpStatus([...this.mcpManagers]).servers
+      );
+    }
+    if (this.sharedMcpManager) {
+      return mapLifecycleServersToList(
+        aggregateMcpStatus([this.sharedMcpManager]).servers
+      );
+    }
+    if (this.lastMcpStatus?.servers && this.lastMcpStatus.servers.length > 0) {
+      return mapLifecycleServersToList(this.lastMcpStatus.servers);
+    }
+    // idle：从配置定义返回名字（state: configured），避免永远 []
+    if (this.options.mcpServers && this.options.mcpServers.length > 0) {
+      return this.options.mcpServers.map((server) => ({
+        id: server.name,
+        name: server.name,
+        state: 'configured',
+        transport: 'stdio',
       }));
     }
     return [];
   }
 
   createRunEngineFactory(): RunEngineFactory {
-    return createAgentRuntimeRunEngineFactory(async ({ runId, session, run }) => {
-      return this.createRuntimeOptions({ runId, session, run });
-    });
+    return createAgentRuntimeRunEngineFactory(
+      async ({ runId, session, run }) => {
+        return this.createRuntimeOptions({ runId, session, run });
+      }
+    );
   }
 
-  async createRuntimeOptions({ runId, session, run }: CreateRunEngineInput): Promise<AgentRuntimeOptions> {
+  async createRuntimeOptions({
+    runId,
+    session,
+    run,
+  }: CreateRunEngineInput): Promise<AgentRuntimeOptions> {
     if (!this.providerFactory) {
-      throw new Error("Provider factory not configured. Call setProviderFactory() first.");
+      throw new Error(
+        'Provider factory not configured. Call setProviderFactory() first.'
+      );
     }
 
     // ── 多层配置合并 ──
@@ -416,11 +493,14 @@ export class DaemonRuntimeFactory {
     });
 
     // 通过 ConfigMerger 合并所有层并校验
-    const { config: mergedConfig, validation } = runtimeConfigMerger.mergeAndValidate(layers);
+    const { config: mergedConfig, validation } =
+      runtimeConfigMerger.mergeAndValidate(layers);
     logRuntimeConfigValidation(runId, validation);
 
     // 从合并结果中提取运行时参数（非法 mode → ask，避免 silent full-access）
-    const permissionMode = normalizeDaemonPermissionMode(mergedConfig.permissionMode ?? "ask");
+    const permissionMode = normalizeDaemonPermissionMode(
+      mergedConfig.permissionMode ?? 'ask'
+    );
     // 探索型任务常需多轮读文件；16 偏紧，默认放宽到 32（仍可用 metadata/env 覆盖）
     const maxTurns = (mergedConfig.maxTurns as number) ?? 32;
     const subagentDepth = (mergedConfig.subagentDepth as number) ?? 0;
@@ -430,35 +510,46 @@ export class DaemonRuntimeFactory {
     const mutationCoordinator = this.getWorkspaceMutationCoordinator(run.cwd);
     const backgroundManager = this.backgroundCommandManagerForCwd(run.cwd);
     const contextState = new InMemoryContextState();
-    const sessionStore = new JsonlSessionStore(this.sessionStorePath(session.id, run.cwd), {
-      mode: "resume-or-create",
-    });
+    const sessionStore = new JsonlSessionStore(
+      this.sessionStorePath(session.id, run.cwd),
+      {
+        mode: 'resume-or-create',
+      }
+    );
     const scopedPromptContext = await buildDaemonScopedPromptContext(
       this.options.scopedContextStore,
       {
         cwd: run.cwd,
-        ...(stringMetadata(run.metadata, "workspaceRoot") !== undefined
-          ? { workspaceRoot: stringMetadata(run.metadata, "workspaceRoot") }
+        ...(stringMetadata(run.metadata, 'workspaceRoot') !== undefined
+          ? { workspaceRoot: stringMetadata(run.metadata, 'workspaceRoot') }
           : {}),
-        ...(stringMetadata(run.metadata, "projectRoot") !== undefined
-          ? { projectRoot: stringMetadata(run.metadata, "projectRoot") }
+        ...(stringMetadata(run.metadata, 'projectRoot') !== undefined
+          ? { projectRoot: stringMetadata(run.metadata, 'projectRoot') }
           : {}),
-        ...(stringArrayMetadata(run.metadata, "projectMarkers") !== undefined
-          ? { projectMarkers: stringArrayMetadata(run.metadata, "projectMarkers") }
+        ...(stringArrayMetadata(run.metadata, 'projectMarkers') !== undefined
+          ? {
+              projectMarkers: stringArrayMetadata(
+                run.metadata,
+                'projectMarkers'
+              ),
+            }
           : {}),
-        ...(stringArrayMetadata(run.metadata, "projectFiles") !== undefined
-          ? { projectFiles: stringArrayMetadata(run.metadata, "projectFiles") }
+        ...(stringArrayMetadata(run.metadata, 'projectFiles') !== undefined
+          ? { projectFiles: stringArrayMetadata(run.metadata, 'projectFiles') }
           : {}),
-        ...(stringArrayMetadata(run.metadata, "projectTags") !== undefined
-          ? { projectTags: stringArrayMetadata(run.metadata, "projectTags") }
+        ...(stringArrayMetadata(run.metadata, 'projectTags') !== undefined
+          ? { projectTags: stringArrayMetadata(run.metadata, 'projectTags') }
           : {}),
-        ...(stringArrayMetadata(run.metadata, "packageNames") !== undefined
-          ? { packageNames: stringArrayMetadata(run.metadata, "packageNames") }
+        ...(stringArrayMetadata(run.metadata, 'packageNames') !== undefined
+          ? { packageNames: stringArrayMetadata(run.metadata, 'packageNames') }
           : {}),
         metadata: run.metadata,
       }
     );
-    run.metadata = withScopedContextRunMetadata(run.metadata, scopedPromptContext.metadata);
+    run.metadata = withScopedContextRunMetadata(
+      run.metadata,
+      scopedPromptContext.metadata
+    );
     const mcpTools = await this.startMcpForRun({
       runId,
       sessionId: session.id,
@@ -472,12 +563,14 @@ export class DaemonRuntimeFactory {
     const filteredMcpTools =
       disabledMcp.size === 0
         ? mcpTools
-        : mcpTools.filter((tool) => !isMcpToolDisabledName(tool.name, disabledMcp));
+        : mcpTools.filter(
+            (tool) => !isMcpToolDisabledName(tool.name, disabledMcp)
+          );
 
     return {
       sessionId: session.id,
       cwd: run.cwd,
-      systemPrompt: stringMetadata(run.metadata, "systemPrompt"),
+      systemPrompt: stringMetadata(run.metadata, 'systemPrompt'),
       promptContext: {
         stableContext: scopedPromptContext.stableContext,
         volatileContext: scopedPromptContext.volatileContext,
@@ -499,15 +592,24 @@ export class DaemonRuntimeFactory {
       ],
       maxTurns,
       permissionPolicy,
-      approvalHandler: new DaemonApprovalHandler(this.options.approvalQueue, runId),
+      approvalHandler: new DaemonApprovalHandler(
+        this.options.approvalQueue,
+        runId
+      ),
       sessionStore,
       resumeSession: true,
       workspaceMutationCoordinator: mutationCoordinator,
       ...createProductRuntimeDefaults({
         cwd: run.cwd,
-        contextWindowTokens: numberMetadata(run.metadata, "contextWindowTokens"),
-        thresholdTokens: numberMetadata(run.metadata, "autoCompactAtTokens"),
-        preferredWorkingTokens: numberMetadata(run.metadata, "preferredWorkingTokens"),
+        contextWindowTokens: numberMetadata(
+          run.metadata,
+          'contextWindowTokens'
+        ),
+        thresholdTokens: numberMetadata(run.metadata, 'autoCompactAtTokens'),
+        preferredWorkingTokens: numberMetadata(
+          run.metadata,
+          'preferredWorkingTokens'
+        ),
         contextState,
       }),
     };
@@ -524,8 +626,13 @@ export class DaemonRuntimeFactory {
   }
 
   private sessionStorePath(sessionId: string, cwd: string): string {
-    const root = resolve(this.options.sessionStoreDir ?? ".codex/daemon-runtime-sessions");
-    const cwdHash = createHash("sha256").update(workspaceCoordinatorKey(cwd)).digest("hex").slice(0, 16);
+    const root = resolve(
+      this.options.sessionStoreDir ?? '.codex/daemon-runtime-sessions'
+    );
+    const cwdHash = createHash('sha256')
+      .update(workspaceCoordinatorKey(cwd))
+      .digest('hex')
+      .slice(0, 16);
     return join(root, `${safePathSegment(sessionId)}-${cwdHash}.jsonl`);
   }
 
@@ -539,23 +646,26 @@ export class DaemonRuntimeFactory {
     subagentDepth: number;
     maxTurns: number;
   }): AgentTool[] {
-    const baseTools = (this.toolFactory
-      ? this.toolFactory({
-          cwd: input.cwd,
-          mutationCoordinator: input.mutationCoordinator,
-          backgroundManager: input.backgroundManager,
-        })
-      : []
-    ).filter(
-      (tool) => tool.name !== "run_subagent"
-    );
+    const baseTools = (
+      this.toolFactory
+        ? this.toolFactory({
+            cwd: input.cwd,
+            mutationCoordinator: input.mutationCoordinator,
+            backgroundManager: input.backgroundManager,
+          })
+        : []
+    ).filter((tool) => tool.name !== 'run_subagent');
 
     const envMaxDepth = process.env.CRISH_MAX_SUBAGENT_DEPTH;
     const parsedEnvMax =
-      envMaxDepth !== undefined && envMaxDepth !== "" && Number.isFinite(Number(envMaxDepth))
+      envMaxDepth !== undefined &&
+      envMaxDepth !== '' &&
+      Number.isFinite(Number(envMaxDepth))
         ? Number(envMaxDepth)
         : undefined;
-    const maxSubagentDepth = resolveMaxSubagentDepth(parsedEnvMax ?? DEFAULT_MAX_SUBAGENT_DEPTH);
+    const maxSubagentDepth = resolveMaxSubagentDepth(
+      parsedEnvMax ?? DEFAULT_MAX_SUBAGENT_DEPTH
+    );
 
     return [
       ...baseTools,
@@ -573,8 +683,13 @@ export class DaemonRuntimeFactory {
     ];
   }
 
-  private backgroundCommandManagerForCwd(cwd: string): BackgroundCommandManager {
-    return this.options.getBackgroundCommandManager?.(cwd) ?? new BackgroundCommandManager({ workspaceRoot: cwd });
+  private backgroundCommandManagerForCwd(
+    cwd: string
+  ): BackgroundCommandManager {
+    return (
+      this.options.getBackgroundCommandManager?.(cwd) ??
+      new BackgroundCommandManager({ workspaceRoot: cwd })
+    );
   }
 
   private async startMcpForRun(input: {
@@ -598,14 +713,14 @@ export class DaemonRuntimeFactory {
       );
       return startResult.tools;
     } catch (cause) {
-      const diagnostic = syntheticMcpDiagnostic(cause, "daemon-mcp");
+      const diagnostic = syntheticMcpDiagnostic(cause, 'daemon-mcp');
       const status = mcpStatusFromDiagnostics([diagnostic]);
       this.lastMcpStatus = status;
       input.runMetadataTarget.metadata = withMcpRunMetadata(
         input.runMetadataTarget.metadata,
         {
           configured: true,
-          readiness: "degraded",
+          readiness: 'degraded',
           readyServers: [],
           degradedServers: [],
           pendingServers: [],
@@ -620,9 +735,38 @@ export class DaemonRuntimeFactory {
     }
   }
 
-  private async resolveMcpManager(input: DaemonMcpLifecycleManagerFactoryInput): Promise<McpLifecycleManager | undefined> {
+  private async resolveMcpManager(
+    input: DaemonMcpLifecycleManagerFactoryInput
+  ): Promise<McpLifecycleManager | undefined> {
     if (this.options.mcpLifecycleManagerFactory) {
       return this.options.mcpLifecycleManagerFactory(input);
+    }
+    return this.ensureSharedMcpManagerForControl();
+  }
+
+  /**
+   * 确保共享 McpLifecycleManager 存在（UI 启停与 run 共用单例）。
+   * 不自动 start 全部 server；startServer / manager.start() 再连。
+   */
+  private async ensureSharedMcpManagerForControl(): Promise<
+    McpLifecycleManager | undefined
+  > {
+    if (this.options.mcpLifecycleManagerFactory) {
+      // 工厂模式：优先复用已登记的 manager
+      for (const manager of this.mcpManagers) {
+        return manager;
+      }
+      // 尚无 run 时 factory 可能依赖 cwd；用默认 cwd 惰性创建并缓存
+      const created = await this.options.mcpLifecycleManagerFactory({
+        runId: 'mcp-control',
+        sessionId: 'mcp-control',
+        cwd: this.options.config.defaultCwd,
+      });
+      if (created) {
+        this.sharedMcpManager = created;
+        this.mcpManagers.add(created);
+      }
+      return created;
     }
 
     if (!this.options.mcpServers || this.options.mcpServers.length === 0) {
@@ -631,8 +775,8 @@ export class DaemonRuntimeFactory {
 
     if (!this.sharedMcpManager) {
       this.sharedMcpManager = new McpLifecycleManager({
-        id: "daemon-mcp",
-        label: "Daemon MCP",
+        id: 'daemon-mcp',
+        label: 'Daemon MCP',
         servers: this.options.mcpServers,
         startupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs,
       });
@@ -640,7 +784,9 @@ export class DaemonRuntimeFactory {
     return this.sharedMcpManager;
   }
 
-  private withMcpProviderDiagnostics(status: DaemonProviderStatusSnapshot): DaemonProviderStatusSnapshot {
+  private withMcpProviderDiagnostics(
+    status: DaemonProviderStatusSnapshot
+  ): DaemonProviderStatusSnapshot {
     const mcpStatus = this.getMcpStatusSnapshot();
     if (!mcpStatus.configured || mcpStatus.diagnostics.length === 0) {
       return status;
@@ -656,11 +802,15 @@ export class DaemonRuntimeFactory {
           metadata,
         }
       : {
-          code: mcpStatus.readiness === "degraded" ? "mcp_degraded" : "mcp_not_ready",
-          message: mcpStatus.readiness === "degraded"
-            ? "One or more MCP servers are degraded."
-            : "MCP lifecycle is not ready.",
-          kind: "mcp",
+          code:
+            mcpStatus.readiness === 'degraded'
+              ? 'mcp_degraded'
+              : 'mcp_not_ready',
+          message:
+            mcpStatus.readiness === 'degraded'
+              ? 'One or more MCP servers are degraded.'
+              : 'MCP lifecycle is not ready.',
+          kind: 'mcp',
           updatedAt: mcpStatus.updatedAt,
           metadata,
         };
@@ -675,17 +825,23 @@ export class DaemonRuntimeFactory {
 /**
  * 记录 ConfigMerger 运行时参数校验结果（日志输出，不阻断运行时创建）。
  */
-function logRuntimeConfigValidation(runId: string, result: ConfigValidationResult): void {
+function logRuntimeConfigValidation(
+  runId: string,
+  result: ConfigValidationResult
+): void {
   if (result.errors.length === 0) return;
   const messages = result.errors
-    .map((e) => `  [${e.path}] ${e.message}${e.received !== undefined ? ` (received: ${JSON.stringify(e.received)})` : ""}`)
-    .join("\n");
-  console.warn(`[DaemonRuntimeFactory/${runId}] Runtime config validation warnings:\n${messages}`);
+    .map(
+      (e) =>
+        `  [${e.path}] ${e.message}${e.received !== undefined ? ` (received: ${JSON.stringify(e.received)})` : ''}`
+    )
+    .join('\n');
+  console.warn(
+    `[DaemonRuntimeFactory/${runId}] Runtime config validation warnings:\n${messages}`
+  );
 }
 
 // ─── 多层配置合并 ────────────────────────────────────────
-
-type RuntimeConfigSourceName = "default" | "daemon-config" | "env" | "run-metadata";
 
 interface RuntimeConfigLayerSources {
   daemonConfig: DaemonConfig;
@@ -696,30 +852,32 @@ interface RuntimeConfigLayerSources {
  * 收集运行时配置层，按优先级从低到高排列：
  * DEFAULT(0) < DAEMON_CONFIG(150) < ENV(300) < RUN_METADATA(400)
  */
-function runtimeConfigLayers(sources: RuntimeConfigLayerSources): ConfigSource[] {
+function runtimeConfigLayers(
+  sources: RuntimeConfigLayerSources
+): ConfigSource[] {
   return [
     {
-      name: "default",
+      name: 'default',
       priority: CONFIG_SOURCE_PRIORITIES.DEFAULT,
       config: {
         maxTurns: 16,
-        permissionMode: "ask",
+        permissionMode: 'ask',
         subagentDepth: 0,
         timeoutMs: 300_000,
       },
     },
     {
-      name: "daemon-config",
+      name: 'daemon-config',
       priority: 150 as ConfigSourcePriority,
       config: runtimeConfigFromDaemonConfig(sources.daemonConfig),
     },
     {
-      name: "env",
+      name: 'env',
       priority: CONFIG_SOURCE_PRIORITIES.ENV,
       config: runtimeConfigFromEnv(process.env),
     },
     {
-      name: "run-metadata",
+      name: 'run-metadata',
       priority: 400 as ConfigSourcePriority,
       config: runtimeConfigFromRunMetadata(sources.runMetadata),
     },
@@ -729,7 +887,9 @@ function runtimeConfigLayers(sources: RuntimeConfigLayerSources): ConfigSource[]
 /**
  * 从 DaemonConfig 提取运行时参数。
  */
-function runtimeConfigFromDaemonConfig(config: DaemonConfig): Record<string, unknown> {
+function runtimeConfigFromDaemonConfig(
+  config: DaemonConfig
+): Record<string, unknown> {
   return {
     maxTurns: config.maxConcurrentRuns > 0 ? undefined : undefined,
   };
@@ -738,7 +898,9 @@ function runtimeConfigFromDaemonConfig(config: DaemonConfig): Record<string, unk
 /**
  * 从环境变量提取运行时参数。
  */
-function runtimeConfigFromEnv(env: Record<string, string | undefined>): Record<string, unknown> {
+function runtimeConfigFromEnv(
+  env: Record<string, string | undefined>
+): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   const maxTurns = env.CRISH_MAX_TURNS ?? env.CRISH_MAX_ROUNDS;
@@ -749,7 +911,8 @@ function runtimeConfigFromEnv(env: Record<string, string | undefined>): Record<s
     }
   }
 
-  const permissionMode = env.CRISH_PERMISSION_MODE ?? env.CRISH_PERMISSION_POLICY;
+  const permissionMode =
+    env.CRISH_PERMISSION_MODE ?? env.CRISH_PERMISSION_POLICY;
   if (permissionMode !== undefined) {
     result.permissionMode = normalizeDaemonPermissionMode(permissionMode);
   }
@@ -777,40 +940,55 @@ function runtimeConfigFromEnv(env: Record<string, string | undefined>): Record<s
  * 从 run.metadata 提取运行时参数。
  * 客户端发起 run-task 时传入的 metadata 具有最高优先级。
  */
-function runtimeConfigFromRunMetadata(metadata: JsonObject | undefined): Record<string, unknown> {
+function runtimeConfigFromRunMetadata(
+  metadata: JsonObject | undefined
+): Record<string, unknown> {
   if (!metadata) return {};
 
   const result: Record<string, unknown> = {};
 
-  const maxRounds = numberMetadata(metadata, "maxRounds");
+  const maxRounds = numberMetadata(metadata, 'maxRounds');
   if (maxRounds !== undefined) result.maxTurns = maxRounds;
 
   if (metadata.permissionMode !== undefined) {
-    result.permissionMode = normalizeDaemonPermissionMode(metadata.permissionMode);
+    result.permissionMode = normalizeDaemonPermissionMode(
+      metadata.permissionMode
+    );
   }
 
-  const depth = numberMetadata(metadata, "subagentDepth");
+  const depth = numberMetadata(metadata, 'subagentDepth');
   if (depth !== undefined) result.subagentDepth = depth;
 
-  const timeout = numberMetadata(metadata, "timeoutMs");
+  const timeout = numberMetadata(metadata, 'timeoutMs');
   if (timeout !== undefined) result.timeoutMs = timeout;
 
   return result;
 }
 
-function stringMetadata(metadata: JsonObject | undefined, key: string): string | undefined {
+function stringMetadata(
+  metadata: JsonObject | undefined,
+  key: string
+): string | undefined {
   const value = metadata?.[key];
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
-function numberMetadata(metadata: JsonObject | undefined, key: string): number | undefined {
+function numberMetadata(
+  metadata: JsonObject | undefined,
+  key: string
+): number | undefined {
   const value = metadata?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
-function stringArrayMetadata(metadata: JsonObject | undefined, key: string): string[] | undefined {
+function stringArrayMetadata(
+  metadata: JsonObject | undefined,
+  key: string
+): string[] | undefined {
   const value = metadata?.[key];
-  return Array.isArray(value) && value.every((item) => typeof item === "string")
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
     ? value
     : undefined;
 }
@@ -819,8 +997,10 @@ function stringArrayMetadata(metadata: JsonObject | undefined, key: string): str
 function parseMcpDisabledTools(metadata: JsonObject | undefined): Set<string> {
   const out = new Set<string>();
   const raw = metadata?.mcpDisabledTools;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [serverId, tools] of Object.entries(raw as Record<string, unknown>)) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [serverId, tools] of Object.entries(
+    raw as Record<string, unknown>
+  )) {
     if (!Array.isArray(tools)) continue;
     for (const t of tools) {
       const name = String(t).trim();
@@ -834,13 +1014,16 @@ function parseMcpDisabledTools(metadata: JsonObject | undefined): Set<string> {
   return out;
 }
 
-function isMcpToolDisabledName(toolName: string, disabled: Set<string>): boolean {
+function isMcpToolDisabledName(
+  toolName: string,
+  disabled: Set<string>
+): boolean {
   if (disabled.has(toolName)) return true;
   // mcp__server__rest → 尝试匹配 rest / server::rest
   const m = /^mcp__(.+?)__(.+)$/i.exec(toolName);
   if (m) {
-    const server = m[1] ?? "";
-    const rest = m[2] ?? "";
+    const server = m[1] ?? '';
+    const rest = m[2] ?? '';
     if (disabled.has(rest) || disabled.has(`${server}::${rest}`)) return true;
   }
   return false;
@@ -848,11 +1031,11 @@ function isMcpToolDisabledName(toolName: string, disabled: Set<string>): boolean
 
 function workspaceCoordinatorKey(cwd: string): string {
   const normalized = resolve(cwd);
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function safePathSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "session";
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120) || 'session';
 }
 
 function providerStatusProviderFromFactory(
@@ -861,7 +1044,7 @@ function providerStatusProviderFromFactory(
   const candidate = factory as DaemonProviderFactory & {
     getProviderStatusSnapshot?: () => DaemonProviderStatusSnapshot;
   };
-  return typeof candidate.getProviderStatusSnapshot === "function"
+  return typeof candidate.getProviderStatusSnapshot === 'function'
     ? () => candidate.getProviderStatusSnapshot!()
     : undefined;
 }
@@ -869,37 +1052,40 @@ function providerStatusProviderFromFactory(
 function unconfiguredProviderStatusSnapshot(): DaemonProviderStatusSnapshot {
   const updatedAt = new Date().toISOString();
   return {
-    credentialMode: "auto",
-    readiness: "missing",
-    providerId: "unconfigured",
-    routeId: "unconfigured",
-    baseUrl: "",
-    model: "",
-    upstreamModel: "",
-    endpoint: "auto",
+    credentialMode: 'auto',
+    readiness: 'missing',
+    providerId: 'unconfigured',
+    routeId: 'unconfigured',
+    baseUrl: '',
+    model: '',
+    upstreamModel: '',
+    endpoint: 'auto',
     stream: true,
-    systemPromptWireMode: "user-prefix",
+    systemPromptWireMode: 'user-prefix',
     apiKey: {
       hasApiKey: false,
-      source: "unset",
+      source: 'unset',
     },
     hasDirectApiKey: false,
-    apiKeySource: "unset",
+    apiKeySource: 'unset',
     gateway: {
       ready: false,
       credentialConfigured: false,
-      routeDecision: ["provider_factory_missing"],
+      routeDecision: ['provider_factory_missing'],
     },
     lastDiagnostic: {
-      code: "provider_factory_missing",
-      message: "Provider factory is not configured.",
+      code: 'provider_factory_missing',
+      message: 'Provider factory is not configured.',
       updatedAt,
     },
     updatedAt,
   };
 }
 
-function withMcpRunMetadata(metadata: JsonObject | undefined, mcp: JsonObject): JsonObject {
+function withMcpRunMetadata(
+  metadata: JsonObject | undefined,
+  mcp: JsonObject
+): JsonObject {
   return {
     ...(metadata ?? {}),
     mcp,
@@ -916,7 +1102,10 @@ function withScopedContextRunMetadata(
   };
 }
 
-function mcpRunMetadata(startResult: McpLifecycleStartResult, snapshot: McpLifecycleSnapshot): JsonObject {
+function mcpRunMetadata(
+  startResult: McpLifecycleStartResult,
+  snapshot: McpLifecycleSnapshot
+): JsonObject {
   return compactJsonObject({
     configured: true,
     readiness: readinessFromMcpSnapshot(snapshot),
@@ -934,7 +1123,9 @@ function mcpRunMetadata(startResult: McpLifecycleStartResult, snapshot: McpLifec
   });
 }
 
-function aggregateMcpStatus(managers: McpLifecycleManager[]): DaemonMcpStatusSnapshot {
+function aggregateMcpStatus(
+  managers: McpLifecycleManager[]
+): DaemonMcpStatusSnapshot {
   if (managers.length === 0) return unconfiguredMcpStatusSnapshot();
 
   const snapshots = managers.map((manager) => manager.snapshot());
@@ -972,11 +1163,17 @@ function aggregateMcpStatus(managers: McpLifecycleManager[]): DaemonMcpStatusSna
   };
 }
 
-function mcpStatusFromDiagnostics(diagnostics: McpLifecycleDiagnostic[]): DaemonMcpStatusSnapshot {
-  const updatedAt = diagnostics.map((diagnostic) => diagnostic.timestamp).sort().at(-1) ?? new Date().toISOString();
+function mcpStatusFromDiagnostics(
+  diagnostics: McpLifecycleDiagnostic[]
+): DaemonMcpStatusSnapshot {
+  const updatedAt =
+    diagnostics
+      .map((diagnostic) => diagnostic.timestamp)
+      .sort()
+      .at(-1) ?? new Date().toISOString();
   return {
     configured: true,
-    readiness: "degraded",
+    readiness: 'degraded',
     serverCount: 0,
     summary: {
       discovering: 0,
@@ -995,7 +1192,7 @@ function mcpStatusFromDiagnostics(diagnostics: McpLifecycleDiagnostic[]): Daemon
 function unconfiguredMcpStatusSnapshot(): DaemonMcpStatusSnapshot {
   return {
     configured: false,
-    readiness: "unknown",
+    readiness: 'unknown',
     serverCount: 0,
     summary: {
       discovering: 0,
@@ -1011,10 +1208,13 @@ function unconfiguredMcpStatusSnapshot(): DaemonMcpStatusSnapshot {
   };
 }
 
-function idleMcpStatusSnapshot(serverCount: number): DaemonMcpStatusSnapshot {
+function idleMcpStatusSnapshot(
+  serverCount: number,
+  servers: JsonObject[] = []
+): DaemonMcpStatusSnapshot {
   return {
     configured: true,
-    readiness: "unknown",
+    readiness: 'unknown',
     serverCount,
     summary: {
       discovering: 0,
@@ -1025,26 +1225,96 @@ function idleMcpStatusSnapshot(serverCount: number): DaemonMcpStatusSnapshot {
       stopped: 0,
     },
     diagnostics: [],
-    servers: [],
+    servers,
     updatedAt: new Date().toISOString(),
   };
 }
 
-function readinessFromMcpSnapshot(snapshot: McpLifecycleSnapshot): DaemonMcpStatusSnapshot["readiness"] {
+function configuredServersFromDefinitions(
+  definitions: McpServerDefinition[] | undefined
+): JsonObject[] {
+  if (!definitions?.length) return [];
+  const updatedAt = new Date().toISOString();
+  return definitions.map((server) =>
+    compactJsonObject({
+      id: server.name,
+      name: server.name,
+      label: server.label ?? server.name,
+      state: 'configured',
+      transport: 'stdio',
+      cachedToolCount: server.cachedTools?.length ?? 0,
+      updatedAt,
+    })
+  );
+}
+
+function mapLifecycleServersToList(
+  servers: JsonObject[] | Array<Record<string, unknown>>
+): Array<{
+  id: string;
+  name: string;
+  state: string;
+  transport?: string;
+  cachedToolCount?: number;
+  lastError?: string;
+  startedAt?: string;
+}> {
+  return servers.map((s) => {
+    const row = s as Record<string, unknown>;
+    const name = String(row.name ?? row.id ?? '');
+    const diagnostic =
+      row.diagnostic && typeof row.diagnostic === 'object'
+        ? (row.diagnostic as Record<string, unknown>)
+        : undefined;
+    return {
+      id: String(row.id ?? row.name ?? name),
+      name,
+      state: String(row.state ?? 'unknown'),
+      transport: typeof row.transport === 'string' ? row.transport : undefined,
+      cachedToolCount:
+        typeof row.cachedToolCount === 'number'
+          ? row.cachedToolCount
+          : typeof row.toolCount === 'number'
+            ? row.toolCount
+            : undefined,
+      lastError:
+        typeof row.lastError === 'string'
+          ? row.lastError
+          : typeof row.error === 'string'
+            ? row.error
+            : typeof diagnostic?.message === 'string'
+              ? diagnostic.message
+              : undefined,
+      startedAt: typeof row.startedAt === 'string' ? row.startedAt : undefined,
+    };
+  });
+}
+
+function readinessFromMcpSnapshot(
+  snapshot: McpLifecycleSnapshot
+): DaemonMcpStatusSnapshot['readiness'] {
   return readinessFromSummary(snapshot.summary);
 }
 
-function readinessFromSummary(summary: Record<string, number>): DaemonMcpStatusSnapshot["readiness"] {
-  if ((summary.degraded ?? 0) > 0) return "degraded";
-  if ((summary.starting ?? 0) > 0 || (summary.discovering ?? 0) > 0 || (summary.reconnecting ?? 0) > 0) {
-    return "starting";
+function readinessFromSummary(
+  summary: Record<string, number>
+): DaemonMcpStatusSnapshot['readiness'] {
+  if ((summary.degraded ?? 0) > 0) return 'degraded';
+  if (
+    (summary.starting ?? 0) > 0 ||
+    (summary.discovering ?? 0) > 0 ||
+    (summary.reconnecting ?? 0) > 0
+  ) {
+    return 'starting';
   }
-  if ((summary.ready ?? 0) > 0) return "ready";
-  if ((summary.stopped ?? 0) > 0) return "stopped";
-  return "unknown";
+  if ((summary.ready ?? 0) > 0) return 'ready';
+  if ((summary.stopped ?? 0) > 0) return 'stopped';
+  return 'unknown';
 }
 
-function mcpLifecycleSnapshotToJson(snapshot: McpLifecycleSnapshot): JsonObject {
+function mcpLifecycleSnapshotToJson(
+  snapshot: McpLifecycleSnapshot
+): JsonObject {
   return compactJsonObject({
     summary: snapshot.summary,
     diagnostics: snapshot.diagnostics.map(mcpDiagnosticToJson),
@@ -1052,7 +1322,9 @@ function mcpLifecycleSnapshotToJson(snapshot: McpLifecycleSnapshot): JsonObject 
   });
 }
 
-function mcpServerSnapshotToJson(server: McpLifecycleSnapshot["servers"][number]): JsonObject {
+function mcpServerSnapshotToJson(
+  server: McpLifecycleSnapshot['servers'][number]
+): JsonObject {
   return compactJsonObject({
     name: server.name,
     label: server.label,
@@ -1062,7 +1334,9 @@ function mcpServerSnapshotToJson(server: McpLifecycleSnapshot["servers"][number]
     availableToolCount: server.availableToolCount,
     diagnosticCount: server.diagnosticCount,
     diagnostics: server.diagnostics.map(mcpDiagnosticToJson),
-    diagnostic: server.diagnostic ? mcpDiagnosticToJson(server.diagnostic) : undefined,
+    diagnostic: server.diagnostic
+      ? mcpDiagnosticToJson(server.diagnostic)
+      : undefined,
     startedAt: server.startedAt,
     updatedAt: server.updatedAt,
   });
@@ -1083,17 +1357,20 @@ function mcpDiagnosticToJson(diagnostic: McpLifecycleDiagnostic): JsonObject {
   });
 }
 
-function syntheticMcpDiagnostic(cause: unknown, server: string): McpLifecycleDiagnostic {
+function syntheticMcpDiagnostic(
+  cause: unknown,
+  server: string
+): McpLifecycleDiagnostic {
   const message = cause instanceof Error ? cause.message : String(cause);
   return {
-    code: "MCP_CONNECT_FAILED",
+    code: 'MCP_CONNECT_FAILED',
     message,
-    phase: "startup-gate",
-    severity: "error",
+    phase: 'startup-gate',
+    severity: 'error',
     retryable: true,
     timestamp: new Date().toISOString(),
     server,
-    state: "degraded",
+    state: 'degraded',
     cause: message,
   };
 }

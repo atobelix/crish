@@ -17,6 +17,7 @@
  */
 import { isDemoMode } from './appMode';
 import { clientApiDemo } from './clientApi.demo';
+import { getDesktopDaemonClient } from './daemonClient';
 
 export interface CompactionSettings {
   enabled?: boolean;
@@ -82,7 +83,8 @@ export interface Settings {
   lastChangelogVersion?: string;
   defaultProvider?: string;
   defaultModel?: string;
-  defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  defaultThinkingLevel?:
+    'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   theme?: string;
   /** UI / mono font preferences (mirrored in crish_fonts) */
   fonts?: {
@@ -153,7 +155,10 @@ export const THINKING_LEVEL_IDS: readonly ThinkingLevel[] = [
   'xhigh',
 ] as const;
 
-export const RESPONSE_STYLE_OPTIONS: ReadonlyArray<{ value: ResponseStyle; label: string }> = [
+export const RESPONSE_STYLE_OPTIONS: ReadonlyArray<{
+  value: ResponseStyle;
+  label: string;
+}> = [
   { value: 'minimal', label: '简洁' },
   { value: 'low', label: '标准' },
   { value: 'medium', label: '详细' },
@@ -174,7 +179,11 @@ const RESPONSE_STYLE_LABEL_MAP: Readonly<Record<string, ResponseStyle>> = {
  */
 export function normalizeSettingsText(raw: unknown): string {
   if (raw == null) return '';
-  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+  if (
+    typeof raw !== 'string' &&
+    typeof raw !== 'number' &&
+    typeof raw !== 'boolean'
+  ) {
     return '';
   }
   let s = String(raw);
@@ -187,11 +196,17 @@ export function normalizeSettingsText(raw: unknown): string {
 }
 
 export function normalizeResponseStyle(raw: unknown): ResponseStyle {
-  if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high') return raw;
+  if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high')
+    return raw;
   if (typeof raw === 'string' || typeof raw === 'number') {
     const t = normalizeSettingsText(raw);
     const lower = t.toLowerCase();
-    if (lower === 'minimal' || lower === 'low' || lower === 'medium' || lower === 'high') {
+    if (
+      lower === 'minimal' ||
+      lower === 'low' ||
+      lower === 'medium' ||
+      lower === 'high'
+    ) {
       return lower;
     }
     const fromLabel = RESPONSE_STYLE_LABEL_MAP[t];
@@ -228,7 +243,10 @@ export function normalizeThinkingLevel(raw: unknown): ThinkingLevel {
 }
 
 /** Coerce loose LS / JSON values to boolean; unknown → fallback. */
-export function normalizeSettingsBool(raw: unknown, fallback: boolean): boolean {
+export function normalizeSettingsBool(
+  raw: unknown,
+  fallback: boolean
+): boolean {
   if (typeof raw === 'boolean') return raw;
   if (typeof raw === 'number') {
     if (raw === 1) return true;
@@ -237,8 +255,10 @@ export function normalizeSettingsBool(raw: unknown, fallback: boolean): boolean 
   }
   if (typeof raw === 'string') {
     const t = normalizeSettingsText(raw).toLowerCase();
-    if (t === 'true' || t === '1' || t === 'yes' || t === 'on' || t === '是') return true;
-    if (t === 'false' || t === '0' || t === 'no' || t === 'off' || t === '否') return false;
+    if (t === 'true' || t === '1' || t === 'yes' || t === 'on' || t === '是')
+      return true;
+    if (t === 'false' || t === '0' || t === 'no' || t === 'off' || t === '否')
+      return false;
   }
   return fallback;
 }
@@ -251,7 +271,11 @@ export function normalizeCustomRules(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
   for (const item of raw) {
-    if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
+    if (
+      typeof item !== 'string' &&
+      typeof item !== 'number' &&
+      typeof item !== 'boolean'
+    ) {
       continue;
     }
     const t = normalizeSettingsText(item);
@@ -287,7 +311,8 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
   const o = raw as Record<string, unknown>;
   const out: Partial<Settings> = { ...(raw as Partial<Settings>) };
 
-  if ('responseStyle' in o) out.responseStyle = normalizeResponseStyle(o.responseStyle);
+  if ('responseStyle' in o)
+    out.responseStyle = normalizeResponseStyle(o.responseStyle);
   if ('defaultThinkingLevel' in o) {
     out.defaultThinkingLevel = normalizeThinkingLevel(o.defaultThinkingLevel);
   }
@@ -302,7 +327,10 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     out.quietStartup = normalizeSettingsBool(o.quietStartup, true);
   }
   if ('enableSkillCommands' in o) {
-    out.enableSkillCommands = normalizeSettingsBool(o.enableSkillCommands, true);
+    out.enableSkillCommands = normalizeSettingsBool(
+      o.enableSkillCommands,
+      true
+    );
   }
   if ('enableAnalytics' in o) {
     out.enableAnalytics = normalizeSettingsBool(o.enableAnalytics, false);
@@ -311,14 +339,27 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     out.collapseChangelog = normalizeSettingsBool(o.collapseChangelog, false);
   }
   if ('enableInstallTelemetry' in o) {
-    out.enableInstallTelemetry = normalizeSettingsBool(o.enableInstallTelemetry, false);
+    out.enableInstallTelemetry = normalizeSettingsBool(
+      o.enableInstallTelemetry,
+      false
+    );
   }
   if ('customRules' in o) out.customRules = normalizeCustomRules(o.customRules);
-  if ('mcpDisabledTools' in o && o.mcpDisabledTools && typeof o.mcpDisabledTools === 'object' && !Array.isArray(o.mcpDisabledTools)) {
+  if (
+    'mcpDisabledTools' in o &&
+    o.mcpDisabledTools &&
+    typeof o.mcpDisabledTools === 'object' &&
+    !Array.isArray(o.mcpDisabledTools)
+  ) {
     const map: Record<string, string[]> = {};
-    for (const [k, v] of Object.entries(o.mcpDisabledTools as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(
+      o.mcpDisabledTools as Record<string, unknown>
+    )) {
       if (!k || !Array.isArray(v)) continue;
-      const tools = v.map(String).map((t) => t.trim()).filter(Boolean);
+      const tools = v
+        .map(String)
+        .map((t) => t.trim())
+        .filter(Boolean);
       if (tools.length) map[k] = tools;
     }
     out.mcpDisabledTools = map;
@@ -327,8 +368,10 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     const v = normalizeSettingsText(o.sendShortcut);
     out.sendShortcut = v === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
   }
-  if ('defaultProvider' in o) out.defaultProvider = normalizeSettingsText(o.defaultProvider);
-  if ('defaultModel' in o) out.defaultModel = normalizeSettingsText(o.defaultModel);
+  if ('defaultProvider' in o)
+    out.defaultProvider = normalizeSettingsText(o.defaultProvider);
+  if ('defaultModel' in o)
+    out.defaultModel = normalizeSettingsText(o.defaultModel);
   if ('theme' in o) {
     const theme = normalizeSettingsText(o.theme);
     out.theme = theme || 'default';
@@ -343,7 +386,12 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
   }
   if ('httpProxy' in o) out.httpProxy = normalizeSettingsText(o.httpProxy);
 
-  if ('fonts' in o && o.fonts && typeof o.fonts === 'object' && !Array.isArray(o.fonts)) {
+  if (
+    'fonts' in o &&
+    o.fonts &&
+    typeof o.fonts === 'object' &&
+    !Array.isArray(o.fonts)
+  ) {
     const f = o.fonts as Record<string, unknown>;
     out.fonts = {
       ...(o.fonts as Settings['fonts']),
@@ -375,11 +423,16 @@ export function getDefaultSettings(): Settings {
  * 非对象 / 损坏输入 → 纯默认。
  */
 export function normalizeSettingsPayload(raw: unknown): Settings {
-  const partial = parseSettingsJson(raw) ?? (raw && typeof raw === 'object' && !Array.isArray(raw)
-    ? (raw as Partial<Settings>)
-    : null);
+  const partial =
+    parseSettingsJson(raw) ??
+    (raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Partial<Settings>)
+      : null);
   if (!partial) return getDefaultSettings();
-  const merged = deepMergeSettings(getDefaultSettings(), normalizeSettingsPartial(partial)) as Settings;
+  const merged = deepMergeSettings(
+    getDefaultSettings(),
+    normalizeSettingsPartial(partial)
+  ) as Settings;
   // 始终再夹一次关键枚举 / 布尔，避免 DEFAULT 缺键或 merge 漏网
   return {
     ...merged,
@@ -389,7 +442,10 @@ export function normalizeSettingsPayload(raw: unknown): Settings {
     tabModeEnabled: normalizeSettingsBool(merged.tabModeEnabled, true),
     quietStartup: normalizeSettingsBool(merged.quietStartup, true),
     sendShortcut: merged.sendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter',
-    enableSkillCommands: normalizeSettingsBool(merged.enableSkillCommands, true),
+    enableSkillCommands: normalizeSettingsBool(
+      merged.enableSkillCommands,
+      true
+    ),
     enableAnalytics: normalizeSettingsBool(merged.enableAnalytics, false),
     customRules: normalizeCustomRules(merged.customRules),
     defaultProvider: normalizeSettingsText(merged.defaultProvider),
@@ -447,7 +503,12 @@ const DEFAULT_SETTINGS: Settings = {
   compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
   branchSummary: { reserveTokens: 16384, skipPrompt: false },
   retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000 },
-  terminal: { showImages: true, imageWidthCells: 60, clearOnShrink: false, showTerminalProgress: false },
+  terminal: {
+    showImages: true,
+    imageWidthCells: 60,
+    clearOnShrink: false,
+    showTerminalProgress: false,
+  },
   images: { autoResize: true, blockImages: false },
   markdown: { codeBlockIndent: '  ' },
   warnings: { anthropicExtraUsage: true },
@@ -486,13 +547,15 @@ const initSettingsDb = () => {
 };
 
 /** Recursive deep merge for settings-like plain objects (arrays replaced, nested objects cloned). */
-export function deepMergeSettings<T extends object, S extends object = Partial<T>>(
-  target: T | null | undefined,
-  source: S | null | undefined,
-): T & S {
+export function deepMergeSettings<
+  T extends object,
+  S extends object = Partial<T>,
+>(target: T | null | undefined, source: S | null | undefined): T & S {
   if (!source) return (target ?? ({} as T)) as T & S;
   if (!target) return deepMergeSettings({} as T, source);
-  const output: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  const output: Record<string, unknown> = {
+    ...(target as Record<string, unknown>),
+  };
   for (const key of Object.keys(source as object)) {
     const srcVal = (source as Record<string, unknown>)[key];
     const tgtVal = output[key];
@@ -543,7 +606,7 @@ async function withSettingsWriteLock<T>(fn: () => Promise<T>): Promise<T> {
           } catch (e) {
             reject(e);
           }
-        },
+        }
       );
     });
   }
@@ -571,6 +634,26 @@ function projectSettingsKey(cwd: string): string {
   return `crish_project_settings_${normalizedCwd}`;
 }
 
+function isMcpServer(obj: unknown): obj is McpServer {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.name === 'string' &&
+    (o.type === 'stdio' || o.type === 'sse')
+  );
+}
+
+function isCronJob(obj: unknown): obj is CronJob {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.cronExpression === 'string' &&
+    typeof o.prompt === 'string'
+  );
+}
+
 export const clientApi = {
   // ── Settings（正式路径）────────────────────────────────────────────────
 
@@ -592,7 +675,9 @@ export const clientApi = {
    * 仅读项目局部设置（不合并全局）。用于规则/技能等「按具体项目」编辑，
    * 避免 getSettingsEx 合并后把全局 customRules 误显示成项目规则。
    */
-  getProjectSettingsPartial: async (cwd: string): Promise<Partial<Settings>> => {
+  getProjectSettingsPartial: async (
+    cwd: string
+  ): Promise<Partial<Settings>> => {
     initSettingsDb();
     if (!cwd || cwd === '__global__') return {};
     const projectSettingsStr = localStorage.getItem(projectSettingsKey(cwd));
@@ -621,10 +706,13 @@ export const clientApi = {
           if (rawStr) {
             localStorage.setItem(
               `${SETTINGS_KEY}__corrupt_backup_${Date.now()}`,
-              rawStr,
+              rawStr
             );
           }
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(getDefaultSettings()));
+          localStorage.setItem(
+            SETTINGS_KEY,
+            JSON.stringify(getDefaultSettings())
+          );
         } catch {
           /* ignore */
         }
@@ -646,11 +734,18 @@ export const clientApi = {
       return globalSettings;
     }
     return normalizeSettingsPayload(
-      deepMergeSettings(globalSettings, normalizeSettingsPartial(projectPartial)),
+      deepMergeSettings(
+        globalSettings,
+        normalizeSettingsPartial(projectPartial)
+      )
     );
   },
 
-  saveSettingsEx: async (cwd: string, scope: 'global' | 'project', updates: Partial<Settings>): Promise<Settings> => {
+  saveSettingsEx: async (
+    cwd: string,
+    scope: 'global' | 'project',
+    updates: Partial<Settings>
+  ): Promise<Settings> => {
     initSettingsDb();
     return withSettingsWriteLock(async () => {
       const safeUpdates = normalizeSettingsPartial(updates);
@@ -664,7 +759,9 @@ export const clientApi = {
             current = normalizeSettingsPayload(parsed);
           }
         }
-        const merged = normalizeSettingsPayload(deepMergeSettings(current, safeUpdates));
+        const merged = normalizeSettingsPayload(
+          deepMergeSettings(current, safeUpdates)
+        );
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
         return merged;
       } else {
@@ -676,7 +773,7 @@ export const clientApi = {
           current = { ...parsedProj } as Record<string, unknown>;
         }
         const merged = normalizeSettingsPartial(
-          deepMergeSettings(current, safeUpdates),
+          deepMergeSettings(current, safeUpdates)
         );
         localStorage.setItem(projKey, JSON.stringify(merged));
 
@@ -688,7 +785,9 @@ export const clientApi = {
             globalSettings = normalizeSettingsPayload(parsed);
           }
         }
-        return normalizeSettingsPayload(deepMergeSettings(globalSettings, merged));
+        return normalizeSettingsPayload(
+          deepMergeSettings(globalSettings, merged)
+        );
       }
     });
   },
@@ -696,13 +795,15 @@ export const clientApi = {
   // ── Telemetry：正式 no-op；demo → clientApi.demo ───────────────────────
 
   subscribeTelemetry: (
-    onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void,
+    onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void
   ): (() => void) => {
     if (!isDemoMode()) return () => undefined;
     return clientApiDemo.subscribeTelemetry(onData);
   },
 
   // ── Providers — DEAD formal（providerProfiles）；demo mock ──────────────
+  // HONEST: 正式路径永不返回假「已支持 Anthropic/Gemini 原生」列表。
+  // 真实配置轨 = providerProfiles + update-config；引擎仅 OpenAI-compatible。
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   getProviders: async (): Promise<ProviderInfo[]> => {
@@ -711,13 +812,19 @@ export const clientApi = {
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
-  updateProviderKey: async (id: string, apiKey: string): Promise<ProviderInfo[]> => {
+  updateProviderKey: async (
+    id: string,
+    apiKey: string
+  ): Promise<ProviderInfo[]> => {
     if (!isDemoMode()) return [];
     return clientApiDemo.updateProviderKey(id, apiKey);
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
-  updateProviderModels: async (id: string, models: string[]): Promise<ProviderInfo[]> => {
+  updateProviderModels: async (
+    id: string,
+    models: string[]
+  ): Promise<ProviderInfo[]> => {
     if (!isDemoMode()) return [];
     return clientApiDemo.updateProviderModels(id, models);
   },
@@ -728,43 +835,121 @@ export const clientApi = {
     return clientApiDemo.fetchLatestModels(id);
   },
 
-  // ── Cron — formal 无假定时；demo localStorage ──────────────────────────
-
-  /** HONEST-HIDE formal: returns []. Demo only reads localStorage mock. */
   getScheduledTasks: async (): Promise<CronJob[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.getScheduledTasks();
+    if (isDemoMode()) return clientApiDemo.getScheduledTasks();
+    try {
+      const client = getDesktopDaemonClient();
+      const res = (await client.request(
+        { type: 'cron.list_tasks' },
+        [
+          'cron.list_tasks_response',
+          'cron.list_tasks',
+          'cron.tasks_listed',
+          'cron.tasks',
+        ],
+        10_000
+      )) as { tasks?: unknown[]; jobs?: unknown[] };
+      const rawList = res.tasks || res.jobs || [];
+      return Array.isArray(rawList) ? rawList.filter(isCronJob) : [];
+    } catch (e) {
+      console.error('getScheduledTasks daemon RPC error:', e);
+      return [];
+    }
   },
 
-  /** HONEST-HIDE formal: returns []. */
   saveScheduledTask: async (task: CronJob): Promise<CronJob[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.saveScheduledTask(task);
+    if (isDemoMode()) return clientApiDemo.saveScheduledTask(task);
+    try {
+      const client = getDesktopDaemonClient();
+      await client.request(
+        { type: 'cron.upsert_task', task },
+        ['cron.upsert_task_response', 'cron.upsert_task', 'cron.task_upserted'],
+        10_000
+      );
+      return clientApi.getScheduledTasks();
+    } catch (e) {
+      console.error('saveScheduledTask daemon RPC error:', e);
+      return [];
+    }
   },
 
-  /** HONEST-HIDE formal: returns []. */
   deleteScheduledTask: async (id: string): Promise<CronJob[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.deleteScheduledTask(id);
+    if (isDemoMode()) return clientApiDemo.deleteScheduledTask(id);
+    try {
+      const client = getDesktopDaemonClient();
+      await client.request(
+        { type: 'cron.delete_task', id },
+        ['cron.delete_task_response', 'cron.delete_task', 'cron.task_deleted'],
+        10_000
+      );
+      return clientApi.getScheduledTasks();
+    } catch (e) {
+      console.error('deleteScheduledTask daemon RPC error:', e);
+      return [];
+    }
   },
 
-  // ── MCP localStorage — formal 用 mcpApi；demo mock ─────────────────────
+  // ── MCP — Daemon RPC 通信链路 (`mcp.list_servers`, `mcp.upsert_server`, `mcp.delete_server`) ────
 
-  /** HONEST-HIDE formal: returns []. Demo: localStorage. Formal MCP → mcpApi. */
   getMcpServers: async (): Promise<McpServer[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.getMcpServers();
+    if (isDemoMode()) return clientApiDemo.getMcpServers();
+    try {
+      const client = getDesktopDaemonClient();
+      const res = (await client.request(
+        { type: 'mcp.list_servers' },
+        [
+          'mcp.list_servers_response',
+          'mcp.list_servers',
+          'mcp.servers_listed',
+          'mcp.servers',
+        ],
+        10_000
+      )) as { servers?: unknown[] };
+      const rawList = res.servers || [];
+      return Array.isArray(rawList) ? rawList.filter(isMcpServer) : [];
+    } catch (e) {
+      console.error('getMcpServers daemon RPC error:', e);
+      return [];
+    }
   },
 
-  /** HONEST-HIDE formal: returns []. */
   saveMcpServer: async (server: McpServer): Promise<McpServer[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.saveMcpServer(server);
+    if (isDemoMode()) return clientApiDemo.saveMcpServer(server);
+    try {
+      const client = getDesktopDaemonClient();
+      await client.request(
+        { type: 'mcp.upsert_server', server },
+        [
+          'mcp.upsert_server_response',
+          'mcp.upsert_server',
+          'mcp.server_upserted',
+        ],
+        10_000
+      );
+      return clientApi.getMcpServers();
+    } catch (e) {
+      console.error('saveMcpServer daemon RPC error:', e);
+      return [];
+    }
   },
 
-  /** HONEST-HIDE formal: returns []. */
   deleteMcpServer: async (id: string): Promise<McpServer[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.deleteMcpServer(id);
+    if (isDemoMode()) return clientApiDemo.deleteMcpServer(id);
+    try {
+      const client = getDesktopDaemonClient();
+      await client.request(
+        { type: 'mcp.delete_server', id },
+        [
+          'mcp.delete_server_response',
+          'mcp.delete_server',
+          'mcp.server_deleted',
+        ],
+        10_000
+      );
+      return clientApi.getMcpServers();
+    } catch (e) {
+      console.error('deleteMcpServer daemon RPC error:', e);
+      return [];
+    }
   },
 };

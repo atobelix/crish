@@ -24,18 +24,18 @@ import type {
   ToolCallBlock,
   ToolExecutionContext,
   ToolOutput,
-} from "@crish/shared-types";
-import type { AgentTool } from "../types";
-import { validateToolInput, repairToolInput } from "../tools";
-import { createId, nowIso } from "../session";
-import { RingBuffer } from "@crish/shared-utils";
-import { SingleToolExecutor } from "./single-tool-executor";
+} from '@crish/shared-types';
+import type { AgentTool } from '../types';
+import { validateToolInput, repairToolInput } from '../tools';
+import { createId, nowIso } from '../session';
+import { RingBuffer } from '@crish/shared-utils';
+import { SingleToolExecutor } from './single-tool-executor';
 
 // ─── 工具执行完成结果 ─────────────────────────────────────
 
 export type ToolExecutionCompletion =
   | { ok: true; output: ToolOutput }
-  | { ok: false; kind: "error" | "timeout" | "cancelled"; cause: unknown };
+  | { ok: false; kind: 'error' | 'timeout' | 'cancelled'; cause: unknown };
 
 // ─── 工具执行器配置 ───────────────────────────────────────
 
@@ -120,33 +120,41 @@ export class ToolExecutor {
   constructor(private readonly options: ToolExecutorOptions) {}
 
   /**
-   * 将工具调用按并行/串行分区
+   * 将工具调用按并发语义分区：
+   * - parallel：可并入同组并行执行
+   * - sequential：同批串行（各自成组，组间有序）
+   * - exclusive：全局互斥写工具 — 每条独立成组，且绝不与其他 tool 同组并行
    *
-   * 并行工具会被分到同一组，其他工具按顺序执行。
    * 此方法为公共方法，供外部调用者使用分区逻辑而不委托执行。
    */
-  partitionBatch(toolCalls: ToolCallBlock[], tools: AgentTool[]): ToolCallBlock[][] {
-    // 简单分区：将并行工具分到一组，其他按顺序执行
+  partitionBatch(
+    toolCalls: ToolCallBlock[],
+    tools: AgentTool[]
+  ): ToolCallBlock[][] {
     const groups: ToolCallBlock[][] = [];
     let currentParallelGroup: ToolCallBlock[] = [];
 
+    const flushParallel = () => {
+      if (currentParallelGroup.length > 0) {
+        groups.push(currentParallelGroup);
+        currentParallelGroup = [];
+      }
+    };
+
     for (const call of toolCalls) {
       const tool = tools.find((t) => t.name === call.toolName);
-      if (tool?.concurrency === "parallel") {
+      const concurrency = tool?.concurrency ?? 'exclusive';
+      if (concurrency === 'parallel') {
         currentParallelGroup.push(call);
-      } else {
-        if (currentParallelGroup.length > 0) {
-          groups.push(currentParallelGroup);
-          currentParallelGroup = [];
-        }
-        groups.push([call]);
+        continue;
       }
+      // sequential 与 exclusive 均不得进入 parallel 组；
+      // exclusive 额外语义在 isFullyParallel / execute 路径保证无并发。
+      flushParallel();
+      groups.push([call]);
     }
 
-    if (currentParallelGroup.length > 0) {
-      groups.push(currentParallelGroup);
-    }
-
+    flushParallel();
     return groups;
   }
 
@@ -156,7 +164,7 @@ export class ToolExecutor {
   isFullyParallel(group: ToolCallBlock[], tools: AgentTool[]): boolean {
     return group.every((call) => {
       const tool = tools.find((t) => t.name === call.toolName);
-      return tool?.concurrency === "parallel";
+      return tool?.concurrency === 'parallel';
     });
   }
 
@@ -179,25 +187,31 @@ export class ToolExecutor {
 
     // ── 串行污染预检 ─────────────────────────────────────
     if (shouldExecuteSequential(toolCalls, tools)) {
-      const batchId = createId("batch");
+      const batchId = createId('batch');
       const calls = toolCalls.map((call) => this.toBatchCall(call, tools));
       yield {
-        type: "tool-batch-start",
+        type: 'tool-batch-start',
         sessionId,
         batchId,
         timestamp: nowIso(),
         summary: this.summarizeBatch(calls),
-        calls
+        calls,
       };
       const batchResults = yield* this.executeSequentialWithEvents(
-        toolCalls, tools, sessionId, cwd, signal, batchId, executeOne
+        toolCalls,
+        tools,
+        sessionId,
+        cwd,
+        signal,
+        batchId,
+        executeOne
       );
       yield {
-        type: "tool-batch-end",
+        type: 'tool-batch-end',
         sessionId,
         batchId,
         timestamp: nowIso(),
-        calls: batchResults
+        calls: batchResults,
       };
       return batchResults;
     }
@@ -206,29 +220,45 @@ export class ToolExecutor {
     const allResults: ToolBatchResult[] = [];
 
     for (const batch of batches) {
-      const batchId = createId("batch");
+      const batchId = createId('batch');
       const calls = batch.map((call) => this.toBatchCall(call, tools));
 
       yield {
-        type: "tool-batch-start",
+        type: 'tool-batch-start',
         sessionId,
         batchId,
         timestamp: nowIso(),
         summary: this.summarizeBatch(calls),
-        calls
+        calls,
       };
 
       const isParallel = this.isFullyParallel(batch, tools);
       const batchResults = isParallel
-        ? yield* this.executeParallelWithEvents(batch, tools, sessionId, cwd, signal, batchId, executeOne)
-        : yield* this.executeSequentialWithEvents(batch, tools, sessionId, cwd, signal, batchId, executeOne);
+        ? yield* this.executeParallelWithEvents(
+            batch,
+            tools,
+            sessionId,
+            cwd,
+            signal,
+            batchId,
+            executeOne
+          )
+        : yield* this.executeSequentialWithEvents(
+            batch,
+            tools,
+            sessionId,
+            cwd,
+            signal,
+            batchId,
+            executeOne
+          );
 
       yield {
-        type: "tool-batch-end",
+        type: 'tool-batch-end',
         sessionId,
         batchId,
         timestamp: nowIso(),
-        calls: batchResults
+        calls: batchResults,
       };
 
       allResults.push(...batchResults);
@@ -249,9 +279,20 @@ export class ToolExecutor {
     const results: ToolBatchResult[] = [];
     for (const call of toolCalls) {
       if (signal.aborted) break;
-      const result = yield* executeOne(call, tools, sessionId, cwd, signal, batchId);
+      const result = yield* executeOne(
+        call,
+        tools,
+        sessionId,
+        cwd,
+        signal,
+        batchId
+      );
       results.push(result);
-      if (result.isError && this.options.parallelFailurePolicy === "cancel-siblings") break;
+      if (
+        result.isError &&
+        this.options.parallelFailurePolicy === 'cancel-siblings'
+      )
+        break;
     }
     return results;
   }
@@ -267,35 +308,42 @@ export class ToolExecutor {
   ): AsyncGenerator<AgentEvent, ToolBatchResult[]> {
     // 并行执行需要使用 ProgressEventQueue 来收集事件
     type ParallelItem =
-      | { type: "event"; event: AgentEvent }
-      | { type: "result"; index: number; result: ToolBatchResult }
-      | { type: "error"; error: unknown };
+      | { type: 'event'; event: AgentEvent }
+      | { type: 'result'; index: number; result: ToolBatchResult }
+      | { type: 'error'; error: unknown };
 
     const queue = new ProgressEventQueue<ParallelItem>();
-    const results: Array<ToolBatchResult | undefined> = new Array(toolCalls.length);
+    const results: Array<ToolBatchResult | undefined> = new Array(
+      toolCalls.length
+    );
     const batchController = new AbortController();
 
     // 链接外部 signal
     const onAbort = (): void => batchController.abort();
-    signal.addEventListener("abort", onAbort, { once: true });
+    signal.addEventListener('abort', onAbort, { once: true });
 
     let completed = 0;
     for (let index = 0; index < toolCalls.length; index++) {
       const iterator = executeOne(
-        toolCalls[index]!, tools, sessionId, cwd, batchController.signal, batchId
+        toolCalls[index]!,
+        tools,
+        sessionId,
+        cwd,
+        batchController.signal,
+        batchId
       );
       void (async () => {
         try {
           while (true) {
             const next = await iterator.next();
             if (next.done) {
-              queue.push({ type: "result", index, result: next.value });
+              queue.push({ type: 'result', index, result: next.value });
               break;
             }
-            queue.push({ type: "event", event: next.value });
+            queue.push({ type: 'event', event: next.value });
           }
         } catch (error) {
-          queue.push({ type: "error", error });
+          queue.push({ type: 'error', error });
         }
       })();
     }
@@ -303,19 +351,19 @@ export class ToolExecutor {
     while (completed < toolCalls.length) {
       const next = await queue.next();
       if (next.done) break;
-      if (next.value.type === "event") {
+      if (next.value.type === 'event') {
         yield next.value.event;
         continue;
       }
-      if (next.value.type === "error") {
+      if (next.value.type === 'error') {
         batchController.abort();
-        signal.removeEventListener("abort", onAbort);
+        signal.removeEventListener('abort', onAbort);
         queue.close();
         throw next.value.error;
       }
       results[next.value.index] = next.value.result;
       if (
-        this.options.parallelFailurePolicy === "cancel-siblings" &&
+        this.options.parallelFailurePolicy === 'cancel-siblings' &&
         next.value.result.isError &&
         !batchController.signal.aborted
       ) {
@@ -324,9 +372,11 @@ export class ToolExecutor {
       completed += 1;
     }
 
-    signal.removeEventListener("abort", onAbort);
+    signal.removeEventListener('abort', onAbort);
     queue.close();
-    return results.filter((result): result is ToolBatchResult => Boolean(result));
+    return results.filter((result): result is ToolBatchResult =>
+      Boolean(result)
+    );
   }
 
   private async *executeSingleWithEvents(
@@ -340,7 +390,7 @@ export class ToolExecutor {
     const startedAt = Date.now();
     const call = this.toBatchCall(toolCall, tools);
 
-    yield { type: "tool-start", sessionId, batchId, call, timestamp: nowIso() };
+    yield { type: 'tool-start', sessionId, batchId, call, timestamp: nowIso() };
 
     const tool = tools.find((t) => t.name === toolCall.toolName);
     if (!tool) {
@@ -349,9 +399,15 @@ export class ToolExecutor {
         toolName: call.toolName,
         output: { text: `Tool not found: ${toolCall.toolName}` },
         isError: true,
-        durationMs: Date.now() - startedAt
+        durationMs: Date.now() - startedAt,
       };
-      yield { type: "tool-end", sessionId, batchId, result, timestamp: nowIso() };
+      yield {
+        type: 'tool-end',
+        sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      };
       return result;
     }
 
@@ -363,11 +419,19 @@ export class ToolExecutor {
       const result: ToolBatchResult = {
         id: call.id,
         toolName: call.toolName,
-        output: { text: `Tool input validation failed:\n${validationErrors.join("\n")}` },
+        output: {
+          text: `Tool input validation failed:\n${validationErrors.join('\n')}`,
+        },
         isError: true,
-        durationMs: Date.now() - startedAt
+        durationMs: Date.now() - startedAt,
       };
-      yield { type: "tool-end", sessionId, batchId, result, timestamp: nowIso() };
+      yield {
+        type: 'tool-end',
+        sessionId,
+        batchId,
+        result,
+        timestamp: nowIso(),
+      };
       return result;
     }
 
@@ -380,20 +444,25 @@ export class ToolExecutor {
       signal,
       emit(update) {
         progressQueue.push({
-          type: "tool-update",
+          type: 'tool-update',
           sessionId,
           batchId,
           toolCallId: toolCall.id,
           update,
-          timestamp: nowIso()
+          timestamp: nowIso(),
         });
-      }
+      },
     };
 
     const singleExecutor = new SingleToolExecutor(this.options.timeoutMs, []);
     const effectiveCall: ToolCallBlock = { ...toolCall, input: repairedInput };
     const executionPromise = singleExecutor
-      .execute(effectiveCall, (input, ctx) => tool.execute(input, ctx), context, signal)
+      .execute(
+        effectiveCall,
+        (input, ctx) => tool.execute(input, ctx),
+        context,
+        signal
+      )
       .finally(() => {
         progressQueue.close();
       });
@@ -411,10 +480,10 @@ export class ToolExecutor {
       toolName: call.toolName,
       output: completed.output,
       isError: completed.isError,
-      durationMs: Date.now() - startedAt
+      durationMs: Date.now() - startedAt,
     };
 
-    yield { type: "tool-end", sessionId, batchId, result, timestamp: nowIso() };
+    yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
     return result;
   }
 
@@ -425,8 +494,8 @@ export class ToolExecutor {
       toolName: call.toolName,
       input: call.input,
       summary: tool ? this.summarizeToolCall(tool, call.input) : call.toolName,
-      category: tool?.category ?? "internal",
-      concurrency: tool?.concurrency ?? "exclusive"
+      category: tool?.category ?? 'internal',
+      concurrency: tool?.concurrency ?? 'exclusive',
     };
   }
 
@@ -449,7 +518,7 @@ export class ToolExecutor {
     }
     return [...counts.entries()]
       .map(([category, count]) => `${count} ${category}`)
-      .join(", ");
+      .join(', ');
   }
 }
 

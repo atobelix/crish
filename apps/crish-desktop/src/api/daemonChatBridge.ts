@@ -15,10 +15,7 @@ import {
   commandMatchesWhitelist,
   extractCommandForMatch,
 } from './commandPermissions';
-import {
-  getCommandPermissions,
-  getPermissionMode,
-} from './storeAccess';
+import { getCommandPermissions, getPermissionMode } from './storeAccess';
 import {
   assistantBubbleForFailure,
   classifySoftFailure,
@@ -46,6 +43,15 @@ import {
   safeParseToolResult,
 } from './daemonEventZod';
 import type { FileDiff } from '../store/types';
+import {
+  extractEventSequence,
+  orchestratorEventToAgentEvent,
+  projectAssistantTextFromEvents,
+  streamRecovery,
+  suffixDelta,
+  type ReplayEvent,
+  type ReplayPayload,
+} from '../services/StreamRecovery';
 
 /** Message block text / content (thought or text delta). */
 export function blockText(block: unknown): string {
@@ -72,10 +78,14 @@ export function normalizeStreamSessionId(sessionId: unknown): string {
  * Event runId guard: missing/blank runId is treated as broadcast (accept);
  * non-empty mismatch drops the frame so foreign runs cannot drive this stream.
  */
-export function messageBelongsToRun(msgRunId: unknown, localRunId: string): boolean {
+export function messageBelongsToRun(
+  msgRunId: unknown,
+  localRunId: string
+): boolean {
   if (msgRunId == null) return true;
-  const rid = typeof msgRunId === 'string' ? msgRunId.trim() : String(msgRunId).trim();
-  if (!rid) return false;
+  const rid =
+    typeof msgRunId === 'string' ? msgRunId.trim() : String(msgRunId).trim();
+  if (!rid) return true;
   return rid === localRunId;
 }
 
@@ -90,7 +100,7 @@ export type ApprovalResolvedFields = {
  * Unknown/missing decision already mapped to deny by zod; empty toolCallId fails.
  */
 export function parseApprovalResolvedFields(
-  event: unknown,
+  event: unknown
 ): ParseResult<ApprovalResolvedFields> {
   const resolved = safeParseApprovalResolved(event);
   // Discriminant narrow: only read .error on ok === false (never !ok)
@@ -98,7 +108,10 @@ export function parseApprovalResolvedFields(
     return parseErr(resolved.error || 'approval-resolved parse failed');
   }
   const { toolCallId, denied, decision } = resolved.data;
-  const id = typeof toolCallId === 'string' ? toolCallId.trim() : String(toolCallId ?? '').trim();
+  const id =
+    typeof toolCallId === 'string'
+      ? toolCallId.trim()
+      : String(toolCallId ?? '').trim();
   if (!id) {
     return parseErr('approval-resolved empty toolCallId');
   }
@@ -141,7 +154,8 @@ export function toolCallFieldsFromEvent(event: Record<string, unknown>): {
 } {
   if (event.call != null) {
     const fromCall = toolCallFields(event.call);
-    if (fromCall.id && fromCall.name && fromCall.name !== 'tool') return fromCall;
+    if (fromCall.id && fromCall.name && fromCall.name !== 'tool')
+      return fromCall;
     // call 残缺时仍尝试顶层字段
     const fromTop = toolCallFields(event);
     if (fromTop.id && fromTop.name && fromTop.name !== 'tool') return fromTop;
@@ -161,8 +175,8 @@ export function toolResultFields(result: unknown): {
   // Discriminant: only read data when ok === true
   const id = basics.ok === true ? basics.data.id : '';
   const isError = basics.ok === true ? basics.data.isError : false;
-  let text = basics.ok === true ? basics.data.text : '';
-  let filePath = basics.ok === true ? basics.data.filePath : undefined;
+  const text = basics.ok === true ? basics.data.text : '';
+  const filePath = basics.ok === true ? basics.data.filePath : undefined;
 
   const r =
     result && typeof result === 'object' && !Array.isArray(result)
@@ -173,7 +187,11 @@ export function toolResultFields(result: unknown): {
   let diffs: FileDiff[] | undefined;
   if (Array.isArray(r.diffs)) {
     diffs = r.diffs as FileDiff[];
-  } else if (r.output && typeof r.output === 'object' && !Array.isArray(r.output)) {
+  } else if (
+    r.output &&
+    typeof r.output === 'object' &&
+    !Array.isArray(r.output)
+  ) {
     const o = r.output as Record<string, unknown>;
     if (Array.isArray(o.diffs)) diffs = o.diffs as FileDiff[];
   }
@@ -181,7 +199,9 @@ export function toolResultFields(result: unknown): {
   if (!filePath) {
     filePath =
       (typeof r.path === 'string' && r.path.trim() ? r.path.trim() : '') ||
-      (typeof r.filePath === 'string' && r.filePath.trim() ? r.filePath.trim() : '') ||
+      (typeof r.filePath === 'string' && r.filePath.trim()
+        ? r.filePath.trim()
+        : '') ||
       (r.output &&
       typeof r.output === 'object' &&
       !Array.isArray(r.output) &&
@@ -193,7 +213,12 @@ export function toolResultFields(result: unknown): {
     if (filePath === '') filePath = undefined;
   }
 
-  if (!diffs && text && !isError && (/\bdiff --git\b/.test(text) || /^@@\s+-\d/m.test(text))) {
+  if (
+    !diffs &&
+    text &&
+    !isError &&
+    (/\bdiff --git\b/.test(text) || /^@@\s+-\d/m.test(text))
+  ) {
     const parsed = parseUnifiedDiffs(text);
     if (parsed.length) diffs = parsed;
   }
@@ -206,7 +231,7 @@ export function toolResultFields(result: unknown): {
  * Rejects non-objects, arrays, and empty type strings (event guard).
  */
 export function resolveEventType(
-  event: unknown,
+  event: unknown
 ): { type: string; raw: Record<string, unknown> } | null {
   const zodEnv = safeParseDaemonEvent(event);
   if (zodEnv.ok === true) {
@@ -273,7 +298,7 @@ export function surfaceStreamFailure(
   raw: unknown,
   scope: string,
   callbacks: StreamCallbacks,
-  runId: string,
+  runId: string
 ): void {
   logInternalError(scope, raw);
   const kind = classifySoftFailure(raw);
@@ -305,17 +330,17 @@ export function createFinishController(
   callbacks: StreamCallbacks,
   cleanup: () => void,
   state: StreamState,
-  timeoutMs = 8000,
+  timeoutMs = 8000
 ): { finish: (force?: boolean) => void; tryResumeFinish: () => void } {
   const finish = (force = false) => {
     if (state.finished) return;
     if (!force && !state.cancelled) {
       if (approvalFlow.hasPending()) {
-        approvalFlow.dispatch({ type: "defer_terminal" });
+        approvalFlow.dispatch({ type: 'defer_terminal' });
         return;
       }
       if (approvalFlow.hasInflight()) {
-        approvalFlow.dispatch({ type: "defer_terminal" });
+        approvalFlow.dispatch({ type: 'defer_terminal' });
         if (state.endTimer) clearTimeout(state.endTimer);
         state.endTimer = setTimeout(() => finish(true), timeoutMs);
         return;
@@ -352,9 +377,12 @@ export class EventRouter {
   private approvalFlow: ApprovalFlowMachine;
   private callbacks: StreamCallbacks;
   private runId: string;
+  private sessionId: string;
   private finish: (force?: boolean) => void;
   private tryResumeFinish: () => void;
   private client: ReturnType<typeof getDesktopDaemonClient>;
+  /** 已应用到 UI 的最大 sequence（跳过 seq<=lastApplied） */
+  private lastAppliedSequence = 0;
 
   constructor(
     state: StreamState,
@@ -364,14 +392,118 @@ export class EventRouter {
     finish: (force?: boolean) => void,
     tryResumeFinish: () => void,
     client: ReturnType<typeof getDesktopDaemonClient>,
+    sessionId = ''
   ) {
     this.state = state;
     this.approvalFlow = approvalFlow;
     this.callbacks = callbacks;
     this.runId = runId;
+    this.sessionId = sessionId;
     this.finish = finish;
     this.tryResumeFinish = tryResumeFinish;
     this.client = client;
+  }
+
+  getLastAppliedSequence(): number {
+    return this.lastAppliedSequence;
+  }
+
+  /**
+   * 断线续流：按 sequence 排序，跳过已应用，message-delta 后缀累加（无重叠）。
+   * 供 StreamRecovery.setReplayHandler 调用。
+   */
+  applyReplayEvents(payload: ReplayPayload | ReplayEvent[]): void {
+    if (this.state.cancelled || this.state.finished) return;
+    const events = Array.isArray(payload) ? payload : payload.events;
+    if (!events.length) return;
+
+    const sorted = [...events].sort((a, b) => {
+      const sa = extractEventSequence(a) ?? 0;
+      const sb = extractEventSequence(b) ?? 0;
+      return sa - sb;
+    });
+
+    const fresh = sorted.filter((e) => {
+      const seq = extractEventSequence(e);
+      return seq == null || seq > this.lastAppliedSequence;
+    });
+    if (!fresh.length) return;
+
+    // 文本：投影全文后与本地 assistantText 做后缀对齐（lastSeq=0 全量也不重叠）
+    const projected = projectAssistantTextFromEvents(fresh);
+    // 当 afterSequence=0 时 projected 是从 run 起点的全文；否则是新增段
+    const afterSeq =
+      !Array.isArray(payload) && typeof payload.afterSequence === 'number'
+        ? payload.afterSequence
+        : this.lastAppliedSequence;
+    let textEmit = '';
+    if (afterSeq <= 0 && this.state.assistantText) {
+      // 全量投影：只 emit 超出已收正文的 suffix
+      const fullProjected = projectAssistantTextFromEvents(sorted);
+      textEmit = suffixDelta(this.state.assistantText, fullProjected);
+      if (
+        fullProjected.startsWith(this.state.assistantText) ||
+        !this.state.assistantText
+      ) {
+        this.state.assistantText =
+          fullProjected.length >= this.state.assistantText.length
+            ? fullProjected
+            : this.state.assistantText;
+      } else if (textEmit) {
+        this.state.assistantText += textEmit;
+      }
+    } else {
+      textEmit = projected;
+      if (textEmit) this.state.assistantText += textEmit;
+    }
+    if (textEmit) {
+      this.callbacks.onChunk(textEmit);
+      if (this.sessionId) {
+        streamRecovery.updateHeartbeat(this.sessionId, {
+          bytes: textEmit.length,
+        });
+      }
+    }
+
+    // 非文本事件（工具 / 审批 / 终态）仍走 handleAgentEvent；文本已处理则跳过 delta
+    for (const raw of fresh) {
+      const seq = extractEventSequence(raw);
+      const agent = orchestratorEventToAgentEvent(raw) ?? raw;
+      const type = String(agent.type ?? '');
+      if (
+        type === 'message-delta' ||
+        type === 'text-delta' ||
+        type === 'message-end'
+      ) {
+        // 文本已 suffix 合并；message-end 若带来更多内容再走一遍 merge
+        if (type === 'message-end') {
+          this.handleAgentEvent(agent);
+        }
+      } else {
+        this.handleAgentEvent(agent);
+      }
+      if (seq != null && seq > this.lastAppliedSequence) {
+        this.lastAppliedSequence = seq;
+        if (this.sessionId) {
+          streamRecovery.updateHeartbeat(this.sessionId, { sequence: seq });
+        }
+      }
+    }
+
+    if (
+      !Array.isArray(payload) &&
+      typeof payload.nextAfterSequence === 'number'
+    ) {
+      if (payload.nextAfterSequence > this.lastAppliedSequence) {
+        this.lastAppliedSequence = payload.nextAfterSequence;
+      }
+      if (this.sessionId) {
+        streamRecovery.setLastSequence(
+          this.sessionId,
+          payload.nextAfterSequence
+        );
+      }
+    }
   }
 
   private applyApprovalResolved(payload: unknown): void {
@@ -381,7 +513,11 @@ export class EventRouter {
       logInternalError('daemon-protocol', resolved.error);
       return;
     }
-    const { toolCallId: requestId, denied, decision: uiDecision } = resolved.data;
+    const {
+      toolCallId: requestId,
+      denied,
+      decision: uiDecision,
+    } = resolved.data;
     this.approvalFlow.dispatch({
       type: 'approval_resolved',
       toolId: requestId,
@@ -390,7 +526,11 @@ export class EventRouter {
     if (this.callbacks.onApprovalResolved) {
       this.callbacks.onApprovalResolved(requestId, uiDecision);
     }
-    if (denied && this.approvalFlow.isDeferredTerminal() && !this.approvalFlow.hasPending()) {
+    if (
+      denied &&
+      this.approvalFlow.isDeferredTerminal() &&
+      !this.approvalFlow.hasPending()
+    ) {
       this.finish(false);
     } else if (this.approvalFlow.snapshot().sawRunTerminal) {
       this.tryResumeFinish();
@@ -412,17 +552,27 @@ export class EventRouter {
       } else {
         const block = event.block;
         t = blockText(block);
-        const b = block && typeof block === 'object' ? (block as Record<string, unknown>) : null;
-        isThought = Boolean(b && (b.type === 'thought' || b.kind === 'thought'));
+        const b =
+          block && typeof block === 'object'
+            ? (block as Record<string, unknown>)
+            : null;
+        isThought = Boolean(
+          b && (b.type === 'thought' || b.kind === 'thought')
+        );
       }
       if (!t) return;
       if (isThought) {
         this.state.assistantThought += t;
         this.callbacks.onThought(this.state.assistantThought);
       } else {
+        let deltaToSend = t;
         if (event.message && typeof event.message === 'object') {
           const msg = event.message as Record<string, unknown>;
-          if (typeof msg.content === 'string' && msg.content.length >= this.state.assistantText.length) {
+          if (
+            typeof msg.content === 'string' &&
+            msg.content.length >= this.state.assistantText.length
+          ) {
+            deltaToSend = msg.content.slice(this.state.assistantText.length);
             this.state.assistantText = msg.content;
           } else {
             this.state.assistantText += t;
@@ -430,12 +580,18 @@ export class EventRouter {
         } else {
           this.state.assistantText += t;
         }
-        this.callbacks.onChunk(this.state.assistantText);
+        if (deltaToSend) {
+          this.callbacks.onChunk(deltaToSend);
+        }
       }
       return;
     }
 
-    if (type === 'message-end' && event.message && typeof event.message === 'object') {
+    if (
+      type === 'message-end' &&
+      event.message &&
+      typeof event.message === 'object'
+    ) {
       const msg = event.message as Record<string, unknown>;
       if (msg.role === 'assistant') {
         const blocks = Array.isArray(msg.blocks) ? msg.blocks : [];
@@ -444,13 +600,18 @@ export class EventRouter {
         for (const bl of blocks) {
           if (bl && typeof bl === 'object') {
             const b = bl as Record<string, unknown>;
-            if (b.type === 'thought' || b.kind === 'thought') thought += blockText(b);
+            if (b.type === 'thought' || b.kind === 'thought')
+              thought += blockText(b);
             else if (b.type === 'text') text += blockText(b);
           }
         }
-        if (typeof msg.content === 'string' && msg.content && !text) text = msg.content;
+        if (typeof msg.content === 'string' && msg.content && !text)
+          text = msg.content;
         if (thought.trim()) {
-          if (this.state.assistantThought && !this.state.assistantThought.includes(thought.trim())) {
+          if (
+            this.state.assistantThought &&
+            !this.state.assistantThought.includes(thought.trim())
+          ) {
             this.state.assistantThought = `${this.state.assistantThought}\n${thought.trim()}`;
           } else {
             this.state.assistantThought = thought.trim();
@@ -459,8 +620,15 @@ export class EventRouter {
         }
         if (text.trim()) {
           const piece = text.trim();
-          this.state.assistantText = mergeAssistantTextPiece(this.state.assistantText, piece);
-          this.callbacks.onChunk(this.state.assistantText);
+          const prevLen = this.state.assistantText.length;
+          this.state.assistantText = mergeAssistantTextPiece(
+            this.state.assistantText,
+            piece
+          );
+          if (this.state.assistantText.length > prevLen) {
+            const addedDelta = this.state.assistantText.slice(prevLen);
+            this.callbacks.onChunk(addedDelta);
+          }
         }
       }
       return;
@@ -501,7 +669,9 @@ export class EventRouter {
       const req = (
         parsedOk
           ? parsed.data.raw
-          : event.request && typeof event.request === 'object' && !Array.isArray(event.request)
+          : event.request &&
+              typeof event.request === 'object' &&
+              !Array.isArray(event.request)
             ? event.request
             : event
       ) as Record<string, unknown>;
@@ -514,23 +684,28 @@ export class EventRouter {
         if (parsed.ok === false) {
           logInternalError('daemon-protocol', parsed.error);
         } else {
-          logInternalError('daemon-protocol', 'approval-requested missing toolCallId');
+          logInternalError(
+            'daemon-protocol',
+            'approval-requested missing toolCallId'
+          );
         }
         return;
       }
-      const toolName = (
-        parsedOk
+      const toolName =
+        (parsedOk
           ? parsed.data.toolName
           : String(req.toolName ?? req.name ?? 'command')
-      ).trim() || 'command';
+        ).trim() || 'command';
       const args = extractApprovalCommandArgs(
         parsedOk && parsed.data.parameters
           ? { ...req, parameters: parsed.data.parameters }
-          : req,
+          : req
       );
       const explanation = parsedOk
         ? parsed.data.explanation
-        : String(req.summary ?? req.reason ?? req.message ?? toolName ?? '需要确认');
+        : String(
+            req.summary ?? req.reason ?? req.message ?? toolName ?? '需要确认'
+          );
       const approvalMeta = parseApprovalRiskMeta(event);
 
       if (this.approvalFlow.debugSets().pending.includes(toolCallId)) {
@@ -550,19 +725,22 @@ export class EventRouter {
             toolCallId,
             toolName,
             args,
-            explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许',
+            explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许'
           );
           void this.client
             .send({ type: 'approve-tool', toolCallId, scope: 'project' })
             .catch(() => {
-              this.approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
+              this.approvalFlow.dispatch({
+                type: 'approval_pending',
+                toolId: toolCallId,
+              });
               if (this.callbacks.onToolPendingApproval) {
                 this.callbacks.onToolPendingApproval(
                   toolCallId,
                   toolName,
                   args,
                   explanation,
-                  approvalMeta,
+                  approvalMeta
                 );
               }
             });
@@ -570,14 +748,17 @@ export class EventRouter {
         }
       }
 
-      this.approvalFlow.dispatch({ type: "approval_pending", toolId: toolCallId });
+      this.approvalFlow.dispatch({
+        type: 'approval_pending',
+        toolId: toolCallId,
+      });
       if (this.callbacks.onToolPendingApproval) {
         this.callbacks.onToolPendingApproval(
           toolCallId,
           toolName,
           args,
           explanation,
-          approvalMeta,
+          approvalMeta
         );
       } else {
         this.callbacks.onToolStart(toolCallId, toolName, args, explanation);
@@ -590,7 +771,11 @@ export class EventRouter {
       return;
     }
 
-    if (type === 'run-terminal' || type === 'run-completed' || type === 'run-failed') {
+    if (
+      type === 'run-terminal' ||
+      type === 'run-completed' ||
+      type === 'run-failed'
+    ) {
       const termParsed = safeParseRunTerminal(event);
       const termOk = termParsed.ok === true;
       const term = termOk
@@ -606,27 +791,27 @@ export class EventRouter {
       if (failed) {
         const errPayload = termOk
           ? termParsed.data.error
-          : event.error ?? event.message ?? event;
+          : (event.error ?? event.message ?? event);
         surfaceStreamFailure(
           errPayload ?? event,
           type === 'run-failed' ? 'run-failed' : 'run-terminal-failed',
           this.callbacks,
-          this.runId,
+          this.runId
         );
       }
-      this.approvalFlow.dispatch({ type: "run_terminal_seen" });
+      this.approvalFlow.dispatch({ type: 'run_terminal_seen' });
       if (this.approvalFlow.hasPending() && !failed) {
-        this.approvalFlow.dispatch({ type: "defer_terminal" });
+        this.approvalFlow.dispatch({ type: 'defer_terminal' });
         return;
       }
-      this.approvalFlow.dispatch({ type: "clear_all" });
+      this.approvalFlow.dispatch({ type: 'clear_all' });
       this.finish(failed);
       return;
     }
 
     if (type === 'agent-end') {
       if (this.approvalFlow.hasPending()) {
-        this.approvalFlow.dispatch({ type: "defer_terminal" });
+        this.approvalFlow.dispatch({ type: 'defer_terminal' });
         return;
       }
       const reason = String((event as { reason?: string }).reason || '');
@@ -635,7 +820,7 @@ export class EventRouter {
           (event as { error?: unknown }).error ?? event,
           'agent-end-error',
           this.callbacks,
-          this.runId,
+          this.runId
         );
         this.finish(true);
         return;
@@ -660,12 +845,30 @@ export class EventRouter {
 
     if (!messageBelongsToRun(msg.runId, this.runId)) return;
 
+    // 序号心跳：外层帧 / 嵌套 event / runtime-event 均尝试提取
+    const seq =
+      extractEventSequence(msg) ??
+      extractEventSequence(msg.event) ??
+      (msg.event && typeof msg.event === 'object'
+        ? extractEventSequence((msg.event as Record<string, unknown>).payload)
+        : null);
+    if (seq != null && seq > this.lastAppliedSequence) {
+      this.lastAppliedSequence = seq;
+    }
+    if (this.sessionId) {
+      streamRecovery.updateHeartbeat(this.sessionId, {
+        ...(seq != null ? { sequence: seq } : {}),
+      });
+    }
+
     if (type === 'subagent-started') {
       this.callbacks.onSubagentStarted?.({
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
         parentRunId: String(msg.runId ?? this.runId),
-        parentToolCallId: msg.parentToolCallId ? String(msg.parentToolCallId) : undefined,
+        parentToolCallId: msg.parentToolCallId
+          ? String(msg.parentToolCallId)
+          : undefined,
         description: String(msg.description ?? '协作 agent'),
         mode: String(msg.mode ?? 'research'),
       });
@@ -705,7 +908,7 @@ export class EventRouter {
         msg.message ?? msg.error ?? msg,
         'daemon-error',
         this.callbacks,
-        this.runId,
+        this.runId
       );
       this.approvalFlow.dispatch({ type: 'clear_all' });
       this.finish(true);
@@ -713,7 +916,12 @@ export class EventRouter {
     }
 
     if (type === 'event') {
-      if (!msg.event || typeof msg.event !== 'object' || Array.isArray(msg.event)) return;
+      if (
+        !msg.event ||
+        typeof msg.event !== 'object' ||
+        Array.isArray(msg.event)
+      )
+        return;
       this.handleAgentEvent(msg.event as Record<string, unknown>);
       return;
     }
@@ -724,7 +932,7 @@ export class EventRouter {
           msg.error ?? msg.message ?? msg,
           'run-ended-failed',
           this.callbacks,
-          this.runId,
+          this.runId
         );
       }
       this.approvalFlow.dispatch({ type: 'run_terminal_seen' });
@@ -752,13 +960,13 @@ export function createStreamCancel(
   callbacks: StreamCallbacks,
   approvalFlow: ApprovalFlowMachine,
   cleanup: () => void,
-  state: StreamState,
+  state: StreamState
 ): () => void {
   return () => {
     if (state.finished) return;
     state.cancelled = true;
-    approvalFlow.dispatch({ type: "clear_all" });
-    approvalFlow.dispatch({ type: "force_finish" });
+    approvalFlow.dispatch({ type: 'clear_all' });
+    approvalFlow.dispatch({ type: 'force_finish' });
     cleanup();
     void client.send({ type: 'cancel-run', runId }).catch(() => undefined);
     state.finished = true;
@@ -781,7 +989,7 @@ export async function createStreamSession(
   options: StreamRequestOptions | undefined,
   state: StreamState,
   onMessage: (msg: Record<string, unknown>) => void,
-  finish: (force?: boolean) => void,
+  finish: (force?: boolean) => void
 ): Promise<void> {
   try {
     const ready = await client.waitUntilConnected(1_500);
@@ -801,27 +1009,92 @@ export async function createStreamSession(
     const mode = getPermissionMode();
     const permissionMode = toDaemonPermissionMode(mode);
 
-    const hasImages = Boolean(options?.hasImages || options?.content?.some((p) => p.type === 'image_url'));
+    const hasImages = Boolean(
+      options?.hasImages ||
+      options?.content?.some((p) => p.type === 'image_url')
+    );
     const safeSessionId = normalizeStreamSessionId(sessionId);
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
     let budgetDifficulty: string | undefined;
+    let responseStyleSystemPrompt: string | undefined;
     try {
       const { clientApi } = await import('./clientApi');
       const sets = await clientApi.getSettingsEx(cwd || '__global__');
-      if (sets?.mcpDisabledTools && Object.keys(sets.mcpDisabledTools).length > 0) {
+      if (
+        sets?.mcpDisabledTools &&
+        Object.keys(sets.mcpDisabledTools).length > 0
+      ) {
         mcpDisabledTools = sets.mcpDisabledTools;
       }
-      const tl = String(sets?.defaultThinkingLevel || '').trim().toLowerCase();
+      const tl = String(sets?.defaultThinkingLevel || '')
+        .trim()
+        .toLowerCase();
       if (tl === 'off') budgetDifficulty = undefined;
       else if (tl === 'minimal') budgetDifficulty = 'easy';
       else if (tl === 'low') budgetDifficulty = 'easy';
       else if (tl === 'medium') budgetDifficulty = 'normal';
       else if (tl === 'high') budgetDifficulty = 'hard';
       else if (tl === 'xhigh') budgetDifficulty = 'hard';
+
+      // responseStyle → systemPrompt（设置不再是死配置）
+      const styleKey = String(sets?.responseStyle ?? 'medium');
+      const styleMap: Record<string, string> = {
+        minimal:
+          'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
+        low: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
+        medium:
+          'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
+        high: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
+        极简: 'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
+        简洁: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
+        适中: 'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
+        深入: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
+      };
+      const guidance =
+        styleMap[styleKey] ??
+        styleMap[styleKey.toLowerCase()] ??
+        styleMap.medium;
+      const base =
+        typeof options?.systemPrompt === 'string'
+          ? options.systemPrompt.trim()
+          : '';
+      if (base.includes('Response style:')) {
+        responseStyleSystemPrompt = base;
+      } else if (base) {
+        responseStyleSystemPrompt = `${base}\n\n${guidance}`;
+      } else {
+        responseStyleSystemPrompt = guidance;
+      }
     } catch {
       /* ignore */
     }
+
+    // Goal / long-run：透传 mode/visibleGoal/maxRounds/maxStalledRounds → 引擎 startGoalRun
+    const goalMode =
+      typeof options?.mode === 'string' ? options.mode.trim() : '';
+    const visibleGoal =
+      typeof options?.visibleGoal === 'string'
+        ? options.visibleGoal.trim()
+        : '';
+    const maxRounds =
+      typeof options?.maxRounds === 'number' &&
+      Number.isFinite(options.maxRounds) &&
+      options.maxRounds > 0
+        ? Math.floor(options.maxRounds)
+        : undefined;
+    const maxStalledRounds =
+      typeof options?.maxStalledRounds === 'number' &&
+      Number.isFinite(options.maxStalledRounds) &&
+      options.maxStalledRounds > 0
+        ? Math.floor(options.maxStalledRounds)
+        : undefined;
+
+    const systemPrompt =
+      responseStyleSystemPrompt ||
+      (typeof options?.systemPrompt === 'string' && options.systemPrompt.trim()
+        ? options.systemPrompt.trim()
+        : undefined);
 
     await client.send({
       type: 'run-task',
@@ -834,11 +1107,19 @@ export async function createStreamSession(
       ...(budgetDifficulty ? { budgetDifficulty } : {}),
       ...(options?.content?.length ? { content: options.content } : {}),
       ...(hasImages ? { hasImages: true } : {}),
-      ...(options?.attachments?.length ? { attachments: options.attachments } : {}),
+      ...(options?.attachments?.length
+        ? { attachments: options.attachments }
+        : {}),
+      ...(goalMode ? { mode: goalMode } : {}),
+      ...(visibleGoal ? { visibleGoal } : {}),
+      ...(maxRounds !== undefined ? { maxRounds } : {}),
+      ...(maxStalledRounds !== undefined ? { maxStalledRounds } : {}),
+      ...(systemPrompt ? { systemPrompt } : {}),
     });
   } catch (e) {
     logInternalError('stream-start', e);
-    if (callbacks.onRunError) callbacks.onRunError(networkUserMessage(), 'network');
+    if (callbacks.onRunError)
+      callbacks.onRunError(networkUserMessage(), 'network');
     else callbacks.onChunk(networkUserMessage());
     finish();
   }
@@ -858,10 +1139,12 @@ export function streamViaDaemon(
   callbacks: StreamCallbacks,
   sessionId: string,
   assistantMsgId: string,
-  options?: StreamRequestOptions,
+  options?: StreamRequestOptions
 ): () => void {
   const client = getDesktopDaemonClient();
   client.startKeepAlive();
+
+  const safeSessionId = normalizeStreamSessionId(sessionId);
 
   const state: StreamState = {
     cancelled: false,
@@ -880,42 +1163,106 @@ export function streamViaDaemon(
     /* ignore */
   }
 
-  const cleanup = () => cleanupStreamState(state);
+  // 主路径：真实 runId 到手即 register（createStreamSession 不替换 runId）
+  streamRecovery.registerStream(safeSessionId, runId);
+
+  let terminalMarked = false;
+  const markTerminal = (kind: 'completed' | 'failed', error?: string) => {
+    if (terminalMarked) return;
+    terminalMarked = true;
+    if (kind === 'completed') streamRecovery.markCompleted(safeSessionId);
+    else streamRecovery.markFailed(safeSessionId, error || 'failed');
+  };
+
+  const trackedCallbacks: StreamCallbacks = {
+    ...callbacks,
+    onChunk: (chunk: string) => {
+      if (chunk) {
+        streamRecovery.updateHeartbeat(safeSessionId, { bytes: chunk.length });
+      }
+      callbacks.onChunk(chunk);
+    },
+    onComplete: () => {
+      if (state.cancelled) markTerminal('failed', 'cancelled');
+      else markTerminal('completed');
+      callbacks.onComplete();
+    },
+    onRunError: (message, kind, detail) => {
+      markTerminal('failed', message || kind || 'error');
+      if (callbacks.onRunError) callbacks.onRunError(message, kind, detail);
+    },
+  };
+
+  const cleanup = () => {
+    cleanupStreamState(state);
+    streamRecovery.setReplayHandler(safeSessionId, null);
+  };
 
   const { finish, tryResumeFinish } = createFinishController(
     approvalFlow,
-    callbacks,
+    trackedCallbacks,
     cleanup,
     state,
-    options?.finishTimeoutMs ?? 8000,
+    options?.finishTimeoutMs ?? 8000
   );
 
   const router = new EventRouter(
     state,
     approvalFlow,
-    callbacks,
+    trackedCallbacks,
     runId,
     finish,
     tryResumeFinish,
     client,
+    safeSessionId
   );
+
+  streamRecovery.setReplayHandler(safeSessionId, (payload) => {
+    router.applyReplayEvents(payload);
+  });
+
+  // 若 onMessage 曾 unsub，重连后 ensure 重新订阅 live
+  const ensureLiveSubscription = () => {
+    if (state.finished || state.cancelled) return;
+    if (!state.unsub) {
+      state.unsub = client.onMessage((msg) => router.onMsg(msg));
+    }
+  };
 
   void createStreamSession(
     client,
     prompt,
-    sessionId,
+    safeSessionId,
     runId,
-    callbacks,
+    trackedCallbacks,
     options,
     state,
     (msg) => router.onMsg(msg),
-    finish,
+    finish
+  ).then(() => {
+    ensureLiveSubscription();
+  });
+
+  const cancel = createStreamCancel(
+    client,
+    runId,
+    trackedCallbacks,
+    approvalFlow,
+    cleanup,
+    state
   );
 
-  return createStreamCancel(client, runId, callbacks, approvalFlow, cleanup, state);
+  return () => {
+    markTerminal('failed', 'cancelled');
+    cancel();
+  };
 }
 
-export async function ensureDaemonConnected(): Promise<{ ok: boolean; url?: string; error?: string }> {
+export async function ensureDaemonConnected(): Promise<{
+  ok: boolean;
+  url?: string;
+  error?: string;
+}> {
   const client = getDesktopDaemonClient();
   client.startKeepAlive();
   try {

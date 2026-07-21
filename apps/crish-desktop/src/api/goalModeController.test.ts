@@ -6,12 +6,16 @@ import {
   computeGoalTaskProgress,
   createActiveGoalLifecycle,
   createIdleGoalLifecycle,
+  buildGoalRunTaskFields,
   createInitialGoalMode,
+  deactivateGoalMode,
   decideGoalContinuation,
   enterGoalMode,
   exitGoalMode,
   formatGoalProgressMessage,
   formatOpenGoalTasksForPrompt,
+  GOAL_DEFAULT_MAX_ITERATIONS,
+  GOAL_DEFAULT_MAX_STALLED_ROUNDS,
   goalLifecycleToSessionMode,
   goalStopAllowsToast,
   markAllGoalTasksDone,
@@ -29,7 +33,9 @@ import {
 } from './goalModeController';
 import type { SessionState } from '../store/types';
 
-function session(partial: Partial<SessionState> & { id: string }): SessionState {
+function session(
+  partial: Partial<SessionState> & { id: string }
+): SessionState {
   return {
     title: 't',
     folder: 'general',
@@ -62,7 +68,7 @@ describe('goalModeController', () => {
 
   it('parseChecklistTasks drops 本轮总结 noise (TasksCard aligned)', () => {
     const tasks = parseChecklistTasks(
-      '- [ ] 实现工具行\n- [x] 本轮总结：已完成若干命令\n- [ ] 写测试',
+      '- [ ] 实现工具行\n- [x] 本轮总结：已完成若干命令\n- [ ] 写测试'
     );
     expect(tasks.map((t) => t.text)).toEqual(['实现工具行', '写测试']);
   });
@@ -74,7 +80,7 @@ describe('goalModeController', () => {
         { id: '1', text: 'a', done: true },
         { id: '2', text: 'b', done: false },
         { id: '3', text: 'c', done: true },
-      ]),
+      ])
     ).toEqual({ total: 3, done: 2, pct: 67 });
   });
 
@@ -84,7 +90,7 @@ describe('goalModeController', () => {
         cancelled: true,
         session: session({ id: 's', goalMode: createInitialGoalMode('g') }),
         assistantText: 'x',
-      }).action,
+      }).action
     ).toBe('stop');
     const inactive = decideGoalContinuation({
       cancelled: false,
@@ -100,7 +106,12 @@ describe('goalModeController', () => {
       cancelled: false,
       session: session({
         id: 's',
-        goalMode: { active: true, goal: 'fix bug', iteration: 0, maxIterations: 5 },
+        goalMode: {
+          active: true,
+          goal: 'fix bug',
+          iteration: 0,
+          maxIterations: 5,
+        },
         messages: [],
       }),
       assistantText: 'still working on it',
@@ -113,7 +124,7 @@ describe('goalModeController', () => {
     }
   });
 
-  it('decideGoalContinuation done: no toast, marks tasks done', () => {
+  it('decideGoalContinuation: DONE with incomplete tasks continues (no false complete)', () => {
     const d = decideGoalContinuation({
       cancelled: false,
       session: session({
@@ -126,6 +137,58 @@ describe('goalModeController', () => {
           tasks: [
             { id: '1', text: 'a', done: true },
             { id: '2', text: 'b', done: false },
+          ],
+        },
+      }),
+      assistantText: '全部搞定 DONE',
+    });
+    // 文案 DONE 但清单未全勾 → 不得 stop:done / 不得 markAll
+    expect(d.action).toBe('continue');
+    if (d.action === 'continue') {
+      expect(d.goalMode.active).toBe(true);
+      expect(d.goalMode.iteration).toBe(2);
+      expect(d.goalMode.tasks?.some((t) => !t.done)).toBe(true);
+      expect(d.displayText).toMatch(/未完成|DONE/);
+    }
+  });
+
+  it('decideGoalContinuation: DONE with no tasks stops as done without force-check', () => {
+    const d = decideGoalContinuation({
+      cancelled: false,
+      session: session({
+        id: 's',
+        goalMode: {
+          active: true,
+          goal: 'ship',
+          iteration: 1,
+          maxIterations: 5,
+          tasks: [],
+        },
+      }),
+      assistantText: '目标已完成。',
+    });
+    expect(d.action).toBe('stop');
+    if (d.action === 'stop') {
+      expect(d.reason).toBe('done');
+      expect(d.toast).toBeUndefined();
+      expect(d.goalMode?.active).toBe(false);
+      expect(d.goalMode?.tasks).toEqual([]);
+    }
+  });
+
+  it('decideGoalContinuation: DONE + all tasks already done stops without markAll', () => {
+    const d = decideGoalContinuation({
+      cancelled: false,
+      session: session({
+        id: 's',
+        goalMode: {
+          active: true,
+          goal: 'ship',
+          iteration: 1,
+          maxIterations: 5,
+          tasks: [
+            { id: '1', text: 'a', done: true },
+            { id: '2', text: 'b', done: true },
           ],
         },
       }),
@@ -159,7 +222,62 @@ describe('goalModeController', () => {
     if (d.action === 'stop') {
       expect(d.reason).toBe('done');
       expect(d.toast).toBeUndefined();
+      expect(d.goalMode?.active).toBe(false);
+      // 全勾来自 checklist 解析，非 markAll 强制
+      expect(d.goalMode?.tasks?.every((t) => t.done)).toBe(true);
     }
+  });
+
+  it('decideGoalContinuation: premature DONE at max_iter keeps open tasks', () => {
+    const d = decideGoalContinuation({
+      cancelled: false,
+      session: session({
+        id: 's',
+        goalMode: {
+          active: true,
+          goal: 'ship',
+          iteration: 4,
+          maxIterations: 5,
+          tasks: [
+            { id: '1', text: 'a', done: true },
+            { id: '2', text: 'b', done: false },
+          ],
+        },
+      }),
+      assistantText: 'DONE but still open\n- [x] a\n- [ ] b',
+    });
+    expect(d.action).toBe('stop');
+    if (d.action === 'stop') {
+      expect(d.reason).toBe('max_iter');
+      expect(d.goalMode?.tasks?.some((t) => !t.done)).toBe(true);
+      expect(d.toast).toMatch(/未全部完成|上限/);
+    }
+  });
+
+  it('buildGoalRunTaskFields aligns with engine defaults', () => {
+    const f = buildGoalRunTaskFields({ goal: '  ship feature  ' });
+    expect(f).toEqual({
+      mode: 'goal',
+      visibleGoal: 'ship feature',
+      maxRounds: GOAL_DEFAULT_MAX_ITERATIONS,
+      maxStalledRounds: GOAL_DEFAULT_MAX_STALLED_ROUNDS,
+    });
+    expect(f.maxRounds).toBe(12);
+    expect(f.maxStalledRounds).toBe(2);
+    expect(
+      buildGoalRunTaskFields({ goal: 'x', maxIterations: 8 }).maxRounds
+    ).toBe(8);
+  });
+
+  it('deactivateGoalMode keeps open tasks', () => {
+    const gm = deactivateGoalMode({
+      active: true,
+      goal: 'g',
+      iteration: 0,
+      tasks: [{ id: '1', text: 'open', done: false }],
+    });
+    expect(gm.active).toBe(false);
+    expect(gm.tasks?.[0]?.done).toBe(false);
   });
 
   it('decideGoalContinuation max_iter toasts once (not success spam)', () => {
@@ -238,7 +356,7 @@ describe('goalModeController', () => {
     const gm = createInitialGoalMode('root');
     const merged = mergeGoalTasksFromAssistantText(
       gm,
-      '- [x] a\n- [ ] b\n- [x] 本轮小结：忽略',
+      '- [x] a\n- [ ] b\n- [x] 本轮小结：忽略'
     );
     expect(merged.tasks?.map((t) => t.text)).toEqual(['a', 'b']);
     const done = markAllGoalTasksDone(merged);
@@ -256,13 +374,13 @@ describe('goalModeController', () => {
       formatOpenGoalTasksForPrompt([
         { id: '1', text: 'open', done: false },
         { id: '2', text: 'done', done: true },
-      ]),
+      ])
     ).toContain('open');
     expect(
       formatOpenGoalTasksForPrompt([
         { id: '1', text: 'open', done: false },
         { id: '2', text: 'done', done: true },
-      ]),
+      ])
     ).not.toContain('- [ ] done');
   });
 });
@@ -274,7 +392,11 @@ describe('goalModeController', () => {
 describe('goal lifecycle pure helpers', () => {
   describe('enter / exit / pause / resume', () => {
     it('enter from idle applies active lifecycle', () => {
-      const r = enterGoalMode(createIdleGoalLifecycle(), '  fix flaky tests  ', 8);
+      const r = enterGoalMode(
+        createIdleGoalLifecycle(),
+        '  fix flaky tests  ',
+        8
+      );
       expect(r.outcome).toBe('applied');
       expect(r.reason).toBe('entered');
       expect(r.changed).toBe(true);
@@ -302,12 +424,16 @@ describe('goal lifecycle pure helpers', () => {
       const paused = pauseGoalMode(active).state;
       expect(enterGoalMode(paused, 'other').outcome).toBe('illegal');
 
-      const blocked = applyGoalUpdate(active, { blocked_reason: 'stuck' }).state;
+      const blocked = applyGoalUpdate(active, {
+        blocked_reason: 'stuck',
+      }).state;
       expect(enterGoalMode(blocked, 'other').outcome).toBe('illegal');
     });
 
     it('enter after completed is allowed (fresh goal)', () => {
-      const done = transitionGoalLifecycle(running(), { type: 'complete' }).state;
+      const done = transitionGoalLifecycle(running(), {
+        type: 'complete',
+      }).state;
       expect(done.phase).toBe('completed');
       const r = enterGoalMode(done, 'next goal');
       expect(r.outcome).toBe('applied');
@@ -329,7 +455,9 @@ describe('goal lifecycle pure helpers', () => {
     });
 
     it('exit completed clears to idle for re-enter', () => {
-      const done = transitionGoalLifecycle(running(), { type: 'complete' }).state;
+      const done = transitionGoalLifecycle(running(), {
+        type: 'complete',
+      }).state;
       const r = exitGoalMode(done);
       expect(r.outcome).toBe('applied');
       expect(r.reason).toBe('cleared_completed');
@@ -355,11 +483,15 @@ describe('goal lifecycle pure helpers', () => {
     });
 
     it('pause completed is illegal; pause blocked is noop', () => {
-      const done = transitionGoalLifecycle(running(), { type: 'complete' }).state;
+      const done = transitionGoalLifecycle(running(), {
+        type: 'complete',
+      }).state;
       expect(pauseGoalMode(done).outcome).toBe('illegal');
       expect(pauseGoalMode(done).reason).toBe('already_completed');
 
-      const blocked = applyGoalUpdate(running(), { blocked_reason: 'no access' }).state;
+      const blocked = applyGoalUpdate(running(), {
+        blocked_reason: 'no access',
+      }).state;
       const p = pauseGoalMode(blocked);
       expect(p.outcome).toBe('noop');
       expect(p.reason).toBe('already_blocked');
@@ -373,7 +505,9 @@ describe('goal lifecycle pure helpers', () => {
       expect(r1.reason).toBe('resumed');
       expect(r1.state.phase).toBe('active');
 
-      const blocked = applyGoalUpdate(running(), { blocked_reason: 'env broken' }).state;
+      const blocked = applyGoalUpdate(running(), {
+        blocked_reason: 'env broken',
+      }).state;
       const r2 = resumeGoalMode(blocked);
       expect(r2.outcome).toBe('applied');
       expect(r2.state.phase).toBe('active');
@@ -383,7 +517,9 @@ describe('goal lifecycle pure helpers', () => {
       expect(resumeGoalMode(running()).reason).toBe('already_active');
 
       expect(resumeGoalMode(createIdleGoalLifecycle()).outcome).toBe('illegal');
-      const done = transitionGoalLifecycle(running(), { type: 'complete' }).state;
+      const done = transitionGoalLifecycle(running(), {
+        type: 'complete',
+      }).state;
       expect(resumeGoalMode(done).outcome).toBe('illegal');
       expect(resumeGoalMode(done).reason).toBe('already_completed');
     });
@@ -404,17 +540,20 @@ describe('goal lifecycle pure helpers', () => {
 
     it('empty progress is noop; progress from idle/completed illegal', () => {
       expect(
-        transitionGoalLifecycle(running(), { type: 'progress', message: '  ' }).outcome,
+        transitionGoalLifecycle(running(), { type: 'progress', message: '  ' })
+          .outcome
       ).toBe('noop');
       expect(
         transitionGoalLifecycle(createIdleGoalLifecycle(), {
           type: 'progress',
           message: 'x',
-        }).reason,
+        }).reason
       ).toBe('not_running');
-      const done = transitionGoalLifecycle(running(), { type: 'complete' }).state;
+      const done = transitionGoalLifecycle(running(), {
+        type: 'complete',
+      }).state;
       expect(
-        transitionGoalLifecycle(done, { type: 'progress', message: 'x' }).reason,
+        transitionGoalLifecycle(done, { type: 'progress', message: 'x' }).reason
       ).toBe('already_completed');
     });
 
@@ -436,7 +575,7 @@ describe('goal lifecycle pure helpers', () => {
           iteration: 0,
           maxIterations: 5,
           message: 'custom note',
-        }),
+        })
       ).toBe('custom note');
     });
 
@@ -451,24 +590,28 @@ describe('goal lifecycle pure helpers', () => {
         maxIterations: 5,
         tasks,
       };
-      expect(formatGoalProgressMessage({ ...base, phase: 'idle' })).toContain('未启动');
-      expect(formatGoalProgressMessage({ ...base, phase: 'active' })).toMatch(
-        /推进中.*第 2\/5 轮.*任务 1\/2/,
+      expect(formatGoalProgressMessage({ ...base, phase: 'idle' })).toContain(
+        '未启动'
       );
-      expect(formatGoalProgressMessage({ ...base, phase: 'paused' })).toContain('已暂停');
+      expect(formatGoalProgressMessage({ ...base, phase: 'active' })).toMatch(
+        /推进中.*第 2\/5 轮.*任务 1\/2/
+      );
+      expect(formatGoalProgressMessage({ ...base, phase: 'paused' })).toContain(
+        '已暂停'
+      );
       expect(
         formatGoalProgressMessage({
           ...base,
           phase: 'blocked',
           blockedReason: 'missing API key',
-        }),
+        })
       ).toMatch(/受阻.*missing API key/);
       expect(
         formatGoalProgressMessage({
           ...base,
           phase: 'completed',
           tasks: tasks.map((t) => ({ ...t, done: true })),
-        }),
+        })
       ).toContain('已完成');
     });
   });
@@ -479,15 +622,19 @@ describe('goal lifecycle pure helpers', () => {
         validateGoalUpdateExclusivity({
           completed: true,
           blocked_reason: 'stuck',
-        }),
+        })
       ).toEqual({ ok: false, reason: 'completed_and_blocked' });
-      expect(validateGoalUpdateExclusivity({ completed: true })).toEqual({ ok: true });
-      expect(validateGoalUpdateExclusivity({ blocked_reason: 'x' })).toEqual({ ok: true });
+      expect(validateGoalUpdateExclusivity({ completed: true })).toEqual({
+        ok: true,
+      });
+      expect(validateGoalUpdateExclusivity({ blocked_reason: 'x' })).toEqual({
+        ok: true,
+      });
       expect(
         validateGoalUpdateExclusivity({
           completed: true,
           blocked_reason: '   ',
-        }),
+        })
       ).toEqual({ ok: true }); // whitespace blocked is absent
     });
 
@@ -508,7 +655,9 @@ describe('goal lifecycle pure helpers', () => {
     });
 
     it('completed clears blockedReason and marks tasks done', () => {
-      const blocked = applyGoalUpdate(running(), { blocked_reason: 'tmp' }).state;
+      const blocked = applyGoalUpdate(running(), {
+        blocked_reason: 'tmp',
+      }).state;
       expect(blocked.phase).toBe('blocked');
       const r = applyGoalUpdate(blocked, {
         completed: true,
@@ -534,9 +683,9 @@ describe('goal lifecycle pure helpers', () => {
       expect(r.state.completed).toBe(false);
       expect(r.state.blockedReason).toBe('need credentials');
       expect(r.state.progressMessages).toContain('waiting on vault');
-      expect(r.state.progressMessages.some((m) => m.includes('need credentials'))).toBe(
-        true,
-      );
+      expect(
+        r.state.progressMessages.some((m) => m.includes('need credentials'))
+      ).toBe(true);
     });
 
     it('complete event also enforces exclusivity (clears blocked)', () => {
@@ -575,7 +724,8 @@ describe('goal lifecycle pure helpers', () => {
         case 'paused':
           return pauseGoalMode(base).state;
         case 'blocked':
-          return applyGoalUpdate(base, { blocked_reason: 'matrix block' }).state;
+          return applyGoalUpdate(base, { blocked_reason: 'matrix block' })
+            .state;
         case 'completed':
           return transitionGoalLifecycle(base, { type: 'complete' }).state;
         default: {
@@ -672,7 +822,10 @@ describe('goal lifecycle pure helpers', () => {
         progress: { outcome: 'illegal', reason: 'already_completed' },
         complete: { outcome: 'noop', reason: 'already_completed' },
         update_progress: { outcome: 'illegal', reason: 'already_completed' },
-        update_complete: { outcome: 'applied', reason: 'progress_on_completed' },
+        update_complete: {
+          outcome: 'applied',
+          reason: 'progress_on_completed',
+        },
         update_block: { outcome: 'illegal', reason: 'already_completed' },
         update_both: { outcome: 'illegal', reason: 'completed_and_blocked' },
       },
