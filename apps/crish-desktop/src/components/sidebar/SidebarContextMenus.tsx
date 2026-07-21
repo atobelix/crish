@@ -1,10 +1,27 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
-import * as Lucide from 'lucide-react';
-import type { SessionState } from '../../store/layoutStore';
 import { getSessionStoreState } from '../../api/storeAccess';
 import { Tooltip } from '../Tooltip';
+import {
+  Archive,
+  Check,
+  ChevronRight,
+  Columns2,
+  ExternalLink,
+  FileDown,
+  GitFork,
+  MessageCircle,
+  PenLine,
+  Pin,
+  PinOff,
+} from 'lucide-react';
 
 export type SessionContextMenuState = {
   x: number;
@@ -85,7 +102,7 @@ export function clampContextMenuPosition(
   x: number,
   y: number,
   menuW = MENU_EST_W,
-  menuH = MENU_EST_H,
+  menuH = MENU_EST_H
 ): { x: number; y: number; transformOrigin: string } {
   const rawW = typeof window !== 'undefined' ? window.innerWidth : 0;
   const rawH = typeof window !== 'undefined' ? window.innerHeight : 0;
@@ -97,21 +114,25 @@ export function clampContextMenuPosition(
   let originY = 'top';
   let originX = 'left';
 
-  // 水平避让：右侧贴边则左翻
+  // 水平避让：右侧贴边则左翻，再钳入视口
   if (finalX + menuW > vw - MENU_EDGE_PAD) {
-    finalX = Math.max(MENU_EDGE_PAD, finalX - menuW);
+    finalX = finalX - menuW;
     originX = 'right';
-  } else {
-    finalX = Math.max(MENU_EDGE_PAD, finalX);
   }
+  finalX = Math.min(
+    Math.max(MENU_EDGE_PAD, finalX),
+    Math.max(MENU_EDGE_PAD, vw - menuW - MENU_EDGE_PAD)
+  );
 
-  // 垂直避让：底部贴边则上翻
+  // 垂直避让：底部贴边则上翻，再钳入视口
   if (finalY + menuH > vh - MENU_EDGE_PAD) {
-    finalY = Math.max(MENU_EDGE_PAD, finalY - menuH);
+    finalY = finalY - menuH;
     originY = 'bottom';
-  } else {
-    finalY = Math.max(MENU_EDGE_PAD, finalY);
   }
+  finalY = Math.min(
+    Math.max(MENU_EDGE_PAD, finalY),
+    Math.max(MENU_EDGE_PAD, vh - menuH - MENU_EDGE_PAD)
+  );
 
   return {
     x: finalX,
@@ -124,12 +145,12 @@ export function clampContextMenuPosition(
 function focusMenuItem(
   root: HTMLElement,
   from: HTMLElement | null,
-  delta: number,
+  delta: number
 ): void {
   const items = Array.from(
     root.querySelectorAll<HTMLElement>(
-      '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])',
-    ),
+      '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])'
+    )
   );
   if (items.length === 0) return;
   if (!Number.isFinite(delta)) {
@@ -200,7 +221,10 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     }, 150);
   }, []);
   const target = contextMenu
-    ? (() => { const s = getSessionStoreState().sessionsById[contextMenu.sessionId]; return s && !s.isArchived ? s : undefined; })()
+    ? (() => {
+        const s = getSessionStoreState().sessionsById[contextMenu.sessionId];
+        return s && !s.isArchived ? s : undefined;
+      })()
     : undefined;
   const isPinned = !!target?.isPinned;
   const showSessionMenu = !!(contextMenu && target);
@@ -217,7 +241,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       contextMenu.x,
       contextMenu.y,
       rect.width,
-      rect.height,
+      rect.height
     );
     el.style.left = `${next.x}px`;
     el.style.top = `${next.y}px`;
@@ -226,14 +250,15 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
   // 排序菜单同样钳位
   useLayoutEffect(() => {
-    if (!sortDropdownOpen || !sortDropdownCoords || !sortMenuRef.current) return;
+    if (!sortDropdownOpen || !sortDropdownCoords || !sortMenuRef.current)
+      return;
     const el = sortMenuRef.current;
     const rect = el.getBoundingClientRect();
     const next = clampContextMenuPosition(
       sortDropdownCoords.x,
       sortDropdownCoords.y,
       rect.width,
-      rect.height,
+      rect.height
     );
     el.style.left = `${next.x}px`;
     el.style.top = `${next.y}px`;
@@ -246,7 +271,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       focusedOnceRef.current = null;
       return;
     }
-    contextMenuRestoreRef.current = document.activeElement as HTMLElement | null;
+    contextMenuRestoreRef.current =
+      document.activeElement as HTMLElement | null;
     const key = contextMenu.sessionId;
     if (focusedOnceRef.current === key) return;
     focusedOnceRef.current = key;
@@ -254,7 +280,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
       const root = menuRef.current;
       if (!root) return;
       const first = root.querySelector<HTMLElement>(
-        '[role="menuitem"]:not([disabled])',
+        '[role="menuitem"]:not([disabled])'
       );
       first?.focus();
     });
@@ -263,7 +289,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
   useEffect(() => {
     if (!sortDropdownOpen || !sortMenuRef.current) return;
-    sortDropdownRestoreRef.current = document.activeElement as HTMLElement | null;
+    sortDropdownRestoreRef.current =
+      document.activeElement as HTMLElement | null;
     requestAnimationFrame(() => {
       const first = sortMenuRef.current?.querySelector<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -279,7 +306,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
         e.preventDefault();
         e.stopPropagation();
         onCloseContextMenu?.();
-        const target = contextMenuTriggerRef?.current || contextMenuRestoreRef.current;
+        const target =
+          contextMenuTriggerRef?.current || contextMenuRestoreRef.current;
         requestAnimationFrame(() => target?.focus());
       }
     };
@@ -294,7 +322,8 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
         e.preventDefault();
         e.stopPropagation();
         onCloseSortDropdown();
-        const target = sortTriggerRef?.current || sortDropdownRestoreRef.current;
+        const target =
+          sortTriggerRef?.current || sortDropdownRestoreRef.current;
         requestAnimationFrame(() => target?.focus());
       }
     };
@@ -304,309 +333,325 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
   return (
     <>
-      {showSessionMenu && contextMenu && createPortal(
-        <div
-          ref={menuRef}
-          className={`${styles.contextMenu} ${styles.open}`}
-          style={{
-            left: contextMenu.x,
-            top: contextMenu.y,
-            position: 'fixed',
-            zIndex: 'var(--z-context-menu)',
-          }}
-          role="menu"
-          aria-label="会话操作"
-          onKeyDown={onMenuKeyDown}
-        >
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="open-current"
-            onClick={() => onSessionAction('open-current')}
+      {showSessionMenu &&
+        contextMenu &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={`${styles.contextMenu} ${styles.open}`}
+            style={{
+              left: contextMenu.x,
+              top: contextMenu.y,
+              position: 'fixed',
+              zIndex: 'var(--z-context-menu)',
+            }}
+            role="menu"
+            aria-label="会话操作"
+            onKeyDown={onMenuKeyDown}
           >
-            <Lucide.MessageCircle size={14} strokeWidth={1.75} aria-hidden />
-            <span>在此处打开</span>
-          </button>
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="open-split"
-            onClick={() => onSessionAction('open-split')}
-          >
-            <Lucide.Columns2 size={14} strokeWidth={1.75} aria-hidden />
-            <span>拆分视图</span>
-          </button>
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="open-new"
-            onClick={() => onSessionAction('open-new')}
-          >
-            <Lucide.ExternalLink size={14} strokeWidth={1.75} aria-hidden />
-            <span>在新窗口打开</span>
-          </button>
-
-          <div className={styles.contextMenuDivider} role="separator" />
-
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="rename"
-            onClick={() => onSessionAction('rename')}
-          >
-            <Lucide.PenLine size={14} strokeWidth={1.75} aria-hidden />
-            <span>重命名</span>
-          </button>
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action={isPinned ? 'unpin' : 'pin'}
-            onClick={() => onSessionAction(isPinned ? 'unpin' : 'pin')}
-          >
-            {isPinned ? (
-              <Lucide.PinOff size={14} strokeWidth={1.75} aria-hidden />
-            ) : (
-              <Lucide.Pin size={14} strokeWidth={1.75} aria-hidden />
-            )}
-            {/* 与侧栏分区「置顶」措辞一致，不用「固定」以免与消息 pin 混淆 */}
-            <span>{isPinned ? '取消置顶' : '置顶'}</span>
-          </button>
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="archive"
-            onClick={() => onSessionAction('archive')}
-          >
-            <Lucide.Archive size={14} strokeWidth={1.75} aria-hidden />
-            <span>归档</span>
-          </button>
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            role="menuitem"
-            data-action="branch"
-            onClick={() => onSessionAction('branch')}
-          >
-            <Lucide.GitFork size={14} strokeWidth={1.75} aria-hidden />
-            <span>分叉</span>
-          </button>
-
-          <div className={styles.contextMenuDivider} role="separator" />
-
-          <Tooltip content="导出为 Markdown">
             <button
               type="button"
               className={styles.contextMenuItem}
               role="menuitem"
-              data-action="export"
-              onClick={() => onSessionAction('export')}
+              data-action="open-current"
+              onClick={() => onSessionAction('open-current')}
             >
-              <Lucide.FileDown size={14} strokeWidth={1.75} aria-hidden />
-              <span>导出 Markdown</span>
+              <MessageCircle size={14} strokeWidth={1.75} aria-hidden />
+              <span>在此处打开</span>
             </button>
-          </Tooltip>
-        </div>,
-        document.body,
-      )}
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="open-split"
+              onClick={() => onSessionAction('open-split')}
+            >
+              <Columns2 size={14} strokeWidth={1.75} aria-hidden />
+              <span>拆分视图</span>
+            </button>
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="open-new"
+              onClick={() => onSessionAction('open-new')}
+            >
+              <ExternalLink size={14} strokeWidth={1.75} aria-hidden />
+              <span>在新窗口打开</span>
+            </button>
 
-      {sortDropdownOpen && sortDropdownCoords && createPortal(
-        <div
-          ref={sortMenuRef}
-          className={`${styles.sortFilterMenu} ${styles.open}`}
-          style={{
-            position: 'fixed',
-            left: sortDropdownCoords.x,
-            top: sortDropdownCoords.y,
-            zIndex: 'var(--z-first-run)',
-          }}
-          role="menu"
-          aria-label="排序与过滤"
-          onMouseLeave={handleFlyLeave}
-          onKeyDown={onMenuKeyDown}
-        >
-          <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
-            排序与过滤
-          </div>
+            <div className={styles.contextMenuDivider} role="separator" />
 
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="rename"
+              onClick={() => onSessionAction('rename')}
+            >
+              <PenLine size={14} strokeWidth={1.75} aria-hidden />
+              <span>重命名</span>
+            </button>
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action={isPinned ? 'unpin' : 'pin'}
+              onClick={() => onSessionAction(isPinned ? 'unpin' : 'pin')}
+            >
+              {isPinned ? (
+                <PinOff size={14} strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Pin size={14} strokeWidth={1.75} aria-hidden />
+              )}
+              {/* 与侧栏分区「置顶」措辞一致，不用「固定」以免与消息 pin 混淆 */}
+              <span>{isPinned ? '取消置顶' : '置顶'}</span>
+            </button>
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="archive"
+              onClick={() => onSessionAction('archive')}
+            >
+              <Archive size={14} strokeWidth={1.75} aria-hidden />
+              <span>归档</span>
+            </button>
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="branch"
+              onClick={() => onSessionAction('branch')}
+            >
+              <GitFork size={14} strokeWidth={1.75} aria-hidden />
+              <span>分叉</span>
+            </button>
+
+            <div className={styles.contextMenuDivider} role="separator" />
+
+            <Tooltip content="导出为 Markdown">
+              <button
+                type="button"
+                className={styles.contextMenuItem}
+                role="menuitem"
+                data-action="export"
+                onClick={() => onSessionAction('export')}
+              >
+                <FileDown size={14} strokeWidth={1.75} aria-hidden />
+                <span>导出 Markdown</span>
+              </button>
+            </Tooltip>
+          </div>,
+          document.body
+        )}
+
+      {sortDropdownOpen &&
+        sortDropdownCoords &&
+        createPortal(
           <div
-            className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
-            onMouseEnter={() => handleFlyEnter('sort')}
+            ref={sortMenuRef}
+            className={`${styles.sortFilterMenu} ${styles.open}`}
+            style={{
+              position: 'fixed',
+              left: sortDropdownCoords.x,
+              top: sortDropdownCoords.y,
+              zIndex: 'var(--z-first-run)',
+            }}
+            role="menu"
+            aria-label="排序与过滤"
+            onMouseLeave={handleFlyLeave}
+            onKeyDown={onMenuKeyDown}
           >
-            <span className={styles.sortFilterRowLabel}>排序方式</span>
-            <Lucide.ChevronRight
-              size={14}
-              strokeWidth={1.75}
-              className={styles.sortFilterChev}
-              aria-hidden
-            />
-            {fly === 'sort' ? (
-              <div className={styles.sortFilterFlyout} role="group" aria-label="排序方式">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={sortType === 'active'}
-                  className={`${styles.sortFilterOption} ${sortType === 'active' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetSortType('active');
-                    onCloseSortDropdown();
-                  }}
-                >
-                  <span>按最近活跃</span>
-                  {sortType === 'active' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={sortType === 'name'}
-                  className={`${styles.sortFilterOption} ${sortType === 'name' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetSortType('name');
-                    onCloseSortDropdown();
-                  }}
-                >
-                  <span>按名称</span>
-                  {sortType === 'name' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-              </div>
-            ) : null}
-          </div>
+            <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
+              排序与过滤
+            </div>
 
-          <div
-            className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
-            onMouseEnter={() => handleFlyEnter('group')}
-          >
-            <span className={styles.sortFilterRowLabel}>分组方式</span>
-            <Lucide.ChevronRight
-              size={14}
-              strokeWidth={1.75}
-              className={styles.sortFilterChev}
-              aria-hidden
-            />
-            {fly === 'group' ? (
-              <div className={styles.sortFilterFlyout} role="group" aria-label="分组方式">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={groupType === 'folder'}
-                  className={`${styles.sortFilterOption} ${groupType === 'folder' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetGroupType('folder');
-                    onCloseSortDropdown();
-                  }}
+            <div
+              className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
+              onMouseEnter={() => handleFlyEnter('sort')}
+            >
+              <span className={styles.sortFilterRowLabel}>排序方式</span>
+              <ChevronRight
+                size={14}
+                strokeWidth={1.75}
+                className={styles.sortFilterChev}
+                aria-hidden
+              />
+              {fly === 'sort' ? (
+                <div
+                  className={styles.sortFilterFlyout}
+                  role="group"
+                  aria-label="排序方式"
                 >
-                  <span>按项目分组</span>
-                  {groupType === 'folder' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={groupType === 'none'}
-                  className={`${styles.sortFilterOption} ${groupType === 'none' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetGroupType('none');
-                    onCloseSortDropdown();
-                  }}
-                >
-                  <span>平铺列表</span>
-                  {groupType === 'none' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-              </div>
-            ) : null}
-          </div>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={sortType === 'active'}
+                    className={`${styles.sortFilterOption} ${sortType === 'active' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetSortType('active');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>按最近活跃</span>
+                    {sortType === 'active' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={sortType === 'name'}
+                    className={`${styles.sortFilterOption} ${sortType === 'name' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetSortType('name');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>按名称</span>
+                    {sortType === 'name' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                </div>
+              ) : null}
+            </div>
 
-          <div
-            className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
-            onMouseEnter={() => handleFlyEnter('filter')}
-          >
-            <span className={styles.sortFilterRowLabel}>列表范围</span>
-            <Lucide.ChevronRight
-              size={14}
-              strokeWidth={1.75}
-              className={styles.sortFilterChev}
-              aria-hidden
-            />
-            {fly === 'filter' ? (
-              <div className={styles.sortFilterFlyout} role="group" aria-label="列表范围">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={filterType === 'all'}
-                  className={`${styles.sortFilterOption} ${filterType === 'all' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetFilterType('all');
-                    onCloseSortDropdown();
-                  }}
+            <div
+              className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
+              onMouseEnter={() => handleFlyEnter('group')}
+            >
+              <span className={styles.sortFilterRowLabel}>分组方式</span>
+              <ChevronRight
+                size={14}
+                strokeWidth={1.75}
+                className={styles.sortFilterChev}
+                aria-hidden
+              />
+              {fly === 'group' ? (
+                <div
+                  className={styles.sortFilterFlyout}
+                  role="group"
+                  aria-label="分组方式"
                 >
-                  <span>全部会话</span>
-                  {filterType === 'all' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={filterType === 'pinned'}
-                  className={`${styles.sortFilterOption} ${filterType === 'pinned' ? styles.isOn : ''}`}
-                  onClick={() => {
-                    onSetFilterType('pinned');
-                    onCloseSortDropdown();
-                  }}
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={groupType === 'folder'}
+                    className={`${styles.sortFilterOption} ${groupType === 'folder' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetGroupType('folder');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>按项目分组</span>
+                    {groupType === 'folder' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={groupType === 'none'}
+                    className={`${styles.sortFilterOption} ${groupType === 'none' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetGroupType('none');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>平铺列表</span>
+                    {groupType === 'none' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div
+              className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
+              onMouseEnter={() => handleFlyEnter('filter')}
+            >
+              <span className={styles.sortFilterRowLabel}>列表范围</span>
+              <ChevronRight
+                size={14}
+                strokeWidth={1.75}
+                className={styles.sortFilterChev}
+                aria-hidden
+              />
+              {fly === 'filter' ? (
+                <div
+                  className={styles.sortFilterFlyout}
+                  role="group"
+                  aria-label="列表范围"
                 >
-                  <span>仅置顶</span>
-                  {filterType === 'pinned' ? (
-                    <Lucide.Check
-                      size={16}
-                      strokeWidth={2}
-                      className={styles.sortFilterCheck}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>,
-        document.body,
-      )}
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={filterType === 'all'}
+                    className={`${styles.sortFilterOption} ${filterType === 'all' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetFilterType('all');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>全部会话</span>
+                    {filterType === 'all' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={filterType === 'pinned'}
+                    className={`${styles.sortFilterOption} ${filterType === 'pinned' ? styles.isOn : ''}`}
+                    onClick={() => {
+                      onSetFilterType('pinned');
+                      onCloseSortDropdown();
+                    }}
+                  >
+                    <span>仅置顶</span>
+                    {filterType === 'pinned' ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2}
+                        className={styles.sortFilterCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 };

@@ -46,19 +46,19 @@ export function isDropType(value: unknown): value is DropType {
 }
 
 export function isSplitCardDropType(
-  t: DropType | null | undefined,
+  t: DropType | null | undefined
 ): t is 'split-card-top' | 'split-card-bottom' {
   return t === 'split-card-top' || t === 'split-card-bottom';
 }
 
 export function isSplitColDropType(
-  t: DropType | null | undefined,
+  t: DropType | null | undefined
 ): t is 'split-col-left' | 'split-col-right' {
   return t === 'split-col-left' || t === 'split-col-right';
 }
 
 export function isMergeLikeDropType(
-  t: DropType | null | undefined,
+  t: DropType | null | undefined
 ): t is 'merge' | 'self-reorder' {
   return t === 'merge' || t === 'self-reorder';
 }
@@ -99,9 +99,12 @@ export type TabBarTabRect = {
 export function exceedsDragThreshold(
   dx: number,
   dy: number,
-  threshold: number = TAB_DRAG_THRESHOLD_PX,
+  threshold: number = TAB_DRAG_THRESHOLD_PX
 ): boolean {
-  const t = Number.isFinite(threshold) && threshold >= 0 ? threshold : TAB_DRAG_THRESHOLD_PX;
+  const t =
+    Number.isFinite(threshold) && threshold >= 0
+      ? threshold
+      : TAB_DRAG_THRESHOLD_PX;
   return Math.abs(dx) > t || Math.abs(dy) > t;
 }
 
@@ -110,9 +113,10 @@ export function exceedsDragThreshold(
  */
 export function resolveTabBarHeight(
   measured: number | null | undefined,
-  fallback: number = DEFAULT_TAB_BAR_H,
+  fallback: number = DEFAULT_TAB_BAR_H
 ): number {
-  const fb = Number.isFinite(fallback) && fallback > 0 ? fallback : DEFAULT_TAB_BAR_H;
+  const fb =
+    Number.isFinite(fallback) && fallback > 0 ? fallback : DEFAULT_TAB_BAR_H;
   if (measured == null || !Number.isFinite(measured) || measured <= 0) {
     return Math.max(TAB_BAR_HEIGHT_MIN, fb);
   }
@@ -133,7 +137,7 @@ export function isChatGroupTarget(groupId: string | null | undefined): boolean {
  */
 export function resolveTabInsertIndex(
   mouseX: number,
-  tabs: readonly TabBarTabRect[],
+  tabs: readonly TabBarTabRect[]
 ): number {
   if (!tabs || tabs.length === 0) return 0;
   for (let i = 0; i < tabs.length; i++) {
@@ -151,7 +155,7 @@ export function resolveTabInsertIndex(
 export function findCardSnapshotAtPoint<T extends { rect: CardSnapRect }>(
   snapshots: readonly T[],
   mouseX: number,
-  mouseY: number,
+  mouseY: number
 ): T | null {
   if (!snapshots || snapshots.length === 0) return null;
   for (let i = 0; i < snapshots.length; i++) {
@@ -184,7 +188,7 @@ export function findCardSnapshotAtPoint<T extends { rect: CardSnapRect }>(
 
 /** SplitEdgeDirection → DropType（merge 保留；null 透传） */
 export function splitEdgeToDropType(
-  edge: SplitEdgeDirection | null | undefined,
+  edge: SplitEdgeDirection | null | undefined
 ): DropType | null {
   switch (edge) {
     case 'top':
@@ -204,7 +208,7 @@ export function splitEdgeToDropType(
 
 /** DropType → DropPreview direction（self-reorder 无预览） */
 export function dropTypeToPreviewDirection(
-  dropType: DropType | null | undefined,
+  dropType: DropType | null | undefined
 ): DropPreviewState['direction'] | null {
   switch (dropType) {
     case 'split-card-top':
@@ -224,7 +228,7 @@ export function dropTypeToPreviewDirection(
 
 /** DropType → detachTabToStandalone placement */
 export function dropTypeToDetachPlacement(
-  dropType: DropType | null | undefined,
+  dropType: DropType | null | undefined
 ): 'top' | 'bottom' | 'new-col' | null {
   switch (dropType) {
     case 'split-card-top':
@@ -260,11 +264,12 @@ export function isRedundantNonChatColumnSplit(params: {
   const sameColSingleGroup =
     sourceColIdx === targetColIdx && sourceColGroupsLength <= 1;
   if (direction === 'left') {
-    return sameColSingleGroup || (isOnlyCardInCol && targetColIdx === sourceColIdx);
+    return (
+      sameColSingleGroup || (isOnlyCardInCol && targetColIdx === sourceColIdx)
+    );
   }
   return (
-    sameColSingleGroup ||
-    (isOnlyCardInCol && targetColIdx + 1 === sourceColIdx)
+    sameColSingleGroup || (isOnlyCardInCol && targetColIdx + 1 === sourceColIdx)
   );
 }
 
@@ -307,7 +312,7 @@ export type TabDropResolveResult = {
 function nullDropResult(
   targetColIdx: number,
   targetGroupIdx: number,
-  targetGroupId: string,
+  targetGroupId: string
 ): TabDropResolveResult {
   return {
     dropType: null,
@@ -323,7 +328,7 @@ function splitCardResult(
   direction: 'top' | 'bottom',
   colIdx: number,
   groupIdx: number,
-  groupId: string,
+  groupId: string
 ): TabDropResolveResult {
   return {
     dropType: direction === 'top' ? 'split-card-top' : 'split-card-bottom',
@@ -339,7 +344,7 @@ function splitColResult(
   direction: 'left' | 'right',
   targetColIdx: number,
   groupId: string,
-  groupIdx: number,
+  groupIdx: number
 ): TabDropResolveResult {
   // left → 插在 targetColIdx；right → targetColIdx+1（与原 hook / columnInsertIndexForSplit 一致）
   const insertCol = direction === 'left' ? targetColIdx : targetColIdx + 1;
@@ -357,7 +362,9 @@ function splitColResult(
  * 卡片相对坐标 → DropType / preview / 目标下标（纯，无 DOM）。
  * 语义对齐原 handlePointerMove 决策树；冗余落点返回 dropType null。
  */
-export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult {
+export function resolveTabDrop(
+  ctx: TabDropResolveContext
+): TabDropResolveResult {
   const {
     relX,
     relY,
@@ -408,7 +415,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
           sourceColGroupsLength,
         })
       ) {
-        return splitColResult('left', targetColIdx, targetGroupId, targetGroupIdx);
+        return splitColResult(
+          'left',
+          targetColIdx,
+          targetGroupId,
+          targetGroupIdx
+        );
       }
     }
 
@@ -422,7 +434,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
           sourceColGroupsLength,
         })
       ) {
-        return splitColResult('right', targetColIdx, targetGroupId, targetGroupIdx);
+        return splitColResult(
+          'right',
+          targetColIdx,
+          targetGroupId,
+          targetGroupIdx
+        );
       }
     }
 
@@ -437,7 +454,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
             direction: 'left',
           })
         ) {
-          return splitColResult('left', targetColIdx, targetGroupId, targetGroupIdx);
+          return splitColResult(
+            'left',
+            targetColIdx,
+            targetGroupId,
+            targetGroupIdx
+          );
         }
       }
       if (x > width * CHAT_COL_RIGHT_ZONE) {
@@ -449,7 +471,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
             direction: 'right',
           })
         ) {
-          return splitColResult('right', targetColIdx, targetGroupId, targetGroupIdx);
+          return splitColResult(
+            'right',
+            targetColIdx,
+            targetGroupId,
+            targetGroupIdx
+          );
         }
       }
       // 非边缘在chat列内拖拽标签无响应
@@ -498,24 +525,44 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
       const bodyY = y - tabBarH;
 
       // Top 20% 边缘：向上拆分
-      if (bodyY < bodyHeight * 0.20) {
+      if (bodyY < bodyHeight * 0.2) {
         if (isSelfHover) {
           if (cardsLength > 1) {
-            return splitCardResult('top', targetColIdx, targetGroupIdx, targetGroupId);
+            return splitCardResult(
+              'top',
+              targetColIdx,
+              targetGroupIdx,
+              targetGroupId
+            );
           }
         } else {
-          return splitCardResult('top', targetColIdx, targetGroupIdx, targetGroupId);
+          return splitCardResult(
+            'top',
+            targetColIdx,
+            targetGroupIdx,
+            targetGroupId
+          );
         }
       }
 
       // Bottom 20% 边缘：向下拆分
-      if (bodyY > bodyHeight * 0.80) {
+      if (bodyY > bodyHeight * 0.8) {
         if (isSelfHover) {
           if (cardsLength > 1) {
-            return splitCardResult('bottom', targetColIdx, targetGroupIdx, targetGroupId);
+            return splitCardResult(
+              'bottom',
+              targetColIdx,
+              targetGroupIdx,
+              targetGroupId
+            );
           }
         } else {
-          return splitCardResult('bottom', targetColIdx, targetGroupIdx, targetGroupId);
+          return splitCardResult(
+            'bottom',
+            targetColIdx,
+            targetGroupIdx,
+            targetGroupId
+          );
         }
       }
 
@@ -571,7 +618,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
       ) {
         return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
       }
-      return splitColResult('left', targetColIdx, targetGroupId, targetGroupIdx);
+      return splitColResult(
+        'left',
+        targetColIdx,
+        targetGroupId,
+        targetGroupIdx
+      );
     }
     if (x > width * CHAT_COL_RIGHT_ZONE) {
       if (
@@ -584,7 +636,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
       ) {
         return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
       }
-      return splitColResult('right', targetColIdx, targetGroupId, targetGroupIdx);
+      return splitColResult(
+        'right',
+        targetColIdx,
+        targetGroupId,
+        targetGroupIdx
+      );
     }
     return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
   }
@@ -666,7 +723,12 @@ export function resolveTabDrop(ctx: TabDropResolveContext): TabDropResolveResult
     ) {
       return nullDropResult(targetColIdx, targetGroupIdx, targetGroupId);
     }
-    return splitCardResult('bottom', targetColIdx, targetGroupIdx, targetGroupId);
+    return splitCardResult(
+      'bottom',
+      targetColIdx,
+      targetGroupIdx,
+      targetGroupId
+    );
   }
 
   const isUpperHalf = y < height / 2;
@@ -718,11 +780,13 @@ export function canCommitTabDrop(params: {
   switch (params.dropType) {
     case 'merge':
       return (
-        !!params.targetGroupId &&
-        params.targetGroupId !== params.sourceGroupId
+        !!params.targetGroupId && params.targetGroupId !== params.sourceGroupId
       );
     case 'self-reorder':
-      return params.tabInsertIdx !== undefined && Number.isFinite(params.tabInsertIdx);
+      return (
+        params.tabInsertIdx !== undefined &&
+        Number.isFinite(params.tabInsertIdx)
+      );
     case 'split-card-top':
     case 'split-card-bottom':
     case 'split-col-left':
@@ -736,7 +800,7 @@ export function canCommitTabDrop(params: {
 /** dropPreview 浅相等（避免热路径无意义 setState） */
 export function dropPreviewEquals(
   a: DropPreviewState | null | undefined,
-  b: DropPreviewState | null | undefined,
+  b: DropPreviewState | null | undefined
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -800,10 +864,13 @@ export function computeDragOverlayTargetSize(params: {
 
 /** 在工作区列中定位 group 的 (colIdx, groupIdx)；未找到 → (-1,-1) */
 export function findGroupIndicesInWorkspace(
-  columns: ReadonlyArray<{
-    groups: ReadonlyArray<{ id: string }>;
-  }> | null | undefined,
-  groupId: string,
+  columns:
+    | ReadonlyArray<{
+        groups: ReadonlyArray<{ id: string }>;
+      }>
+    | null
+    | undefined,
+  groupId: string
 ): { colIdx: number; groupIdx: number } {
   if (!columns || !groupId) return { colIdx: -1, groupIdx: -1 };
   for (let cIdx = 0; cIdx < columns.length; cIdx++) {
@@ -819,10 +886,13 @@ export function findGroupIndicesInWorkspace(
 
 /** 源列是否「仅一 group 且该 group 仅一 card」 */
 export function isOnlyCardInSourceColumn(
-  columns: ReadonlyArray<{
-    groups: ReadonlyArray<{ id: string; cards: ReadonlyArray<unknown> }>;
-  }> | null | undefined,
-  sourceGroupId: string,
+  columns:
+    | ReadonlyArray<{
+        groups: ReadonlyArray<{ id: string; cards: ReadonlyArray<unknown> }>;
+      }>
+    | null
+    | undefined,
+  sourceGroupId: string
 ): boolean {
   if (!columns) return false;
   for (let i = 0; i < columns.length; i++) {
@@ -839,10 +909,12 @@ export function isOnlyCardInSourceColumn(
 /** 拖拽结束动画：优先 data-group-id / data-card-id，避免 textContent 误匹配 */
 function findDropTargetCardEl(
   cardId: string,
-  preferredGroupId?: string | null,
+  preferredGroupId?: string | null
 ): HTMLElement | null {
   if (preferredGroupId) {
-    const cards = Array.from(document.querySelectorAll('.workspace-card[data-group-id]'));
+    const cards = Array.from(
+      document.querySelectorAll('.workspace-card[data-group-id]')
+    );
     for (let i = 0; i < cards.length; i++) {
       const el = cards[i] as HTMLElement;
       if (el.getAttribute('data-group-id') === preferredGroupId) return el;
@@ -856,7 +928,9 @@ function findDropTargetCardEl(
     }
   }
   if (cardId === 'chat') {
-    return document.querySelector('.workspace-card.flat-layout') as HTMLElement | null;
+    return document.querySelector(
+      '.workspace-card.flat-layout'
+    ) as HTMLElement | null;
   }
   return null;
 }
@@ -867,14 +941,12 @@ function findDropTargetCardEl(
  * 稳定性：pointer capture、cancel 清理、插入线复用、data-card-id 定位。
  * 落点几何与提交护栏见上方 pure helpers（resolveTabDrop / canCommitTabDrop）。
  */
-export function useTabDrag({
-  wsId,
-  groupId,
-  cardsLength,
-}: UseTabDragOptions) {
+export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
   const setDraggedTab = useWorkspaceStore((s) => s.setDraggedTab);
   const mergeTab = useWorkspaceStore((s) => s.mergeTab);
-  const detachTabToStandalone = useWorkspaceStore((s) => s.detachTabToStandalone);
+  const detachTabToStandalone = useWorkspaceStore(
+    (s) => s.detachTabToStandalone
+  );
   const closeTabInGroup = useWorkspaceStore((s) => s.closeTabInGroup);
 
   const handleTabPointerDown = React.useCallback(
@@ -899,7 +971,9 @@ export function useTabDrag({
 
       const targetEl = e.currentTarget as HTMLElement;
       const isDragFromTabButton = targetEl.classList.contains('card-tab');
-      const sourceCard = targetEl.closest('.workspace-card') as HTMLElement | null;
+      const sourceCard = targetEl.closest(
+        '.workspace-card'
+      ) as HTMLElement | null;
       const pointerId = e.pointerId;
 
       // 捕获指针：移出窗口 / 跨 iframe 仍收 move/up，避免卡在 dragging 态
@@ -927,15 +1001,24 @@ export function useTabDrag({
       const tabRect = targetEl ? targetEl.getBoundingClientRect() : null;
       const startWidth = cardRect ? cardRect.width : 0;
       const startHeight = cardRect ? cardRect.height : 0;
-      const clickOffsetX = isDragFromTabButton && tabRect
-        ? (startX - tabRect.left)
-        : (cardRect ? (startX - cardRect.left) : 0);
-      const clickOffsetY = isDragFromTabButton && tabRect
-        ? (startY - tabRect.top)
-        : (cardRect ? (startY - cardRect.top) : 0);
+      const clickOffsetX =
+        isDragFromTabButton && tabRect
+          ? startX - tabRect.left
+          : cardRect
+            ? startX - cardRect.left
+            : 0;
+      const clickOffsetY =
+        isDragFromTabButton && tabRect
+          ? startY - tabRect.top
+          : cardRect
+            ? startY - cardRect.top
+            : 0;
 
-
-      const cardElements = Array.from(document.querySelectorAll('.workspace-card:not(.placeholder-card-group)')) as HTMLElement[];
+      const cardElements = Array.from(
+        document.querySelectorAll(
+          '.workspace-card:not(.placeholder-card-group)'
+        )
+      ) as HTMLElement[];
       const cardSnapshots = cardElements.map((el) => {
         const r = el.getBoundingClientRect();
         return {
@@ -954,9 +1037,6 @@ export function useTabDrag({
         };
       });
 
-      const canvasEl = document.querySelector('.workspace-canvas') as HTMLElement;
-      const canvasRect = canvasEl ? canvasEl.getBoundingClientRect() : null;
-
       const safeSetDropPreview = (nextPreview: DropPreviewState | null) => {
         const currentPreview = getWorkspaceStoreState().dropPreview;
         if (!nextPreview) {
@@ -970,15 +1050,22 @@ export function useTabDrag({
         }
       };
 
-      const getIndicator = () => document.getElementById(`drop-indicator-${wsId}`) as HTMLDivElement | null;
+      const getIndicator = () =>
+        document.getElementById(
+          `drop-indicator-${wsId}`
+        ) as HTMLDivElement | null;
 
       const removeInsertLine = () => {
         if (insertLineEl) {
           insertLineEl.remove();
           insertLineEl = null;
         }
-        document.querySelectorAll('.tab-insert-line').forEach((el) => el.remove());
-        document.querySelectorAll('.tab-placeholder-indicator').forEach((el) => el.remove());
+        document
+          .querySelectorAll('.tab-insert-line')
+          .forEach((el) => el.remove());
+        document
+          .querySelectorAll('.tab-placeholder-indicator')
+          .forEach((el) => el.remove());
       };
 
       const clearIndicator = () => {
@@ -990,8 +1077,15 @@ export function useTabDrag({
         removeInsertLine();
       };
 
-      const showTabInsertLine = (tabsBar: HTMLElement, mouseX: number): { insertX: number; insertIdx: number } => {
-        const tabs = Array.from(tabsBar.querySelectorAll('.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)')) as HTMLElement[];
+      const showTabInsertLine = (
+        tabsBar: HTMLElement,
+        mouseX: number
+      ): { insertX: number; insertIdx: number } => {
+        const tabs = Array.from(
+          tabsBar.querySelectorAll(
+            '.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)'
+          )
+        ) as HTMLElement[];
         const barRect = tabsBar.getBoundingClientRect();
         const tabRects = tabs.map((t) => {
           const tr = t.getBoundingClientRect();
@@ -1004,11 +1098,16 @@ export function useTabDrag({
         }
 
         // Clean up any placeholders that are either in other bars, or at a different position
-        document.querySelectorAll('.tab-placeholder-indicator').forEach((el) => {
-          if (el.parentElement !== tabsBar || Array.from(tabsBar.children).indexOf(el) !== insertIdx) {
-            el.remove();
-          }
-        });
+        document
+          .querySelectorAll('.tab-placeholder-indicator')
+          .forEach((el) => {
+            if (
+              el.parentElement !== tabsBar ||
+              Array.from(tabsBar.children).indexOf(el) !== insertIdx
+            ) {
+              el.remove();
+            }
+          });
 
         // Insert new inline placeholder if it does not exist
         if (!tabsBar.querySelector('.tab-placeholder-indicator')) {
@@ -1017,7 +1116,7 @@ export function useTabDrag({
           placeholder.setAttribute('aria-hidden', 'true');
           const title = getPanelTitle(cardId);
           placeholder.innerHTML = `<span class="tab-label" style="opacity: 0.85">${title}</span>`;
-          
+
           if (insertIdx < tabs.length) {
             tabsBar.insertBefore(placeholder, tabs[insertIdx]);
           } else {
@@ -1037,7 +1136,12 @@ export function useTabDrag({
 
         if (!isDragging && exceedsDragThreshold(dx, dy)) {
           isDragging = true;
-          setDraggedTab({ cardId, sourceGroupId: groupId, workspaceId: wsId, isTabDrag: isDragFromTabButton });
+          setDraggedTab({
+            cardId,
+            sourceGroupId: groupId,
+            workspaceId: wsId,
+            isTabDrag: isDragFromTabButton,
+          });
 
           if (isDragFromTabButton && targetEl) {
             dragOverlay = targetEl.cloneNode(true) as HTMLDivElement;
@@ -1062,7 +1166,9 @@ export function useTabDrag({
               justify-content: center;
             `;
             // Remove close button from drag preview tab so it looks super clean
-            dragOverlay.querySelectorAll('.tab-close-btn').forEach((btn) => btn.remove());
+            dragOverlay
+              .querySelectorAll('.tab-close-btn')
+              .forEach((btn) => btn.remove());
             document.body.appendChild(dragOverlay);
             document.body.classList.add('dragging-card');
           } else if (sourceCard) {
@@ -1076,16 +1182,19 @@ export function useTabDrag({
               overflow: hidden;
               box-shadow: 0 0 16px rgba(0,0,0,0.12);
               border-radius: 0;
-              border: 1.5px solid rgba(55, 65, 81, 0.3);
-              background: var(--bg-card, #f9f9f9);
+              border: 1.5px solid color-mix(in srgb, var(--accent-color, #1a73e8) 35%, var(--border-color));
+              background: var(--bg-card, var(--bg-primary));
               opacity: 0.92;
               pointer-events: none;
               z-index: 10000;
-              transition: width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+              transition: opacity 0.12s ease-out;
+              will-change: transform;
             `;
-            dragOverlay.querySelectorAll('input, textarea, button').forEach((el) => {
-              (el as HTMLInputElement).disabled = true;
-            });
+            dragOverlay
+              .querySelectorAll('input, textarea, button')
+              .forEach((el) => {
+                (el as HTMLInputElement).disabled = true;
+              });
             document.body.appendChild(dragOverlay);
             document.body.classList.add('dragging-card');
           }
@@ -1099,7 +1208,11 @@ export function useTabDrag({
         const mouseX = moveEvent.clientX;
         const mouseY = moveEvent.clientY;
 
-        const matchedSnapshot = findCardSnapshotAtPoint(cardSnapshots, mouseX, mouseY);
+        const matchedSnapshot = findCardSnapshotAtPoint(
+          cardSnapshots,
+          mouseX,
+          mouseY
+        );
 
         if (!matchedSnapshot) {
           clearIndicator();
@@ -1117,25 +1230,39 @@ export function useTabDrag({
         const targetGroupId = matchedSnapshot.groupId;
 
         const currentDraggedTab = getWorkspaceStoreState().draggedTab;
-        const currentSourceGroupId = currentDraggedTab?.sourceGroupId ?? groupId;
+        const currentSourceGroupId =
+          currentDraggedTab?.sourceGroupId ?? groupId;
 
-        const currentWs = getWorkspaceStoreState().workspaces.find((w) => w.id === wsId);
+        const currentWs = getWorkspaceStoreState().workspaces.find(
+          (w) => w.id === wsId
+        );
         const columns = currentWs?.columns;
         const { colIdx: currentColIdx, groupIdx: currentGroupIdx } =
           findGroupIndicesInWorkspace(columns, currentSourceGroupId);
 
-        const sourceCol = columns?.find((c) => c.groups.some((g) => g.id === currentSourceGroupId));
-        const onlyCard = isOnlyCardInSourceColumn(columns, currentSourceGroupId);
+        const sourceCol = columns?.find((c) =>
+          c.groups.some((g) => g.id === currentSourceGroupId)
+        );
+        const onlyCard = isOnlyCardInSourceColumn(
+          columns,
+          currentSourceGroupId
+        );
         const sourceColGroupsLength = sourceCol?.groups.length ?? 0;
 
         const tabBarH = resolveTabBarHeight(
-          matchedSnapshot.element.querySelector('.card-header')?.getBoundingClientRect().height
-            ?? matchedSnapshot.element.querySelector('.tabs-bar')?.getBoundingClientRect().height
-            ?? DEFAULT_TAB_BAR_H,
+          matchedSnapshot.element
+            .querySelector('.card-header')
+            ?.getBoundingClientRect().height ??
+            matchedSnapshot.element
+              .querySelector('.tabs-bar')
+              ?.getBoundingClientRect().height ??
+            DEFAULT_TAB_BAR_H
         );
 
         const isSelfHover = targetGroupId === currentSourceGroupId;
-        const tabsBar = matchedSnapshot.element.querySelector('.tabs-bar') as HTMLElement | null;
+        const tabsBar = matchedSnapshot.element.querySelector(
+          '.tabs-bar'
+        ) as HTMLElement | null;
         const hasTabsBar = !!tabsBar;
 
         let tabInsertIdx: number | undefined;
@@ -1192,19 +1319,7 @@ export function useTabDrag({
 
         safeSetDropPreview(resolved.preview);
 
-        const size = computeDragOverlayTargetSize({
-          dropType: lastDropType,
-          startWidth,
-          startHeight,
-          targetWidth: targetRect.width,
-          targetHeight: targetRect.height,
-          canvasWidth: canvasRect?.width,
-          canvasHeight: canvasRect?.height,
-          targetColGroupsCount: columns?.[lastTargetColIdx]?.groups.length ?? 1,
-        });
-
-        dragOverlay.style.width = `${size.width}px`;
-        dragOverlay.style.height = `${size.height}px`;
+        // Drag 期间保持初始尺寸；仅 animateOverlayAway 松手时再变形，避免每帧改 width/height 触发布局
       };
 
       const detachListeners = () => {
@@ -1221,13 +1336,17 @@ export function useTabDrag({
         }
       };
 
-      const animateOverlayAway = (overlay: HTMLDivElement, preferredGroupId: string | null) => {
+      const animateOverlayAway = (
+        overlay: HTMLDivElement,
+        preferredGroupId: string | null
+      ) => {
         document.body.classList.remove('dragging-card');
         requestAnimationFrame(() => {
           const targetCardDOM = findDropTargetCardEl(cardId, preferredGroupId);
           if (targetCardDOM) {
             const destRect = targetCardDOM.getBoundingClientRect();
-            overlay.style.transition = 'all 0.28s cubic-bezier(0.19, 1, 0.22, 1)';
+            overlay.style.transition =
+              'all 0.28s cubic-bezier(0.19, 1, 0.22, 1)';
             overlay.style.left = `${destRect.left}px`;
             overlay.style.top = `${destRect.top}px`;
             overlay.style.width = `${destRect.width}px`;
@@ -1246,7 +1365,12 @@ export function useTabDrag({
 
       const finishPointer = (ev?: Event) => {
         if (finished) return;
-        if (ev && 'pointerId' in ev && (ev as PointerEvent).pointerId !== pointerId) return;
+        if (
+          ev &&
+          'pointerId' in ev &&
+          (ev as PointerEvent).pointerId !== pointerId
+        )
+          return;
         finished = true;
         detachListeners();
 
@@ -1265,7 +1389,8 @@ export function useTabDrag({
         setDraggedTab(null);
 
         // pointercancel：只清状态，不提交布局变更
-        const cancelled = ev?.type === 'pointercancel' || ev?.type === 'lostpointercapture';
+        const cancelled =
+          ev?.type === 'pointercancel' || ev?.type === 'lostpointercapture';
         let destGroupId: string | null = latestSourceGroupId;
 
         const commit = canCommitTabDrop({
@@ -1278,10 +1403,22 @@ export function useTabDrag({
 
         if (commit && lastDropType) {
           if (lastDropType === 'merge' && lastTargetGroupId) {
-            mergeTab(wsId, cardId, latestSourceGroupId, lastTargetGroupId, lastTabInsertIdx);
+            mergeTab(
+              wsId,
+              cardId,
+              latestSourceGroupId,
+              lastTargetGroupId,
+              lastTabInsertIdx
+            );
             destGroupId = lastTargetGroupId;
           } else if (lastDropType === 'self-reorder') {
-            mergeTab(wsId, cardId, latestSourceGroupId, latestSourceGroupId, lastTabInsertIdx);
+            mergeTab(
+              wsId,
+              cardId,
+              latestSourceGroupId,
+              latestSourceGroupId,
+              lastTabInsertIdx
+            );
             destGroupId = latestSourceGroupId;
           } else {
             const placement = dropTypeToDetachPlacement(lastDropType);
@@ -1292,7 +1429,7 @@ export function useTabDrag({
                 latestSourceGroupId,
                 lastTargetColIdx,
                 placement,
-                lastTargetGroupIdx,
+                lastTargetGroupIdx
               );
               destGroupId = null;
             } else if (placement === 'new-col') {
@@ -1301,7 +1438,7 @@ export function useTabDrag({
                 cardId,
                 latestSourceGroupId,
                 lastTargetColIdx,
-                'new-col',
+                'new-col'
               );
               destGroupId = null;
             }
@@ -1330,7 +1467,7 @@ export function useTabDrag({
       mergeTab,
       detachTabToStandalone,
       closeTabInGroup,
-    ],
+    ]
   );
 
   return { handleTabPointerDown };

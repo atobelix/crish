@@ -9,20 +9,12 @@ import {
   markdownHtmlCacheSize,
   setMarkdownHtmlCache,
 } from './markdownCache';
+import { escapeHtml, stripThoughtPlaceholders } from './markdownRenderLite';
 
 // 缓存 API 再导出，保持既有 import 路径稳定
 export { clearMarkdownHtmlCache, markdownHtmlCacheSize };
-
-/** HTML 属性/正文转义；null/非字符串安全降级 */
-export function escapeHtml(s: string): string {
-  if (s == null || s === '') return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// 轻量 API 再导出，保持既有 import 路径兼容（Chat 行请直接用 markdownRenderLite）
+export { escapeHtml, stripThoughtPlaceholders } from './markdownRenderLite';
 
 /**
  * 剥控制符 / BOM / 零宽 / bidi 覆盖，防止 smuggle `javascript:` 等危险 scheme。
@@ -31,8 +23,9 @@ export function escapeHtml(s: string): string {
 function sanitizeUrlCandidate(url: string): string {
   return String(url ?? '')
     .replace(
+      // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
       /[\u0000-\u001f\u007f\u00ad\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\ufeff]/g,
-      '',
+      ''
     )
     .trim();
 }
@@ -124,9 +117,19 @@ function isLocalPathRef(s: string): boolean {
     if (/^(javascript|vbscript|data):/i.test(v)) return false;
   }
   if (/^[A-Za-z]:[\\/]/.test(t)) return true;
-  if (t.startsWith('/') || t.startsWith('~/') || t.startsWith('./') || t.startsWith('../')) return true;
+  if (
+    t.startsWith('/') ||
+    t.startsWith('~/') ||
+    t.startsWith('./') ||
+    t.startsWith('../')
+  )
+    return true;
   if (/^(apps|packages|src|docs)\//.test(t)) return true;
-  if (/\.(ts|tsx|js|jsx|css|md|json|rs|py|toml|yml|yaml)$/i.test(t) && !t.includes('://')) return true;
+  if (
+    /\.(ts|tsx|js|jsx|css|md|json|rs|py|toml|yml|yaml)$/i.test(t) &&
+    !t.includes('://')
+  )
+    return true;
   return false;
 }
 
@@ -139,15 +142,15 @@ function wrapCjkTextSegment(text: string): string {
   let s = text
     .replace(
       /([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])([A-Za-z0-9@._/\\-])/g,
-      '$1<wbr>$2',
+      '$1<wbr>$2'
     )
     .replace(
       /([A-Za-z0-9@._/\\-])([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])/g,
-      '$1<wbr>$2',
+      '$1<wbr>$2'
     );
   s = s.replace(
     /([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{10})(?=[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])/g,
-    '$1<wbr>',
+    '$1<wbr>'
   );
   return s;
 }
@@ -160,56 +163,6 @@ function visualIndent(ws: string): number {
     else n += 1;
   }
   return n;
-}
-
-/** 本轮/本回合 + 可选修饰 + 总结|小结|回顾 */
-const RE_ROUND_SUMMARY_ZH = '本(?:轮|回合)(?:工作|内容|完成)?(?:总结|小结|回顾)';
-/** Round / Session / Turn summary */
-const RE_ROUND_SUMMARY_EN = '(?:Round|Session|Turn)\\s+summary';
-
-/**
- * 去掉模型常夹带的「正在思考…」占位与「本轮总结」类噪音标题。
- * 仅剥独立标题行（可含冒号/装饰括号/分隔点），不吞掉正文段落。
- */
-/**
- * 去掉首尾空行/BOM，但保留行尾有意义空格（如 `- ` 空列表项），
- * 避免 String.trim 把最后一项 `-\s` 吃成裸 `-` 导致匹配失败。
- */
-function softTrimMarkdown(s: string): string {
-  return s
-    .replace(/^[\s\ufeff]+/, '')
-    .replace(/(?:\r?\n[ \t]*)+$/g, '');
-}
-
-export function stripThoughtPlaceholders(text: string): string {
-  if (text == null || text === '') return '';
-  const source = typeof text === 'string' ? text : String(text);
-  if (!source.trim()) return '';
-  const zh = RE_ROUND_SUMMARY_ZH;
-  const en = RE_ROUND_SUMMARY_EN;
-  return softTrimMarkdown(
-    source
-      .replace(/^(正在思考中[….\s]{0,50}|正在处理[….\s]{0,50}){1,50}/gm, '')
-      // heading：## 本轮总结 / ## 本轮工作总结 · / ## 本回合小结：
-      .replace(new RegExp(`^#{1,6}\\s*${zh}\\s*[:：·.\\-—–]*\\s*$`, 'gm'), '')
-      // 粗体：**本轮总结** / **本轮总结：**
-      .replace(
-        new RegExp(`^\\*{1,2}\\s*${zh}\\s*[:：]?\\s*\\*{1,2}\\s*[:：·.\\-—–]*\\s*$`, 'gm'),
-        '',
-      )
-      // 【本轮总结】 / [本轮小结]
-      .replace(new RegExp(`^[\\[【]\\s*${zh}\\s*[\\]】]\\s*[:：·.\\-—–]*\\s*$`, 'gm'), '')
-      // 裸行
-      .replace(new RegExp(`^${zh}\\s*[:：·.\\-—–]*\\s*$`, 'gm'), '')
-      // 英文 Round / Session / Turn summary 标题行
-      .replace(new RegExp(`^#{1,6}\\s*${en}\\s*[:：·.\\-—–]*\\s*$`, 'gim'), '')
-      .replace(
-        new RegExp(`^\\*{1,2}\\s*${en}\\s*[:：]?\\s*\\*{1,2}\\s*[:：·.\\-—–]*\\s*$`, 'gim'),
-        '',
-      )
-      .replace(new RegExp(`^${en}\\s*[:：·.\\-—–]*\\s*$`, 'gim'), '')
-      .replace(/\n{3,}/g, '\n\n'),
-  );
 }
 
 /** 从 markdown 链目标字符串取出 URL（去掉可选 title；支持尖括号） */
@@ -236,7 +189,10 @@ function isTableSepLine(line: string): boolean {
   if (!t) return false;
   // 分隔行不用转义管道语义；去掉首尾 | 后按 | 切
   const core = t.replace(/^\|/, '').replace(/\|$/, '');
-  const cells = core.split('|').map((c) => c.trim()).filter((c) => c.length > 0);
+  const cells = core
+    .split('|')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
   if (cells.length < 2) return false;
   return cells.every((c) => /^:?-{2,}:?$/.test(c));
 }
@@ -246,7 +202,9 @@ function isTableRowLine(line: string): boolean {
   if (!t.includes('|')) return false;
   if (isTableSepLine(t)) return false;
   // 至少一处 | 且有实际单元格文字（全空 | | | 不当表体行，便于收尾）
-  return (t.match(/\|/g) || []).length >= 1 && t.replace(/\|/g, '').trim().length > 0;
+  return (
+    (t.match(/\|/g) || []).length >= 1 && t.replace(/\|/g, '').trim().length > 0
+  );
 }
 
 /**
@@ -277,7 +235,9 @@ function splitTableCells(line: string): string[] {
 }
 
 /** 从 GFM 分隔行解析列对齐：--- / :--- / ---: / :---: */
-function parseTableAlignments(sepLine: string): Array<'left' | 'center' | 'right'> {
+function parseTableAlignments(
+  sepLine: string
+): Array<'left' | 'center' | 'right'> {
   return splitTableCells(sepLine).map((c) => {
     const t = c.trim();
     // 忽略单元格内误写的转义残留，只看 : 与 -
@@ -290,7 +250,9 @@ function parseTableAlignments(sepLine: string): Array<'left' | 'center' | 'right
   });
 }
 
-function tableCellAlignAttr(align: 'left' | 'center' | 'right' | undefined): string {
+function tableCellAlignAttr(
+  align: 'left' | 'center' | 'right' | undefined
+): string {
   // 白名单：禁止把任意字符串写入 style
   if (align === 'center' || align === 'right') {
     return ` style="text-align:${align}"`;
@@ -301,7 +263,7 @@ function tableCellAlignAttr(align: 'left' | 'center' | 'right' | undefined): str
 /** 对齐数组对齐到 colCount（缺列补 left，多余截断） */
 function normalizeAlignments(
   aligns: Array<'left' | 'center' | 'right'>,
-  colCount: number,
+  colCount: number
 ): Array<'left' | 'center' | 'right'> {
   const out: Array<'left' | 'center' | 'right'> = [];
   for (let i = 0; i < colCount; i++) {
@@ -399,7 +361,7 @@ function formatMarkdownTextSegment(text: string): string {
       if (!t || t.length > 80) return full;
       if (/\s{2,}/.test(inner)) return full;
       return `<em>${inner}</em>`;
-    },
+    }
   );
   s = s.replace(/%%CODE(\d+)%%/g, (_, i) => codes[Number(i)] || '');
   return wrapCjkTextSegment(s);
@@ -413,9 +375,12 @@ function formatMarkdownTextSegment(text: string): string {
 function applyInline(html: string): string {
   if (!html) return '';
   // 无标签时仍走 CJK 快路径（format 内也会 wbr）
-  return html.replace(/(^|>)([^<]*)/g, (_full, prefix: string, text: string) => {
-    return prefix + formatMarkdownTextSegment(text);
-  });
+  return html.replace(
+    /(^|>)([^<]*)/g,
+    (_full, prefix: string, text: string) => {
+      return prefix + formatMarkdownTextSegment(text);
+    }
+  );
 }
 
 /**
@@ -476,7 +441,7 @@ function isIndentedContinuation(line: string, baseIndent: number): boolean {
 function renderListItemHtml(
   kind: ListKind,
   content: string,
-  taskChecked?: boolean,
+  taskChecked?: boolean
 ): string {
   // 空内容仍输出合法 li，避免松散空项被丢弃造成序号错位
   if (kind === 'task') {
@@ -615,7 +580,9 @@ function processListBlocks(html: string): string {
         const cls = tag === 'ol' ? 'md-ol md-ol-nested' : 'md-ul md-ul-nested';
         // 嵌套 ol 若从非 1 起号，保留 start
         const startAttr =
-          tag === 'ol' && segStart != null && segStart > 1 ? ` start="${segStart}"` : '';
+          tag === 'ol' && segStart != null && segStart > 1
+            ? ` start="${segStart}"`
+            : '';
         htmlNest += `<${tag} class="${cls}"${startAttr}>${seg.join('')}</${tag}>`;
         seg = [];
         segKind = null;
@@ -650,7 +617,9 @@ function processListBlocks(html: string): string {
       const tag = segKind;
       const cls = tag === 'ol' ? 'md-ol' : 'md-ul';
       const startAttr =
-        tag === 'ol' && segStart != null && segStart > 1 ? ` start="${segStart}"` : '';
+        tag === 'ol' && segStart != null && segStart > 1
+          ? ` start="${segStart}"`
+          : '';
       out.push('');
       out.push(`<${tag} class="${cls}"${startAttr}>${seg.join('')}</${tag}>`);
       out.push('');
@@ -672,7 +641,7 @@ function processListBlocks(html: string): string {
           const done = it.taskChecked ? ' done' : '';
           const box = it.taskChecked ? ' checked' : '';
           seg.push(
-            `<li class="md-li md-task-item${done}"><span class="md-task-box${box}"></span>${it.content}${nested}</li>`,
+            `<li class="md-li md-task-item${done}"><span class="md-task-box${box}"></span>${it.content}${nested}</li>`
           );
         } else if (it.kind === 'ol') {
           seg.push(`<li class="md-li md-ol-item">${it.content}${nested}</li>`);
@@ -701,20 +670,20 @@ function langFromFenceInfo(info: string): string {
   const aliases: Record<string, string> = {
     'c++': 'cpp',
     'c#': 'csharp',
-    'cs': 'csharp',
-    'js': 'javascript',
-    'ts': 'typescript',
-    'tsx': 'typescript',
-    'jsx': 'javascript',
-    'py': 'python',
-    'rs': 'rust',
-    'sh': 'bash',
-    'shell': 'bash',
-    'zsh': 'bash',
-    'yml': 'yaml',
-    'md': 'markdown',
-    'ps1': 'bash',
-    'powershell': 'bash',
+    cs: 'csharp',
+    js: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    jsx: 'javascript',
+    py: 'python',
+    rs: 'rust',
+    sh: 'bash',
+    shell: 'bash',
+    zsh: 'bash',
+    yml: 'yaml',
+    md: 'markdown',
+    ps1: 'bash',
+    powershell: 'bash',
   };
   return aliases[lower] || lower;
 }
@@ -725,7 +694,11 @@ function extractFilePathFromFenceInfo(info: string): string {
   return m ? (m[1] ?? m[2] ?? '') : '';
 }
 
-function buildCodeFenceHtml(bodyRaw: string, langClean: string, filePath?: string): string {
+function buildCodeFenceHtml(
+  bodyRaw: string,
+  langClean: string,
+  filePath?: string
+): string {
   const body = bodyRaw.replace(/\n$/, '');
   let inner: string;
   try {
@@ -744,7 +717,9 @@ function buildCodeFenceHtml(bodyRaw: string, langClean: string, filePath?: strin
     const segments = filePath.split('/');
     const parts = segments.map((s, i) => {
       const isLast = i === segments.length - 1;
-      const cls = isLast ? 'md-code-breadcrumb-file' : 'md-code-breadcrumb-segment';
+      const cls = isLast
+        ? 'md-code-breadcrumb-file'
+        : 'md-code-breadcrumb-segment';
       return `<span class="${cls}">${escapeHtml(s)}</span>`;
     });
     breadcrumb = `<span class="md-code-breadcrumb">${parts.join('<span class="md-code-breadcrumb-separator">/</span>')}</span>`;
@@ -760,13 +735,16 @@ function buildCodeFenceHtml(bodyRaw: string, langClean: string, filePath?: strin
 function extractCodeFences(text: string): { text: string; fences: string[] } {
   const fences: string[] = [];
   // 闭合 fence：允许 info string（非换行）
-  let out = text.replace(/```([^\n`]{0,500})\r?\n([\s\S]{0,50000}?)```/g, (_, info, code) => {
-    const i = fences.length;
-    const langClean = langFromFenceInfo(info);
-    const filePath = extractFilePathFromFenceInfo(info);
-    fences.push(buildCodeFenceHtml(code, langClean, filePath));
-    return `\n%%FENCE${i}%%\n`;
-  });
+  let out = text.replace(
+    /```([^\n`]{0,500})\r?\n([\s\S]{0,50000}?)```/g,
+    (_, info, code) => {
+      const i = fences.length;
+      const langClean = langFromFenceInfo(info);
+      const filePath = extractFilePathFromFenceInfo(info);
+      fences.push(buildCodeFenceHtml(code, langClean, filePath));
+      return `\n%%FENCE${i}%%\n`;
+    }
+  );
   // 文末未闭合：```lang\n…（无收尾 ```）— 流式时仍渲染为代码块
   out = out.replace(/```([^\n`]*)\r?\n([\s\S]*)$/, (full, info, code) => {
     // 避免误伤：若 body 内又出现独立 ``` 行则放弃（残缺多 fence）
@@ -802,9 +780,12 @@ function parseMarkdownToHtmlUncached(raw: string): string {
   if (raw == null || raw === '') return '';
   let source = typeof raw === 'string' ? raw : String(raw);
   if (!source.trim()) return '';
-  if (source.length > MAX_MARKDOWN_INPUT) source = source.slice(0, MAX_MARKDOWN_INPUT);
+  if (source.length > MAX_MARKDOWN_INPUT)
+    source = source.slice(0, MAX_MARKDOWN_INPUT);
   // 统一换行，避免 \r 干扰列表/表格行匹配
-  let text = stripThoughtPlaceholders(source.replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+  let text = stripThoughtPlaceholders(
+    source.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  );
   if (!text) return '';
 
   // 去掉对话里无意义的水平线（--- / *** / ___）
@@ -837,7 +818,7 @@ function parseMarkdownToHtmlUncached(raw: string): string {
     }
     const src = sanitizeUrlCandidate(rawSrc);
     return pushInline(
-      `<img class="md-img" src="${escapeHtml(src)}" alt="${escapeHtml(alt || '')}" loading="lazy" />`,
+      `<img class="md-img" src="${escapeHtml(src)}" alt="${escapeHtml(alt || '')}" loading="lazy" />`
     );
   };
 
@@ -847,7 +828,7 @@ function parseMarkdownToHtmlUncached(raw: string): string {
       const pathRaw = isLocalPathRef(rawUrl) ? rawUrl : t;
       const path = sanitizeUrlCandidate(pathRaw) || pathRaw;
       return pushInline(
-        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(t)}</button>`,
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(t)}</button>`
       );
     }
     if (!isSafeHref(rawUrl)) {
@@ -855,26 +836,28 @@ function parseMarkdownToHtmlUncached(raw: string): string {
     }
     const url = sanitizeUrlCandidate(rawUrl);
     return pushInline(
-      `<a class="md-a" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(t)}</a>`,
+      `<a class="md-a" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(t)}</a>`
     );
   };
 
   // 尖括号目标优先：![alt](<url>) / [t](<url>)，允许 url 内含 `)`（CommonMark）
   text = text.replace(
     /!\[([^\]]{0,2000})\]\(\s*<([^>\n]{0,2000})>\s*(?:(["'])[\s\S]{0,2000}?\3\s*)?\)/g,
-    (_m, alt: string, dest: string) => renderImgFromDest(alt, dest),
+    (_m, alt: string, dest: string) => renderImgFromDest(alt, dest)
   );
   text = text.replace(
     /\[([^\]]{1,2000})\]\(\s*<([^>\n]{0,2000})>\s*(?:(["'])[\s\S]{0,2000}?\3\s*)?\)/g,
-    (_m, t: string, dest: string) => renderLinkFromDest(t, dest),
+    (_m, t: string, dest: string) => renderLinkFromDest(t, dest)
   );
 
   // 普通目标：[^)]+ 可含零宽/BOM（再经 sanitize）；避免 [^)\s] 漏匹配
-  text = text.replace(/!\[([^\]]{0,2000})\]\(([^)]{1,10000})\)/g, (_m, alt: string, rawDest: string) =>
-    renderImgFromDest(alt, rawDest),
+  text = text.replace(
+    /!\[([^\]]{0,2000})\]\(([^)]{1,10000})\)/g,
+    (_m, alt: string, rawDest: string) => renderImgFromDest(alt, rawDest)
   );
-  text = text.replace(/\[([^\]]{1,2000})\]\(([^)]{1,10000})\)/g, (_m, t: string, rawDest: string) =>
-    renderLinkFromDest(t, rawDest),
+  text = text.replace(
+    /\[([^\]]{1,2000})\]\(([^)]{1,10000})\)/g,
+    (_m, t: string, rawDest: string) => renderLinkFromDest(t, rawDest)
   );
 
   // 裸路径：盘符 / 相对路径 / monorepo 前缀
@@ -883,9 +866,9 @@ function parseMarkdownToHtmlUncached(raw: string): string {
     (full, path: string) => {
       if (path.length > 160) return full;
       return pushInline(
-        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`,
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`
       );
-    },
+    }
   );
 
   // 其余文本 escape

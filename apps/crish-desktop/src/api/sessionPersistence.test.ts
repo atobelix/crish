@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
-  if (typeof globalThis.localStorage !== 'undefined' && typeof globalThis.localStorage?.getItem === 'function') {
+  if (
+    typeof globalThis.localStorage !== 'undefined' &&
+    typeof globalThis.localStorage?.getItem === 'function'
+  ) {
     return;
   }
   const map = new Map<string, string>();
@@ -65,7 +68,9 @@ import {
 } from './sessionPersistence';
 import { EMPTY_SESSION_TITLE } from './sessionTitle';
 
-function baseMsg(partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 'sender'>): SessionMessage {
+function baseMsg(
+  partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 'sender'>
+): SessionMessage {
   return {
     timestamp: 1_700_000_000_000,
     text: '',
@@ -73,7 +78,9 @@ function baseMsg(partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 
   };
 }
 
-function baseSession(partial: Partial<SessionState> & Pick<SessionState, 'id'>): SessionState {
+function baseSession(
+  partial: Partial<SessionState> & Pick<SessionState, 'id'>
+): SessionState {
   return {
     title: EMPTY_SESSION_TITLE,
     folder: DEFAULT_SESSION_FOLDER,
@@ -187,7 +194,9 @@ describe('parseSessionMessage / parseSessionMessages / jsonl', () => {
   it('rejects missing id/sender', () => {
     expect(parseSessionMessage(null)).toBeNull();
     expect(parseSessionMessage({ sender: 'user', timestamp: 1 })).toBeNull();
-    expect(parseSessionMessage({ id: 'm', sender: 'system', timestamp: 1 })).toBeNull();
+    expect(
+      parseSessionMessage({ id: 'm', sender: 'system', timestamp: 1 })
+    ).toBeNull();
   });
 
   it('accepts user/assistant and coerces toolCalls', () => {
@@ -247,8 +256,8 @@ describe('parseSessionMessage / parseSessionMessages / jsonl', () => {
           JSON.stringify({ id: 'x' }), // no sender
           JSON.stringify(msgs[1]),
           '',
-        ].join('\n'),
-      ).map((m) => m.id),
+        ].join('\n')
+      ).map((m) => m.id)
     ).toEqual(['1', '2']);
   });
 
@@ -264,7 +273,7 @@ describe('parseSessionMessage / parseSessionMessages / jsonl', () => {
       parseSessionMessages([
         baseMsg({ id: 'ok', sender: 'user' }),
         { id: 'bad' },
-      ]),
+      ])
     ).toHaveLength(1);
   });
 });
@@ -330,7 +339,7 @@ describe('parseSessionAgent / hydrateSessionAgents', () => {
         subagentRunId: 'r',
         parentSessionId: 'p',
         parentRunId: 'pr',
-      }),
+      })
     ).toMatchObject({
       id: 'a',
       status: 'stopped',
@@ -411,7 +420,7 @@ describe('localStorage load/save shape guards', () => {
     expect(loadSessionIndex()).toEqual([]);
     localStorage.setItem(
       SESSION_INDEX_KEY,
-      JSON.stringify([{ id: 'ok', title: 'T' }, { no: 'id' }]),
+      JSON.stringify([{ id: 'ok', title: 'T' }, { no: 'id' }])
     );
     const idx = loadSessionIndex();
     expect(idx).toHaveLength(1);
@@ -420,8 +429,26 @@ describe('localStorage load/save shape guards', () => {
 
   it('saveSessionIndex re-guards and round-trips', () => {
     saveSessionIndex([
-      { id: 's1', title: 'A', folder: 'F', isPinned: false, isArchived: false, timestamp: '', updatedAt: 1, messageCount: 0 },
-      { id: '', title: 'drop', folder: 'F', isPinned: false, isArchived: false, timestamp: '', updatedAt: 1, messageCount: 0 } as SessionIndexEntry,
+      {
+        id: 's1',
+        title: 'A',
+        folder: 'F',
+        isPinned: false,
+        isArchived: false,
+        timestamp: '',
+        updatedAt: 1,
+        messageCount: 0,
+      },
+      {
+        id: '',
+        title: 'drop',
+        folder: 'F',
+        isPinned: false,
+        isArchived: false,
+        timestamp: '',
+        updatedAt: 1,
+        messageCount: 0,
+      } as SessionIndexEntry,
     ]);
     const loaded = loadSessionIndex();
     expect(loaded).toHaveLength(1);
@@ -441,13 +468,13 @@ describe('localStorage load/save shape guards', () => {
 
     saveSessionBody('s2', msgs);
     expect(loadSessionBody('s2')).toEqual(msgs);
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's2')?.includes('\n') || true).toBe(
-      true,
-    );
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 's2')?.includes('\n') || true
+    ).toBe(true);
 
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's3',
-      [JSON.stringify(msgs[0]), '@@@'].join('\n'),
+      [JSON.stringify(msgs[0]), '@@@'].join('\n')
     );
     expect(loadSessionBody('s3')).toHaveLength(1);
   });
@@ -491,7 +518,7 @@ describe('localStorage load/save shape guards', () => {
           messages: [],
           startedAt: 1,
         },
-      ]),
+      ])
     );
     const agents = loadSessionAgents('s');
     expect(agents[0].status).toBe('stopped');
@@ -514,9 +541,13 @@ describe('localStorage load/save shape guards', () => {
     saveSessionAgents('s', []);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's')).toBeNull();
 
-    const many = Array.from({ length: SESSION_AGENTS_SAVE_CAP + 10 }, (_, i) => make(i));
+    const many = Array.from({ length: SESSION_AGENTS_SAVE_CAP + 10 }, (_, i) =>
+      make(i)
+    );
     saveSessionAgents('s', many);
-    const stored = JSON.parse(localStorage.getItem(SESSION_AGENTS_PREFIX + 's')!);
+    const stored = JSON.parse(
+      localStorage.getItem(SESSION_AGENTS_PREFIX + 's')!
+    );
     expect(stored).toHaveLength(SESSION_AGENTS_SAVE_CAP);
   });
 
@@ -553,7 +584,9 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     const s = baseSession({
       id: 's1',
       title: 'T',
-      messages: [baseMsg({ id: 'm1', sender: 'user', text: 'hi', timestamp: 50 })],
+      messages: [
+        baseMsg({ id: 'm1', sender: 'user', text: 'hi', timestamp: 50 }),
+      ],
     });
     saveSessionIndex([
       {
@@ -616,7 +649,9 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(h.sessions).toHaveLength(1);
     expect(h.sessions[0].id).toBe(id);
     // must not invent remote shell for missing active
-    expect(h.sessions.some((s) => s.id === 'ghost-remote-not-in-index')).toBe(false);
+    expect(h.sessions.some((s) => s.id === 'ghost-remote-not-in-index')).toBe(
+      false
+    );
     expect(h.activeSessionId).toBeNull();
     expect(h.sessions[0].messages[1].status).toBe('completed');
     expect(h.folderOrder).toEqual([DEFAULT_SESSION_FOLDER]);
@@ -644,13 +679,14 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(h.activeSessionId).toBe(id);
   });
 
-  it('persistAllSessions writes index/body and purges orphan bodies', () => {
-    localStorage.setItem(SESSION_BODY_PREFIX + 'orphan', messagesToJsonl([
-      baseMsg({ id: 'o', sender: 'user', text: 'gone' }),
-    ]));
+  it('persistAllSessions writes index/body and purges orphan bodies', async () => {
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'orphan',
+      messagesToJsonl([baseMsg({ id: 'o', sender: 'user', text: 'gone' })])
+    );
     localStorage.setItem(
       SESSION_AGENTS_PREFIX + 'orphan',
-      JSON.stringify([{ id: 'x' }]),
+      JSON.stringify([{ id: 'x' }])
     );
 
     const s = baseSession({
@@ -668,7 +704,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
         }),
       ],
     });
-    persistAllSessions([s], 'keep', [DEFAULT_SESSION_FOLDER]);
+    await persistAllSessions([s], 'keep', [DEFAULT_SESSION_FOLDER]);
 
     expect(loadSessionIndex().map((e) => e.id)).toEqual(['keep']);
     expect(loadSessionBody('keep')).toHaveLength(2);
@@ -678,7 +714,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(loadFolderOrder()).toEqual([DEFAULT_SESSION_FOLDER]);
   });
 
-  it('persistAllSessions with empty list clears index and does not invent sessions', () => {
+  it('persistAllSessions with empty list clears index and does not invent sessions', async () => {
     saveSessionIndex([
       {
         id: 'old',
@@ -692,7 +728,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       },
     ]);
     saveSessionBody('old', [baseMsg({ id: 'm', sender: 'user', text: 'x' })]);
-    persistAllSessions([], '', []);
+    await persistAllSessions([], '', []);
     expect(loadSessionIndex()).toEqual([]);
     expect(loadSessionBody('old')).toEqual([]);
     expect(loadActiveSessionId()).toBeNull();

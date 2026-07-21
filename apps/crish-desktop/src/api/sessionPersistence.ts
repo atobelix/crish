@@ -9,10 +9,15 @@
  * 不发明远程空壳会话。
  */
 
-import type { SessionAgent, SessionMessage, SessionState } from '../store/layoutStore';
+import type {
+  SessionAgent,
+  SessionMessage,
+  SessionState,
+} from '../store/layoutStore';
 import type { MessageToolCall } from '../store/types';
 import type { WorkerPool } from '../workers/worker-pool';
 import { Priority } from '../workers/types';
+import { setAsyncItem, removeAsyncItem, keyIndexManager } from './asyncStorage';
 import { coerceSessionTimestamp } from './sessionTime';
 import { EMPTY_SESSION_TITLE, prepareSessionsForUi } from './sessionTitle';
 import { normalizeAssistantTimeline } from './toolPresentation';
@@ -94,7 +99,10 @@ const AGENT_STATUSES = new Set<SessionAgent['status']>([
 ]);
 
 /** JSON.parse 失败 / 空串 → fallback（不抛） */
-export function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
+export function safeParseJson<T>(
+  raw: string | null | undefined,
+  fallback: T
+): T {
   if (raw == null || raw === '') return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -232,7 +240,8 @@ function parseToolCall(raw: unknown): MessageToolCall | null {
           })()
         : '';
   const status: MessageToolCall['status'] =
-    typeof o.status === 'string' && TOOL_STATUSES.has(o.status as MessageToolCall['status'])
+    typeof o.status === 'string' &&
+    TOOL_STATUSES.has(o.status as MessageToolCall['status'])
       ? (o.status as MessageToolCall['status'])
       : 'error';
   const tc: MessageToolCall = {
@@ -259,7 +268,8 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
   const o = raw as Record<string, unknown>;
   const id = asNonEmptyString(o.id);
   if (!id) return null;
-  const sender = o.sender === 'user' || o.sender === 'assistant' ? o.sender : null;
+  const sender =
+    o.sender === 'user' || o.sender === 'assistant' ? o.sender : null;
   if (!sender) return null;
 
   const ts = asFiniteNumber(o.timestamp);
@@ -277,14 +287,19 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
   ) {
     msg.status = o.status as NonNullable<SessionMessage['status']>;
   }
-  if (typeof o.streamTextOffset === 'number' && Number.isFinite(o.streamTextOffset)) {
+  if (
+    typeof o.streamTextOffset === 'number' &&
+    Number.isFinite(o.streamTextOffset)
+  ) {
     msg.streamTextOffset = o.streamTextOffset;
   }
   if (typeof o.thinkingTime === 'number' && Number.isFinite(o.thinkingTime)) {
     msg.thinkingTime = o.thinkingTime;
   }
   if (Array.isArray(o.toolCalls) && o.toolCalls.length) {
-    const tools = o.toolCalls.map(parseToolCall).filter(Boolean) as MessageToolCall[];
+    const tools = o.toolCalls
+      .map(parseToolCall)
+      .filter(Boolean) as MessageToolCall[];
     if (tools.length) msg.toolCalls = tools;
   }
   if (Array.isArray(o.blocks) && o.blocks.length) {
@@ -334,7 +349,7 @@ export function parseSessionAgent(raw: unknown): SessionAgent | null {
 
   const statusRaw = typeof o.status === 'string' ? o.status : '';
   const status: SessionAgent['status'] = AGENT_STATUSES.has(
-    statusRaw as SessionAgent['status'],
+    statusRaw as SessionAgent['status']
   )
     ? (statusRaw as SessionAgent['status'])
     : 'stopped';
@@ -441,7 +456,7 @@ export function messagesToJsonlFallback(messages: SessionMessage[]): string {
  */
 export async function messagesToJsonlWorker(
   messages: SessionMessage[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!messages?.length) return '';
   if (messages.length <= WORKER_BATCH_THRESHOLD) {
@@ -455,7 +470,7 @@ export async function messagesToJsonlWorker(
         'messages.to-jsonl',
         { messages },
         Priority.Normal,
-        { signal },
+        { signal }
       );
     }
   } catch {
@@ -470,7 +485,7 @@ export async function messagesToJsonlWorker(
  */
 export async function jsonlToMessagesWorker(
   jsonl: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<SessionMessage[]> {
   if (!jsonl?.trim()) return [];
   // 长度阈值：~200 条消息 ≈ 200KB，超过走 worker
@@ -485,7 +500,7 @@ export async function jsonlToMessagesWorker(
         'jsonl.to-messages',
         { text: jsonl },
         Priority.Normal,
-        { signal },
+        { signal }
       );
       return parseSessionMessages(result);
     }
@@ -498,7 +513,9 @@ export async function jsonlToMessagesWorker(
 /**
  * 恢复时把未完成的流式状态收成终态，避免 UI 永久转圈。
  */
-export function sanitizeMessagesForHydrate(messages: SessionMessage[]): SessionMessage[] {
+export function sanitizeMessagesForHydrate(
+  messages: SessionMessage[]
+): SessionMessage[] {
   if (!messages?.length) return [];
   return messages.map((m) => {
     let next = m;
@@ -522,7 +539,9 @@ export function sanitizeMessagesForHydrate(messages: SessionMessage[]): SessionM
             return {
               ...tc,
               status: 'error' as const,
-              output: tc.output?.trim() ? tc.output : '上次会话中断，工具未完成',
+              output: tc.output?.trim()
+                ? tc.output
+                : '上次会话中断，工具未完成',
             };
           }
           return tc;
@@ -530,7 +549,10 @@ export function sanitizeMessagesForHydrate(messages: SessionMessage[]): SessionM
       };
     }
     // 历史脏数据：客户端曾注入的「已结束。」不是模型正文，去掉以免误导续聊
-    if (next.sender === 'assistant' && (next.text || '').trim() === '已结束。') {
+    if (
+      next.sender === 'assistant' &&
+      (next.text || '').trim() === '已结束。'
+    ) {
       next = { ...next, text: '' };
     }
     // 对齐 blocks / toolCalls，保证重开会话时间线可渲染
@@ -592,41 +614,110 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
   return msgs;
 }
 
+export async function saveSessionBodyAsync(
+  sessionId: string,
+  messages: SessionMessage[],
+  serializedJsonl?: string | null
+): Promise<void> {
+  const id = asNonEmptyString(sessionId);
+  if (!id) return;
+  const msgs = messages || [];
+  const key = BODY_PREFIX + id;
+  const content =
+    serializedJsonl != null ? serializedJsonl : messagesToJsonl(msgs);
+  await setAsyncItem(key, content);
+  keyIndexManager.addKey(key);
+  try {
+    localStorage.setItem(key, content);
+    persistedMessageCounts.set(id, msgs.length);
+  } catch {
+    /* quota */
+  }
+}
+
 export function saveSessionBody(
   sessionId: string,
   messages: SessionMessage[],
-  serializedJsonl?: string | null,
+  serializedJsonl?: string | null
 ): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
   const msgs = messages || [];
   const prevCount = persistedMessageCounts.get(id) ?? 0;
+  const key = BODY_PREFIX + id;
+
+  let content: string;
+  if (serializedJsonl != null) {
+    content = serializedJsonl;
+  } else if (prevCount === 0 || msgs.length < prevCount) {
+    content = messagesToJsonl(msgs);
+  } else if (msgs.length > prevCount) {
+    const newMsgs = msgs.slice(prevCount);
+    const existing = localStorage.getItem(key) ?? '';
+    const append = newMsgs.map((m) => JSON.stringify(m)).join('\n');
+    const sep = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+    content = existing + sep + append;
+  } else {
+    content = localStorage.getItem(key) ?? messagesToJsonl(msgs);
+  }
+
+  // Non-blocking async write to IndexedDB
+  setAsyncItem(key, content)
+    .then(() => {
+      keyIndexManager.addKey(key);
+    })
+    .catch(() => {
+      /* ignore */
+    });
 
   try {
-    if (serializedJsonl != null) {
-      localStorage.setItem(BODY_PREFIX + id, serializedJsonl);
-    } else if (prevCount === 0 || msgs.length < prevCount) {
-      localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(msgs));
-    } else if (msgs.length > prevCount) {
-      const newMsgs = msgs.slice(prevCount);
-      const existing = localStorage.getItem(BODY_PREFIX + id) ?? '';
-      const append = newMsgs.map((m) => JSON.stringify(m)).join('\n');
-      const sep = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-      localStorage.setItem(BODY_PREFIX + id, existing + sep + append);
-    }
+    localStorage.setItem(key, content);
     persistedMessageCounts.set(id, msgs.length);
   } catch {
     const fallback = msgs.slice(-100);
-    localStorage.setItem(BODY_PREFIX + id, messagesToJsonl(fallback));
+    const fbContent = messagesToJsonl(fallback);
+    localStorage.setItem(key, fbContent);
+    setAsyncItem(key, fbContent).catch(() => {
+      /* ignore */
+    });
     persistedMessageCounts.set(id, fallback.length);
+  }
+}
+
+export async function cleanupOrphanSessionsAsync(
+  activeIds: Set<string>
+): Promise<void> {
+  const allKeys = await keyIndexManager.getKeys();
+  for (const k of allKeys) {
+    if (k.startsWith(BODY_PREFIX)) {
+      const sessionId = k.slice(BODY_PREFIX.length);
+      if (!activeIds.has(sessionId)) {
+        await removeAsyncItem(k);
+        keyIndexManager.deleteKey(k);
+        localStorage.removeItem(k);
+      }
+    } else if (k.startsWith(AGENTS_PREFIX)) {
+      const sessionId = k.slice(AGENTS_PREFIX.length);
+      if (!activeIds.has(sessionId)) {
+        await removeAsyncItem(k);
+        keyIndexManager.deleteKey(k);
+        localStorage.removeItem(k);
+      }
+    }
   }
 }
 
 export function deleteSessionBody(sessionId: string): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
-  localStorage.removeItem(BODY_PREFIX + id);
-  localStorage.removeItem(AGENTS_PREFIX + id);
+  const bodyKey = BODY_PREFIX + id;
+  const agentsKey = AGENTS_PREFIX + id;
+  removeAsyncItem(bodyKey);
+  removeAsyncItem(agentsKey);
+  keyIndexManager.deleteKey(bodyKey);
+  keyIndexManager.deleteKey(agentsKey);
+  localStorage.removeItem(bodyKey);
+  localStorage.removeItem(agentsKey);
   persistedMessageCounts.delete(id);
 }
 
@@ -640,7 +731,10 @@ export function loadSessionAgents(sessionId: string): SessionAgent[] {
   return hydrateSessionAgents(list);
 }
 
-export function saveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
+export function saveSessionAgents(
+  sessionId: string,
+  agents: SessionAgent[]
+): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
   if (!agents?.length) {
@@ -650,7 +744,7 @@ export function saveSessionAgents(sessionId: string, agents: SessionAgent[]): vo
   try {
     localStorage.setItem(
       AGENTS_PREFIX + id,
-      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP)),
+      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
     );
   } catch {
     /* quota */
@@ -693,7 +787,9 @@ export function saveFolderOrder(order: string[]): void {
   }
 }
 
-function lastMessageTime(messages: SessionMessage[] | undefined): number | null {
+function lastMessageTime(
+  messages: SessionMessage[] | undefined
+): number | null {
   if (!messages?.length) return null;
   for (let i = messages.length - 1; i >= 0; i--) {
     const ts = messages[i]?.timestamp;
@@ -710,7 +806,9 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
       if (!s?.id) return null;
       const old = prev.get(s.id);
       const messageCount = s.messages?.length ?? 0;
-      const pinnedIds = s.pinnedMessageIds?.length ? s.pinnedMessageIds : undefined;
+      const pinnedIds = s.pinnedMessageIds?.length
+        ? s.pinnedMessageIds
+        : undefined;
       const oldPinned = old?.pinnedMessageIds;
       const pinsChanged =
         (pinnedIds?.length ?? 0) !== (oldPinned?.length ?? 0) ||
@@ -765,7 +863,9 @@ export function hydrateSessionsFromDisk(): {
   }
 
   // 按最近更新排序，保证侧栏「最近」有意义
-  const ordered = [...index].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const ordered = [...index].sort(
+    (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+  );
 
   const sessions: SessionState[] = ordered.map((e) => {
     const messages = sanitizeMessagesForHydrate(loadSessionBody(e.id));
@@ -779,7 +879,9 @@ export function hydrateSessionsFromDisk(): {
       // 纠正历史字面量「刚刚」等（与 sessionDiskMirror 一致）
       timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
       messages,
-      pinnedMessageIds: e.pinnedMessageIds?.length ? e.pinnedMessageIds : undefined,
+      pinnedMessageIds: e.pinnedMessageIds?.length
+        ? e.pinnedMessageIds
+        : undefined,
       agents: loadSessionAgents(e.id),
       engineCursor: e.engineCursor,
       engineLastRunId: e.engineLastRunId,
@@ -806,17 +908,10 @@ export function hydrateSessionsFromDisk(): {
  */
 const persistedMessageCounts = new Map<string, number>();
 
-/**
- * 上次持久化时已知的会话 id 集合。
- * 用于在 persistAllSessions 中跳过「无删除」场景的孤儿扫描——
- * 只有当 keep 集合相对上次缩小时才扫 localStorage，避免每次增量写入都做 O(n) 全扫。
- */
-let lastKnownSessionIds: Set<string> | null = null;
-
 export async function persistAllSessions(
   sessions: SessionState[],
   activeSessionId: string,
-  folderOrder: string[],
+  folderOrder: string[]
 ): Promise<void> {
   const list = sessions ?? [];
   saveSessionIndex(sessionsToIndex(list));
@@ -824,7 +919,7 @@ export async function persistAllSessions(
   for (const s of list) {
     if (!s?.id) continue;
     const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
     // 大数据量（>200 条）走 Worker 序列化，小数据量直接同步
     if (msgs.length > WORKER_BATCH_THRESHOLD) {
@@ -834,7 +929,7 @@ export async function persistAllSessions(
         },
         () => {
           saveSessionBody(s.id, msgs);
-        },
+        }
       );
       workerJobs.push(job);
     } else {
@@ -846,30 +941,23 @@ export async function persistAllSessions(
   if (workerJobs.length > 0) {
     await Promise.allSettled(workerJobs);
   }
-  // 孤儿扫描：只有当 keep 集合相对上次缩小时才扫 localStorage。
-  // 增量写入（无删除）时跳过 O(n) 全扫——这是高频路径的主要开销。
+  // 始终清理不在 keep 中的 BODY_/AGENTS_ 孤儿 key（含外源植入的 body）
   try {
     const keep = new Set(list.map((s) => s.id).filter(Boolean));
-    const prev = lastKnownSessionIds;
-    const shrunk =
-      prev === null ||
-      Array.from(prev).some((id) => !keep.has(id));
-    if (shrunk) {
-      const toRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(BODY_PREFIX)) {
-          const id = k.slice(BODY_PREFIX.length);
-          if (!keep.has(id)) toRemove.push(k);
-        }
-        if (k && k.startsWith(AGENTS_PREFIX)) {
-          const id = k.slice(AGENTS_PREFIX.length);
-          if (!keep.has(id)) toRemove.push(k);
-        }
+    await cleanupOrphanSessionsAsync(keep);
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(BODY_PREFIX)) {
+        const id = k.slice(BODY_PREFIX.length);
+        if (!keep.has(id)) toRemove.push(k);
       }
-      for (const k of toRemove) localStorage.removeItem(k);
+      if (k && k.startsWith(AGENTS_PREFIX)) {
+        const id = k.slice(AGENTS_PREFIX.length);
+        if (!keep.has(id)) toRemove.push(k);
+      }
     }
-    lastKnownSessionIds = keep;
+    for (const k of toRemove) localStorage.removeItem(k);
   } catch {
     /* ignore */
   }
@@ -884,40 +972,34 @@ export async function persistAllSessions(
 export function persistAllSessionsSync(
   sessions: SessionState[],
   activeSessionId: string,
-  folderOrder: string[],
+  folderOrder: string[]
 ): void {
   const list = sessions ?? [];
   saveSessionIndex(sessionsToIndex(list));
   for (const s of list) {
     if (!s?.id) continue;
     const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
     saveSessionBody(s.id, msgs);
     saveSessionAgents(s.id, s.agents || []);
   }
+  // 始终清理不在 keep 中的 BODY_/AGENTS_ 孤儿 key（与 async 版一致）
   try {
     const keep = new Set(list.map((s) => s.id).filter(Boolean));
-    const prev = lastKnownSessionIds;
-    const shrunk =
-      prev === null ||
-      Array.from(prev).some((id) => !keep.has(id));
-    if (shrunk) {
-      const toRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(BODY_PREFIX)) {
-          const id = k.slice(BODY_PREFIX.length);
-          if (!keep.has(id)) toRemove.push(k);
-        }
-        if (k && k.startsWith(AGENTS_PREFIX)) {
-          const id = k.slice(AGENTS_PREFIX.length);
-          if (!keep.has(id)) toRemove.push(k);
-        }
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(BODY_PREFIX)) {
+        const id = k.slice(BODY_PREFIX.length);
+        if (!keep.has(id)) toRemove.push(k);
       }
-      for (const k of toRemove) localStorage.removeItem(k);
+      if (k && k.startsWith(AGENTS_PREFIX)) {
+        const id = k.slice(AGENTS_PREFIX.length);
+        if (!keep.has(id)) toRemove.push(k);
+      }
     }
-    lastKnownSessionIds = keep;
+    for (const k of toRemove) localStorage.removeItem(k);
   } catch {
     /* ignore */
   }
@@ -925,7 +1007,7 @@ export function persistAllSessionsSync(
   saveFolderOrder(folderOrder || []);
 }
 
-/** 重置孤儿扫描缓存（用于显式清空/导入会话后强制重扫） */
+/** 兼容旧调用：孤儿扫描已改为每次 persist 全扫，此函数为 no-op */
 export function resetOrphanScanCache(): void {
-  lastKnownSessionIds = null;
+  /* no-op */
 }

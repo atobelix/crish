@@ -3,12 +3,22 @@
  * 空态由 ChatCard → ChatEmptyState 负责；本组件不渲染欢迎壳，避免幽灵闪屏。
  * 状态机/stream 仍在 ChatCard；className 与历史路径保持一致。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import * as Lucide from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { Tooltip } from './settings/SettingsUI';
-import type { FileDiff, SessionAgent, SessionMessage } from '../store/layoutStore';
+import type {
+  FileDiff,
+  SessionAgent,
+  SessionMessage,
+} from '../store/layoutStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { assistantCopyText } from '../api/toolPresentation';
 import {
@@ -28,14 +38,12 @@ import {
   subscribeSearchQuery,
   getSearchQuerySnapshot,
 } from '../api/sessionSearch';
-import {
-  ChatAssistantMessageRow,
-  ChatUserMessageRow,
-} from './ChatMessageRow';
+import { ChatAssistantMessageRow, ChatUserMessageRow } from './ChatMessageRow';
 import { prepare, layout } from '@chenglou/pretext';
 import { useVirtualScroll } from '../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../api/messageWindow';
 import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
+import { ChevronDown, Pin, PinOff } from 'lucide-react';
 
 const EMPTY_PIN_IDS: string[] = [];
 const EMPTY_MSGS: SessionMessage[] = [];
@@ -50,7 +58,7 @@ function pinSnippet(text?: string, max = 72): string {
 
 function scrollToMessage(messageId: string) {
   const el = document.querySelector(
-    `[data-msg-id="${CSS.escape(messageId)}"]`,
+    `[data-msg-id="${CSS.escape(messageId)}"]`
   ) as HTMLElement | null;
   if (!el) return false;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -62,7 +70,7 @@ function scrollToMessage(messageId: string) {
 /** 双 rAF 后再试 scroll（等 expandedOlder 提交后 DOM 挂载） */
 function scrollToMessageAfterPaint(
   messageId: string,
-  onMiss?: () => void,
+  onMiss?: () => void
 ): void {
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -109,10 +117,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   activeSessionId,
   thinkingSeconds,
   showAllMessages = false,
-  // 空态已由 ChatEmptyState 承接；保留 props 以免破坏 ChatCard 契约
-  showProjectPicker: _showProjectPicker,
-  onShowProjectPicker: _onShowProjectPicker,
-  onProjectChanged: _onProjectChanged,
+  // showProjectPicker / onShowProjectPicker / onProjectChanged：空态已由 ChatEmptyState 承接，不解构
   onSetChatInput,
   onSendFollowUp,
   onWithdraw,
@@ -149,11 +154,11 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const sessionKey = activeSessionId || '_';
   const expandedTools = useMemo(
     () => expandedToolsBySession[sessionKey] ?? {},
-    [expandedToolsBySession, sessionKey],
+    [expandedToolsBySession, sessionKey]
   );
   const expandedUserMsgs = useMemo(
     () => expandedUserMsgsBySession[sessionKey] ?? {},
-    [expandedUserMsgsBySession, sessionKey],
+    [expandedUserMsgsBySession, sessionKey]
   );
 
   // ref 层：依赖频繁变化的值，使回调 identity 稳定
@@ -176,19 +181,22 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const searchHighlightQuery = useSyncExternalStore(
     subscribeSearchQuery,
     getSearchQuerySnapshot,
-    getSearchQuerySnapshot,
+    getSearchQuerySnapshot
   );
 
   const pinMessage = useLayoutStore((s) => s.pinMessage);
   const unpinMessage = useLayoutStore((s) => s.unpinMessage);
   // 收紧订阅：按 sessionsById 取当前会话字段，避免 sessions 整表 find
   const pinnedMessageIds = useLayoutStore(
-    (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds || EMPTY_PIN_IDS,
+    (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds || EMPTY_PIN_IDS
   );
   const sessionAllMessages = useLayoutStore(
-    (s) => s.sessionsById[activeSessionId]?.messages || EMPTY_MSGS,
+    (s) => s.sessionsById[activeSessionId]?.messages || EMPTY_MSGS
   );
-  const pinnedIdSet = useMemo(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
+  const pinnedIdSet = useMemo(
+    () => new Set(pinnedMessageIds),
+    [pinnedMessageIds]
+  );
 
   /**
    * 待审批 / 搜索最早命中 keep-alive：同帧 mustInclude + 抬升 expandedOlder。
@@ -237,7 +245,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         // 同帧强制进窗，避免 effect 滞后一拍导致审批行 silent miss
         mustIncludeIndices: showAllMessages ? undefined : mustIncludeIndices,
       }),
-    [messages, expandedOlder, showAllMessages, mustIncludeIndices],
+    [messages, expandedOlder, showAllMessages, mustIncludeIndices]
   );
   const visibleMessages = messageWindow.visible;
   const olderStep = expandOlderStepCount(messageWindow.hiddenCount);
@@ -247,7 +255,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   useEffect(() => {
     if (!searchHighlightQuery) return;
     const idx = messages.findIndex((m) =>
-      messageMatchesSearch(m, searchHighlightQuery),
+      messageMatchesSearch(m, searchHighlightQuery)
     );
     if (idx < 0) return;
     const id = messages[idx]?.id;
@@ -276,7 +284,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   ]);
 
   const permissionMode = useLayoutStore((s) => s.permissionMode);
-  const hideThinkingBlock = useLayoutStore((s) => Boolean(s.appSettings?.hideThinkingBlock));
+  const hideThinkingBlock = useLayoutStore((s) =>
+    Boolean(s.appSettings?.hideThinkingBlock)
+  );
   const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
   const planApproved = useLayoutStore((s) => s.planApproved);
   const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
@@ -291,14 +301,20 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         const m = byId.get(id);
         if (!m) return null;
         const text =
-          m.sender === 'assistant' ? assistantCopyText(m) || m.text || '' : m.text || '';
+          m.sender === 'assistant'
+            ? assistantCopyText(m) || m.text || ''
+            : m.text || '';
         return {
           id,
           sender: m.sender as 'user' | 'assistant',
           snippet: pinSnippet(text),
         };
       })
-      .filter(Boolean) as { id: string; sender: 'user' | 'assistant'; snippet: string }[];
+      .filter(Boolean) as {
+      id: string;
+      sender: 'user' | 'assistant';
+      snippet: string;
+    }[];
   }, [pinnedMessageIds, sessionAllMessages]);
 
   const togglePin = useCallback(
@@ -311,7 +327,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       }
       // 钉栏图标 / is-pinned 态即反馈，不 toast 成功
     },
-    [activeSessionId, pinnedIdSet, pinMessage, unpinMessage],
+    [activeSessionId, pinnedIdSet, pinMessage, unpinMessage]
   );
 
   /** 固定条跳转：pin include 抬升窗口（带 overscan）再 scroll；用 containsId 校验 */
@@ -321,9 +337,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       // 过滤视图：钉住的消息可能不在 displayMessages 中
       if (idx < 0 && showAllMessages) {
         const exists = sessionAllMessages.some((m) => m.id === messageId);
-        onShowToast(
-          exists ? '该消息不在当前过滤结果中' : '未找到该固定消息',
-        );
+        onShowToast(exists ? '该消息不在当前过滤结果中' : '未找到该固定消息');
         return;
       }
       // 优先当前展示列表；过滤视图回落到完整会话
@@ -339,7 +353,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
           listForPin,
           messageId,
           prev,
-          DEFAULT_RECENT_MESSAGE_COUNT,
+          DEFAULT_RECENT_MESSAGE_COUNT
         );
 
       if (!showAllMessages) {
@@ -358,7 +372,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         }, 50);
       });
     },
-    [messages, sessionAllMessages, showAllMessages, onShowToast],
+    [messages, sessionAllMessages, showAllMessages, onShowToast]
   );
 
   /** 步进以 effectiveExpanded 为基，避免 mustInclude 抬升后 state 滞后导致少扩 */
@@ -366,14 +380,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     setExpandedOlder((n) =>
       nextExpandedOlder(
         Math.max(n, messageWindow.effectiveExpanded),
-        messageWindow.hiddenCount,
-      ),
+        messageWindow.hiddenCount
+      )
     );
   }, [messageWindow.hiddenCount, messageWindow.effectiveExpanded]);
 
   const expandOlderAll = useCallback(() => {
     setExpandedOlder(
-      expandedOlderToShowAll(messages.length, DEFAULT_RECENT_MESSAGE_COUNT),
+      expandedOlderToShowAll(messages.length, DEFAULT_RECENT_MESSAGE_COUNT)
     );
   }, [messages.length]);
 
@@ -387,9 +401,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const thinkingMsgId = useMemo(
     () =>
       messages.find(
-        (m) => m.sender === 'assistant' && m.status === 'processing',
+        (m) => m.sender === 'assistant' && m.status === 'processing'
       )?.id,
-    [messages],
+    [messages]
   );
 
   /**
@@ -406,7 +420,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         },
       }));
     },
-    [sessionKey],
+    [sessionKey]
   );
 
   /** 代码块「复制」：只从相邻 pre 取文本，不依赖 data-copy 属性 */
@@ -424,10 +438,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         () => {
           /* 成功静默 */
         },
-        () => onShowToast('复制失败'),
+        () => onShowToast('复制失败')
       );
     },
-    [onShowToast],
+    [onShowToast]
   );
 
   const onToggleExpandUser = useCallback(
@@ -440,38 +454,35 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         },
       }));
     },
-    [sessionKey],
+    [sessionKey]
   );
 
   /** 行组件内只收 assistantMsgId；在此解析对应用户原文，避免把整表 messages 传入行 props */
-  const handleRegenerateRow = useCallback(
-    (assistantMsgId: string) => {
-      const msgs = messagesRef.current;
-      const toast = onShowToastRef.current;
-      const idx = msgs.findIndex((m) => m.id === assistantMsgId);
-      let userText = '';
-      for (let i = idx - 1; i >= 0; i--) {
-        if (msgs[i].sender === 'user') {
-          userText = msgs[i].text || '';
-          break;
-        }
+  const handleRegenerateRow = useCallback((assistantMsgId: string) => {
+    const msgs = messagesRef.current;
+    const toast = onShowToastRef.current;
+    const idx = msgs.findIndex((m) => m.id === assistantMsgId);
+    let userText = '';
+    for (let i = idx - 1; i >= 0; i--) {
+      if (msgs[i].sender === 'user') {
+        userText = msgs[i].text || '';
+        break;
       }
-      if (!userText.trim()) {
-        toast('没有可重新生成的内容');
-        return;
-      }
-      if (msgs.some((m) => m.status === 'processing')) {
-        toast('请等待当前回复完成');
-        return;
-      }
-      onRegenerateRef.current?.(userText, assistantMsgId);
-    },
-    [],
-  );
+    }
+    if (!userText.trim()) {
+      toast('没有可重新生成的内容');
+      return;
+    }
+    if (msgs.some((m) => m.status === 'processing')) {
+      toast('请等待当前回复完成');
+      return;
+    }
+    onRegenerateRef.current?.(userText, assistantMsgId);
+  }, []);
 
   const handleDismissFollowUp = useCallback((msgId: string) => {
     setDismissedFollowUps((prev) =>
-      prev[msgId] ? prev : { ...prev, [msgId]: true },
+      prev[msgId] ? prev : { ...prev, [msgId]: true }
     );
   }, []);
 
@@ -479,22 +490,19 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     (prompt: string) => {
       onSetChatInput(prompt);
     },
-    [onSetChatInput],
+    [onSetChatInput]
   );
 
-  const handleSendFollowUp = useCallback(
-    (prompt: string) => {
-      const send = onSendFollowUpRef.current;
-      if (!send) return;
-      const msgs = messagesRef.current;
-      if (msgs.some((m) => m.status === 'processing')) {
-        onShowToastRef.current?.('请等待当前回复完成');
-        return;
-      }
-      send(prompt);
-    },
-    [],
-  );
+  const handleSendFollowUp = useCallback((prompt: string) => {
+    const send = onSendFollowUpRef.current;
+    if (!send) return;
+    const msgs = messagesRef.current;
+    if (msgs.some((m) => m.status === 'processing')) {
+      onShowToastRef.current?.('请等待当前回复完成');
+      return;
+    }
+    send(prompt);
+  }, []);
 
   const toolStackProps = useMemo(
     () => ({
@@ -522,7 +530,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       onOpenTerminal,
       onApprovalAllow,
       onApprovalDeny,
-    ],
+    ]
   );
 
   // ───── 虚拟滚动 ─────
@@ -580,7 +588,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     // 只处理还未被 Pretext/RO 测量过的 index
     const pending = visibleMessages
       .map((msg, i) => ({ msg, i }))
-      .filter(({ msg, i }) => msg != null && manager.getHeight(i) === MESSAGE_ESTIMATED_ROW_HEIGHT);
+      .filter(
+        ({ msg, i }) =>
+          msg != null && manager.getHeight(i) === MESSAGE_ESTIMATED_ROW_HEIGHT
+      );
 
     if (pending.length === 0) return;
 
@@ -609,9 +620,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       if (cursor < pending.length) {
         // 还有剩余，继续安排下一个 idle 帧
         if (typeof requestIdleCallback !== 'undefined') {
-          pretextRicRef.current = requestIdleCallback(processChunk, { timeout: 500 });
+          pretextRicRef.current = requestIdleCallback(processChunk, {
+            timeout: 500,
+          });
         } else {
-          pretextRicRef.current = window.setTimeout(() => processChunk(), 16) as unknown as number;
+          pretextRicRef.current = window.setTimeout(
+            () => processChunk(),
+            16
+          ) as unknown as number;
         }
       } else {
         pretextRicRef.current = null;
@@ -619,9 +635,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     };
 
     if (typeof requestIdleCallback !== 'undefined') {
-      pretextRicRef.current = requestIdleCallback(processChunk, { timeout: 300 });
+      pretextRicRef.current = requestIdleCallback(processChunk, {
+        timeout: 300,
+      });
     } else {
-      pretextRicRef.current = window.setTimeout(() => processChunk(), 16) as unknown as number;
+      pretextRicRef.current = window.setTimeout(
+        () => processChunk(),
+        16
+      ) as unknown as number;
     }
 
     return () => {
@@ -656,7 +677,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     }
     const ro = roRef.current;
     const observed = observedRowsRef.current;
-    const current = new Set<Element>(Array.from(container.querySelectorAll('[data-vindex]')));
+    const current = new Set<Element>(
+      Array.from(container.querySelectorAll('[data-vindex]'))
+    );
     // 新增观测
     for (const row of current) {
       if (!observed.has(row)) {
@@ -691,7 +714,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const olderAria = `显示更早的 ${olderStep} 条消息，当前仍有 ${messageWindow.hiddenCount} 条未显示`;
   const showAllAria = `一次展开全部 ${messageWindow.hiddenCount} 条更早消息`;
 
-  const { startIndex, endIndex, startOffset, estimatedTotalHeight } = vs.visibleRange;
+  const { startIndex, endIndex, startOffset, estimatedTotalHeight } =
+    vs.visibleRange;
   const endOffset = vs.manager.getOffset(endIndex);
 
   return (
@@ -726,7 +750,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                   aria-label={olderAria}
                 >
                   显示更早的 {olderStep} 条
-                  <span className="chat-msg-window-older-meta" aria-hidden="true">
+                  <span
+                    className="chat-msg-window-older-meta"
+                    aria-hidden="true"
+                  >
                     （另有 {messageWindow.hiddenCount} 条未显示）
                   </span>
                 </button>
@@ -740,7 +767,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                     aria-label={showAllAria}
                   >
                     全部展开
-                    <span className="chat-msg-window-older-meta" aria-hidden="true">
+                    <span
+                      className="chat-msg-window-older-meta"
+                      aria-hidden="true"
+                    >
                       （{messageWindow.hiddenCount} 条）
                     </span>
                   </button>
@@ -750,7 +780,11 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
           </div>
         ) : null}
         {pinnedItems.length > 0 ? (
-          <div className={styles.pinnedBar} role="region" aria-label="已固定消息">
+          <div
+            className={styles.pinnedBar}
+            role="region"
+            aria-label="已固定消息"
+          >
             <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
               <button
                 type="button"
@@ -764,9 +798,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                     : `展开已固定消息列表，共 ${pinnedItems.length} 条`
                 }
               >
-                <Lucide.Pin size={13} strokeWidth={2} aria-hidden />
+                <Pin size={13} strokeWidth={2} aria-hidden />
                 <span>已固定 · {pinnedItems.length}</span>
-                <Lucide.ChevronDown
+                <ChevronDown
                   size={14}
                   className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
                   aria-hidden
@@ -784,7 +818,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                         aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
                         onClick={() => jumpToPinned(item.id)}
                       >
-                        <span className={styles.pinnedSnippet}>{item.snippet}</span>
+                        <span className={styles.pinnedSnippet}>
+                          {item.snippet}
+                        </span>
                       </button>
                     </Tooltip>
                     <Tooltip content="取消固定">
@@ -794,7 +830,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
                         aria-label={`取消固定：${item.snippet}`}
                         onClick={() => togglePin(item.id)}
                       >
-                        <Lucide.PinOff size={14} aria-hidden />
+                        <PinOff size={14} aria-hidden />
                       </button>
                     </Tooltip>
                   </li>
@@ -810,11 +846,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         {/* 可视范围内的消息 */}
         {visibleMessages.slice(startIndex, endIndex).map((msg, i) => {
           const virtualIndex = startIndex + i;
-          const prevMsg = virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
-          const isFollowUp = msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
+          const prevMsg =
+            virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
+          const isFollowUp =
+            msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
           const isPinnedMsg = pinnedIdSet.has(msg.id);
           const isSearchHit =
-            !!searchHighlightQuery && messageMatchesSearch(msg, searchHighlightQuery);
+            !!searchHighlightQuery &&
+            messageMatchesSearch(msg, searchHighlightQuery);
 
           if (msg.sender === 'user') {
             return (
@@ -839,42 +878,47 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
           return (
             <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-                <div data-vindex={virtualIndex}>
-                  <ChatAssistantMessageRow
-                    msg={msg}
-                    isFollowUp={isFollowUp}
-                    isPinned={isPinnedMsg}
-                    isSearchHit={isSearchHit}
-                    isThinkingMsg={msg.id === thinkingMsgId}
-                    thinkingSeconds={thinkingSeconds}
-                    hideThinkingBlock={hideThinkingBlock}
-                    inPlanMode={inPlanMode}
-                    planApproved={planApproved}
-                    isLastAssistant={msg.id === lastAssistantId}
-                    toolStackProps={toolStackProps}
-                    onTogglePin={togglePin}
-                    onShowToast={onShowToast}
-                    onRegenerate={handleRegenerateRow}
-                    onBranch={onBranch}
-                    onOpenDiff={onOpenDiff}
-                    onOpenDiffPanel={onOpenDiffPanel}
-                    setPermissionMode={setPermissionMode}
-                    setPlanApproved={setPlanApproved}
-                    onFillFollowUp={handleFillFollowUp}
-                    onSendFollowUp={onSendFollowUp ? handleSendFollowUp : undefined}
-                    followUpDismissed={!!dismissedFollowUps[msg.id]}
-                    onDismissFollowUp={handleDismissFollowUp}
-                    messageIndex={virtualIndex}
-                    virtualScrollManager={manager}
-                  />
-                </div>
-              </AppErrorBoundary>
+              <div data-vindex={virtualIndex}>
+                <ChatAssistantMessageRow
+                  msg={msg}
+                  isFollowUp={isFollowUp}
+                  isPinned={isPinnedMsg}
+                  isSearchHit={isSearchHit}
+                  isThinkingMsg={msg.id === thinkingMsgId}
+                  thinkingSeconds={thinkingSeconds}
+                  hideThinkingBlock={hideThinkingBlock}
+                  inPlanMode={inPlanMode}
+                  planApproved={planApproved}
+                  isLastAssistant={msg.id === lastAssistantId}
+                  toolStackProps={toolStackProps}
+                  onTogglePin={togglePin}
+                  onShowToast={onShowToast}
+                  onRegenerate={handleRegenerateRow}
+                  onBranch={onBranch}
+                  onOpenDiff={onOpenDiff}
+                  onOpenDiffPanel={onOpenDiffPanel}
+                  setPermissionMode={setPermissionMode}
+                  setPlanApproved={setPlanApproved}
+                  onFillFollowUp={handleFillFollowUp}
+                  onSendFollowUp={
+                    onSendFollowUp ? handleSendFollowUp : undefined
+                  }
+                  followUpDismissed={!!dismissedFollowUps[msg.id]}
+                  onDismissFollowUp={handleDismissFollowUp}
+                  messageIndex={virtualIndex}
+                  virtualScrollManager={manager}
+                />
+              </div>
+            </AppErrorBoundary>
           );
         })}
 
         {/* 底部 spacer：可视范围之后的剩余消息占位 */}
         <div
-          style={{ height: Math.max(0, estimatedTotalHeight - endOffset), flexShrink: 0 }}
+          style={{
+            height: Math.max(0, estimatedTotalHeight - endOffset),
+            flexShrink: 0,
+          }}
           aria-hidden
         />
       </div>

@@ -9,7 +9,7 @@ function expectTransition(
   m: ApprovalFlowMachine,
   event: ApprovalFlowEvent,
   outcome: TransitionOutcome,
-  reason: string | null,
+  reason: string | null
 ) {
   const r = m.transition(event);
   expect(r.outcome).toBe(outcome);
@@ -110,6 +110,7 @@ describe('ApprovalFlowMachine', () => {
         inflightCount: 0,
         deferredTerminal: false,
         sawRunTerminal: false,
+        flowStatus: 'idle',
       });
     });
 
@@ -119,7 +120,7 @@ describe('ApprovalFlowMachine', () => {
         m,
         { type: 'approval_resolved', toolId: 'ghost' },
         'illegal',
-        'resolve_not_pending',
+        'resolve_not_pending'
       );
       expect(m.hasPending()).toBe(false);
       expect(m.isResolved('ghost')).toBe(false);
@@ -135,7 +136,7 @@ describe('ApprovalFlowMachine', () => {
         m,
         { type: 'approval_resolved', toolId: 't', denied: false },
         'applied',
-        'resolved_allowed',
+        'resolved_allowed'
       );
       expect(m.isResolved('t')).toBe(true);
       expect(m.isPending('t')).toBe(false);
@@ -146,7 +147,7 @@ describe('ApprovalFlowMachine', () => {
         m,
         { type: 'approval_resolved', toolId: 't', denied: true },
         'noop',
-        'double_resolve',
+        'double_resolve'
       );
       // deny on double-resolve must NOT strip inflight
       expect(m.snapshot()).toEqual(snap);
@@ -157,14 +158,24 @@ describe('ApprovalFlowMachine', () => {
       const m = new ApprovalFlowMachine();
       m.transition({ type: 'approval_pending', toolId: 'r' });
       m.transition({ type: 'approval_resolved', toolId: 'r' });
-      expectTransition(m, { type: 'approval_resolved', toolId: 'r' }, 'noop', 'double_resolve');
-      expectTransition(m, { type: 'approval_pending', toolId: 'r' }, 'applied', 'pending_added');
+      expectTransition(
+        m,
+        { type: 'approval_resolved', toolId: 'r' },
+        'noop',
+        'double_resolve'
+      );
+      expectTransition(
+        m,
+        { type: 'approval_pending', toolId: 'r' },
+        'applied',
+        'pending_added'
+      );
       expect(m.isResolved('r')).toBe(false);
       expectTransition(
         m,
         { type: 'approval_resolved', toolId: 'r', denied: true },
         'applied',
-        'resolved_denied',
+        'resolved_denied'
       );
     });
   });
@@ -174,7 +185,12 @@ describe('ApprovalFlowMachine', () => {
       const m = new ApprovalFlowMachine();
       m.transition({ type: 'tool_start', toolId: 'c1' });
       m.transition({ type: 'approval_pending', toolId: 'c1' });
-      expectTransition(m, { type: 'approval_cancelled', toolId: 'c1' }, 'applied', 'cancelled');
+      expectTransition(
+        m,
+        { type: 'approval_cancelled', toolId: 'c1' },
+        'applied',
+        'cancelled'
+      );
       expect(m.hasPending()).toBe(false);
       expect(m.hasInflight()).toBe(false);
       expect(m.isResolved('c1')).toBe(true);
@@ -187,7 +203,12 @@ describe('ApprovalFlowMachine', () => {
       m.transition({ type: 'tool_start', toolId: 'b' });
       m.transition({ type: 'approval_pending', toolId: 'a' });
       m.transition({ type: 'approval_pending', toolId: 'b' });
-      expectTransition(m, { type: 'approval_cancelled' }, 'applied', 'cancelled_all');
+      expectTransition(
+        m,
+        { type: 'approval_cancelled' },
+        'applied',
+        'cancelled_all'
+      );
       expect(m.snapshot().pendingCount).toBe(0);
       expect(m.snapshot().inflightCount).toBe(0);
       expect(m.debugSets().resolved.sort()).toEqual(['a', 'b']);
@@ -195,12 +216,17 @@ describe('ApprovalFlowMachine', () => {
 
     it('cancel when nothing pending is noop', () => {
       const m = new ApprovalFlowMachine();
-      expectTransition(m, { type: 'approval_cancelled' }, 'noop', 'nothing_to_cancel');
+      expectTransition(
+        m,
+        { type: 'approval_cancelled' },
+        'noop',
+        'nothing_to_cancel'
+      );
       expectTransition(
         m,
         { type: 'approval_cancelled', toolId: 'x' },
         'noop',
-        'cancel_not_pending',
+        'cancel_not_pending'
       );
     });
 
@@ -212,7 +238,7 @@ describe('ApprovalFlowMachine', () => {
         m,
         { type: 'approval_cancelled', toolId: 'd' },
         'noop',
-        'double_cancel',
+        'double_cancel'
       );
     });
 
@@ -224,7 +250,7 @@ describe('ApprovalFlowMachine', () => {
         allowM,
         { type: 'approval_resolved', toolId: 'x', denied: false },
         'applied',
-        'resolved_allowed',
+        'resolved_allowed'
       );
       expect(allowM.isInflight('x')).toBe(true);
 
@@ -235,7 +261,7 @@ describe('ApprovalFlowMachine', () => {
         denyM,
         { type: 'approval_resolved', toolId: 'x', denied: true },
         'applied',
-        'resolved_denied',
+        'resolved_denied'
       );
       expect(denyM.isInflight('x')).toBe(false);
     });
@@ -244,15 +270,55 @@ describe('ApprovalFlowMachine', () => {
   describe('idempotent / noop transitions', () => {
     it('duplicate pending / inflight / defer / run_terminal are noop', () => {
       const m = new ApprovalFlowMachine();
-      expectTransition(m, { type: 'tool_start', toolId: 't' }, 'applied', 'tool_started');
-      expectTransition(m, { type: 'tool_start', toolId: 't' }, 'noop', 'already_inflight');
-      expectTransition(m, { type: 'approval_pending', toolId: 't' }, 'applied', 'pending_added');
-      expectTransition(m, { type: 'approval_pending', toolId: 't' }, 'noop', 'already_pending');
-      expectTransition(m, { type: 'run_terminal_seen' }, 'applied', 'run_terminal_marked');
-      expectTransition(m, { type: 'run_terminal_seen' }, 'noop', 'already_saw_run_terminal');
+      expectTransition(
+        m,
+        { type: 'tool_start', toolId: 't' },
+        'applied',
+        'tool_started'
+      );
+      expectTransition(
+        m,
+        { type: 'tool_start', toolId: 't' },
+        'noop',
+        'already_inflight'
+      );
+      expectTransition(
+        m,
+        { type: 'approval_pending', toolId: 't' },
+        'applied',
+        'pending_added'
+      );
+      expectTransition(
+        m,
+        { type: 'approval_pending', toolId: 't' },
+        'noop',
+        'already_pending'
+      );
+      expectTransition(
+        m,
+        { type: 'run_terminal_seen' },
+        'applied',
+        'run_terminal_marked'
+      );
+      expectTransition(
+        m,
+        { type: 'run_terminal_seen' },
+        'noop',
+        'already_saw_run_terminal'
+      );
       expectTransition(m, { type: 'defer_terminal' }, 'applied', 'deferred');
-      expectTransition(m, { type: 'defer_terminal' }, 'noop', 'already_deferred');
-      expectTransition(m, { type: 'tool_end', toolId: 'missing' }, 'noop', 'not_inflight');
+      expectTransition(
+        m,
+        { type: 'defer_terminal' },
+        'noop',
+        'already_deferred'
+      );
+      expectTransition(
+        m,
+        { type: 'tool_end', toolId: 'missing' },
+        'noop',
+        'not_inflight'
+      );
     });
 
     it('clear_all / force_finish on empty machine are noop', () => {
@@ -269,12 +335,18 @@ describe('ApprovalFlowMachine', () => {
       m.transition({ type: 'approval_pending', toolId: 'f' });
       m.transition({ type: 'run_terminal_seen' });
       m.transition({ type: 'defer_terminal' });
-      expectTransition(m, { type: 'force_finish' }, 'applied', 'force_finished');
+      expectTransition(
+        m,
+        { type: 'force_finish' },
+        'applied',
+        'force_finished'
+      );
       expect(m.snapshot()).toEqual({
         pendingCount: 0,
         inflightCount: 0,
         deferredTerminal: false,
         sawRunTerminal: true,
+        flowStatus: 'idle',
       });
       expect(m.debugSets().resolved).toEqual([]);
     });
@@ -297,8 +369,16 @@ describe('ApprovalFlowMachine', () => {
       outcome: TransitionOutcome;
       reason: string | null;
     }> = [
-      { event: { type: 'tool_start', toolId: 'm' }, outcome: 'applied', reason: 'tool_started' },
-      { event: { type: 'tool_end', toolId: 'm' }, outcome: 'noop', reason: 'not_inflight' },
+      {
+        event: { type: 'tool_start', toolId: 'm' },
+        outcome: 'applied',
+        reason: 'tool_started',
+      },
+      {
+        event: { type: 'tool_end', toolId: 'm' },
+        outcome: 'noop',
+        reason: 'not_inflight',
+      },
       {
         event: { type: 'approval_pending', toolId: 'm' },
         outcome: 'applied',
@@ -314,16 +394,36 @@ describe('ApprovalFlowMachine', () => {
         outcome: 'noop',
         reason: 'cancel_not_pending',
       },
-      { event: { type: 'approval_cancelled' }, outcome: 'noop', reason: 'nothing_to_cancel' },
+      {
+        event: { type: 'approval_cancelled' },
+        outcome: 'noop',
+        reason: 'nothing_to_cancel',
+      },
       {
         event: { type: 'run_terminal_seen' },
         outcome: 'applied',
         reason: 'run_terminal_marked',
       },
-      { event: { type: 'defer_terminal' }, outcome: 'applied', reason: 'deferred' },
-      { event: { type: 'clear_all' }, outcome: 'noop', reason: 'already_clear' },
-      { event: { type: 'force_finish' }, outcome: 'noop', reason: 'already_finished' },
-      { event: { type: 'tool_start', toolId: '' }, outcome: 'illegal', reason: 'empty_tool_id' },
+      {
+        event: { type: 'defer_terminal' },
+        outcome: 'applied',
+        reason: 'deferred',
+      },
+      {
+        event: { type: 'clear_all' },
+        outcome: 'noop',
+        reason: 'already_clear',
+      },
+      {
+        event: { type: 'force_finish' },
+        outcome: 'noop',
+        reason: 'already_finished',
+      },
+      {
+        event: { type: 'tool_start', toolId: '' },
+        outcome: 'illegal',
+        reason: 'empty_tool_id',
+      },
     ];
 
     for (const c of cases) {

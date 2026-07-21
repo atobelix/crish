@@ -19,16 +19,33 @@ describe('SidebarContextMenus toast + position helpers', () => {
   });
 
   it('clamps menu coords inside viewport padding', () => {
-    const nearOrigin = clampContextMenuPosition(-20, -10, 160, 200);
-    expect(nearOrigin.x).toBe(8);
-    expect(nearOrigin.y).toBe(8);
+    const iw = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const ih = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    // 强制走 0→1280×800 fallback，避免 jsdom 异常大视口
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 0,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 0,
+    });
+    try {
+      const nearOrigin = clampContextMenuPosition(-20, -10, 160, 200);
+      expect(nearOrigin.x).toBe(8);
+      expect(nearOrigin.y).toBe(8);
 
-    // jsdom 常无真实视口尺寸；clamp 对 0 尺寸退回 1280×800
-    const far = clampContextMenuPosition(99999, 99999, 160, 200);
-    expect(far.x).toBe(1280 - 160 - 8);
-    expect(far.y).toBe(800 - 200 - 8);
+      const far = clampContextMenuPosition(99999, 99999, 160, 200);
+      expect(far.x).toBe(1280 - 160 - 8);
+      expect(far.y).toBe(800 - 200 - 8);
 
-    const mid = clampContextMenuPosition(100, 120, 160, 200);
-    expect(mid).toEqual({ x: 100, y: 120 });
+      const mid = clampContextMenuPosition(100, 120, 160, 200);
+      expect(mid.x).toBe(100);
+      expect(mid.y).toBe(120);
+      expect(mid.transformOrigin).toMatch(/top|bottom/);
+    } finally {
+      if (iw) Object.defineProperty(window, 'innerWidth', iw);
+      if (ih) Object.defineProperty(window, 'innerHeight', ih);
+    }
   });
 });

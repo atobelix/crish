@@ -68,17 +68,22 @@ const DEFAULT_TITLE_ZH =
  * 用于「是否有可见正文」判定（firstUser 跳过纯不可见行）。
  */
 const TITLE_INVISIBLE_CHARS =
+  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
 
 /** 定时任务侧栏标题（与 workflowApi.scheduledSessionTitle 产出对齐） */
-export function isScheduledSessionTitle(title: string | undefined | null): boolean {
+export function isScheduledSessionTitle(
+  title: string | undefined | null
+): boolean {
   const t = (title ?? '').trim();
   // 「定时 · 名称」或紧凑「定时·名称」
   return t.startsWith('定时 ·') || t.startsWith('定时·');
 }
 
 /** 是否仍是占位 / 默认标题（可安全被首条用户消息覆盖） */
-export function isDefaultSessionTitle(title: string | undefined | null): boolean {
+export function isDefaultSessionTitle(
+  title: string | undefined | null
+): boolean {
   const t = (title ?? '').trim();
   if (!t) return true;
   // 定时占位永非默认（避免误覆盖 / 被当成可复用空壳）
@@ -90,7 +95,7 @@ export function isDefaultSessionTitle(title: string | undefined | null): boolean
   // New Session 1 / Untitled (2) / Chat 3 / No Title 2 / Untitled-1
   if (
     /^(new session|new chat|new conversation|untitled(?:\s+session|\s+chat|\s+conversation)?|session|chat|conversation|no title)([\s\-#（(]*[\d].*)?$/i.test(
-      t,
+      t
     )
   ) {
     return true;
@@ -141,23 +146,23 @@ export function isEmptyShellSession(s: ShellSessionLike): boolean {
  */
 export function shouldListSessionInSidebar(
   s: ShellSessionLike & { id: string },
-  _activeSessionId?: string | null,
+  activeSessionId?: string | null
 ): boolean {
+  void activeSessionId; // 保留签名兼容 filterSidebarSessions
   if (s.isPinned) return true;
   if (isScheduledSessionTitle(s.title)) return true;
   if (sessionHasListableContent(s)) return true;
   if (!isDefaultSessionTitle(s.title)) return true;
-  // 空壳会话（无实质内容、默认标题、未置顶）：侧栏不展示，待发送消息后自动列出
-  return false;
+  // 空壳默认标题也展示，避免切换后「丢对话」；刷屏靠 createSession 复用
+  return true;
 }
 
 /**
  * 去掉非保留的空壳。keepIds 通常含 activeSessionId（当前编辑中的空白会话）。
  */
-export function pruneEmptyShellSessions<T extends ShellSessionLike & { id: string }>(
-  sessions: T[],
-  opts?: { keepIds?: Iterable<string> | null },
-): T[] {
+export function pruneEmptyShellSessions<
+  T extends ShellSessionLike & { id: string },
+>(sessions: T[], opts?: { keepIds?: Iterable<string> | null }): T[] {
   const keep = new Set(opts?.keepIds || []);
   let changed = false;
   const next = sessions.filter((s) => {
@@ -178,7 +183,7 @@ export function pruneEmptyShellSessions<T extends ShellSessionLike & { id: strin
 export function shellPruneKeepIds(
   primaryId: string | null | undefined,
   activeSessionId?: string | null,
-  opts?: { activating?: boolean; extraKeepIds?: Iterable<string> | null },
+  opts?: { activating?: boolean; extraKeepIds?: Iterable<string> | null }
 ): string[] {
   const ids: string[] = [];
   if (primaryId) ids.push(primaryId);
@@ -214,7 +219,7 @@ export type FindReusableEmptyShellOpts = {
 export function findReusableEmptyShell(
   sessions: Array<ShellSessionLike & { id: string }>,
   folder?: string | null,
-  opts?: FindReusableEmptyShellOpts,
+  opts?: FindReusableEmptyShellOpts
 ): string | null {
   const wantFolder = Boolean(folder);
   const excludeId = opts?.excludeId || null;
@@ -249,12 +254,17 @@ export function findReusableEmptyShell(
  * - 去掉首尾引号 / 句末标点噪声
  * 保留 CJK 与 BMP 外码点（emoji 等），UTF-8 中文安全。
  */
-export function sanitizeSessionTitleText(text: string | null | undefined): string {
+export function sanitizeSessionTitleText(
+  text: string | null | undefined
+): string {
   let s = String(text ?? '');
   // 控制符 / 零宽 / 双向 / BOM（与 firstUser 可见性判定同源）
   s = s.replace(TITLE_INVISIBLE_CHARS, '');
   // 全角空格等空白 → 普通空格再折叠
-  s = s.replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ');
+  s = s.replace(
+    /[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g,
+    ' '
+  );
   s = s.replace(/\s+/g, ' ').trim();
   // 连续 slash 命令：`/help` `/cmd 正文` → 正文
   s = s.replace(/^(?:\/\S+[ \t]*)+/, '').trim();
@@ -275,9 +285,12 @@ export function sanitizeSessionTitleText(text: string | null | undefined): strin
  */
 export function truncateSessionTitle(
   text: string,
-  maxLen: number = SESSION_TITLE_MAX_LEN,
+  maxLen: number = SESSION_TITLE_MAX_LEN
 ): string {
-  const limit = Number.isFinite(maxLen) && maxLen > 0 ? Math.floor(maxLen) : SESSION_TITLE_MAX_LEN;
+  const limit =
+    Number.isFinite(maxLen) && maxLen > 0
+      ? Math.floor(maxLen)
+      : SESSION_TITLE_MAX_LEN;
   const chars = Array.from(text);
   if (chars.length <= limit) return text;
   // 至少留 1 码点 + …，避免空标题
@@ -291,7 +304,7 @@ export function truncateSessionTitle(
  */
 export function deriveSessionTitle(
   text: string,
-  maxLen: number = SESSION_TITLE_MAX_LEN,
+  maxLen: number = SESSION_TITLE_MAX_LEN
 ): string {
   const cleaned = sanitizeSessionTitleText(text);
   if (!cleaned) return EMPTY_SESSION_TITLE;
@@ -308,7 +321,7 @@ export function deriveSessionTitle(
 export function withTitleCollisionSuffix(
   base: string,
   existingTitles: Iterable<string | null | undefined>,
-  opts?: { maxAttempts?: number },
+  opts?: { maxAttempts?: number }
 ): string {
   const raw = String(base ?? '').trim();
   const title = raw || EMPTY_SESSION_TITLE;
@@ -329,7 +342,9 @@ export function withTitleCollisionSuffix(
 }
 
 /** 从消息列表取首条用户正文（跳过空白 / 纯不可见控制符） */
-export function firstUserMessageText(messages: TitleMessage[] | undefined): string {
+export function firstUserMessageText(
+  messages: TitleMessage[] | undefined
+): string {
   if (!messages?.length) return '';
   for (const m of messages) {
     if (m.sender !== 'user') continue;
@@ -357,7 +372,7 @@ export type MaybeAutoTitleOpts = {
 export function maybeAutoTitleFromMessages(
   title: string | undefined | null,
   messages: TitleMessage[] | undefined,
-  opts?: MaybeAutoTitleOpts,
+  opts?: MaybeAutoTitleOpts
 ): string | null {
   if (!isDefaultSessionTitle(title)) return null;
   const first = firstUserMessageText(messages);
@@ -389,7 +404,7 @@ export type FillDefaultTitlesOpts = {
 /** 批量补全默认标题（hydrate / seed 用） */
 export function fillDefaultSessionTitles<T extends TitleSession>(
   sessions: T[],
-  opts?: FillDefaultTitlesOpts,
+  opts?: FillDefaultTitlesOpts
 ): T[] {
   let changed = false;
   const resolve = Boolean(opts?.resolveCollisions);
@@ -406,7 +421,7 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
     const title = maybeAutoTitleFromMessages(
       s.title,
       s.messages || undefined,
-      resolve ? { existingTitles: taken, excludeTitle: s.title } : undefined,
+      resolve ? { existingTitles: taken, excludeTitle: s.title } : undefined
     );
     if (!title || title === s.title) {
       // 未改时若已是真实标题，确保在池中（多会话同名用户标题）
@@ -430,10 +445,12 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
  * 先从消息补默认标题，再按 active 剪非保留空壳。
  * 与 setSessions 策略一致：keep 仅 active（activating），定时真实标题不会被剪。
  */
-export function prepareSessionsForUi<T extends ShellSessionLike & { id: string }>(
+export function prepareSessionsForUi<
+  T extends ShellSessionLike & { id: string },
+>(
   sessions: T[],
   activeSessionId?: string | null,
-  opts?: { keepIds?: Iterable<string> | null },
+  opts?: { keepIds?: Iterable<string> | null }
 ): T[] {
   const filled = fillDefaultSessionTitles(sessions) as T[];
   const keepIds =

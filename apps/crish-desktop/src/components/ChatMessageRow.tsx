@@ -8,8 +8,14 @@
  * - 角色文案：messageRoleLabelZh（你 / 助手）与固定条 chat-pinned-role 一致
  * - 工具栈：仅经 toolStackProps handoff 托管 ChatToolStack，禁止行内二次实现工具 UI
  */
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from './settings/SettingsUI';
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
@@ -28,18 +34,37 @@ import {
   shouldShowFollowUpSuggestions,
   type FollowUpSuggestion,
 } from '../api/followUpSuggestions';
-import { stripThoughtPlaceholders, escapeHtml } from '../api/markdownRender';
+import {
+  stripThoughtPlaceholders,
+  escapeHtml,
+} from '../api/markdownRenderLite';
 import { parseMarkdownToHtmlAsync } from '../api/markdownRenderAsync';
 import { getMarkdownHtmlCache } from '../api/markdownCache';
-import { IncrementalMarkdownBridge } from '../api/incrementalMarkdownBridge';
+import type { IncrementalMarkdownBridge } from '../api/incrementalMarkdownBridge';
 import { chunkUpdatesToDomPatches, applyDomPatches } from '../api/domPatch';
 import { Priority } from '../workers';
-import { ChangeOverviewCard } from './ChangeOverviewCard';
 import type { PermissionMode } from '../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../api/messageWindow';
 import { useBubbleShrinkWidth, usePreparedText } from '../hooks/useTextMeasure';
 import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
 import { VirtualScrollManager } from '../api/VirtualScrollManager';
+import {
+  AlertCircle,
+  Check,
+  ChevronRight,
+  Copy,
+  Pin,
+  PinOff,
+  RefreshCw,
+  Send,
+  X,
+} from 'lucide-react';
+
+const ChangeOverviewCard = React.lazy(() =>
+  import('./ChangeOverviewCard').then((m) => ({
+    default: m.ChangeOverviewCard,
+  }))
+);
 
 // ─── 密度常量（长用户气泡截断） ─────────────────────────────────────────────
 
@@ -72,7 +97,8 @@ export function messageRowAriaLabel(opts: {
   const parts: string[] = [messageRoleLabelZh(opts.role)];
   if (opts.isPinned) parts.push('已固定');
   if (opts.status === 'queued') parts.push('排队中');
-  else if (opts.isThinking || opts.status === 'processing') parts.push('生成中');
+  else if (opts.isThinking || opts.status === 'processing')
+    parts.push('生成中');
   return parts.join(' · ');
 }
 
@@ -129,7 +155,7 @@ export function isUserBubbleLong(text: string | undefined | null): boolean {
  */
 export function userBubbleDisplayText(
   text: string | undefined | null,
-  isExpanded: boolean,
+  isExpanded: boolean
 ): string {
   const t = text || '';
   if (isUserBubbleLong(t) && !isExpanded) {
@@ -145,7 +171,7 @@ export function looksLikePlan(text: string): boolean {
   if (/步骤|计划/.test(t)) return true;
   if (/^#{1,3}\s/m.test(t)) return true;
   // 1. / 1、 / 2. 等有序列表（顿号后可无空格）
-  if (/(?:^|\n)\s*\d+[\.、]\s*\S/.test(t)) return true;
+  if (/(?:^|\n)\s*\d+[.、]\s*\S/.test(t)) return true;
   return false;
 }
 
@@ -156,7 +182,7 @@ export function looksLikePlan(text: string): boolean {
  * 行组件不解析 toolCalls / 不自建工具行——只 handoff 给 ChatToolStack。
  */
 export function shouldHostToolStack(
-  items: readonly ToolRenderItem[] | undefined | null,
+  items: readonly ToolRenderItem[] | undefined | null
 ): boolean {
   return Array.isArray(items) && items.length > 0;
 }
@@ -168,7 +194,7 @@ export function shouldHostToolStack(
 export function buildToolStackHostProps(
   items: ToolRenderItem[],
   msgId: string,
-  shared: ChatToolStackSharedProps,
+  shared: ChatToolStackSharedProps
 ): ChatToolStackSharedProps & { items: ToolRenderItem[]; msgId: string } {
   return { items, msgId, ...shared };
 }
@@ -207,7 +233,7 @@ export async function copyTextBestEffort(text: string): Promise<boolean> {
 /** 行级工具栈共享 props 浅比较（仅数据字段；回调假定稳定） */
 export function toolStackSharedPropsEqual(
   a: ChatToolStackSharedProps,
-  b: ChatToolStackSharedProps,
+  b: ChatToolStackSharedProps
 ): boolean {
   return (
     a.expandedTools === b.expandedTools &&
@@ -237,7 +263,10 @@ export type ChatUserMessageRowProps = {
   virtualScrollManager: VirtualScrollManager | null;
 };
 
-function userRowPropsEqual(prev: ChatUserMessageRowProps, next: ChatUserMessageRowProps): boolean {
+function userRowPropsEqual(
+  prev: ChatUserMessageRowProps,
+  next: ChatUserMessageRowProps
+): boolean {
   return (
     prev.msg.id === next.msg.id &&
     prev.msg.status === next.msg.status &&
@@ -271,8 +300,16 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
   const userRowRef = useRef<HTMLDivElement>(null);
-  const userBubbleFont = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
-  const userBubbleWidth = useBubbleShrinkWidth(displayText, userBubbleFont, userRowRef, 32);
+  const userBubbleFont = useMemo(
+    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
+    []
+  );
+  const userBubbleWidth = useBubbleShrinkWidth(
+    displayText,
+    userBubbleFont,
+    userRowRef,
+    32
+  );
   const pinLabels = pinToggleLabels(isPinned);
   const rowAria = messageRowAriaLabel({
     role: 'user',
@@ -284,7 +321,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     () => () => {
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -321,7 +358,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
         onToggleExpand(msg.id);
       }
     },
-    [isLong, msg.id, onToggleExpand],
+    [isLong, msg.id, onToggleExpand]
   );
 
   return (
@@ -338,7 +375,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
         {isPinned ? (
           <Tooltip content="已固定">
             <span className={styles.pinBadge} aria-hidden="true">
-              <Lucide.Pin size={11} strokeWidth={2.25} />
+              <Pin size={11} strokeWidth={2.25} />
               已固定
             </span>
           </Tooltip>
@@ -371,7 +408,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
               aria-label={copied ? '已复制' : '复制消息'}
               onClick={handleCopy}
             >
-              {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
+              {copied ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </Tooltip>
           {isPinned ? (
@@ -383,7 +420,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                 aria-pressed
                 onClick={() => onTogglePin(msg.id)}
               >
-                <Lucide.PinOff size={14} />
+                <PinOff size={14} />
               </button>
             </Tooltip>
           ) : null}
@@ -393,7 +430,10 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   );
 };
 
-export const ChatUserMessageRow = React.memo(ChatUserMessageRowInner, userRowPropsEqual);
+export const ChatUserMessageRow = React.memo(
+  ChatUserMessageRowInner,
+  userRowPropsEqual
+);
 
 // ─── Assistant row ──────────────────────────────────────────────────────────
 
@@ -434,7 +474,7 @@ export type ChatAssistantMessageRowProps = {
 
 function assistantRowPropsEqual(
   prev: ChatAssistantMessageRowProps,
-  next: ChatAssistantMessageRowProps,
+  next: ChatAssistantMessageRowProps
 ): boolean {
   if (prev.isThinkingMsg || next.isThinkingMsg) {
     if (prev.thinkingSeconds !== next.thinkingSeconds) return false;
@@ -480,9 +520,8 @@ function focusChatComposer(): void {
     document.body;
   const ta =
     scope.querySelector<HTMLTextAreaElement>(
-      '.input-container textarea:not([disabled])',
-    ) ??
-    scope.querySelector<HTMLTextAreaElement>('textarea:not([disabled])');
+      '.input-container textarea:not([disabled])'
+    ) ?? scope.querySelector<HTMLTextAreaElement>('textarea:not([disabled])');
   ta?.focus();
 }
 
@@ -515,9 +554,17 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 }) => {
   void _onBranch;
   const assistantRowRef = useRef<HTMLDivElement>(null);
-  const assistantBubbleFont = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
+  const assistantBubbleFont = useMemo(
+    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
+    []
+  );
   const assistantPlainText = msg.text || '';
-  const assistantBubbleWidth = useBubbleShrinkWidth(assistantPlainText, assistantBubbleFont, assistantRowRef, 0);
+  const assistantBubbleWidth = useBubbleShrinkWidth(
+    assistantPlainText,
+    assistantBubbleFont,
+    assistantRowRef,
+    0
+  );
 
   const thinkingRaw =
     msg.thinking &&
@@ -527,9 +574,12 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       ? msg.thinking.trim()
       : '';
   const thinkingText = thinkingRaw || (isThinkingMsg ? '…' : '');
-  const thinkingLineCount = thinkingText ? thinkingText.split(/\r?\n/).length : 0;
+  const thinkingLineCount = thinkingText
+    ? thinkingText.split(/\r?\n/).length
+    : 0;
   /** 设置「隐藏思考过程」时整段不展示（含进行中） */
-  const showThinking = !hideThinkingBlock && (isThinkingMsg || thinkingLineCount > 0);
+  const showThinking =
+    !hideThinkingBlock && (isThinkingMsg || thinkingLineCount > 0);
   /**
    * 完成态默认折叠且不挂载 body，避免长思考撑爆 DOM；
    * 进行中自动打开（仍受字符预算约束）。
@@ -555,7 +605,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     () => () => {
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -596,7 +646,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       {isPinned ? (
         <Tooltip content="已固定">
           <span className={styles.pinBadge} aria-hidden="true">
-            <Lucide.Pin size={11} strokeWidth={2.25} />
+            <Pin size={11} strokeWidth={2.25} />
             已固定
           </span>
         </Tooltip>
@@ -629,7 +679,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                 aria-hidden
               />
             ) : (
-              <Lucide.ChevronRight
+              <ChevronRight
                 size={14}
                 className={`${styles.thinkingChevron}${thinkingBodyOpen ? ` ${styles.isOpen}` : ''}`}
                 aria-hidden
@@ -638,13 +688,19 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             <span className={styles.thinkingFoldLabel}>
               {isThinkingMsg ? '思考中' : '思考'}
               {isThinkingMsg ? (
-                <span className={styles.thinkingSec}> · {thinkingSeconds}s</span>
+                <span className={styles.thinkingSec}>
+                  {' '}
+                  · {thinkingSeconds}s
+                </span>
               ) : thinkingBudget.truncated && thinkingBodyOpen ? (
                 <span className={styles.thinkingSec}> · 已截断</span>
               ) : null}
             </span>
           </button>
-          <div className={styles.accordionWrapper} data-expanded={thinkingBodyOpen ? 'true' : 'false'}>
+          <div
+            className={styles.accordionWrapper}
+            data-expanded={thinkingBodyOpen ? 'true' : 'false'}
+          >
             <div className={styles.accordionInner}>
               <div className={styles.thinkingFoldBody} id={thinkingBodyId}>
                 {thinkingBudget.text}
@@ -654,45 +710,64 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
         </div>
       ) : null}
 
-      <div className={styles.assistantBody} style={{ maxWidth: assistantBubbleWidth ?? undefined }}>
+      <div
+        className={styles.assistantBody}
+        style={{ maxWidth: assistantBubbleWidth ?? undefined }}
+      >
         {(() => {
           try {
             const timeline = buildAssistantTimeline(msg);
             if (!timeline.length) {
-               const fallback = stripThoughtPlaceholders(msg.text || '');
-               if (!fallback.trim()) {
-                 if (msg.status === 'error') {
-                   return (
-                     <div className={styles.timelineText}>
-                       <div style={{ padding: '8px 12px', background: 'var(--bg-error-subtle, rgba(239, 68, 68, 0.08))', borderRadius: 8, color: 'var(--text-error, #ef4444)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                         <Lucide.AlertCircle size={14} />
-                         <span>服务暂时不可用，请检查网络或后端配置</span>
-                       </div>
-                     </div>
-                   );
-                 }
-                 return null;
-               }
-               if (isThinkingMsg) {
-                 return (
-                   <div className={styles.timelineText}>
-                     <div
-                       className={`${styles.assistantText} ${styles.isStreaming}`}
-                       style={{ whiteSpace: 'pre-wrap' }}
-                     >
-                       {fallback}
-                     </div>
-                   </div>
-                 );
-               }
-               return (
+              const fallback = stripThoughtPlaceholders(msg.text || '');
+              if (!fallback.trim()) {
+                if (msg.status === 'error') {
+                  return (
+                    <div className={styles.timelineText}>
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          background:
+                            'var(--bg-error-subtle, rgba(239, 68, 68, 0.08))',
+                          borderRadius: 8,
+                          color: 'var(--text-error, #ef4444)',
+                          fontSize: 13,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <AlertCircle size={14} />
+                        <span>服务暂时不可用，请检查网络或后端配置</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              }
+              if (isThinkingMsg) {
+                return (
                   <div className={styles.timelineText}>
-                    <AsyncMarkdownBlock
-                      text={fallback}
-                      priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
-                    />
+                    <div
+                      className={`${styles.assistantText} ${styles.isStreaming}`}
+                      style={{ whiteSpace: 'pre-wrap' }}
+                    >
+                      {fallback}
+                    </div>
                   </div>
                 );
+              }
+              return (
+                <div className={styles.timelineText}>
+                  <AsyncMarkdownBlock
+                    text={fallback}
+                    priority={
+                      msg.status === 'processing'
+                        ? Priority.Normal
+                        : Priority.High
+                    }
+                  />
+                </div>
+              );
             }
             const textItems = timeline.filter((i) => i.kind === 'text');
             const lastTextKey = textItems.length
@@ -721,7 +796,11 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                   <div key={item.key} className={styles.timelineText}>
                     <AsyncMarkdownBlock
                       text={bodyText}
-                      priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
+                      priority={
+                        msg.status === 'processing'
+                          ? Priority.Normal
+                          : Priority.High
+                      }
                     />
                     {imgs.length > 0 && (
                       <div className={styles.inlineImages}>
@@ -744,7 +823,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
               const host = buildToolStackHostProps(
                 item.items!,
                 msg.id,
-                toolStackProps,
+                toolStackProps
               );
               return (
                 <div key={item.key} className={styles.timelineTools}>
@@ -756,7 +835,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             console.error('[ChatMessageRow] timeline render', err);
             const fallback = stripThoughtPlaceholders(msg.text || '');
             return fallback ? (
-              <div className={`${styles.assistantText} md-rendered`}>{fallback}</div>
+              <div className={`${styles.assistantText} md-rendered`}>
+                {fallback}
+              </div>
             ) : null;
           }
         })()}
@@ -792,7 +873,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                 aria-label={copied ? '已复制' : '复制正文'}
                 onClick={handleCopy}
               >
-                {copied ? <Lucide.Check size={14} /> : <Lucide.Copy size={14} />}
+                {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </Tooltip>
             {isLastAssistant ? (
@@ -803,7 +884,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                   aria-label="重新生成"
                   onClick={() => onRegenerate(msg.id)}
                 >
-                  <Lucide.RefreshCw size={14} />
+                  <RefreshCw size={14} />
                 </button>
               </Tooltip>
             ) : null}
@@ -816,7 +897,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                   aria-pressed
                   onClick={() => onTogglePin(msg.id)}
                 >
-                  <Lucide.PinOff size={14} />
+                  <PinOff size={14} />
                 </button>
               </Tooltip>
             ) : null}
@@ -835,7 +916,8 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             ) {
               return null;
             }
-            const suggestions: FollowUpSuggestion[] = buildFollowUpSuggestions(msg);
+            const suggestions: FollowUpSuggestion[] =
+              buildFollowUpSuggestions(msg);
             if (!suggestions.length) return null;
             return (
               <div
@@ -862,7 +944,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                             focusChatComposer();
                           }}
                         >
-                          <span className={styles.followupChipLabel}>{s.label}</span>
+                          <span className={styles.followupChipLabel}>
+                            {s.label}
+                          </span>
                         </button>
                       </Tooltip>
                       {onSendFollowUp ? (
@@ -873,7 +957,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                             aria-label={`直接发送：${s.label}`}
                             onClick={() => onSendFollowUp(s.prompt)}
                           >
-                            <Lucide.Send size={12} strokeWidth={2} aria-hidden />
+                            <Send size={12} strokeWidth={2} aria-hidden />
                           </button>
                         </Tooltip>
                       ) : null}
@@ -888,19 +972,21 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
                       aria-label="关闭后续建议"
                       onClick={() => onDismissFollowUp(msg.id)}
                     >
-                      <Lucide.X size={14} aria-hidden />
+                      <X size={14} aria-hidden />
                     </button>
                   </Tooltip>
                 ) : null}
               </div>
             );
           })()}
-          <ChangeOverviewCard
-            message={msg}
-            onOpenDiff={onOpenDiff}
-            onOpenDiffPanel={onOpenDiffPanel}
-            onShowToast={onShowToast}
-          />
+          <React.Suspense fallback={null}>
+            <ChangeOverviewCard
+              message={msg}
+              onOpenDiff={onOpenDiff}
+              onOpenDiffPanel={onOpenDiffPanel}
+              onShowToast={onShowToast}
+            />
+          </React.Suspense>
         </>
       )}
     </div>
@@ -909,18 +995,25 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 
 export const ChatAssistantMessageRow = React.memo(
   ChatAssistantMessageRowInner,
-  assistantRowPropsEqual,
+  assistantRowPropsEqual
 );
 
 // ─── Async Markdown ──────────────────────────────────────────────────────────
 
-function useAsyncMarkdownHtml(markdown: string, priority: Priority): { html: string; loading: boolean } {
+function useAsyncMarkdownHtml(
+  markdown: string,
+  priority: Priority
+): { html: string; loading: boolean } {
   const [html, setHtml] = useState('');
   const [loading, setLoading] = useState(false);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
-    if (!markdown) { setHtml(''); setLoading(false); return; }
+    if (!markdown) {
+      setHtml('');
+      setLoading(false);
+      return;
+    }
 
     const cached = getMarkdownHtmlCache(markdown);
     if (cached !== undefined) {
@@ -932,30 +1025,45 @@ function useAsyncMarkdownHtml(markdown: string, priority: Priority): { html: str
     setLoading(true);
     cancelledRef.current = false;
 
-    parseMarkdownToHtmlAsync(markdown, priority).then((result) => {
-      if (!cancelledRef.current) {
-        setHtml(result);
-        setLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelledRef.current) setLoading(false);
-    });
+    parseMarkdownToHtmlAsync(markdown, priority)
+      .then((result) => {
+        if (!cancelledRef.current) {
+          setHtml(result);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelledRef.current) setLoading(false);
+      });
 
-    return () => { cancelledRef.current = true; };
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [markdown, priority]);
 
   return { html, loading };
 }
 
-function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priority }) {
+function AsyncMarkdownBlock({
+  text,
+  priority,
+}: {
+  text: string;
+  priority: Priority;
+}) {
   const { html, loading } = useAsyncMarkdownHtml(text, priority);
   const skeletonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const bridgeRef = useRef<IncrementalMarkdownBridge | null>(null);
   const initializedRef = useRef(false);
-  const font = useMemo(() => buildPretextFontForUiSize('medium', 'sans', 'normal'), []);
+  const font = useMemo(
+    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
+    []
+  );
   const { measureHeight } = usePreparedText({ text, font });
-  const [skeletonMinH, setSkeletonMinH] = useState<number | undefined>(undefined);
+  const [skeletonMinH, setSkeletonMinH] = useState<number | undefined>(
+    undefined
+  );
 
   useLayoutEffect(() => {
     if (!loading || !skeletonRef.current || !text) {
@@ -971,20 +1079,37 @@ function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priori
 
   useLayoutEffect(() => {
     if (!containerRef.current || loading || !html) return;
+    let cancelled = false;
 
-    const bridge = bridgeRef.current ?? (bridgeRef.current = new IncrementalMarkdownBridge());
-    const result = bridge.push(text);
+    // 首次需要时再拉 bridge（及其 highlight 依赖），切断 Chat 行静态链
+    void import('../api/incrementalMarkdownBridge').then(
+      ({ IncrementalMarkdownBridge }) => {
+        if (cancelled || !containerRef.current) return;
+        const bridge =
+          bridgeRef.current ??
+          (bridgeRef.current = new IncrementalMarkdownBridge());
+        const result = bridge.push(text);
 
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      const wrappedHtml = result.updates.map(u =>
-        `<span data-chunk-id="${u.id}">${u.html}</span>`
-      ).join('');
-      containerRef.current.innerHTML = wrappedHtml;
-    } else if (result.updates.length > 0) {
-      const patches = chunkUpdatesToDomPatches(containerRef.current, result.updates, false);
-      applyDomPatches(containerRef.current, patches);
-    }
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          const wrappedHtml = result.updates
+            .map((u) => `<span data-chunk-id="${u.id}">${u.html}</span>`)
+            .join('');
+          containerRef.current.innerHTML = wrappedHtml;
+        } else if (result.updates.length > 0) {
+          const patches = chunkUpdatesToDomPatches(
+            containerRef.current,
+            result.updates,
+            false
+          );
+          applyDomPatches(containerRef.current, patches);
+        }
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
   }, [html, loading, text]);
 
   if (!text) return null;
@@ -1000,9 +1125,6 @@ function AsyncMarkdownBlock({ text, priority }: { text: string; priority: Priori
     );
   }
   return (
-    <div
-      ref={containerRef}
-      className={`${styles.assistantText} md-rendered`}
-    />
+    <div ref={containerRef} className={`${styles.assistantText} md-rendered`} />
   );
 }

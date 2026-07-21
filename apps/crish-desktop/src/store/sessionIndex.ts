@@ -41,7 +41,7 @@ export function reindexSessionsById(state: SessionsIndexed): void {
  * 读路径防御：部分 hydrate / 测试夹具可能只塞了 sessions。
  */
 export function ensureSessionsById(
-  state: SessionsIndexed,
+  state: SessionsIndexed
 ): Record<string, SessionState> {
   const byId = state.sessionsById;
   if (byId && typeof byId === 'object') return byId;
@@ -50,7 +50,9 @@ export function ensureSessionsById(
 }
 
 /** 按 sessions 数组顺序列出 id（跳过空 id） */
-export function listSessionIds(state: Pick<SessionsIndexed, 'sessions'>): string[] {
+export function listSessionIds(
+  state: Pick<SessionsIndexed, 'sessions'>
+): string[] {
   const ids: string[] = [];
   for (const s of state.sessions) {
     if (s?.id) ids.push(s.id);
@@ -58,10 +60,10 @@ export function listSessionIds(state: Pick<SessionsIndexed, 'sessions'>): string
   return ids;
 }
 
-/** O(1) 按 id 取会话；索引缺失时回退线性扫描并补索引项 */
+/** O(1) 按 id 取会话；索引缺失时回退线性扫描并安全回填索引项 */
 export function getSessionById(
   state: SessionsIndexed,
-  sessionId: string,
+  sessionId: string
 ): SessionState | undefined {
   if (!sessionId) return undefined;
   const byId = state.sessionsById;
@@ -69,12 +71,23 @@ export function getSessionById(
     const hit = byId[sessionId];
     if (hit) return hit;
   }
-  // 索引缺失或尚未同步：回退到线性扫描（读路径绝不 mutate 对象，避免 frozen state 报 not extensible 崩溃）
-  return state.sessions.find((s) => s.id === sessionId);
+  // 索引缺失或尚未同步：线性扫描；可扩展时安全回填（frozen/sealed 则跳过）
+  const found = state.sessions.find((s) => s.id === sessionId);
+  if (found && byId && Object.isExtensible(byId)) {
+    try {
+      byId[sessionId] = found;
+    } catch {
+      /* frozen / sealed */
+    }
+  }
+  return found;
 }
 
 /** 数组下标（需要重排时）；优先索引定位 */
-export function getSessionIndex(state: SessionsIndexed, sessionId: string): number {
+export function getSessionIndex(
+  state: SessionsIndexed,
+  sessionId: string
+): number {
   const sess = getSessionById(state, sessionId);
   if (!sess) return -1;
   // 同引用快速定位
@@ -85,7 +98,9 @@ export function getSessionIndex(state: SessionsIndexed, sessionId: string): numb
 }
 
 /** 从 sessions 数组构建全新索引对象（非 immer 场景 / 初始 state） */
-export function buildSessionsById(sessions: SessionState[]): Record<string, SessionState> {
+export function buildSessionsById(
+  sessions: SessionState[]
+): Record<string, SessionState> {
   const map: Record<string, SessionState> = Object.create(null);
   for (const s of sessions) {
     if (s?.id) map[s.id] = s;
@@ -103,7 +118,7 @@ export function buildSessionsById(sessions: SessionState[]): Record<string, Sess
 export function reorderSessionById(
   sessions: SessionState[],
   sessionId: string,
-  toIndex: number,
+  toIndex: number
 ): SessionState[] {
   if (!sessionId || sessions.length === 0) return sessions;
   const from = sessions.findIndex((s) => s.id === sessionId);
@@ -125,7 +140,7 @@ export function reorderSessionById(
  */
 export function reorderSessionsByIdList(
   sessions: SessionState[],
-  orderedIds: readonly string[],
+  orderedIds: readonly string[]
 ): SessionState[] {
   if (!sessions.length || !orderedIds.length) return sessions;
   const byId = buildSessionsById(sessions);
@@ -164,7 +179,7 @@ export function reorderSessionsByIdList(
 export function moveSessionInIndexed(
   state: SessionsIndexed,
   sessionId: string,
-  toIndex: number,
+  toIndex: number
 ): boolean {
   const next = reorderSessionById(state.sessions, sessionId, toIndex);
   if (next === state.sessions) return false;
@@ -179,7 +194,7 @@ export function moveSessionInIndexed(
  */
 export function reorderIndexedByIdList(
   state: SessionsIndexed,
-  orderedIds: readonly string[],
+  orderedIds: readonly string[]
 ): boolean {
   const next = reorderSessionsByIdList(state.sessions, orderedIds);
   if (next === state.sessions) return false;
@@ -194,7 +209,7 @@ export function reorderIndexedByIdList(
  */
 export function deleteSessionFromIndexed(
   state: SessionsIndexed,
-  sessionId: string,
+  sessionId: string
 ): boolean {
   if (!sessionId) return false;
   const idx = getSessionIndex(state, sessionId);
@@ -218,7 +233,9 @@ export type SessionsIndexIssue =
   | { kind: 'duplicate_id'; id: string };
 
 /** 诊断 sessions 与 sessionsById 是否一致（测试 / dev 断言） */
-export function checkSessionsIndex(state: SessionsIndexed): SessionsIndexIssue[] {
+export function checkSessionsIndex(
+  state: SessionsIndexed
+): SessionsIndexIssue[] {
   const issues: SessionsIndexIssue[] = [];
   const byId = state.sessionsById || {};
   const seen = new Set<string>();
@@ -301,9 +318,15 @@ export type SessionEmptyShellFlagsOpts = {
 export function getSessionEmptyShellFlags(
   s: Pick<
     SessionState,
-    'id' | 'title' | 'messages' | 'isArchived' | 'isPinned' | 'agents' | 'folder'
+    | 'id'
+    | 'title'
+    | 'messages'
+    | 'isArchived'
+    | 'isPinned'
+    | 'agents'
+    | 'folder'
   >,
-  opts: SessionEmptyShellFlagsOpts = {},
+  opts: SessionEmptyShellFlagsOpts = {}
 ): SessionEmptyShellFlags {
   const isPinned = Boolean(s.isPinned);
   const isArchived = Boolean(s.isArchived);
@@ -316,10 +339,7 @@ export function getSessionEmptyShellFlags(
   const id = s.id || '';
   const shouldList =
     !isArchived &&
-    shouldListSessionInSidebar(
-      { ...s, id },
-      opts.activeSessionId,
-    );
+    shouldListSessionInSidebar({ ...s, id }, opts.activeSessionId);
   const displayTitle = sessionListDisplayTitle(s);
   return {
     isEmptyMessages,
@@ -339,7 +359,10 @@ export function getSessionEmptyShellFlags(
  * 与 isEmptyShellSession 对齐（置顶不当幽灵丢弃，也不当「再新建」目标）。
  */
 export function isPlaceholderEmptySession(
-  s: Pick<SessionState, 'title' | 'messages' | 'isArchived' | 'isPinned' | 'agents'>,
+  s: Pick<
+    SessionState,
+    'title' | 'messages' | 'isArchived' | 'isPinned' | 'agents'
+  >
 ): boolean {
   if (s.isArchived) return false;
   return isEmptyShellSession(s);
@@ -360,7 +383,7 @@ export type FindReusableEmptyOpts = {
  */
 export function findReusableEmptySession(
   sessions: SessionState[],
-  opts: FindReusableEmptyOpts = {},
+  opts: FindReusableEmptyOpts = {}
 ): SessionState | undefined {
   const id = findReusableEmptyShell(sessions, opts.folder, {
     excludeId: opts.excludeId,
@@ -391,7 +414,9 @@ export type SessionSearchFilterKeys = {
 };
 
 /** 规范化搜索 needle：trim + lower；空串 → '' */
-export function normalizeSearchFilterQuery(query: string | null | undefined): string {
+export function normalizeSearchFilterQuery(
+  query: string | null | undefined
+): string {
   return String(query ?? '')
     .trim()
     .toLowerCase();
@@ -401,7 +426,7 @@ export function normalizeSearchFilterQuery(query: string | null | undefined): st
  * 为单会话构建搜索 filter keys（与 sessionListDisplayTitle / EMPTY_SESSION_TITLE 一致）。
  */
 export function buildSessionSearchFilterKeys(
-  s: Pick<SessionState, 'id' | 'title' | 'folder' | 'messages'>,
+  s: Pick<SessionState, 'id' | 'title' | 'folder' | 'messages'>
 ): SessionSearchFilterKeys {
   const id = s.id || '';
   const idKey = id.toLowerCase();
@@ -430,7 +455,7 @@ export function buildSessionSearchFilterKeys(
 /** keys 是否命中已规范化的 needle（空 needle 视为全命中） */
 export function sessionMatchesSearchFilterKeys(
   keys: SessionSearchFilterKeys,
-  needle: string,
+  needle: string
 ): boolean {
   if (!needle) return true;
   return keys.haystack.includes(needle);
@@ -442,12 +467,12 @@ export function sessionMatchesSearchFilterKeys(
  */
 export function filterSessionsBySearchKeys(
   sessions: SessionState[],
-  query: string | null | undefined,
+  query: string | null | undefined
 ): SessionState[] {
   const needle = normalizeSearchFilterQuery(query);
   if (!needle) return sessions;
   return sessions.filter((s) =>
-    sessionMatchesSearchFilterKeys(buildSessionSearchFilterKeys(s), needle),
+    sessionMatchesSearchFilterKeys(buildSessionSearchFilterKeys(s), needle)
   );
 }
 
@@ -472,7 +497,7 @@ export type FilterSidebarSessionsOpts = {
  */
 export function filterSidebarSessions(
   sessions: SessionState[],
-  opts: FilterSidebarSessionsOpts = {},
+  opts: FilterSidebarSessionsOpts = {}
 ): SessionState[] {
   const activeId = opts.activeSessionId || '';
   const needle = normalizeSearchFilterQuery(opts.searchQuery);
@@ -482,7 +507,10 @@ export function filterSidebarSessions(
     if (!needle) return true;
     // 活动会话在搜索时仍保留（用户正在看的壳不被搜词踢出）
     if (activeId && s.id === activeId) return true;
-    return sessionMatchesSearchFilterKeys(buildSessionSearchFilterKeys(s), needle);
+    return sessionMatchesSearchFilterKeys(
+      buildSessionSearchFilterKeys(s),
+      needle
+    );
   });
 }
 
@@ -504,7 +532,7 @@ export type PartitionedSidebarSessions = {
  */
 export function partitionSidebarSessions(
   sessions: SessionState[],
-  opts: PartitionSidebarSessionsOpts = {},
+  opts: PartitionSidebarSessionsOpts = {}
 ): PartitionedSidebarSessions {
   let visible = filterSidebarSessions(sessions, {
     activeSessionId: opts.activeSessionId,
@@ -528,7 +556,7 @@ export function partitionSidebarSessions(
  */
 export function groupUnpinnedByProject(
   unpinned: SessionState[],
-  projects: Array<{ id: string; name: string; path?: string }>,
+  projects: Array<{ id: string; name: string; path?: string }>
 ): { byProjectId: Record<string, SessionState[]>; general: SessionState[] } {
   const projectIdSet = new Set(projects.map((p) => p.id));
   const nameToId = new Map(projects.map((p) => [p.name, p.id]));
