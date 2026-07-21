@@ -59,6 +59,23 @@ Backpressure:
 - WebSocket send failure or excessive buffer closes that client and records a diagnostic.
 - UI delta floods should be coalesced at the Workbench projection/render layer; daemon event logs remain semantically complete.
 
+### Client → Daemon stream control (Crish Desktop)
+
+When the desktop render buffer exceeds a high-water mark (~64KB of unconsumed stream text), the client signals the daemon to stop pushing live deltas for that run. When the buffer drains below a low-water mark (~16KB), it signals resume. Chunks already received are never dropped on the client; the daemon side pause-buffers outbound events.
+
+| Path             | Encoding                                                        | Payload                                        |
+| ---------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| Binary preferred | `STREAM_PAUSE` `0x21` / `STREAM_RESUME` `0x22`                  | UTF-8 JSON meta `{ "runId": "<id>" }`          |
+| JSON fallback    | `{ "type": "stream-pause" \| "stream-resume", "runId": "..." }` | First-class inbound protocol types (validated) |
+
+Daemon behavior (`StreamBackpressureRegistry` + `RunHandler`):
+
+1. **pause** — mark run paused; `for await` of orchestrator events waits on `waitIfPaused`; sink `send` buffers messages (drop-oldest at cap, default 512) instead of WS push.
+2. **resume** — clear pause, flush buffer to the originating WebSocket (or broadcast if socket gone), wake waiters, resume real-time push.
+3. **run end / cancel** — `clearRun` drops pause state and waiters (no leak).
+
+Binary frames still ACK with `STREAM_ACK`. JSON path returns correlated `pong` after apply. Empty `runId` on JSON is a validation error; binary may omit meta and no-op.
+
 ## Required Tests
 
 - SSE body ignores abort until our reader cancellation path fires.
