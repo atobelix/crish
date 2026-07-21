@@ -19,7 +19,8 @@
   z-index: var(--z-pinned-bar);
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
   box-shadow: none;
@@ -148,4 +149,10 @@
   .pinnedBar {
     max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
+}
+
+/* eco: disable pinned bar glass */
+:global([data-perf-tier='eco']) .pinnedBar {
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--bg-primary) 97%, transparent);
 }

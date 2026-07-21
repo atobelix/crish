@@ -28,11 +28,16 @@
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: color-mix(in srgb, var(--bg-elevated, #2a2d3a) 92%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--bg-elevated, #2a2d3a) 92%,
+    transparent
+  );
   color: var(--text-secondary, #c8cbd4);
   padding: 6px 12px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--border-subtle, #ffffff) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--border-subtle, #ffffff) 8%, transparent);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   font-size: var(--font-size-sm, 12px);
   line-height: 1.35;
@@ -54,7 +59,9 @@
   font-size: var(--font-size-xs, 11px);
   padding: 2px 6px;
   border-radius: var(--radius-xs);
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .toastUndoBtn:hover {
@@ -71,7 +78,9 @@
   padding: 0 4px;
   border-radius: var(--radius-xs);
   line-height: 1;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .toastDismissBtn:hover {
@@ -81,25 +90,48 @@
 
 .toastDismissBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(
+    --focus-ring,
+    0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent)
+  );
 }
 
 .toastUndoBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(
+    --focus-ring,
+    0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent)
+  );
 }
 
 @keyframes toast-slide-in {
-  from { transform: translateX(120%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 @keyframes toast-slide-out {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(120%); opacity: 0; }
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(120%);
+    opacity: 0;
+  }
 }
 .toastAlert {
   animation: toast-slide-in var(--transition-enter) forwards;
 }
 .toastAlertExiting {
   animation: toast-slide-out var(--transition-exit) forwards;
+}
+
+/* eco: disable toast glass */
+:global([data-perf-tier='eco']) .toastAlert {
+  backdrop-filter: none;
 }

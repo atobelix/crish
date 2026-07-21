@@ -1,12 +1,15 @@
-/* --- settings.css (overlay / cover / panel / settings tabs) �?split from index.css (selectors preserved) ---
- * Hairline 婵傛垹瀹虫�?chat 娑撯偓閼疯揪绱扮紒鎾寸€痪?--border-subtle / --hairline閿涙稒甯舵禒鍓佸�?--border-color / --hairline-strong
- * 閹貉傛妤傛锟?--control-height*閿涙稑鐡ч崣鐤泲 --font-size*閿涙稑瀣侀崘宥呭晸 magic px �?text-primary color-mix 閹诲繗锟?*/
+/* --- settings.css (overlay / cover / panel / settings tabs) �?split from index.css (selectors preserved) ---
+ * Hairline 婵傛垹瀹虫�?chat 娑撯偓閼疯揪绱扮紒鎾寸€痪?--border-subtle / --hairline閿涙稒甯舵禒鍓佸�?--border-color / --hairline-strong
+ * 閹貉傛妤傛锟?--control-height*閿涙稑鐡ч崣鐤泲 --font-size*閿涙稑瀣侀崘宥呭晸 magic px �?text-primary color-mix 閹诲繗锟?*/
 /* --- PREMIUM SETTINGS BUTTONS --- */
 .settings-btn-primary {
   background-color: var(--bg-active);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height);
@@ -28,7 +31,10 @@
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height);
@@ -49,7 +55,10 @@
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   height: var(--control-height-sm);
@@ -88,9 +97,12 @@
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color var(--transition-micro), background var(--transition-micro), box-shadow var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background var(--transition-micro),
+    box-shadow var(--transition-micro);
 }
-/* 鐠佸墽鐤嗙€靛棗瀹抽敍姘愁攽閸愬懎鐨幒褌锟?�?�?control-height-sm閿涘矂浼╅崗?magic 28px + !important 閸棗锟?*/
+/* 鐠佸墽鐤嗙€靛棗瀹抽敍姘愁攽閸愬懎鐨幒褌锟?�?�?control-height-sm閿涘矂浼╅崗?magic 28px + !important 閸棗锟?*/
 .settings-field-input--sm {
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
@@ -194,7 +206,7 @@ select.settings-field-input {
   gap: var(--space-2);
 }
 
-/* Settings nav �?閸﹀棜顫楅惌鈺佽埌閿涙盯鈧鑵戦崣顏嗘暏鏉烆垰绨抽敍灞肩瑝閸欑姵寮挎潏?*/
+/* Settings nav �?閸﹀棜顫楅惌鈺佽埌閿涙盯鈧鑵戦崣顏嗘暏鏉烆垰绨抽敍灞肩瑝閸欑姵寮挎潏?*/
 .settings-sidebar-tab {
   display: flex;
   align-items: center;
@@ -209,7 +221,9 @@ select.settings-field-input {
   width: 100%;
   background: transparent;
   color: var(--text-secondary);
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
   box-sizing: border-box;
   min-height: 36px;
 }
@@ -218,7 +232,7 @@ select.settings-field-input {
   color: var(--text-primary);
 }
 .settings-sidebar-tab.active {
-  /* 閺堝绨抽懝?�?閺冪姵寮挎潏?*/
+  /* 閺堝绨抽懝?�?閺冪姵寮挎潏?*/
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
@@ -240,7 +254,7 @@ select.settings-field-input {
 .settings-sidebar-tab.active svg {
   color: var(--text-primary);
 }
-/* 閸掓锟?鐞涖劌宕熼崸妤嬬窗閺冪姾澹婇崸妤€顦诲鍡幢鐞涘矂�?hairline閿涘牅锟?chat-msg-filter-bar / tool 閸掑棗灏崥?token�?*/
+/* 閸掓锟?鐞涖劌宕熼崸妤嬬窗閺冪姾澹婇崸妤€顦诲鍡幢鐞涘矂�?hairline閿涘牅锟?chat-msg-filter-bar / tool 閸掑棗灏崥?token�?*/
 .settings-card-row {
   display: flex;
   flex-direction: column;
@@ -263,7 +277,7 @@ select.settings-field-input {
 }
 
 .settings-scope-selector {
-  display: none; /* removed from UI �?confuses consumers */
+  display: none; /* removed from UI �?confuses consumers */
 }
 
 .settings-scope-toggle-group {
@@ -283,7 +297,9 @@ select.settings-field-input {
   cursor: pointer;
   background: transparent;
   color: var(--text-tertiary);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .settings-scope-toggle-btn.active {
@@ -292,7 +308,7 @@ select.settings-field-input {
   box-shadow: none;
 }
 
-/* --- SHORTCUT BUTTONS �?�?field-input 閸氬本寮挎潏瑙勩€傞敍灞炬￥ !important --- */
+/* --- SHORTCUT BUTTONS �?�?field-input 閸氬本寮挎潏瑙勩€傞敍灞炬￥ !important --- */
 .shortcut-key-btn {
   font-size: var(--font-size-xxs);
   background: transparent;
@@ -308,7 +324,10 @@ select.settings-field-input {
   max-width: 200px;
   text-align: center;
   font-weight: var(--font-weight-normal);
-  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro);
   box-shadow: none;
   white-space: nowrap;
   overflow: hidden;
@@ -322,7 +341,7 @@ select.settings-field-input {
 }
 
 .shortcut-key-btn.recording {
-  /* 娑擃厽鈧傜秼缁紮绱皉ecording �?active + standard hairline閿涘奔绗夐悽銊︽閼瑰弶寮挎�?*/
+  /* 娑擃厽鈧傜秼缁紮绱皉ecording �?active + standard hairline閿涘奔绗夐悽銊︽閼瑰弶寮挎�?*/
   background-color: var(--bg-active);
   color: var(--text-primary);
   border-color: var(--border-color);
@@ -344,7 +363,7 @@ select.settings-field-input {
 }
 
 /* ============================================================
-   Settings Design System v3閿涘牅閲滄禍?閺呴缚鍏橀柌宥堫啎鐠佲槄锟?   閸樼喎鍨敍姘冲垱鐎佃壈鍩呭锕€顕鎰剁幢閸旂喕鍏橀崣浼存姜鐠囧瓨妲戞稊锔肩幢閻樿埖鈧讲澧佃ぐ鎾冲閸婄》绱辩€涙�?1閿涙稖顢戞姗€鈧倷锟?   ============================================================ */
+   Settings Design System v3閿涘牅閲滄禍?閺呴缚鍏橀柌宥堫啎鐠佲槄锟?   閸樼喎鍨敍姘冲垱鐎佃壈鍩呭锕€顕鎰剁幢閸旂喕鍏橀崣浼存姜鐠囧瓨妲戞稊锔肩幢閻樿埖鈧讲澧佃ぐ鎾冲閸婄》绱辩€涙�?1閿涙稖顢戞姗€鈧倷锟?   ============================================================ */
 .settings-pane--modern {
   gap: var(--space-4);
   width: 100%;
@@ -365,7 +384,7 @@ select.settings-field-input {
   color: var(--text-primary);
   line-height: var(--line-height-compact);
 }
-/* 姒涙顓婚梾鎰婢堆勵唽鐠囧瓨妲戦敍姘愁啎缂冾噣銆夐弰顖氬閼宠棄褰撮敍灞肩瑝閺勵垵顕╅弰搴濆�?*/
+/* 姒涙顓婚梾鎰婢堆勵唽鐠囧瓨妲戦敍姘愁啎缂冾噣銆夐弰顖氬閼宠棄褰撮敍灞肩瑝閺勵垵顕╅弰搴濆�?*/
 .settings-page-desc {
   display: none;
   margin: 6px 0 0;
@@ -382,7 +401,7 @@ select.settings-field-input {
   font-size: var(--font-size-xs);
   opacity: 0.9;
 }
-/* 鐎规碍妞傛禒璇插鐠佸墽鐤嗘い纰夌窗缁毖冨櫨鐢啫鐪敍娑楃箽鐠囦浇绻樻い闈涘祮閺堝褰茬憴渚€顎囬�?*/
+/* 鐎规碍妞傛禒璇插鐠佸墽鐤嗘い纰夌窗缁毖冨櫨鐢啫鐪敍娑楃箽鐠囦浇绻樻い闈涘祮閺堝褰茬憴渚€顎囬�?*/
 .sched-settings {
   gap: 14px;
   min-height: 240px;
@@ -534,7 +553,7 @@ select.settings-field-input {
 .sched-settings-row .ui-btn {
   flex-shrink: 0;
 }
-/* 閸忕厧顔愰敍姘灙鐞涖劌鍞村畵灞灸侀弶鑳П閻楀浄绱欓崗鏈电铂妞ょ敻娼伴懟銉ょ矝�?settings-list 閸栧懓锛欓敍?*/
+/* 閸忕厧顔愰敍姘灙鐞涖劌鍞村畵灞灸侀弶鑳П閻楀浄绱欓崗鏈电铂妞ょ敻娼伴懟銉ょ矝�?settings-list 閸栧懓锛欓敍?*/
 .settings-list .sched-preset-chips {
   display: flex;
   flex-wrap: wrap;
@@ -597,7 +616,7 @@ select.settings-field-input {
   border: none;
   gap: var(--space-2_5);
 }
-/* 娴犲懎婀棁鈧憰浣碘偓灞藉幢閻楀洦鍔呴妴宥嗘閺勬儳绱￠�?hairline 婢舵牗顢嬮敍鍫熸殻妞ゅ灚娓舵�?0�? 婢跺嫸锟?*/
+/* 娴犲懎婀棁鈧憰浣碘偓灞藉幢閻楀洦鍔呴妴宥嗘閺勬儳绱￠�?hairline 婢舵牗顢嬮敍鍫熸殻妞ゅ灚娓舵�?0�? 婢跺嫸锟?*/
 .settings-list--hairline {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
@@ -610,7 +629,7 @@ select.settings-field-input {
   align-items: center;
   justify-content: flex-start;
   gap: 12px 16px;
-  /* 閻ｆ瑧娅ф稉杞板瘜閿涙岸绮拋銈嗘￥閹诲繗绔熼弮鐘茬俺閿涙稒鏆ｇ悰?hover 娑撳秹鐝禍顕嗙礄闁灝鍘ら崑鍥у讲閻愰€涚瑢閹舵牕濮╅�?*/
+  /* 閻ｆ瑧娅ф稉杞板瘜閿涙岸绮拋銈嗘￥閹诲繗绔熼弮鐘茬俺閿涙稒鏆ｇ悰?hover 娑撳秹鐝禍顕嗙礄闁灝鍘ら崑鍥у讲閻愰€涚瑢閹舵牕濮╅�?*/
   padding: 12px 14px;
   min-height: 48px;
   border: none;
@@ -626,7 +645,7 @@ select.settings-field-input {
   border: none;
   transform: none;
 }
-/* 婢舵牞顫囨い纰夌窗閺嶅洨顒烽崶鍝勭暰鐎规枻绱濋幒褌娆㈢槐褑绐￠崗璺烘倵閿涘牏顩﹀�?space-between 娑撱倗顏€靛綊缍堥�?*/
+/* 婢舵牞顫囨い纰夌窗閺嶅洨顒烽崶鍝勭暰鐎规枻绱濋幒褌娆㈢槐褑绐￠崗璺烘倵閿涘牏顩﹀�?space-between 娑撱倗顏€靛綊缍堥�?*/
 .settings-list-row--single {
   flex-wrap: nowrap;
   align-items: center;
@@ -648,14 +667,14 @@ select.settings-field-input {
   justify-content: flex-start;
   gap: var(--space-2);
 }
-/* 婢舵牞锟?�?鐎靛棗瀹抽崚鍡橆唽閿涙矮绗佸锝囨彛閸戞垵宕熺�?*/
+/* 婢舵牞锟?�?鐎靛棗瀹抽崚鍡橆唽閿涙矮绗佸锝囨彛閸戞垵宕熺�?*/
 .settings-density-segment.settings-segment-pill .ui-segment-item {
   min-width: 40px;
   padding: 0 10px;
 }
 
 /* ============================================================
-   娑擃亝鈧冨妞ょ绱伴崡鏇☆攽鐎靛棗瀹抽敍鍫熺垼妫版ê�?/ 閹貉傛閸欑绱濋弮鐘插閺傚洦顢嶉幘鎴︾彯�?   ============================================================ */
+   娑擃亝鈧冨妞ょ绱伴崡鏇☆攽鐎靛棗瀹抽敍鍫熺垼妫版ê�?/ 閹貉傛閸欑绱濋弮鐘插閺傚洦顢嶉幘鎴︾彯�?   ============================================================ */
 .settings-pane--personalize {
   gap: 14px;
   width: 100%;
@@ -705,7 +724,9 @@ select.settings-field-input {
 .settings-pane--personalize .settings-list-row--clickable:hover {
   background: transparent;
 }
-.settings-pane--personalize .settings-list-row--clickable:hover .settings-list-title {
+.settings-pane--personalize
+  .settings-list-row--clickable:hover
+  .settings-list-title {
   color: inherit;
 }
 @media (max-width: 720px) {
@@ -727,7 +748,7 @@ select.settings-field-input {
 }
 
 /* ============================================================
-   鐎瑰鍙忔い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫ョ帛鐠併倖娼堥梽?/ 瀹搞儰缍旈惄顔肩�?/ 閸涙垝鎶ら惂钘夋倳閸楁洩�?   鐠囧瓨妲戞潻?title閿涙稖濮遍悧鍥攽閸忎浇顔忛幒褌娆㈡笟褎宕茬悰宀嬬礉閺嶅洭顣介崚妞剧箽閹镐礁宕熺�?   ============================================================ */
+   鐎瑰鍙忔い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫ョ帛鐠併倖娼堥梽?/ 瀹搞儰缍旈惄顔肩�?/ 閸涙垝鎶ら惂钘夋倳閸楁洩�?   鐠囧瓨妲戞潻?title閿涙稖濮遍悧鍥攽閸忎浇顔忛幒褌娆㈡笟褎宕茬悰宀嬬礉閺嶅洭顣介崚妞剧箽閹镐礁宕熺�?   ============================================================ */
 .settings-pane--security {
   gap: 14px;
   width: 100%;
@@ -757,7 +778,7 @@ select.settings-field-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 鐠侯垰绶炵悰宀嬬窗閺嶅洭顣介崠鍝勬倖濠娾€冲⒖娴ｆ瑧鈹栭梻杈剧礉娓氬じ绨惇浣烘殣�?*/
+/* 鐠侯垰绶炵悰宀嬬窗閺嶅洭顣介崠鍝勬倖濠娾€冲⒖娴ｆ瑧鈹栭梻杈剧礉娓氬じ绨惇浣烘殣�?*/
 .settings-list-row--security .settings-list-title.settings-path-ellipsis {
   display: block;
   max-width: 100%;
@@ -794,7 +815,7 @@ select.settings-field-input {
   flex-shrink: 0;
   padding-inline: 6px;
 }
-/* 韫囶偅锟?/ 瀹告彃鍘戠拋闈╃窗閸欏厖�?chips 閸欘垱宕茬悰宀嬬礉瀹革缚鏅堕弽鍥暯娴犲秴宕熺�?*/
+/* 韫囶偅锟?/ 瀹告彃鍘戠拋闈╃窗閸欏厖�?chips 閸欘垱宕茬悰宀嬬礉瀹革缚鏅堕弽鍥暯娴犲秴宕熺�?*/
 .settings-list-row--security-chips {
   align-items: flex-start;
   min-height: var(--control-height-sm, 28px);
@@ -861,7 +882,7 @@ select.settings-field-input {
 .settings-list-row:last-child {
   border-bottom: none;
 }
-/* 闂傜绐涢崹瀣灙鐞涱煉绱版禒宥呭礋�?*/
+/* 闂傜绐涢崹瀣灙鐞涱煉绱版禒宥呭礋�?*/
 .settings-list--spaced {
   gap: 0;
 }
@@ -884,7 +905,7 @@ select.settings-field-input {
   overflow: hidden;
 }
 .settings-list-title {
-  /* 鐎涙锟?+1閿涙俺绐＄€靛棗�?token閿涘矂浼╅崗宥団€栫紓鏍垳 13px 閸嬪繐锟?*/
+  /* 鐎涙锟?+1閿涙俺绐＄€靛棗�?token閿涘矂浼╅崗宥団€栫紓鏍垳 13px 閸嬪繐锟?*/
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
@@ -893,12 +914,12 @@ select.settings-field-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 缁岀儤锟?/ 閸楃姳缍呴敍姘舵�?essay閿涘苯宕熺悰?tertiary */
+/* 缁岀儤锟?/ 閸楃姳缍呴敍姘舵�?essay閿涘苯宕熺悰?tertiary */
 .settings-list-empty {
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
-/* 姒涙顓绘稉宥呯潔缁€鍝勫閺傚洦顢嶉敍娑楃矌瀵倸锟?缁岀儤鈧礁褰查�?--force閿涘牏顩﹀銏狀槻鏉╃増甯舵禒璺虹秼閸撳秴鈧》锟?*/
+/* 姒涙顓绘稉宥呯潔缁€鍝勫閺傚洦顢嶉敍娑楃矌瀵倸锟?缁岀儤鈧礁褰查�?--force閿涘牏顩﹀銏狀槻鏉╃増甯舵禒璺虹秼閸撳秴鈧》锟?*/
 .settings-list-sub {
   display: none;
   margin-top: 0;
@@ -922,7 +943,7 @@ select.settings-field-input {
   flex-wrap: nowrap;
   min-width: 0;
 }
-/* 鐞涘苯鍞寸悰銊ュ礋閿涙俺绶�?+ 閹稿鎸抽崥灞肩鐞涘矉绱濇稉宥嗗床鐞涘本鍨氶妴灞艰⒈鐞涘矁顔曠純顕€銆嶉妴?*/
+/* 鐞涘苯鍞寸悰銊ュ礋閿涙俺绶�?+ 閹稿鎸抽崥灞肩鐞涘矉绱濇稉宥嗗床鐞涘本鍨氶妴灞艰⒈鐞涘矁顔曠純顕€銆嶉妴?*/
 .settings-list-control--inline-form {
   flex: 1 1 auto;
   max-width: min(520px, 72%);
@@ -934,7 +955,7 @@ select.settings-field-input {
   min-width: 0;
 }
 /*
- * 娴滃矂鈧锟?/ 娑撳鈧绔撮敍姘瘻闁筋喖閮婂銈呭瀻瀵偓閿涘苯鎮囬懛顏勬妇鐟欐帞鐓╄ぐ顫�? * 濠碘偓濞蹭紮绱版潪顖氱俺 + 濞村懏寮挎潏鐧哥幢閺堫亝绺哄ú浼欑窗闁繑�?+ 閺囧瓨绁幓蹇氱珶锟? */
+ * 娴滃矂鈧锟?/ 娑撳鈧绔撮敍姘瘻闁筋喖閮婂銈呭瀻瀵偓閿涘苯鎮囬懛顏勬妇鐟欐帞鐓╄ぐ顫�? * 濠碘偓濞蹭紮绱版潪顖氱俺 + 濞村懏寮挎潏鐧哥幢閺堫亝绺哄ú浼欑窗闁繑�?+ 閺囧瓨绁幓蹇氱珶锟? */
 .settings-segment-pill.ui-segment,
 .settings-segment-pill,
 .settings-segment-rect.ui-segment,
@@ -950,7 +971,7 @@ select.settings-field-input {
   gap: var(--space-2) !important;
   box-shadow: none !important;
 }
-/* 閺堫亝绺哄ú浼欑窗娴犲懏绁幓蹇氱珶閿涙稒绺哄ú浼欑窗娴犲懓钂嬫惔鏇樷偓鍌滎洣濮濄垹�?鏉堢懓褰旈悽?*/
+/* 閺堫亝绺哄ú浼欑窗娴犲懏绁幓蹇氱珶閿涙稒绺哄ú浼欑窗娴犲懓钂嬫惔鏇樷偓鍌滎洣濮濄垹�?鏉堢懓褰旈悽?*/
 .settings-segment-pill .ui-segment-item,
 .settings-segment-rect .ui-segment-item,
 .settings-choice-group .ui-segment-item,
@@ -967,13 +988,20 @@ select.settings-field-input {
   line-height: var(--line-height-none);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro);
 }
 .settings-segment-pill .ui-segment-item:hover,
 .settings-segment-rect .ui-segment-item:hover,
 .settings-choice-group .ui-segment-item:hover,
 .settings-choice-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 2.5%,
+    transparent
+  ) !important;
   border-color: transparent !important;
   color: var(--text-primary);
 }
@@ -981,13 +1009,17 @@ select.settings-field-input {
 .settings-segment-rect .ui-segment-item.active,
 .settings-choice-group .ui-segment-item.active,
 .settings-choice-btn.active {
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-primary)) !important;
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 6%,
+    var(--bg-primary)
+  ) !important;
   border-color: transparent !important;
   color: var(--text-primary) !important;
   font-weight: var(--font-weight-medium);
   box-shadow: none !important;
 }
-/* 缁涘顔旂捄顖氱�?閺佺増宓侀敍姘剁帛鐠併倕褰茬憴渚婄礄娑撳秵妲哥敮顔煎И閺傚洦顢嶉敍澶涚幢娴兼ê鍘涢崡鏇☆攽閻胶锟?*/
+/* 缁涘顔旂捄顖氱�?閺佺増宓侀敍姘剁帛鐠併倕褰茬憴渚婄礄娑撳秵妲哥敮顔煎И閺傚洦顢嶉敍澶涚幢娴兼ê鍘涢崡鏇☆攽閻胶锟?*/
 .settings-list-sub--mono {
   display: block;
   font-family: var(--font-mono);
@@ -999,7 +1031,7 @@ select.settings-field-input {
   color: var(--text-tertiary);
   max-width: 100%;
 }
-/* 鐠侯垰锟?闂€?ID 閸楁洝顢戦惇浣烘�?*/
+/* 鐠侯垰锟?闂€?ID 閸楁洝顢戦惇浣烘�?*/
 .settings-path-ellipsis {
   display: inline-block;
   max-width: min(360px, 48vw);
@@ -1107,7 +1139,7 @@ select.settings-field-input {
   gap: var(--space-3);
   flex-wrap: nowrap;
 }
-/* 妞よ埖锟?meta閿涙矮绮庡鍌氱�?瀵洘鎼搁幀渚婄幢婢跺秷鍫ぐ鎾冲閸婅偐锟?meta 鎼存柨锟?TSX 閸掔娀�?*/
+/* 妞よ埖锟?meta閿涙矮绮庡鍌氱�?瀵洘鎼搁幀渚婄幢婢跺秷鍫ぐ鎾冲閸婅偐锟?meta 鎼存柨锟?TSX 閸掔娀�?*/
 .settings-head-meta {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
@@ -1132,7 +1164,7 @@ select.settings-field-input {
   color: var(--text-tertiary);
   opacity: 0.9;
 }
-/* 缁備焦顒涚粩鏍ф倻閸棗褰旈幋鎰┾偓灞艰⒈鐞涘矁顔曠純顕€銆嶉妴宥佲偓鏂衡偓鏃€甯舵禒鏈电瀵板绐￠弽鍥暯閸氬奔绔寸�?*/
+/* 缁備焦顒涚粩鏍ф倻閸棗褰旈幋鎰┾偓灞艰⒈鐞涘矁顔曠純顕€銆嶉妴宥佲偓鏂衡偓鏃€甯舵禒鏈电瀵板绐￠弽鍥暯閸氬奔绔寸�?*/
 .settings-list-row.settings-list-row--stack,
 .settings-list-row--stack {
   flex-direction: row;
@@ -1156,7 +1188,7 @@ select.settings-field-input {
   align-items: center;
   gap: var(--space-1_5);
 }
-/* 妫板嫯顔曢懞顖滃閿涙氨顩﹀銏㈢彨閹烘帗鐪界€涙绱遍悽銊︽纯妤傛澹掑鍌涒偓褌鍞�?!important 閸棗锟?*/
+/* 妫板嫯顔曢懞顖滃閿涙氨顩﹀銏㈢彨閹烘帗鐪界€涙绱遍悽銊︽纯妤傛澹掑鍌涒偓褌鍞�?!important 閸棗锟?*/
 .settings-preset-chips,
 .settings-list-stack-actions {
   writing-mode: horizontal-tb;
@@ -1175,7 +1207,7 @@ select.settings-field-input {
   overflow-wrap: normal;
 }
 /* ============================================================
-   閻劑鍣烘い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫滅窗�?token 閹槒锟?+ 鐎规矮鐜悰顭掔�?   閺佹澘鈧厧褰哥€靛綊锟?tabular-nums閿涙稖顕╅弰搴ょ�?title閿涙稒鍨氶崝鐔兼饯锟?/ 闁挎瑨锟?toast
+   閻劑鍣烘い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫滅窗�?token 閹槒锟?+ 鐎规矮鐜悰顭掔�?   閺佹澘鈧厧褰哥€靛綊锟?tabular-nums閿涙稖顕╅弰搴ょ�?title閿涙稒鍨氶崝鐔兼饯锟?/ 闁挎瑨锟?toast
    ============================================================ */
 .settings-pane--usage {
   gap: 14px;
@@ -1234,7 +1266,7 @@ select.settings-field-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 鐎规矮鐜悰宀嬬窗濡€筹�?ID 閸氬啯寮ч崜鈺€缍戠粚娲？閿涘奔绌舵�?mono 閻胶锟?*/
+/* 鐎规矮鐜悰宀嬬窗濡€筹�?ID 閸氬啯寮ч崜鈺€缍戠粚娲？閿涘奔绌舵�?mono 閻胶锟?*/
 .settings-list-row--usage .settings-list-title.settings-usage-model-id {
   display: block;
   max-width: 100%;
@@ -1347,7 +1379,7 @@ select.settings-field-input {
   }
 }
 
-/* 閳光偓閳光偓 韫囶偅宓庨柨顕€銆夌€靛棗瀹抽敍姘垼妫版ɑ鐖槐褍鍣剧粵娑⑩偓?+ 閸楁洝顢戣ぐ鏇炲�?閳光偓閳光偓 */
+/* 閳光偓閳光偓 韫囶偅宓庨柨顕€銆夌€靛棗瀹抽敍姘垼妫版ɑ鐖槐褍鍣剧粵娑⑩偓?+ 閸楁洝顢戣ぐ鏇炲�?閳光偓閳光偓 */
 .settings-pane--shortcuts {
   gap: 14px;
   width: 100%;
@@ -1467,7 +1499,7 @@ select.settings-field-input {
   gap: var(--space-1);
   max-width: none;
 }
-/* 鐟欏嫬鍨い纰夌窗妫板嫯顔曢懞顖滃 + 閸楁洝顢戠憴鍕�?+ 濞ｈ濮炵悰?*/
+/* 鐟欏嫬鍨い纰夌窗妫板嫯顔曢懞顖滃 + 閸楁洝顢戠憴鍕�?+ 濞ｈ濮炵悰?*/
 .settings-rule-presets {
   display: flex;
   flex-direction: row;
@@ -1548,7 +1580,7 @@ select.settings-field-input {
   min-height: var(--control-height-sm);
 }
 
-/* 鐠佸墽鐤嗘禍宀€楠囧鐟扮湴閿涘牐顫夐崚娆忓弿�?/ 濡€崇€烽惄顔肩秿缁涘�?*/
+/* 鐠佸墽鐤嗘禍宀€楠囧鐟扮湴閿涘牐顫夐崚娆忓弿�?/ 濡€崇€烽惄顔肩秿缁涘�?*/
 .settings-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -1610,7 +1642,8 @@ select.settings-field-input {
   gap: var(--space-2);
   min-height: 40px;
   padding: 6px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 .models-catalog-row:last-child {
   border-bottom: none;
@@ -1648,7 +1681,7 @@ select.settings-field-input {
   flex-shrink: 0;
   opacity: 1;
 }
-/* 閹垮秳缍旈幐澶愭尦婵绮撻崣顖濐潌閿涘矂浼╅崗?hover 閺勯箖娈ｇ€佃壈鍤х悰灞筋啍閹舵牕�?*/
+/* 閹垮秳缍旈幐澶愭尦婵绮撻崣顖濐潌閿涘矂浼╅崗?hover 閺勯箖娈ｇ€佃壈鍤х悰灞筋啍閹舵牕�?*/
 .models-catalog-row .models-catalog-actions {
   opacity: 1;
 }
@@ -1661,7 +1694,7 @@ select.settings-field-input {
   opacity: 1;
   pointer-events: auto;
 }
-/* 娑撹崵鏅棃銏℃喅鐟曚緤绱拌ぐ鎾冲濡€筹�?+ 閼惧嘲锟?閹靛锝為崗銉ュ�?*/
+/* 娑撹崵鏅棃銏℃喅鐟曚緤绱拌ぐ鎾冲濡€筹�?+ 閼惧嘲锟?閹靛锝為崗銉ュ�?*/
 .models-summary {
   display: flex;
   flex-direction: column;
@@ -2007,7 +2040,7 @@ select.settings-field-input {
     grid-template-columns: 1fr;
   }
 }
-/* 閹碘晛鐫嶉崚妤勩€冪悰灞芥健閿涙艾鍞撮懕鏂跨潔瀵偓鐠囷附�?闁板秶锟?*/
+/* 閹碘晛鐫嶉崚妤勩€冪悰灞芥健閿涙艾鍞撮懕鏂跨潔瀵偓鐠囷附�?闁板秶锟?*/
 .ext-row-block {
   display: flex;
   flex-direction: column;
@@ -2039,11 +2072,11 @@ select.settings-field-input {
   line-height: 1.5;
   font-family: var(--font-mono);
 }
-/* 瀵懓鐪伴幐鍌氬�?body 閺冩湹绻氱拠浣烘磰鏉╁洩顔曠純顔煎弿鐏炲繐锟?*/
+/* 瀵懓鐪伴幐鍌氬�?body 閺冩湹绻氱拠浣烘磰鏉╁洩顔曠純顔煎弿鐏炲繐锟?*/
 body > .settings-dialog-backdrop {
   z-index: var(--z-settings-tooltip);
 }
-/* 鐟欏嫬鍨崗銊︽瀮瀵懓鐪伴敍姘纯缁毖冨櫨閻ㄥ嫬�?閼存熬绱濆锝嗘瀮娴兼ê锟?*/
+/* 鐟欏嫬鍨崗銊︽瀮瀵懓鐪伴敍姘纯缁毖冨櫨閻ㄥ嫬�?閼存熬绱濆锝嗘瀮娴兼ê锟?*/
 .settings-dialog--rules {
   width: min(680px, calc(100vw - 32px));
   max-height: min(85vh, 720px);
@@ -2100,7 +2133,9 @@ textarea.settings-dialog-textarea.settings-field-input,
   color: var(--text-primary);
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 textarea.settings-dialog-textarea:focus,
 textarea.settings-dialog-textarea:focus-visible {
@@ -2124,14 +2159,14 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-dialog--rules .settings-dialog-foot {
   padding: 8px 12px 10px;
 }
-/* 婢瑰啿鐪扮€佃壈鍩呴敍姘瘜鐎规矮绠熷鎻掓躬娑撳﹥鏌熼�?token閿涙稒顒濇径鍕瑝锟?!important 鐟曞棛娲婇敍鍫ヤ缉閸忓秳�?field-input 閸愯尙鐛婇敍?*/
+/* 婢瑰啿鐪扮€佃壈鍩呴敍姘瘜鐎规矮绠熷鎻掓躬娑撳﹥鏌熼�?token閿涙稒顒濇径鍕瑝锟?!important 鐟曞棛娲婇敍鍫ヤ缉閸忓秳�?field-input 閸愯尙鐛婇敍?*/
 .settings-cover-nav {
   background: transparent;
 }
 .settings-cover-header {
   background: transparent;
 }
-/* 閸旂喕鍏橀崸妤嬬窗鐎圭懓娅掗崣顖欑箽閻ｆ瑨銆冮崡鏇幢闂€鎸庢瀮锟?body 姒涙顓婚梾鎰�?*/
+/* 閸旂喕鍏橀崸妤嬬窗鐎圭懓娅掗崣顖欑箽閻ｆ瑨銆冮崡鏇幢闂€鎸庢瀮锟?body 姒涙顓婚梾鎰�?*/
 .settings-feature {
   display: flex;
   flex-direction: column;
@@ -2182,7 +2217,7 @@ textarea.settings-dialog-textarea:focus-visible {
   margin-top: var(--space-1_5);
 }
 /*
- * 鐠佸墽鐤嗛崘鍛啇閸掓绮烘稉鈧仦鍛厬閿涙氨鍩楃€圭懓娅掑鍙夋暭锟?align-items: stretch�? * 鐎涙劙銆夐棃銏も偓姘崇箖 max-width + margin: auto 閼奉亜鐪虫稉顓ㄧ礉娑撳秴鍟€娓氭繆锟?align-self�? */
+ * 鐠佸墽鐤嗛崘鍛啇閸掓绮烘稉鈧仦鍛厬閿涙氨鍩楃€圭懓娅掑鍙夋暭锟?align-items: stretch�? * 鐎涙劙銆夐棃銏も偓姘崇箖 max-width + margin: auto 閼奉亜鐪虫稉顓ㄧ礉娑撳秴鍟€娓氭繆锟?align-self�? */
 .settings-cover-content > * {
   width: 100%;
   max-width: var(--settings-content-max, 720px);
@@ -2321,9 +2356,9 @@ textarea.settings-dialog-textarea:focus-visible {
   width: auto;
   max-width: none;
 }
-/* 娴滃矂鈧绔村鈧崗绛圭窗閸忓疇寤虹挧?text-tertiary 濞ｇ柉澹婇敍鍫熺�?閺嗘鍤滈柅鍌氱安閿涘绱卞锟?accent-green閿涙盯鎸抽悽?elevated閿涙稑鐦戞惔锔炬殣锟?*/
+/* 娴滃矂鈧绔村鈧崗绛圭窗閸忓疇寤虹挧?text-tertiary 濞ｇ柉澹婇敍鍫熺�?閺嗘鍤滈柅鍌氱安閿涘绱卞锟?accent-green閿涙盯鎸抽悽?elevated閿涙稑鐦戞惔锔炬殣锟?*/
 .settings-switch,
-.settings-toggle-row input[type="checkbox"] {
+.settings-toggle-row input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   width: 36px;
@@ -2335,10 +2370,12 @@ textarea.settings-dialog-textarea:focus-visible {
   position: relative;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 .settings-switch::after,
-.settings-toggle-row input[type="checkbox"]::after {
+.settings-toggle-row input[type='checkbox']::after {
   content: '';
   position: absolute;
   width: 14px;
@@ -2351,37 +2388,37 @@ textarea.settings-dialog-textarea:focus-visible {
   box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
 }
 .settings-switch:checked,
-.settings-toggle-row input[type="checkbox"]:checked {
+.settings-toggle-row input[type='checkbox']:checked {
   background: var(--accent-green, #22b671);
   border-color: var(--accent-green, #22b671);
 }
 .settings-switch:checked::after,
-.settings-toggle-row input[type="checkbox"]:checked::after {
+.settings-toggle-row input[type='checkbox']:checked::after {
   transform: translateX(16px);
 }
 .settings-switch:focus-visible,
-.settings-toggle-row input[type="checkbox"]:focus-visible {
+.settings-toggle-row input[type='checkbox']:focus-visible {
   outline: 2px solid var(--accent-green-muted, #a7f3d0);
   outline-offset: 2px;
 }
 .settings-switch:disabled,
-.settings-toggle-row input[type="checkbox"]:disabled {
+.settings-toggle-row input[type='checkbox']:disabled {
   opacity: 0.45;
   cursor: default;
 }
-html[data-theme="dark"] .settings-switch,
-html[data-theme="dark"] .settings-toggle-row input[type="checkbox"] {
+html[data-theme='dark'] .settings-switch,
+html[data-theme='dark'] .settings-toggle-row input[type='checkbox'] {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
-html[data-theme="dark"] .settings-switch:checked,
-html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
+html[data-theme='dark'] .settings-switch:checked,
+html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
   background: var(--accent-green, #22b671);
   border-color: var(--accent-green, #22b671);
 }
 /* [MIGRATED] .settings-select styles migrated to SettingsSelect.module.css */
 
-/* 缁愬嫬顔旈敍姘瑢鐎电鐦介�?chat-col 閺€璺哄經娑撯偓閼疯揪绱濋柆鍨帳鐠佸墽鐤嗙€佃壈鍩呴幐銈囧瀻閸愬懎�?*/
+/* 缁愬嫬顔旈敍姘瑢鐎电鐦介�?chat-col 閺€璺哄經娑撯偓閼疯揪绱濋柆鍨帳鐠佸墽鐤嗙€佃壈鍩呴幐銈囧瀻閸愬懎�?*/
 @media (max-width: 720px) {
   .settings-cover-nav {
     width: 152px;
@@ -2489,7 +2526,7 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
 }
 
 /* === personalize polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱卞鈧崗宕囪雹瀵偓锟?*/
+/* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱卞鈧崗宕囪雹瀵偓锟?*/
 
 .settings-pane--personalize {
   gap: var(--space-4);
@@ -2518,7 +2555,8 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   padding: 12px 0;
   gap: 16px 20px;
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -2566,7 +2604,9 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   min-width: 0;
 }
 .settings-pane--personalize .settings-personalize-select,
-.settings-pane--personalize .settings-list-control--personalize .settings-select {
+.settings-pane--personalize
+  .settings-list-control--personalize
+  .settings-select {
   width: min(168px, 100%);
   max-width: 180px;
   min-width: 120px;
@@ -2574,7 +2614,6 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
   border-radius: var(--radius-lg);
 }
-
 
 @media (max-width: 560px) {
   .settings-pane--personalize .settings-list-row--personalize {
@@ -2593,3 +2632,10 @@ html[data-theme="dark"] .settings-toggle-row input[type="checkbox"]:checked {
   }
 }
 
+/* eco tier：关闭设置对话框遮罩毛玻璃，降低 GPU 合成开销 */
+html[data-perf-tier='eco'] .settings-dialog-backdrop,
+html[data-perf-tier='eco'] .settings-overlay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: color-mix(in srgb, var(--bg-overlay, #000) 70%, transparent);
+}

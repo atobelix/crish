@@ -55,7 +55,9 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .cheatsheetCloseBtn:hover {
@@ -65,7 +67,10 @@
 
 .cheatsheetCloseBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(
+    --focus-ring,
+    0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent)
+  );
   color: var(--text-primary);
 }
 
@@ -188,4 +193,10 @@
 .exiting {
   opacity: 0;
   transition: opacity var(--transition-exit);
+}
+
+/* eco: disable overlay glass */
+:global([data-perf-tier='eco']) .cheatsheetOverlay {
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--bg-overlay, #000) 65%, transparent);
 }

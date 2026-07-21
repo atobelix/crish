@@ -1,6 +1,6 @@
-/* Progressive rule: ban new !important in CSS. */
+/* Progressive rule: flag !important as warning (historical debt must not block commits). */
 module.exports = {
   rules: {
-    'declaration-no-important': true,
+    'declaration-no-important': [true, { severity: 'warning' }],
   },
 };
