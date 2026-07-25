@@ -4,10 +4,7 @@ import { Activity, ChevronDown } from 'lucide-react';
 import { formatElapsed } from './helpers';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 
-interface LiveTask {
-  id: string; taskName: string; elapsedSeconds: number;
-  sessionId?: string; kind: 'session' | 'run';
-}
+import type { LiveTask } from './useOverviewState';
 
 interface ActiveTasksSectionProps {
   open: boolean;

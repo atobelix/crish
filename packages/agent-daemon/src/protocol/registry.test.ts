@@ -58,7 +58,7 @@ describe('daemon protocol registry', () => {
   });
 
   it('has inbound schema validators for every registered message type', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol.ts'), 'utf8');
+    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
     const schemaCases = extractCases(
       source,
       'export function validateInboundMessage',
@@ -69,7 +69,7 @@ describe('daemon protocol registry', () => {
   });
 
   it('has outbound schema validators for every registered message type', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol.ts'), 'utf8');
+    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
     const schemaCases = extractCases(
       source,
       'export function validateOutboundMessage',
@@ -82,7 +82,7 @@ describe('daemon protocol registry', () => {
   });
 
   it('keeps capability groups aligned with registry and schema validators', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol.ts'), 'utf8');
+    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
     const inboundSchemaCases = extractCases(
       source,
       'export function validateInboundMessage',

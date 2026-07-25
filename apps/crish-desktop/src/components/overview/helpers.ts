@@ -1,4 +1,4 @@
-import { backgroundTaskStateLabel, type BackgroundTaskInfo } from '../../api/backgroundTasksApi';
+import { backgroundTaskStateLabel } from '../../api/backgroundTasksApi';
 
 export function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
