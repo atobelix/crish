@@ -1,0 +1,178 @@
+[
+  {
+    "check": "protocol-inbound.ts",
+    "original_path": "packages/shared-types/src/protocol-inbound.ts",
+    "corrected_path": "packages/agent-daemon/src/types/protocol-inbound.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径不存在（MISSING），修正路径 packages/agent-daemon/src/types/protocol-inbound.ts 真实存在"
+  },
+  {
+    "check": "process.rs",
+    "original_path": "crates/conex-ipc/src/process.rs",
+    "corrected_path": "crates/conex-sandbox/src/process_tree.rs",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 crates/conex-ipc/src/process.rs 不存在，修正路径 crates/conex-sandbox/src/process_tree.rs 真实存在"
+  },
+  {
+    "check": "approval-bridge.ts",
+    "original_path": "apps/crish-desktop/src/services/approval-bridge.ts",
+    "corrected_path": "packages/agent-daemon/src/daemon-approval-handler.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径为幻觉文件（MISSING），校正文档正确标记为幻觉并指向 daemon-approval-handler.ts（EXISTS）"
+  },
+  {
+    "check": "approval-pipeline.ts",
+    "original_path": "apps/crish-desktop/src/services/approval-pipeline.ts",
+    "corrected_path": "packages/agent-daemon/src/daemon-approval-handler.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径为幻觉文件（MISSING），校正文档正确标记并指向 daemon-approval-handler.ts（EXISTS）"
+  },
+  {
+    "check": "approval-queue.ts",
+    "original_path": "apps/crish-desktop/src/services/approval-queue.ts",
+    "corrected_path": "packages/agent-daemon/src/daemon-approval-handler.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径为幻觉文件（MISSING），校正文档正确标记并指向 daemon-approval-handler.ts（EXISTS）"
+  },
+  {
+    "check": "approval-cache.ts",
+    "original_path": "apps/crish-desktop/src/utils/approval-cache.ts",
+    "corrected_path": "packages/agent-daemon/src/daemon-approval-handler.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径为幻觉文件（MISSING），校正文档正确标记并指向 daemon-approval-handler.ts（EXISTS）"
+  },
+  {
+    "check": "provider-registry-v2.ts",
+    "original_path": "packages/agent-provider-http/src/provider-registry-v2.ts",
+    "corrected_path": null,
+    "actually_exists": false,
+    "status": "pass",
+    "detail": "路径完全不存在于仓库（MISSING），校正文档和 write_set 矩阵已正确移除该条目，标记为幻觉/已删除"
+  },
+  {
+    "check": "scripts/ci/check-g1-style.js",
+    "original_path": "scripts/ci/check-g1-style.js",
+    "corrected_path": "scripts/ci/check-g1-style.js",
+    "actually_exists": false,
+    "status": "warn",
+    "detail": "脚本不存在（MISSING），校正文档明确标注为'待创建'，符合预期状态"
+  },
+  {
+    "check": "scripts/ci/check-g3-g4-resource.js",
+    "original_path": "scripts/ci/check-g3-g4-resource.js",
+    "corrected_path": "scripts/ci/check-g3-g4-resource.js",
+    "actually_exists": false,
+    "status": "warn",
+    "detail": "脚本不存在（MISSING），校正文档明确标注为'待创建'，符合预期状态"
+  },
+  {
+    "check": "EventRouter.ts",
+    "original_path": "apps/crish-desktop/src/api/EventRouter.ts",
+    "corrected_path": "apps/crish-desktop/src/api/daemon-chat-bridge/EventRouter.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径为 wrong_path（MISSING），修正路径 api/daemon-chat-bridge/EventRouter.ts 真实存在"
+  },
+  {
+    "check": "AppBootstrap.ts",
+    "original_path": "apps/crish-desktop/src/components/AppBootstrap.ts",
+    "corrected_path": "apps/crish-desktop/src/app/AppBootstrap.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 components/ 为 wrong_path（MISSING），修正路径 app/AppBootstrap.ts 真实存在"
+  },
+  {
+    "check": "AppGlobalDialogs.tsx",
+    "original_path": "apps/crish-desktop/src/components/dialogs/AppGlobalDialogs.tsx",
+    "corrected_path": "apps/crish-desktop/src/app/AppGlobalDialogs.tsx",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 components/dialogs/ 为 wrong_path（MISSING），修正路径 app/AppGlobalDialogs.tsx 真实存在"
+  },
+  {
+    "check": "TelemetryDialog.tsx",
+    "original_path": "apps/crish-desktop/src/components/dialogs/TelemetryDialog.tsx",
+    "corrected_path": "apps/crish-desktop/src/components/TelemetryDialog.tsx",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 components/dialogs/ 为 wrong_path（MISSING），修正路径 components/TelemetryDialog.tsx 真实存在"
+  },
+  {
+    "check": "tab-drag.css",
+    "original_path": "apps/crish-desktop/src/hooks/tab-drag/tab-drag.css",
+    "corrected_path": "apps/crish-desktop/src/styles/tab-drag.css",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 hooks/tab-drag/ 为 wrong_path（MISSING），修正路径 styles/tab-drag.css 真实存在"
+  },
+  {
+    "check": "useSlashSend.ts",
+    "original_path": "apps/crish-desktop/src/hooks/useSlashSend.ts",
+    "corrected_path": "apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 hooks/ 为 wrong_path（MISSING），修正路径 hooks/chat-stream/useSlashSend.ts 真实存在"
+  },
+  {
+    "check": "useFileNavigation.ts",
+    "original_path": "apps/crish-desktop/src/hooks/useFileNavigation.ts",
+    "corrected_path": "apps/crish-desktop/src/components/files/hooks/useFileNavigation.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 hooks/ 为 wrong_path（MISSING），修正路径 components/files/hooks/ 真实存在"
+  },
+  {
+    "check": "ui-selectors.ts",
+    "original_path": "apps/crish-desktop/src/store/ui-selectors.ts",
+    "corrected_path": "apps/crish-desktop/src/store/layout-helpers/ui-selectors.ts",
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原始路径 store/ 为 wrong_path（MISSING），修正路径 store/layout-helpers/ 真实存在"
+  },
+  {
+    "check": "StreamRenderBuffer.ts (spot-check: originally exists)",
+    "original_path": "apps/crish-desktop/src/api/StreamRenderBuffer.ts",
+    "corrected_path": null,
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原本 exists 的路径，抽检确认仍存在，未被意外改错"
+  },
+  {
+    "check": "applyFileDiff.ts (spot-check: originally exists)",
+    "original_path": "apps/crish-desktop/src/api/applyFileDiff.ts",
+    "corrected_path": null,
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原本 exists 的路径，抽检确认仍存在，未被意外改错"
+  },
+  {
+    "check": "daemonChatBridge.ts (spot-check: originally exists)",
+    "original_path": "apps/crish-desktop/src/api/daemonChatBridge.ts",
+    "corrected_path": null,
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "原本 exists 的路径，抽检确认仍存在，未被意外改错"
+  },
+  {
+    "check": "normalizer.ts (corrected plan key path)",
+    "original_path": "packages/agent-runtime/src/provider-stream-contract/normalizer.ts",
+    "corrected_path": null,
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "校正计划中 GAP-ST-07 的目标文件，抽检确认存在"
+  },
+  {
+    "check": "process-executor.ts (corrected plan key path)",
+    "original_path": "packages/agent-runtime/src/process-lifecycle/process-executor.ts",
+    "corrected_path": null,
+    "actually_exists": true,
+    "status": "pass",
+    "detail": "校正计划中 GAP-PM-02/GAP-PM-06 的目标文件，抽检确认存在"
+  }
+]

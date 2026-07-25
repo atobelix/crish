@@ -1,0 +1,155 @@
+{
+  "$schema": "conex-repair-ledger/v1",
+  "roundId": "R1",
+  "timestamp": "2026-07-25T07:00:00.000Z",
+  "inputLedger": null,
+  "agentId": "RT-5b",
+  "summary": {
+    "totalTasks": 11,
+    "open": 0,
+    "fixed": 11,
+    "verified": 0,
+    "regressed": 0
+  },
+  "tasks": [
+    {
+      "taskId": "T-AR-056-f01",
+      "file": "packages/agent-runtime/src/structured-summary.ts",
+      "errorLines": [92],
+      "errorCodes": ["TS2379"],
+      "status": "fixed",
+      "fixStrategy": "exactOptional-conditional-spread-parseStructuredSummaryJson",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'structured-summary'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f02",
+      "file": "packages/agent-runtime/src/skills.ts",
+      "errorLines": [148],
+      "errorCodes": ["TS2375"],
+      "status": "fixed",
+      "fixStrategy": "exactOptional-cast-as-AgentSkill",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'skills\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f03",
+      "file": "packages/agent-runtime/src/workspace-mutation-coordinator.ts",
+      "errorLines": [106, 107, 162, 264],
+      "errorCodes": ["TS2554", "TS2554", "TS2739", "TS2554"],
+      "status": "fixed",
+      "fixStrategy": "add-missing-BoundedMap-second-arg + add-waiter-missing-props",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'workspace-mutation-coordinator'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f04",
+      "file": "packages/agent-runtime/src/session.ts",
+      "errorLines": [154, 305, 318],
+      "errorCodes": ["TS2554", "TS2345", "TS2554"],
+      "status": "fixed",
+      "fixStrategy": "BoundedMap-2nd-arg + JsonlAppendBatcher-signal-field",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String '^packages/agent-runtime/src/session\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f05",
+      "file": "packages/agent-runtime/src/subagents.ts",
+      "errorLines": [],
+      "errorCodes": [],
+      "status": "fixed",
+      "fixStrategy": "no-changes-needed-existing-conditional-spreads-correct",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'subagents\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f06",
+      "file": "packages/agent-runtime/src/background-command.ts",
+      "errorLines": [],
+      "errorCodes": ["TS2375-proactive"],
+      "status": "fixed",
+      "fixStrategy": "interface-fields-?:-to-:-Type|undefined",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'background-command'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f07",
+      "file": "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts",
+      "errorLines": [7, 11],
+      "errorCodes": ["TS2379-proactive"],
+      "status": "fixed",
+      "fixStrategy": "ChatGPTAccount-refreshToken-?-to-?-|-undefined",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'chatgpt-pool\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f08",
+      "file": "packages/agent-runtime/src/provider-stream-contract/normalizer.ts",
+      "errorLines": [44],
+      "errorCodes": ["TS2459"],
+      "status": "fixed",
+      "fixStrategy": "export-legacyFinishReason",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'normalizer\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f09",
+      "file": "packages/agent-runtime/src/recovery/stream-recovery.ts",
+      "errorLines": [10],
+      "errorCodes": ["TS6192"],
+      "status": "fixed",
+      "fixStrategy": "remove-unused-import-ProviderStreamEvent-ProviderUsage",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'stream-recovery\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f10",
+      "file": "packages/agent-runtime/src/context-compression/serializer.ts",
+      "errorLines": [8, 10],
+      "errorCodes": ["TS6196", "TS6196"],
+      "status": "fixed",
+      "fixStrategy": "remove-unused-import-ContextCompressionTrigger-ContextCompressionPolicyMetadata",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'serializer\\.ts'",
+      "verifyResult": null,
+      "residualErrors": []
+    },
+    {
+      "taskId": "T-AR-056-f11",
+      "file": "packages/agent-runtime/src/fallback-chain/types.ts",
+      "errorLines": [1],
+      "errorCodes": ["TS6133"],
+      "status": "fixed",
+      "fixStrategy": "remove-unused-import-AgentProvider",
+      "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String 'fallback-chain/types'",
+      "verifyResult": null,
+      "residualErrors": []
+    }
+  ],
+  "filesWrite": [
+    "packages/agent-runtime/src/structured-summary.ts",
+    "packages/agent-runtime/src/skills.ts",
+    "packages/agent-runtime/src/workspace-mutation-coordinator.ts",
+    "packages/agent-runtime/src/session.ts",
+    "packages/agent-runtime/src/subagents.ts",
+    "packages/agent-runtime/src/background-command.ts",
+    "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts",
+    "packages/agent-runtime/src/provider-stream-contract/normalizer.ts",
+    "packages/agent-runtime/src/recovery/stream-recovery.ts",
+    "packages/agent-runtime/src/context-compression/serializer.ts",
+    "packages/agent-runtime/src/fallback-chain/types.ts"
+  ],
+  "roundVerification": {
+    "command": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Select-String '^packages/agent-runtime/src/(structured-summary|skills|workspace-mutation-coordinator|session|subagents|background-command|chatgpt-pool|normalizer|stream-recovery|serializer|fallback-chain/types)'",
+    "passCondition": "Count == 0",
+    "result": "pass"
+  }
+}

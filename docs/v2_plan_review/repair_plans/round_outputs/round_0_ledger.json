@@ -1,0 +1,18 @@
+{
+  "roundId": "R0",
+  "timestamp": "2026-07-25T00:00:00.000Z",
+  "agents": [
+    {
+      "agentId": "CFG-1",
+      "status": "done",
+      "tasks": [
+        {"taskId": "T-CFG-001", "status": "verified", "verifyResult": "pass"},
+        {"taskId": "T-CFG-002", "status": "verified", "verifyResult": "pass"},
+        {"taskId": "T-CFG-003", "status": "verified", "verifyResult": "pass"},
+        {"taskId": "T-CFG-004", "status": "verified", "verifyResult": "pass"},
+        {"taskId": "T-CFG-005", "status": "verified", "verifyResult": "pass"}
+      ]
+    }
+  ],
+  "roundVerification": {"result": "pass"}
+}

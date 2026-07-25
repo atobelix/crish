@@ -1,0 +1,226 @@
+{
+  "meta": {
+    "title": "Post-Fix Verification Audit — Gap 05 (Patch/Seek) & Gap 06 (Desktop/UI)",
+    "generated": "2026-07-25",
+    "baseline_docs": [
+      "analysis/master_repair_plan_v2/conex_gap_audits/conex_gap_05_patch_seek_engines.md",
+      "analysis/master_repair_plan_v2/conex_gap_audits/conex_gap_06_desktop_ui_runtimes.md"
+    ]
+  },
+
+  "gap_05": {
+    "title": "代码编辑 / Patch 寻址域",
+    "findings": [
+      {
+        "id": "SE-01",
+        "title": "eof 锚定 + matchCount 诊断 + splitLinesForSeek 换行对齐",
+        "report_ref": "Gap 05 §3.3 死角 1.1 / 1.2 / 1.3",
+        "files": {
+          "rust": "crates/conex-diff/src/seek_sequence.rs",
+          "ts": "packages/shared-utils/src/file/seek-sequence.ts"
+        },
+        "verification": {
+          "eof_param": {
+            "status": "fixed",
+            "evidence": "seek_sequence(lines, pattern, start, eof) — 第129行 eof: bool 已加入；当 eof=true 时 search_start 锚定在 max_start（第139行）"
+          },
+          "diagnostic_return": {
+            "status": "fixed",
+            "evidence": "返回 Option<SeekResult> 含 match_count、ambiguous、line、col、pass；多匹配时返回 ambiguous=true + matchCount>1，不再坍缩为 None"
+          },
+          "split_lines_parity": {
+            "status": "fixed",
+            "evidence": "split_lines_for_seek 第45行：text.ends_with('\\n') 时追加空字符串，与 TS split('\\n') 语义对齐"
+          },
+          "ts_side_support": {
+            "status": "fixed",
+            "evidence": "seekSequence 第191行已有 eof 参数；replaceViaSeekSequence 传递该参数；SeekSequenceResult 含 matchCount + passTried"
+          }
+        },
+        "overall": "fixed"
+      },
+      {
+        "id": "SE-02",
+        "title": "safeCompactionCutoff — 工具调用成对原子裁切",
+        "report_ref": "Gap 05 §4.3 缺陷 2.1 / 2.2",
+        "files": {
+          "rust": "crates/conex-compaction/src/compaction.rs",
+          "ts": "packages/agent-runtime/src/context-compression/compression-utils.ts"
+        },
+        "verification": {
+          "rust_id_level_pairing": {
+            "status": "fixed",
+            "evidence": "safe_drop_end 第117-146行：extract_tool_call_ids 解析 assistant 中的 tool_call_id；extract_result_ids 解析 tool 消息中的 toolCallId；若 retained 区间的 tool_result 引用了 drop 区间的 tool_call，则跳过该批次（return start）"
+          },
+          "ts_bidirectional_guard": {
+            "status": "fixed",
+            "evidence": "includeRequiredToolCallMessages 第137行：反向追溯（tool_result→tool_call）确保 call 被保留；新增正向追溯（tool_call→tool_result）第177-188行，防止 orphan tool_call"
+          }
+        },
+        "overall": "fixed"
+      },
+      {
+        "id": "SE-03",
+        "title": "resolve_under_root symlink loop / safe_canonicalize",
+        "report_ref": "Gap 05 §5.3 死角 3.1 / 3.2",
+        "files": {
+          "path_utils": "crates/conex-fs/src/path_utils.rs",
+          "directory": "apps/agent-workbench/src-tauri/src/fs_commands/directory.rs"
+        },
+        "verification": {
+          "safe_canonicalize_exists": {
+            "status": "fixed",
+            "evidence": "path_utils.rs 第6行：safe_canonicalize 使用 HashSet 追踪已访问路径 + max_hops 上限（默认40）；环路检测返回错误而非 Stack Overflow"
+          },
+          "resolve_under_root_uses_safe_canonicalize": {
+            "status": "fixed",
+            "evidence": "resolve_under_root 第34行/第41行：调用 safe_canonicalize(Path, 40) 替代裸 std::fs::canonicalize"
+          },
+          "directory_recursive_visited_set": {
+            "status": "fixed",
+            "evidence": "directory.rs list_directory 为扁平列举（非递归），无需 visited_set；递归扫描的安全由 safe_canonicalize 在调用前保障"
+          }
+        },
+        "overall": "fixed"
+      },
+      {
+        "id": "SE-04",
+        "title": "FileDiff provisional 状态 + Accept 禁用屏障",
+        "report_ref": "Gap 05 §6.3 死角 4.1",
+        "files": {
+          "types": "apps/crish-desktop/src/store/types.ts",
+          "apply": "apps/crish-desktop/src/api/applyFileDiff.ts",
+          "ui": "apps/crish-desktop/src/components/DiffCardFileList.tsx"
+        },
+        "verification": {
+          "provisional_field": {
+            "status": "fixed",
+            "evidence": "FileDiff 接口第120行：provisional?: boolean"
+          },
+          "classify_rejects_provisional": {
+            "status": "fixed",
+            "evidence": "classifyFileDiff 第210行：if (diff?.provisional) return { ok: false, reason: '仍在流式生成中，请等待完成' }"
+          },
+          "accept_button_disabled": {
+            "status": "fixed",
+            "evidence": "DiffCardFileList.tsx 第259行：disabled={applyBusy || !classifyFileDiff(f).ok}，provisional 时 classify 返回 ok=false → 按钮禁用"
+          },
+          "streaming_badge": {
+            "status": "fixed",
+            "evidence": "第193-196行：!classifyFileDiff(f).ok 时显示 applyHint；provisional=true 时显示 '正在生成 diff...'"
+          }
+        },
+        "overall": "fixed"
+      }
+    ]
+  },
+
+  "gap_06": {
+    "title": "桌面 / UI / 唤醒域与应用运行时",
+    "findings": [
+      {
+        "id": "UI-01",
+        "title": "Keep-Awake 系统唤醒锁",
+        "report_ref": "Gap 06 §2",
+        "files": {
+          "power": "apps/agent-workbench/src-tauri/src/power.rs",
+          "main": "apps/agent-workbench/src-tauri/src/main.rs"
+        },
+        "verification": {
+          "power_rs_exists": {
+            "status": "fixed",
+            "evidence": "power.rs 已创建，含 workbench_set_keep_awake tauri command"
+          },
+          "windows_implementation": {
+            "status": "fixed",
+            "evidence": "Windows 平台调用 SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) 阻止睡眠"
+          },
+          "macos_implementation": {
+            "status": "partially_fixed",
+            "evidence": "macOS 平台为 TODO 空桩（'TODO: 使用 IOKit IOPMAssertionCreateWithName 实现'），不报错但不生效"
+          },
+          "linux_implementation": {
+            "status": "partially_fixed",
+            "evidence": "Linux 平台为 TODO 空桩（'TODO: 使用 DBus Inhibit / systemd-inhibit 实现'），不报错但不生效"
+          }
+        },
+        "overall": "partially_fixed",
+        "note": "Windows 完全可用；macOS/Linux 空桩待实现"
+      },
+      {
+        "id": "UI-02",
+        "title": "Reasoning 思考链中断保存 (reasoning_content abort)",
+        "report_ref": "Gap 06 §4",
+        "files": {
+          "bridge": "apps/crish-desktop/src/api/directFetchBridge.ts",
+          "callbacks": "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts"
+        },
+        "verification": {
+          "abort_preserves_thought": {
+            "status": "fixed",
+            "evidence": "directFetchBridge.ts 第319-327行：abort 时设置 finished=true，flush 已累积的 assistantThought 到 callbacks.onThought，再触发 onComplete（不再静默 return）"
+          },
+          "heuristic_token_fallback": {
+            "status": "fixed",
+            "evidence": "useStreamCallbacks.ts 第524-538行：fetchRunSnapshotUsage 不可用时，以 text.length/4 启发式估算 output/reasoning tokens 写入 telemetry，计费不归零"
+          },
+          "thinking_placeholder_cleanup": {
+            "status": "fixed",
+            "evidence": "第480-483行：'正在处理…'/'正在思考中...' 占位符在完成时清除 thinking 字段"
+          }
+        },
+        "overall": "fixed"
+      },
+      {
+        "id": "UI-03",
+        "title": "视口钳制 (100dvh) + 滚轮拦截 + Function import 消除",
+        "report_ref": "Gap 06 §5",
+        "files": {
+          "model_picker_css": "apps/crish-desktop/src/components/ModelPicker.module.css",
+          "compose_menu_css": "apps/crish-desktop/src/components/ComposePlusMenu.module.css",
+          "project_picker": "apps/crish-desktop/src/components/ProjectPickerMenu.tsx"
+        },
+        "verification": {
+          "model_picker_dvh": {
+            "status": "fixed",
+            "evidence": "ModelPicker.module.css 第7行：max-height: min(360px, calc(100dvh - 3.5rem))；第8行 overflow-y: auto；第9行 overscroll-behavior: contain"
+          },
+          "compose_menu_max_height": {
+            "status": "fixed",
+            "evidence": "ComposePlusMenu.module.css 第24行：max-height: calc(100dvh - 3.5rem)；第25行 overflow-y: auto；第26行 overscroll-behavior: contain"
+          },
+          "dynamic_function_import": {
+            "status": "fixed",
+            "evidence": "ProjectPickerMenu.tsx 第36行：import(/* webpackIgnore: true */ '@tauri-apps/plugin-dialog')，替换了旧式 Function('return import(...)')() 反模式"
+          }
+        },
+        "overall": "fixed"
+      },
+      {
+        "id": "UI-04",
+        "title": "API Key 物理加密 (跨平台凭据存储 + localStorage 明文剥离)",
+        "report_ref": "Gap 06 §6",
+        "files": {
+          "credentials": "apps/agent-workbench/src-tauri/src/config/credentials.rs",
+          "provider_profiles": "apps/crish-desktop/src/api/providerProfiles.ts"
+        },
+        "verification": {
+          "localStorage_apiKey_stripped": {
+            "status": "fixed",
+            "evidence": "providerProfiles.ts 第514-517行：stripApiKey 函数删除 apiKey 字段；第519行 saveProfiles 写入 LS 前 stripApiKey；apiKey 不再明文存放在 localStorage"
+          },
+          "non_windows_os_secret": {
+            "status": "still_exists",
+            "evidence": "credentials.rs 第171-174行：#[cfg(not(windows))] 仍返回 Err('OS credential storage is not implemented for this platform')，macOS Keychain 和 Linux SecretService 未实现"
+          },
+          "sandbox_mount_guard": {
+            "status": "still_exists",
+            "evidence": "未在代码中找到 validate_skill_sandbox_mount 或等效实现"
+          }
+        },
+        "overall": "partially_fixed",
+        "note": "localStorage apiKey 剥离已完成（安全回归）；非 Windows 平台 OS 加密（macOS Keychain/Linux SecretService）及 Sandbox Mount Guard 尚未实现"
+      }
+    ]
+  }
+}

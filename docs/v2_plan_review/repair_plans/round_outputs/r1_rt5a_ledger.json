@@ -1,0 +1,160 @@
+{
+  "$schema": "conex-repair-ledger/v1",
+  "roundId": "R1-RT5a",
+  "timestamp": "2026-07-25T12:00:00.000Z",
+  "inputLedger": null,
+  "summary": {
+    "totalTasks": 10,
+    "open": 0,
+    "fixed": 0,
+    "verified": 10,
+    "regressed": 0
+  },
+  "agents": [
+    {
+      "agentId": "RT-5a",
+      "status": "done",
+      "filesWrite": [
+        "packages/agent-runtime/src/plan-document/index.ts",
+        "packages/agent-runtime/src/plan-document/validation.ts",
+        "packages/agent-runtime/src/plan-document/operations.ts",
+        "packages/agent-runtime/src/provider/auth/credential-pool.ts",
+        "packages/agent-runtime/src/provider/auth/credential-resolver.ts",
+        "packages/agent-runtime/src/provider/auth/key-rotation.ts",
+        "packages/agent-runtime/src/rendering/rendering-pipeline.ts",
+        "packages/agent-runtime/src/runtime.ts",
+        "packages/agent-runtime/src/secrets-obfuscation.ts",
+        "packages/agent-runtime/src/trace/index.ts",
+        "packages/agent-runtime/src/tool-discovery.ts"
+      ],
+      "tasks": [
+        {
+          "taskId": "T-AR-023",
+          "file": "packages/agent-runtime/src/plan-document/index.ts",
+          "errorLines": [7,8,9,10,11,13,14,15,44,50,57,64,69,78,79,80,105,108,132],
+          "errorCodes": ["TS6196","TS1361"],
+          "status": "verified",
+          "fixStrategy": "remove-unused-type-imports + import-type-to-value",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'plan-document/index'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-023",
+          "file": "packages/agent-runtime/src/plan-document/validation.ts",
+          "errorLines": [8,9,10,11,12,13,14,15,16,17,34,46,58,71,81,91,92],
+          "errorCodes": ["TS6196","TS1361"],
+          "status": "verified",
+          "fixStrategy": "remove-unused-type-imports + import-type-to-value",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'plan-document/validation'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-024",
+          "file": "packages/agent-runtime/src/plan-document/operations.ts",
+          "errorLines": [1,2,4,200,212,238,252,262,267,272,279,285],
+          "errorCodes": ["TS6196","TS6133","TS2412","TS2322"],
+          "status": "verified",
+          "fixStrategy": "remove-unused-imports + conditional-cloneSource-guard + conditional-spread-with-cast",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'operations.ts'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-050",
+          "file": "packages/agent-runtime/src/provider/auth/credential-pool.ts",
+          "errorLines": [1,53,56,82,86,89,103,104,140,141],
+          "errorCodes": ["TS6133","TS2412","TS2322"],
+          "status": "verified",
+          "fixStrategy": "remove-unused-createSecret + conditional-assign + delete-optional + null-coalescing",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'credential-pool'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-051",
+          "file": "packages/agent-runtime/src/provider/auth/credential-resolver.ts",
+          "errorLines": [27,28,102],
+          "errorCodes": ["TS2412"],
+          "status": "verified",
+          "fixStrategy": "field-type-?-to-Type-undefined",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'credential-resolver.ts'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-052",
+          "file": "packages/agent-runtime/src/provider/auth/key-rotation.ts",
+          "errorLines": [1,60,63,73,74],
+          "errorCodes": ["TS6133","TS2322","TS2412"],
+          "status": "verified",
+          "fixStrategy": "remove-unused-createSecret + null-coalescing + delete-optional",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'key-rotation'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-055",
+          "file": "packages/agent-runtime/src/rendering/rendering-pipeline.ts",
+          "errorLines": [225,433],
+          "errorCodes": ["TS2379"],
+          "status": "verified",
+          "fixStrategy": "conditional-spread-diagnostics-detail",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'rendering-pipeline'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-056",
+          "file": "packages/agent-runtime/src/runtime.ts",
+          "errorLines": [47,52,162],
+          "errorCodes": ["TS2379","TS2345"],
+          "status": "verified",
+          "fixStrategy": "conditional-spread-connectionManager-compression-toolOutputBudget + parameter-order-fix",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'runtime\\.ts'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-056",
+          "file": "packages/agent-runtime/src/secrets-obfuscation.ts",
+          "errorLines": [692],
+          "errorCodes": ["TS2375"],
+          "status": "verified",
+          "fixStrategy": "conditional-spread-source",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'secrets-obfuscation'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-056",
+          "file": "packages/agent-runtime/src/trace/index.ts",
+          "errorLines": [210],
+          "errorCodes": ["TS2379"],
+          "status": "verified",
+          "fixStrategy": "conditional-spread-attributes",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'trace/index'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        },
+        {
+          "taskId": "T-AR-056",
+          "file": "packages/agent-runtime/src/tool-discovery.ts",
+          "errorLines": [240,241],
+          "errorCodes": ["TS2412"],
+          "status": "verified",
+          "fixStrategy": "field-type-?-to-Type-undefined",
+          "verifyCommand": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'tool-discovery'",
+          "verifyResult": "pass",
+          "residualErrors": []
+        }
+      ]
+    }
+  ],
+  "roundVerification": {
+    "command": "npx tsc --noEmit -p packages/agent-runtime/tsconfig.json 2>&1 | Out-String -Stream | Select-String 'plan-document|credential-pool|credential-resolver|key-rotation|rendering-pipeline|runtime\\.ts|secrets-obfuscation|trace/index|tool-discovery'",
+    "passCondition": "Count == 0",
+    "result": "pass"
+  }
+}

@@ -1,0 +1,1859 @@
+{
+  "meta": {
+    "generated_at": "2026-07-25",
+    "note": "3 套 ID 体系已尽力映射，无法映射的标注 orphan: true。拓扑文档共引用 ~48 个 GAP-{round}-{num} 格式 ID，台账 ledger_v2.json 共 37 条 GAP-{domain}-{num} 格式 ID，写集隔离矩阵另有 AG/B/D/P/X 系列 ID。",
+    "source_documents": [
+      "ledger_v2.json",
+      "conex_repair_topology_v2.md",
+      "write_set_isolation_matrix_v2.md",
+      "quality_gates_and_waves_v2.md",
+      "2026-07-24-终极多Agent协同修复方案_v2.0.md"
+    ],
+    "id_systems_detected": {
+      "ledger": "GAP-{域}-{序号} (37 issues)",
+      "topology": "GAP-{轮次编号}-{序号}[T后缀] (~48 references)",
+      "write_set_matrix": "AG-01~12, B0, D1~15, P1~11, X1~5 (混合体系)"
+    },
+    "mapping_note": "拓扑格式 GAP-01-XX → 流式/Token域(GAP-ST-XX), GAP-02-XX → 并发状态机域(GAP-CS-XX), GAP-03-XX → Tool Call容错域(GAP-TC-XX), GAP-04-XX → 进程/内存域(GAP-PM-XX), GAP-05-XX → 代码编辑/Patch域(GAP-SE-XX), GAP-06-XX → 桌面/UI域(GAP-UI-XX)。GAP-08-XX和GAP-09-XX无ledger对应项。写集矩阵的AG/B/D/P/X系列全部为orphan。"
+  },
+  "entries": [
+    {
+      "id_ledger": "GAP-ST-01",
+      "id_topology": "GAP-01-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "StreamRenderBuffer Unicode Surrogate Pair 增量截断乱码",
+      "domain": "流式 / Token 域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts"],
+      "files_read": ["apps/crish-desktop/src/api/StreamRenderBuffer.test.ts"],
+      "root_cause_summary": "flushFrame 分帧截断时仅对 splitAt - 1 为 High Surrogate 做了退格，当 splitAt 指向 High Surrogate 或无 \\n 时未做 UTF-16 代理对校验，导致输出孤立 Surrogate 乱码并破坏 DOM 增量 Markdown 解析器 AST。",
+      "remediation_summary": "重构 safeUnicodeCutPosition 函数，同时校验 splitAt - 1 与 splitAt 的代理对边界，确保 Surrogate Pair 不被截断拆分。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-02",
+      "id_topology": "GAP-01-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "TextDecoder 流式解包结束未 flush 导致残余 Byte Buffer 丢失",
+      "domain": "流式 / Token 域",
+      "severity": "P2-Medium",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/openai-stream-parse.ts", "apps/crish-desktop/src/api/directFetchBridge.ts"],
+      "files_read": [],
+      "root_cause_summary": "readSseJson 与 fetchDirectly 在 ReadableStream 收到 done: true 退出循环时，未调用不带 { stream: true } 的 decoder.decode() 强行刷空内部残余 1~3 字节缓冲区，导致流末尾 UTF-8 字符被直接丢弃。",
+      "remediation_summary": "流读取循环结束后在 finally 或退出分支显式调用 decoder.decode() 刷空并追加剩余字符。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-03",
+      "id_topology": "GAP-01-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Rust conex-stream 在 SSE 帧解析中使用 from_utf8_lossy 导致跨包字符替换乱码",
+      "domain": "流式 / Token 域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-stream/src/parser/sse.rs"],
+      "files_read": [],
+      "root_cause_summary": "SseFrameParser 的 parse_frame 在分割 \\n\\n 之前直接使用 from_utf8_lossy(bytes)，若 TCP 分包将 4 字节 UTF-8 字符分割在两帧间，直接被替换为 \\u{FFFD} 损坏字节。",
+      "remediation_summary": "在 SSE 帧解析器中引入 Utf8ChunkDecoder 暂存未完成的多字节序列，待后续 Chunk 到达后再解码。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 1.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-04",
+      "id_topology": "GAP-01-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "TS 与 Rust Token 估算公式失配及 Tools Schema 开销漏算",
+      "domain": "流式 / Token 域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/context-compression/token-estimator.ts", "crates/conex-compaction/src/compaction.rs"],
+      "files_read": [],
+      "root_cause_summary": "Rust 侧 calculate_total_tokens 仅按 content 和 images * 1600 估算，彻底漏算了 System Prompt、Tools Schema 开销与 1.15 安全系数，导致 TS 与 Rust 上下文压缩决策失配。",
+      "remediation_summary": "为 Rust compaction.rs 添加 static_overhead 字段与 Tools Schema 权值计算，同步 TS 侧 Safety Factor (1.15)。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-05",
+      "id_topology": "GAP-01-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "413 Payload Too Large 图片剥离忽视 message.blocks 导致死循环重试",
+      "domain": "流式 / Token 域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/payload-image-recovery.ts", "packages/agent-runtime/src/session-loop/index.ts"],
+      "files_read": [],
+      "root_cause_summary": "countContentPartImages 与 scrubImagesOldestFirst 强依赖 metadata.contentParts，若图片存在于 message.blocks 中时返回 stripped = 0，降级恢复逻辑失效导致 413 错误无限抛出。",
+      "remediation_summary": "重构 scrubImagesOldestFirst 深度递归遍历扫描并同步剥离 blocks 数组中 type === 'image' 的 Base64 数据。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-06",
+      "id_topology": "GAP-01-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "413 降级图片剥离后 metadata 与 message.blocks 数据不同步",
+      "domain": "流式 / Token 域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/payload-image-recovery.ts"],
+      "files_read": [],
+      "root_cause_summary": "图片剥离逻辑仅修改了 metadata 上的标志，未同步更新 message.blocks 中的 Image Block，导致发送给 Provider 的 Payload 依然包含原 Base64 数据。",
+      "remediation_summary": "确保剥离图片时同步将 Block 级替换为 type: 'text' 文本占位符 [Image content omitted for request-size recovery]。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-07",
+      "id_topology": "GAP-01-07",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "normalizer.ts 强制改写 legacyFinishReason 抹杀 length 截断信号",
+      "domain": "流式 / Token 域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider-stream-contract/normalizer.ts"],
+      "files_read": ["packages/agent-runtime/src/provider-stream-contract/types.ts"],
+      "root_cause_summary": "legacyFinishReason 强制将除 error 和 tool-call 以外的所有理由（包括 length / max_tokens）统一改为 'stop'，在归一化管道中抹杀了物理截断信号。",
+      "remediation_summary": "扩展 ProviderStreamFinishReason 类型，修改 legacyFinishReason 函数允许 'length' / 'max_tokens' 保真传递。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-08",
+      "id_topology": "GAP-01-08",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "buildMessage 缺失 finishReason 入参硬编码 stopReason",
+      "domain": "流式 / Token 域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/runtime-components/provider-response-consumer.ts"],
+      "files_read": [],
+      "root_cause_summary": "buildMessage 完全没有入参接收来自流事件 end 的 finishReason，通过推导硬编码赋值 stopReason，导致 stopReason: 'length' 永远无法挂载到 message.metadata。",
+      "remediation_summary": "更新 buildMessage 与 ProviderResponseConsumer，记录并保留流中的 event.finishReason 并传递给 metadata.stopReason。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-09",
+      "id_topology": "GAP-01-09",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "session-loop 自动续写与 maxTokens 扩容判定恒假失效",
+      "domain": "流式 / Token 域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/session-loop/index.ts"],
+      "files_read": [],
+      "root_cause_summary": "由于归一化层抹杀 length，msg.metadata?.stopReason === 'length' 判定恒为 false，导致模型截断时无法自动发送 Continue... 提示词续写与扩容。",
+      "remediation_summary": "恢复 length 信号流转，并确保 handleNoToolCalls 能正确触发 handleLengthFinishReason 续写提示词与状态转换。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-ST-10",
+      "id_topology": "GAP-01-10",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "balanceJsonContainers 反斜杠转义与字面量修复漏洞",
+      "domain": "流式 / Token 域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider-stream-contract/json-repair.ts", "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts"],
+      "files_read": [],
+      "root_cause_summary": "JSON 截断在末尾 \\ 时补全双引号会被转义导致 JSON.parse 持续语法报错；且截断的布尔/null 字面量无法修复；且 ProviderResponseConsumer 主干未集成修复器。",
+      "remediation_summary": "增强 balanceJsonContainers 算法（剥离末尾单数 \\、补全布尔/null 字面量），并在 ProviderResponseConsumer 中集成 repairToolCallJsonArguments。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-01",
+      "id_topology": "GAP-02-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "后台 Subagent (forkMode: 'background') 的 Abort 监听器被提前解绑",
+      "domain": "并发与状态机域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-daemon/src/subagent-runtime.ts"],
+      "files_read": ["packages/agent-runtime/src/session-loop/index.ts"],
+      "root_cause_summary": "forkMode === 'background' 时在 execute() 同步返回后 context.signal 监听器被 finally 解绑，导致后续父 Run Cancel 时 Cancel 信号无法传达给后台运行的 Subagent。",
+      "remediation_summary": "将 Abort 信号监听绑定到 Session/Run 级别的生命周期，而非 transient tool execution context。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 1.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-02",
+      "id_topology": "GAP-02-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "BackgroundCommandManager 后台 Shell 任务与 Run 的 AbortSignal 彻底脱节",
+      "domain": "并发与状态机域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/background-command.ts", "packages/agent-orchestrator/src/orchestrator.ts"],
+      "files_read": [],
+      "root_cause_summary": "orchestrator.ts 的 cancelRun() 仅调用了 active.engine?.abort()，未联动 BackgroundCommandManager 终止派生的后台 Shell 子进程。",
+      "remediation_summary": "在 cancelRun() 中增加对 BackgroundCommandManager.cancelAllForRun(runId) 的调用，秒级级联强杀子进程树。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 1.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-03",
+      "id_topology": "GAP-02-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "activeRuns 采用 BoundedMap 静默淘汰最旧 Run 导致 Ghost Run 狂飙",
+      "domain": "并发与状态机域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-orchestrator/src/orchestrator.ts", "packages/shared-utils/src/bounded-map.ts"],
+      "files_read": [],
+      "root_cause_summary": "activeRuns 满容量时 BoundedMap 静默 FIFO 删除最旧 Run，既未调用 engine.abort() 也未清理监听器，导致最旧 Run 变为后台可越界运行的 Ghost Run。",
+      "remediation_summary": "在 BoundedMap.set 或 activeRuns 操作前检查容量，对即将被淘汰的 Run 显式调用 engine.abort('active-runs-capacity-exceeded') 强杀并响应清理。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 1.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-04",
+      "id_topology": "GAP-02-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "createDaemonSubagentTool 缺少全局 Live Agent 槽位门禁",
+      "domain": "并发与状态机域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-daemon/src/subagent-runtime.ts"],
+      "files_read": [],
+      "root_cause_summary": "Daemon 端的 Subagent 工具完全没有集成 activeSubagentCount 限制与并发槽位门禁，只要 depth < maxDepth 便无限创建 Subagent 导致资源耗尽或 429。",
+      "remediation_summary": "在 Daemon 侧引入基于 AsyncSemaphore 的并发 Live Agent 槽位管理器，超限时排队或优雅拒绝。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 2.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-05",
+      "id_topology": "GAP-02-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "CrossProcessLock 为孤儿代码导致 OAuth 刷新重放旧 Token 账号锁定",
+      "domain": "并发与状态机域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider/auth/oauth/cross-process-lock.ts", "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts"],
+      "files_read": [],
+      "root_cause_summary": "CrossProcessLock 为孤儿代码未装配到 refreshAccount() 中，多个 Subagent 同时收到 401 触发刷新时重放旧 Refresh Token，导致 OAuth 服务器返回 invalid_grant 并锁死账号。",
+      "remediation_summary": "在 refreshAccount 中装配 CrossProcessLock 并引入 Single-Flight Generation 刷新意图锁。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 1.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-06",
+      "id_topology": "GAP-02-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "流式中途 TCP Reset (ECONNRESET) 被硬归类为 Case B 拒绝重试",
+      "domain": "并发与状态机域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider-transport/stream-recovery.ts"],
+      "files_read": [],
+      "root_cause_summary": "StreamRecovery.decideRecovery() 只要已有字符输出（text.length > 0），遇到底层 TCP Reset (ECONNRESET) 即归类为 Case B 并抛错中断，无暂态重试或退避。",
+      "remediation_summary": "引入 TransientErrorClassifier，识别 ECONNRESET / socket hang up，即便有部分字符也允许带断点标记的暂态重试与指数退避。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-07",
+      "id_topology": "GAP-02-07",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "账号池将暂态流中断误判为 Auth 错误导致健康账号误封禁",
+      "domain": "并发与状态机域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts"],
+      "files_read": [],
+      "root_cause_summary": "StreamRecoveryError 被上层 Gateway 归类为 auth 或 server 异常并记录失败，触发 cooldownUntil (5min~1h) 冷却，导致账号池被误杀杀光。",
+      "remediation_summary": "严格区分 Transient Network Error 与 True Auth Error，暂态网络波动不得增加 account.errorCount 或触发账号 Cooldown。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 2.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-08",
+      "id_topology": "GAP-02-08",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "setTraceContext 滥用 AsyncLocalStorage.enterWith 导致跨 Session 状态污染",
+      "domain": "并发与状态机域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/trace/index.ts"],
+      "files_read": [],
+      "root_cause_summary": "enterWith() 永久改变了当前事件循环线程的 AsyncLocalStorage Store，且无法自动恢复，导致后续异步回调及并发 Session 互相泄漏 Trace/SessionId。",
+      "remediation_summary": "彻底废载 enterWith，强制全链路使用 withTraceContext / AsyncLocalStorage.run() 作用域隔离。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-CS-09",
+      "id_topology": "GAP-02-09",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "subagents.ts 模块级全局变量 activeSubagentCount 在 try 块外自增导致死锁漂移",
+      "domain": "并发与状态机域",
+      "severity": "P2-Medium",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/subagents.ts"],
+      "files_read": [],
+      "root_cause_summary": "activeSubagentCount += 1 位于 try 块之外，后续代码若抛出同步异常则不会触发 finally 中的扣减，导致计数器永久漂移累加并死锁。",
+      "remediation_summary": "改用 SubagentConcurrencyGuard / using Disposable 句柄，并在 finally 块中实现严格的计数防漂移兜底。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-TC-01",
+      "id_topology": "GAP-03-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Tool Call 参数归一化缺陷与 Zod Schema Preprocess 缺失",
+      "domain": "Tool Call 容错域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider-openai-chat.ts", "packages/agent-runtime/src/anthropic-stream-parse.ts", "packages/agent-runtime/src/tools.ts", "packages/agent-daemon/src/protocol/validators/common.ts"],
+      "files_read": [],
+      "root_cause_summary": "LLM 输出 'null'、'[]' 或 'None' 时被错误包装为 { value: null } 或 { value: [] }，extractToolArgumentObject 无法解包返回 undefined 导致工具参数错误；且 Zod 校验器缺乏 .preprocess() 自动自动纠偏。",
+      "remediation_summary": "在 tools.ts 中实现 normalizeToolInputObject，并在共享校验库中提供 zCoerceArray 和 zDefaultEmpty 纠偏辅助函数。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-TC-02",
+      "id_topology": "GAP-03-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "DaemonApprovalHandler 缺失 runIntentDenylist 导致人类拒绝后无限弹窗死循环",
+      "domain": "Tool Call 容错域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-daemon/src/daemon-approval-handler.ts", "packages/agent-runtime/src/runtime-helpers.ts"],
+      "files_read": [],
+      "root_cause_summary": "审批处理器只有 allowlist 没有 runIntentDenylist 记忆，人类点击 Deny 后不记录黑名单且未在返回决策中设置 retryable: false，导致模型重试时触发 UI 无限重复弹窗轰炸。",
+      "remediation_summary": "在 DaemonApprovalHandler 中增加 runIntentDenylist 记忆，拒绝决策时自动注入 retryable: false 并拦截同 Run 重复请求。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.3"
+      }
+    },
+    {
+      "id_ledger": "GAP-TC-03",
+      "id_topology": "GAP-03-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Tool 消息体空 content 被序列化为 '[]' 导致的响应与上下文污染",
+      "domain": "Tool Call 容错域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/tool-output-budget.ts", "packages/agent-runtime/src/openai-request-build.ts"],
+      "files_read": [],
+      "root_cause_summary": "stringifyToolOutput 在 text 为空且 json 为 [] 或 {} 时执行 JSON.stringify 导出字符串 '[]' 或 '{}' 污染历史消息；且 content: '' 会在部分 Provider 触发 HTTP 400。",
+      "remediation_summary": "stringifyToolOutput 显式拦截空数组/空对象并导出空字符串 ''；在 openai-request-build.ts 中使用 safeToolResultContent 注入 (empty tool output) 占位符。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-TC-04",
+      "id_topology": "GAP-03-07",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "MCP Stdio Adapter 忽略 AbortSignal 与超时且缺失 Circuit Breaker 熔断保护",
+      "domain": "Tool Call 容错域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-daemon/src/mcp-stdio-adapter.ts", "packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts"],
+      "files_read": [],
+      "root_cause_summary": "mcp-stdio-adapter 中 _context 传入的 signal 和 timeout 被 void _context 彻底丢弃导致子进程卡死时永久挂起 Session；McpServerController 无滑动窗口熔断器；所有 MCP 工具硬编码 isReadOnly: false。",
+      "remediation_summary": "绑定 context.signal 与 30s 默认超时；在 McpServerController 中加入 3 次连续失败熔断器；读取元数据区分只读/写工具。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.3"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-01",
+      "id_topology": "GAP-04-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Rust attach_to_job_object 处于死代码状态且存在 Handle 泄漏",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-sandbox/src/process_tree.rs"],
+      "files_read": [],
+      "root_cause_summary": "attach_to_job_object 处于未调用状态，且内部 CreateJobObjectW 得到的 job 句柄在函数退出时直接丢失，Job Object 限制失效且发生句柄泄漏，导致宿主崩溃时孤儿子进程脱管。",
+      "remediation_summary": "重构为 ScopedJobObject RAII 结构体，实现 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 限制，并在 PTY / Daemon 启动子进程时强绑定。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.4"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-02",
+      "id_topology": "GAP-04-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "terminateProcessTree 缺乏 Windows/Unix 两阶段优雅降级终止机制",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/process-lifecycle/process-executor.ts"],
+      "files_read": [],
+      "root_cause_summary": "Windows 分支直接执行 taskkill /F 强制终止未给予子进程优雅退出时间，且 PowerShell 遍历极其昂贵；Unix 分支缺乏进程组 leader 设置导致遗留孙子进程。",
+      "remediation_summary": "实施 Phase 1: Soft Kill (SIGTERM / WM_CLOSE) -> 3000ms Timeout -> Phase 2: Hard Kill 两阶段优雅终止机制。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.4"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-03",
+      "id_topology": "GAP-04-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "BackgroundCommandManager 的 BoundedMap 容量淘汰导致后台进程泄漏",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/background-command.ts", "packages/shared-utils/src/bounded-map.ts"],
+      "files_read": [],
+      "root_cause_summary": "BoundedMap 容量满淘汰最旧 Key 时没有销毁回调，如果淘汰的任务处于 running 状态，其 child 子进程与定时器不会被清除，导致僵尸后台进程无限泄漏。",
+      "remediation_summary": "为 BoundedMap 增加 onEvict 销毁回调，淘汰最旧条目时主动触发 terminateChild 强收子进程与定时器。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 1.4"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-04",
+      "id_topology": "GAP-04-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "SQLite DbPool 缺少 SQLITE_BUSY 指数退避重试与 Deferred 事务死锁",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-db/src/pool.rs", "crates/conex-db/src/transaction.rs", "crates/conex-db/src/query.rs"],
+      "files_read": [],
+      "root_cause_summary": "仅有静态 busy_timeout = 5000 无代码重试循环，且事务使用默认 BEGIN TRANSACTION (Deferred)，在高并发写场景下极易触发 SQLITE_BUSY_SNAPSHOT 锁升级死锁并抛错穿透。",
+      "remediation_summary": "将写事务升级为 BEGIN IMMEDIATE，并在写操作层引入带 random jitter 的 5 次指数退避重试机制。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-05",
+      "id_topology": "GAP-04-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "长会话 Raw Tool Payloads 内存保留、缺失 GC 回调与 Rust 压缩全量 Clone",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/session.ts", "packages/agent-runtime/src/provider-openai-compatible.ts", "crates/conex-compaction/src/compaction.rs"],
+      "files_read": [],
+      "root_cause_summary": "大工具输出随 Message 数组无限增长并频繁深拷贝；全库缺乏 global.gc?.() 显式调用；Rust compaction.rs 全量 .clone() 且未调用 shrink_to_fit()。",
+      "remediation_summary": "实现 pruneHistoricalToolOutputs 截断 10 轮前的 Raw Payload，在 Compaction 结束添加显式 GC 调用；Rust compaction 原地 retain 并调用 shrink_to_fit()。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-PM-06",
+      "id_topology": "GAP-04-09",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "createGuardedProcessEnv 与 PowerShell Prelude 完全未注入防卡死非交互环境变量",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/process-lifecycle/process-executor.ts"],
+      "files_read": [],
+      "root_cause_summary": "createGuardedProcessEnv 和 buildWindowsPowerShellScript 零注入 CI=true、GIT_TERMINAL_PROMPT=0、PIP_NO_INPUT=1 等环境变量，导致 git/npm/pip 工具在 Stdin 下永久卡死。",
+      "remediation_summary": "注入全套 Anti-Hanging 非交互环境变量（CI=true, GIT_TERMINAL_PROMPT=0, PIP_NO_INPUT=1, PAGER=cat 等）。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.4"
+      }
+    },
+    {
+      "id_ledger": "GAP-SE-01",
+      "id_topology": "GAP-05-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "4-Pass seekSequence 双侧对齐缺失 eof 锚定与 matchCount 诊断坍塌",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-diff/src/seek_sequence.rs", "packages/shared-utils/src/file/seek-sequence.ts", "packages/shared-utils/src/file/fixtures/seek-cases.json"],
+      "files_read": [],
+      "root_cause_summary": "Rust 侧 seek_sequence 缺少 eof: bool 参数；且只返回 Option<SeekHit> 丢失 matchCount 诊断状态无法区分 ambiguous 与 missing；Rust lines() 会强剥离末尾 \\n 导致与 TS 侧 index 1 行偏移。",
+      "remediation_summary": "在 Rust 侧引入 seek_sequence_full，支持 eof、match_count 诊断和保留末尾空行的 split_lines_for_seek。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-SE-02",
+      "id_topology": "GAP-05-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "上下文压缩 safeCompactionCutoff 缺乏工具对绑定导致 Orphan Tool Result / Call API 400 报错",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-compaction/src/compaction.rs", "packages/agent-runtime/src/context-compression/compression-utils.ts", "packages/agent-runtime/src/context-compression/serializer.ts"],
+      "files_read": [],
+      "root_cause_summary": "Rust 侧 safe_drop_end 缺失 ID 级工具对断言；TS 侧 includeRequiredToolCallMessages 只有单向追溯，缺失反向 Orphan Tool Call 保护，导致产生孤立 tool_result 或 tool_call 触发 Provider HTTP 400。",
+      "remediation_summary": "实现双向 calculateSafeCompactionCutoff，确保 assistant.tool_calls 与对应的 tool_result 被原子同存或同删。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.5"
+      }
+    },
+    {
+      "id_ledger": "GAP-SE-03",
+      "id_topology": "GAP-05-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "resolve_under_root 与目录递归扫描缺乏 Visited Path Set 导致 Symlink Loop 崩溃",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-fs/src/path_utils.rs", "apps/agent-workbench/src-tauri/src/fs_commands/directory.rs", "apps/agent-workbench/src-tauri/src/perf/fs.rs"],
+      "files_read": [],
+      "root_cause_summary": "resolve_under_root 裸调用 std::fs::canonicalize 在循环软链接下抛出 ELOOP；directory.rs 递归扫描未记录 Visited Paths，在父级软链接下触发 Stack Overflow 崩溃。",
+      "remediation_summary": "实现带 hop count 限制 (<=40) 和 visited_set 追溯的 safe_canonicalize / safe_abs_path，防止无限递归。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": "GAP-SE-04",
+      "id_topology": "GAP-05-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "FileDiff 结构缺失 provisional 状态导致流式未完成半截代码被 Accept 误写入磁盘",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/store/types.ts", "apps/crish-desktop/src/components/DiffCardFileList.tsx", "apps/crish-desktop/src/api/applyFileDiff.ts"],
+      "files_read": [],
+      "root_cause_summary": "FileDiff 类型定义缺失 provisional 状态；classifyFileDiff 纯静态格式校验对未完成流式 Chunk 放行，导致 UI Accept 按钮高亮可点击，误将半截代码覆盖写盘。",
+      "remediation_summary": "为 FileDiff 增加 provisional?: boolean；classifyFileDiff 对 provisional diff 返回 ok: false；UI Accept 按钮硬性禁用并显示流式生成中。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.5"
+      }
+    },
+    {
+      "id_ledger": "GAP-UI-01",
+      "id_topology": "GAP-06-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Tauri 2 主进程系统级 Keep-Awake 唤醒锁缺位导致 OS 睡眠长任务中断",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/agent-workbench/src-tauri/src/main.rs", "apps/agent-workbench/src-tauri/src/sidecar/run_stream.rs"],
+      "files_read": [],
+      "root_cause_summary": "70+ 个 Tauri Command 列表中完全缺失系统电源管理与阻止睡眠唤醒锁，长时间 Run/Task 运行中 OS 进入睡眠导致 IPC 与 TCP/SSE 套接字挂起假死。",
+      "remediation_summary": "在 Tauri 主进程中增加 power.rs 唤醒锁模块（基于 Win32 SetThreadExecutionState / macOS IOKit / Linux DBus），并导出 workbench_set_keep_awake 命令。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.6"
+      }
+    },
+    {
+      "id_ledger": "GAP-UI-02",
+      "id_topology": "GAP-06-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Reasoning 模型 reasoning_content 流中断丢弃与 Usage 计费清零缺陷",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P0-Blocker",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/api/directFetchBridge.ts", "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts"],
+      "files_read": [],
+      "root_cause_summary": "directFetchBridge.ts 在 signal abort 时直接 return 跳过 onComplete()，导致已收到的 assistantThought (DeepSeek-R1 思考链) 被抹除；useStreamCallbacks.ts 清空 Thinking Buffer 且 Usage 计费记录为 0。",
+      "remediation_summary": "即使 abort 也强制触发 onThought 刷新与阶段性 onComplete() 封存；引入 resolveInterruptedTokens 启发式 Token 估算。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.6"
+      }
+    },
+    {
+      "id_ledger": "GAP-UI-03",
+      "id_topology": "GAP-06-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "桌面 UI 菜单视口高度未钳制、事件穿透与动态 Function import 反模式",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/components/ModelPicker.module.css", "apps/crish-desktop/src/components/ComposePlusMenu.module.css", "apps/crish-desktop/src/components/ProjectPickerMenu.tsx"],
+      "files_read": [],
+      "root_cause_summary": "ComposePlusMenu 缺失 max-height 和 overflow-y: auto 导致出屏；ModelPicker 使用旧 52vh 未做视口钳制与滚轮拦截；ProjectPickerMenu 存在 Function('return import(...)') 违反 CSP 规范。",
+      "remediation_summary": "统一使用 max-h-[calc(100dvh-3.5rem)] 视口弹性钳制与 overscroll-behavior: contain 滚轮拦截；重构为标准 ESM 动态 import。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.2"
+      }
+    },
+    {
+      "id_ledger": "GAP-UI-04",
+      "id_topology": "GAP-06-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "API Key 非 Windows 平台加密为空与前端 localStorage 明文存储凭据泄漏",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P1-High",
+      "source_documents": ["ledger_v2.json", "conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/agent-workbench/src-tauri/src/config/credentials.rs", "apps/crish-desktop/src/api/providerProfiles.ts"],
+      "files_read": [],
+      "root_cause_summary": "credentials.rs 中 #[cfg(not(windows))] 直接返回 Error 未支持 macOS Keychain 与 Linux SecretService；前端 providerProfiles.ts 将包含 apiKey 的 Profile 明文存入 localStorage 存在 XSS 窃取风险。",
+      "remediation_summary": "补全 macOS Security Framework 与 Linux SecretService 支持；前端序列化存 localStorage 时剥离明文 apiKey；增加 Skill 沙盒凭据 Mount Guard。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.2"
+      }
+    }
+  ],
+  "orphan_entries": [
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-03-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "缺少通用 Zod Preprocess 转换器 (zCoerceArray, zDefaultEmpty)",
+      "domain": "Tool Call 容错域",
+      "severity": "P2-Medium",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/schema-helpers.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-03-02 作为 Zod 辅助函数导出项（R1 类型契约），其内容已合并入 ledger 中 GAP-TC-01 的修复方案内，但 topology 将其列为独立节点 GAP-03-02T。",
+      "remediation_summary": "导出 zCoerceArray / zDefaultEmpty Preprocess 转换器（R1 编译解锁阶段）。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-04-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "事务采用默认 BEGIN TRANSACTION (Deferred) 引发锁升级死锁",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-db/src/transaction.rs"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-04-05（BEGIN IMMEDIATE 升级），属于 GAP-PM-04（GAP-04-04）的同一修复包。",
+      "remediation_summary": "将写事务升级为 BEGIN IMMEDIATE 避免锁升级死锁。",
+      "assigned": {
+        "round": "R6",
+        "wave": "Wave 3.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-04-07",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "缺乏显式 global.gc?.() 触发器与堆内存 Watchdog 监控",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P2-Medium",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/session-loop/index.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-04-07（GC 触发器），属于 GAP-PM-05（GAP-04-06）同一修复包。",
+      "remediation_summary": "在 Compaction 结束添加显式 global.gc?.() 调用。",
+      "assigned": {
+        "round": "R6",
+        "wave": "Wave 3.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-04-08",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Rust compaction 原地 retain 消除 Message.clone 并调用 shrink_to_fit",
+      "domain": "进程 / 内存 / 数据库 / 句柄域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["crates/conex-compaction/src/compaction.rs"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-04-08（Rust compaction 零拷贝），属于 GAP-PM-05（GAP-04-06）同一修复包。",
+      "remediation_summary": "改用 messages.retain 原地剔除，裁切后显式调用 shrink_to_fit()。",
+      "assigned": {
+        "round": "R6",
+        "wave": "Wave 3.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-05-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "splitLinesForSeek 与 Rust lines() 换行符剥离契约不一致",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/shared-utils/src/file/seek-sequence.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-05-02（TS 侧行分割规范化），属于 GAP-SE-01（GAP-05-01）同一修复包。",
+      "remediation_summary": "实现 splitLinesForSeek 与 Rust lines() 完全对齐，正确处理 CRLF。",
+      "assigned": {
+        "round": "R5",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-05-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "TS includeRequiredToolCallMessages 缺失反向 Orphan Tool Call 检查",
+      "domain": "代码编辑 / Patch 寻址域",
+      "severity": "P0-Blocker",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/context-compression/compression-utils.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-05-04（TS 侧反向检查），属于 GAP-SE-02（GAP-05-03）同一修复包。",
+      "remediation_summary": "实现双向 Tool Pair 完整性校验。",
+      "assigned": {
+        "round": "R5",
+        "wave": "Wave 1.5"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-03-06",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "role: 'tool' 消息在空输出时传入 content: '' 导致 HTTP 400",
+      "domain": "Tool Call 容错域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md"],
+      "files_write": ["packages/agent-runtime/src/openai-request-build.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-03-06（HTTP 400 空 content），属于 GAP-TC-03（GAP-03-05）同一修复包。",
+      "remediation_summary": "在构建 role: 'tool' 消息时若 content 为空自动充填 '(empty tool output)'。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-03-09",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "所有 MCP 工具被一律硬编码标记为 isReadOnly: false",
+      "domain": "Tool Call 容错域",
+      "severity": "P2-Medium",
+      "source_documents": ["conex_repair_topology_v2.md"],
+      "files_write": ["packages/agent-runtime/src/mcp-stdio-adapter.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-03-09（MCP 读写标记），属于 GAP-TC-04（GAP-03-07）同一修复包。",
+      "remediation_summary": "根据 Tool schema 推导 readOnly 属性。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 1.3"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-06-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "中断流响应未能落盘，导致中断 Token 结算为 0 且 Retry 消息重复",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useStreamCallbacks.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-06-03（Usage 清零/消息重复），属于 GAP-UI-02（GAP-06-02）同一修复包。",
+      "remediation_summary": "在 Abort 时强制封存 Token 估算与消息落盘。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 1.6"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-06-05",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "ProjectPickerMenu.tsx 使用动态 Function import 违反 CSP",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P2-Medium",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/components/ProjectPickerMenu.tsx"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-06-05（Function import），属于 GAP-UI-03（GAP-06-04）同一修复包。",
+      "remediation_summary": "使用标准 ESM 动态 import 替代 Function('return import(...)')。",
+      "assigned": {
+        "round": "R7",
+        "wave": "Wave 4.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-06-07",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "前端 providerProfiles.ts 将 API Key 明文存储于 localStorage",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/crish-desktop/src/api/providerProfiles.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-06-07（localStorage 明文），属于 GAP-UI-04（GAP-06-06）同一修复包。",
+      "remediation_summary": "前端脱敏并剔除明文 Key，仅保留 Daemon 安全内存中。",
+      "assigned": {
+        "round": "R7",
+        "wave": "Wave 4.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-06-08",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "缺乏 Skill 沙盒凭据 Mount Guard，存在主 Key 越界被偷取风险",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["apps/agent-workbench/src-tauri/src/config/credentials.rs"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档单独列出 GAP-06-08（Sandbox Mount Guard），属于 GAP-UI-04（GAP-06-06）同一修复包。",
+      "remediation_summary": "实现 validate_skill_sandbox_mount，禁止沙盒挂载 .env / credentials 文件。",
+      "assigned": {
+        "round": "R7",
+        "wave": "Wave 4.2"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-08-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Daemon 侧装配全局 AsyncSemaphore(32) Live Agent 槽位门禁",
+      "domain": "并发与状态机域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-daemon/src/subagent-runtime.ts"],
+      "files_read": [],
+      "root_cause_summary": "拓扑文档额外列出 GAP-08-01（Semaphore 门禁），内容与 GAP-CS-04（GAP-02-04）重叠，但作为独立 R8 节点存在。",
+      "remediation_summary": "引入基于 AsyncSemaphore(32) 的全局并发 Live Agent 槽位管理器。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-08-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "CI/CD 6 条硬性断言 (代码行数/无循环依赖/<2s 扫描)",
+      "domain": "CI/CD 治理域",
+      "severity": "P1-High",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": [".github/workflows/ci.yml"],
+      "files_read": [],
+      "root_cause_summary": "ledger 未包含此 CI 治理条目，为拓扑文档专属的 R8 治理节点。",
+      "remediation_summary": "集成行数门禁、no-circular、2 秒极速扫描等 6 条硬性断言到 CI workflow。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-09-01",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "黄金向量 4-Pass Seek 双端一致性自动化测试",
+      "domain": "E2E 验证域",
+      "severity": "P0-Blocker",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/shared-utils/src/file/seek-sequence.test.ts", "crates/conex-diff/tests/seek_parity.rs"],
+      "files_read": [],
+      "root_cause_summary": "ledger 未包含此测试条目，为拓扑/主方案文档中 R9 专用验证节点。",
+      "remediation_summary": "导入 seek-cases.json 黄金用例，校验 TS 与 Rust 返回结果 100% 相同。",
+      "assigned": {
+        "round": "R9",
+        "wave": "Wave 9.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-09-02",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "OAuth Single-Flight 并发 401 刷新网络回归测试",
+      "domain": "E2E 验证域",
+      "severity": "P0-Blocker",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.test.ts"],
+      "files_read": [],
+      "root_cause_summary": "ledger 未包含此测试条目，为拓扑/主方案文档中 R9 专用验证节点。",
+      "remediation_summary": "开启 10 个并发 Promise.all 触发 refreshAccount，断言网络请求仅 1 次。",
+      "assigned": {
+        "round": "R9",
+        "wave": "Wave 9.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-09-03",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "Compaction 双向 Tool Pair 零 400 错报集成测试",
+      "domain": "E2E 验证域",
+      "severity": "P0-Blocker",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["packages/agent-runtime/src/context-compression/compaction-pair.test.ts"],
+      "files_read": [],
+      "root_cause_summary": "ledger 未包含此测试条目，为拓扑/主方案文档中 R9 专用验证节点。",
+      "remediation_summary": "构造多层嵌套 tool_calls 与 tool_result 消息流，校验零孤立消息。",
+      "assigned": {
+        "round": "R9",
+        "wave": "Wave 9.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": "GAP-09-04",
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "端到端 E2E 全量系统断言与验证",
+      "domain": "E2E 验证域",
+      "severity": "P0-Blocker",
+      "source_documents": ["conex_repair_topology_v2.md", "2026-07-24-终极多Agent协同修复方案_v2.0.md"],
+      "files_write": ["tests/e2e/full-system.test.ts"],
+      "files_read": [],
+      "root_cause_summary": "ledger 未包含此测试条目，为拓扑/主方案文档中 R9 专用验证节点。",
+      "remediation_summary": "模拟长时间 Agent 自动编程全流程，断言零崩溃、零孤儿进程、零死锁。",
+      "assigned": {
+        "round": "R9",
+        "wave": "Wave 9.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-01",
+      "id_write_set_alt": "R1-T01",
+      "title": "冲突标记清理 (Workspace.tsx / CardPanel.tsx 等合并冲突)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/CardPanel.tsx", "apps/crish-desktop/src/components/Workspace.tsx", "apps/crish-desktop/src/components/ChatEmptyState.tsx", "apps/crish-desktop/src/components/WorkspaceChromeBars.tsx", "apps/crish-desktop/src/services/StreamRecovery.ts"],
+      "files_read": ["apps/crish-desktop/src/hooks/useChatStream.ts"],
+      "root_cause_summary": "写集矩阵中 F1/R1-T01 任务，修复 5 处 Git 合并冲突残留，对应 B0/AG-01。",
+      "remediation_summary": "清理冲突标记与重复代码段。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-02",
+      "id_write_set_alt": "R2-T02 / R5-T06 / R8-T05",
+      "title": "审批缓存与流式竞态清理 (approval-cache / useStreamCallbacks)",
+      "domain": "并发与状态机域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/utils/approval-cache.ts", "apps/crish-desktop/src/services/approval-pipeline.ts", "apps/crish-desktop/src/hooks/useSlashSend.ts", "apps/crish-desktop/src/hooks/useStreamCallbacks.ts", "apps/crish-desktop/src/services/approval-bridge.ts", "apps/crish-desktop/src/services/approval-queue.ts"],
+      "files_read": ["apps/crish-desktop/src/store/sessionStore.ts", "apps/crish-desktop/src/hooks/useChatStream.ts"],
+      "root_cause_summary": "R2-S2 跨 Session 审批缓存污染；R5-E6/E7 闭包竞态、cancelFn 捕获旧值、approval 队列。",
+      "remediation_summary": "跨 Session 审批隔离；实时引用校验 streamManager；approval 队列合并。",
+      "assigned": {
+        "round": "R2/R5",
+        "wave": "Wave 2.1 / Wave 5.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-03",
+      "id_write_set_alt": "R5-T01 / R5-T02 / R5-T04 / R5-T07",
+      "title": "Error 事件响应与 EventRouter 错误透传",
+      "domain": "并发与状态机域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["packages/agent-runtime/src/session-loop/index.ts", "apps/crish-desktop/src/api/EventRouter.ts", "apps/crish-desktop/src/services/stream-recovery.ts", "apps/crish-desktop/src/services/approval-bridge.ts", "apps/crish-desktop/src/services/approval-queue.ts"],
+      "files_read": ["packages/agent-runtime/src/error-classifier.ts", "packages/shared-types/src/protocol-inbound.ts", "apps/crish-desktop/src/api/StreamRenderBuffer.ts", "apps/crish-desktop/src/hooks/useChatStream.ts"],
+      "root_cause_summary": "runtime-error retryable 标识缺失、EventRouter 缺乏缺失 case、ErrorClassifier 不统一。",
+      "remediation_summary": "补全 retryable、扩展 EventRouter、统一 ErrorClassifier。",
+      "assigned": {
+        "round": "R5",
+        "wave": "Wave 5.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-04",
+      "id_write_set_alt": "R2-T03 / R2-T04",
+      "title": "Message actions 与 session-store 异常状态修复",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/store/session-actions/message-actions.ts", "apps/crish-desktop/src/store/session-store/index.ts", "apps/crish-desktop/src/store/session-store/types.ts"],
+      "files_read": ["apps/crish-desktop/src/store/session-store/types.ts", "apps/crish-desktop/src/store/sessionStore.ts"],
+      "root_cause_summary": "Session Store 异常状态修复，FIFO shift 导致悬挂 Tool Result。",
+      "remediation_summary": "修复 SHIFT 操作导致悬挂消息与异常状态。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-05",
+      "id_write_set_alt": "R8-T03 / R8-T04 / R8-T05",
+      "title": "StreamRenderBuffer Worker 化 / UTF-8 截断 / 内存释放",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/store/types.ts", "apps/crish-desktop/src/workers/markdownWorker.ts", "apps/crish-desktop/src/api/IncrementalMarkdownBridge.ts", "apps/crish-desktop/src/hooks/useStreamCallbacks.ts"],
+      "files_read": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts", "apps/crish-desktop/src/store/sessionStore.ts"],
+      "root_cause_summary": "R8 横切收尾轮：UTF-8 代理对截断、Worker 化增量 Markdown、generationMapRef 内存释放。",
+      "remediation_summary": "补全 UTF-8 代理对安全截断，支持 Worker 异步 Markdown Bridge，清理 generationMapRef。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-06",
+      "id_write_set_alt": "R6-T02 / R7-T03",
+      "title": "protocol-inbound 拆分子文件 / Hello 类型守卫",
+      "domain": "架构合规域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["packages/shared-types/src/protocol-inbound.ts", "packages/shared-types/src/protocol-outbound.ts", "packages/shared-types/src/protocol/validators/common.ts", "packages/shared-types/src/protocol/protocol.ts"],
+      "files_read": ["packages/shared-types/src/index.ts", "packages/shared-types/src/protocol-inbound.ts"],
+      "root_cause_summary": "上帝文件 protocol-inbound.ts > 400 行，需拆分为 auth/run/session/diagnostic 子文件。",
+      "remediation_summary": "拆分超长文件，为 Hello Case 添加类型守卫。",
+      "assigned": {
+        "round": "R6/R7",
+        "wave": "Wave 6.1 / Wave 7.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-07",
+      "id_write_set_alt": "R7-T01 / R7-T02",
+      "title": "CI/CD Pipeline 建设 (ci.yml / package.json)",
+      "domain": "CI/CD 治理域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": [".github/workflows/ci.yml", "package.json"],
+      "files_read": ["turbo.json", "package.json", "packages/*/package.json", "apps/*/package.json"],
+      "root_cause_summary": "全量构建 CI Pipeline 缺失，需要包含 8 大核心 Job。",
+      "remediation_summary": "编写 .github/workflows/ci.yml 包含全量 Job，配置 Turbo cache。",
+      "assigned": {
+        "round": "R7",
+        "wave": "Wave 7.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-08",
+      "id_write_set_alt": "R2-T01 / R2-T06",
+      "title": "MessageContent XSS 纵深防御 / Rust unsafe 安全注释",
+      "domain": "安全域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/chat/MessageContent.tsx", "crates/conex-ipc/src/process.rs"],
+      "files_read": ["package.json (dompurify)", "crates/conex-ipc/src/credentials.rs"],
+      "root_cause_summary": "DOMPurify 纵深防御缺失；Process 句柄 11 处 unsafe 块缺 SAFETY 注释。",
+      "remediation_summary": "集成 DOMPurify 防御；为所有 unsafe 块添加 // SAFETY: 文档注释。",
+      "assigned": {
+        "round": "R2",
+        "wave": "Wave 2.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-09",
+      "id_write_set_alt": "R5-T03 / R5-T08",
+      "title": "ErrorClassifier 统一 / provider-registry / TelemetryMonitor",
+      "domain": "错误处理域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["packages/agent-provider-http/src/provider-openai-base.ts", "packages/agent-runtime/src/provider-stream-contract/error.ts", "packages/agent-runtime/src/provider-stream-contract/normalizer.ts", "packages/agent-provider-http/src/provider-registry-v2.ts", "apps/crish-desktop/src/services/TelemetryMonitor.ts"],
+      "files_read": ["packages/agent-runtime/src/error-classifier.ts", "apps/agent-workbench/src-tauri/src/main.rs"],
+      "root_cause_summary": "ErrorClassifier 不统一 / provider-registry-v2 注册 / TelemetryMonitor 遥测。",
+      "remediation_summary": "统一 ErrorClassifier，更新 provider-registry-v2，集成 TelemetryMonitor。",
+      "assigned": {
+        "round": "R5",
+        "wave": "Wave 5.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-10",
+      "id_write_set_alt": "R6-T01 / R6-T02 / R6-T03",
+      "title": "layoutStore / protocol-inbound / ui-selectors 上帝文件拆分",
+      "domain": "架构合规域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/store/layoutStore.ts", "apps/crish-desktop/src/store/slices/*", "packages/shared-types/src/protocol-inbound.ts", "packages/shared-types/src/protocol-outbound.ts", "packages/shared-types/src/types/protocol-*", "apps/crish-desktop/src/store/ui-selectors.ts", "apps/crish-desktop/src/store/layout-helpers/*"],
+      "files_read": ["apps/crish-desktop/src/store/types.ts", "packages/shared-types/src/index.ts", "apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "超长文件拆分：layoutStore.ts > 400 行、protocol-inbound.ts > 400 行、ui-selectors.ts > 300 行。",
+      "remediation_summary": "按单一职责拆分超长文件为多个子模块。",
+      "assigned": {
+        "round": "R6",
+        "wave": "Wave 6.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-11",
+      "id_write_set_alt": "R1-T04 / R6-T06",
+      "title": "Cargo.toml lint 修复 / middleware-pipeline / tool-hook-observability",
+      "domain": "基础设施域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/agent-workbench/src-tauri/Cargo.toml", "packages/agent-provider-http/Cargo.toml", "packages/plugin-sdk/src/tool-hook-observability.ts", "packages/plugin-sdk/src/tool-hook-types.ts", ".dependency-cruiser.cjs", ".dependency-cruiser.js", "packages/agent-runtime/src/middleware-pipeline.ts"],
+      "files_read": ["Cargo.toml", ".eslintrc.cjs"],
+      "root_cause_summary": "Cargo.toml 缺失 lint 规则；middleware-pipeline 工具 Hook 可观测性基础设施。",
+      "remediation_summary": "补全 Cargo.toml lint 配置；实现 tool-hook-observability 中间件管道。",
+      "assigned": {
+        "round": "R1/R6",
+        "wave": "Wave 1.1 / Wave 6.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "AG-12",
+      "id_write_set_alt": "R6-T04 / R6-T05 / R6-T07 / R6-T08",
+      "title": "ChatProviderGuard / useFileNavigation / faux-provider / AppBootstrap",
+      "domain": "架构合规域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/chat/ChatProviderGuard.tsx", "apps/crish-desktop/src/components/chat/ChatCheckpointActions.tsx", "apps/crish-desktop/src/hooks/useFileNavigation.ts", "apps/crish-desktop/src/hooks/useFilePreview.ts", "packages/test-utils/src/faux-provider.ts", "vitest.globalSetup.ts", "apps/crish-desktop/src/components/AppBootstrap.ts", "apps/crish-desktop/src/hooks/useAppKeyboard.ts", "apps/crish-desktop/src/hooks/keyboard/*"],
+      "files_read": ["apps/crish-desktop/src/components/chat/ChatCard.tsx", "apps/crish-desktop/src/store/workspaceStore.ts", "packages/agent-runtime/src/types.ts", "apps/crish-desktop/src/app/AppHeader.tsx"],
+      "root_cause_summary": "R6 架构合规与组件清理轮：缺失 Guard 组件、文件导航 hooks、假 Provider 测试工具。",
+      "remediation_summary": "新建 ChatProviderGuard、useFileNavigation、faux-provider 等基础设施组件。",
+      "assigned": {
+        "round": "R6",
+        "wave": "Wave 6.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "B0",
+      "id_write_set_alt": "R1-T01 / R1-T02",
+      "title": "Git 冲突标记清理（37 个 UU 状态文件）",
+      "domain": "基础设施域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/CardPanel.tsx", "apps/crish-desktop/src/components/Workspace.tsx", "apps/crish-desktop/src/components/ChatEmptyState.tsx", "apps/crish-desktop/src/components/WorkspaceChromeBars.tsx", "apps/crish-desktop/src/services/StreamRecovery.ts", "*37 个 UU 状态文件*"],
+      "files_read": ["apps/crish-desktop/src/hooks/useChatStream.ts", "全局状态"],
+      "root_cause_summary": "Git 合并操作历史遗留冲突标记导致 Workspace.tsx 等文件存在 <<<<<<< 标记。",
+      "remediation_summary": "逐一清理冲突标记并保留正确版本代码。",
+      "assigned": {
+        "round": "R1",
+        "wave": "Wave 1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D1",
+      "id_write_set_alt": "R4-T01",
+      "title": "Tab 拖拽边界检测失效 (collision detection)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/index.ts", "apps/crish-desktop/src/hooks/tab-drag/types.ts", "apps/crish-desktop/src/hooks/tab-drag/collision.ts", "apps/crish-desktop/src/hooks/tab-drag/pointer-state.ts", "apps/crish-desktop/src/hooks/tab-drag/drop-handlers.ts", "apps/crish-desktop/src/hooks/tab-drag/tab-drag.css"],
+      "files_read": ["apps/crish-desktop/src/components/CardPanel.tsx"],
+      "root_cause_summary": "Tab 拖拽边界检测失效导致松手位置错位。",
+      "remediation_summary": "重写拖拽碰撞检测算法，集成 Pointer Capture。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D2",
+      "id_write_set_alt": "R4-T01",
+      "title": "快照过期抖动",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/index.ts", "apps/crish-desktop/src/hooks/tab-drag/types.ts"],
+      "files_read": [],
+      "root_cause_summary": "拖拽快照过期导致视觉抖动。",
+      "remediation_summary": "实现 rAF 节流快照更新。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D3",
+      "id_write_set_alt": "R4-T03",
+      "title": "侧边栏实时重排 (sidebar drag reorder)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/sidebar/SidebarSessionList.tsx", "apps/crish-desktop/src/store/session-actions/session-ordering.ts", "apps/crish-desktop/src/hooks/useDragReorder.ts"],
+      "files_read": ["apps/crish-desktop/src/store/sessionStore.ts"],
+      "root_cause_summary": "侧边栏拖拽排序触发不合理重排。",
+      "remediation_summary": "集成 useSortable + Pointer Down 统一拖拽。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D4",
+      "id_write_set_alt": "R4-T03",
+      "title": "HTML5 DnD / PointerDown 双拖拽系统冲突",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/sidebar/SidebarSessionList.tsx"],
+      "files_read": [],
+      "root_cause_summary": "HTML5 DnD draggable 与 PointerDown 双重拖拽系统共存导致冲突。",
+      "remediation_summary": "清除 HTML5 DnD 残余，统一为 Pointer Capture 驱动。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D5",
+      "id_write_set_alt": "R4-T01",
+      "title": "rAF 节流缺失导致拖拽性能问题",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/index.ts", "apps/crish-desktop/src/hooks/tab-drag/pointer-state.ts"],
+      "files_read": [],
+      "root_cause_summary": "拖拽 mousemove 处理缺乏 rAF 节流。",
+      "remediation_summary": "在 pointer-state 中引入 rAF 节流。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D6",
+      "id_write_set_alt": "R4-T01",
+      "title": "translate3d GPU 加速优化缺失",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/tab-drag.css"],
+      "files_read": [],
+      "root_cause_summary": "拖拽元素未使用 translate3d 触发 GPU 合成层。",
+      "remediation_summary": "CSS 中增加 translate3d 硬件加速。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D7",
+      "id_write_set_alt": "R4-T02",
+      "title": "列宽调整死代码启用 (column resize)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/Workspace.tsx", "apps/crish-desktop/src/hooks/useColumnResize.ts", "apps/crish-desktop/src/components/workspace/ColumnResizeHandle.tsx", "apps/crish-desktop/src/utils/dragOverlay.ts", "apps/crish-desktop/src/store/workspaceActions.ts"],
+      "files_read": ["apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "Workspace.tsx 内联简陋 resize 逻辑需要重构为 useColumnResize Hook。",
+      "remediation_summary": "接入规范 useColumnResize Hook + Pointer Capture + rAF 节流。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D8",
+      "id_write_set_alt": "R4-T01",
+      "title": "拖拽 drop-handlers 优化",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/drop-handlers.ts"],
+      "files_read": [],
+      "root_cause_summary": "拖拽 drop 处理逻辑需要优化与统一。",
+      "remediation_summary": "重构 drop-handlers 与碰撞检测联动。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D9",
+      "id_write_set_alt": "R4-T01",
+      "title": "渲染树 React.memo 优化",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/tab-drag/index.ts"],
+      "files_read": ["apps/crish-desktop/src/components/CardPanel.tsx"],
+      "root_cause_summary": "CardPanel 渲染树缺乏 React.memo 优化。",
+      "remediation_summary": "对高频渲染叶子组件实施 memo。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D10",
+      "id_write_set_alt": "R8-T01",
+      "title": "z-index Token 统一管理",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/styles/tokens/zindex.css", "apps/crish-desktop/src/styles/tokens/z-index.ts", "apps/crish-desktop/src/components/dialogs/AppGlobalDialogs.tsx", "apps/crish-desktop/src/components/dialogs/TelemetryDialog.tsx"],
+      "files_read": ["apps/crish-desktop/src/hooks/tab-drag/tab-drag.css"],
+      "root_cause_summary": "全仓库 z-index 散落各处需统一 Token 管理。",
+      "remediation_summary": "建立 z-index Token 体系并全局替换。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D11",
+      "id_write_set_alt": "R4-T03",
+      "title": "拖拽排序 setState 改写优化",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useDragReorder.ts"],
+      "files_read": [],
+      "root_cause_summary": "侧边栏 dragover setState 频繁改写导致性能问题。",
+      "remediation_summary": "优化 setState 调用，使用 ref 存储中间状态。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D12",
+      "id_write_set_alt": "R4-T02",
+      "title": "布局死代码清理",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/Workspace.tsx"],
+      "files_read": ["apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "Workspace.tsx 布局废弃代码需要清理。",
+      "remediation_summary": "移除过时 DropIndicatorLayer 引用与废弃布局代码。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D13",
+      "id_write_set_alt": "R4-T03",
+      "title": "SidebarSessionList pointercancel 处理缺失",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/sidebar/SidebarSessionList.tsx"],
+      "files_read": [],
+      "root_cause_summary": "侧边栏拖拽缺乏 pointercancel 事件处理。",
+      "remediation_summary": "增加 pointercancel 统一回调与状态恢复。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D14",
+      "id_write_set_alt": "R4-T04",
+      "title": "AppHeader / shell-polish CSS 壳层加固",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/app/AppHeader.tsx", "apps/crish-desktop/src/styles/shell-polish.css", "apps/crish-desktop/src/hooks/useWindowControls.ts"],
+      "files_read": ["apps/crish-desktop/src/components/WorkspaceChromeBars.tsx"],
+      "root_cause_summary": "应用壳层与窗口控制逻辑需要加固。",
+      "remediation_summary": "shell-polish CSS 壳层加固与窗口控制逻辑优化。",
+      "assigned": {
+        "round": "R4",
+        "wave": "Wave 4.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "D15",
+      "id_write_set_alt": "R8-T02",
+      "title": "拖拽死代码彻底清理 (DropIndicatorLayer / GlobalDragOverlay)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/drag/DropIndicatorLayer.tsx", "apps/crish-desktop/src/components/drag/GlobalDragOverlay.tsx", "apps/crish-desktop/src/contexts/dragContext.tsx", "apps/crish-desktop/src/constants/layout.ts"],
+      "files_read": ["apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "旧拖拽系统遗留的 DropIndicatorLayer 与 GlobalDragOverlay 组件需要移除。",
+      "remediation_summary": "彻底清理废弃的拖拽死代码。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P1",
+      "id_write_set_alt": "R3-T01",
+      "title": "StreamRenderBuffer 每帧丢弃 hljs/markdown 产物浪费",
+      "domain": "流式 / Token 域",
+      "severity": "P1",
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts", "apps/crish-desktop/src/hooks/useChatStream.ts", "apps/crish-desktop/src/api/subagentTimeline.ts", "apps/crish-desktop/src/api/IncrementalMarkdownParser.ts", "apps/crish-desktop/src/api/codeHighlight.ts", "apps/crish-desktop/src/api/streamTextBatcher.ts"],
+      "files_read": ["apps/crish-desktop/src/store/sessionStore.ts"],
+      "root_cause_summary": "StreamRenderBuffer 每帧无条件计算增量 Markdown/hljs 但产物被丢弃。",
+      "remediation_summary": "惰性触发增量 Markdown 解析，仅在有 HTML 订阅者时计算。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P2",
+      "id_write_set_alt": "R3-T02",
+      "title": "useChatAutoScroll 增量布局性能",
+      "domain": "流式 / Token 域",
+      "severity": "P2",
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useChatAutoScroll.ts"],
+      "files_read": ["apps/crish-desktop/src/components/chat/ChatMessageList.tsx"],
+      "root_cause_summary": "自动滚动增量布局性能待优化。",
+      "remediation_summary": "优化增量布局触发的滚动逻辑。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P3",
+      "id_write_set_alt": "R3-T01",
+      "title": "Subagent 事件节流缺失",
+      "domain": "流式 / Token 域",
+      "severity": "P3",
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useChatStream.ts", "apps/crish-desktop/src/api/subagentTimeline.ts"],
+      "files_read": [],
+      "root_cause_summary": "Subagent 事件未经节流直接 setState 导致高频更新。",
+      "remediation_summary": "接入 StreamTextBatcher 节流桶，按 48ms/rAF 批量写入 Store。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P4",
+      "id_write_set_alt": "R3-T05",
+      "title": "autoIndexMiddleware 中间件修复",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/store/autoIndexMiddleware.ts"],
+      "files_read": ["apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "Store autoIndex 中间件需要修复与优化。",
+      "remediation_summary": "修复 autoIndexMiddleware 逻辑。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P5",
+      "id_write_set_alt": "R3-T03",
+      "title": "markdownRenderLite 正则复用优化",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/markdownRenderLite.ts"],
+      "files_read": [],
+      "root_cause_summary": "markdownRenderLite 正则表达式复用不足导致性能开销。",
+      "remediation_summary": "正则表达式常量化与复用。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P6",
+      "id_write_set_alt": "R3-T04",
+      "title": "daemonChatBridge SSE Zod 快速路径解析",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/daemonChatBridge.ts", "apps/crish-desktop/src/api/directFetchBridge.ts"],
+      "files_read": ["packages/shared-types/src/protocol-inbound.ts"],
+      "root_cause_summary": "SSE 事件 Zod 快速路径解析与回退路径对齐。",
+      "remediation_summary": "实现 SSE 事件 Zod 快速路径，对齐回退路径。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P7",
+      "id_write_set_alt": "R3-T03",
+      "title": "DOM 插入线移除 / 虚拟化竞态修复",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/chat/ChatMessageRow.tsx", "apps/crish-desktop/src/components/chat/ChatMessageList.tsx", "apps/crish-desktop/src/components/chat/ChatCard.tsx", "apps/crish-desktop/src/hooks/useChatCardSelectors.ts", "apps/crish-desktop/src/hooks/useMessageWindow.ts"],
+      "files_read": ["apps/crish-desktop/src/components/chat/MessageContent.tsx"],
+      "root_cause_summary": "DOM 插入线视觉缺陷 + 虚拟列表竞态条件。",
+      "remediation_summary": "移除 DOM 插入线，修复虚拟化竞态。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P8",
+      "id_write_set_alt": "R3-T06",
+      "title": "usePretextHeights 高度计算修复",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/chat/hooks/usePretextHeights.ts"],
+      "files_read": ["apps/crish-desktop/src/workers/pretextWorker.ts"],
+      "root_cause_summary": "Pretext 高度计算逻辑需要修复。",
+      "remediation_summary": "修复 pretext 高度计算。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P9",
+      "id_write_set_alt": "R3-T03",
+      "title": "ChatCard / MessageContent 渲染优化",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/chat/ChatCard.tsx"],
+      "files_read": [],
+      "root_cause_summary": "ChatCard 渲染层可以被优化。",
+      "remediation_summary": "ChatCard 渲染优化与集成。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P10a",
+      "id_write_set_alt": "R3-T01",
+      "title": "useChatStream 批合并 (Subagent 部分)",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useChatStream.ts"],
+      "files_read": [],
+      "root_cause_summary": "useChatStream 流式热路径批合并处理。",
+      "remediation_summary": "接入 StreamTextBatcher 节流桶。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P10b",
+      "id_write_set_alt": "R3-T04",
+      "title": "daemonChatBridge EventRouter 错误事件转发",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/daemonChatBridge.ts"],
+      "files_read": [],
+      "root_cause_summary": "daemonChatBridge EventRouter 错误事件未正确分发。",
+      "remediation_summary": "修复 EventRouter 错误事件转发逻辑。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P11",
+      "id_write_set_alt": "R3-T04",
+      "title": "SSE thought bug（思考文本丢失）",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/directFetchBridge.ts"],
+      "files_read": [],
+      "root_cause_summary": "SSE 回退路径思考文本丢失 bug。",
+      "remediation_summary": "修复 SSE 思考文本丢失问题。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "P11a",
+      "id_write_set_alt": "R3-T01",
+      "title": "流式热路径批合并 (StreamRenderBuffer 部分)",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts"],
+      "files_read": [],
+      "root_cause_summary": "StreamRenderBuffer 流式热路径批合并。",
+      "remediation_summary": "接入 StreamTextBatcher 节流桶。",
+      "assigned": {
+        "round": "R3",
+        "wave": "Wave 3.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "X1",
+      "id_write_set_alt": "R8-T01",
+      "title": "z-index Token 统一 + Dialog 重构",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/styles/tokens/zindex.css", "apps/crish-desktop/src/styles/tokens/z-index.ts", "apps/crish-desktop/src/components/dialogs/AppGlobalDialogs.tsx", "apps/crish-desktop/src/components/dialogs/TelemetryDialog.tsx"],
+      "files_read": ["apps/crish-desktop/src/hooks/tab-drag/tab-drag.css"],
+      "root_cause_summary": "全仓库 z-index Token 统一与 Dialog 组件重构。",
+      "remediation_summary": "建立 z-index Token 体系，重构 Dialog 组件。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "X2",
+      "id_write_set_alt": "R8-T02",
+      "title": "拖拽死代码清理 (DropIndicatorLayer / GlobalDragOverlay)",
+      "domain": "桌面 / UI / 应用运行时域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/components/drag/DropIndicatorLayer.tsx", "apps/crish-desktop/src/components/drag/GlobalDragOverlay.tsx", "apps/crish-desktop/src/contexts/dragContext.tsx", "apps/crish-desktop/src/constants/layout.ts"],
+      "files_read": ["apps/crish-desktop/src/store/layoutStore.ts"],
+      "root_cause_summary": "旧拖拽系统遗留组件需彻底清理。",
+      "remediation_summary": "移除过时拖拽组件与引用。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "X3",
+      "id_write_set_alt": "R8-T03",
+      "title": "UTF-8 代理对截断修复 (StreamRenderBuffer store/types)",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/store/types.ts"],
+      "files_read": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts"],
+      "root_cause_summary": "R8 阶段补全 UTF-8 代理对安全截断与降级 UI。",
+      "remediation_summary": "补全 UTF-8 代理对安全截断。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "X4",
+      "id_write_set_alt": "R8-T04",
+      "title": "Worker 化增量 Markdown 解析",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/workers/markdownWorker.ts", "apps/crish-desktop/src/api/IncrementalMarkdownBridge.ts"],
+      "files_read": ["apps/crish-desktop/src/api/StreamRenderBuffer.ts"],
+      "root_cause_summary": "增量 Markdown 解析需要迁移到 Worker 线程。",
+      "remediation_summary": "新建 markdownWorker + IncrementalMarkdownBridge 实现 Worker 化。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": "X5",
+      "id_write_set_alt": "R8-T05",
+      "title": "generationMapRef 内存释放 / useStreamCallbacks 清理",
+      "domain": "流式 / Token 域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["apps/crish-desktop/src/hooks/useStreamCallbacks.ts"],
+      "files_read": ["apps/crish-desktop/src/store/sessionStore.ts"],
+      "root_cause_summary": "Session 删除时 generationMapRef 残留 Entry 导致内存泄漏。",
+      "remediation_summary": "清理 generationMapRef 在 Session 删除时的遗留 Entry。",
+      "assigned": {
+        "round": "R8",
+        "wave": "Wave 8.1"
+      }
+    },
+    {
+      "id_ledger": null,
+      "id_topology": null,
+      "id_write_set": null,
+      "id_write_set_alt": null,
+      "title": "R9 测试套件：useChatApproval/useFileNavigation/FauxAgentProvider 等 11 项",
+      "domain": "测试域",
+      "severity": null,
+      "source_documents": ["write_set_isolation_matrix_v2.md"],
+      "files_write": ["tests/unit/useChatApproval.test.ts", "tests/unit/useFileNavigation.test.ts", "tests/unit/faux-provider.test.ts", "tests/unit/StreamRenderBuffer.test.ts", "tests/integration/ChatCard.test.tsx", "tests/unit/exponential-backoff.test.ts", "tests/unit/approval-cache.test.ts", "tests/e2e/store-integrity.e2e.test.ts", "tests/unit/error-classifier.test.ts", "tests/unit/AppBootstrap.test.ts", "vitest.config.ts"],
+      "files_read": [],
+      "root_cause_summary": "R9 测试套件补齐轮，为所有修复模块新建独立单测与集成测试。",
+      "remediation_summary": "新建 11 个单元/集成测试覆盖所有修复模块。",
+      "assigned": {
+        "round": "R9",
+        "wave": "Wave 9.1"
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+﻿{
+  "round": "r1",
+  "agent": "RT-2",
+  "taskIds": ["T-AR-011","T-AR-012","T-AR-013","T-AR-014","T-AR-015","T-AR-016","T-AR-017","T-AR-018","T-AR-019","T-AR-020","T-AR-021","T-AR-022"],
+  "timestamp": "2026-07-25T03:10:08Z",
+  "files": {
+    "goal-disk-oracle.ts": { "errors": 0, "notes": "TS2379×2 fixed with conditional spread for detail field" },
+    "extension-registry.ts": { "errors": 0, "notes": "TS2322×3 fixed with conditional spread for reason/terminateReason/model/promptOverride/modifiedInput/modifiedOutput" },
+    "tool-hook-observability.ts": { "errors": 0, "notes": "TS2379/TS2345/TS2322 fixed: ToolHookContext extends ToolExecutionContext, added proper return types, type guards" },
+    "checkpoint-tools.ts": { "errors": 0, "notes": "TS2379×3 fixed with conditional spread for archiveRoot/maxFileBytes" },
+    "edit-tool.ts": { "errors": 0, "notes": "TS2305/TS2379 fixed: added exports to shared-utils, conditional spread for options.snapshot" },
+    "token-estimator.ts": { "errors": 0, "notes": "TS2375×2 fixed with intermediate vars + conditional spread for ImageContent/ProviderUsage" },
+    "media-preprocessor.ts": { "errors": 0, "notes": "TS6133/TS2375/TS2379 fixed: removed unused mimeCategory, conditional spread for width/height" },
+    "memory.ts": { "errors": 0, "notes": "TS2379×2 fixed for remember/search with intermediate vars + conditional spread" },
+    "model-routing-enhanced.ts": { "errors": 0, "notes": "TS2375 fixed with conditional spread for minimumContextTokens" },
+    "matcher.ts": { "errors": 0, "notes": "TS6133×6 removed unused imports, TS2375×2 fixed with conditional spread for selected/maxCostTier/minimumContextTokens/metadata" },
+    "profile.ts": { "errors": 0, "notes": "TS6196 deleted unused ModelCapabilityFlags(re-added for type annotation), TS2379×2/TS2375×5 fixed with intermediate vars + conditional spread + as ModelProfile assertions" },
+    "model-routing-roles.ts": { "errors": 0, "notes": "TS6196 removed unused ModelCapabilityTag, TS2412×4 fixed with guard + conditional assignment" }
+  },
+  "summary": "12/12 files clean, 0 remaining errors in write set"
+}

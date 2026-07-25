@@ -1,0 +1,91 @@
+{
+  "round": "r1",
+  "agent": "UI-1",
+  "tasks": [
+    {
+      "id": "T-UI-001",
+      "file": "apps/crish-desktop/src/components/CardPanel.tsx",
+      "fix": "removed duplicate function definitions (lines 598-735: 2nd renderCardIcon/PANEL_ADD_IDS/handleTabClick/handleGlobalTabClick/closeToolTab/resolveFocusAfterClose/focusTabByIndex/onTabKeyDown) and corrupted merge artifact (lines 843-893: misplaced tabs-map inside chat breadcrumb branch)",
+      "old_lines": 1170,
+      "new_lines": 980,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-002",
+      "file": "apps/crish-desktop/src/components/ChatHeaderMore.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 238,
+      "new_lines": 238,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-003",
+      "file": "apps/crish-desktop/src/components/ChatStatusRibbons.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 914,
+      "new_lines": 914,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-004",
+      "file": "apps/crish-desktop/src/components/ComposePlusMenu.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 233,
+      "new_lines": 233,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-005",
+      "file": "apps/crish-desktop/src/components/DiffCardFileList.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 337,
+      "new_lines": 337,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-006",
+      "file": "apps/crish-desktop/src/components/DiffCardGitActions.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 106,
+      "new_lines": 106,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-007",
+      "file": "apps/crish-desktop/src/components/ModelPicker.tsx",
+      "fix": "React.memo closing: `));` → `});`",
+      "old_lines": 300,
+      "new_lines": 300,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-008",
+      "file": "apps/crish-desktop/src/components/QuickOpen.tsx",
+      "fix": "removed erroneous dangling `<button` tag (line 230) that broke JSX nesting",
+      "old_lines": 268,
+      "new_lines": 267,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-009",
+      "file": "apps/crish-desktop/src/components/SettingsPanel.tsx",
+      "fix": "React.memo closing: `));` → `});`, removed redundant `};`",
+      "old_lines": 731,
+      "new_lines": 730,
+      "status": "fixed"
+    },
+    {
+      "id": "T-UI-010",
+      "file": "apps/crish-desktop/src/components/WorkspaceChromeBars.tsx",
+      "fix": "completed unclosed onClick callback (missing `}); }}>`) and added missing button content + `</button>` for the '通用工作区' menu item",
+      "old_lines": 617,
+      "new_lines": 625,
+      "status": "fixed"
+    }
+  ],
+  "summary": {
+    "total_tasks": 10,
+    "fixed": 10,
+    "failed": 0
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "agent": "AWB-2",
+  "round": 1,
+  "changes": {
+    "T-AWB-015": {
+      "file": "apps/agent-workbench/src/shared/background-command-bridge.ts",
+      "type": "interface-optional-to-undefined",
+      "detail": "continuation?: → continuation: WorkbenchContinuationDecision | undefined"
+    },
+    "T-AWB-016": {
+      "file": "apps/agent-workbench/src/shared/background-tasks.ts",
+      "type": "interface-optional-to-undefined",
+      "detail": "Converted all ?: to | undefined in WorkbenchBackgroundTaskStartInput, WorkbenchBackgroundTaskHeartbeatInput, WorkbenchBackgroundTaskEndInput"
+    },
+    "T-AWB-017": {
+      "file": "apps/agent-workbench/src/shared/disclosure-diagnostics.ts",
+      "type": "interface-optional-to-undefined",
+      "detail": "Converted all ?: to | undefined in WorkbenchCommandDiagnosticInput, WorkbenchRenderedReferenceStatus, WorkbenchDisclosureAnalysisInput, WorkbenchDisclosureSnapshotInput"
+    },
+    "T-AWB-018": {
+      "file": "apps/agent-workbench/src/shared/output-references.ts",
+      "type": "interface-optional-to-undefined",
+      "detail": "Converted all ?: to | undefined in WorkbenchOutputReferenceExtractionOptions and ReferenceCandidate"
+    },
+    "T-AWB-019": {
+      "file": "apps/agent-workbench/src/shared/perf-backend.ts",
+      "type": "no-change",
+      "detail": "No ?: found in interfaces — no changes needed"
+    },
+    "T-AWB-020": {
+      "file": "apps/agent-workbench/src/shared/runtime-bridge.ts",
+      "type": "remove-unused-import",
+      "detail": "Removed unused import WorkbenchMode (TS6133)"
+    },
+    "T-AWB-021": {
+      "file": "apps/agent-workbench/src/shared/task-controller.ts",
+      "type": "interface-optional-to-undefined",
+      "detail": "Converted all ?: to | undefined in WorkbenchHeartbeatInput and WorkbenchContinuationOptions"
+    },
+    "T-AWB-022": {
+      "file": "apps/agent-workbench/src/shared/workbench-config/defaults.ts",
+      "type": "interface-modification",
+      "detail": "Changed defaultTemperature: ... ? 1 : undefined to conditional spread to avoid TS2375/TS2379 with exactOptionalPropertyTypes"
+    },
+    "T-AWB-023": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/config.ts",
+      "type": "remove-unused-import",
+      "detail": "Removed unused imports WorkbenchTokenBudgetSnapshot, WorkbenchLongRunPolicy (TS6133)"
+    },
+    "T-AWB-024": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/daemon-session.ts",
+      "type": "remove-unused-export",
+      "detail": "Removed unused exports: WorkbenchEnqueuePendingInputRequest, WorkbenchCancelPendingInputRequest, WorkbenchDispatchPendingInputRequest, DaemonSessionEventsResponse, DaemonRunEventsQuery, DaemonRunSnapshotQuery, DaemonRunSnapshotResponse (TS6196)"
+    },
+    "T-AWB-025": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/guards.ts",
+      "type": "remove-unused-import",
+      "detail": "Removed unused import DaemonBackgroundTaskSnapshot (TS6133)"
+    },
+    "T-AWB-026": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/plan-document.ts",
+      "type": "remove-unused-export",
+      "detail": "Removed unused exports: WorkbenchPlanDocumentPatch, WorkbenchPlanDocumentsListedResponse, WorkbenchPlanDocumentResponse, WorkbenchPlanDocumentDeletedResponse (TS6196)"
+    },
+    "T-AWB-027": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/ui-projections.ts",
+      "type": "remove-unused-import",
+      "detail": "Removed 3 unused imports: WorkbenchPlanState, WorkbenchHealth, WorkbenchBackgroundTask (TS6133)"
+    },
+    "T-AWB-028": {
+      "file": "apps/agent-workbench/src/shared/workbench-contract/workbench-ui.ts",
+      "type": "remove-unused-import",
+      "detail": "Removed unused import DaemonProviderApiKeySource (TS6133)"
+    }
+  },
+  "summary": {
+    "files_modified": 13,
+    "files_no_change": 1,
+    "total_tasks": 14,
+    "edits_made": {
+      "interface-?:-to-undefined": 6,
+      "remove-unused-import": 5,
+      "remove-unused-export": 2,
+      "interface-modification": 1,
+      "no-change": 1
+    }
+  }
+}

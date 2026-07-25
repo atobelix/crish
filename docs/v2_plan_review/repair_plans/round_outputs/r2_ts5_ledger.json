@@ -1,0 +1,66 @@
+﻿{
+    "sourceEdits":  [
+                        {
+                            "file":  "packages/agent-orchestrator/src/orchestrator.ts",
+                            "changes":  [
+                                            "Added import for state-snapshot module",
+                                            "Added lastRestoreMode field",
+                                            "Added getLastRestoreMode() method",
+                                            "Added persistStateSnapshot() method",
+                                            "Modified restoreFromEventStore() to support snapshot incremental restore",
+                                            "Modified persistAndBroadcast() to skip store for non-durable runtime deltas",
+                                            "Moved goal-round-completed emission after provider error check in driveGoalRun",
+                                            "Added isNonDurableRuntimeDelta export",
+                                            "Modified streamingEventIterable to pass afterSequence parameter"
+                                        ]
+                        },
+                        {
+                            "file":  "packages/agent-orchestrator/src/event-store.ts",
+                            "changes":  [
+                                            "Added import for state-snapshot module",
+                                            "Added stateSnapshotPath(), loadStateSnapshot(), writeStateSnapshot() methods"
+                                        ]
+                        }
+                    ],
+    "agent":  "TS-5",
+    "timestamp":  "2026-07-25T04:08:55.894Z",
+    "files":  [
+                  {
+                      "path":  "packages/agent-orchestrator/src/event-store.test.ts",
+                      "result":  "pass",
+                      "testsFailed":  0,
+                      "fixes":  [
+                                    "Best-effort test: changed sessionSummaryIndexPath from directory to proper file path to prevent write hang"
+                                ],
+                      "testsPassed":  17
+                  },
+                  {
+                      "path":  "packages/agent-orchestrator/src/orchestrator.test.ts",
+                      "result":  "pass",
+                      "testsFailed":  0,
+                      "fixes":  [
+                                    "Added isNonDurableRuntimeDelta export to orchestrator.ts for delta classification test",
+                                    "Modified persistAndBroadcast to skip store persistence for non-durable deltas (message-delta, thought-delta)",
+                                    "Added vi.useRealTimers() at delta test start to workaround global fake timers from vitest.setup.ts",
+                                    "Added persistStateSnapshot() and getLastRestoreMode() to AgentOrchestrator",
+                                    "Added loadStateSnapshot(), writeStateSnapshot(), stateSnapshotPath() to FileOrchestratorEventStore",
+                                    "Modified restoreFromEventStore() to load/apply snapshots for incremental restore",
+                                    "Modified streamingEventIterable to pass afterSequence for incremental snapshot restore",
+                                    "Moved goal-round-completed emission after provider error check in driveGoalRun"
+                                ],
+                      "testsPassed":  32
+                  },
+                  {
+                      "path":  "packages/agent-orchestrator/src/__tests__/types.test.ts",
+                      "result":  "pass",
+                      "testsFailed":  0,
+                      "fixes":  [
+                                    "Replaced unused BackgroundCommandManager import with real type validation tests",
+                                    "Added tests for well-formed OrchestratorEvent and all known event types"
+                                ],
+                      "testsPassed":  2
+                  }
+              ],
+    "round":  2,
+    "status":  "completed"
+}

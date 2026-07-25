@@ -1,0 +1,95 @@
+{
+  "agent": "TS-2",
+  "round": 2,
+  "status": "completed",
+  "files": [
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts",
+      "changes": [
+        "type assertion: (this.server.address() as any).port → (this.server.address() as { port: number }).port",
+        "remove unused param: error429(delay = 1) → error429() — delay was never used in function body"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/factory.test.ts",
+      "changes": [
+        "remove unused import: vi removed from vitest import"
+      ],
+      "remaining_issues": [
+        "_request, _options underscore-prefixed unused params (interface conformance)"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/base-engine.test.ts",
+      "changes": [
+        "type assertion: (init as any)?.signal as AbortSignal → init?.signal as AbortSignal (3 occurrences)",
+        "type assertion: (signal as any).reason → signal.reason"
+      ],
+      "remaining_issues": [
+        "_request, _options, _response, _signal, _body underscore-prefixed unused params (interface conformance)"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts",
+      "changes": [
+        "type assertion: (b as any).text → (b as { text: string }).text (2 occurrences)"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/e2e/provider-factory.test.ts",
+      "changes": [
+        "type assertion: events: any[] → events: ProviderStreamEvent[]",
+        "add import: type ProviderStreamEvent from ../../types"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/e2e/exponential-backoff-e2e.test.ts",
+      "changes": [
+        "remove unused variable: const port = await server.start(0) → await server.start(0)",
+        "type assertion: events: any[] → events: ProviderStreamEvent[]",
+        "type assertion: result: any → result: ProviderCallResult",
+        "add import: type ProviderCallResult from ../../../runtime-components/provider-call-gateway"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/benchmarks/provider-lifecycle.bench.ts",
+      "changes": []
+    },
+    {
+      "path": "packages/agent-runtime/src/provider/__tests__/registry.test.ts",
+      "changes": []
+    },
+    {
+      "path": "packages/agent-runtime/src/provider-gateway-edge.test.ts",
+      "changes": [
+        "remove unused import: DefaultProviderGateway removed from ./provider-gateway import"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider-gateway.test.ts",
+      "changes": [],
+      "remaining_issues": [
+        "_request underscore-prefixed unused param (interface conformance)"
+      ]
+    },
+    {
+      "path": "packages/agent-runtime/src/provider-gateway/credential-resolver.test.ts",
+      "changes": []
+    },
+    {
+      "path": "packages/agent-runtime/src/provider-cache-hints.test.ts",
+      "changes": []
+    }
+  ],
+  "summary": {
+    "files_processed": 12,
+    "files_with_changes": 7,
+    "files_clean": 5,
+    "unused_imports_removed": ["vi", "DefaultProviderGateway"],
+    "type_assertions_replaced": 8,
+    "unused_params_vars_removed": ["delay (param)", "port (var)"],
+    "remaining_eslint_errors": 8,
+    "remaining_details": "all 8 remaining errors are _-prefixed unused params — intentional interface conformance pattern, not file-level fixes",
+    "strategy": "删未使用 import + 条件展开可选字段 + 类型断言"
+  }
+}

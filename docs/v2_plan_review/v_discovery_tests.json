@@ -1,0 +1,265 @@
+[
+  {
+    "issue_id": "GAP-ST-07",
+    "test_path": "packages/agent-runtime/src/provider-stream-contract/normalizer.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/provider-stream-contract/normalizer.ts",
+    "source_exports": [
+      "normalizeProviderStreamEvent",
+      "normalizeProviderStreamEvents",
+      "normalizeAndCoalesceProviderStreamEvents",
+      "NormalizeAndCoalesceOptions",
+      "NormalizeProviderStreamEventOptions"
+    ],
+    "suggested_stub": "import { normalizeProviderStreamEvent, normalizeProviderStreamEvents, normalizeAndCoalesceProviderStreamEvents } from './normalizer';\n\ndescribe('normalizer', () => {\n  it('should normalize provider stream events', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-ST-09",
+    "test_path": "packages/agent-runtime/src/session-loop/index.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/session-loop/index.ts",
+    "source_exports": [
+      "AgentSessionLoop"
+    ],
+    "suggested_stub": "import { AgentSessionLoop } from './index';\n\ndescribe('AgentSessionLoop', () => {\n  it('should create session loop', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-ST-09",
+    "test_path": "packages/agent-runtime/src/session-loop/provider-call.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/session-loop/provider-call.ts",
+    "source_exports": [
+      "ProviderCallCoordinator",
+      "LengthAction"
+    ],
+    "suggested_stub": "import { ProviderCallCoordinator, LengthAction } from './provider-call';\n\ndescribe('ProviderCallCoordinator', () => {\n  it('should handle length finish reason', () => {\n    // TODO: implement handleLengthFinishReason\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-TC-04",
+    "test_path": "packages/agent-daemon/src/mcp-stdio-adapter.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-daemon/src/mcp-stdio-adapter.ts",
+    "source_exports": [
+      "StdioMcpAdapterOptions",
+      "createStdioMcpAdapter"
+    ],
+    "suggested_stub": "import { createStdioMcpAdapter, StdioMcpAdapterOptions } from './mcp-stdio-adapter';\n\ndescribe('mcp-stdio-adapter', () => {\n  it('should create stdio adapter with AbortSignal', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-TC-04",
+    "test_path": "packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts",
+    "source_exports": [
+      "McpServerController"
+    ],
+    "suggested_stub": "import { McpServerController } from './mcp-server-controller';\n\ndescribe('McpServerController', () => {\n  it('should implement circuit breaker for failed connections', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-SE-02",
+    "test_path": "packages/agent-runtime/src/context-compression/compression-utils.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/context-compression/compression-utils.ts",
+    "source_exports": [
+      "textFromBlocks",
+      "numberField",
+      "collectThoughtBlocks",
+      "compactJson",
+      "exitCodeFromToolResult",
+      "formatCommandFact",
+      "isTerminalToolName",
+      "lastUserMessageText",
+      "lastUserMessageMetadata",
+      "readFilesFromSnapshotHints",
+      "modifiedFilesFromSnapshotHints",
+      "includeLatestUserMessage",
+      "includeRequiredToolCallMessages"
+    ],
+    "suggested_stub": "import { includeRequiredToolCallMessages, textFromBlocks, collectThoughtBlocks } from './compression-utils';\n\ndescribe('compression-utils', () => {\n  describe('includeRequiredToolCallMessages', () => {\n    it('should reverse trace tool call IDs', () => {\n      // TODO: implement\n    });\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-SE-04",
+    "test_path": "apps/crish-desktop/src/store/types.test.ts",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/store/types.ts",
+    "source_exports": [
+      "SettingsTabType",
+      "KnownPanelCardId",
+      "CardState",
+      "CardGroupState",
+      "ColumnState",
+      "WorkspaceState",
+      "DiffChangeType",
+      "DiffChange",
+      "FileDiff",
+      "CronTargetSession",
+      "CronJobStatus",
+      "CronJob",
+      "MessageApprovalRiskLevel",
+      "MessageToolApprovalMeta",
+      "MessageToolCallStatus",
+      "MessageToolCall",
+      "StreamingMessageRenderState",
+      "MessageSender",
+      "SessionMessageStatus"
+    ],
+    "suggested_stub": "import type { FileDiff } from './types';\n\ndescribe('store/types', () => {\n  it('FileDiff should accept provisional field', () => {\n    const diff: FileDiff = { provisional: true } as FileDiff;\n    expect(diff.provisional).toBe(true);\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-SE-04",
+    "test_path": "apps/crish-desktop/src/components/DiffCardFileList.test.tsx",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/components/DiffCardFileList.tsx",
+    "source_exports": [
+      "DiffCardFileList"
+    ],
+    "suggested_stub": "import React from 'react';\nimport { render } from '@testing-library/react';\nimport { DiffCardFileList } from './DiffCardFileList';\n\ndescribe('DiffCardFileList', () => {\n  it('should disable Accept button for provisional diffs', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-UI-02",
+    "test_path": "apps/crish-desktop/src/api/directFetchBridge.test.ts",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/api/directFetchBridge.ts",
+    "source_exports": [
+      "streamViaDirectFetch"
+    ],
+    "suggested_stub": "import { streamViaDirectFetch } from './directFetchBridge';\n\ndescribe('directFetchBridge', () => {\n  it('should flush assistantThought on abort', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-UI-02",
+    "test_path": "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.test.ts",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts",
+    "source_exports": [
+      "useStreamCallbacks"
+    ],
+    "suggested_stub": "import { renderHook } from '@testing-library/react';\nimport { useStreamCallbacks } from './useStreamCallbacks';\n\ndescribe('useStreamCallbacks', () => {\n  it('should preserve thinking buffer on stop generation', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-ST-10",
+    "test_path": "packages/agent-runtime/src/provider-stream-contract/json-repair.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/provider-stream-contract/json-repair.ts",
+    "source_exports": [
+      "ProviderToolCallJsonAccumulator",
+      "createProviderToolCallEventFromAccumulator",
+      "repairToolCallJsonArguments"
+    ],
+    "suggested_stub": "import { ProviderToolCallJsonAccumulator, repairToolCallJsonArguments } from './json-repair';\n\ndescribe('json-repair', () => {\n  describe('repairToolCallJsonArguments', () => {\n    it('should handle trailing backslash and truncated literals', () => {\n      // TODO: implement\n    });\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-CS-02",
+    "test_path": "packages/agent-orchestrator/src/types.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-orchestrator/src/types.ts",
+    "source_exports": [
+      "ORCHESTRATOR_PROTOCOL_VERSION",
+      "SessionStatus",
+      "RunStatus",
+      "RunOutcome",
+      "RunOutcomeReason",
+      "OrchestratorRunKind",
+      "GoalRunStatus",
+      "GoalContinuationDecision",
+      "GoalRunOptions",
+      "OrchestratorGoalRunState",
+      "OrchestratorSessionRecord",
+      "OrchestratorRunRecord",
+      "PendingInputRecord",
+      "EnqueuePendingInputRequest",
+      "CancelPendingInputRequest"
+    ],
+    "suggested_stub": "import type { OrchestratorRunRecord, RunStatus } from './types';\n\ndescribe('orchestrator/types', () => {\n  it('onRunCancel callback type should be defined', () => {\n    // TODO: verify onRunCancel type\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-CS-05",
+    "test_path": "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts",
+    "source_exports": [
+      "ChatGPTAccountPool",
+      "ChatGPTAccount",
+      "AccountSelectionStrategy",
+      "PoolStats",
+      "DaemonConfigUpdate",
+      "AccountPoolChangeKind",
+      "AccountPoolChangeCallback",
+      "DaemonConfigUpdateCallback"
+    ],
+    "suggested_stub": "import { ChatGPTAccountPool } from './chatgpt-pool';\n\ndescribe('ChatGPTAccountPool', () => {\n  it('should deduplicate refresh requests via single-flight', () => {\n    // TODO: implement refreshAccount single-flight test\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-CS-08",
+    "test_path": "packages/agent-runtime/src/trace/index.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-runtime/src/trace/index.ts",
+    "source_exports": [
+      "TraceManager",
+      "TraceSpan",
+      "TraceContext",
+      "TraceQuery",
+      "TraceQueryResult",
+      "SpanEvent",
+      "setTraceContext",
+      "getTraceContext",
+      "withTraceContext"
+    ],
+    "suggested_stub": "import { setTraceContext, getTraceContext, withTraceContext, TraceManager } from './index';\n\ndescribe('trace/index', () => {\n  it('setTraceContext should not use enterWith', () => {\n    // TODO: implement\n  });\n  it('withTraceContext should scope context to callback', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-ST-01",
+    "test_path": "apps/crish-desktop/src/api/StreamRenderBuffer.test.ts",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/api/StreamRenderBuffer.ts",
+    "source_exports": [
+      "StreamRenderBuffer",
+      "RenderFrame",
+      "BufferFlushPayload"
+    ],
+    "suggested_stub": "import { StreamRenderBuffer } from './StreamRenderBuffer';\n\ndescribe('StreamRenderBuffer', () => {\n  it('should handle surrogate pairs in chunk truncation', () => {\n    // TODO: implement safeUnicodeCutPosition tests\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-TC-01",
+    "test_path": "packages/agent-daemon/src/protocol/validators/common.test.ts",
+    "exists": false,
+    "source_path": "packages/agent-daemon/src/protocol/validators/common.ts",
+    "source_exports": [
+      "helloSchema",
+      "zCoerceArray",
+      "zDefaultEmpty",
+      "isJsonObject",
+      "isJsonValue"
+    ],
+    "suggested_stub": "import { zCoerceArray, zDefaultEmpty } from './common';\n\ndescribe('validators/common', () => {\n  it('zCoerceArray should wrap non-array values', () => {\n    // TODO: implement\n  });\n  it('zDefaultEmpty should provide fallback', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-UI-03",
+    "test_path": "apps/crish-desktop/src/components/ComposePlusMenu.test.tsx",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/components/ComposePlusMenu.tsx",
+    "source_exports": [
+      "ComposePlusMenu"
+    ],
+    "suggested_stub": "import React from 'react';\nimport { render } from '@testing-library/react';\nimport { ComposePlusMenu } from './ComposePlusMenu';\n\ndescribe('ComposePlusMenu', () => {\n  it('should clamp viewport height and block wheel propagation', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-UI-03",
+    "test_path": "apps/crish-desktop/src/components/ModelPicker.test.tsx",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/components/ModelPicker.tsx",
+    "source_exports": [
+      "ModelPicker"
+    ],
+    "suggested_stub": "import React from 'react';\nimport { render } from '@testing-library/react';\nimport { ModelPicker } from './ModelPicker';\n\ndescribe('ModelPicker', () => {\n  it('should clamp max-height and contain overscroll', () => {\n    // TODO: implement\n  });\n});"
+  },
+  {
+    "issue_id": "GAP-UI-03",
+    "test_path": "apps/crish-desktop/src/components/ProjectPickerMenu.test.tsx",
+    "exists": false,
+    "source_path": "apps/crish-desktop/src/components/ProjectPickerMenu.tsx",
+    "source_exports": [
+      "ProjectPickerMenu"
+    ],
+    "suggested_stub": "import React from 'react';\nimport { render } from '@testing-library/react';\nimport { ProjectPickerMenu } from './ProjectPickerMenu';\n\ndescribe('ProjectPickerMenu', () => {\n  it('should use standard ESM import instead of Function()', () => {\n    // TODO: implement\n  });\n});"
+  }
+]

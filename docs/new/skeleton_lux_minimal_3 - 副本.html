@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conex Desktop Workspace - Quiet Luxury Skeleton</title>
+  <style>
+    /* -------------------------------------------------------------------------- */
+    /* DESIGN SYSTEM & QUIET LUXURY CSS VARIABLES                                  */
+    /* -------------------------------------------------------------------------- */
+    :root {
+      --bg-root: #08080a;
+      --bg-sidebar: #0c0c0e;
+      --bg-card: #111114;
+      --bg-card-header: #151518;
+      --bg-elevated: #1a1a1e;
+      --bg-input: rgba(255, 255, 255, 0.025);
+      
+      --border-hairline: rgba(255, 255, 255, 0.05);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(255, 255, 255, 0.14);
+
+      --text-muted: rgba(255, 255, 255, 0.25);
+      --text-subtle: rgba(255, 255, 255, 0.45);
+      --text-primary: rgba(255, 255, 255, 0.88);
+
+      --skel-base: rgba(255, 255, 255, 0.04);
+      --skel-highlight: rgba(255, 255, 255, 0.09);
+
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", "Inter", sans-serif;
+      --font-mono: "SF Mono", "Geist Mono", "JetBrains Mono", monospace;
+
+      --sidebar-width: 250px;
+      --titlebar-h: 36px;
+      --tabbar-h: 34px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-root);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* SKELETON ANIMATION                                                          */
+    /* -------------------------------------------------------------------------- */
+    .skel {
+      background: linear-gradient(
+        90deg,
+        var(--skel-base) 0%,
+        var(--skel-highlight) 50%,
+        var(--skel-base) 100%
+      );
+      background-size: 200% 100%;
+      animation: skel-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    @keyframes skel-pulse {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* LAYOUT SHELL                                                               */
+    /* -------------------------------------------------------------------------- */
+    .app-shell {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background-color: var(--bg-root);
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* SIDEBAR                                                                    */
+    /* -------------------------------------------------------------------------- */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100%;
+      background-color: var(--bg-sidebar);
+      border-right: 1px solid var(--border-hairline);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .sidebar-top {
+      padding: 12px 10px 10px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sidebar-brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 24px;
+      padding: 0 4px;
+    }
+
+    .sidebar-new-btn {
+      width: 100%;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.02);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .sidebar-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-microcaps {
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 4px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-item {
+      height: 26px;
+      border-radius: 5px;
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-item.active {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .sidebar-footer {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* MAIN WORKSPACE CANVAS                                                      */
+    /* -------------------------------------------------------------------------- */
+    .workspace-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-width: 0;
+      background-color: var(--bg-root);
+    }
+
+    /* L0 & L1 WORKSPACE CHROME */
+    .chrome-row-l0 {
+      height: var(--titlebar-h);
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      flex-shrink: 0;
+    }
+
+    .chrome-row-l1 {
+      height: var(--tabbar-h);
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 10px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .ws-tab {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+    }
+
+    .ws-tab.active {
+      background: var(--bg-card);
+      border-color: var(--border-hairline);
+    }
+
+    /* WORKSPACE CANVAS / SPLIT GRID */
+    .canvas-grid {
+      flex: 1;
+      display: flex;
+      height: calc(100% - var(--titlebar-h) - var(--tabbar-h));
+      min-height: 0;
+      position: relative;
+    }
+
+    .canvas-col {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-width: 0;
+      position: relative;
+    }
+
+    .col-splitter {
+      width: 1px;
+      height: 100%;
+      background: var(--border-hairline);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .col-splitter::after {
+      content: '';
+      position: absolute;
+      top: 20%;
+      bottom: 20%;
+      left: 0;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, var(--border-active), transparent);
+    }
+
+    .row-splitter {
+      height: 1px;
+      width: 100%;
+      background: var(--border-hairline);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* CARDS & PANELS                                                             */
+    /* -------------------------------------------------------------------------- */
+    .card-panel {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border-hairline);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .card-header {
+      height: 36px;
+      padding: 0 12px;
+      background: var(--bg-card-header);
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .card-body {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    /* CHAT & INLINE AGENT SPECIFICS */
+    .chat-user-msg {
+      align-self: flex-end;
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .inline-agent-block {
+      border: 1px solid var(--border-hairline);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.015);
+      overflow: hidden;
+    }
+
+    .inline-agent-head {
+      height: 32px;
+      padding: 0 10px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .inline-agent-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .thinking-fold {
+      padding: 6px 10px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed var(--border-hairline);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .composer-footer {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .composer-box {
+      min-height: 42px;
+      border-radius: 7px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-input);
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    /* TERMINAL SPECIFICS */
+    .terminal-card {
+      background: #09090b;
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .terminal-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- 1. LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="sidebar-brand-row">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="skel" style="width:16px; height:16px; border-radius:4px;"></span>
+            <span class="skel" style="width:72px; height:12px;"></span>
+          </div>
+          <span class="skel" style="width:14px; height:14px; border-radius:3px;"></span>
+        </div>
+
+        <div class="sidebar-new-btn">
+          <span class="skel" style="width:12px; height:12px;"></span>
+          <span class="skel" style="width:84px; height:11px;"></span>
+          <span class="skel" style="width:24px; height:10px; margin-left:auto; border-radius:3px;"></span>
+        </div>
+      </div>
+
+      <div class="sidebar-scroll">
+        <!-- Section: Pinned -->
+        <div class="sidebar-section">
+          <div class="sidebar-microcaps">
+            <span class="skel" style="width:40px; height:9px;"></span>
+            <span class="skel" style="width:12px; height:9px;"></span>
+          </div>
+          <div class="sidebar-item active">
+            <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+            <span class="skel" style="width:110px; height:11px;"></span>
+          </div>
+          <div class="sidebar-item">
+            <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+            <span class="skel" style="width:90px; height:11px;"></span>
+          </div>
+        </div>
+
+        <!-- Section: Workspaces -->
+        <div class="sidebar-section">
+          <div class="sidebar-microcaps">
+            <span class="skel" style="width:65px; height:9px;"></span>
+            <span class="skel" style="width:12px; height:9px;"></span>
+          </div>
+          <div class="sidebar-item">
+            <span class="skel" style="width:12px; height:12px;"></span>
+            <span class="skel" style="width:75px; height:11px;"></span>
+          </div>
+          <div class="sidebar-item">
+            <span class="skel" style="width:12px; height:12px;"></span>
+            <span class="skel" style="width:95px; height:11px;"></span>
+          </div>
+        </div>
+
+        <!-- Section: Recent Sessions -->
+        <div class="sidebar-section">
+          <div class="sidebar-microcaps">
+            <span class="skel" style="width:80px; height:9px;"></span>
+          </div>
+          <div class="sidebar-item"><span class="skel" style="width:120px; height:11px;"></span></div>
+          <div class="sidebar-item"><span class="skel" style="width:100px; height:11px;"></span></div>
+          <div class="sidebar-item"><span class="skel" style="width:135px; height:11px;"></span></div>
+          <div class="sidebar-item"><span class="skel" style="width:85px; height:11px;"></span></div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="skel" style="width:8px; height:8px; border-radius:50%;"></span>
+          <span class="skel" style="width:50px; height:10px;"></span>
+        </div>
+        <span class="skel" style="width:14px; height:14px; border-radius:3px;"></span>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN WORKSPACE CANVAS -->
+    <main class="workspace-main">
+      
+      <!-- L0 Titlebar Chrome -->
+      <header class="chrome-row-l0">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="display:flex; gap:6px;">
+            <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+            <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+            <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+          </div>
+          <span class="skel" style="width:1px; height:12px;"></span>
+          <span class="skel" style="width:110px; height:12px;"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="skel" style="width:48px; height:18px; border-radius:4px;"></span>
+          <span class="skel" style="width:16px; height:16px;"></span>
+        </div>
+      </header>
+
+      <!-- L1 Session Tab Bar Chrome -->
+      <nav class="chrome-row-l1">
+        <div class="ws-tab active">
+          <span class="skel" style="width:12px; height:12px;"></span>
+          <span class="skel" style="width:80px; height:11px;"></span>
+          <span class="skel" style="width:10px; height:10px; border-radius:50%;"></span>
+        </div>
+        <div class="ws-tab">
+          <span class="skel" style="width:12px; height:12px;"></span>
+          <span class="skel" style="width:105px; height:11px;"></span>
+        </div>
+        <div class="ws-tab">
+          <span class="skel" style="width:12px; height:12px;"></span>
+          <span class="skel" style="width:70px; height:11px;"></span>
+        </div>
+        <span class="skel" style="width:20px; height:20px; margin-bottom:4px; margin-left:4px;"></span>
+      </nav>
+
+      <!-- Split Canvas Grid -->
+      <div class="canvas-grid">
+
+        <!-- COLUMN 1: Main Conversation & Inline Agent Panel (flex: 1.25) -->
+        <div class="canvas-col" style="flex: 1.25;">
+          <section class="card-panel">
+            <header class="card-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="skel" style="width:14px; height:14px;"></span>
+                <span class="skel" style="width:130px; height:12px;"></span>
+                <span class="skel" style="width:45px; height:16px; border-radius:99px;"></span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <span class="skel" style="width:14px; height:14px;"></span>
+                <span class="skel" style="width:14px; height:14px;"></span>
+              </div>
+            </header>
+
+            <div class="card-body">
+              <!-- User Message Bubble -->
+              <div class="chat-user-msg">
+                <span class="skel" style="width:180px; height:11px;"></span>
+                <span class="skel" style="width:240px; height:11px;"></span>
+              </div>
+
+              <!-- Subagent Inline Panel -->
+              <div class="inline-agent-block">
+                <div class="inline-agent-head">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="skel" style="width:12px; height:12px;"></span>
+                    <span class="skel" style="width:90px; height:11px;"></span>
+                    <span class="skel" style="width:42px; height:14px; border-radius:4px;"></span>
+                  </div>
+                  <span class="skel" style="width:12px; height:12px;"></span>
+                </div>
+
+                <div class="inline-agent-body">
+                  <!-- Thinking Fold Header -->
+                  <div class="thinking-fold">
+                    <span class="skel" style="width:10px; height:10px;"></span>
+                    <span class="skel" style="width:55px; height:10px;"></span>
+                    <span class="skel" style="width:140px; height:8px; opacity:0.6;"></span>
+                  </div>
+
+                  <!-- Output Lines -->
+                  <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+                    <span class="skel" style="width:92%; height:11px;"></span>
+                    <span class="skel" style="width:85%; height:11px;"></span>
+                    <span class="skel" style="width:60%; height:11px;"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Assistant Response Content Lines -->
+              <div style="display:flex; flex-direction:column; gap:8px; padding-left:4px;">
+                <span class="skel" style="width:95%; height:11px;"></span>
+                <span class="skel" style="width:88%; height:11px;"></span>
+                <span class="skel" style="width:92%; height:11px;"></span>
+                <span class="skel" style="width:40%; height:11px;"></span>
+              </div>
+            </div>
+
+            <!-- Composer Floating Footer -->
+            <footer class="composer-footer">
+              <div class="composer-box">
+                <span class="skel" style="width:160px; height:11px; margin-bottom:2px;"></span>
+                <div style="display:flex; gap:6px;">
+                  <span class="skel" style="width:20px; height:20px; border-radius:4px;"></span>
+                  <span class="skel" style="width:20px; height:20px; border-radius:4px;"></span>
+                </div>
+              </div>
+            </footer>
+          </section>
+        </div>
+
+        <!-- Vertical Column Splitter -->
+        <div class="col-splitter"></div>
+
+        <!-- COLUMN 2: Split Right Panel (Terminal & Inspector) (flex: 1) -->
+        <div class="canvas-col" style="flex: 1;">
+          
+          <!-- Top Split Row: Terminal Card (flex: 1.1) -->
+          <section class="card-panel terminal-card" style="flex: 1.1;">
+            <header class="card-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="skel" style="width:13px; height:13px;"></span>
+                <span class="skel" style="width:80px; height:11px;"></span>
+                <span class="skel" style="width:4px; height:4px; border-radius:50%;"></span>
+                <span class="skel" style="width:60px; height:10px;"></span>
+                <span class="skel" style="width:35px; height:14px; border-radius:3px;"></span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <span class="skel" style="width:12px; height:12px;"></span>
+                <span class="skel" style="width:12px; height:12px;"></span>
+                <span class="skel" style="width:12px; height:12px;"></span>
+              </div>
+            </header>
+
+            <div class="card-body" style="font-family: var(--font-mono); gap: 10px;">
+              <div class="terminal-line">
+                <span class="skel" style="width:24px; height:10px;"></span>
+                <span class="skel" style="width:140px; height:10px;"></span>
+              </div>
+              <div class="terminal-line">
+                <span class="skel" style="width:280px; height:10px; opacity:0.6;"></span>
+              </div>
+              <div class="terminal-line">
+                <span class="skel" style="width:210px; height:10px; opacity:0.6;"></span>
+              </div>
+              <div class="terminal-line">
+                <span class="skel" style="width:180px; height:10px; opacity:0.6;"></span>
+              </div>
+              <div class="terminal-line" style="margin-top: 6px;">
+                <span class="skel" style="width:24px; height:10px;"></span>
+                <span class="skel" style="width:8px; height:12px;"></span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Horizontal Row Splitter -->
+          <div class="row-splitter"></div>
+
+          <!-- Bottom Split Row: Inspector / Status Panel (flex: 0.9) -->
+          <section class="card-panel" style="flex: 0.9;">
+            <header class="card-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="skel" style="width:13px; height:13px;"></span>
+                <span class="skel" style="width:95px; height:11px;"></span>
+              </div>
+              <span class="skel" style="width:14px; height:14px;"></span>
+            </header>
+
+            <div class="card-body">
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span class="skel" style="width:70px; height:10px;"></span>
+                  <span class="skel" style="width:110px; height:10px;"></span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span class="skel" style="width:85px; height:10px;"></span>
+                  <span class="skel" style="width:65px; height:10px;"></span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span class="skel" style="width:60px; height:10px;"></span>
+                  <span class="skel" style="width:90px; height:10px;"></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+</body>
+</html>

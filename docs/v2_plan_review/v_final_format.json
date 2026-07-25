@@ -1,0 +1,80 @@
+[
+  {
+    "check": "JSON 解析",
+    "status": "pass",
+    "detail": "ledger_v2_CORRECTED.json 可被正确解析为 JSON 对象，包含 version、generated_at、total_issues (37)、summary、issues 数组。",
+    "evidence": "ConvertFrom-Json 成功，解析出 37 条 issues，version='2.0'"
+  },
+  {
+    "check": "JSON 字段完整性 (review_status)",
+    "status": "pass",
+    "detail": "所有 37 条 issue 均包含 review_status 字段（值为 'verified' 或 'partial'）和 status 字段（值为 'open' 等）。",
+    "evidence": "GAP-ST-01 review_status='verified', GAP-ST-10 review_status='partial'——37 条全部 checked"
+  },
+  {
+    "check": "Markdown 代码块语言标记",
+    "status": "fail",
+    "detail": "v2_corrected_plan.md 中共计 68 个 ``` 代码块，全部缺少语言标记（如 ```typescript、```rust、```json）。其他校正文档也存在类似问题。",
+    "evidence": "v2_corrected_plan.md: 68/68 tagless；quality_gates_and_waves_v2_CORRECTED.md: 8/12 tagless"
+  },
+  {
+    "check": "Markdown 表格对齐",
+    "status": "pass",
+    "detail": "v2_review_summary.md 和 quality_gates_and_waves_v2_CORRECTED.md 中的表格均使用正确对齐标记（:---、:---:、---:），列数一致。v2_corrected_plan.md 末尾的优先级排序汇总表对齐正确。",
+    "evidence": "v2_review_summary.md 的 4×5 审查轮次表、6×4 根因分布表、37×5 综合大表均对齐正确"
+  },
+  {
+    "check": "编码 UTF-8 无 BOM",
+    "status": "pass",
+    "detail": "全部 7 个文件均为 UTF-8 无 BOM 编码。",
+    "evidence": "ledger_v2_CORRECTED.json 首字节 0x7B('{')；全部 .md 文件首字节非 EF BB BF"
+  },
+  {
+    "check": "修复步骤完整性（三要素）",
+    "status": "pass",
+    "detail": "v2_corrected_plan.md 中除 GAP-ST-06（明确标注'与 ST-05 同一文件、同一修改批'）外的所有 GAP 条目均包含文件路径:行号 + → 动作 + 具体改动三要素。",
+    "evidence": "35 个 GAP 段中 34 个包含 `:行号` 和 → 箭头；GAP-ST-06 因与 ST-05 共享修复，无独立行号属于合理例外"
+  },
+  {
+    "check": "路径前缀统一性",
+    "status": "pass",
+    "detail": "v2_corrected_plan.md 中所有文件路径均为项目根相对路径，统一使用 packages/、apps/、crates/ 前缀，无绝对路径。",
+    "evidence": "共 92 处相对路径引用，0 处形如 C:\\Software\\conex\\... 的绝对路径"
+  },
+  {
+    "check": "缺失关键信息",
+    "status": "pass",
+    "detail": "未发现只写'修改'但未说明具体改法的条目。所有步骤都通过 → 箭头后的描述明确说明了改动内容。",
+    "evidence": "例如 normalizer.ts:45-49 → '扩展 legacyFinishReason：除 error/tool-call 外，增加 length→length 映射'"
+  },
+  {
+    "check": "Round 优先级排序合理性",
+    "status": "pass",
+    "detail": "排序遵循自底向上原则：R1（基础设施：normalizer、进程生命周期、MCP Stdio 信号绑定）→ R2（并发核心：Subagent Abort、Token 估算）→ R3（流式层：StreamRenderBuffer、SSE UTF-8、413 降级）→ R4（代码编辑算法：seekSequence、symlink 保护）→ R8（边界治理：Live Agent 信号量、BoundedMap 淘汰清理）。底层基础修复在上层依赖之前。",
+    "evidence": "ST-09 依赖 ST-07+ST-08（R1）；SE-01 依赖 ST-03（R3→R4）；CS-04 依赖 CS-08（R2→R8）"
+  },
+  {
+    "check": "优先级汇总表计数一致性",
+    "status": "fail",
+    "detail": "v2_corrected_plan.md 末页的'优先级排序汇总'表中，R2 声称 8 项但实际上文列出了 9 项（ST-04, ST-10, CS-01, CS-02, CS-03, CS-05, CS-06, CS-08, CS-09），R3 声称 7 项但实际上文列出了 9 项（ST-01, ST-02, ST-03, ST-05, ST-06, TC-01, TC-03, PM-04, PM-05）。计数与内容不符。",
+    "evidence": "表格 R2 列'8'但列出 9 个 ID；R3 列'7'但列出 9 个 ID"
+  },
+  {
+    "check": "verification_command 可用性（测试文件存在性）",
+    "status": "fail",
+    "detail": "Ledger 中 37 条 issue 的 verification_command 指向的测试文件，11 个 vitest 路径在仓库中不存在。其中 GAP-ST-01 的路径为已知幻觉路径（应位于 packages/shared-utils/src/__tests__/）。其余 10 个确实不存在。",
+    "evidence": "MISSING: normalizer.test.ts, index.test.ts (session-loop), json-repair.test.ts, chatgpt-pool.test.ts, trace.test.ts, mcp-stdio-adapter.test.ts, compression-utils.test.ts, directFetchBridge.test.ts, ProjectPickerMenu.test.ts, StreamRenderBuffer.test.ts"
+  },
+  {
+    "check": "verification_command 可用性（cargo 命令）",
+    "status": "warn",
+    "detail": "6 个 cargo test -p <crate> 命令和 2 个 cargo test --manifest-path 命令对应的 crate 存在但无法在此环境中验证测试是否实际通过。从 crate 包名看路径合理（conex-stream、conex-compaction、conex-db、conex-diff、conex-fs、conex-sandbox），属于可执行命令。",
+    "evidence": "cargo test -p conex-stream / conex-compaction / conex-db / conex-diff / conex-fs / conex-sandbox 及 --manifest-path 到 agent-workbench"
+  },
+  {
+    "check": "校正范围与排除项一致性",
+    "status": "pass",
+    "detail": "校正版计划声明排除 6 项（ST-10 partial feasible、CS-07 partial root cause、TC-03 partial root cause、PM-02 partial root cause+feasible、SE-02 partial root cause、UI-04 partial root cause+feasible）。核对 review_summary.md 的 partial 列表完全一致。这 6 项确实不在已执行计划的 31 项中。",
+    "evidence": "v2_corrected_plan.md 第 3-4 行列出 6 项排除，v2_review_summary.md 第 30-34 行 partial 列表完全对应"
+  }
+]

@@ -1,0 +1,19 @@
+apps/crish-desktop/src/components/ChatHeaderMore.tsx(238,3): error TS1005: ')' expected.
+apps/crish-desktop/src/components/ChatStatusRibbons.tsx(913,3): error TS1005: ')' expected.
+apps/crish-desktop/src/components/ComposePlusMenu.tsx(233,3): error TS1135: Argument expression expected.
+apps/crish-desktop/src/components/DiffCardFileList.tsx(337,3): error TS1005: ')' expected.
+apps/crish-desktop/src/components/DiffCardGitActions.tsx(106,3): error TS1005: ')' expected.
+apps/crish-desktop/src/components/ModelPicker.tsx(300,3): error TS1005: ')' expected.
+apps/crish-desktop/src/components/SettingsPanel.tsx(730,1): error TS1005: ')' expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(356,6): error TS17008: JSX element 'div' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(445,7): error TS1005: ')' expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(517,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(520,37): error TS17008: JSX element 'Props' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(520,74): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(521,3): error TS1109: Expression expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(610,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(613,44): error TS17008: JSX element 'Props' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(613,62): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(614,3): error TS1109: Expression expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(625,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(626,1): error TS1005: '</' expected.

@@ -1,0 +1,106 @@
+[
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-01: StreamRenderBuffer.ts surrogate pair 切割——flushFrame 仅退格 High Surrogate，切在 Low Surrogate 或无 \\n 行时抛出乱码",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-01",
+    "evidence": "apps/crish-desktop/src/api/StreamRenderBuffer.ts:164-173 — safeUnicodeCutPosition 同时检查 forward (charCodeAt(pos) >= 0xDC00) 和 backward (charCodeAt(pos-1) >= 0xD800)，覆盖低代理在前和在后两种情况；且在 L199, L217, L247 三处 splitAt 调用处统一使用 safeUnicodeCutPosition",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-02: TextDecoder 流式解包残余 Byte Buffer 丢失——openai-stream-parse.ts / directFetchBridge.ts 流结束 done:true 时未 flush decoder 缓冲区",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-02",
+    "evidence": "packages/agent-runtime/src/openai-stream-parse.ts:150-153 — 循环后调用 decoder.decode() 无 {stream:true} 并追加到 buffer；apps/crish-desktop/src/api/directFetchBridge.ts:287-289 — 相同 flush 模式",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-03: Rust SSE 帧解析使用 from_utf8_lossy 导致跨包 UTF-8 字节变成 \\u{FFFD} 乱码",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-03",
+    "evidence": "crates/conex-stream/src/parser/sse.rs:74 — 帧分割前用 std::str::from_utf8 校验有效性，无效时不切帧；L98 — parse_frame 内用 from_utf8().expect() 而非 from_utf8_lossy，杜绝静默替换",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-04: Token 估算器 TS/Rust 失配——compaction.rs 漏算 System Prompt、Tools Schema 开销与 1.15 安全系数",
+    "status": "partially_fixed",
+    "fixed_by": "GAP-ST-04",
+    "evidence": "crates/conex-compaction/src/compaction.rs:20 — 新增 static_overhead: 300（硬编码估算）；L12 — SAFETY_FACTOR: 1.15；L48-53 — calculate_total_tokens 使用 ((content_tokens + static_overhead) * SAFETY_FACTOR) 公式对齐 TS。但 static_overhead 为固定值 300 而非动态计算 tools schema 长度，TS 侧 estimateContextTokens 按实际 tools JSON 长度计算，仍存在精度差距",
+    "if_still_exists": "Rust compaction 引擎无 tools schema 入参，300 为固定估算值而非动态计算；大 tools schema（>4K tokens）场景下 TS 侧估算可能显著高于 Rust 侧"
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-05+ST-06: 413 Payload Too Large 图片剥离——仅检查 metadata.contentParts，忽略 blocks 内 Base64 图片，且 metadata 与 blocks 不同步",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-05+ST-06",
+    "evidence": "packages/agent-runtime/src/payload-image-recovery.ts:27-29 — 新增 isImageBlock 识别 block.type==='image'；L42-44 — countContentPartImages 叠加 blocks 中的图片计数；L86-97 — scrubImagesOldestFirst 同时处理 blocks，将 image block 替换为 text 占位符；L105-109 — out.push 同时更新 metadata 和 blocks，保持两端同步",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-07: normalizer.ts legacyFinishReason 强制将 'length' 信号归一为 'stop'，抹杀截断信号",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-07",
+    "evidence": "packages/agent-runtime/src/provider-stream-contract/normalizer.ts:48 — 新增 if (reason === 'length' || reason === 'max_tokens') return 'length'，保留截断信号",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-08: provider-response-consumer.ts buildMessage 忽略流事件 finishReason，硬编码 stopReason",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-08",
+    "evidence": "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:37 — 新增 finishReasonFromStream 字段；L108-110 — 'end' 事件中捕获 event.finishReason；L125 — 传递至 buildMessage；L136 — buildMessage 签名新增 finishReason?: string 参数；L142 — stopReason=(finishReason ?? 'stop')，保留原始 finishReason；L155 — 新增 metadata.providerFinishReason",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-09: session-loop/index.ts handleNoToolCalls 中 stopReason==='length' 因上游抹杀恒为 false，续写/扩容失效",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-09（依赖 ST-07+ST-08）",
+    "evidence": "packages/agent-runtime/src/session-loop/index.ts:303 — msg.metadata?.stopReason === 'length' 判定现在可正常触发；L303-314 — 完整的 handleLengthFinishReason 和 shouldRetryWithEscalation 续写逻辑；L250 — handleStreaming 工具分支也使用 stopReason==='length' 判断",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_01_streaming_tokens.md",
+    "gap_item": "ST-10: json-repair.ts balanceJsonContainers 尾部悬挂反斜杠 \\ 导致闭合双引号被转义，JSON.parse 持续报错；未完成字面量无法补全",
+    "status": "fixed",
+    "fixed_by": "GAP-ST-10",
+    "evidence": "packages/agent-runtime/src/provider-stream-contract/json-repair.ts:224-229 — 闭合前检查 text.endsWith('\\\\') && !text.endsWith('\\\\\\\\')，剥离尾部分隔反斜杠再加双引号；L182-193 — completeTruncatedLiterals 补全截断布尔/null 字面量（t→true, tr→true, f→alse, fa→lse, n→ull, nu→ll, nul→l）",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_03_tool_call_fault_tolerance.md",
+    "gap_item": "TC-01: extractToolArgumentObject 无法处理 null/[] 参数导致 {value: null} 或 {value: []} 传给底层工具",
+    "status": "fixed",
+    "fixed_by": "GAP-TC-01",
+    "evidence": "packages/agent-runtime/src/tools.ts:141-146 — 新增 value===null 返回 {}；Array.isArray(value) 返回 {items: value}；typeof value==='string' => JSON.parse 容错。配合 L249-263 coerceToolInputToSchema 实现 schema 级类型自动转换",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_03_tool_call_fault_tolerance.md",
+    "gap_item": "TC-02: 完全缺失 runIntentDenylist—人类拒绝后不记录黑名单且未标记 retryable:false，引发无限重复弹窗死循环",
+    "status": "fixed",
+    "fixed_by": "GAP-TC-02",
+    "evidence": "packages/agent-daemon/src/daemon-approval-handler.ts:22 — 新增 runIntentDenylist；L76-79 — requestApproval 中检查 denylist 命中即返回 deny+retryable:false；L227-230 — decisionFromResult 拒绝分支写入 denylist；L128 — clearRun 清理 denylist；L243 — 拒绝决策 metadata 含 retryable:false",
+    "if_still_exists": ""
+  },
+  {
+    "gap_source": "conex_gap_03_tool_call_fault_tolerance.md",
+    "gap_item": "TC-03: stringifyToolOutput 空 json 数组被 JSON.stringify 导出为 '[]' 污染上下文；tool 消息 content:\"\" 可能导致 Provider HTTP 400",
+    "status": "still_exists",
+    "fixed_by": "未修复",
+    "evidence": "packages/agent-runtime/src/tool-output-budget.ts:63-69 — stringifyToolOutput 当 output.json!==undefined 时直接 JSON.stringify，未拦截空数组/空对象；packages/agent-runtime/src/openai-request-build.ts:58-63 — 同样缺少空值拦截。输出 '[]' 或 '{}' 可能污染工具结果上下文",
+    "if_still_exists": "tool-output-budget.ts L65: `if (output.json !== undefined) return JSON.stringify(output.json, null, 2);` 和 openai-request-build.ts L60: `if (output.json !== undefined) return JSON.stringify(output.json);` 均未对空数组/空对象做特殊处理。需添加 `if (Array.isArray(output.json) && output.json.length === 0) return '';` 和 `if (isPlainObject(output.json) && Object.keys(output.json).length === 0) return '';` 拦截"
+  },
+  {
+    "gap_source": "conex_gap_03_tool_call_fault_tolerance.md",
+    "gap_item": "TC-04: MCP 工具 client.callTool 完全忽略 AbortSignal 与超时；无熔断器；所有 MCP 工具硬编码 isReadOnly: false",
+    "status": "fixed",
+    "fixed_by": "GAP-TC-04",
+    "evidence": "packages/agent-daemon/src/mcp-stdio-adapter.ts:197-202 — 30s AbortSignal.timeout + context.signal 通过 AbortSignal.any 合并传入 client.callTool；L188-191 — isReadOnly 按工具名前缀（list/get/read/search/query）智能判定。packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts:47-48 — consecutiveFailures + maxConsecutiveFailures=3 熔断计数器；L405-422 — executeManagedTool 成功复位/失败累加，达阈值后 degrade() 切断该 server",
+    "if_still_exists": ""
+  }
+]

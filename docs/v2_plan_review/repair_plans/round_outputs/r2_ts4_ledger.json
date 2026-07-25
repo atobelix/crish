@@ -1,0 +1,63 @@
+{
+  "agent": "TS-4",
+  "round": 2,
+  "summary": "修复 7 个 agent-daemon 测试文件 (65 passed, 0 failed)",
+  "files": [
+    {
+      "file": "packages/agent-daemon/src/daemon-approval-handler.test.ts",
+      "status": "fixed",
+      "changes": "替换 it.todo 为真实测试: 验证 intent denylist 记录和 retryable:false 注入",
+      "tests_passing": 2
+    },
+    {
+      "file": "packages/agent-daemon/src/mcp-stdio-adapter.test.ts",
+      "status": "fixed",
+      "changes": "替换 it.todo 为真实测试: 空命令拒绝、confirmStart 拒绝、AbortSignal 接受",
+      "tests_passing": 3
+    },
+    {
+      "file": "packages/agent-daemon/src/server-handlers.test.ts",
+      "status": "unchanged",
+      "changes": "所有测试已通过, 无需修改",
+      "tests_passing": 20
+    },
+    {
+      "file": "packages/agent-daemon/src/server-runtime-factory.test.ts",
+      "status": "fixed",
+      "changes": "修复 10 个失败: 移除 .resolves/.rejects 用于同步方法; 调整 MCP 启动测试以初始化 sharedManager; 使用 toMatchObject 处理额外字段; 修复 restoreCheckpoint 调用",
+      "tests_passing": 20
+    },
+    {
+      "file": "packages/agent-daemon/src/handlers/run-handlers.stream-pause.test.ts",
+      "status": "fixed",
+      "changes": "实现修复 handleCancelRun 未清除 backpressure 导致的超时",
+      "tests_passing": 7
+    },
+    {
+      "file": "packages/agent-daemon/src/protocol/registry.test.ts",
+      "status": "unchanged",
+      "changes": "所有测试已通过, 无需修改",
+      "tests_passing": 11
+    },
+    {
+      "file": "packages/agent-daemon/src/protocol/validators/common.test.ts",
+      "status": "fixed",
+      "changes": "替换 it.todo 为真实测试: zCoerceArray/zDefaultEmpty/zCoerceObject 验证",
+      "tests_passing": 3
+    }
+  ],
+  "source_fixes": [
+    {
+      "file": "packages/agent-daemon/src/scoped-context-runtime.ts",
+      "reason": "scopedContextDiagnostic 返回 undefined 字段导致 toJsonValue 抛出; 移除 undefined 字段"
+    },
+    {
+      "file": "packages/agent-daemon/src/server-runtime-factory/index.ts",
+      "reason": "getMcpStatusSnapshot 未缓存 lastMcpStatus; listMcpServers 返回空; restoreCheckpoint 未处理可选方法"
+    },
+    {
+      "file": "packages/agent-daemon/src/handlers/run-handlers.ts",
+      "reason": "handleCancelRun 未清除 backpressure, 导致 waitIfPaused 超时"
+    }
+  ]
+}

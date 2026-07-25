@@ -1,0 +1,398 @@
+﻿
+apps/agent-workbench/src/cli/goal-runner.ts(107,40): error TS2379: Argument of type '{ runtime: WorkbenchRuntimeFactory
+Result; cwd: string; prompt: string; mode: "execute"; initialSnapshot: WorkbenchTaskSnapshot | undefined; backgroundDra
+inTimeoutMs: number; runBudget: WorkbenchRunnerBudgetOptions | undefined; }' is not assignable to parameter of type 'Wo
+rkbenchRunnerOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's
+ properties.
+apps/agent-workbench/src/cli/goal-runner.ts(123,19): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(124,34): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(125,7): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "error"; }' is not assignable to 
+type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(143,19): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(144,34): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(159,21): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(160,36): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(161,9): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "error"; }' is not assignable to 
+type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(174,19): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(175,34): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(186,19): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(187,34): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(188,7): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "error"; }' is not assignable to 
+type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(251,17): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(252,32): error TS2379: Argument of type '{ index: number; prompt: string; e
+vents: WorkbenchRunEvent[]; snapshot: WorkbenchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; }' is
+ not assignable to parameter of type 'WorkbenchGoalRound' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(256,7): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "complete"; }' is not assignable 
+to type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(259,7): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "pause"; }' is not assignable to 
+type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(272,7): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "stalled"; }' is not assignable t
+o type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the t
+arget's properties.
+apps/agent-workbench/src/cli/goal-runner.ts(279,3): error TS2375: Type '{ rounds: WorkbenchGoalRound[]; snapshot: Workb
+enchTaskSnapshot | undefined; decision: WorkbenchContinuationDecision; stoppedReason: "max-rounds"; }' is not assignabl
+e to type 'WorkbenchGoalResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of th
+e target's properties.
+apps/agent-workbench/src/cli/main.ts(131,5): error TS2375: Type '{ difficulty: WorkbenchRunBudgetDifficulty | undefined
+; maxTotalTokens: number | undefined; }' is not assignable to type 'WorkbenchRunnerBudgetOptions' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(158,5): error TS2375: Type '{ difficulty: WorkbenchRunBudgetDifficulty | undefined
+; maxTotalTokens: number | undefined; }' is not assignable to type 'WorkbenchRunnerBudgetOptions' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(182,5): error TS2375: Type '{ difficulty: WorkbenchRunBudgetDifficulty | undefined
+; maxTotalTokens: number | undefined; }' is not assignable to type 'WorkbenchRunnerBudgetOptions' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(210,33): error TS2379: Argument of type '{ cwd: string; configPath: string | undef
+ined; sessionPath: string | undefined; apiKey: string | undefined; resumeSession: boolean; maxTurns: number | undefined
+; }' is not assignable to parameter of type 'WorkbenchRuntimeFactoryOptions' with 'exactOptionalPropertyTypes: true'. C
+onsider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(220,16): error TS6133: 'createCliTaskIterable' is declared but its value is never 
+read.
+apps/agent-workbench/src/cli/main.ts(227,5): error TS2375: Type '{ difficulty: WorkbenchRunBudgetDifficulty | undefined
+; maxTotalTokens: number | undefined; }' is not assignable to type 'WorkbenchRunnerBudgetOptions' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(246,5): error TS2375: Type '{ difficulty: WorkbenchRunBudgetDifficulty | undefined
+; maxTotalTokens: number | undefined; }' is not assignable to type 'WorkbenchRunnerBudgetOptions' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(308,45): error TS2379: Argument of type '{ id: string | undefined; branchId: strin
+g | undefined; parentRunId: string | undefined; parentBranchId: string | undefined; command: string; cwd: string; provi
+derId: string; modelId: string; ... 5 more ...; userGoal: string; }' is not assignable to parameter of type 'StartRunRe
+cordInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties
+.
+apps/agent-workbench/src/cli/main.ts(369,3): error TS2375: Type '{ events: WorkbenchRunEvent[]; snapshot: WorkbenchTask
+Snapshot | undefined; decision: WorkbenchContinuationDecision | undefined; }' is not assignable to type 'CliRunJsonOutp
+ut' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/main.ts(386,3): error TS2375: Type '{ registryPath: string; record: WorkbenchRunRecord; sn
+apshot: WorkbenchTaskSnapshot | undefined; }' is not assignable to type 'CliResumeContext' with 'exactOptionalPropertyT
+ypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/provider-add.ts(2,1): error TS6133: 'existsSync' is declared but its value is never read.
+apps/agent-workbench/src/cli/provider-add.ts(75,43): error TS2532: Object is possibly 'undefined'.
+apps/agent-workbench/src/cli/provider-add.ts(92,40): error TS2532: Object is possibly 'undefined'.
+apps/agent-workbench/src/cli/provider-add.ts(93,17): error TS2532: Object is possibly 'undefined'.
+apps/agent-workbench/src/cli/provider-add.ts(197,9): error TS2375: Type '{ id: string; name: string; version: string; e
+ngine: ProviderEngine; description: string; tags: string[] | undefined; baseUrl: string; pathPrefix: string; auth: { ke
+yHeader?: string; apiKey?: any; apiKeyEnv?: string; method: AuthMethod; }; ... 4 more ...; features: {}; }' is not assi
+gnable to type 'ProviderDefinition' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types o
+f the target's properties.
+apps/agent-workbench/src/cli/provider-add.ts(210,50): error TS18004: No value exists in scope for the shorthand propert
+y 'apiKey'. Either declare one or provide an initializer.
+apps/agent-workbench/src/cli/provider-add.ts(222,5): error TS2412: Type 'Record<string, string> | undefined' is not ass
+ignable to type 'Record<string, string>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the ty
+pe of the target.
+apps/agent-workbench/src/cli/provider-add.ts(296,9): error TS2375: Type '{ name: string; id: string; engine: "anthropic
+" | "gemini" | "openai-compatible"; baseUrl: string; pathPrefix: string; authMethod: "none" | "api-key" | "basic" | "be
+arer" | "aws-sig-v4" | "azure-api-key" | "oauth2"; ... 8 more ...; tags: string[]; }' is not assignable to type 'Provid
+erAddFlowState' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prope
+rties.
+apps/agent-workbench/src/cli/provider-dev.ts(10,9): error TS6133: 'authHeaders' is declared but its value is never read
+.
+apps/agent-workbench/src/cli/provider-dev.ts(24,43): error TS2379: Argument of type '{ id: string; baseUrl: string; api
+Key: string | undefined; apiKeyEnv: string | undefined; model: string; endpoint: "auto" | "responses" | "chat-completio
+ns"; stream: boolean; temperature: number | undefined; ... 4 more ...; fetch: { ...; }; }' is not assignable to paramet
+er of type 'OpenAICompatibleProviderOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to th
+e types of the target's properties.
+apps/agent-workbench/src/cli/provider-dev.ts(43,43): error TS2379: Argument of type '{ id: string; baseUrl: string; api
+Key: string | undefined; apiKeyEnv: string | undefined; model: string; endpoint: "auto" | "responses" | "chat-completio
+ns"; stream: boolean; requestTimeoutMs: number | undefined; fetch: { ...; }; }' is not assignable to parameter of type 
+'OpenAICompatibleProviderOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of 
+the target's properties.
+apps/agent-workbench/src/cli/provider-dev.ts(65,10): error TS2678: Type '"tool-args-delta"' is not comparable to type '
+"tool-call" | "stop" | "provider-diagnostic" | "text-delta" | "thought-delta"'.
+apps/agent-workbench/src/cli/provider-dev.ts(82,32): error TS2353: Object literal may only specify known properties, an
+d 'content' does not exist in type 'AgentMessage'.
+apps/agent-workbench/src/cli/provider-test.ts(1,1): error TS6133: 'readFile' is declared but its value is never read.
+apps/agent-workbench/src/cli/provider-test.ts(2,1): error TS6192: All imports in import declaration are unused.
+apps/agent-workbench/src/cli/provider-test.ts(3,1): error TS6133: 'existsSync' is declared but its value is never read.
+apps/agent-workbench/src/cli/provider-test.ts(95,67): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(97,80): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(98,48): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(121,56): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(123,53): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(144,66): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(147,50): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(151,61): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(153,58): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(155,47): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(184,66): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(190,7): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(215,66): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(216,47): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(251,54): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(253,54): error TS2561: Object literal may only specify known properties, 
+but 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(402,7): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(430,7): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-test.ts(442,11): error TS6133: 'response' is declared but its value is never read
+.
+apps/agent-workbench/src/cli/provider-test.ts(456,7): error TS2561: Object literal may only specify known properties, b
+ut 'latency' does not exist in type 'TestResult'. Did you mean to write 'latencyMs'?
+apps/agent-workbench/src/cli/provider-utils.ts(4,35): error TS6196: 'AuthMethod' is declared but never used.
+apps/agent-workbench/src/cli/provider-validate.ts(4,35): error TS6196: 'ValidationCheck' is declared but never used.
+apps/agent-workbench/src/cli/provider-validate.ts(82,26): error TS2379: Argument of type '{ name: string; passed: false
+; message: string | undefined; }' is not assignable to parameter of type 'ValidationCheck' with 'exactOptionalPropertyT
+ypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/run-registry.ts(116,9): error TS2375: Type '{ id: string; branchId: string; parentRunId: s
+tring | undefined; parentBranchId: string | undefined; command: string; cwd: string; createdAt: string; updatedAt: stri
+ng; status: "running"; ... 13 more ...; stoppedReason?: string; }' is not assignable to type 'WorkbenchRunRecord' with 
+'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/run-registry.ts(154,35): error TS2379: Argument of type '{ completionPercent?: number; sna
+pshotId?: string; status: WorkbenchRunRecordStatus; lastEventAt: string; lastEventType: WorkbenchRunEventType; lastMess
+age: string | undefined; }' is not assignable to parameter of type 'Partial<Pick<WorkbenchRunRecord, "status" | "comple
+tionPercent" | "lastEventAt" | "snapshotId" | "sessionPath" | "stoppedReason" | "eventLogPath" | "promptFile" | "config
+Path" | "outputRoot" | "lastEventType" | "lastMessage">>' with 'exactOptionalPropertyTypes: true'. Consider adding 'und
+efined' to the types of the target's properties.
+apps/agent-workbench/src/cli/run-registry.ts(170,35): error TS2379: Argument of type '{ completionPercent?: number; sna
+pshotId?: string; status: WorkbenchRunRecordStatus; stoppedReason: string | undefined; }' is not assignable to paramete
+r of type 'Partial<Pick<WorkbenchRunRecord, "status" | "completionPercent" | "lastEventAt" | "snapshotId" | "sessionPat
+h" | "stoppedReason" | "eventLogPath" | "promptFile" | "configPath" | "outputRoot" | "lastEventType" | "lastMessage">>'
+ with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.test.ts(189,9): error TS2375: Type '{ baseUrl: string; apiKey: string; api
+KeyEnv: undefined; modelsPath: string; id: string; endpoint: WorkbenchProviderEndpoint; authHeader: WorkbenchAuthHeader
+; ... 13 more ...; models: WorkbenchModelProfile[]; }' is not assignable to type 'WorkbenchProviderSettings' with 'exac
+tOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.test.ts(216,9): error TS2375: Type '{ baseUrl: string; apiKey: string; api
+KeyEnv: undefined; id: string; endpoint: WorkbenchProviderEndpoint; authHeader: WorkbenchAuthHeader; ... 14 more ...; m
+odels: WorkbenchModelProfile[]; }' is not assignable to type 'WorkbenchProviderSettings' with 'exactOptionalPropertyTyp
+es: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.ts(99,9): error TS2375: Type '{ recovery?: AgentRecoveryRuntimeOptions; to
+olOutputBudget?: ToolOutputBudgetRuntimeOptions; ... 8 more ...; permissionPolicy: RuntimePermissionPolicy; }' is not a
+ssignable to type 'AgentRuntimeOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the typ
+es of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.ts(117,3): error TS2375: Type '{ runtime: AgentRuntime; settings: Workbenc
+hRuntimeSettings; contextState: InMemoryContextState; backgroundCommands: BackgroundCommandManager; sessionPath: string
+ | undefined; }' is not assignable to type 'WorkbenchRuntimeFactoryResult' with 'exactOptionalPropertyTypes: true'. Con
+sider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.ts(137,5): error TS2353: Object literal may only specify known properties,
+ and 'modelsUrl' does not exist in type '{ baseUrl: string; modelsPath?: string; fetch?: { (input: URL | RequestInfo, i
+nit?: RequestInit | undefined): Promise<Response>; (input: string | ... 1 more ... | Request, init?: RequestInit | unde
+fined): Promise<...>; }; ... 8 more ...; rustReqwestCwd?: string; }'.
+apps/agent-workbench/src/cli/runtime-factory.ts(149,7): error TS2379: Argument of type '{ id: string; name: string; ven
+dor: string | undefined; }' is not assignable to parameter of type 'WorkbenchRemoteModel' with 'exactOptionalPropertyTy
+pes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.ts(191,3): error TS2375: Type '{ id: string; baseUrl: string; apiKey: stri
+ng | undefined; model: string; endpoint: WorkbenchProviderEndpoint; authHeader: WorkbenchAuthHeader; ... 15 more ...; r
+etry: { ...; }; }' is not assignable to type 'OpenAICompatibleProviderOptions' with 'exactOptionalPropertyTypes: true'.
+ Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/runtime-factory.ts(248,5): error TS2375: Type '{ apiKeyFile: string | undefined; rustReqwe
+stCwd: string | undefined; id?: string; baseUrl?: string; endpoint?: WorkbenchProviderEndpoint; ... 15 more ...; models
+?: WorkbenchModelProfileConfig[]; }' is not assignable to type 'WorkbenchProviderSettingsConfig' with 'exactOptionalPro
+pertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/snapshot-aware-goal-strategy.ts(18,8): error TS6133: 'WorkbenchTaskAssessment' is declared
+ but its value is never read.
+apps/agent-workbench/src/cli/snapshot-aware-goal-strategy.ts(114,5): error TS2412: Type 'SnapshotResolver | undefined' 
+is not assignable to type 'SnapshotResolver' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to th
+e type of the target.
+apps/agent-workbench/src/cli/snapshot-aware-goal-strategy.ts(189,29): error TS2379: Argument of type '{ snapshot: Workb
+enchTaskSnapshot; visibleGoal: string; decision: GoalContinuationDecision; roundIndex: number; events: AgentEvent[]; wo
+rkbenchEvents: { ...; }[] | undefined; }' is not assignable to parameter of type '{ snapshot: WorkbenchTaskSnapshot; vi
+sibleGoal: string; decision: GoalContinuationDecision; roundIndex: number; events: AgentEvent[]; workbenchEvents?: { ..
+.; }[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties
+.
+apps/agent-workbench/src/cli/snapshot-aware-goal-strategy.ts(322,5): error TS2375: Type '{ action: "continue"; reason: 
+string; prompt: string | undefined; }' is not assignable to type 'GoalContinuationDecision' with 'exactOptionalProperty
+Types: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(32,8): error TS6133: 'WorkbenchEvidenceItem' is declared but its value
+ is never read.
+apps/agent-workbench/src/cli/workbench-runner.ts(378,81): error TS2379: Argument of type '{ signals: ("review" | "check
+")[]; evidence: { id: string; kind: "decision"; title: string; detail: string; createdAt: string; } | undefined; }' is 
+not assignable to parameter of type 'RuntimeEvidenceInferenceInput' with 'exactOptionalPropertyTypes: true'. Consider a
+dding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(536,7): error TS2375: Type '{ state: "degraded" | "good" | "busy"; sum
+mary: string; lastEventAt: string | undefined; memoryMb?: number; cpuPercent?: number; stalledForMs?: number; }' is not
+ assignable to type 'WorkbenchHealth' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types
+ of the target's properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(573,40): error TS2379: Argument of type '{ evidence: (WorkbenchEvidenc
+eItem | { id: string; kind: "command" | "check" | "decision"; title: string; detail: string | undefined; metadata: { to
+olName: string; ... 5 more ...; truncated: boolean | null; }; createdAt: string; })[]; ... 18 more ...; longRun: Workbe
+nchLongRunPolicy; }' is not assignable to parameter of type 'WorkbenchTaskSnapshot' with 'exactOptionalPropertyTypes: t
+rue'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(730,7): error TS2375: Type '{ path: string; additions: number; deletio
+ns: number; checkpointId: string | undefined; state: "draft" | "checked" | "needs-review"; }' is not assignable to type
+ 'WorkbenchChangeItem' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target'
+s properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(740,15): error TS2379: Argument of type '{ path: string; additions: nu
+mber; deletions: number; checkpointId: string | undefined; state: "draft" | "checked" | "needs-review"; }' is not assig
+nable to parameter of type 'WorkbenchChangeItem' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' t
+o the types of the target's properties.
+apps/agent-workbench/src/cli/workbench-runner.ts(803,3): error TS2375: Type '{ id: string; command: string; exitCode: n
+umber | undefined; output: string | undefined; error: string | undefined; }' is not assignable to type 'WorkbenchComman
+dDiagnosticInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pro
+perties.
+apps/agent-workbench/src/cli/workbench-runner.ts(948,9): error TS2375: Type '{ promptTokens: number | undefined; comple
+tionTokens: number | undefined; totalTokens: number | undefined; cacheReadTokens: number | undefined; cacheWriteTokens:
+ number | undefined; reasoningTokens: number | undefined; }' is not assignable to type 'ProviderUsage' with 'exactOptio
+nalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/core/tauri-command-registry.test.ts(359,23): error TS18048: 'macroContent' is possibly 'undefi
+ned'.
+apps/agent-workbench/src/core/tauri-command-registry.test.ts(363,3): error TS2322: Type 'string | undefined' is not ass
+ignable to type 'string'.
+apps/agent-workbench/src/core/tauri-command-registry.ts(465,31): error TS2345: Argument of type 'string | undefined' is
+ not assignable to parameter of type 'string'.
+apps/agent-workbench/src/core/tauri-command-registry.ts(675,3): error TS2375: Type '{ status: "ok" | "empty"; ok: true;
+ empty: boolean; command: string | undefined; }' is not assignable to type 'BridgeViewStatus' with 'exactOptionalProper
+tyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/core/tauri-command-registry.ts(756,10): error TS6133: 'readGenerateHandlerBlock' is declared b
+ut its value is never read.
+apps/agent-workbench/src/core/tauri-command-registry.ts(800,16): error TS2345: Argument of type 'string | undefined' is
+ not assignable to parameter of type 'string'.
+apps/agent-workbench/src/shared/background-command-bridge.ts(85,59): error TS2379: Argument of type '{ taskId: string; 
+state: "cancelled" | "failed" | "succeeded" | "timed-out"; exitCode: number | null | undefined; signal: string | null |
+ undefined; summary: string; outputPreview: string; now: string; }' is not assignable to parameter of type 'WorkbenchBa
+ckgroundTaskEndInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's
+ properties.
+apps/agent-workbench/src/shared/background-command-bridge.ts(123,5): error TS2375: Type '{ backgroundTasks: (WorkbenchB
+ackgroundTask | { continuationPrompt: string | undefined; id: string; kind: WorkbenchBackgroundTaskKind; ... 15 more ..
+.; evidenceIds?: string[]; })[]; ... 18 more ...; longRun: WorkbenchLongRunPolicy; }' is not assignable to type 'Workbe
+nchTaskSnapshot' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prop
+erties.
+apps/agent-workbench/src/shared/background-tasks.ts(45,9): error TS2375: Type '{ id: string; kind: WorkbenchBackgroundT
+askKind; title: string; state: "running"; cwd: string | undefined; command: string | undefined; detail: string | undefi
+ned; startedAt: string; updatedAt: string; heartbeatAt: string; heartbeatCount: number; }' is not assignable to type 'W
+orkbenchBackgroundTask' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target
+'s properties.
+apps/agent-workbench/src/shared/background-tasks.ts(95,5): error TS2322: Type '(WorkbenchBackgroundTask | { detail: str
+ing | undefined; outputPreview: string | undefined; updatedAt: string; heartbeatAt: string; heartbeatCount: number; ...
+ 13 more ...; evidenceIds?: string[]; })[]' is not assignable to type 'WorkbenchBackgroundTask[]'.
+apps/agent-workbench/src/shared/background-tasks.ts(130,83): error TS2379: Argument of type 'WorkbenchBackgroundTask | 
+{ state: "cancelled" | "failed" | "succeeded" | "timed-out"; exitCode: number | null | undefined; signal: string | null
+ | undefined; ... 15 more ...; continuationPrompt?: string; }' is not assignable to parameter of type 'WorkbenchBackgro
+undTask' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/background-tasks.ts(143,5): error TS2322: Type '(WorkbenchBackgroundTask | { state: "ca
+ncelled" | "failed" | "succeeded" | "timed-out"; exitCode: number | null | undefined; signal: string | null | undefined
+; ... 15 more ...; continuationPrompt?: string; })[]' is not assignable to type 'WorkbenchBackgroundTask[]'.
+apps/agent-workbench/src/shared/disclosure-diagnostics.ts(179,19): error TS2379: Argument of type '{ kind: "command-fai
+led" | "command-not-found"; severity: "warning" | "error"; title: string; detail: string; suggestion: string; targetId:
+ string | undefined; now: string; }' is not assignable to parameter of type '{ kind: WorkbenchDisclosureIssueKind; seve
+rity: WorkbenchDisclosureIssueSeverity; title: string; detail: string; suggestion: string; targetId?: string; now: stri
+ng; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/disclosure-diagnostics.ts(195,19): error TS2379: Argument of type '{ kind: "mojibake"; 
+severity: "warning"; title: string; detail: string; suggestion: string; targetId: string | undefined; now: string; }' i
+s not assignable to parameter of type '{ kind: WorkbenchDisclosureIssueKind; severity: WorkbenchDisclosureIssueSeverity
+; title: string; detail: string; suggestion: string; targetId?: string; now: string; }' with 'exactOptionalPropertyType
+s: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/disclosure-diagnostics.ts(209,19): error TS2379: Argument of type '{ kind: "empty-outpu
+t"; severity: "info"; title: string; detail: string; suggestion: string; targetId: string | undefined; now: string; }' 
+is not assignable to parameter of type '{ kind: WorkbenchDisclosureIssueKind; severity: WorkbenchDisclosureIssueSeverit
+y; title: string; detail: string; suggestion: string; targetId?: string; now: string; }' with 'exactOptionalPropertyTyp
+es: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/disclosure-diagnostics.ts(233,3): error TS2375: Type '{ id: string; kind: WorkbenchDisc
+losureIssueKind; severity: WorkbenchDisclosureIssueSeverity; title: string; detail: string; suggestion: string; targetI
+d: string | undefined; createdAt: string; }' is not assignable to type 'WorkbenchDisclosureIssue' with 'exactOptionalPr
+opertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/output-references.ts(83,3): error TS2375: Type '{ id: string; label: string; kind: Work
+benchOutputReferenceKind; render: WorkbenchOutputReferenceRender; source: WorkbenchOutputReferenceSource; ... 7 more ..
+.; createdAt: string; }' is not assignable to type 'WorkbenchOutputReference' with 'exactOptionalPropertyTypes: true'. 
+Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/output-references.ts(140,21): error TS2379: Argument of type '{ target: string; label: 
+string | undefined; kind: WorkbenchOutputReferenceKind | undefined; render: WorkbenchOutputReferenceRender | undefined;
+ source: "workbench-tag"; }' is not assignable to parameter of type 'ReferenceCandidate' with 'exactOptionalPropertyTyp
+es: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/output-references.ts(158,21): error TS2379: Argument of type '{ label: string | undefin
+ed; target: string; source: "markdown-image"; kind: "image"; render: "inline"; }' is not assignable to parameter of typ
+e 'ReferenceCandidate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target'
+s properties.
+apps/agent-workbench/src/shared/output-references.ts(176,21): error TS2379: Argument of type '{ label: string | undefin
+ed; target: string; source: "markdown-link"; }' is not assignable to parameter of type 'ReferenceCandidate' with 'exact
+OptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/perf-backend.ts(243,28): error TS2345: Argument of type 'string | undefined' is not ass
+ignable to parameter of type 'string'.
+apps/agent-workbench/src/shared/perf-backend.ts(245,28): error TS2345: Argument of type 'string | undefined' is not ass
+ignable to parameter of type 'string'.
+apps/agent-workbench/src/shared/perf-backend.ts(397,7): error TS2379: Argument of type '{ data: number[]; encoding: str
+ing | undefined; }' is not assignable to parameter of type '{ data: number[]; encoding?: string; }' with 'exactOptional
+PropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/runtime-bridge.ts(2,3): error TS6196: 'WorkbenchMode' is declared but never used.
+apps/agent-workbench/src/shared/task-controller.ts(90,9): error TS2375: Type '{ state: "degraded" | "good" | "busy"; su
+mmary: string; memoryMb: number | undefined; cpuPercent: number | undefined; lastEventAt: string | undefined; stalledFo
+rMs: number | undefined; }' is not assignable to type 'WorkbenchHealth' with 'exactOptionalPropertyTypes: true'. Consid
+er adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/workbench-config/defaults.ts(129,3): error TS2375: Type '{ id: string; displayName: str
+ing; vendor: WorkbenchModelVendor; contextWindowTokens: number; preferredWorkingTokens: number; autoCompactAtTokens: nu
+mber; reserveOutputTokens: number; ... 7 more ...; available: boolean; }' is not assignable to type 'WorkbenchModelProf
+ile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/workbench-config/defaults.ts(151,28): error TS2379: Argument of type '{ id: string; nam
+e: string | undefined; vendor: WorkbenchModelVendor | undefined; maxContext: number | undefined; available: boolean | u
+ndefined; }' is not assignable to parameter of type 'WorkbenchRemoteModel' with 'exactOptionalPropertyTypes: true'. Con
+sider adding 'undefined' to the types of the target's properties.
+apps/agent-workbench/src/shared/workbench-contract/config.ts(1,1): error TS6192: All imports in import declaration are 
+unused.
+apps/agent-workbench/src/shared/workbench-contract/daemon-session.ts(1,27): error TS6196: 'JsonValue' is declared but n
+ever used.
+apps/agent-workbench/src/shared/workbench-contract/guards.ts(1,35): error TS6196: 'DaemonBackgroundTaskSnapshot' is dec
+lared but never used.
+apps/agent-workbench/src/shared/workbench-contract/plan-document.ts(1,27): error TS6196: 'JsonValue' is declared but ne
+ver used.
+apps/agent-workbench/src/shared/workbench-contract/ui-projections.ts(6,3): error TS6196: 'WorkbenchPlanState' is declar
+ed but never used.
+apps/agent-workbench/src/shared/workbench-contract/ui-projections.ts(9,3): error TS6196: 'WorkbenchHealth' is declared 
+but never used.
+apps/agent-workbench/src/shared/workbench-contract/ui-projections.ts(10,3): error TS6196: 'WorkbenchBackgroundTask' is 
+declared but never used.
+apps/agent-workbench/src/shared/workbench-contract/workbench-ui.ts(9,3): error TS6196: 'DaemonProviderApiKeySource' is 
+declared but never used.
+
+

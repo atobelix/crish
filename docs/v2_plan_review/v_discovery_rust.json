@@ -1,0 +1,83 @@
+[
+  {
+    "issue_id": "GAP-PM-01",
+    "crate": "conex-sandbox",
+    "files": ["src/process_tree.rs", "src/pty.rs"],
+    "dependencies": ["conex-types"],
+    "conflicts_with": [],
+    "risk_level": "low",
+    "note": "ScopedJobObject RAII 重构需同时改 pty.rs（添加 ScopedJobObject 绑定调用）。pty.rs 当前未引用 process_tree.rs，为新加依赖链。无其他 issue 触碰 conex-sandbox。"
+  },
+  {
+    "issue_id": "GAP-ST-03",
+    "crate": "conex-stream",
+    "files": ["src/parser/sse.rs"],
+    "dependencies": [],
+    "conflicts_with": [],
+    "risk_level": "low",
+    "note": "SseFrameParser 新增 utf8_buf 跨帧累积器。conex-stream 无 workspace 内部依赖（仅 bytes/serde/thiserror）。无其他 issue 触碰此 crate。"
+  },
+  {
+    "issue_id": "GAP-ST-04",
+    "crate": "conex-compaction",
+    "files": ["src/compaction.rs"],
+    "dependencies": ["conex-ipc", "conex-types"],
+    "conflicts_with": ["GAP-SE-02", "GAP-PM-05"],
+    "risk_level": "high",
+    "note": "与 SE-02、PM-05 共改 compaction.rs。ST-04 改 struct 字段/构造函数/calculate_total_tokens（行 5-9/12-17/50-54）。SE-02 改 safe_drop_end（行 100-121）。PM-05 改 compact 方法（行 28-48）。三者行号不重叠但语义强耦合：compact() 调用 calc_total_tokens 和 safe_drop_end，任一修改可能破坏上下游逻辑。"
+  },
+  {
+    "issue_id": "GAP-SE-02",
+    "crate": "conex-compaction",
+    "files": ["src/compaction.rs"],
+    "dependencies": ["conex-ipc", "conex-types"],
+    "conflicts_with": ["GAP-ST-04", "GAP-PM-05"],
+    "risk_level": "high",
+    "note": "与 ST-04、PM-05 共改 compaction.rs。safe_drop_end（行 100-121）新增 ID 级 tool_call→tool_result 配对校验。该函数被 compact()（PM-05 修改区）调用。"
+  },
+  {
+    "issue_id": "GAP-PM-05",
+    "crate": "conex-compaction",
+    "files": ["src/compaction.rs"],
+    "dependencies": ["conex-ipc", "conex-types"],
+    "conflicts_with": ["GAP-ST-04", "GAP-SE-02"],
+    "risk_level": "high",
+    "note": "与 ST-04、SE-02 共改 compaction.rs。compact() 方法（行 28-48）用 retain+shrink_to_fit 替代 clone。该函数内部调 safe_drop_end（SE-02 改）和 calculate_total_tokens（ST-04 改）。TS 侧 session.ts/session-loop/index.ts 改动无冲突。"
+  },
+  {
+    "issue_id": "GAP-SE-01",
+    "crate": "conex-diff",
+    "files": ["src/seek_sequence.rs"],
+    "dependencies": ["conex-ipc", "conex-types"],
+    "conflicts_with": [],
+    "risk_level": "low",
+    "note": "seek_sequence 签名添加 eof+SeekResult，新增 split_lines_for_seek。无其他 Rust crate 调用 seek_sequence（agent-workbench 仅用 diff_engine）。TS 侧在 shared-utils 有独立镜像实现，不直接调用 Rust。全量重写但无外部依赖冲突。"
+  },
+  {
+    "issue_id": "GAP-SE-03",
+    "crate": "conex-fs",
+    "files": ["src/path_utils.rs"],
+    "dependencies": ["conex-ipc", "conex-types"],
+    "conflicts_with": [],
+    "risk_level": "medium",
+    "note": "path_utils.rs 新增 safe_canonicalize + 修改 resolve_under_root。agent-workbench 未依赖 conex-fs（Cargo.toml 无此依赖），故 agent-workbench 侧 types.rs/perf/fs.rs 改动需自行实现或新增依赖。两个 crate 的改动虽无写冲突，但功能需对齐（共同的 canonicalize 替换策略）。"
+  },
+  {
+    "issue_id": "GAP-PM-04",
+    "crate": "conex-db",
+    "files": ["src/transaction.rs"],
+    "dependencies": ["conex-ipc"],
+    "conflicts_with": [],
+    "risk_level": "low",
+    "note": "仅改 transaction.rs（行 17: BEGIN IMMEDIATE，行 27-29: 指数退避重试）。pool.rs 和 query.rs 不改。无其他 issue 触碰 conex-db。"
+  },
+  {
+    "issue_id": "GAP-UI-01",
+    "crate": "crish-agent-workbench",
+    "files": ["src-tauri/src/power.rs", "src-tauri/src/main.rs", "src-tauri/Cargo.toml"],
+    "dependencies": ["windows-sys/macos IO kit/Linux DBus"],
+    "conflicts_with": [],
+    "risk_level": "low",
+    "note": "新增 power.rs 文件 + main.rs 注册命令 + Cargo.toml 加条件依赖。无其他 issue 触碰 agent-workbench main.rs 或 Cargo.toml。power.rs 为新文件无冲突可能。"
+  }
+]

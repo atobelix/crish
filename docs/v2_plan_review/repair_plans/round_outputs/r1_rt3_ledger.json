@@ -1,0 +1,104 @@
+{
+  "agent": "RT-3",
+  "round": 1,
+  "date": "2026-07-25",
+  "tasks": [
+    {
+      "id": "T-AR-025",
+      "file": "packages/agent-runtime/src/preview-queue.ts",
+      "lines": [247, 365],
+      "errors": ["TS2375×2"],
+      "fix": "条件展开: runTransitionEffect → result/artifact 条件展开; mergeArtifactInputs → 逐字段条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-026",
+      "file": "packages/agent-runtime/src/process-lifecycle/process-manager.ts",
+      "lines": [132, 319, 323],
+      "errors": ["TS2412×3"],
+      "fix": "line 132: `child.pid ?? 0`; lines 319,323: `delete record.runtimeTimer/terminationTimer`",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-027",
+      "file": "packages/agent-runtime/src/project-progress-ledger.ts",
+      "lines": [136, 158],
+      "errors": ["TS2375×2"],
+      "fix": "条件展开 summary 字段: `...(summary !== undefined ? { summary } : {})`",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-028",
+      "file": "packages/agent-runtime/src/prompt-assembly.ts",
+      "lines": [144, 206, 215],
+      "errors": ["TS2375×1, TS2379×2"],
+      "fix": "line 144: systemPrompt 条件展开; lines 206,215: block.label 条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-029",
+      "file": "packages/agent-runtime/src/provider-anthropic.ts",
+      "lines": [106, 220],
+      "errors": ["TS2379×2"],
+      "fix": "line 106: buildAnthropicMessagesBody 可选字段条件展开; line 220: AnthropicProvider 构造可选字段条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-030",
+      "file": "packages/agent-runtime/src/provider-gemini.ts",
+      "lines": [111, 235],
+      "errors": ["TS2379×2"],
+      "fix": "同 T-AR-029 模式: buildGeminiGenerateContentBody + GeminiProvider 构造可选字段条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-031",
+      "file": "packages/agent-runtime/src/provider-openai-compatible.ts",
+      "lines": [101, 256, 389],
+      "errors": ["TS2379×1, TS2375×2"],
+      "fix": "line 101: reason 条件展开; lines 256,389: HttpRequest.timeoutMs 条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-032",
+      "file": "packages/agent-runtime/src/provider-openai-chat.ts",
+      "lines": [19, 73, 94, 105],
+      "errors": ["TS6192×1, TS2322×3"],
+      "fix": "line 19: 删除未使用 import createProviderCacheHintPlan/ProviderCacheHintPlan; lines 73,94,105: usage 条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-033",
+      "file": "packages/agent-runtime/src/provider-openai-responses.ts",
+      "lines": [92, 141],
+      "errors": ["TS2322×2"],
+      "fix": "line 92: usage 条件展开; line 141: tool-call id 条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-034",
+      "file": "packages/agent-runtime/src/provider-request-machine.ts",
+      "lines": [327],
+      "errors": ["TS2379×1"],
+      "fix": "snapshot 条件展开: `...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {})`",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-035",
+      "file": "packages/agent-runtime/src/provider-stream-contract/error.ts",
+      "lines": [29],
+      "errors": ["TS2379×1"],
+      "fix": "ErrorClassifierOptions status 条件展开",
+      "result": "ok"
+    },
+    {
+      "id": "T-AR-036",
+      "file": "packages/agent-runtime/src/provider-transport/connection-manager.ts",
+      "lines": [129, 149, 304],
+      "errors": ["TS2322×2, TS2379×1"],
+      "fix": "lines 129,149: `sorted[0] ?? null` + select() 返回类型改为 ProviderTransport | null; line 304: endpoint 条件展开",
+      "result": "ok"
+    }
+  ],
+  "summary": "12 files, 12 tasks, all ok. No remaining TS2375/TS2379/TS2322/TS6192/TS2412 in write-set source files (excluding pre-existing BoundedMap constructor issues)."
+}

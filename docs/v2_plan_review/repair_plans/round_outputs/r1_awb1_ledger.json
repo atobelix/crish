@@ -1,0 +1,154 @@
+{
+  "agent": "AWB-1",
+  "round": 1,
+  "files": [
+    {
+      "path": "apps/agent-workbench/src/cli/goal-runner.ts",
+      "tasks": ["T-AWB-001"],
+      "changes": [
+        "WorkbenchGoalRunnerOptions, WorkbenchGoalRound, WorkbenchGoalResult: all field?: Type → field: Type | undefined",
+        "Added missing required fields at buildNextRoundPrompt call sites (progressSignature, detail, visibleGoal, stoppedReason, lastDecision, lastStalledRoundIndex, lastProgressSignature)",
+        "Added missing required fields at computeProgressSignature call site (prompt, progressSignature, detail)",
+        "mapToGoalDecision: prompt now always provided, added progressSignature/detail",
+        "mapToWorkbenchDecision: removed detail field (not in WorkbenchContinuationDecision)"
+      ],
+      "errors_resolved": ["TS2379×10+", "TS2375×6+"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/main.ts",
+      "tasks": ["T-AWB-002"],
+      "changes": [
+        "CliRunJsonOutput, CliResumeContext: field?: Type → field: Type | undefined",
+        "createCliRuntime: added settings, provider, permissionPolicy fields with undefined",
+        "runWorkbenchGoal call sites: added maxTransientProviderErrors, runTask, onRoundStart, onRoundEnd",
+        "runWorkbenchTask call sites: added backgroundDrainTimeoutMs",
+        "runBudgetArg: added enabled and warnAtRatio fields",
+        "createCliTaskIterable: removed (unused)",
+        "printBackgroundTaskDemo: added now, state, signal, evidenceIds fields",
+        "findLatestRun filter: added status and branchId"
+      ],
+      "errors_resolved": ["TS2375×5+", "TS2379×4+"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/provider-add.ts",
+      "tasks": ["T-AWB-003"],
+      "changes": [
+        "Removed unused import: existsSync",
+        "ProviderAddFlowState: field?: Type → field: Type | undefined",
+        "Fixed spread of undefined: ...(cond ? { apiKey: state.apiKey } : {})",
+        "Fixed tags conditional: tags conditional spread instead of ternary with undefined",
+        "Fixed headers assignment: added null check before assignment",
+        "Fixed choices[i] access: added type assertion for non-null"
+      ],
+      "errors_resolved": ["TS6133", "TS2379×2", "TS2375", "TS6196"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/provider-dev.ts",
+      "tasks": ["T-AWB-004"],
+      "changes": [
+        "createProviderFromConfig: removed unused authHeaders variable",
+        "apiKey: changed from string | undefined to string (default empty string)",
+        "OpenAICompatibleProvider constructor: conditional spread for optional fields",
+        "formatStreamEvent: removed tool-args-delta case (not in union type)",
+        "AgentProviderRequest: changed content → blocks in message"
+      ],
+      "errors_resolved": ["TS2375", "TS2379"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/provider-test.ts",
+      "tasks": ["T-AWB-005"],
+      "changes": [
+        "Removed unused imports: readFile, resolve, isAbsolute, existsSync",
+        "Renamed all latency → latencyMs to match TestResult interface"
+      ],
+      "errors_resolved": ["TS6133×3", "TS2379×12+"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/provider-utils.ts",
+      "tasks": ["T-AWB-006"],
+      "changes": [
+        "Removed unused import: AuthMethod"
+      ],
+      "errors_resolved": ["TS6133"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/provider-validate.ts",
+      "tasks": ["T-AWB-007"],
+      "changes": [
+        "Removed unused import: ValidationCheck",
+        "Fixed message hint: added ?? '缺失' fallback"
+      ],
+      "errors_resolved": ["TS6133", "TS2322"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/run-registry.ts",
+      "tasks": ["T-AWB-008"],
+      "changes": [
+        "WorkbenchRunRecord, StartRunRecordInput, LatestRunFilter: all field?: Type → field: Type | undefined"
+      ],
+      "errors_resolved": ["TS2375", "TS2379"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/runtime-factory.ts",
+      "tasks": ["T-AWB-009"],
+      "changes": [
+        "WorkbenchRuntimeFactoryOptions, WorkbenchRuntimeFactoryResult, WorkbenchModelRefreshOptions: all field?: Type → field: Type | undefined"
+      ],
+      "errors_resolved": ["TS2375", "TS2379"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/runtime-factory.test.ts",
+      "tasks": ["T-AWB-010"],
+      "changes": [
+        "All createWorkbenchRuntime call sites: added configPath, provider, sessionPath, apiKey, resumeSession, permissionPolicy fields with undefined",
+        "Removed apiKeyEnv: undefined (omit instead of explicit undefined)"
+      ],
+      "errors_resolved": ["TS2375"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/workbench-runner.ts",
+      "tasks": ["T-AWB-011"],
+      "changes": [
+        "WorkbenchRunnerBudgetOptions, WorkbenchRunnerOptions, TokenBudgetUpdate: all field?: Type → field: Type | undefined"
+      ],
+      "errors_resolved": ["TS2379", "TS2375"]
+    },
+    {
+      "path": "apps/agent-workbench/src/cli/snapshot-aware-goal-strategy.ts",
+      "tasks": ["T-AWB-012"],
+      "changes": [
+        "SnapshotResolver, SnapshotAwareRoundContext, SnapshotAwareGoalStrategyOptions: all field?: Type → field: Type | undefined",
+        "assessRound, computeProgressSignature, buildNextRoundPrompt input types: roundContext?: → roundContext: Type | undefined",
+        "buildAuditPrompt: workbenchEvents?: → workbenchEvents: Type | undefined",
+        "Private methods: resolveSnapshot, extractResumeDecisionFromContext, mapWorkbenchDecision parameter ?: → : Type | undefined",
+        "onRoundEvent empty context: added all required fields with undefined",
+        "Constructor default: added all required fields with undefined"
+      ],
+      "errors_resolved": ["TS2375", "TS2379"]
+    },
+    {
+      "path": "apps/agent-workbench/src/core/tauri-command-registry.ts",
+      "tasks": ["T-AWB-013"],
+      "changes": [
+        "RegisteredTauriCommand, BridgeViewStatus: all field?: Type → field: Type | undefined",
+        "getBridgeViewStatus command param: ?: string → : string | undefined",
+        "RegExp match results: added as string assertions",
+        "createBackendNotWiredArrayResult, createBackendDiagnosticArrayResult: [] as T[] → [] as unknown as T[]"
+      ],
+      "errors_resolved": ["TS2379", "TS2375", "TS2352"]
+    },
+    {
+      "path": "apps/agent-workbench/src/core/tauri-command-registry.test.ts",
+      "tasks": ["T-AWB-014"],
+      "changes": [
+        "readReleaseGenerateHandlerSource: match[1] → match[1] as string",
+        "readReleaseGenerateHandlerSource: branchMatch[1] → branchMatch[1] as string"
+      ],
+      "errors_resolved": ["TS2375", "TS2322"]
+    }
+  ],
+  "out_of_scope_errors": [
+    "goal-runner.test.ts (16 errors) — missing WorkbenchGoalRunnerOptions fields — to be fixed by owning agent"
+  ],
+  "completed": true
+}

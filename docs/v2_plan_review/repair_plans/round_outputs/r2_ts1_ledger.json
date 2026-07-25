@@ -1,0 +1,18 @@
+{
+  "agentId": "TS-1",
+  "status": "done",
+  "tasks": [
+    {"taskId": "T-TS-001", "file": "packages/agent-runtime/src/__tests__/canonical-schema.test.ts", "errorsFixed": 3, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-002", "file": "packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts", "errorsFixed": 6, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-003", "file": "packages/agent-runtime/src/__tests__/context-slicer.test.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-004", "file": "packages/agent-runtime/src/__tests__/steering-input-queue.test.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-005", "file": "packages/agent-runtime/src/__tests__/integrations/chatgpt-pool.test.ts", "errorsFixed": 0, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-006", "file": "packages/agent-runtime/src/__tests__/integrations/media-pipeline.test.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-007", "file": "packages/agent-runtime/src/__tests__/integrations/oauth-flow.test.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-008", "file": "packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts", "errorsFixed": 11, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-009", "file": "packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts", "errorsFixed": 9, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-010", "file": "packages/agent-runtime/src/runtime-components/conversation-engine.test.ts", "errorsFixed": 14, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-011", "file": "packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts", "errorsFixed": 11, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-TS-012", "file": "packages/agent-runtime/src/runtime-components/tool-executor.test.ts", "errorsFixed": 3, "status": "verified", "verifyResult": "pass"}
+  ]
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "check": "ID 映射完整性",
+    "status": "pass",
+    "detail": "拓扑文档（conex_repair_topology_v2_CORRECTED.md 第 1 节）提供了完整的旧编号→新编号映射表（GAP-01-01→GAP-ST-01 至 GAP-06-08→GAP-UI-04），覆盖全部 10+9+4+6+4+4=37 项 ledger 问题。拓扑文档第 2 节 DAG 中的 GAP-08-02(orphan)、GAP-09-01~04(计划创建) 均明确标注为 ledger 中不存在的条目。无未映射的 ID。",
+    "evidence": "拓扑文档第 1 节映射表 82 行：GAP-01-01→GAP-ST-01 至 GAP-06-08→GAP-UI-04；ledger_v2_CORRECTED.json issues 数组共 37 项，ID 前缀涵盖 ST(10)/CS(9)/TC(4)/PM(6)/SE(4)/UI(4) 六大领域。"
+  },
+  {
+    "check": "问题数量声明统一性",
+    "status": "pass",
+    "detail": "所有文档中关于问题数量的陈述均已统一为 37 项。主方案文档第 457 行校正注明确说明从 48 修改为 37；拓扑文档第 17/87/210/538 行均使用 37；ledger 第 6 行 total_issues=37。v2_review_summary.md 第 18/38 行也使用 37。完全一致。",
+    "evidence": "主方案.md:457 校正注：\"已统一修正为'37 项 ledger 问题'\"；拓扑.md:17：\"共 37 项 ledger 问题\"；ledger.json:6：\"total_issues\": 37"
+  },
+  {
+    "check": "Round/Wave 分配一致性（Ledger vs 拓扑依赖矩阵）",
+    "status": "fail",
+    "detail": "Ledger 中 assigned_round 与拓扑文档第 3 节依赖矩阵的 Round 归属存在系统性偏差。37 项中有 26 项（70%）Round 不一致。典型例子：GAP-CS-03（Ledger=R1, 拓扑=R8）、GAP-CS-05（Ledger=R1, 拓扑=R8）、GAP-UI-01（Ledger=R1, 拓扑=R6）、GAP-UI-02（Ledger=R1, 拓扑=R3）。Ledger 中的 assigned_round 反映的是问题被摄入台账的轮次（初始归集），而拓扑矩阵反映的是 DAG 实际的实现轮次。两者概念不同但未区分说明。",
+    "evidence": "Ledger 显示 GAP-CS-03 assigned_round=R1；拓扑矩阵(line 228)显示 GAP-CS-03 所属 Round=R8。Ledger 显示 GAP-SE-04 assigned_round=R1；拓扑矩阵(line 248)显示 GAP-SE-04 所属 Round=R5。差异项共 26 项，详见附录。"
+  },
+  {
+    "check": "文件路径一致性（跨文档交叉校验）",
+    "status": "warn",
+    "detail": "主要争议路径均已在校正过程中统一。protocol-inbound.ts 在 5 份文档中均校正为 packages/agent-daemon/src/types/protocol-inbound.ts。provider-openai-chat.ts 均校正为 packages/agent-runtime/src/provider-openai-chat.ts。mcp-stdio-adapter.ts 均校正为 packages/agent-daemon/src/mcp-stdio-adapter.ts。但注意：主方案任务卡中的 Wave 命名（如 'Wave 1'）与 ledger 中的 Wave 命名（如 'Wave 1.1'）格式不同（缺小数位），属于命名约定未完全统一。",
+    "evidence": "主方案.md:466 路径校正：provider-openai-chat.ts；主方案.md:485 路径校正：protocol-inbound.ts；主方案.md:530 路径校正：mcp-stdio-adapter.ts；ledger.json:385-392 对应路径一致；写集矩阵.md:64-65 路径校正确认。"
+  },
+  {
+    "check": "G0~G5 门禁命令一致性",
+    "status": "warn",
+    "detail": "G0 命令存在差异：主方案 3.1 节（line 186）使用 cargo check --workspace --all-targets，而质量门禁文档第 3 节（line 96）使用 cargo check --workspace（缺少 --all-targets 参数）。G1/G3/G4 脚本（scripts/ci/check-g1-style.js 等）在两文档中均一致标注为\"需创建\"。G5 配置在两文档中均校正为 vitest.integration.config.ts。覆盖率的实际阈值（statements≥50 等）在两文档中描述一致。",
+    "evidence": "主方案.md:186：`cargo check --workspace --all-targets`；质量门禁.md:96：`cargo check --workspace`；质量门禁.md:248 校正汇总：\"vitest.e2e.config.ts→不存在，改为 vitest.integration.config.ts\""
+  },
+  {
+    "check": "P0/P1/P2 严重程度矛盾解决",
+    "status": "pass",
+    "detail": "主方案 2.1 节（line 119-121）已加入校正注，阐明 severity 字段（P0-Blocker/P1-High/P2-Medium）仅用于排序参考，不改变等优先级调度原则。Ledger 中所有 37 项的 severity 使用完全一致（P0-Blocker:17, P1-High:18, P2-Medium:2）。写集矩阵和拓扑文档中的风险等级标注也与 ledger 一致。原始 v2.0 中\"禁止 P0/P1/P2 区别对待\"与分级字段的矛盾已解决。",
+    "evidence": "主方案.md:119-121：\"禁止 P0/P1/P2 区别对待...审查确认分级字段仅用于排序参考\"；ledger 的 by_severity：P0-Blocker:17, P1-High:18, P2-Medium:2"
+  },
+  {
+    "check": "Ledger 统计总数与明细一致性",
+    "status": "pass",
+    "detail": "Ledger 中 total_issues=37，issues 数组实际包含 37 项。by_domain 各项之和=10+9+4+6+4+4=37。by_severity 各项之和=17+18+2=37。by_status（open=35, verified=2）=37。所有统计数字与 issues 数组长度完全吻合。",
+    "evidence": "ledger.json:6 total_issues=37；by_domain 各域计数之和=37；by_severity 各等级计数之和=37；issues 数组 Count=37"
+  },
+  {
+    "check": "主方案任务卡与 Ledger 文件路径互校",
+    "status": "pass",
+    "detail": "主方案中 R4~R6 任务卡的 files_write/files_read 路径与 ledger 中对应 Issue 的 affected_files/files_write 基本一致。例如：R4-Agent-1 target_issues=GAP-TC-01, files_write=packages/agent-runtime/src/provider-openai-chat.ts，ledger 中 GAP-TC-01 的 files_write 包含同一文件。R4-Agent-2 target_issues=GAP-TC-02, files_write=packages/agent-daemon/src/daemon-approval-handler.ts，与 ledger 一致。",
+    "evidence": "主方案.md:463（R4-Agent-1）files_write→ledger.json:385（GAP-TC-01 files_write）；主方案.md:484（R4-Agent-2）files_write→ledger.json:409（GAP-TC-02 files_write）；一一匹配。"
+  },
+  {
+    "check": "拓扑 DAG 与依赖矩阵内部一致性",
+    "status": "warn",
+    "detail": "拓扑文档第 2 节 DAG 图中的 Round 归属与第 3 节依赖矩阵的 Round 归属基本一致，但存在少量内部差异。例如 GAP-SE-04 在 DAG 中拆分为 R1（R1_2 类型契约）和 R5（R5_5 UI 逻辑），但依赖矩阵（line 248）将 SE-04 归为 R5。GAP-TC-01 在 DAG 中拆分为 R1（R1_4 Zod 辅助函数）和 R4（R4_1 空值解包），但依赖矩阵（line 235）将 TC-01 归为 R4。这种拆分是设计意图（类型契约先行），但矩阵未反映这种拆分。",
+    "evidence": "DAG 中 R1_2=\"GAP-SE-04T: FileDiff 扩展 provisional?: boolean 字段\"（R1），R5_5=\"GAP-SE-04: UI DiffCard Accept 按钮硬性禁用 provisional Diff 落盘\"（R5）；依赖矩阵(line 248): GAP-SE-04 → R5"
+  },
+  {
+    "check": "Wave 命名约定一致性",
+    "status": "warn",
+    "detail": "主方案任务卡（第 9~11 节）中 assigned_wave 使用无小数格式如 'Wave 1'、'Wave 2'，而 ledger 使用带小数的格式如 'Wave 1.1'、'Wave 1.2'、'Wave 2.1'、'Wave 2.2'。虽然任务卡的 Wave 1 对应 ledger 中 Wave 1.x 的子波次概念，但命名格式差异缺乏映射说明。质量门禁文档中的 Wave 0~3 则是更高层次的抽象阶段，与拓扑/台账的 Wave 1.x 无直接对应关系。",
+    "evidence": "主方案.md:461 \"assigned_wave: Wave 1\"（R4-Agent-1）；主方案.md:554 \"assigned_wave: Wave 1\"（R5-Agent-1）；ledger.json:36 \"assigned_wave: Wave 1.1\"（GAP-ST-01）；ledger.json:74 \"assigned_wave: Wave 1.2\"（GAP-ST-03）"
+  },
+  {
+    "check": "质量门禁文档 Wave 调度与拓扑文档 Round 的层次对应",
+    "status": "warn",
+    "detail": "质量门禁文档第 2 节定义 Wave 0~3 的调度规范（门禁锁逐层递进），与拓扑文档的 Round 1~9/Wave 1.x 体系属于不同抽象层级。质量门禁 Wave 0 包含基础设施契约（对应拓扑 R1+R5 的部分内容），Wave 1 包含核心引擎（对应拓扑 R2+R6+R7 的部分内容），Wave 2 包含 UI 重构（对应拓扑 R3+R7 的部分内容），Wave 3 为集成联调（对应拓扑 R9）。两份文档间缺乏显式的 Wave 0~3 ↔ Round 1~9 交叉引用映射表，读者难以直接对应。",
+    "evidence": "质量门禁.md:58-88 Wave 0~3 的任务描述；拓扑.md:91-204 Round 1~9 DAG。两份文档未提供双向映射表。"
+  },
+  {
+    "check": "主要引用文件存在性声明一致性",
+    "status": "pass",
+    "detail": "所有文档对\"需创建\"文件的标注一致：scripts/ci/ 目录及内部脚本（check-g1-style.js, check-g3-g4-resource.js, run-quality-gates.ps1, run-quality-gates.sh）在 5 份文档中均标注为\"需创建\"。G5 的 vitest.e2e.config.ts 在所有文档中均已改为 vitest.integration.config.ts。StreamRenderBuffer.test.ts 的幻觉路径在所有文档中均已标注。",
+    "evidence": "主方案.md:194 校正注、质量门禁.md:97-101（G1/G3/G4 需创建）、质量门禁.md:248（G5 配置修正）、ledger.json GAP-ST-01 review_note（StreamRenderBuffer.test.ts 幻觉路径）"
+  }
+]

@@ -1,0 +1,146 @@
+{
+  "audit": "Conex Post-Fix Audit — Gap 02 (Concurrency/State) & Gap 04 (Process/Memory/DB)",
+  "timestamp": "2026-07-25",
+  "results": [
+    {
+      "id": "CS-01",
+      "title": "后台 Subagent Abort 监听器 premature 解绑",
+      "file": "packages/agent-daemon/src/subagent-runtime.ts",
+      "status": "fixed",
+      "evidence": "新增 `parentRunAbortSignal` option（L46），使用 `options.parentRunAbortSignal ?? context.signal`（L207）代替仅依赖 context.signal；background 分支的 abort 监听器在 `.finally()` 中才 remove（L233），且 semaphore slot 同时在此释放。绑定生命周期延长至 parentRunAbortSignal 而非 tool execution context。",
+      "audit_defect": "subagent-runtime.ts:226 — 后台 Subagent 在工具返回时提前解绑 onAbort 监听器"
+    },
+    {
+      "id": "CS-02",
+      "title": "cancelRun 未杀后台 Shell 进程树",
+      "file": "packages/agent-orchestrator/src/orchestrator.ts",
+      "status": "fixed",
+      "evidence": "`cancelRun()` L332 新增 `this.options.getBackgroundCommandManager?.(run.cwd)?.cancelAllForRun(runId)`；BackgroundCommandManager.cancelAllForRun()（background-command.ts:316-327）遍历 runIndex 并调用 cancel() → terminateChild()。",
+      "audit_defect": "orchestrator.ts:322 — cancelRun() 仅通知 Engine abort，未取消 BackgroundCommandManager 派生的 Shell 进程树"
+    },
+    {
+      "id": "CS-03",
+      "title": "BoundedMap 淘汰活跃 Run 导致 Ghost Run",
+      "file": "packages/shared-utils/src/bounded-map.ts / packages/agent-orchestrator/src/orchestrator.ts",
+      "status": "fixed",
+      "evidence": "BoundedMap 新增 `onEvict` 回调（bounded-map.ts:16-17,57）；`activeRuns` 构造（orchestrator.ts:59-61）传入 `(_key, active) => { active.engine?.abort('active-runs-capacity-exceeded'); }`，淘汰前强杀引擎。",
+      "audit_defect": "orchestrator.ts:59 & bounded-map.ts:49 — activeRuns 满容量时 BoundedMap 静默 FIFO 删除最旧 Run"
+    },
+    {
+      "id": "CS-04",
+      "title": "Daemon 侧缺少全局 Live Agent 槽位门禁",
+      "file": "packages/agent-daemon/src/subagent-runtime.ts",
+      "status": "fixed",
+      "evidence": "L86 新增 `DAEMON_SUBAGENT_SEMAPHORE = new AsyncSemaphore(32)`；execute() 入口 L126 `await DAEMON_SUBAGENT_SEMAPHORE.acquire()`；background/foreground finally 中 `slot()` 释放。",
+      "audit_defect": "subagent-runtime.ts:119 — agent-daemon 的 createDaemonSubagentTool 缺少全局 Live Agent 槽位门禁"
+    },
+    {
+      "id": "CS-05",
+      "title": "OAuth Refresh 缺少 CrossProcessLock 意图锁",
+      "file": "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts",
+      "status": "partially_fixed",
+      "evidence": "`refreshAccount()`（L181-194）通过 `refreshInflight` Map 实现了进程内 single-flight（相同 accountId 并发请求共享一个 Promise），防止了同进程并发重放旧 Refresh Token。但 `CrossProcessLock`（cross-process-lock.ts）已实现带 generation 校验的文件锁，仍未在 `_doRefreshAccount()` 或 `refreshAccount()` 中装配。跨进程场景缺少 Generation-Bound Intent Lock 保护。",
+      "audit_defect": "chatgpt-pool.ts:178 — CrossProcessLock 为孤儿代码，refreshAccount 无意图锁防护"
+    },
+    {
+      "id": "CS-06",
+      "title": "TCP Reset 中途断流直接判 Case B 不重试",
+      "file": "packages/agent-runtime/src/provider-transport/stream-recovery.ts",
+      "status": "fixed",
+      "evidence": "L363-382 在 Case B 检查前新增 `TransientErrorClassifier`（ECONNRESET/socket hang up/ETIMEDOUT/ECONNREFUSED），识别为暂态网络错误时走 retry（指数退避 + 备用通道），不抛 surface-error。",
+      "audit_defect": "stream-recovery.ts:364 — 流式中途哪怕产生 1 个字符，TCP Reset 即被归类为 Case B 拒绝重试"
+    },
+    {
+      "id": "CS-07",
+      "title": "账号池误判暂态流中断为 Auth/Server 错误",
+      "file": "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts（recordFailure）",
+      "status": "partially_fixed",
+      "evidence": "CS-06 的修复使得暂态网络错误在 stream-recovery 层被重试处理，大幅降低了到达池层的误分类概率。但 `recordFailure()`（L161-178）本身未新增 `\"transient\"` 类型区分，`errorCount++` 与 `cooldownUntil` 惩罚逻辑未调整。在全部重试耗尽后仍可能将暂态断流误记为 `\"server\"` 或 `\"auth\"`。",
+      "audit_defect": "chatgpt-pool.ts:158 — 网络中途 Reset 被误判为 Auth / Server 错误"
+    },
+    {
+      "id": "CS-08",
+      "title": "setTraceContext 滥用 enterWith 导致上下文串扰",
+      "file": "packages/agent-runtime/src/trace/index.ts",
+      "status": "fixed",
+      "evidence": "`enterWith(context)` L347 已替换为 `traceContextStorage.run(context, () => {})`；新增 `withTraceContext()`（L355-357）和 `withTraceContextAsync()` 基于 `run()` 的正确保封装；`setTraceContext` 标记为废弃。",
+      "audit_defect": "trace/index.ts:348 — setTraceContext 滥用 AsyncLocalStorage.enterWith"
+    },
+    {
+      "id": "CS-09",
+      "title": "activeSubagentCount 模块级全局变量计数器漂移",
+      "file": "packages/agent-runtime/src/subagents.ts",
+      "status": "fixed",
+      "evidence": "模块级 `let activeSubagentCount = 0` 已移除（L54-55），替换为 `const subagentSemaphore = new AsyncSemaphore(6)` 全局实例；acquire/release 均在 try/finally 对中，无同步异常泄漏风险。",
+      "audit_defect": "subagents.ts:54 — 模块级全局变量 activeSubagentCount 在 try 块外自增"
+    },
+    {
+      "id": "PM-01",
+      "title": "attach_to_job_object 死代码 + Handle 泄漏",
+      "file": "crates/conex-sandbox/src/process_tree.rs",
+      "status": "fixed",
+      "evidence": "旧 `attach_to_job_object()` 函数已删除。重构为 `ScopedJobObject` struct（L5-51）：使用 `OwnedHandle` RAII 管理句柄；`new()` 创建 Job Object 并设置 `KILL_ON_JOB_CLOSE`；`assign_process()` 绑定子进程；`Drop` 自动 `CloseHandle`。",
+      "audit_defect": "crates/conex-sandbox/src/process_tree.rs:5-57 — attach_to_job_object 未调用死代码且 Handle 逻辑有误"
+    },
+    {
+      "id": "PM-02",
+      "title": "缺乏两阶段 ProcessTreeKiller 优雅降级",
+      "file": "packages/agent-runtime/src/process-lifecycle/process-executor.ts",
+      "status": "fixed",
+      "evidence": "`terminateProcessTree()`（L385-435）Windows 分支实现：Phase 1 `taskkill /PID /T` 软终止（3s 窗口）→ Phase 2 `taskkill /F /PID /T` 强制终止。Unix 分支使用 `process.kill(-pid, \"SIGTERM\")` + `scheduleKillEscalation()` 升级 SIGKILL。",
+      "audit_defect": "process-executor.ts:370-417 — 缺乏两阶段 ProcessTreeKiller 优雅降级"
+    },
+    {
+      "id": "PM-03",
+      "title": "BoundedMap 淘汰导致后台进程泄漏",
+      "file": "packages/agent-runtime/src/background-command.ts",
+      "status": "fixed",
+      "evidence": "`BoundedMap` 新增 `onEvict` 回调；`background-command.ts` L114-121 在 evict 回调中检测非终态任务的 `record.child` 并调用 `terminateChild()` 杀进程。",
+      "audit_defect": "background-command.ts:111-145 — BoundedMap 容量淘汰导致后台进程无限泄漏"
+    },
+    {
+      "id": "PM-04",
+      "title": "SQLite 缺少 BEGIN IMMEDIATE 与指数退避",
+      "file": "crates/conex-db/src/transaction.rs / pool.rs",
+      "status": "fixed",
+      "evidence": "transaction.rs L35：`BEGIN IMMEDIATE`（非 Deferred）。L8-24：`busy_retry()` 实现 5 次指数退避（10ms·2^attempt + 0-9ms jitter）。`execute()`（L46）和 `commit()`（L50-52）也包裹 `busy_retry`。pool.rs 保留 `PRAGMA busy_timeout = 5000`。",
+      "audit_defect": "pool.rs:29-37 & transaction.rs:15-42 — 缺少 SQLITE_BUSY 指数退避；事务使用 DEFERRED 模式"
+    },
+    {
+      "id": "PM-05",
+      "title": "长会话内存泄漏（Tool 输出剪裁 + GC + Rust shrink_to_fit）",
+      "file": "packages/agent-runtime/src/session.ts / session-loop/index.ts / crates/conex-compaction/src/compaction.rs",
+      "status": "fixed",
+      "evidence": "① `pruneHistoricalToolOutputs()`（session.ts:65-75）在 compaction 后剪裁历史 tool 输出为 '[truncated]'。② `global.gc?.()` 在 compaction 后显式触发（session-loop/index.ts:186,272）。③ compaction.rs L33-35：使用 `retain()` 代替 `clone()+filter()+collect()` 避免深拷贝；`shrink_to_fit()` 释放 Vec 容量。",
+      "audit_defect": "session.ts + provider-openai-compatible.ts + compaction.rs — 多处内存泄漏隐患"
+    },
+    {
+      "id": "PM-06",
+      "title": "createGuardedProcessEnv 缺少防卡死环境变量",
+      "file": "packages/agent-runtime/src/process-lifecycle/process-executor.ts",
+      "status": "fixed",
+      "evidence": "`createGuardedProcessEnv()`（L223-245）已注入：CI=true, GIT_TERMINAL_PROMPT=0, PIP_NO_INPUT=1, PAGER=cat, GIT_PAGER=cat, DEBIAN_FRONTEND=noninteractive, NPM_CONFIG_FUND=false 等。`buildWindowsPowerShellScript()`（L262-285）也注入了 CI, GIT_TERMINAL_PROMPT, PIP_NO_INPUT。覆盖了最常见的卡死场景。",
+      "audit_defect": "process-executor.ts:223-233 — createGuardedProcessEnv 零非交互环境变量"
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "fixed": 13,
+    "partially_fixed": 2,
+    "still_exists": 0,
+    "details": {
+      "Gap_02_Concurrency_State": {
+        "total": 9,
+        "fixed": 7,
+        "partially_fixed": 2,
+        "items": { "CS-01": "fixed", "CS-02": "fixed", "CS-03": "fixed", "CS-04": "fixed", "CS-05": "partially_fixed", "CS-06": "fixed", "CS-07": "partially_fixed", "CS-08": "fixed", "CS-09": "fixed" }
+      },
+      "Gap_04_Process_Memory_DB": {
+        "total": 6,
+        "fixed": 6,
+        "partially_fixed": 0,
+        "items": { "PM-01": "fixed", "PM-02": "fixed", "PM-03": "fixed", "PM-04": "fixed", "PM-05": "fixed", "PM-06": "fixed" }
+      }
+    }
+  }
+}

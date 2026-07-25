@@ -1,0 +1,50 @@
+{
+  "round": "r1",
+  "agent": "DO-1",
+  "status": "completed",
+  "summary": "Fixed 18 agent-daemon source files with exactOptional batch strategy (?: → : Type | undefined)",
+  "files_modified": [
+    "packages/agent-daemon/src/approval-queue.ts",
+    "packages/agent-daemon/src/background-task-manager.ts",
+    "packages/agent-daemon/src/conversation-rewind-boundary.ts",
+    "packages/agent-daemon/src/daemon-approval-handler.ts",
+    "packages/agent-daemon/src/daemon-client-registry.ts",
+    "packages/agent-daemon/src/daemon-lifecycle.ts",
+    "packages/agent-daemon/src/daemon-logger.ts",
+    "packages/agent-daemon/src/index.ts",
+    "packages/agent-daemon/src/mcp-config.ts",
+    "packages/agent-daemon/src/mcp-stdio-adapter.ts",
+    "packages/agent-daemon/src/scoped-context-runtime.ts",
+    "packages/agent-daemon/src/scoped-context-store.ts",
+    "packages/agent-daemon/src/server/connection-manager.ts",
+    "packages/agent-daemon/src/server/approval-bridge.ts",
+    "packages/agent-daemon/src/server/workflow-manager.ts",
+    "packages/agent-daemon/src/server/index.ts",
+    "packages/agent-daemon/src/types/config.ts",
+    "packages/agent-daemon/src/types/entities.ts"
+  ],
+  "additional_files_modified": [
+    "packages/agent-daemon/src/types/snapshot-types.ts"
+  ],
+  "tasks": {
+    "T-DO-001": "Changed PendingApproval metadata? and timer? to : Type | undefined; ApprovalQueueSnapshot all ?: to | undefined; added timer: undefined to creation",
+    "T-DO-002": "Changed DaemonBackgroundTaskSnapshot all ?: to : Type | undefined in snapshot-types.ts; added detail/metadata to diagnostic objects",
+    "T-DO-004": "Changed all local interfaces (DaemonConversationRewindBoundaryDiagnostic, ResolveConversationRewindBoundaryInput, PreviewConversationRewindByBoundaryInput, DaemonConversationRewindBoundaryResult, DaemonConversationRewindBoundaryPreviewResult) from ?: to | undefined; fixed call sites with conditional spread",
+    "T-DO-005": "Fixed buildIntentKey command argument with conditional spread; changed decisionFromResult input scope? and timeoutMs to | undefined",
+    "T-DO-006": "Changed ConnectedClient, DaemonClientTransportDiagnostic interfaces from ?: to | undefined; fixed BoundedMap constructor args; fixed sendError runId conditional spread; added clientId/detail/metadata to diagnostic literals",
+    "T-DO-007": "Changed DaemonLifecycleErrorInput and DaemonLifecycleSnapshotInput from ?: to | undefined; added direct assignment with ?? undefined for optional fields in snapshots",
+    "T-DO-008": "Changed toLogErr return type from ?: to | undefined for stack/code/name; changed stream and filePath class fields from ?: to | undefined",
+    "T-DO-019": "Changed secretToken assignment from direct undefined to conditional spread ...(secretToken ? { secretToken } : {})",
+    "T-DO-020": "Changed StdioMcpAdapterOptions all ?: to | undefined (args, env, cwd, confirmStart)",
+    "T-DO-021": "Changed inputSchema assignment to conditional spread ...(inputSchema !== undefined ? { inputSchema } : {})",
+    "T-DO-022": "Changed globalRules/workspaceRules/projectRules files/dirs assignments to conditional spread",
+    "T-DO-023": "Changed ScopedContextQueryResult.diagnostic? to | undefined in entities.ts",
+    "T-DO-028": "Removed unused imports (DaemonLifecycleSnapshot, DaemonProviderStatusSnapshot, DaemonMcpStatusSnapshot); fixed BoundedMap constructor; fixed recordError calls with all required fields; fixed type assertions (as unknown as)",
+    "T-DO-029": "Changed ApprovalDecision.reason? to : string | undefined",
+    "T-DO-030": "Changed WorkflowManager class fields from ?: to | undefined (schedulerTimer, schedulerTickTask, onTickError)",
+    "T-DO-031": "Fixed import (normalizeDaemonMcpServers from mcp-config); added mcpServers to DaemonConfig; fixed DaemonConnectionManager constructor args with conditional spread; removed unused withClient; fixed statusHandler _client param; fixed DaemonRuntimeFactory conditional spreads; fixed DaemonLifecycleErrorInput callers; fixed as never and as Record casts",
+    "T-DO-035": "Changed DaemonConfig.secretToken? and apiKeyLast4Exposure? to | undefined; added mcpServers: DaemonMcpServerConfig[] | undefined",
+    "T-DO-036": "Batch changed all entities.ts interfaces ?: to | undefined; cleaned unused imports"
+  },
+  "verification": "tsc --project packages/agent-daemon/tsconfig.json --noEmit: 0 errors across all 18 write-set files"
+}

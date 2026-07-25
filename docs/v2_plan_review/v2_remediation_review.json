@@ -1,0 +1,866 @@
+{
+    "meta":  {
+                 "generated_at":  "2026-07-25",
+                 "agents_merged":  8,
+                 "total_entries":  58
+             },
+    "entries":  [
+                    {
+                        "missed_areas":  "v2 方案未提及 nlIndex 分支（lines 183, 199）和 deadline 分支的代理对缺失问题，仅聚焦于粗分块 path（lines 228-233）。现有注释行\u0027确保不切断中文字符\u0027（line 164）有误导性——实际只防 surrogate pair 不防中文字符边界。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 flushFrame 的三处分帧截断点统一实施代理对完整性校验，并修正现有 High Surrogate 单侧校验的漏洞",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\StreamRenderBuffer.ts; line_start=228; line_end=233; action=修改; detail=扩展粗分块截断的代理对校验：除现有 splitAt-1 High Surrogate 检查外，增加 splitAt 指向 Low Surrogate (0xDC00-0xDFFF) 时的向前退格逻辑}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\StreamRenderBuffer.ts; line_start=183; line_end=188; action=新增; detail=在 nlIndex 截断分支（maxBytesPerFrame 超限）中增加代理对校验：当 nlIndex 后字节为 Low Surrogate 或 nlIndex 前字节为 High Surrogate 时调整截断点}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\StreamRenderBuffer.ts; line_start=199; line_end=204; action=新增; detail=在 deadline 截断分支中同步增加代理对校验，逻辑同上}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\StreamRenderBuffer.ts; line_start=166; line_end=273; action=重构（可选）; detail=提取统一 safeUnicodeCutPosition(text, splitAt) 辅助函数，封装代理对回退逻辑，在 3 个截断点统一调用，避免重复代码}"
+                                                                ]
+                                                  },
+                        "side_effects":  "性能影响可忽略（每次分帧最多多检查 2 个 charCodeAt）。如果提取为独立函数，需确保单元测试覆盖 3 种截断路径。v2_path_audit 确认 StreamRenderBuffer.test.ts 为幻觉文件（不存在），需新建测试文件。",
+                        "issue_id":  "GAP-ST-01",
+                        "feasible":  true,
+                        "original_remediation":  "重构 safeUnicodeCutPosition 函数，同时校验 splitAt - 1 与 splitAt 的代理对边界，确保 Surrogate Pair 不被截断拆分。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案未提及 directFetchBridge.ts 中 line 223 已将 value 解码为字符串后 split lines——decoder 残余字节影响的是字符串解码末尾的残缺 UTF-8 编码，而非 lines 分割。此问题在 directFetchBridge.ts 中实际影响较小（UTF-8 编码，非 GBK），但安全修复仍然建议。openai-stream-parse.ts 的 TextDecoder 无字符集指定（默认 utf-8），同样影响有限但仍是合规修复。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在两个流式读取路径的循环退出后显式调用 decoder.decode() 刷空 TextDecoder 内部残余 1~3 字节缓冲区",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\openai-stream-parse.ts; line_start=120; line_end=120; action=新增; detail=在 while(true) 循环结束后（line 95-97 done break 之后）、line 150 处理残余 buffer 之前，添加一行 buffer += decoder.decode(); 以刷空内部字节缓冲}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\directFetchBridge.ts; line_start=223; line_end=223; action=新增; detail=在 while 循环结束后（line 221 done break 之后）、line 225 buffer pop 之前，添加一行 buffer += decoder.decode();}"
+                                                                ]
+                                                  },
+                        "side_effects":  "极低。decoder.decode() 无参调用在无残余字节时返回空字符串。在 openai-stream-parse.ts 中需注意放置位置在 throw cancelledError 判断之后（lines 91-93），避免异常路径误刷。",
+                        "issue_id":  "GAP-ST-02",
+                        "feasible":  true,
+                        "original_remediation":  "流读取循环结束后在 finally 或退出分支显式调用 decoder.decode() 刷空并追加剩余字符。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案未提及 text.lines() 在 line 100 会剥离末尾 \\n——这在跨帧场景中尤其重要，因为 Utf8ChunkDecoder 累积的是原始字节，lines() 的行为与字节级处理不同。需要考虑 CRLF 处理的一致性。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 SseFrameParser 中新增 UTF-8 跨帧累积器，在 feed_bytes 层面先解码再找 `\\n\\n` 边界，替换 from_utf8_lossy 调用",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-stream\\src\\parser\\sse.rs; line_start=31; line_end=34; action=修改; detail=在 SseFrameParser struct 中添加 utf8_buf: Vec\u003cu8\u003e 暂存字段，用于跨 feed_bytes 调用累积不完整 UTF-8 字节序列}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-stream\\src\\parser\\sse.rs; line_start=52; line_end=92; action=修改; detail=在 feed_bytes 中，在查找 \\n\\n 边界之前，将新字节追加到 utf8_buf，使用 utf8::decode 或手动验证累积中的字节是否组成完整 UTF-8 序列；仅在完成完整序列时才尝试边界匹配}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-stream\\src\\parser\\sse.rs; line_start=95; line_end=97; action=修改; detail=将 parse_frame 中的 String::from_utf8_lossy(bytes) 替换为 String::from_utf8(validated_bytes).unwrap()，其中 validated_bytes 来自 Utf8ChunkDecoder 的完整序列}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-stream\\src\\parser\\sse.rs; line_start=120; line_end=124; action=修改; detail=在 reset() 方法中同时清空 utf8_buf}"
+                                                                ]
+                                                  },
+                        "side_effects":  "需要新增依赖 utf8 crate 或手动解析 UTF-8 边界字节。如果 TCP 分包使 `\\n\\n` 跨越 UTF-8 多字节序列，此修复可能导致帧边界延迟识别（直到序列完成），引入额外延迟。工程取舍：延迟 \u003c1ms 可忽略。",
+                        "issue_id":  "GAP-ST-03",
+                        "feasible":  true,
+                        "original_remediation":  "在 SSE 帧解析器中引入 Utf8ChunkDecoder 暂存未完成的多字节序列，待后续 Chunk 到达后再解码。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案未提及 Rust side 的 SAFETY_FACTOR 应在 calculate_total_tokens 中 apply 还是在 compact 决策阶段 apply。建议在 calculate_total_tokens 中 apply（与 TS 侧一致），因为 TS 侧的 applyTokenEstimateSafetyFactor 在 estimateContextTokens 内部调用。另外，IMAGE_TOKEN_COST=1600 在 Rust 侧 line 96 已存在但未被 calculate_total_tokens 使用——该函数直接用 m.images.len() * IMAGE_TOKEN_COST，需确认一致性。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "向 Rust CompactionEngine 添加 static_overhead 和 safety_factor，使 calculate_total_tokens 与 TS 侧 estimateContextTokens 公式对齐",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=5; line_end=9; action=修改; detail=为 CompactionEngine struct 添加 static_overhead: usize 字段和 IMAGE_TOKEN_COST 常量引用}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=12; line_end=17; action=修改; detail=在 ComactionEngine::new() 中初始化 static_overhead: 0（由调用方设置）}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=50; line_end=54; action=修改; detail=修改 calculate_total_tokens: tokens = static_overhead + 对 messages 的 sum + 应用 SAFETY_FACTOR=1.15（Math.ceil）}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\context-compression\\token-estimator.ts; line_start=31; line_end=46; action=验证; detail=验证现有 staticOverheadTokens 计算（systemPrompt + tools + rules）已正确实现，无需修改}"
+                                                                ]
+                                                  },
+                        "side_effects":  "添加 static_overhead 后 compaction thresholds 将等效提升约 overhead 对应 token 量，可能导致稍微更早触发 compaction。此为预期行为。需确保调用方（TS 层）在构造新 Rust CompactionEngine 时传入正确的 static_overhead 值。",
+                        "issue_id":  "GAP-ST-04",
+                        "feasible":  true,
+                        "original_remediation":  "为 Rust compaction.rs 添加 static_overhead 字段与 Tools Schema 权值计算，同步 TS 侧 Safety Factor (1.15)。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案未提及 countContentPartImages 的名称已不再准确（因为现在也扫描 blocks），应考虑重命名或弃用旧函数。同样，scrubImagesOldestFirst 也不再只是操作 contentParts。建议不要重命名以保持兼容性，但应更新顶部注释（line 3）。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "扩充 scrubImagesOldestFirst 和 countContentPartImages 以同时扫描和操作 message.blocks 中的 image 类型块",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=19; line_end=25; action=新增; detail=添加 isImageBlock(block: AgentMessageBlock): boolean 函数，识别 blocks 中 type === \u0027image\u0027 的块}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=27; line_end=40; action=修改; detail=扩展 countContentPartImages：在检查 contentParts 后（if n===0），额外扫描 message.blocks 中的 image 块}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=46; line_end=118; action=修改; detail=在 scrubImagesOldestFirst 的循环中，当扫描完 contentParts 后且 remaining \u003e 0 时，新增对 message.blocks 中 image 块的剥离：将 type:\u0027image\u0027 替换为 type:\u0027text\u0027 + IMAGE_OMITTED_PLACEHOLDER}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=97; line_end=111; action=修改; detail=确保 hasImages-only 分支的 blocks 替换逻辑同时适用于 contentParts+blocks 混合场景}"
+                                                                ]
+                                                  },
+                        "side_effects":  "变更后 scrubImagesOldestFirst 的 stripped 计数将反映真实剥离数量，可能使 session-loop 中的 payloadRecoveryRetries 逻辑更早成功。需确保 IMAGE_OMITTED_PLACEHOLDER 在 block 级替换后不会在 UI 中显示异常。",
+                        "issue_id":  "GAP-ST-05",
+                        "feasible":  true,
+                        "original_remediation":  "重构 scrubImagesOldestFirst 深度递归遍历扫描并同步剥离 blocks 数组中 type === \u0027image\u0027 的 Base64 数据。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案将 ST-05 与 ST-06 作为独立修复项列出，但两者修改的是同一文件中的同一函数，应合并为一次修改。R2 根因审核确认了这一点（两个 issue 共享同一证据文件 payload-image-recovery.ts）。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "与 ST-05 统一修复，确保 scrubImagesOldestFirst 在剥离 contentParts 中的图片时同时同步替换 blocks 中对应的 image 块",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=65; line_end=90; action=修改; detail=在 contentParts 剥离分支中（line 65-90），当成功剥离 contentParts 中的 image 后，同步扫描并替换 message.blocks 中的 image 块为 text 占位符}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\payload-image-recovery.ts; line_start=46; line_end=118; action=修改; detail=统一确保所有剥离路径（contentParts 路径和 hasImages 路径）均同步操作 blocks}"
+                                                                ]
+                                                  },
+                        "side_effects":  "与 ST-05 相同。两个 issue 应在同一改动中修复。",
+                        "issue_id":  "GAP-ST-06",
+                        "feasible":  true,
+                        "original_remediation":  "确保剥离图片时同步将 Block 级替换为 type: \u0027text\u0027 文本占位符 [Image content omitted for request-size recovery]。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案声称需扩展类型定义，但 types.ts line 5 的 ProviderStreamFinishReason 已包含 \u0027length\u0027。修正方案应聚焦于 legacyFinishReason 函数本身。另需注意 line 109 raw.reason 的值可能为 provider 特定的 \u0027max_tokens\u0027，需映射为 \u0027length\u0027。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "修改 legacyFinishReason 函数传递 \u0027length\u0027 和 \u0027max_tokens\u0027 信号，无需修改类型定义（types.ts line 5 已包含 \u0027length\u0027）",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-stream-contract\normalizer.ts; line_start=45; line_end=49; action=修改; detail=扩展 legacyFinishReason：除 \u0027error\u0027 和 \u0027tool-call\u0027 外，增加 \u0027length\u0027 直接返回 \u0027length\u0027，增加 \u0027max_tokens\u0027 映射为 \u0027length\u0027，其余仍返回 \u0027stop\u0027}"
+                                                                ]
+                                                  },
+                        "side_effects":  "修复后将自动激活下游 ST-08 和 ST-09 的 length 处理路径。可能导致之前被掩藏的 \u0027length\u0027 用户体验变化（续写提示词出现）。需确保 UI 层已准备好展示 \u0027length\u0027 截断提示。ProviderStreamFinishReason 类型（types.ts:5）已包含 \u0027length\u0027，无需额外修改。",
+                        "issue_id":  "GAP-ST-07",
+                        "feasible":  true,
+                        "original_remediation":  "扩展 ProviderStreamFinishReason 类型，修改 legacyFinishReason 函数允许 \u0027length\u0027 / \u0027max_tokens\u0027 保真传递。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案未提及 finishReason 可能来自 done 事件（line 109-110）而非 end 事件。建议优先使用 end 事件的 finishReason（线 99-107），done 事件的 finishReason 作为 fallback。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 ProviderResponseConsumer 中捕获 end 事件的 finishReason 并传递给 buildMessage，替代硬编码的 stopReason 推导",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\runtime-components\\provider-response-consumer.ts; line_start=29; line_end=36; action=新增; detail=在类中添加私有字段 private finishReasonFromStream: ProviderStreamFinishReason | undefined = undefined; 并补充 import}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\runtime-components\\provider-response-consumer.ts; line_start=99; line_end=107; action=修改; detail=在 end 事件处理中捕获 finishReason：this.finishReasonFromStream = event.finishReason;}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\runtime-components\\provider-response-consumer.ts; line_start=119; line_end=119; action=修改; detail=buildMessage 调用处传入 this.finishReasonFromStream 作为新增参数}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\runtime-components\\provider-response-consumer.ts; line_start=124; line_end=135; action=修改; detail=buildMessage 添加 finishReason 参数：使用 finishReasonFromStream 若存在且非 \u0027stop\u0027，否则回退到现在的硬编码逻辑}"
+                                                                ]
+                                                  },
+                        "side_effects":  "变更后 provider-response-consumer 会正确传播 \u0027length\u0027 finishReason，使下游 SessionLoop 的 handleNoToolCalls 中 stopReason === \u0027length\u0027 检查（index.ts:299）变为可达。这是预期的行为修复。",
+                        "issue_id":  "GAP-ST-08",
+                        "feasible":  true,
+                        "original_remediation":  "更新 buildMessage 与 ProviderResponseConsumer，记录并保留流中的 event.finishReason 并传递给 metadata.stopReason。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案误以为 handleNoToolCalls 缺乏 length 处理逻辑，但实际上已有完整实现（index.ts:299-310 和 provider-call.ts:89-100,108-117）。问题仅在于上游信号丢失导致该路径不可达。修正方案应聚焦于 ST-07+ST-08，不需要修改 session-loop 本身。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "该 issue 是 ST-07 和 ST-08 的下游效应；一旦上游 length 信号恢复，handleNoToolCalls 中的 length 路径自动可达，handleLengthFinishReason 逻辑已存在且可运行",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session-loop\\index.ts; line_start=248; line_end=248; action=验证; detail=确认 line 248 的 stopReason !== \u0027length\u0027 守卫在 ST-07+ST-08 修复后正确工作（不重置计数器当 stopReason=\u0027length\u0027）}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session-loop\\index.ts; line_start=298; line_end=318; action=验证; detail=确认 handleNoToolCalls 的第 299 行 stopReason === \u0027length\u0027 检查在 ST-07+ST-08 修复后正确触发 handleLengthFinishReason}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session-loop\\provider-call.ts; line_start=89; line_end=100; action=验证; detail=确认 handleLengthFinishReason 的 escalation 逻辑正常工作（tryEscalateMaxTokensForLengthRecovery lines 108-117）}"
+                                                                ]
+                                                  },
+                        "side_effects":  "激活 length 路径后，模型被截断时将自动触发续写（escalated nudge text）。用户将看到\u0027Previous assistant output was truncated...\u0027提示语。这是预期行为，但需确保 UI/消息历史不会因此产生过多续写消息（line 58 MAX_LENGTH_CONTINUE_NUDGES=1 提供防护）。",
+                        "issue_id":  "GAP-ST-09",
+                        "feasible":  true,
+                        "original_remediation":  "恢复 length 信号流转，并确保 handleNoToolCalls 能正确触发 handleLengthFinishReason 续写提示词与状态转换。"
+                    },
+                    {
+                        "missed_areas":  "v2 方案误判 ProviderResponseConsumer 缺失集成，实际是 upstream accumulator已经处理。另需注意 balanceJsonContainers 在 line 209 返回 `${text}${inString ? \u0027\"\u0027 : \u0027\u0027}${closers.reverse().join(\u0027\u0027)}`——当 text 以 \\ 结尾时，追加的 \u0027\"\u0027 会被转义为无效的 JSON。剥离末尾 \\ 后再补 \u0027\"\u0027 是正确的做法。截断数字字面量（如 \u002712\u0027）未在 v2 方案中提及，也是潜在问题。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "修复 balanceJsonContainers 的尾随反斜杠和截断字面量问题；ProviderResponseConsumer 集成部分不需要，因为上游 ProviderToolCallJsonAccumulator 已经通过 finalize() 调用了 repairToolCallJsonArguments",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-stream-contract\\json-repair.ts; line_start=180; line_end=210; action=修改; detail=在 balanceJsonContainers 的 inString 路径（line 209）中，在追加 \u0027\\\"\u0027 前检查 escaped：若最后字符为 \\ （且 escaped=true），则先将末尾 \\ 剥离再追加 \u0027\"\u0027}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-stream-contract\\json-repair.ts; line_start=140; line_end=160; action=修改; detail=在 jsonRepairCandidates 中增加对截断布尔/null 字面量的修复：如文本以 \u0027tru\u0027 结尾 → 补 \u0027e\u0027，以 \u0027fals\u0027 结尾 → 补 \u0027e\u0027，以 \u0027nul\u0027 结尾 → 补 \u0027l\u0027}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-stream-contract\\json-repair.ts; line_start=180; line_end=210; action=修改; detail=在 balanceJsonContainers 的循环外增加尾随字面量检测：若文本以 \u0027tru\u0027/\u0027fals\u0027/\u0027nul\u0027 结尾且不在字符串内，追加补全字符}"
+                                                                ]
+                                                  },
+                        "side_effects":  "balanceJsonContainers 的尾随反斜杠剥离仅在 inString=true 且 escaped=true 时触发，不影响正常 JSON。截断字面量补全仅对末尾不完整关键字生效，误触风险低。R2 根因审核确认 ProviderResponseConsumer 的集成上游已完成（json-repair.ts:44-46 ProviderToolCallJsonAccumulator.finalize 已调用 repairToolCallJsonArguments），因此 v2 方案中关于 ProviderResponseConsumer 集成的部分不必要。",
+                        "issue_id":  "GAP-ST-10",
+                        "feasible":  "partial",
+                        "original_remediation":  "增强 balanceJsonContainers 算法（剥离末尾单数 \\、补全布尔/null 字面量），并在 ProviderResponseConsumer 中集成 repairToolCallJsonArguments。"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未提及 context.signal 作为次要信号的保底作用——当 parentRunAbortSignal 未传入时应回退到 context.signal",
+                        "corrected_remediation":  {
+                                                      "strategy":  "将 Abort 信号监听从 context.signal 迁移到 Run 级生命周期信号；在 DaemonSubagentToolOptions 中新增 parentRunAbortSignal 字段，由 orchestrator 创建工具时传入 AbortController.signal，确保父 Run Cancel 时信号能传递到后台 Subagent",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=37; line_end=48; action=修改; detail=在 DaemonSubagentToolOptions 接口中新增 parentRunAbortSignal?: AbortSignal 字段}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=199; line_end=206; action=修改; detail=将 context.signal.addEventListener 改为 options.parentRunAbortSignal.addEventListener；保留 context.signal 作为次要信号（快速检测当前 scope abort）}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=225; line_end=226; action=修改; detail=finally 块中移除 context.signal.removeEventListener，改为移除 parentRunAbortSignal 上的监听器}"
+                                                                ]
+                                                  },
+                        "side_effects":  "需要调用方（orchestrator/daemon）在创建 tool options 时传入正确的 runAbortSignal；若传入信号过早 abort 则后台 subagent 也会被取消",
+                        "issue_id":  "GAP-CS-01",
+                        "feasible":  true,
+                        "original_remediation":  "将 Abort 信号绑定到 Session/Run 级别的生命周期，而非 transient tool execution context"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未提及 BackgroundCommandRecord 需要存储 runId 关联；需在 BackgroundCommandStartInput 或 spawn 参数中传递 runId 以建立索引",
+                        "corrected_remediation":  {
+                                                      "strategy":  "为 BackgroundCommandManager 新增 cancelAllForRun 方法；在 AgentOrchestratorOptions 中增加 onRunCancel 回调；在 cancelRun() 中依次执行 engine.abort() 和回调",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\background-command.ts; line_start=267; line_end=277; action=新增; detail=新增 cancelAllForRun(runId: string): void 方法，遍历 tasks 查找 command 中包含对应 runId 或通过额外 runId 索引取消后台任务}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\background-command.ts; line_start=111; line_end=116; action=修改; detail=在 BackgroundCommandManager 中新增 private readonly runIndex = new Map\u003cstring, string\u003e() 映射 runId→taskId；在 start() 中解析并记录关系}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-orchestrator\\src\\types.ts; line_start=340; line_end=350; action=修改; detail=在 AgentOrchestratorOptions 中新增 onRunCancel?: (runId: string, reason: string) =\u003e void 回调字段}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-orchestrator\\src\\orchestrator.ts; line_start=322; line_end=331; action=修改; detail=在 cancelRun() 中的 active.engine?.abort(reason) 之后调用 this.options.onRunCancel?.(runId, reason)}"
+                                                                ]
+                                                  },
+                        "side_effects":  "引入 AgentOrchestratorOptions 的新回调字段，不影响现有构造调用方（默认 undefined 则为 no-op）",
+                        "issue_id":  "GAP-CS-02",
+                        "feasible":  true,
+                        "original_remediation":  "在 cancelRun() 中增加对 BackgroundCommandManager.cancelAllForRun(runId) 的调用"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未考虑 activeRuns 淘汰后还需从 runs Map 中移除记录并 emit run-failed/cancelled 事件",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 BoundedMap 构造函数中接受可选的 onEvict 回调，在 FIFO 淘汰时调用；在 orchestrator 创建 activeRuns 时传入 engine.abort 回调",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\shared-utils\\src\\bounded-map.ts; line_start=13; line_end=22; action=修改; detail=构造函数签名改为 constructor(capacity: number, onEvict?: (key: K, value: V) =\u003e void)，私有存储 this.onEvict}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\shared-utils\\src\\bounded-map.ts; line_start=48; line_end=55; action=修改; detail=在 const oldestKey = this.map.keys().next().value 之后、this.map.delete(oldestKey) 之前，调用 this.onEvict?.(oldestKey, this.map.get(oldestKey)!)}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-orchestrator\\src\\orchestrator.ts; line_start=59; line_end=59; action=修改; detail=将 activeRuns 初始化改为 new BoundedMap\u003cstring, ActiveRun\u003e(MAX_ORCHESTRATOR_RUNS, (_, active) =\u003e { active.engine?.abort(\u0027active-runs-capacity-exceeded\u0027) })}"
+                                                                ]
+                                                  },
+                        "side_effects":  "BoundedMap 的其他使用者不受影响（未传 onEvict 时行为不变）",
+                        "issue_id":  "GAP-CS-03",
+                        "feasible":  true,
+                        "original_remediation":  "为 BoundedMap 增加 onEvict 销毁回调，淘汰时显式 abort ghost run"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未区分不同优先级（foreground vs background）的 subagent，background 可能应使用更低的槽位权重",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 subagent-runtime.ts 中引入模块级 AsyncSemaphore，在 execute() 开始时 acquire、在 finally 路径 release",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=13; line_end=17; action=新增; detail=新增 import { AsyncSemaphore } from \u0027@crish/shared-utils\u0027}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=17; line_end=18; action=新增; detail=新增模块级常量 const DAEMON_SUBAGENT_SEMAPHORE = new AsyncSemaphore(32);  /* 最大 32 并发 */}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=118; line_end=121; action=修改; detail=在 depth check 之后、开始业务逻辑之前 await DAEMON_SUBAGENT_SEMAPHORE.acquire()}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=225; line_end=237; action=修改; detail=background 路径的 .finally 回调中释放 DAEMON_SUBAGENT_SEMAPHORE.release()}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-daemon\\src\\subagent-runtime.ts; line_start=263; line_end=276; action=修改; detail=foreground 路径的 finally 块（line 263-276）中释放 DAEMON_SUBAGENT_SEMAPHORE.release()}"
+                                                                ]
+                                                  },
+                        "side_effects":  "daemon 侧 subagent 创建变为阻塞式排队而非立即拒绝；32 槽位上限可根据实际资源调整",
+                        "issue_id":  "GAP-CS-04",
+                        "feasible":  true,
+                        "original_remediation":  "在 Daemon 侧引入基于 AsyncSemaphore 的并发 Live Agent 槽位管理器"
+                    },
+                    {
+                        "missed_areas":  "V2 方案推荐 CrossProcessLock 偏重——同一 ChatGPTAccountPool 实例不存在跨进程争用；文件锁开销大且可能因文件残留导致死锁",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 ChatGPTAccountPool 中引入 per-account single-flight Promise 去重，使用 AsyncMutex 替代文件级 CrossProcessLock（同进程场景），避免并发 refresh 重放旧 Refresh Token",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider\\auth\\oauth\\chatgpt-pool.ts; line_start=41; line_end=49; action=修改; detail=新增 private readonly refreshInflight = new Map\u003cstring, Promise\u003cboolean\u003e\u003e() 用于 per-account single-flight}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider\\auth\\oauth\\chatgpt-pool.ts; line_start=178; line_end=201; action=重写; detail=refreshAccount(): 检查 refreshInflight 中是否已有对应 accountId 的 in-flight promise，有则直接返回；否则创建新 Promise 包装 refreshToken 调用，完成后从 Map 中删除；对异常路径确保 Map cleanup}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider\\auth\\oauth\\chatgpt-pool.ts; line_start=1; line_end=7; action=新增; detail=无需 import CrossProcessLock（该方案跨进程场景单独处理）；使用 AsyncMutex 辅助跨 session 的 refresh 排他}"
+                                                                ]
+                                                  },
+                        "side_effects":  "single-flight 使同 account 的并发 refresh 自动合并为一次，避免 invalid_grant；跨进程场景仍需 CrossProcessLock（当前仓库无多进程架构需求）",
+                        "issue_id":  "GAP-CS-05",
+                        "feasible":  true,
+                        "original_remediation":  "在 refreshAccount 中装配 CrossProcessLock 并引入 Single-Flight Generation 刷新意图锁"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未指定重试时的断点续接具体实现——需在 retry transport 的 request 中追加 resume_token 或已有文本标记以防止完整响应重复",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 decideRecovery() 的 Case B 分支中增加暂态网络错误检测，对 ECONNRESET/Socket Hang Up 等错误允许带断点标记的暂态重试与指数退避",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=340; line_end=417; action=修改; detail=在 decideRecovery() 的 Case B 判断（line 364-376）之前新增：若 error 属于 Transient Network Error（复用 ErrorClassifier 或直接 error.message 匹配 ECONNRESET/socket hang up/fetch failed），即使有部分字符也走 retry 路径，附带退避 delay = Math.min(1000 * 2 ** retryCount, 30000)}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=1; line_end=8; action=新增; detail=import { ErrorClassifier } from \u0027../error-classifier\u0027}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=364; line_end=376; action=修改; detail=Case B 分支改为：先通过 ErrorClassifier 判断是否为 TRANSIENT_NETWORK，若是则走带退避的 retry 而非 surface-error}"
+                                                                ]
+                                                  },
+                        "side_effects":  "暂态网络错误导致的部分输出会因重试而重复，需在消费侧（ProviderResponseConsumer）做去重或断点续接",
+                        "issue_id":  "GAP-CS-06",
+                        "feasible":  true,
+                        "original_remediation":  "引入 TransientErrorClassifier，识别 ECONNRESET / socket hang up，即便有部分字符也允许带断点标记的暂态重试与指数退避"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未讨论 session-loop/index.ts 中 handleStreamError 的 error 分类链路——当前 ErrorClassifier.classify() 在 line 255 将中文 surface-error 文本归为 UNKNOWN，需在 StreamRecoveryError 中携带原始 Error 以便重新分类",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 chatgpt-pool.ts 的 recordFailure 中新增 transient 类型（不触发 errorCount 和 cooldown）；在 stream-recovery.ts 的 surface-error 路径中携带原始错误类型；在 session-loop 的错误处理链路中保留 error 域信息",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider\\auth\\oauth\\chatgpt-pool.ts; line_start=158; line_end=176; action=修改; detail=扩展 errorType 为 \u0027auth\u0027 | \u0027quota\u0027 | \u0027timeout\u0027 | \u0027server\u0027 | \u0027transient\u0027；transient 类型不执行 errorCount++ 也不设置 cooldownUntil}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=584; line_end=599; action=修改; detail=StreamRecoveryError 类增加 originalError?: unknown 属性，保存传入的原始错误对象；在构造函数中新增参数}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=216; line_end=221; action=修改; detail=Case B surface-error 的 throw 语句：new StreamRecoveryError(msg, accumulator, [], originalError) 传递原始错误}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\provider-transport\\stream-recovery.ts; line_start=342; line_end=376; action=修改; detail=decideRecovery 新增 error 参数传递到 StreamRecoveryError（当前只有 message，丢失类型）}"
+                                                                ]
+                                                  },
+                        "side_effects":  "暂态错误不再污染账户健康状态，减少误封禁；但需确保真实的 auth 错误仍能正确传递 errorType=\u0027auth\u0027",
+                        "issue_id":  "GAP-CS-07",
+                        "feasible":  true,
+                        "original_remediation":  "严格区分 Transient Network Error 与 True Auth Error，暂态网络波动不得增加 account.errorCount 或触发账号 Cooldown"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未提供迁移策略——需 grep 全仓找到 setTraceContext 的所有调用点（当前仅 trace/index.ts 自身导出，需确认外部调用方）",
+                        "corrected_remediation":  {
+                                                      "strategy":  "重写 setTraceContext：废掉 enterWith，改用 run() 实现的空作用域；审计所有调用方，迁移至 withTraceContext",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\trace\\index.ts; line_start=344; line_end=350; action=重写; detail=setTraceContext 改为调用 traceContextStorage.run(context, () =\u003e {}) 以提供临时隔离上下文；或直接标记 @deprecated 并委托给 withTraceContext}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\trace\\index.ts; line_start=344; line_end=350; action=修改; detail=若保留 setTraceContext，函数体改为：if (context) { traceContextStorage.enterWith(context); } else { traceContextStorage.disable(); } 仍使用 enterWith 但增加清理逻辑}"
+                                                                ]
+                                                  },
+                        "side_effects":  "调用方如果依赖 setTraceContext 的永久性（一次调用影响后续所有异步操作），迁移后需要改为显式传递 context 或使用 withTraceContext 包裹作用域",
+                        "issue_id":  "GAP-CS-08",
+                        "feasible":  true,
+                        "original_remediation":  "彻底废载 enterWith，强制全链路使用 withTraceContext / AsyncLocalStorage.run() 作用域隔离"
+                    },
+                    {
+                        "missed_areas":  "V2 方案未提及 TOCTOU 竞态问题——即使将 increment 移入 try 块，check+increment 之间仍存在竞态窗口；AsyncSemaphore 原子地解决了此问题",
+                        "corrected_remediation":  {
+                                                      "strategy":  "将 activeSubagentCount 自增移入 try 块内，并使用 AsyncSemaphore 替代单纯的计数 + 竞态检测",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\subagents.ts; line_start=54; line_end=54; action=修改; detail=将 let activeSubagentCount = 0 替换为 import { AsyncSemaphore } from \u0027@crish/shared-utils\u0027 + const subagentSemaphore = new AsyncSemaphore(6)}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\subagents.ts; line_start=185; line_end=198; action=重写; detail=删除 if+increment 检查块，替换为 await subagentSemaphore.acquire()（带超时或排队）}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\subagents.ts; line_start=311; line_end=312; action=修改; detail=将 finally 中的 activeSubagentCount = Math.max(0, activeSubagentCount - 1) 替换为 subagentSemaphore.release()}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\subagents.ts; line_start=1; line_end=5; action=新增; detail=添加 AsyncSemaphore import}"
+                                                                ]
+                                                  },
+                        "side_effects":  "subagent 创建变为阻塞式排队而非立即拒绝 maxConcurrent；maxConcurrent 默认 6 保持不变",
+                        "issue_id":  "GAP-CS-09",
+                        "feasible":  true,
+                        "original_remediation":  "改用 SubagentConcurrencyGuard / using Disposable 句柄，在 finally 块中实现严格计数防漂移"
+                    },
+                    {
+                        "missed_areas":  "TS 侧 process-executor.ts 和 background-command.ts 的 child_process.spawn 无法直接使用 Rust Job Object，需要 Tauri Command 桥接或在 N-API 层暴露；当前 v2 修复计划未覆盖此跨语言绑定需求。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "替换 attach_to_job_object 为 ScopedJobObject RAII 模式；在所有 Rust 侧子进程创建点接入",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-sandbox\\src\\process_tree.rs; line_start=1; line_end=71; action=重写; detail=删除原 attach_to_job_object 函数；新增 ScopedJobObject 结构体，构造函数调用 CreateJobObjectW + SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) + AssignProcessToJobObject，Drop 中调用 CloseHandle；成功路径 handle 泄漏问题由 Drop 自动修复。保留 set_process_group() 不变。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-sandbox\\src\\lib.rs; line_start=3; line_end=3; action=修改; detail=保持 pub mod process_tree 导出；新的 ScopedJobObject 在此公开。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-sandbox\\src\\pty.rs; line_start=48; line_end=50; action=修改; detail=在 execute_command 的 Windows 分支中，获取子进程 HANDLE 后创建 ScopedJobObject 绑定，确保子进程在宿主退出时被 OS 强制终止。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-sandbox\\src\\process.rs; line_start=1; line_end=1; action=修改; detail=若 ProcessManager 新增 spawn() 方法，在其 Windows 分支接入 ScopedJobObject。当前为空 struct，待扩展。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "无副作用。ScopedJobObject 在当前代码路径零调用，仅作为基础设施引入。PTY 侧集成后，portable_pty 的内建 child handle 类型需转换为 RawHandle。",
+                        "issue_id":  "GAP-PM-01",
+                        "feasible":  true,
+                        "original_remediation":  "重构为 ScopedJobObject RAII 结构体，实现 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 限制，并在 PTY / Daemon 启动子进程时强绑定。"
+                    },
+                    {
+                        "missed_areas":  "Unix 分支已具备两阶段 SIGTERM → scheduleKillEscalation → SIGKILL，无需修改。Root Cause Audit 确认 Unix 描述不准确（detached:true 已设进程组 leader）。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "仅对 Windows 分支增加两阶段软终止；Unix 分支已完善，无需修改",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\process-lifecycle\\process-executor.ts; line_start=370; line_end=417; action=修改; detail=重构 terminateProcessTree：Windows 分支先发送 WM_CLOSE/CTRL_BREAK_EVENT（Phase 1 soft kill），设置 3000ms 超时后执行 taskkill /F（Phase 2 hard kill）；若 Phase 1 失败或超时则升级。Unix 分支保持现有 SIGTERM → scheduleKillEscalation(5s) → SIGKILL 逻辑不变，其进程组 leader 已于 line 135 detached:true 设置。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\process-lifecycle\\process-executor.ts; line_start=419; line_end=450; action=修改; detail=terminateWindowsProcessTree：在 Stop-Process -Force 之前先发送 Stop-Process -Id PID（无 -Force 软终止），等待短暂间隔后再 -Force 强杀。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "Windows 分支引入 Phase 1 软终止后，部分进程可能更快响应退出，减少残留子进程。PowerShell 枚举开销不变（Get-CimInstance 仍为全量扫描）。若应用程序无窗口消息泵，WM_CLOSE 失效，但后续 Phase 2 兜底。",
+                        "issue_id":  "GAP-PM-02",
+                        "feasible":  "partial",
+                        "original_remediation":  "实施 Phase 1: Soft Kill (SIGTERM / WM_CLOSE) -\u003e 3000ms Timeout -\u003e Phase 2: Hard Kill 两阶段优雅终止机制。"
+                    },
+                    {
+                        "missed_areas":  "BoundedMap 在 InMemorySessionStore (session.ts:141) 中也有使用，但该处存储 SessionEntry 无子进程/定时器资源，无需 eviction callback。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "为 BoundedMap 增加构造函数级 onEvict 回调；在 BackgroundCommandManager 创建 BoundedMap 时传入清理 handler",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\shared-utils\\src\\bounded-map.ts; line_start=13; line_end=22; action=修改; detail=BoundedMap 构造函数增加可选的 onEvict?: (value: V, key: K) =\u003e void 参数，存储在私有字段中。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\shared-utils\\src\\bounded-map.ts; line_start=48; line_end=55; action=修改; detail=在 set() 方法的 FIFO 淘汰路径中（oldestKey 删除后），调用 this.onEvict?.(oldestValue, oldestKey)。注意：需在 delete 前捕获被淘汰的 value。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\background-command.ts; line_start=112; line_end=112; action=修改; detail=将 this.tasks = new BoundedMap\u003cstring, BackgroundCommandRecord\u003e(MAX_BACKGROUND_TASKS) 改为传入 onEvict。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\background-command.ts; line_start=112; line_end=115; action=新增; detail=在 constructor 中创建 BoundedMap 时，onEvict 回调实现：若 record.state 非终态，调用 terminateChild(record.child, this.guard()) + clearTimeout(record.timeout) + clearInterval(record.heartbeat)。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "BoundedMap 现有使用方不受影响（未传 onEvict 时行为不变）。BackgroundCommandManager 的 dispose() 方法仍保留完整清理路径，与 eviction 回调不冲突。",
+                        "issue_id":  "GAP-PM-03",
+                        "feasible":  true,
+                        "original_remediation":  "为 BoundedMap 增加 onEvict 销毁回调，淘汰最旧条目时主动触发 terminateChild 强收子进程与定时器。"
+                    },
+                    {
+                        "missed_areas":  "query.rs 为纯 QueryBuilder 无关并发控制。当前 transaction 层仅 expose execute() 方法，若上层绕过 transaction 直接使用 pool.get() 并执行写操作，则仍需外层重试保护。建议在 pool.rs 中提供 execute_with_retry() 辅助方法。GAP-04-05（orphan）已合并至此。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "写事务改用 BEGIN IMMEDIATE；在 transaction.execute 中封装带指数退避的重试循环",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-db\\src\\transaction.rs; line_start=17; line_end=17; action=修改; detail=将 \"BEGIN TRANSACTION\" 改为 \"BEGIN IMMEDIATE\"。读事务仍可用 BEGIN TRANSACTION（Deferred），但当前代码为统一入口，所有事务提升为 IMMEDIATE 避免锁升级死锁。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-db\\src\\transaction.rs; line_start=27; line_end=29; action=修改; detail=在 execute() 方法中封装重试逻辑：遇到 rusqlite::Error::SqliteFailure(_, Some(ref msg)) 且 msg == \"database is locked\" 或 SQLITE_BUSY 时，执行指数退避重试（最多 5 次，退避基数 100ms，每次乘 2，加 ±50ms random jitter）。超过重试次数后传递原始错误。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "BEGIN IMMEDIATE 在首次 execute_batch 时即获取写锁，若系统频繁读事务可能增加写事务等待时间。WAL 模式下此影响较小。5 次退避重试引入最多 ~6.2s 额外延迟。",
+                        "issue_id":  "GAP-PM-04",
+                        "feasible":  true,
+                        "original_remediation":  "将写事务升级为 BEGIN IMMEDIATE，并在写操作层引入带 random jitter 的 5 次指数退避重试机制。"
+                    },
+                    {
+                        "missed_areas":  "Rust compaction 的 safe_drop_end 函数（line 100-121）未被改动，其 role 级邻接保护逻辑在改为 retain 后仍需保留。GAP-04-07（GC call）和 GAP-04-08（shrink_to_fit）已合并至此修复包。TS 侧 pruneHistoricalToolOutputs 需确保在 message.blocks 格式（非旧版 content/parts 格式）下正确工作。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "分三部分：TS 侧新增 pruneHistoricalToolOutputs 函数 + 在 session-loop 中调用 + Rust 侧 compaction 优化",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session.ts; line_start=55; line_end=63; action=新增; detail=新增 pruneHistoricalToolOutputs(messages: AgentMessage[], activeWindowSize = 10, maxBytesPerOutput = 32768): AgentMessage[] 函数。遍历 messages，对超过 activeWindowSize 轮前的 tool 角色消息，遍历其 blocks 将 type:\u0027tool-result\u0027 的 text 超出 maxBytesPerOutput 的部分裁剪为 \u0027[tool output truncated: N bytes]\u0027。返回新数组。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session-loop\\index.ts; line_start=258; line_end=260; action=修改; detail=在上下文压缩（context compression/compaction）后，调用 pruneHistoricalToolOutputs(messages) 对消息列表做 Tool Payload 裁剪，并将结果写回 session store。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\session-loop\\index.ts; line_start=260; line_end=262; action=新增; detail=在 compaction 和 pruneHistoricalToolOutputs 完成后，调用 global.gc?.() 提示 V8 回收堆内存（仅在 --expose-gc 或 Node \u003e= 14 的 --gc-global 下有效）。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=28; line_end=48; action=重写; detail=重写 compact() 方法：原地操作 messages: (1) messages.retain(|m| !m.is_custom_ui_msg) 过滤掉 UI 消息（零拷贝），(2) 调用 self.strip_images_from_messages(messages)，(3) messages.shrink_to_fit() 释放 Vec 多余容量。消除 messages.iter().cloned().collect() 全量深拷贝。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "pruneHistoricalToolOutputs 是纯函数式裁剪，不影响消息完整性。global.gc?.() 仅在 --expose-gc 启用的进程中生效，在普通进程中为 no-op。Rust 侧改用 retain 后，消息索引语义不变但向量内部内存布局变化，依赖 indices 的外部代码不受影响。",
+                        "issue_id":  "GAP-PM-05",
+                        "feasible":  true,
+                        "original_remediation":  "实现 pruneHistoricalToolOutputs 截断 10 轮前的 Raw Payload，在 Compaction 结束添加显式 GC 调用；Rust compaction 原地 retain 并调用 shrink_to_fit()。"
+                    },
+                    {
+                        "missed_areas":  "Unix 分支在 defaultProcessShell() 的 bash -lc 中没有独立的 prelude 注入机制（line 286-289），需在 args() 中添加 `set +o interactive` 或注入 `BASH_ENV` 环境变量。当前 v2 修复计划未覆盖 Bash 模式。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 createGuardedProcessEnv 和 buildWindowsPowerShellScript 中注入 12 个防卡死环境变量",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\process-lifecycle\\process-executor.ts; line_start=223; line_end=233; action=修改; detail=在 createGuardedProcessEnv 中，在现有 PYTHONUTF8/PYTHONIOENCODING 赋值之后，增加：guarded.CI = \u0027true\u0027; guarded.GIT_TERMINAL_PROMPT = \u00270\u0027; guarded.GIT_PAGER = \u0027cat\u0027; guarded.PAGER = \u0027cat\u0027; guarded.PIP_NO_INPUT = \u00271\u0027; guarded.YARN_ENABLE_IMMUTABLE_INSTALLS = \u0027false\u0027; guarded.NPM_CONFIG_AUDIT = \u0027false\u0027; guarded.NPM_CONFIG_FUND = \u0027false\u0027; guarded.TERM = \u0027dumb\u0027; guarded.PS1 = \u0027\u0027; guarded.DEBIAN_FRONTEND = \u0027noninteractive\u0027（仅 Unix）；guarded.GIT_EDITOR = \u0027true\u0027;}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\process-lifecycle\\process-executor.ts; line_start=250; line_end=270; action=修改; detail=在 buildWindowsPowerShellScript 的 prelude 中，在现有的 $env:PYTHONUTF8/$env:PYTHONIOENCODING 行后，追加：$env:CI=\u0027true\u0027; $env:GIT_TERMINAL_PROMPT=\u00270\u0027; $env:GIT_PAGER=\u0027cat\u0027; $env:PAGER=\u0027cat\u0027; $env:PIP_NO_INPUT=\u00271\u0027; $env:TERM=\u0027dumb\u0027;}"
+                                                                ]
+                                                  },
+                        "side_effects":  "CI=true 可能改变某些构建行为（如跳过 devDependencies 安装、缩短日志输出）。GIT_TERMINAL_PROMPT=0 确保 git 不会因 credential 弹窗卡死。PIP_NO_INPUT=1 确保 pip 无交互模式。总体副作用可控且符合预期。部分变量（如 DEBIAN_FRONTEND）仅 Unix 有效，Windows 分支需条件注入。",
+                        "issue_id":  "GAP-PM-06",
+                        "feasible":  true,
+                        "original_remediation":  "注入全套 Anti-Hanging 非交互环境变量（CI=true, GIT_TERMINAL_PROMPT=0, PIP_NO_INPUT=1, PAGER=cat 等）。"
+                    },
+                    {
+                        "missed_areas":  "GAP-05-02（TS 侧行分割规范化，orphan 节点）已包含在此修复包中，需确认 TS 侧 splitLinesForSeek 与 Rust 侧 split_lines_for_seek 行为完全一致（CRLF → \\n 后 split，保留末尾空行），可以复用现有 TS 实现作为参照。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "Rust 侧新增 eof 参数 + SeekResult 返回结构体（含 match_count, pass_tried），新增 split_lines_for_seek 保留 trailing empty line；TS 侧无需改动（已有 eof/matchCount）。Golden fixture 已有 eof-suffix-unique 用例（seek-cases.json:81），Rust 侧需修改 golden_fixture_seek_cases_json_parity 使其调用原生 eof 参数而非模拟。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-diff\\src\\seek_sequence.rs; line_start=108; line_end=155; action=修改; detail=替换 seek_sequence 签名：pub fn seek_sequence(lines: \u0026[\u0026str], pattern: \u0026[\u0026str], start: usize, eof: bool) -\u003e SeekResult，新增 SeekResult 结构体 { hit: Option\u003cSeekHit\u003e, match_count: usize, pass_tried: Vec\u003cSeekPass\u003e }。当 eof=true 时 search_start = lines.len() - pattern.len()；保留 match_count 诊断使调用方能区分 ambiguous 与 missing。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-diff\\src\\seek_sequence.rs; line_start=157; line_end=162; action=修改; detail=同步更新 seek_sequence_owned 签名，传递 eof 参数。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-diff\\src\\seek_sequence.rs; line_start=1; line_end=386; action=新增; detail=实现 split_lines_for_seek(lines: \u0026str) -\u003e Vec\u003c\u0026str\u003e：类似 TS splitLinesForSeek，保留末尾空行（不同于标准 lines() 会剥离末尾 \\n）。作为 pub fn 导出。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-diff\\src\\seek_sequence.rs; line_start=328; line_end=385; action=修改; detail=修改 golden_fixture_seek_cases_json_parity 测试：将 eof 分支从模拟 start 改为直接调用 seek_sequence 的 eof 参数，消除仿真偏差。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\shared-utils\\src\\file\\seek-sequence.ts; line_start=245; line_end=249; action=无需修改; detail=TS 侧 splitLinesForSeek / seekSequence / eof 参数已实现完备（line 195, 209, 245-249），无需修改。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "Rust 侧 seek_sequence 返回值类型从 Option\u003cSeekHit\u003e 变更为 SeekResult 结构体，所有调用方（当前仅测试和 golden fixture 测试）需适配新返回类型。split_lines_for_seek 新增导出无破坏性。",
+                        "issue_id":  "GAP-SE-01",
+                        "feasible":  true,
+                        "original_remediation":  "在 Rust 侧引入 seek_sequence_full，支持 eof、match_count 诊断和保留末尾空行的 split_lines_for_seek。"
+                    },
+                    {
+                        "missed_areas":  "GAP-05-04（TS 侧反向检查，orphan 节点）已包含在此修复包中。Rust 侧 Message 结构体需要在 conex-types crate 中确认是否暴露 tool_call_id 字段用于 ID 级别配对。若当前 Message 无 tool_call_ids 字段，需在 conex-types 中补充。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "Rust `safe_drop_end` 增加 ID 级 tool_call→tool_result 配对断言；TS `includeRequiredToolCallMessages` 增加反向追溯（保留 tool_call 要求保留其 tool_result）。函数名不是 `calculateSafeCompactionCutoff`（方案中的概念命名），实际函数为 `safe_drop_end`（Rust）和 `includeRequiredToolCallMessages`（TS）。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=100; line_end=121; action=修改; detail=修改 safe_drop_end：在定位 end 后，扫描 messages[start+1..end] 范围内所有 assistant 消息的 tool_call IDs，然后检查 messages[end..] 中是否存在对应的 tool_result（通过 role==\u0027tool\u0027 消息的 content 或 messages 的 tool_call_id 字段）。若有 tool_call 在 dropped 范围内但 tool_result 在保留范围内，则扩展 end 以包含该 tool_result。反之，若有 tool_result 在 dropped 范围内但 tool_call 在保留范围内，则停止 drop（保持 end 不变或缩小）。总之确保 tool_call↔tool_result 配对不被截断。}",
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-compaction\\src\\compaction.rs; line_start=1; line_end=216; action=新增; detail=在 safe_drop_end 中需要访问 Message 结构体的 tool_call_ids 字段（需确认 Message 类型是否包含该字段）。若不包含，需要在 crate 层增加 ID 提取辅助函数。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\context-compression\\compression-utils.ts; line_start=137; line_end=169; action=修改; detail=修改 includeRequiredToolCallMessages：在现有正向追溯（tool_result→tool_call）基础上增加反向追溯——构建 keptToolCallIds 集合（index \u003e= firstKeptIndex 范围内的 tool_call block IDs），然后扫描 kept 范围内的 tool_result，若有 tool_result 引用了 kept 范围内的 tool_call 但 tool_result 本身的 index \u003c firstKeptIndex（即被裁切掉了），扩展 firstKeptIndex 以包含该 tool_result 所在的 message。}",
+                                                                    "@{file=C:\\Software\\conex\\packages\\agent-runtime\\src\\context-compression\\serializer.ts; line_start=1; line_end=150; action=无需修改; detail=serializer.ts 仅消费裁切结果，不参与裁切决策，无需修改。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "Rust safe_drop_end 增加 ID 扫描可能略微增加 O(n) 开销（但 compaction 本身已是 O(n)）。TS includeRequiredToolCallMessages 的反向追溯可能在某些边界情况下增加更多保留消息，轻微降低压缩率但可保证无孤立工具对 → Provider HTTP 400。",
+                        "issue_id":  "GAP-SE-02",
+                        "feasible":  true,
+                        "original_remediation":  "实现双向 calculateSafeCompactionCutoff，确保 assistant.tool_calls 与对应的 tool_result 被原子同存或同删。"
+                    },
+                    {
+                        "missed_areas":  "resolve_existing（types.rs:149）在 resolve_for_write 中也有 canonicalize 调用（line 149），以及 while 循环中的 ancestor.canonicalize()（line 178），这两处也需替换。perf/fs.rs 中 file_info（line 118）的 std::fs::metadata(path) 也会跟随 symlink，但 metadata 不触发 ELOOP（只跟随一次），无需额外防护。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 conex-fs 中实现 safe_canonicalize(path, max_hops=40) 函数，用 visited_set (HashSet\u003cPathBuf\u003e) 检测循环，替代所有裸 canonicalize() 调用。需 patch 4 个 Rust 文件：path_utils.rs、types.rs（WorkspaceFsGuard）、perf/fs.rs、directory.rs。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\crates\\conex-fs\\src\\path_utils.rs; line_start=1; line_end=22; action=新增+修改; detail=新增 pub fn safe_canonicalize(path: \u0026Path, max_hops: usize) -\u003e Result\u003cPathBuf\u003e：手动解析 symlink 链，使用 visited_set (HashSet\u003cPathBuf\u003e) 追踪已访问路径，超过 max_hops 或检测到循环时返回错误。修改 resolve_under_root：将其中的 std::fs::canonicalize 调用（line 6, 13）替换为 safe_canonicalize(path, 40)。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\fs_commands\\types.rs; line_start=99; line_end=107; action=修改; detail=修改 WorkspaceFsGuard::new：将 line 100 的 root.as_ref().canonicalize() 替换为 safe_canonicalize(root.as_ref(), 40)。需引入 use conex_fs::path_utils::safe_canonicalize。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\fs_commands\\types.rs; line_start=109; line_end=135; action=修改; detail=修改 WorkspaceFsGuard::resolve_existing：将 line 119 的 candidate.canonicalize() 替换为 safe_canonicalize(\u0026candidate, 40)。同时将 line 149 的 resolve_for_write 中的 candidate.canonicalize() 替换。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\perf\\fs.rs; line_start=148; line_end=150; action=修改; detail=修改 start_watcher_internal：将 line 149 的 Path::new(\u0026path).canonicalize() 替换为 safe_canonicalize(Path::new(\u0026path), 40)。需引入 use conex_fs::path_utils::safe_canonicalize。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\fs_commands\\directory.rs; line_start=20; line_end=20; action=无需修改; detail=directory.rs 通过 guard.resolve_existing(path) 间接调用 canonicalize，且仅做单层 read_dir（不递归），当 types.rs 修复后该路径自动受保护。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "safe_canonicalize 基于软件实现 symlink 解析而非 OS 级，失败时返回特定错误而非 ELOOP。所有调用方需处理新的错误类型。max_hops=40 是安全值（Linux 默认 40 symlink 限制），不影响正常的文件路径解析。",
+                        "issue_id":  "GAP-SE-03",
+                        "feasible":  true,
+                        "original_remediation":  "实现带 hop count 限制 (\u003c=40) 和 visited_set 追溯的 safe_canonicalize / safe_abs_path，防止无限递归。"
+                    },
+                    {
+                        "missed_areas":  "applyFileDiff.test.ts 中的 classifyFileDiff 测试用例需补充 provisional 用例。流式数据产生方（如会话处理/SSE 接收端）需在生成过程中正确设置 provisional=true，在完成时设置 provisional=false 或去除该字段——此部分属于上游数据生产者修复，不在 SE-04 直接范围内，但此临时 r3_a05 报告中可标注为边界依赖。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "在 FileDiff 类型定义中添加 provisional 可选字段；修改 classifyFileDiff 检测 provisional=true 时返回 ok:false；UI 层（DiffCardFileList.tsx）对 provisional diff 显示\"流式生成中\"提示而非默认的无法应用提示。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\store\\types.ts; line_start=103; line_end=119; action=修改; detail=在 FileDiff 接口中新增字段：provisional?: boolean; （置于 gitStatus 之后）。表示该 FileDiff 仍在流式生成中，尚未完成，不应接受落盘。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\applyFileDiff.ts; line_start=209; line_end=263; action=修改; detail=在 classifyFileDiff 函数开头（pathCheck 之后、changes 检查之前）增加：if (diff?.provisional) { return { ok: false, reason: \u0027diff 仍在流式生成中\u0027 }; }。确保流式未完成的半截 diff 被安全拒绝。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\components\\DiffCardFileList.tsx; line_start=193; line_end=197; action=修改; detail=修改 UI 提示逻辑：将第 193 行的条件判断从 !classifyFileDiff(f).ok 扩展为检查 f.provisional。当 provisional 为 true 时，显示明确提示\"正在生成 diff，完成后即可应用\"，而非通用的\"无法安全自动应用\"。Accept 按钮已在 line 259 通过 disabled={applyBusy || !classifyFileDiff(f).ok} 自动禁用，provisional 导致 classifyFileDiff 返回 !ok，Accept 已不可点击，不需修改按钮逻辑。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "provisional diff 被 classifyFileDiff 拒绝后影响所有依赖该函数的调用链：applyFileDiffToDisk（line 472）自动跳过写入；DiffCardFileList UI 的 Accept 按钮自动禁用。不会影响已有非 provisional diff 的行为。",
+                        "issue_id":  "GAP-SE-04",
+                        "feasible":  true,
+                        "original_remediation":  "为 FileDiff 增加 provisional?: boolean；classifyFileDiff 对 provisional diff 返回 ok: false；UI Accept 按钮硬性禁用并显示流式生成中。"
+                    },
+                    {
+                        "missed_areas":  "前端未考虑页面可见性变化（visibilitychange）时自动释放唤醒锁；run_stream.rs 的 sidecar 重连逻辑也应关联唤醒锁生命周期，确保重连期间不被睡眠打断。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "新增 power.rs 跨平台唤醒锁模块，集成到 register_handlers! 宏中，实现 Tauri Command 层 set_keep_awake(active: bool) → ()。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\power.rs; line_start=1; line_end=1; action=新增; detail=创建 power.rs：含 mod-level 条件编译，windows 调用 SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED|ES_DISPLAY_REQUIRED)，macOS 通过 IOKit IOPMAssertionCreate(kIOPMAssertionTypeNoSleep, ...)，Linux 通过 DBus org.freedesktop.PowerManagement.Inhibit。导出 workbench_set_keep_awake Tauri Command。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\main.rs; line_start=9; line_end=9; action=修改; detail=在 `mod perf;` 后新增 `mod power;`。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\main.rs; line_start=21; line_end=110; action=修改; detail=在 register_handlers! 中添加 `power::workbench_set_keep_awake,` 命令注册。建议放在 perf 命令组之后（line ~102 附近）。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\Cargo.toml; line_start=48; line_end=48; action=修改; detail=macOS 目标添加 [target.\u0027cfg(target_os = \"macos\")\u0027.dependencies] io-kit = \"...\"；Linux 目标添加 dbus 或 zbus 依赖。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "需要 Tauri 2 的异步 Command 支持（power 操作是同步的，需 spawn_blocking）；macOS App Store 提交需在 entitlements 中请求 com.apple.developer.powermanagement.sleepdisabled 权限；Linux DBus 权限需要对应 PolicyKit 配置。前端需在长任务开始时调用 set_keep_awake(true)，结束时/页面卸载时调用 set_keep_awake(false)，避免电池消耗。",
+                        "issue_id":  "GAP-UI-01",
+                        "feasible":  true,
+                        "original_remediation":  "在 Tauri 主进程中增加 power.rs 唤醒锁模块（基于 Win32 SetThreadExecutionState / macOS IOKit / Linux DBus），并导出 workbench_set_keep_awake 命令。"
+                    },
+                    {
+                        "missed_areas":  "未处理 streaming 中途分帧渲染缓冲区（StreamRenderBuffer）的中断刷新：当 abort 时 renderBufferRef.current 可能仍有未 flush 的累积文本，handleStopGeneration 中虽然调用了 stopBuf?.push(\u0027\u0027, true)/flush/stop，但 need verify this is sufficient。另外 useStreamCallbacks 内 `onRunError` 的 abort 路径（line 388-414）也可能需要类似的 thinking 保留逻辑。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "修改 directFetchBridge.ts 的 catch 分支，在 abort 路径前执行 onThought 最终刷新和 onComplete；在 handleStopGeneration 中保留思考缓冲区并内联 Token 估算。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\directFetchBridge.ts; line_start=287; line_end=296; action=修改; detail=将 line 287-288 的 `finished = true; callbacks.onComplete();` 与 catch 块（line 289-296）重组为：1) 在 try 块正常结束（line 220 loop 退出或 line 277 finish_reason）后走完整 onComplete；2) 在 catch 块中先 flush assistantThought 到 onThought（line 268-269 的最终值），检查是否已有部分文本输出，若有则依然调用 onComplete()，否则才跳过；不再仅在 `controller.signal.aborted` 时裸 return。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\directFetchBridge.ts; line_start=267; line_end=270; action=修改; detail=在 thoughtPiece 刷新后增加最终 onThought 调用时机：当 abort 中断前，确保 assistantThought 的最新完整值已传递给 onThought。具体：在 catch 块 abort 检查前插入 `if (assistantThought) callbacks.onThought(assistantThought);`。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\hooks\\chat-stream\\useStreamCallbacks.ts; line_start=567; line_end=615; action=修改; detail=在 handleStopGeneration 中：1) 保留已积累的 thinking 缓冲区内容而非清空（line 591 改为仅当 thinking 为 \u0027正在处理…\u0027 或 \u0027正在思考中...\u0027 时才清空，否则保留 asst.thinking 原文）；2) 增加内联 Token 估算逻辑（按字符数 /4 近似），调用 syncTelemetryData 更新 Usage 和计费，避免中断流 Usage 归零；3) 参考 onComplete 的 line 501-546 中的 fetchRunSnapshotUsage 路径，若 runId 仍有效则尝试获取真实 Usage 后落盘。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "abort 路径增加 onComplete 调用可能触发 onComplete 内部副作用（如 scheduleFinalMarkdownHtml、pushRunNotice 等），需确保 runClosed 标志正确设置避免重复执行；fetchRunSnapshotUsage 在 Run 刚被取消时可能返回空/失败，内联估算作为 fallback 是必要的。",
+                        "issue_id":  "GAP-UI-02",
+                        "feasible":  true,
+                        "original_remediation":  "即使 abort 也强制触发 onThought 刷新与阶段性 onComplete() 封存；引入 resolveInterruptedTokens 启发式 Token 估算。"
+                    },
+                    {
+                        "missed_areas":  "未检查 `ModelPicker.tsx` 组件的滚动滚轮事件拦截 — 若弹出容器内部可滚动但外部页面同步滚动的 overscroll 行为，需在 CSS 中增加 `overscroll-behavior: contain` 到 .mpickScroll 元素。ComposePlusMenu 也同样需要在 scroll container 上设置 overscroll-behavior。另外 ProjectPickerMenu 的搜索框（className=searchInput）在菜单弹出时 autoFocus（line 173），可能导致键盘滚轮仍然穿透的问题未被覆盖。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "修复三处 CSS/TS 问题：增加 ComposePlusMenu 的 max-height/overflow；更新 ModelPicker 视口钳制公式；替换 ProjectPickerMenu 的 Function() 为 ESM import。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\components\\ComposePlusMenu.module.css; line_start=14; line_end=26; action=修改; detail=为 .main（line 14）增加 `max-height: calc(100dvh - 3.5rem); overflow-y: auto; overscroll-behavior: contain;`。当前 .main 仅定义 width、background、border、border-radius、box-shadow、padding、display、flex-direction、gap、animation、transform-origin，缺少视口高度钳制。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\components\\ComposePlusMenu.module.css; line_start=27; line_end=29; action=修改; detail=在 .mainExit 后也考虑同步 max-height/overflow 约束（若退出动画期间内容尺寸突变可能引起布局偏移），建议 .mainExit 保持相同 overflow 行为。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\components\\ModelPicker.module.css; line_start=7; line_end=7; action=修改; detail=将 `max-height: min(360px, 52vh)` 改为 `max-height: min(360px, calc(100dvh - 3.5rem))`，增加 `overscroll-behavior: contain;`。.mpickScroll（line 84-89）已有 overflow-y: auto，但父容器 mpick 的 max-height 使用过时的 52vh。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\components\\ProjectPickerMenu.tsx; line_start=36; line_end=47; action=修改; detail=将 line 37 的 `Function(\u0027return import(\"@tauri-apps/plugin-dialog\")\u0027)()` 替换为 `import(/* @vite-ignore */ \u0027@tauri-apps/plugin-dialog\u0027)`（与 FirstRunWizard.tsx:262 相同的标准 ESM 动态 import 模式）。删除整个 Function 构造器路径，直接 `const mod = await import(...).catch(...)`。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "ComposePlusMenu 的 max-height 改动在窗口较小时可能裁剪过多菜单项，需确保 .main 内部已使用 flex-shrink: 0 确保常规项不被压缩。ProjectPickerMenu 的 import 改动后，vite 构建将静态分析此导入并打包 plugin-dialog 代码，不再能运行时忽略（Function 模式可绕过打包），但这是正确做法。",
+                        "issue_id":  "GAP-UI-03",
+                        "feasible":  true,
+                        "original_remediation":  "统一使用 max-h-[calc(100dvh-3.5rem)] 视口弹性钳制与 overscroll-behavior: contain 滚轮拦截；重构为标准 ESM 动态 import。"
+                    },
+                    {
+                        "missed_areas":  "hasKey 布尔标记仍存储在 localStorage 中，攻击者可通过遍历 profiles 得知哪些供应商已配密钥（元数据泄露）。考虑改用后端请求时的 `hasApiKey` 引擎状态间接判断。Skill 沙盒 Mount Guard 需要额外的调用方接入点（当前 sandbox 创建链路中无挂载校验），改动面超出 credentials.rs 本身。providerProfiles.ts 中 `oauthToken` 的 `refreshToken` 字段若已持久化到后端（DPAPI）则前端不应保留副本。",
+                        "corrected_remediation":  {
+                                                      "strategy":  "修复 credentials.rs 的非 Windows 加密缺位（核心问题）；修复 providerProfiles.ts 的 oauthToken/oauthConfig 静默丢弃 bug（数据损失）；localStorage apiKey 已剥除无需再改，只需移除 hasKey 元数据泄露；Skill 沙盒 Mount Guard 作为独立议题。",
+                                                      "steps":  [
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\config\\credentials.rs; line_start=166; line_end=210; action=修改; detail=为 #[cfg(not(windows))] 的三个 OS 函数添加 macOS Keychain 支持（通过 Security.framework C API 或 rust-keychain crate）：1) os_secret_store_available 验证可访问 keychain；2) write_os_secret 用 SecKeychainAddGenericPassword 存储；3) read_os_secret 用 SecKeychainFindGenericPassword 读取。同时为 Linux 添加 libsecret D-Bus 或 secret-service crate 的等效实现。保留 Err/MemoryOnly 降级路径作为 fallback。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\Cargo.toml; line_start=48; line_end=48; action=修改; detail=添加条件依赖：[target.\u0027cfg(target_os = \"macos\")\u0027.dependencies] security-framework = \"...\"；[target.\u0027cfg(target_os = \"linux\")\u0027.dependencies] secret-service = \"...\" 或 libsecret-sys。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\providerProfiles.ts; line_start=310; line_end=326; action=修改; detail=修复 normalizeProviderProfile 的 oauth 字段丢失：在返回类型 ProviderProfile 的规范对象中保留 `oauthConfig: p.oauthConfig` 和 `oauthToken: undefined`（仅保留配置模板，不持久化令牌）。并在 ProviderProfile 类型定义中确认这两个字段是可选的可序列化子集。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\crish-desktop\\src\\api\\providerProfiles.ts; line_start=514; line_end=517; action=修改; detail=stripApiKey 函数当前已正确剥除 apiKey。考虑额外剥离 `oauthToken` 字段（如有），仅保留 `hasKey` 布尔标记（可考虑移除 hasKey 减少元数据泄露，但破坏性较大建议保留）。}",
+                                                                    "@{file=C:\\Software\\conex\\apps\\agent-workbench\\src-tauri\\src\\config\\credentials.rs; line_start=1; line_end=1; action=新增; detail=（GAP-06-08 合并至此）实现 validate_skill_sandbox_mount(path: \u0026Path) -\u003e Result\u003c(), SandboxViolation\u003e 函数，扫描挂载路径禁止包含 .env、credentials、.ssh 等敏感文件。该函数在沙盒创建挂载点前被调用。}"
+                                                                ]
+                                                  },
+                        "side_effects":  "macOS Keychain 使用需要应用签名（codesign）；首次访问可能弹出钥匙串权限弹窗。Linux libsecret 需要 D-Bus session bus 可达（容器/CI 场景可能缺失）。oauthToken 的序列化保留需评估安全边界——若仅存配置（clientId/authorizeUrl）而不存令牌，是安全的；若意外序列化 accessToken 则倒退安全风险。",
+                        "issue_id":  "GAP-UI-04",
+                        "feasible":  "partial",
+                        "original_remediation":  "补全 macOS Security Framework 与 Linux SecretService 支持；前端序列化存 localStorage 时剥离明文 apiKey；增加 Skill 沙盒凭据 Mount Guard。"
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "scripts/ci/ 目录完全不存在，G1 脚本需从文档内嵌源码（quality_gates_and_waves_v2.md:110-271）提取创建",
+                                                      "steps":  [
+                                                                    "@{file=scripts/ci/; action=创建目录; detail=mkdir -p scripts/ci/ 或 New-Item -ItemType Directory -Path scripts/ci}",
+                                                                    "@{file=scripts/ci/check-g1-style.js; action=创建; detail=将 quality_gates_and_waves_v2.md:110-271 的 JavaScript 代码提取为文件；注意第 4 行 windowsHide 仅在 Node ≥17 可用，需添加 process.platform 判断}",
+                                                                    "@{file=scripts/ci/check-g1-style.js; action=修复行 199; detail=path.resolve(__dirname, \u0027../../\u0027) 在脚本位于 scripts/ci/ 时解析正确，若脚本位置变更需同步调整}",
+                                                                    "@{file=scripts/ci/check-g1-style.js; action=修复 forbiddenPatterns; detail=当前仅 6 条，需补充 DNS 预解析(#4)、密钥降级链(#5)、IpcRouter(#8)、React.memo 95%(#9) 共 4 条以匹配 ANTI_OVERENGINEERING_GUARDRAILS.md 的 9 条红线}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-G1-script",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "scripts/ci/ 目录不存在，G3/G4 脚本需从文档内嵌源码（quality_gates_and_waves_v2.md:280-432）提取创建",
+                                                      "steps":  [
+                                                                    "@{file=scripts/ci/check-g3-g4-resource.js; action=创建; detail=将 quality_gates_and_waves_v2.md:280-432 的 JavaScript 代码提取为文件}",
+                                                                    "@{file=scripts/ci/check-g3-g4-resource.js; action=修复功能缺陷; detail=G4 testG4MemoryAndHandles 中 store 数组声明后未使用（死代码），循环内仅创建 tempContext 但不存储，无法模拟真实内存压力。建议改为 push/分配实际大小}",
+                                                                    "@{file=scripts/ci/check-g3-g4-resource.js; action=修复 G3 竞态; detail=child.on(\u0027exit\u0027) 回调与 setTimeout 间存在竞态：子进程可能在 setTimeout 前退出，此时 remainingChildren 读取不准确。建议在 exit 回调中直接检查孤儿进程而非延迟 500ms}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-G3-G4-script",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "vitest.e2e.config.ts 在仓库中不存在。仓库有 vitest.integration.config.ts 可用于集成/E2E 测试，需改用现有配置或创建新配置",
+                                                      "steps":  [
+                                                                    "@{file=vitest.e2e.config.ts; action=创建或修改引用; detail=选项 A：新建 vitest.e2e.config.ts，继承通用配置并添加 E2E 特定设置（testTimeout: 60000, retry: 1, include: e2e/**）}",
+                                                                    "@{file=quality_gates_and_waves_v2.md; action=修改行 98/542/624; detail=选项 B：若使用现有 vitest.integration.config.ts，将 --config vitest.e2e.config.ts 改为 --config vitest.integration.config.ts；并调整 G5 描述为集成测试而非完整 E2E}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-G5-config",
+                        "feasible":  false,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "scripts/ci/ 目录不存在，两个 runner 脚本需从文档内嵌源码创建",
+                                                      "steps":  [
+                                                                    "@{file=scripts/ci/; action=创建目录; detail=确保目录存在}",
+                                                                    "@{file=scripts/ci/run-quality-gates.ps1; action=创建; detail=从 quality_gates_and_waves_v2.md:440-549 提取 PowerShell 脚本}",
+                                                                    "@{file=scripts/ci/run-quality-gates.sh; action=创建; detail=从 quality_gates_and_waves_v2.md:558-628 提取 Bash 脚本；设置 chmod +x}",
+                                                                    "@{file=scripts/ci/run-quality-gates.ps1; action=修复行 464 拼写错误; detail=\u0027Cipher\u0027 应为 \u0027Cyan\u0027 或 \u0027Blue\u0027，PowerShell 无 Cipher 颜色名（Write-Host 参数错误）}",
+                                                                    "@{file=scripts/ci/run-quality-gates.sh; action=修复行 571; detail=Bash 脚本缺少 set -euo pipefail 已加但 \u0027run_step\u0027 函数中未捕获 stderr；建议添加 2\u003e\u00261 重定向}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-runner-scripts",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "实际 vitest 覆盖率阈值远低于 80%，需修正描述以匹配实际配置",
+                                                      "steps":  [
+                                                                    "@{file=quality_gates_and_waves_v2.md; action=修改行 95; detail=将 \u0027核心覆盖率 \u003e 80%\u0027 改为 \u0027核心覆盖率阈值：statements ≥ 50 / branches ≥ 40 / functions ≥ 50 / lines ≥ 50（根配置，子包略高至 70/60/65/70）\u0027}",
+                                                                    "@{file=vitest.config.ts; action=可选：提高阈值; detail=若团队目标确为 80%，需逐包提升 vitest.config.ts 中的 thresholds 值。当前实际值：root=50/40/50/50, 子包=70/60/65/70}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-coverage-80",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "实际 RED_LINE_PATTERN_COUNT = 17（gatekeeper.rs:12），含 17 条正则模式。文档及 ANTI_OVERENGINEERING_GUARDRAILS.md:13 均需同步修正",
+                                                      "steps":  [
+                                                                    "@{file=analysis/master_repair_plan_v2/quality_gates_and_waves_v2.md; action=修改行 59; detail=将 \u002711 条毁灭性指令拦截\u0027 改为 \u002717 条毁灭性指令拦截\u0027}",
+                                                                    "@{file=ANTI_OVERENGINEERING_GUARDRAILS.md; action=修改行 13; detail=将 \u0027基于 Rust RegexSet 的 11 条毁灭性指令硬拦截\u0027 改为 \u002717 条\u0027}",
+                                                                    "@{file=crates/conex-sandbox/src/gatekeeper.rs; action=验证; detail=当前 17 条已覆盖 Unix rm -rf /、dd/ mkfs 磁盘擦除、Windows Remove-Item/format/del/rd 及各变体与 bypass 模式，确认为正确数量}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-gatekeeper-count",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "sab_ring_buffer 仍存在于 crates/conex-ipc/src/lib.rs:2-5 作为公开模块并 re-export RingBufferHeader。Wave 1 任务正确标识了需要移除，但当前代码中尚未实现移除",
+                                                      "steps":  [
+                                                                    "@{file=crates/conex-ipc/src/lib.rs; action=修改; detail=删除 pub mod sab_ring_buffer; 和 pub use sab_ring_buffer::RingBufferHeader; 两行}",
+                                                                    "@{file=crates/conex-ipc/src/sab_ring_buffer.rs; action=删除; detail=移除整个文件（约 200 行无锁环形缓冲区实现）}",
+                                                                    "@{file=crates/conex-ipc/Cargo.toml; action=检查; detail=移除可能因 sab_ring_buffer 引入的依赖（如有）}",
+                                                                    "@{file=quality_gates_and_waves_v2.md; action=不修改; detail=Wave 1 任务 \u0027移除 sab_ring_buffer\u0027 是正确的计划项；需补充说明此任务尚未完成，仅标记了计划}",
+                                                                    "@{file=ANTI_OVERENGINEERING_GUARDRAILS.md; action=不修改; detail=禁令 2 的描述 \u0027彻底禁止\u0027 是政策层面的正确声明，无需改动}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-sab-ring-buffer",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "ANTI_OVERENGINEERING_GUARDRAILS.md 仅显式编号了 9 条禁令（禁令 1-9），文档声明 10 项与实际不符。建议补充第 10 条或修正计数",
+                                                      "steps":  [
+                                                                    "@{file=ANTI_OVERENGINEERING_GUARDRAILS.md; action=检查是否有遗漏的禁令; detail=当前显式列出 9 条：1)OS沙盒 2)sab_ring_buffer 3)DynamicModelRouter 4)DNS预解析 5)密钥降级链 6)CircuitBreaker 7)MiddlewarePipeline 8)IpcRouter 9)React.memo(95%)。若确为 9 条，将行 4/71 的 \u002710\u0027 改为 \u00279\u0027}",
+                                                                    "@{file=ANTI_OVERENGINEERING_GUARDRAILS.md; action=或补充第 10 条禁令; detail=若意图保留 10 条，需显式添加第 10 条（如 \u0027严禁任意类型断言 as any 绕过类型检查\u0027 已在 quality_gates.md:666 隐含）}",
+                                                                    "@{file=analysis/master_repair_plan_v2/quality_gates_and_waves_v2.md; action=同步修改行 17/71; detail=将 \u002710 项红线设计\u0027 修改为与实际计数一致的数字（9 或 10）}",
+                                                                    "@{file=analysis/master_repair_plan_v2/quality_gates_and_waves_v2.md; action=同步 forbiddenPatterns; detail=G1 脚本 js 中 forbiddenPatterns 仅 6 条，需添加 DNS预解析(#4)、密钥降级链(#5)、IpcRouter(#8)、React.memo(#9) 共 4 条以匹配完整红线列表}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "QG-anti-overengineering-count",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "改为实际路径（文件存在于 other location）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正热点表第 52 行路径; detail=`packages/shared-types/src/protocol-inbound.ts` → `packages/agent-daemon/src/types/protocol-inbound.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-hotspot-protocol-inbound",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "改为实际路径（文件存在于 other crate）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正热点表第 53 行路径; detail=`crates/conex-ipc/src/process.rs` → `crates/conex-sandbox/src/process_tree.rs`；此文件含 11 处 unsafe 块缺 // SAFETY: 注释}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-hotspot-process-rs",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正路径（文件实际存在于 packages/agent-runtime/src/approval/）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R2 S2 files_write 路径; detail=`apps/crish-desktop/src/utils/approval-cache.ts` → `packages/agent-runtime/src/approval/approval-cache.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-S2-approval-cache",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正路径（文件实际存在于 packages/agent-runtime/src/approval/）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R2 S2 files_write 路径; detail=`apps/crish-desktop/src/services/approval-pipeline.ts` → `packages/agent-runtime/src/approval/approval-pipeline.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-S2-approval-pipeline",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正路径（实际文件在 agent-runtime 下的 provider-transport）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R5 E4 files_write 路径; detail=`apps/crish-desktop/src/services/stream-recovery.ts` → `packages/agent-runtime/src/provider-transport/stream-recovery.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-E4-stream-recovery",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正路径（实际文件在 agent-daemon）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R5 E7 files_write 路径; detail=`apps/crish-desktop/src/services/approval-bridge.ts` → `packages/agent-daemon/src/server/approval-bridge.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-E7-approval-bridge",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正路径（实际文件在 agent-daemon）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R5 E7 files_write 路径; detail=`apps/crish-desktop/src/services/approval-queue.ts` → `packages/agent-daemon/src/approval-queue.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-E7-approval-queue",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "删除（该文件不存在于仓库任何位置，且 agent-provider-http 为 Rust crate 仅有 Cargo.toml）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=从 R5 E8 files_write 中删除; detail=`packages/agent-provider-http/src/provider-registry-v2.ts` 不存在，应移除；如 R5-T08 仍需要注册逻辑，可引用 `packages/agent-runtime/src/provider-openai-compatible.ts` 或创建新文件}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-E8-provider-registry",
+                        "feasible":  false,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "删除或替换（S6 任务为给 process.rs 加 // SAFETY: 注释，credentials.rs 非必要依赖）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=从 R2 S6 files_read 中删除或替换; detail=`crates/conex-ipc/src/credentials.rs` 不存在于仓库（只有 apps/agent-workbench/src-tauri/src/config/credentials.rs），且 AG-08 安全注释任务不依赖 credentials，建议直接移除}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-S6-credentials-rs",
+                        "feasible":  false,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "删除（该文件不存在于仓库任何位置）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=从 R3 S6 files_read 中删除; detail=`apps/crish-desktop/src/workers/pretextWorker.ts` 不存在于仓库；S6 任务 `usePretextHeights` 的计算逻辑可仅依赖自身 Hook，无需外部 worker 依赖}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-S6-pretextWorker",
+                        "feasible":  false,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "保留为规划中新建文件（标记为 planned new file，非 hallucination）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=添加注释标记; detail=ChatProviderGuard.tsx 和 ChatCheckpointActions.tsx 为 AG-12 计划新建的 Guard/组件文件，当前不存在但属于修复计划的预期产物，应在矩阵中标注为 `[NEW]`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-A4-ChatProviderGuard",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "保留为规划中新建文件（标记为 planned new file）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=添加注释标记; detail=同上，应标注为 `[NEW]` 表示计划新建}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-A4-ChatCheckpointActions",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "修正测试文件路径（实际存在对应文件）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=修正 R9 T04 测试文件路径; detail=`tests/unit/StreamRenderBuffer.test.ts` → `packages/shared-utils/src/__tests__/StreamRenderBuffer.test.ts`}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-R9-T04-test-path",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "建议两阶段映射：① AG-xx↔GAP-{domain}-xx 显式映射表 ② 在矩阵每行附加 ledger_id 字段",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=在文档开头增加 ID 映射声明表; detail=AG-01=B0=GAP-UI-01(冲突清理), AG-02=GAP-CS-xx(审批缓存), AG-03=GAP-CS-xx(错误透传), AG-04=GAP-UI-xx(session-store), AG-05=GAP-ST-xx/UI-xx(Worker/截断), AG-06=GAP-UI-xx(protocol拆分), AG-07=GAP-xx(CI/CD), AG-08=GAP-UI-xx(XSS/unsafe), AG-09=GAP-TC-xx(ErrorClassifier), AG-10=GAP-UI-xx(上帝文件), AG-11=GAP-xx(Cargo/middleware), AG-12=GAP-UI-xx(Guard组件); D1~D15=GAP-UI-xx(拖拽); P1~P11=GAP-ST-xx(流式); X1~X5=GAP-ST/UI-xx(收尾)}",
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=每行矩阵附加 ledger_id 列; detail=在各 Wave 表中 Issue 列增加对应 GAP-ID 引用，便于跨文档追溯}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-ID-mapping",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "无需修正——path_audit 确认全部 6 条路径均 exists",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=确认无需修改; detail=R1-T01 的 5 条 files_write + 1 条 files_read 经 path_audit 验证全部存在，隔离矩阵正确}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-R1-T01-path-verify",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "无需修正——经 glob 验证 3 条路径均 exists",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=确认无需修改; detail=sessionActions.ts 存在于 apps/crish-desktop/src/store/；session-actions/index.ts 和 types.ts 均存在；隔离矩阵正确}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-R1-T03-path-verify",
+                        "feasible":  true,
+                        "original_remediation":  null
+                    },
+                    {
+                        "missed_areas":  null,
+                        "corrected_remediation":  {
+                                                      "strategy":  "提交系统性路径校正集（批量修正至 write_set_isolation_matrix_v2.md 以及 cross_index.json）",
+                                                      "steps":  [
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=批量修正所有 wrong_path 和 hallucinated 路径; detail=1) 热点表 2 条：protocol-inbound.ts→agent-daemon; process.rs→crates/conex-sandbox 2) 写集矩阵 5 条修正：approval-cache/approval-pipeline/stream-recovery/approval-bridge/approval-queue 3) 写集矩阵 2 条删除：provider-registry-v2（不存在）、credentials.rs（不存在/非依赖） 4) 写集矩阵 2 条标记[NEW]：ChatProviderGuard/ChatCheckpointActions 5) 写集矩阵 1 条修正测试路径：StreamRenderBuffer.test.ts}",
+                                                                    "@{file=write_set_isolation_matrix_v2.md; action=附加 ID 映射声明表; detail=AG/B/D/P/X ↔ GA P-ST/CS/TC/PM/SE/UI 映射关系}",
+                                                                    "@{file=v2_cross_index.json; action=同步更正 cross_index 中对应的 files_write/files_read 路径; detail=AG-02 → approval-cache 路径修正; AG-03 → stream-recovery 路径修正; AG-06/AG-10 → protocol-inbound 路径修正等}"
+                                                                ]
+                                                  },
+                        "side_effects":  null,
+                        "issue_id":  "WS-systematic-overview",
+                        "feasible":  "partial",
+                        "original_remediation":  null
+                    }
+                ]
+}

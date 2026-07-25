@@ -1,0 +1,168 @@
+{
+  "agent": "RT-4",
+  "round": 1,
+  "description": "修复 agent-runtime Gateway 与运行时组件的 15 个文件",
+  "tasks": [
+    {
+      "id": "T-AR-037",
+      "file": "packages/agent-runtime/src/provider-gateway/credential-resolver.ts",
+      "fixes": [
+        "删除未使用导入 TS6196/TS6133: ProviderRouteSelection, ProviderGatewayPlanCode",
+        "TS2375 exactOptional 行8: account分支 重构为条件展开，移除 ...source 中 undefined 可选属性",
+        "TS2375 exactOptional 行14: api-key分支 重构为条件展开，headers 使用 cloneStringRecord 变量",
+        "TS2375 exactOptional 行26: normalizeResolvedCredential 重构为条件展开，headers/accountId 处理"
+      ]
+    },
+    {
+      "id": "T-AR-038",
+      "file": "packages/agent-runtime/src/provider-gateway/index.ts",
+      "fixes": [
+        "TS6133: 删除未使用导入 AgentMessage, ProviderGatewayPlanCode, ProviderRouteSelection, validateApiKey",
+        "TS2412×4: credentialResolver/secretStore/modelCatalog/gatewayBridge 字段类型改为 X | undefined",
+        "TS2379: listRoutes query 条件展开",
+        "TS2379: failurePlan 调用中 capabilityRequest/modelRouteDecision 条件展开",
+        "TS2379: profileFromProviderRouteOffer 入参条件展开",
+        "TS2375: ProviderFactoryPlan 构造中 providerOptions/modelProfile/capabilityRequest/metadata 条件展开",
+        "TS2375: ProviderGatewayPlan 构造中 capabilityRequest/modelRouteDecision 条件展开",
+        "TS2379: CredentialResolver 选项条件展开",
+        "TS2375: ResolvedProviderCredential 构造中 headers/baseUrl/metadata 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-039",
+      "file": "packages/agent-runtime/src/provider-gateway/route-selector.ts",
+      "fixes": [
+        "TS6133: 删除未使用导入 enrichProfileFromCatalog, profileFromProviderRouteOffer",
+        "新增 compactDefined 辅助函数过滤 undefined 属性",
+        "TS2375: recordRouteResult - ProviderRouteHealth 条件展开 lastSuccess/lastFailure/metadata",
+        "TS2375: toRouteSelection - ProviderRouteSelection 条件展开 endpointType/endpointSupport/streamingSupport/lastSuccess/lastFailure",
+        "TS2375: failurePlan - ProviderGatewayPlan 条件展开 selectedRoute/capabilityRequest/modelRouteDecision",
+        "TS2375: cloneRouteOffer - ProviderRouteOffer 显式声明必需属性 + 条件展开可选属性",
+        "TS2412: cloneModelProfile - ModelProviderRouteMetadata route 条件展开",
+        "TS2375: cloneCredentialSource - 两个分支重构移除 ...source",
+        "TS2375: cloneRouteHealth/cloneRouteHealthEvent - 条件展开 metadata",
+        "TS2375: redactCredentialSource - 两个分支条件展开",
+        "TS2375: routeHealthEvent - 条件展开 metadata"
+      ]
+    },
+    {
+      "id": "T-AR-040",
+      "file": "packages/agent-runtime/src/runtime-metrics/collectors.ts",
+      "fixes": [
+        "TS6133: 删除未使用导入 RuntimeProviderUsageMetrics, RuntimeDurationMetrics, MutableDurationHistogram, MAX_HISTOGRAM_BUCKETS",
+        "修复 outputByteSize 缺失: 改为从 ToolOutput 计算 byteSize",
+        "TS2379: finishSpan 调用中 error 字段条件展开",
+        "TS2379×6: recordProviderSpan startOrUpdateSpan/finishSpan 条件展开",
+        "TS2379: recordCheckpointSpan startOrUpdateSpan sessionId 条件展开",
+        "TS2339: finishSpan 回退对象类型标注修复",
+        "TS2379: snapshot compactSnapshot 调用条件展开 + 类型断言",
+        "TS2554: BoundedMap 构造传递第二个参数 undefined"
+      ]
+    },
+    {
+      "id": "T-AR-041",
+      "file": "packages/agent-runtime/src/runtime-metrics/snapshot.ts",
+      "fixes": [
+        "TS2459: JsonObject 未导出 → 改为从 @crish/shared-types 导入",
+        "TS6133: 删除未使用 MAX_TOOL_NAME_METRICS/DIMENSION_METRICS/TERMINAL_REASONS/TRACE_SPANS/TRACE_ERRORS",
+        "TS2375: durationMetrics 返回类型使用 compactObject + 条件展开",
+        "TS2379: compactDimensions 条件展开",
+        "TS2379: compactDimensions 函数内部条件展开输入参数",
+        "TS2379: errorSummary stack 条件展开 + 类型断言",
+        "TS2379: traceSummary compactObject 使用类型断言",
+        "TS2554: BoundedMap 构造传递第二个参数 undefined",
+        "TS2352: compactObject → RuntimeDurationMetrics 转换添加 unknown"
+      ]
+    },
+    {
+      "id": "T-AR-042",
+      "file": "packages/agent-runtime/src/runtime-components/context-manager.ts",
+      "fixes": [
+        "TS2379: ContextCompressor 构造 toolOutputBudget 条件展开",
+        "TS2379: projectMessageForProvider 参数 toolOutputBudget 条件展开",
+        "TS2375×2: projectPromptContext 返回值 stableContext/volatileContext 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-043",
+      "file": "packages/agent-runtime/src/runtime-components/conversation-engine.ts",
+      "fixes": [
+        "TS2375: TurnResult endReason 条件展开",
+        "TS2375: ConversationSnapshot lastTurnAt 条件展开",
+        "TS2412: restoreFromSnapshot lastTurnAt 赋值默认值回退"
+      ]
+    },
+    {
+      "id": "T-AR-044",
+      "file": "packages/agent-runtime/src/scoped-context.ts",
+      "fixes": [
+        "TS2375: defineScopedRule description/source 条件展开（使用 optionalText 局部变量）",
+        "TS2375: skillToScopedContextRecord description 条件展开",
+        "TS2375: candidateFromRecord description/source 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-045",
+      "file": "packages/agent-runtime/src/scoped-context-resources.ts",
+      "fixes": [
+        "TS2375: ScopedContextResolverProject workspaceRoot/projectRoot 条件展开",
+        "TS2379: loadAndResolveScopedContextResources userEnabledIds/userDisabledIds 条件展开",
+        "TS2375: readScopedRuleFile ScopedRuleInput description/tags/appliesTo 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-046",
+      "file": "packages/agent-runtime/src/state-machine/core.ts",
+      "fixes": [
+        "TS2379: StateDefinition onEnter/onExit 条件展开",
+        "TS2375: transitionTo effect 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-047",
+      "file": "packages/agent-runtime/src/subagent-loop.ts",
+      "fixes": [
+        "TS6196: 删除未使用导入 JsonObject",
+        "TS2379: assemblePromptForProvider systemPrompt 条件展开",
+        "TS2375: AgentProviderRequest systemPrompt 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-048",
+      "file": ["packages/agent-runtime/src/tool-output-budget.ts", "packages/agent-runtime/src/tool-output-guard.ts"],
+      "fixes": [
+        "TS2375: budgetToolOutputForContext ToolOutput artifacts 条件展开",
+        "TS2375: guardToolOutputForContext ToolOutput artifacts 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-049",
+      "file": "packages/agent-runtime/src/tools/tool-definition.ts",
+      "fixes": [
+        "TS2412: inputSchema/inputAliases 属性声明改为可选 ?: 并条件赋值",
+        "TS2379×2: resolveForLLM LlmToolDefinition inputSchema 条件展开"
+      ]
+    },
+    {
+      "id": "T-AR-054",
+      "file": "packages/agent-runtime/src/rich-read.ts",
+      "fixes": [
+        "TS2322: createWorkspaceRichReadProvider read 添加 context 参数",
+        "TS2322: createWorkspaceRichReadProvider 返回类型显式 RichReadDirectoryResource/RichReadByteResource",
+        "TS2375: parseRichReadRequest scheme/startLine/endLine/cursor 条件展开",
+        "TS2375: createArtifactRichReadProvider label/metadata/mimeType 条件展开"
+      ]
+    }
+  ],
+  "summary": {
+    "total_files": 15,
+    "errors_resolved": 82,
+    "tool": "tsc --noEmit",
+    "verification": "所有 15 个目标文件类型错误清零",
+    "out_of_scope": [
+      "BoundedMap 构造签名变更由 shared-utils 层负责，本层仅补充 undefined 参数"
+    ]
+  },
+  "completed_at": "2026-07-25T00:00:00.000Z",
+  "agent_signature": "RT-4"
+}

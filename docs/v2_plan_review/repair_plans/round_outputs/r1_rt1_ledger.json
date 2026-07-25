@@ -1,0 +1,16 @@
+{
+  "agentId": "RT-1",
+  "status": "done",
+  "tasks": [
+    {"taskId": "T-AR-001", "file": "error-classifier.ts", "errorsFixed": 23, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-002", "file": "anthropic-stream-parse.ts", "errorsFixed": 7, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-003", "file": "checkpoint-manifest.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-004", "file": "checkpoint/checkpoint-manager.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-005", "file": "core-event-projector.ts", "errorsFixed": 4, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-006", "file": "conversation-boundary-manifest.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-007", "file": "event-queue/index.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-008", "file": "canonical-event.ts", "errorsFixed": 1, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-009", "file": "gemini-stream-parse.ts", "errorsFixed": 9, "status": "verified", "verifyResult": "pass"},
+    {"taskId": "T-AR-010", "file": "git-versioning.ts", "errorsFixed": 2, "status": "verified", "verifyResult": "pass"}
+  ]
+}

@@ -1,0 +1,756 @@
+{
+    "meta":  {
+                 "generated_at":  "2026-07-25",
+                 "agents_merged":  8,
+                 "total_entries":  65
+             },
+    "entries":  [
+                    {
+                        "evidence_files":  [
+                                               "apps/crish-desktop/src/api/StreamRenderBuffer.ts:166-233",
+                                               "apps/crish-desktop/src/api/StreamRenderBuffer.ts:228-232"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-01",
+                        "root_cause_detail":  "flushFrame in StreamRenderBuffer.ts only protects against splitting at High Surrogate (0xD800-0xDBFF) at splitAt-1 (line 229-232), but does not check splitAt itself for Low Surrogate (0xDC00-0xDFFF), and the surrogate guard is only triggered when newline-based splitting occurs (nlIndex \u003e= 0, line 183, 199). When split is driven by maxBytesPerFrame (line 179) with no newline, or when deadline exceeded (line 195) with no newline, surrogate pair integrity is completely unchecked. The entire flow has no safeUnicodeCutPosition function as a unified guard.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Adding a unified safeUnicodeCutPosition that validates both sides of the split point is a sound approach. The remediation correctly identifies the gap.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/openai-stream-parse.ts:35",
+                                               "packages/agent-runtime/src/openai-stream-parse.ts:95-98",
+                                               "packages/agent-runtime/src/openai-stream-parse.ts:120",
+                                               "apps/crish-desktop/src/api/directFetchBridge.ts:215",
+                                               "apps/crish-desktop/src/api/directFetchBridge.ts:220-224"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-02",
+                        "root_cause_detail":  "readSseJson (openai-stream-parse.ts line 35, 120) always calls decoder.decode(value, { stream: true }) and never performs a final decoder.decode() flush after the done:true break (line 95-98). The remaining SSE text buffer is handled (line 150-155) but the TextDecoder internal 1-3 byte residual buffer is never flushed. Similarly, directFetchBridge.ts line 215 creates decoder with { stream: true } on every chunk (line 223) and never calls decoder.decode() without the flag after the loop ends at line 221 \u0027if (done) break\u0027.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Calling decoder.decode() without { stream: true } in the finally block or after the loop will correctly flush any trailing bytes held in TextDecoder\u0027s internal buffer.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-stream/src/parser/sse.rs:52-92",
+                                               "crates/conex-stream/src/parser/sse.rs:95-97"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-03",
+                        "root_cause_detail":  "SseFrameParser::parse_frame (crates/conex-stream/src/parser/sse.rs:96) calls String::from_utf8_lossy(bytes) on complete frame bytes after \n\n boundary is found. If a multi-byte UTF-8 character (4 bytes) straddles a TCP segment boundary that coincides with the \n\n frame boundary, the partial bytes before \n\n will be replaced with U+FFFD by from_utf8_lossy. There is no UTF-8 accumulation mechanism (e.g., Utf8ChunkDecoder) to buffer partial sequences across frame boundaries. The code has no awareness of UTF-8 character boundaries during frame parsing.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Introducing a Utf8ChunkDecoder that accumulates incomplete UTF-8 sequences across feed_bytes calls is a sound fix. This is a well-known pattern for streaming UTF-8 data.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-compaction/src/compaction.rs:50-54",
+                                               "packages/agent-runtime/src/context-compression/token-estimator.ts:7",
+                                               "packages/agent-runtime/src/context-compression/token-estimator.ts:31-46"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-04",
+                        "root_cause_detail":  "Rust CompactionEngine::calculate_total_tokens (compaction.rs:50-54) only sums count_tokens(\u0026m.content) + images.len() * IMAGE_TOKEN_COST. It has no concept of System Prompt overhead, Tools Schema tokens, or any static_overhead field. In contrast, TS token-estimator.ts has TOKEN_ESTIMATE_SAFETY_FACTOR=1.15 (line 7), staticOverheadTokens (lines 31-46) that accounts for systemPrompt, tools, and rules, and a more comprehensive estimateMessageTokens. The Rust side lacks all of these.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Adding static_overhead and Tools Schema weight computation to the Rust side, plus synchronizing the Safety Factor (1.15), will align the two estimators.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/payload-image-recovery.ts:3",
+                                               "packages/agent-runtime/src/payload-image-recovery.ts:27-40",
+                                               "packages/agent-runtime/src/payload-image-recovery.ts:46-118",
+                                               "packages/agent-runtime/src/session-loop/index.ts:258-259"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-05",
+                        "root_cause_detail":  "countContentPartImages (payload-image-recovery.ts:27-40) only reads meta.contentParts and meta.hasImages. scrubImagesOldestFirst (lines 46-118) only replaces image entries in meta.contentParts with text placeholders. Neither function scans message.blocks for type: \u0027image\u0027 blocks. The file header comment at line 3 explicitly states \u0027Operates on metadata.contentParts — never softDeny path\u0027, confirming this is a known structural limitation. If images are stored in blocks instead of contentParts, stripped=0 is returned and 413 recovery fails.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Extending scrubImagesOldestFirst to recursively scan and strip blocks of type \u0027image\u0027 is the correct approach. The placeholder pattern already exists for contentParts.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/payload-image-recovery.ts:68-77",
+                                               "packages/agent-runtime/src/payload-image-recovery.ts:97-109"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-06",
+                        "root_cause_detail":  "scrubImagesOldestFirst (payload-image-recovery.ts:68-77) replaces stripped contentParts entries with { type: \u0027text\u0027, text: IMAGE_OMITTED_PLACEHOLDER } but never touches message.blocks. The only blocks modification occurs at lines 97-109, which is specifically for the case where meta.hasImages is set without contentParts. When images exist in blocks as type: \u0027image\u0027 blocks, they are left untouched. This means the Provider payload constructed from blocks will still contain the original Base64 image data, defeating the 413 recovery.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Synchronizing block-level replacement when stripping images (replacing image blocks with text placeholders) will fix the synchronization issue. This is a necessary complement to ST-05.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/provider-stream-contract/normalizer.ts:45-49",
+                                               "packages/agent-runtime/src/provider-stream-contract/types.ts:5"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-07",
+                        "root_cause_detail":  "legacyFinishReason function (normalizer.ts:45-49) returns only \u0027error\u0027 or \u0027tool-call\u0027 as-pass-through, and maps EVERYTHING else (including \u0027length\u0027, \u0027max_tokens\u0027) to \u0027stop\u0027. The type system in types.ts:5 already defines ProviderStreamFinishReason as including \u0027length\u0027, but legacyFinishReason throws away any value other than \u0027error\u0027/\u0027tool-call\u0027. This means when a provider sends finish_reason: \u0027length\u0027 or \u0027max_tokens\u0027, the normalized stream end event (end/done) will have finishReason: \u0027stop\u0027, permanently erasing the truncation signal.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Extending legacyFinishReason to pass through \u0027length\u0027/\u0027max_tokens\u0027 values, or removing the function in favor of direct passthrough, is straightforward and correct.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:99-107",
+                                               "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:124-150",
+                                               "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:131-135"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-08",
+                        "root_cause_detail":  "ProviderResponseConsumer.buildMessage (provider-response-consumer.ts:124-150) has no finishReason parameter. It hardcodes stopReason as \u0027error\u0027 (if error), \u0027tool-call\u0027 (if blocks contain tool-call), or \u0027stop\u0027 (otherwise). The event.end handler (lines 99-107) receives event.finishReason but completely ignores it — it only extracts event.error and event.usage. Even if the upstream normalizer preserved \u0027length\u0027, buildMessage has no mechanism to propagate it to message.metadata.stopReason.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Adding finishReason parameter to buildMessage and passing event.finishReason from the \u0027end\u0027 event handler will fix the propagation. This is a clean, scoped change.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/session-loop/index.ts:298-318",
+                                               "packages/agent-runtime/src/session-loop/provider-call.ts:89-117",
+                                               "packages/agent-runtime/src/provider-stream-contract/normalizer.ts:45-49",
+                                               "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:131-135"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-09",
+                        "root_cause_detail":  "handleNoToolCalls in session-loop/index.ts (line 298-318) checks msg.metadata?.stopReason === \u0027length\u0027 to trigger length-based continuation. However, due to the upstream chain — legacyFinishReason (normalizer.ts:45-49) mapping \u0027length\u0027 to \u0027stop\u0027, and buildMessage (provider-response-consumer.ts:131-135) hardcoding stopReason to \u0027stop\u0027 for non-error/non-tool-call cases — msg.metadata.stopReason is always \u0027stop\u0027. The handleLengthFinishReason method (provider-call.ts:89-100) and its escalation logic (tryEscalateMaxTokensForLengthRecovery at lines 108-117) exist but are unreachable because the stopReason check at line 90 guards the entire path.",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "Restoring the \u0027length\u0027 signal through the normalizer and buildMessage chain will automatically activate the existing handleLengthFinishReason logic. The continuation infrastructure is already in place.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/provider-stream-contract/json-repair.ts:180-210",
+                                               "packages/agent-runtime/src/provider-stream-contract/json-repair.ts:140-160",
+                                               "packages/agent-runtime/src/provider-stream-contract/json-repair.ts:44-46",
+                                               "packages/agent-runtime/src/runtime-components/provider-response-consumer.ts:78-93"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-ST-10",
+                        "root_cause_detail":  "balanceJsonContainers (json-repair.ts:180-210) appends \u0027\"\u0027 when inString=true at end of text, but when text ends with \u0027\\\u0027 (backslash), escaped=true prevents the next char from closing the string, yet the function still appends \u0027\"\u0027 — creating a JSON-invalid escaped quote \" rather than a proper string terminator. The function does not detect or strip trailing backslashes. Additionally, jsonRepairCandidates (lines 140-160) lists multiple repair strategies but has no handling for truncated boolean/null literals (true/false/null). The tool call JSON repair IS integrated in the pipeline (via ProviderToolCallJsonAccumulator which calls repairToolCallJsonArguments), but ProviderResponseConsumer itself (provider-response-consumer.ts:78-93) does not call repairToolCallJsonArguments — it relies on the upstream accumulator to pre-repair, making the consumer dependent on the upstream integration being correct.",
+                        "root_cause_deviation":  "The root cause claim \u0027ProviderResponseConsumer 主干未集成修复器\u0027 is technically accurate at the consumer level, but repairToolCallJsonArguments IS already integrated upstream in the event pipeline via ProviderToolCallJsonAccumulator.finalize() (json-repair.ts:44-46), and ProviderResponseConsumer receives pre-repaired input through event.toolCall.input. The backslash and boolean/null literal issues in balanceJsonContainers are confirmed.",
+                        "remediation_note":  "Fixing balanceJsonContainers to strip trailing backslashes before appending the close quote, and adding truncated literal completion (true/false/null), are appropriate. Integration of repair in ProviderResponseConsumer is already partially handled upstream.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-daemon/src/subagent-runtime.ts:199-206",
+                                               "packages/agent-daemon/src/subagent-runtime.ts:216-251",
+                                               "packages/agent-orchestrator/src/orchestrator.ts:322-331"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-01",
+                        "root_cause_detail":  "forkMode === \u0027background\u0027 时，execute() 在 subagent-runtime.ts:118 同步返回（:238-251），Abort 监听器注册于 context.signal（:205）。背景 Promise 的 .finally() 在 :226 执行 removeEventListener，但此 listener 绑定的 context.signal 是 tool execution 生命周期信号。execute() 返回后 tool execution 框架可能视此 tool call 为已完成，导致后续父 Run cancelRun（orchestrator.ts:322）通过 active.engine?.abort() 发出的信号无法传递到后台 subagent，因为 context.signal 已脱离活跃生命周期。",
+                        "root_cause_deviation":  "listener 本身并非被提前解绑（.finally 在背景任务完成时才执行），但 context.signal 所属的 tool execution scope 在 execute() 同步返回后即失效，这才是真正原因。",
+                        "remediation_note":  "将 Abort 信号绑定到 Session/Run 级别生命周期（如 daemon 侧的 OrchestratorRunHandle），而非 transient tool execution context。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-orchestrator/src/orchestrator.ts:322-331",
+                                               "packages/agent-runtime/src/background-command.ts:267-277",
+                                               "packages/agent-runtime/src/background-command.ts:332-343"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-02",
+                        "root_cause_detail":  "cancelRun()（orchestrator.ts:322-331）仅调用 active.engine?.abort(reason)，无任何对 BackgroundCommandManager 的关联。BackgroundCommandManager（background-command.ts:111-416）提供 cancel(taskId)（:267-277）和 dispose()（:332-343），但缺少 cancelAllForRun(runId) 方法，且 orchestrator 也无法访问该 manager。Run 取消时后台 Shell 子进程完全不受影响。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "在 cancelRun() 中增加 BackgroundCommandManager.cancelAllForRun(runId) 调用，同时为 BackgroundCommandManager 添加按 runId 批量取消的方法。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-orchestrator/src/orchestrator.ts:59",
+                                               "packages/agent-orchestrator/src/orchestrator.ts:310",
+                                               "packages/agent-orchestrator/src/orchestrator.ts:445",
+                                               "packages/shared-utils/src/bounded-map.ts:48-57"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-03",
+                        "root_cause_detail":  "activeRuns（orchestrator.ts:59）使用 new BoundedMap\u003cstring, ActiveRun\u003e(MAX_ORCHESTRATOR_RUNS)。BoundedMap.set()（bounded-map.ts:48-57）在满容量时静默 FIFO 删除最旧 key，无任何 eviction 回调。被淘汰的 ActiveRun 上 engine.abort() 从未被调用，关联的 run 继续在后台运行（ghost run），同时监听器与资源泄漏。仅在 driveRun() 的 finally 块（:445）调用 activeRuns.delete() 来正常清理。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "为 BoundedMap 增加 onEvict 销毁回调，或在 activeRuns.set() 前主动检查容量并调用 engine.abort(\u0027active-runs-capacity-exceeded\u0027)。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-daemon/src/subagent-runtime.ts:119-121",
+                                               "packages/agent-runtime/src/subagents.ts:186-198",
+                                               "packages/agent-runtime/src/subagents.ts:311-312"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-04",
+                        "root_cause_detail":  "createDaemonSubagentTool()（subagent-runtime.ts:85-302）仅对深度做检查（:119: options.depth \u003e= maxDepth），完全没有 activeSubagentCount 并发计数或 AsyncSemaphore 槽位门禁。对比 createSubagentTool()（subagents.ts:136-371）有完整的 activeSubagentCount 上限检查（:187-198）和 finally 扣减（:312）。Daemon 端 subagent 工具缺少了运行时已有的并发保护。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "在 Daemon 侧引入基于 AsyncSemaphore 的并发 Live Agent 槽位管理器，超限时排队或优雅拒绝。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/provider/auth/oauth/cross-process-lock.ts:16-146",
+                                               "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts:178-201",
+                                               "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts:1-7"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-05",
+                        "root_cause_detail":  "CrossProcessLock（cross-process-lock.ts:16-146）已实现为独立文件锁工具，但 ChatGPTAccountPool.refreshAccount()（chatgpt-pool.ts:178-201）中完全未引用 CrossProcessLock。refreshAccount() 无任何互斥或 single-flight 机制，且 chatgpt-pool.ts 的 import 列表中无 CrossProcessLock。多个 Subagent 并行收到 401 将同时调用 refreshToken(account.refreshToken)（:183），重放旧 Refresh Token 导致 OAuth 服务器返回 invalid_grant。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "在 refreshAccount() 中装配 CrossProcessLock，并引入 Single-Flight Generation 刷新意图锁。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/provider-transport/stream-recovery.ts:342-417",
+                                               "packages/agent-runtime/src/provider-transport/stream-recovery.ts:364-376",
+                                               "packages/agent-runtime/src/provider-transport/stream-recovery.ts:158-203"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-06",
+                        "root_cause_detail":  "decideRecovery()（stream-recovery.ts:340-417）中 Case B 判断（:364-376）仅检查 this.accumulator.text.length \u003e 0 || this.accumulator.thought.length \u003e 0，完全不考虑底层错误类型。ECONNRESET、socket hang up、StreamInterruptedError 等暂态网络错误，只要有部分文本输出即被硬归类为 surface-error，拒绝重试。重试逻辑（:158-203）只在 Case C（零内容）时才触发。无 TransientErrorClassifier 识别可重试的 TCP 级错误。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "引入 TransientErrorClassifier，识别 ECONNRESET / socket hang up，即便有部分字符也允许带断点标记的暂态重试与指数退避。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts:158-176",
+                                               "packages/agent-runtime/src/error-classifier.ts:56-201",
+                                               "packages/agent-runtime/src/provider-transport/stream-recovery.ts:364-376"
+                                           ],
+                        "root_cause":  "partial",
+                        "issue_id":  "GAP-CS-07",
+                        "root_cause_detail":  "ChatGPTAccountPool.recordFailure()（chatgpt-pool.ts:158-176）仅支持 4 种 errorType: \u0027auth\u0027 | \u0027quota\u0027 | \u0027timeout\u0027 | \u0027server\u0027，缺乏 \u0027transient\u0027 或 \u0027network\u0027 类型。任一类型均触发 account.errorCount++ 和 cooldownUntil 冷却（:162-171）。ErrorClassifier（error-classifier.ts:56-201）能正确将 ECONNRESET 等归类为 TRANSIENT_NETWORK（legacyKind: \u0027network\u0027），但 stream-recovery Case B 返回的 surface-error 消息为中文文本（如 \u0027响应被中断（已输出 XX 字符）\u0027），落入 error-classifier UNKNOWN 分类。",
+                        "root_cause_deviation":  "实际风险路径并非 StreamRecoveryError 直接触发 account pool 的 recordFailure（chatgpt-pool.recordFailure 在前端/provider 流中未被直接调用），而是底层网络错误（如 401/5xx）本身能正确归类，但 stream-recovery 的 surface-error 路径丢失了原始错误类型信息，导致上层只能按 UNKNOWN 处理。缺失的不是分类器而是分类信息在错误传递链中的保真度。",
+                        "remediation_note":  "确保 StreamRecoveryError 携带原始错误域信息，且 account pool 增加 transient/network 类型不触发 cooldown。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/trace/index.ts:344-350",
+                                               "packages/agent-runtime/src/trace/index.ts:356-358"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-08",
+                        "root_cause_detail":  "setTraceContext()（trace/index.ts:344-350）使用 AsyncLocalStorage.enterWith()（:348）永久性改变当前事件循环线程的 ALS Store，无法自动恢复。enterWith() 不会在异步操作完成后恢复之前的 store，导致后续任何同一事件循环派发的异步回调都错误继承此 TraceContext。withTraceContext()（:356-358）正确使用 ALS.run() 作用域隔离，但 setTraceContext 作为替代入口点破坏了隔离保证。注释（:345-346）注明\u0027仅用于非 ALS 管理的场景\u0027但未限制调用。",
+                        "root_cause_deviation":  null,
+                        "remediation_note":  "废载 enterWith，强制全链路使用 withTraceContext / AsyncLocalStorage.run() 作用域隔离。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/subagents.ts:54",
+                                               "packages/agent-runtime/src/subagents.ts:186-198",
+                                               "packages/agent-runtime/src/subagents.ts:227",
+                                               "packages/agent-runtime/src/subagents.ts:311-312",
+                                               "packages/agent-runtime/src/subagents.ts:146"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-CS-09",
+                        "root_cause_detail":  "activeSubagentCount（subagents.ts:54）在 execute() 中于 try 块之外自增（:198），try 块始于 :227。介于 :199-226 的代码包括 createId(\u0027agent\u0027)（:200）等同步操作，若其中任一操作抛出同步异常，finally（:312）不会执行 activeSubagentCount 扣减。此外，该工具声明 concurrency: \u0027parallel\u0027（:146），但 check-and-increment（:187-198）存在 TOCTOU 竞态：多个并行调用可同时通过上限检查后均执行 += 1，导致实际并发数超过 maxConcurrent。",
+                        "root_cause_deviation":  "createId() 极少抛异常，实际死锁风险较低；但 TOCTOU 竞态更为严重——并行场景下计数器漂移累加可导致 activeSubagentCount 失控。",
+                        "remediation_note":  "将 activeSubagentCount += 1 移入 try 块，或改用异步信号量（AsyncSemaphore）。方案可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/anthropic-stream-parse.ts:330-344",
+                                               "packages/agent-runtime/src/provider-openai-chat.ts:128-131",
+                                               "packages/agent-runtime/src/tools.ts:120-144",
+                                               "packages/agent-daemon/src/protocol/validators/common.ts"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-TC-01",
+                        "root_cause_detail":  "parseArguments in anthropic-stream-parse.ts:337 and provider-openai-chat.ts:130 wrap non-object JSON values (null, [], number, string) as { value: ... }. extractToolArgumentObject in tools.ts:137-141 cannot unwrap { value: null } or { value: [] } because isPlainObject(null)=false and typeof null!==\u0027string\u0027, returning undefined. validators/common.ts has no zCoerceArray/zDefaultEmpty Zod preprocess helpers.",
+                        "root_cause_deviation":  "normalizeToolInputObject does not exist; only normalizeToolInput exists in tool-discovery.ts (for metadata, not arguments). The wrapping happens in stream parsers, not in tools.ts itself — but the failure to extract is in tools.ts.",
+                        "remediation_note":  "Fix extractToolArgumentObject to handle non-object value types in the wrapper, and add Zod preprocess helpers in validators.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-daemon/src/daemon-approval-handler.ts:16-20",
+                                               "packages/agent-daemon/src/daemon-approval-handler.ts:164-231",
+                                               "packages/agent-runtime/src/runtime-helpers.ts"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-TC-02",
+                        "root_cause_detail":  "daemon-approval-handler.ts has only runIntentAllowlist (line 18) and alwaysIntentAllowlist (line 20). No runIntentDenylist exists. decisionFromResult (line 164-231) on denial only returns { behavior: \u0027deny\u0027, ... } without recording intentKey in any denylist and without setting retryable: false. runtime-helpers.ts also has no runIntentDenylist. Model retries trigger repeated approval UI popups.",
+                        "root_cause_deviation":  "None — fully confirmed.",
+                        "remediation_note":  "Add runIntentDenylist Map\u003cstring, Set\u003cstring\u003e\u003e, record denied intentKeys, inject retryable: false in deny decisions, and check denylist before requesting approval.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/openai-request-build.ts:58-63",
+                                               "packages/agent-runtime/src/openai-request-build.ts:335-340",
+                                               "packages/agent-runtime/src/tool-output-budget.ts:63-70"
+                                           ],
+                        "root_cause":  "partial",
+                        "issue_id":  "GAP-TC-03",
+                        "root_cause_detail":  "stringifyToolOutput in openai-request-build.ts:58-63 uses truthy check for output.text, so text=\u0027\u0027 (falsy) with json=[] returns \u0027[]\u0027. However, stringifyToolOutput in tool-output-budget.ts:63-70 uses typeof check and returns \u0027\u0027 for empty string correctly. safeToolResultContent does not exist in the codebase. The serialization issue affects the request-build version used in toChatMessages.",
+                        "root_cause_deviation":  "The tool-output-budget.ts version is less affected (uses typeof check). safeToolResultContent is a proposed fix, not existing code. Only the openai-request-build.ts version has the truthy-check bug.",
+                        "remediation_note":  "Fix openai-request-build.ts stringifyToolOutput to handle empty text with non-empty json: check text !== undefined instead of truthy, or add explicit guard for []/{}. Inject placeholder for empty content in tool messages.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-daemon/src/mcp-stdio-adapter.ts:60-62",
+                                               "packages/agent-daemon/src/mcp-stdio-adapter.ts:186-200",
+                                               "packages/agent-runtime/src/mcp-lifecycle/types.ts:60-64",
+                                               "packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-TC-04",
+                        "root_cause_detail":  "mcp-stdio-adapter.ts:62 void _context in connect discarding McpServerStartContext.signal. mcp-stdio-adapter.ts:193 void _context in execute discarding ToolExecutionContext.signal. client.callTool() at line 194 has no timeout/signal. isReadOnly: () =\u003e false at line 187 hardcodes all MCP tools as writable. McpServerController has no sliding-window circuit breaker (only degrade() with diagnostic recording). Note: controller\u0027s executeManagedTool (line 365) does pass context.signal to waitForReady, but adapter layer ignores context entirely.",
+                        "root_cause_deviation":  "McpServerController does propagate parent signal in waitForReady (line 138-139, 365), so the controller layer partially handles abort. The gap is at the adapter layer where context is voided and client.callTool() is called without signal/timeout.",
+                        "remediation_note":  "Pass context.signal and timeout to client.callTool() in mcp-stdio-adapter; add circuit breaker (consecutive failure counter) in McpServerController; derive isReadOnly from MCP tool schema readOnly field if available.",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-sandbox/src/process_tree.rs:5-57",
+                                               "crates/conex-sandbox/src/process_tree.rs:55"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-PM-01",
+                        "root_cause_detail":  "attach_to_job_object (process_tree.rs:5-57) 为 pub fn 但全库 grep 零调用方，确认为死代码。成功路径（第55行 Ok(())）未调用 CloseHandle(job)，导致 Windows Job Object 句柄泄漏。错误路径（第24-26, 42-44, 50-52行）有 CloseHandle 但成功路径遗漏。修复方的 ScopedJobObject RAII 方案正确。",
+                        "root_cause_deviation":  "无偏差。根因分析准确：死代码 + 成功路径 Handle 泄漏均属实。",
+                        "remediation_note":  "ScopedJobObject RAII + JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 方案合理，需确保在 PTY/Daemon 子进程创建点接入。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/process-lifecycle/process-executor.ts:370-417",
+                                               "packages/agent-runtime/src/process-lifecycle/process-executor.ts:133-135"
+                                           ],
+                        "root_cause":  "partial",
+                        "issue_id":  "GAP-PM-02",
+                        "root_cause_detail":  "Windows 分支（process-executor.ts:375-393）确实缺乏优雅终止：taskkill /F 硬杀 + PowerShell Stop-Process -Force 均无 Phase 1 软终止。但 Unix 分支（第395-416行）已有两阶段终止：SIGTERM → scheduleKillEscalation（5秒后 SIGKILL）。且 spawn 时 detached: true（第135行）已在 Unix 上设置进程组 leader，process.kill(-pid, SIGTERM) 可正确杀进程组。",
+                        "root_cause_deviation":  "Unix 部分陈述不准确：Unix 分支已有两阶段优雅终止机制（SIGTERM → 5s → SIGKILL）且 detached: true 已设进程组 leader，不存在\"缺乏进程组 leader 设置\"问题。Windows 部分完全正确。",
+                        "remediation_note":  "Windows 分支增加 WM_CLOSE/CTRL_BREAK_EVENT 软杀阶段是合理改进。Unix 分支已基本完善，改进空间有限。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/shared-utils/src/bounded-map.ts:48-58",
+                                               "packages/shared-utils/src/bounded-map.ts:13-94"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-PM-03",
+                        "root_cause_detail":  "BoundedMap.set（bounded-map.ts:48-58）超容量时仅 FIFO 删除最旧 key，没有任何 onEvict 销毁回调。BackgroundCommandManager（background-command.ts:112）使用 BoundedMap\u003cstring, BackgroundCommandRecord\u003e 存储后台任务，被淘汰的 BackgroundCommandRecord 中的 child（子进程）、timeout（定时器）、heartbeat（心跳）均不会主动清理。",
+                        "root_cause_deviation":  "无偏差。BoundedMap 确无 eviction callback 机制，淘汰 running 态任务导致子进程和定时器泄漏。",
+                        "remediation_note":  "添加 onEvict 回调参数（set 或 constructor），在淘汰时调用 terminateChild + clearTimeout/clearInterval 是最直接的修复方式。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-db/src/transaction.rs:17",
+                                               "crates/conex-db/src/pool.rs:33"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-PM-04",
+                        "root_cause_detail":  "transaction.rs:17 使用 `BEGIN TRANSACTION`（Deferred 模式），写事务在首次写入时才升级锁，高并发下触发 SQLITE_BUSY_SNAPSHOT 锁升级死锁。pool.rs:33 仅设 `PRAGMA busy_timeout = 5000`（SQLite 内置重试，无 jitter/退避），缺乏应用层指数退避重试循环。query.rs 为纯 QueryBuilder 无关并发问题。",
+                        "root_cause_deviation":  "无偏差。Deferred 事务 + 无应用层退避重试的确诊准确。SQLite 的 busy_timeout 是内置轮询等待，非真正指数退避。",
+                        "remediation_note":  "BEGIN IMMEDIATE 升级 + 5 次 random jitter 指数退避重试是标准业界方案，可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/session.ts:1-710",
+                                               "crates/conex-compaction/src/compaction.rs:29-33",
+                                               "crates/conex-compaction/src/compaction.rs:47"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-PM-05",
+                        "root_cause_detail":  "1) session.ts 无 pruneHistoricalToolOutputs 函数，长会话工具输出随 messages 无限增长。2) compaction.rs:29-33 使用 messages.iter().cloned().collect() 全量深拷贝 Message 数组。3) compaction.rs 无 shrink_to_fit() 调用释放 Vec 容量。4) 全库 TS 源码无 global.gc?.() 显式调用。",
+                        "root_cause_deviation":  "无偏差。三大问题均属实：缺失历史载荷裁剪、Rust 全量 clone 未收缩、缺 GC 触发。",
+                        "remediation_note":  "pruneHistoricalToolOutputs 截断 10 轮前载荷、compaction 改用 retain + shrink_to_fit、compaction 后调用 global.gc?.() 方案合理可行。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "packages/agent-runtime/src/process-lifecycle/process-executor.ts:223-233",
+                                               "packages/agent-runtime/src/process-lifecycle/process-executor.ts:250-269"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-PM-06",
+                        "root_cause_detail":  "createGuardedProcessEnv（process-executor.ts:223-233）仅注入 PYTHONUTF8=1 和 PYTHONIOENCODING=utf-8，完全不注入 CI=true、GIT_TERMINAL_PROMPT=0、PIP_NO_INPUT=1、PAGER=cat 等防卡死环境变量。buildWindowsPowerShellScript（第250-269行）prelude 同样无任何 anti-hanging 变量。",
+                        "root_cause_deviation":  "无偏差。零非交互环境变量的根因描述准确。",
+                        "remediation_note":  "注入全套 12 个非交互环境变量方案合理（CI=true, GIT_TERMINAL_PROMPT=0, PIP_NO_INPUT=1, PAGER=cat, GIT_PAGER=cat, TERM=dumb 等）。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-diff/src/seek_sequence.rs:108",
+                                               "crates/conex-diff/src/seek_sequence.rs:158",
+                                               "crates/conex-diff/src/seek_sequence.rs:299",
+                                               "crates/conex-diff/src/seek_sequence.rs:344",
+                                               "packages/shared-utils/src/file/seek-sequence.ts:191",
+                                               "packages/shared-utils/src/file/seek-sequence.ts:209",
+                                               "packages/shared-utils/src/file/seek-sequence.ts:245",
+                                               "packages/shared-utils/src/file/seek-sequence.ts:274"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-SE-01",
+                        "root_cause_detail":  "Rust `seek_sequence` (seek_sequence.rs:108) 签名 `pub fn seek_sequence(lines: \u0026[\u0026str], pattern: \u0026[\u0026str], start: usize) -\u003e Option\u003cSeekHit\u003e` 无 `eof: bool` 参数，TS `seekSequence` (seek-sequence.ts:191-196) 已有 `eof = false` 第4参数及锚定逻辑 (line 209 `const searchStart = eof ? maxStart : start`)，双方签名不对等。Rust 返回值 `Option\u003cSeekHit\u003e` 不含 `matchCount` 诊断，内部 match_count 变量(seek_sequence.rs:124)返回到调用方前丢失，无法区分 ambiguous 与 missing。Rust 侧无 `split_lines_for_seek` 等效函数。Golden 测试 (line 326-353) 通过 `start = len(hay) - len(pat)` 模拟 eof，证实原生 eof 参数缺失。",
+                        "root_cause_deviation":  "无显著偏差。GAP-05-02（TS 侧行分割规范化）为同一修复包中的子问题，主根因已覆盖。",
+                        "remediation_note":  "可行：Rust 侧新增 `seek_sequence_full` 加 eof 参数和 SeekResult 返回类型（含 matchCount），并实现 `split_lines_for_seek`。修复包同时对齐 GAP-05-02。分配 Round 4/Wave 4.1。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-compaction/src/compaction.rs:100",
+                                               "crates/conex-compaction/src/compaction.rs:110",
+                                               "packages/agent-runtime/src/context-compression/compression-utils.ts:137",
+                                               "packages/agent-runtime/src/context-compression/compression-utils.ts:150",
+                                               "packages/agent-runtime/src/context-compression/serializer.ts:1"
+                                           ],
+                        "root_cause":  "partial",
+                        "issue_id":  "GAP-SE-02",
+                        "root_cause_detail":  "Rust `safe_drop_end` (compaction.rs:100-121) 使用 role 级邻接分组（assistant → 连续 tool role, line 110-113），但无 ID 级 tool_call↔tool_result 配对断言。TS `includeRequiredToolCallMessages` (compression-utils.ts:137-169) 只有正向追溯（tool_result 要求其 tool_call 保留, lines 153-164），缺少反向保护（保留的 tool_call 要求其 tool_result 也必须保留），可能导致孤立 tool_call 或 tool_result 引发 Provider HTTP 400。",
+                        "root_cause_deviation":  "轻微偏差：(1) 问题函数名为 `safe_drop_end`/`includeRequiredToolCallMessages`，非 `calculateSafeCompactionCutoff`（后者是拓扑文档中的修复方案名）。 (2) Rust `safe_drop_end` 并非完全\"缺乏工具对绑定\"——它有 role 级邻接保护（assistant+连续 tool）；缺少的是跨消息的 ID 级配对断言。 (3) `serializer.ts` 在序列化层面不直接参与裁切决策，仅消费裁切结果。",
+                        "remediation_note":  "方案合理但需要细分：Rust 侧为 `safe_drop_end` 增加 ID 级 tool_call→tool_result 配对校验；TS 侧为 `includeRequiredToolCallMessages` 增加反向追溯方向。`calculateSafeCompactionCutoff` 可作为统一的封装入口。分配 Round 1/Wave 1.5 合理。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "crates/conex-fs/src/path_utils.rs:5",
+                                               "crates/conex-fs/src/path_utils.rs:6",
+                                               "crates/conex-fs/src/path_utils.rs:13",
+                                               "apps/agent-workbench/src-tauri/src/fs_commands/types.rs:100",
+                                               "apps/agent-workbench/src-tauri/src/fs_commands/types.rs:119",
+                                               "apps/agent-workbench/src-tauri/src/fs_commands/directory.rs:20",
+                                               "apps/agent-workbench/src-tauri/src/perf/fs.rs:149"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-SE-03",
+                        "root_cause_detail":  "`resolve_under_root` (path_utils.rs:5-22) 裸调用 `std::fs::canonicalize` 两次（lines 6, 13），无任何 visited path set 或 hop count 上限。`WorkspaceFsGuard::new` (types.rs:100) 和 `resolve_existing` (types.rs:119) 均直接调用 `canonicalize()`，无循环保护。`perf/fs.rs` `start_watcher_internal` (line 149) 同样直接 `canonicalize()`。`directory.rs` `list_directory_with_guard` (line 20) 通过 `guard.resolve_existing` 间接暴露。全部路径均依赖 OS 级 ELOOP 错误处理，无 Rust 层防递归机制。",
+                        "root_cause_deviation":  "轻微偏差：`directory.rs` 本身仅做单层目录读取（read_dir + filter_map），不递归进入子目录；但 `WorkspaceFsGuard.resolve_existing` 的 `canonicalize` 调用在传入循环软链接路径时仍会触发 ELOOP。递归扫描的实际风险在调用方（如递归遍历实现），但根因（canonicalize 无保护）准确。",
+                        "remediation_note":  "方案正确：实现 `safe_canonicalize(path, max_hops=40)` 带 visited_set 和 hop 计数，替代全仓所有裸 `canonicalize()` 调用。`safe_abs_path` 组合 root+input 带限规范化。分配 Round 4/Wave 4.1。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "apps/crish-desktop/src/store/types.ts:103",
+                                               "apps/crish-desktop/src/api/applyFileDiff.ts:209",
+                                               "apps/crish-desktop/src/api/applyFileDiff.ts:227",
+                                               "apps/crish-desktop/src/components/DiffCardFileList.tsx:251",
+                                               "apps/crish-desktop/src/components/DiffCardFileList.tsx:259"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-SE-04",
+                        "root_cause_detail":  "`FileDiff` 接口 (types.ts:103-119) 无 `provisional?: boolean` 字段——仅有 `staged`/`unstaged`/`untracked`/`gitStatus`。`classifyFileDiff` (applyFileDiff.ts:209-263) 是纯静态格式校验（路径安全 lines 210-168、行数配比 lines 227-239、hunk 类型 lines 242-262），完全不感知流式完成状态。`DiffCardFileList.tsx` Accept 按钮 (line 259) 仅依据 `!classifyFileDiff(f).ok` 做 disabled，无 provisional 通道；工具提示 (line 251-253) 同样仅依赖 `classifyFileDiff(f).ok`。全仓 grep `provisional` 在 apps/crish-desktop/src/ 下为零命中（仅存在于 analysis 文档/benchmark plans 中）。",
+                        "root_cause_deviation":  "无显著偏差。",
+                        "remediation_note":  "方案明确可行：为 `FileDiff` 增加 `provisional?: boolean`；`classifyFileDiff` 增加 `if (diff.provisional) return { ok: false, reason: \u0027diff 仍处于流式生成中\u0027 }`；UI Accept 按钮增加 `f.provisional` 禁用条件。分配 Round 1/Wave 1.5。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "apps/agent-workbench/src-tauri/src/main.rs:21-110",
+                                               "apps/agent-workbench/src-tauri/src/sidecar/run_stream.rs:1-349"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-UI-01",
+                        "root_cause_detail":  "main.rs register_handlers! 列出 ~90 个 Tauri Command，全部不含电源管理（无 SetThreadExecutionState / IOKit / DBus 调用）。无 power 模块导入，无 workbench_set_keep_awake 命令。run_stream.rs 仅为 sidecar 断开重连逻辑，不含唤醒锁。运行长任务时 OS 可自由进入睡眠导致 IPC/SSE 挂起。",
+                        "root_cause_deviation":  "无偏差",
+                        "remediation_note":  "新增 power.rs + SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED) 是标准做法，方案合理。需注意多平台条件编译（cfg(windows)/cfg(target_os = \"macos\")/cfg(target_os = \"linux\")）及 Tauri Command 注册。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "apps/crish-desktop/src/api/directFetchBridge.ts:290-296",
+                                               "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts:416-551",
+                                               "apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts:567-615"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-UI-02",
+                        "root_cause_detail":  "(1) directFetchBridge.ts:290 — catch 块中 `if (controller.signal.aborted) return;` 直接 return 跳过 onComplete()，导致已收取的 reasoning_content/assistantThought 无法触发 onComplete 封存。(2) useStreamCallbacks.ts handleStopGeneration:567-615 — 不调用 fetchRunSnapshotUsage，直接 st.updateMessageThinking(sid, cur.assistantMsgId, \u0027\u0027) 清空思考缓冲区；Usage 估算（onComplete:501-546 的 fetchRunSnapshotUsage + 计费落盘）全部跳过。",
+                        "root_cause_deviation":  "无偏差。两处代码均证实中断流时 thinking 丢失且 Usage 不落盘。",
+                        "remediation_note":  "即使 abort 也应 flush onThought 缓冲区并调用 onComplete 的 Usage 估算逻辑（或等效的 handleStopGeneration 内联估算）。resolveInterruptedTokens 启发式是合理补充。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "apps/crish-desktop/src/components/ComposePlusMenu.module.css:14-26",
+                                               "apps/crish-desktop/src/components/ModelPicker.module.css:7",
+                                               "apps/crish-desktop/src/components/ProjectPickerMenu.tsx:36-38"
+                                           ],
+                        "root_cause":  "verified",
+                        "issue_id":  "GAP-UI-03",
+                        "root_cause_detail":  "(1) ComposePlusMenu.module.css:14-26 — .main 无 max-height 和 overflow-y，多条目时菜单出屏。(2) ModelPicker.module.css:7 — max-height: min(360px, 52vh) 使用旧 52vh 固定视口比，未用 calc(100dvh-*) 弹性钳制；但 .mpickScroll:87 有 overflow-y:auto。(3) ProjectPickerMenu.tsx:37 — Function(\u0027return import(\"@tauri-apps/plugin-dialog\")\u0027)() 使用 Function 构造器动态 import，违反 CSP 规范。",
+                        "root_cause_deviation":  "无偏差。三处子问题均属实。",
+                        "remediation_note":  "统一使用 max-h-[calc(100dvh-3.5rem)] 视口弹性钳制 + overscroll-behavior:contain 滚轮拦截；ProjectPickerMenu 改用标准 ESM import()。方案合理。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  [
+                                               "apps/agent-workbench/src-tauri/src/config/credentials.rs:171-174",
+                                               "apps/agent-workbench/src-tauri/src/config/credentials.rs:187-190",
+                                               "apps/agent-workbench/src-tauri/src/config/credentials.rs:207-210",
+                                               "apps/crish-desktop/src/api/providerProfiles.ts:514-523",
+                                               "apps/crish-desktop/src/api/providerProfiles.ts:310-326"
+                                           ],
+                        "root_cause":  "partial",
+                        "issue_id":  "GAP-UI-04",
+                        "root_cause_detail":  "(A) credentials.rs 非 Windows 加密缺位 — 已证实：#[cfg(not(windows))] fn os_secret_store_available 返回 Err (line 172-174)，write_os_secret 返回 Err (line 188-190)，read_os_secret 返回 Ok(None) (line 208-210)。macOS/Linux 无 Keychain/SecretService 支持，密钥仅存进程内存。 (B) localStorage 明文存储 apiKey — 未证实：当前 saveProfiles (line 519-523) 通过 normalizeProviderProfile (apiKey:undefined) + stripApiKey 双重剥除 apiKey 后才写入 localStorage；实际凭据经 Tauri 后端 DPAPI/内存存储。但 hasKey 布尔标记存入 localStorage 存在元数据泄露；oauthToken/oauthConfig 被 normalizeProviderProfile 静默丢弃（数据丢失 bug）。",
+                        "root_cause_deviation":  "偏差：localStorage 明文存储 apiKey 的描述与当前代码不符（已剥除）；但非 Windows 平台加密缺位完全属实。",
+                        "remediation_note":  "非 Windows 加密：补全 macOS Security Framework / Linux libsecret 是正确方向。localStorage 方面：当前代码已足够安全（apiKey 已剥除），可考虑移除 hasKey 元数据、修复 oauthToken 静默丢弃的数据丢失问题。Skill 沙盒 Mount Guard 独立于本议题。",
+                        "remediation_feasible":  true
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    },
+                    {
+                        "evidence_files":  null,
+                        "root_cause":  null,
+                        "issue_id":  null,
+                        "root_cause_detail":  null,
+                        "root_cause_deviation":  null,
+                        "remediation_note":  null,
+                        "remediation_feasible":  null
+                    }
+                ]
+}

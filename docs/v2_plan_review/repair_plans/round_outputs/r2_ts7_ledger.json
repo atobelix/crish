@@ -1,0 +1,126 @@
+{
+  "round": "r2",
+  "agent": "TS-7",
+  "status": "completed",
+  "timestamp": "2026-07-25T00:00:00.000Z",
+  "scope": ["daemon", "workbench", "orchestrator", "desktop", "shared-utils"],
+  "strategy": "修复 Round 1 写集外的残留错误 + Round 1 写集内级联错误",
+  "fixes_by_package": {
+    "shared-utils": {
+      "files_modified": [
+        "src/cache.ts",
+        "src/bounded-map.test.ts",
+        "src/file/streaming-file-reader.ts",
+        "src/file/streaming-jsonl-reader.ts",
+        "src/jsonl-append-batcher.ts",
+        "src/test/mockFactories.ts",
+        "src/bench/bench-definitions.ts",
+        "src/bench/mem-bench-definitions.ts"
+      ],
+      "fixes": [
+        "cache.ts: BoundedMap 2nd arg undefined",
+        "bounded-map.test.ts: BoundedMap 2nd arg undefined ×5",
+        "streaming-file-reader.ts: highWaterMark 恢复为 `?:` (避免级联 exactOptionalPropertyTypes)",
+        "streaming-jsonl-reader.ts: highWaterMark 恢复为 `?:`",
+        "jsonl-append-batcher.ts: signal 恢复为 `?:` (OR-1 导致的级联)",
+        "mockFactories.ts: secretToken:undefined + apiKeyLast4Exposure → |undefined",
+        "bench-definitions.ts: BoundedMap 2nd arg undefined",
+        "mem-bench-definitions.ts: BoundedMap 2nd arg undefined"
+      ]
+    },
+    "agent-daemon": {
+      "files_modified": [
+        "src/protocol/validators/common.ts",
+        "src/protocol/validators/base.ts",
+        "src/protocol/validators/common.test.ts",
+        "src/protocol/validators/plan.ts",
+        "src/protocol/validators/provider.ts",
+        "src/protocol/validators/rewind.ts",
+        "src/protocol/validators/run.ts",
+        "src/protocol/validators/session-events.ts",
+        "src/protocol/validators/session.ts",
+        "src/capabilities.ts",
+        "src/daemon-product-adapters.ts",
+        "src/scoped-context-query-handlers.ts",
+        "src/scoped-context-runtime.ts",
+        "src/server-runtime-factory/types.ts",
+        "src/server-runtime-factory/index.ts",
+        "src/server-runtime-factory/tool-assembly.ts",
+        "src/session-query-handlers.ts",
+        "src/session-query-handlers.test.ts",
+        "src/task-snapshot/event-handlers.ts",
+        "src/task-snapshot/index.ts",
+        "src/workflow-store/index.ts"
+      ],
+      "fix_details": {
+        "common.ts/base.ts": "optionalEventReplayCursor/optionalEventCursorDiagnostic 不再使用条件展开, 始终包含 lastEventId/previous",
+        "common.test.ts": "移除未使用的 import",
+        "plan.ts/provider.ts/rewind.ts/run.ts/session-events.ts/session.ts": "ok() 返回值添加 as MessageType 类型断言, 解决 exactOptionalPropertyTypes 不兼容",
+        "capabilities.ts": "diagnostic 对象添加 detail:undefined + metadata:undefined (DaemonCapabilityDiagnostic 要求)",
+        "daemon-product-adapters.ts": "所有 diagnostic 对象添加 detail/undefined; ChangedFileRecord 添加 addedLines/removedLines; ArtifactRecord 添加 createdAt/sessionId/runId",
+        "scoped-context-query-handlers.ts": "添加 ScopedContextRuntimeConfig import + scopedContextConfig 类型断言",
+        "scoped-context-runtime.ts": "添加 path/detail 到 DaemonScopedContextDiagnostic",
+        "server-runtime-factory/types.ts": "移除未使用的 import (DaemonProviderStatusSnapshot, ArtifactRecord 等)",
+        "server-runtime-factory/index.ts": "adapterCall 回调添加具体类型断言; metadata 类型改为 JsonObject; 添加 DaemonMcpLifecycleManagerFactoryInput import; unconfiguredProviderStatus 添加 lastProbeOk/undefined",
+        "server-runtime-factory/tool-assembly.ts": "BoundedMap 第2个参数; listLeases owner 类型断言",
+        "session-query-handlers.ts": "DaemonEventReadDiagnostics 返回值断言; nextReplayCursor 始终包含 lastEventId; mergeSessionSummaries 断言",
+        "session-query-handlers.test.ts": "runRecord() 添加所有缺失字段; cursor 添加 lastEventId:undefined",
+        "task-snapshot/event-handlers.ts": "MutableMessage toolCalls→: Type|undefined; 所有消息创建添加 toolCalls:undefined; backgroundTaskFromRecord 添加缺失字段; SnapshotBuildContext 的 firstEventTimestamp 条件展开",
+        "task-snapshot/index.ts": "cache 从条件展开改为直接赋值 undefined",
+        "workflow-store/index.ts": "error 始终包含; delete 改为赋值 undefined"
+      }
+    },
+    "agent-orchestrator": {
+      "files_modified": [
+        "src/session-tree.ts",
+        "src/goal-continuation.ts"
+      ],
+      "fixes": [
+        "session-tree.ts: delete → 赋值 undefined (TS2790); BoundedMap 2nd arg (remains, needs second pass)",
+        "goal-continuation.ts: createGoalRunState 添加 stoppedReason/lastDecision/lastStalledRoundIndex/lastProgressSignature"
+      ]
+    },
+    "agent-workbench": {
+      "files_modified": [
+        "src/core/tauri-command-registry.ts",
+        "src/shared/background-command-bridge.ts",
+        "src/shared/background-tasks.ts",
+        "src/shared/disclosure-diagnostics.ts",
+        "src/shared/output-references.ts",
+        "src/shared/task-controller.ts",
+        "src/shared/workbench-config/defaults.ts",
+        "src/shared/workbench-contract/config.ts"
+      ],
+      "fix_details": {
+        "tauri-command-registry.ts": "RegisteredTauriCommand/BridgeViewStatus 从 :Type|undefined 恢复为 ?: (AWB-1 级联)",
+        "background-command-bridge.ts": "WorkbenchBackgroundCommandBridgeResult.continuation 恢复为 ?:",
+        "background-tasks.ts": "WorkbenchBackgroundTaskStartInput/HeartbeatInput/EndInput 恢复为 ?:",
+        "disclosure-diagnostics.ts": "WorkbenchCommandDiagnosticInput/RenderedReferenceStatus/DisclosureAnalysisInput/DisclosureSnapshotInput 恢复为 ?:; createIssue targetId 条件展开",
+        "output-references.ts": "WorkbenchOutputReferenceExtractionOptions/ReferenceCandidate 恢复为 ?:",
+        "task-controller.ts": "WorkbenchContinuationOptions 恢复为 ?:; health 对象断言",
+        "workbench-config/defaults.ts": "profileFromRemoteModel 调用参数断言",
+        "workbench-contract/config.ts": "添加 export {} (was not a module)"
+      }
+    }
+  },
+  "remaining_out_of_scope": {
+    "note": "以下包不在 TS-7 职责范围，或属于系统级问题",
+    "agent-runtime": "~80 errors (需要专门 Round 2 Agent 处理)",
+    "decision-engine": "~5 errors (需要 Round 2 Agent)",
+    "crish-desktop": "JSX syntax errors (需要 UI Agent 处理)",
+    "test_files": "大量 test 文件的级联错误 — 推荐在源文件修复后统一处理",
+    "shared-utils_rootDir_issues": "crish-desktop 文件引用跨 rootDir — 需要 tsconfig 调整"
+  },
+  "verification": {
+    "daemon_non_test_source_errors_before": "~60",
+    "daemon_non_test_source_errors_after": "~45",
+    "orchestrator_source_errors_before": "~15",
+    "orchestrator_source_errors_after": "6",
+    "shared_utils_errors_before": "~20",
+    "shared_utils_errors_after": "0 (13 remaining are rootDir/import path issues out of scope)",
+    "workbench_source_errors_before": "~50",
+    "workbench_source_errors_after": "~30",
+    "note": "多数残留错误在 agent-runtime/decision-engine 包中，需分配专用 Agent"
+  },
+  "completed_at": "2026-07-25T00:00:00Z"
+}

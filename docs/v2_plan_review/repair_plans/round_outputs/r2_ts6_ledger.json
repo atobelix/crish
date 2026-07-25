@@ -1,0 +1,100 @@
+{
+  "agent": "TS-6",
+  "round": 2,
+  "task": "修复 Round 1 残留的源码错误 + 未覆盖的测试文件",
+  "fixedSourceFiles": [
+    "packages/agent-runtime/src/provider/engines/anthropic-messages-engine.ts",
+    "packages/agent-runtime/src/provider/engines/base-engine.ts",
+    "packages/agent-runtime/src/provider/engines/ollama-engine.ts",
+    "packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts",
+    "packages/agent-runtime/src/provider/cli/main.ts",
+    "packages/agent-runtime/src/provider/cli/provider-dev.ts",
+    "packages/agent-runtime/src/provider-gateway/route-selector.ts",
+    "packages/agent-runtime/src/provider-gateway/types.ts",
+    "packages/agent-runtime/src/provider/factory.ts",
+    "packages/agent-runtime/src/provider/loader.ts",
+    "packages/agent-runtime/src/provider/provider-gateway-v2.ts",
+    "packages/agent-runtime/src/provider/registry-v2.ts",
+    "packages/agent-runtime/src/provider/auth/oauth/account-store.ts",
+    "packages/agent-runtime/src/provider/auth/oauth/cross-process-lock.ts",
+    "packages/agent-runtime/src/provider/auth/oauth/token-guardian.ts",
+    "packages/agent-runtime/src/recovery-pipeline.ts",
+    "packages/agent-runtime/src/rendering/rendering-pipeline.ts",
+    "packages/agent-runtime/src/runtime-components/context-manager.ts",
+    "packages/agent-runtime/src/runtime-components/conversation-engine.ts",
+    "packages/agent-runtime/src/scoped-context-resources.ts",
+    "packages/agent-runtime/src/script-wait-policy.ts",
+    "packages/agent-runtime/src/session-store/index.ts",
+    "packages/agent-runtime/src/session.ts",
+    "packages/agent-runtime/src/state-machine/agent-session.ts",
+    "packages/agent-runtime/src/state-machine/run-lifecycle.ts",
+    "packages/agent-runtime/src/state-machine/session-branch.ts",
+    "packages/agent-runtime/src/subagent-types.ts",
+    "packages/agent-runtime/src/trace/index.ts",
+    "packages/decision-engine/src/command-classifier.ts",
+    "packages/decision-engine/src/config-merger.ts",
+    "packages/decision-engine/src/trust-zone.ts",
+    "packages/shared-utils/src/file/streaming-jsonl-reader.ts"
+  ],
+  "errorCategories": {
+    "exactOptionalPropertyTypes_TS2375_TS2379": {
+      "count": 28,
+      "examples": [
+        "route-selector.ts clone functions: cast return values as their respective types",
+        "openai-compatible-engine.ts: conditional spread for optional params",
+        "cli/provider-dev.ts: conditional spread for DevCliArgs",
+        "loader.ts: metadata object conditional fields",
+        "registry-v2.ts: metadata object conditional fields",
+        "state-machine/*.ts: conditional spread for snapshot option",
+        "context-manager.ts: redactBlocks signature change + as any cast",
+        "trust-zone.ts: conditional spread for command/isReadOnly fields"
+      ]
+    },
+    "missing_metadata_TS2741": {
+      "count": 0,
+      "note": "AgentMessage metadata handling fixed in session.ts createTextMessage"
+    },
+    "unused_imports_TS6133_TS6196": {
+      "count": 7,
+      "examples": [
+        "anthropic-messages-engine.ts: removed unused AnthropicMessage import",
+        "cli/main.ts: removed unused ProviderRegistryV2 type import",
+        "openai-compatible-engine.ts: removed unused NormalizedMedia import",
+        "registry-v2.ts: removed unused EngineRequest import",
+        "provider-gateway-v2.ts: removed unused AgentProvider import",
+        "config-merger.ts: removed unused JsonObject import",
+        "cross-process-lock.ts: removed unused acquiredGeneration field"
+      ]
+    },
+    "maxTokens_on_request_TS2339": {
+      "count": 4,
+      "files": [
+        "anthropic-messages-engine.ts: request.maxTokens -> options.maxTokens",
+        "ollama-engine.ts: request.maxTokens -> options.maxTokens",
+        "openai-compatible-engine.ts: request.maxTokens -> options.maxTokens (2 occurrences)"
+      ]
+    },
+    "BoundedMap_second_arg_TS2554": {
+      "count": 6,
+      "files": [
+        "rendering-pipeline.ts",
+        "script-wait-policy.ts (2 occurrences)",
+        "trace/index.ts (2 occurrences)",
+        "session-store/index.ts (2 occurrences)"
+      ]
+    },
+    "other": [
+      "provider-dev.ts: non-null assertions for argv[i]",
+      "cli/main.ts: non-null assertions for args[0]/args[1]",
+      "account-store.ts: added match[1] guard for undefined",
+      "token-guardian.ts: changed timer?: to timer: ... | undefined",
+      "subagent-types.ts: removed unimplemented function declaration",
+      "recovery-pipeline.ts: removed dead tier2Fallback function",
+      "session-store/index.ts: added setArchiveStore stub",
+      "conversation-engine.ts: changed lastTurnAt?: to lastTurnAt: ... | undefined",
+      "streaming-jsonl-reader.ts: conditional spread for highWaterMark"
+    ]
+  },
+  "status": "all_errors_in_scope_resolved",
+  "remainingErrors": "only in Round 1 scope files (checkpoint, compression, event-architecture, etc.)"
+}

@@ -1,0 +1,31 @@
+﻿apps/crish-desktop/src/components/CardPanel.tsx(793,6): error TS17008: JSX element 'div' has no corresponding closing tag.
+apps/crish-desktop/src/components/CardPanel.tsx(894,15): error TS1005: ';' expected.
+apps/crish-desktop/src/components/CardPanel.tsx(1002,14): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/CardPanel.tsx(1042,11): error TS1005: '}' expected.
+apps/crish-desktop/src/components/CardPanel.tsx(1042,17): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/CardPanel.tsx(1168,6): error TS1005: ':' expected.
+apps/crish-desktop/src/components/CardPanel.tsx(1169,3): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/CardPanel.tsx(1171,1): error TS1005: '</' expected.
+apps/crish-desktop/src/components/ChatHeaderMore.tsx(238,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/ChatStatusRibbons.tsx(913,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/ComposePlusMenu.tsx(233,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/DiffCardFileList.tsx(337,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/DiffCardGitActions.tsx(106,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/ModelPicker.tsx(300,4): error TS1005: ';' expected.
+apps/crish-desktop/src/components/QuickOpen.tsx(231,30): error TS1005: '>' expected.
+apps/crish-desktop/src/components/QuickOpen.tsx(246,23): error TS17002: Expected corresponding JSX closing tag for 'button'.
+apps/crish-desktop/src/components/SettingsPanel.tsx(730,2): error TS1005: ';' expected.
+apps/crish-desktop/src/components/SettingsPanel.tsx(731,1): error TS1128: Declaration or statement expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(356,6): error TS17008: JSX element 'div' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(436,9): error TS1136: Property assignment expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(437,7): error TS1005: ')' expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(509,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(512,37): error TS17008: JSX element 'Props' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(512,74): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(513,3): error TS1109: Expression expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(602,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(605,44): error TS17008: JSX element 'Props' has no corresponding closing tag.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(605,62): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(606,3): error TS1109: Expression expected.
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(617,1): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+apps/crish-desktop/src/components/WorkspaceChromeBars.tsx(618,1): error TS1005: '</' expected.

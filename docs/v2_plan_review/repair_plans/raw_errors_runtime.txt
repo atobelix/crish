@@ -1,0 +1,1559 @@
+﻿
+packages/agent-runtime/src/__tests__/canonical-schema.test.ts(135,23): error TS2488: Type 'string | number | boolean | 
+JsonValue[] | { [key: string]: JsonValue; }' must have a '[Symbol.iterator]()' method that returns an iterator.
+packages/agent-runtime/src/__tests__/canonical-schema.test.ts(172,5): error TS2322: Type '{ type: any; }' is not assign
+able to type 'ToolConcurrency'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(10,5): error TS2322: Type '"builtin"' is not assignable
+ to type 'ToolCategory'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(12,5): error TS2322: Type '{ type: "adaptive"; }' is no
+t assignable to type 'ToolConcurrency'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(15,5): error TS2322: Type '() => Promise<{ content: nev
+er[]; }>' is not assignable to type '(input: JsonObject, context: ToolExecutionContext) => Promise<ToolOutput>'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(66,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(67,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(91,62): error TS2345: Argument of type '(AgentTool | un
+defined)[]' is not assignable to parameter of type 'AgentTool[]'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(93,14): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/canonicalize-tools.test.ts(93,51): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/context-slicer.test.ts(153,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/context-slicer.test.ts(153,37): error TS2339: Property 'text' does not exist on ty
+pe 'LLMMessageBlock'.
+packages/agent-runtime/src/__tests__/integrations/chatgpt-pool.test.ts(206,33): error TS2379: Argument of type '{ id: s
+tring; refreshToken: undefined; }' is not assignable to parameter of type 'Partial<ChatGPTAccount>' with 'exactOptional
+PropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/__tests__/integrations/media-pipeline.test.ts(360,12): error TS2532: Object is possibly 'und
+efined'.
+packages/agent-runtime/src/__tests__/integrations/media-pipeline.test.ts(362,12): error TS2532: Object is possibly 'und
+efined'.
+packages/agent-runtime/src/__tests__/integrations/oauth-flow.test.ts(39,15): error TS2339: Property 'codeChallenge' doe
+s not exist on type '{ authorizationUrl: string; codeVerifier: string; state: string; }'.
+packages/agent-runtime/src/__tests__/integrations/oauth-flow.test.ts(163,51): error TS2379: Argument of type '{ refresh
+Url: undefined; clientId: string; authorizeUrl: string; tokenUrl: string; scopes: string[]; redirectUri: string; }' is 
+not assignable to parameter of type 'OAuthFlowOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefi
+ned' to the types of the target's properties.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(1,36): error TS6133: 'beforeEach' is decla
+red but its value is never read.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(30,12): error TS2532: Object is possibly '
+undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(31,12): error TS2532: Object is possibly '
+undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(117,31): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(137,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(138,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(153,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(154,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(155,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(231,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(246,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/streaming-executor.test.ts(247,12): error TS2532: Object is possibly 
+'undefined'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(24,12): error TS2571: Object is of type 'unknown'
+.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(25,12): error TS2571: Object is of type 'unknown'
+.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(126,27): error TS2353: Object literal may only sp
+ecify known properties, and 'index' does not exist in type '{ id?: string; function?: { name?: string; arguments?: stri
+ng; }; }'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(154,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(155,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(156,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(168,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(169,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(170,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(171,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/integrations/tool-stream.test.ts(172,12): error TS2532: Object is possibly 'undefi
+ned'.
+packages/agent-runtime/src/__tests__/steering-input-queue.test.ts(93,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/__tests__/steering-input-queue.test.ts(94,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(58,13): error TS2322: Type '{ type: "stop"; reason: "error"; error
+: string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(202,9): error TS2322: Type '{ usage: ProviderUsage | undefined; ty
+pe: "stop"; reason: "stop" | "tool-call" | "length" | "error"; error?: string; }' is not assignable to type 'ProviderSt
+reamEvent'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(242,13): error TS2322: Type '{ type: "tool-call"; id: string | und
+efined; toolName: string; input: JsonObject; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(255,11): error TS2322: Type '{ type: "stop"; reason: "error"; erro
+r: string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(264,9): error TS2322: Type '{ type: "stop"; reason: "tool-call" | 
+"length" | "error" | "stop"; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/anthropic-stream-parse.ts(303,3): error TS2375: Type '{ promptTokens: number | undefined; co
+mpletionTokens: number | undefined; totalTokens: number | undefined; cacheReadTokens: number | undefined; cacheWriteTok
+ens: number | undefined; }' is not assignable to type 'ProviderUsage' with 'exactOptionalPropertyTypes: true'. Consider
+ adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/checkpoint-manifest.ts(375,3): error TS2375: Type '{ sessionId: string; runId: string; userM
+essageId: string; toolCall?: CheckpointManifestToolCall; checkpoint?: CheckpointManifestCheckpointRef | GitCheckpoint; 
+checkpointId: string; ... 5 more ...; metadata: JsonObject; }' is not assignable to type 'CheckpointManifestInput' with
+ 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/checkpoint-manifest.ts(621,3): error TS2375: Type '{ targetSummary?: string | undefined; ses
+sionId?: string | undefined; actor?: string | undefined; toolName?: string | undefined; id?: string | undefined; }' is 
+not assignable to type 'CheckpointManifestToolCall' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined
+' to the types of the target's properties.
+packages/agent-runtime/src/checkpoint/checkpoint-manager.ts(101,11): error TS2375: Type '{ checkpointId: string; sessio
+nId: string; createdAt: string; messageCount: number; turnIndex: number; schemaVersion: number; referencedMessageIds: s
+tring[]; label: string | undefined; description: string | undefined; }' is not assignable to type 'CheckpointMetadata' 
+with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/context-compression/compression-utils.test.ts(2,1): error TS6133: 'includeRequiredToolCallMe
+ssages' is declared but its value is never read.
+packages/agent-runtime/src/context-compression/index.ts(93,45): error TS2345: Argument of type 'ContextStateReader | un
+defined' is not assignable to parameter of type '{ snapshotForCompression?: () => Promise<{ completedTaskSummaries: str
+ing[]; pendingTasks: string[]; sessionEvents: string[]; fileSnapshotHints: string[]; previousCompressionSummary?: strin
+g; readFiles?: string[]; modifiedFiles?: string[]; }>; } | undefined'.
+packages/agent-runtime/src/context-compression/index.ts(97,44): error TS2339: Property 'thoughtSummarizer' does not exi
+st on type 'ContextCompressionRuntimeOptions'.
+packages/agent-runtime/src/context-compression/index.ts(131,57): error TS2379: Argument of type '{ trigger: ContextComp
+ressionTrigger; reason: ContextCompressionReason; policy: ContextCompressionPolicyMetadata; ... 9 more ...; maxSummaryT
+okens: number; }' is not assignable to parameter of type 'ContextSummaryRequest' with 'exactOptionalPropertyTypes: true
+'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/context-compression/index.ts(152,61): error TS2379: Argument of type '{ kind: "context-compr
+ession"; goal: string | undefined; progress: string[]; nextSteps: string[]; criticalContext: string[]; readFiles: strin
+g[]; modifiedFiles: string[]; risks: string[]; sourceIds: string[]; }' is not assignable to parameter of type 'Structur
+edSummaryInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prope
+rties.
+packages/agent-runtime/src/context-compression/index.ts(204,7): error TS2322: Type 'Record<string, unknown>' is not ass
+ignable to type 'JsonObject'.
+packages/agent-runtime/src/context-compression/serializer.ts(8,3): error TS6196: 'ContextCompressionTrigger' is declare
+d but never used.
+packages/agent-runtime/src/context-compression/serializer.ts(10,3): error TS6196: 'ContextCompressionPolicyMetadata' is
+ declared but never used.
+packages/agent-runtime/src/context-compression/token-estimator.ts(123,13): error TS2375: Type '{ type: "image"; mimeTyp
+e: string; source: "base64" | "url"; data: string; width: number | undefined; height: number | undefined; detail: "auto
+" | "low" | "high" | undefined; sizeBytes: number; }' is not assignable to type 'ImageContent' with 'exactOptionalPrope
+rtyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/context-compression/token-estimator.ts(196,3): error TS2375: Type '{ totalTokens: number; pr
+omptTokens: number | undefined; completionTokens: number | undefined; cacheReadTokens: number | undefined; cacheWriteTo
+kens: number | undefined; reasoningTokens: number | undefined; }' is not assignable to type 'ProviderUsage' with 'exact
+OptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/conversation-boundary-manifest.ts(351,9): error TS2375: Type '{ metadata?: JsonObject; check
+pointSource?: ConversationBoundaryCheckpointSource; checkpointRef?: string; checkpointId?: string; ... 10 more ...; cre
+atedAt: string; }' is not assignable to type 'ConversationBoundaryManifestRecord' with 'exactOptionalPropertyTypes: tru
+e'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/conversation-boundary-manifest.ts(394,9): error TS2375: Type '{ metadata?: JsonObject; check
+pointSource?: ConversationBoundaryCheckpointSource; checkpointRef?: string | undefined; checkpointId?: string | undefin
+ed; ... 10 more ...; createdAt: string; }' is not assignable to type 'ConversationBoundaryManifestRecord' with 'exactOp
+tionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/doctor-report.ts(2,10): error TS2305: Module '"./provider-transport/stream-recovery"' has no
+ exported member 'StreamRecoveryGlobalRegistry'.
+packages/agent-runtime/src/doctor-report.ts(3,15): error TS2305: Module '"./provider-transport/stream-recovery"' has no
+ exported member 'StreamRecoveryGlobalStats'.
+packages/agent-runtime/src/error-classifier.ts(63,50): error TS2379: Argument of type '{ httpStatus: number | undefined
+; providerId: string | undefined; originalError: unknown; recoveryHint: string; }' is not assignable to parameter of ty
+pe 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/error-classifier.ts(70,60): error TS2379: Argument of type '{ subType: string; httpStatus: n
+umber; providerId: string | undefined; originalError: unknown; legacyKind: string; }' is not assignable to parameter of
+ type 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of t
+he target's properties.
+packages/agent-runtime/src/error-classifier.ts(77,51): error TS2379: Argument of type '{ httpStatus: number; providerId
+: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<ClassifiedError>' with
+ 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(83,55): error TS2379: Argument of type '{ httpStatus: number; providerId
+: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<ClassifiedError>' with
+ 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(89,60): error TS2379: Argument of type '{ httpStatus: number; providerId
+: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<ClassifiedError>' with
+ 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(96,60): error TS2379: Argument of type '{ subType: string | undefined; h
+ttpStatus: number; providerId: string | undefined; originalError: unknown; legacyKind: string; retryable: boolean; }' i
+s not assignable to parameter of type 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider addi
+ng 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(105,50): error TS2379: Argument of type '{ httpStatus: number; providerI
+d: string | undefined; originalError: unknown; retryAfterMs: number | undefined; }' is not assignable to parameter of t
+ype 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the
+ target's properties.
+packages/agent-runtime/src/error-classifier.ts(112,56): error TS2379: Argument of type '{ providerId: string | undefine
+d; originalError: StreamInterruptedError; recoveryHint: string; }' is not assignable to parameter of type 'Partial<Clas
+sifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's propert
+ies.
+packages/agent-runtime/src/error-classifier.ts(119,57): error TS2379: Argument of type '{ providerId: string | undefine
+d; originalError: ConnectionError; recoveryHint: string; }' is not assignable to parameter of type 'Partial<ClassifiedE
+rror>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(126,57): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; recoveryHint: string; }' is not assignable to parameter of t
+ype 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the
+ target's properties.
+packages/agent-runtime/src/error-classifier.ts(133,50): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; recoveryHint: string; }' is not assignable to parameter of t
+ype 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the
+ target's properties.
+packages/agent-runtime/src/error-classifier.ts(140,60): error TS2379: Argument of type '{ subType: string; httpStatus: 
+number | undefined; providerId: string | undefined; originalError: unknown; legacyKind: string; retryable: true; }' is 
+not assignable to parameter of type 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding
+ 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(148,51): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(154,55): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(160,50): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(166,60): error TS2379: Argument of type '{ subType: string; httpStatus: 
+number | undefined; providerId: string | undefined; originalError: unknown; legacyKind: string; }' is not assignable to
+ parameter of type 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to t
+he types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(174,56): error TS2379: Argument of type '{ httpStatus: number; providerI
+d: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<ClassifiedError>' wit
+h 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(180,56): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(186,57): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; recoveryHint: string; }' is not assignable to parameter of t
+ype 'Partial<ClassifiedError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the
+ target's properties.
+packages/agent-runtime/src/error-classifier.ts(193,57): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(198,45): error TS2379: Argument of type '{ httpStatus: number | undefine
+d; providerId: string | undefined; originalError: unknown; }' is not assignable to parameter of type 'Partial<Classifie
+dError>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/error-classifier.ts(209,3): error TS2375: Type '{ domain: ErrorDomain; retryable: boolean; u
+iSeverity: UiSeverity; legacyKind: string; subType: string | undefined; httpStatus: number | undefined; providerId: str
+ing | undefined; recoveryHint: string | undefined; retryAfterMs: number | undefined; originalError: unknown; }' is not 
+assignable to type 'ClassifiedError' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types 
+of the target's properties.
+packages/agent-runtime/src/event-architecture/canonical-event.test.ts(7,3): error TS6133: 'ConexCanonicalAdapter' is de
+clared but its value is never read.
+packages/agent-runtime/src/event-architecture/canonical-event.test.ts(12,3): error TS6133: 'RUNTIME_EVENT_SCHEMAS' is d
+eclared but its value is never read.
+packages/agent-runtime/src/event-architecture/canonical-event.test.ts(218,7): error TS2322: Type '"diagnostic"' is not 
+assignable to type 'ConexEventDomain'.
+packages/agent-runtime/src/event-architecture/canonical-event.ts(483,42): error TS2322: Type '"diagnostic"' is not assi
+gnable to type 'ConexEventDomain'.
+packages/agent-runtime/src/event-architecture/canonical-event.ts(484,12): error TS2322: Type '"diagnostic"' is not assi
+gnable to type 'ConexEventDomain'.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(18,3): error TS6196: 'CoreEventBase' is declared
+ but never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(19,3): error TS6196: 'AgentMeta' is declared but
+ never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(20,3): error TS6196: 'TurnMeta' is declared but 
+never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(21,3): error TS6196: 'MessageMeta' is declared b
+ut never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(22,3): error TS6196: 'ToolMeta' is declared but 
+never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(23,3): error TS6196: 'CompressionMeta' is declar
+ed but never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.test.ts(24,3): error TS6196: 'DiagnosticMeta' is declare
+d but never used.
+packages/agent-runtime/src/event-protocol/core-event-projector.ts(107,11): error TS2375: Type '{ sessionId: string; tim
+estamp: string; traceId: string | undefined; spanId: string | undefined; }' is not assignable to type 'CoreEventBase' w
+ith 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/event-protocol/core-event-projector.ts(129,11): error TS2322: Type '{ reason: "error" | "sto
+p" | "aborted" | "max-turns"; error: string | undefined; }' is not assignable to type 'AgentMeta | TurnMeta | MessageMe
+ta | ToolMeta | CompressionMeta | DiagnosticMeta'.
+packages/agent-runtime/src/event-protocol/core-event-projector.ts(277,11): error TS2322: Type '{ result: ContextCompres
+sionRecord | undefined; aborted: boolean; error: string | undefined; }' is not assignable to type 'AgentMeta | TurnMeta
+ | MessageMeta | ToolMeta | CompressionMeta | DiagnosticMeta'.
+packages/agent-runtime/src/event-protocol/core-event-projector.ts(421,13): error TS2322: Type '{ kind: "run-terminal"; 
+runId: string; terminal: "cancelled" | "failed" | "completed"; error: string | undefined; }' is not assignable to type 
+'DiagnosticDetails | undefined'.
+packages/agent-runtime/src/event-queue/index.ts(200,7): error TS2412: Type 'undefined' is not assignable to type 'Timeo
+ut' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/event-queue/index.ts(262,22): error TS2352: Conversion of type 'ConexCanonicalEvent' to type
+ 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was inte
+ntional, convert the expression to 'unknown' first.
+packages/agent-runtime/src/fallback-chain/engine.test.ts(209,11): error TS6133: 'fallback1' is declared but its value i
+s never read.
+packages/agent-runtime/src/fallback-chain/engine.ts(9,52): error TS2379: Argument of type '{ status: number | undefined
+; }' is not assignable to parameter of type 'ErrorClassifierOptions' with 'exactOptionalPropertyTypes: true'. Consider 
+adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/fallback-chain/types.ts(1,1): error TS6133: 'AgentProvider' is declared but its value is nev
+er read.
+packages/agent-runtime/src/gemini-stream-parse.ts(51,13): error TS2322: Type '{ type: "stop"; reason: "error"; error: s
+tring; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(58,13): error TS2322: Type '{ type: "stop"; reason: "error"; error: s
+tring; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(166,11): error TS2322: Type '{ type: "stop"; reason: "error"; error: 
+string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(170,9): error TS2322: Type '{ usage: ProviderUsage | undefined; error
+?: string; type: "stop"; reason: "stop" | "tool-call" | "length" | "error"; }' is not assignable to type 'ProviderStrea
+mEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(191,11): error TS2322: Type '{ type: "stop"; reason: "error"; error: 
+string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(264,11): error TS2322: Type '{ type: "stop"; reason: "error"; error: 
+string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(274,11): error TS2322: Type '{ type: "stop"; reason: "error"; error: 
+string; usage: undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(286,9): error TS2322: Type '{ usage: ProviderUsage | undefined; error
+?: string; type: "stop"; reason: "tool-call" | "length" | "error" | "stop"; }' is not assignable to type 'ProviderStrea
+mEvent'.
+packages/agent-runtime/src/gemini-stream-parse.ts(360,3): error TS2375: Type '{ promptTokens: number | undefined; compl
+etionTokens: number | undefined; totalTokens: number | undefined; cacheReadTokens: number | undefined; reasoningTokens:
+ number | undefined; }' is not assignable to type 'ProviderUsage' with 'exactOptionalPropertyTypes: true'. Consider add
+ing 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/git-versioning.ts(411,36): error TS2379: Argument of type '{ id: string; label: string; stra
+tegy: "commit"; refName: string; createdAt: string; repositoryRoot: string; baseCommit: string | null; includeUntracked
+: false; statusBefore: GitWorkspaceStatus; toolCall: GitCheckpointToolCall | undefined; }' is not assignable to paramet
+er of type 'Omit<GitCheckpointMetadata, "version">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined
+' to the types of the target's properties.
+packages/agent-runtime/src/git-versioning.ts(464,36): error TS2379: Argument of type '{ id: string; label: string; stra
+tegy: "snapshot"; refName: string; createdAt: string; repositoryRoot: string; baseCommit: string; includeUntracked: boo
+lean; statusBefore: GitWorkspaceStatus; toolCall: GitCheckpointToolCall | undefined; }' is not assignable to parameter 
+of type 'Omit<GitCheckpointMetadata, "version">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' t
+o the types of the target's properties.
+packages/agent-runtime/src/goal-disk-oracle.ts(76,22): error TS2379: Argument of type '{ check: { kind: "contains"; pat
+h: string; substring: string; encoding?: BufferEncoding; }; ok: boolean; detail: string | undefined; }' is not assignab
+le to parameter of type '{ check: DiskOracleCheck; ok: boolean; detail?: string; }' with 'exactOptionalPropertyTypes: t
+rue'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/goal-disk-oracle.ts(91,22): error TS2379: Argument of type '{ check: { kind: "json-path"; pa
+th: string; pointer: string; equals?: unknown; }; ok: boolean; detail: string | undefined; }' is not assignable to para
+meter of type '{ check: DiskOracleCheck; ok: boolean; detail?: string; }' with 'exactOptionalPropertyTypes: true'. Cons
+ider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/hooks/extension-registry.ts(96,7): error TS2322: Type '(ctx: HookContext) => Promise<{ block
+: boolean; reason: string | undefined; modifiedInput: JsonObject | undefined; }>' is not assignable to type '(ctx: Hook
+Context) => Promise<{ block?: boolean; reason?: string; modifiedInput?: JsonObject; }>'.
+packages/agent-runtime/src/hooks/extension-registry.ts(119,7): error TS2322: Type '(ctx: HookContext) => Promise<{ modi
+fiedOutput: ToolOutput | undefined; terminate: boolean; terminateReason: string | undefined; }>' is not assignable to t
+ype '(ctx: HookContext) => Promise<{ modifiedOutput?: ToolOutput; terminate?: boolean; terminateReason?: string; }>'.
+packages/agent-runtime/src/hooks/extension-registry.ts(151,7): error TS2322: Type '(ctx: TurnContext) => Promise<{ mode
+l: string | undefined; promptOverride: string | undefined; }>' is not assignable to type '(ctx: TurnContext) => Promise
+<{ model?: string; promptOverride?: string; }>'.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(91,56): error TS2379: Argument of type 'ToolHookContext' is
+ not assignable to parameter of type 'ToolExecutionContext' with 'exactOptionalPropertyTypes: true'. Consider adding 'u
+ndefined' to the types of the target's properties.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(107,48): error TS2345: Argument of type 'unknown' is not as
+signable to parameter of type 'ToolResult<TOutput>'.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(123,54): error TS2379: Argument of type 'ToolHookContext' i
+s not assignable to parameter of type 'ToolExecutionContext' with 'exactOptionalPropertyTypes: true'. Consider adding '
+undefined' to the types of the target's properties.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(155,5): error TS2322: Type '(input: TInput, ctx: ToolExecut
+ionContext) => unknown' is not assignable to type '(input: TInput, ctx: ToolExecutionContext) => BeforeExecuteResult | 
+Promise<BeforeExecuteResult>'.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(156,5): error TS2322: Type '(result: ToolResult<TOutput>, c
+tx: ToolExecutionContext) => unknown' is not assignable to type '(result: ToolResult<TOutput>, ctx: ToolExecutionContex
+t) => ToolResult<TOutput> | Promise<ToolResult<TOutput>>'.
+packages/agent-runtime/src/hooks/tool-hook-observability.ts(157,5): error TS2322: Type '(error: Error, ctx: ToolExecuti
+onContext) => unknown' is not assignable to type '(error: Error, ctx: ToolExecutionContext) => OnErrorResult | Promise<
+OnErrorResult>'.
+packages/agent-runtime/src/ISessionStore.ts(2,97): error TS2305: Module '"./session-store"' has no exported member 'Arc
+hiveStore'.
+packages/agent-runtime/src/local-tools/checkpoint-tools.ts(52,54): error TS2379: Argument of type '{ workspaceRoot: str
+ing; archiveRoot: string | undefined; snapshotPath: string; targetPath: string; }' is not assignable to parameter of ty
+pe 'RestoreSnapshotRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the ta
+rget's properties.
+packages/agent-runtime/src/local-tools/checkpoint-tools.ts(91,58): error TS2379: Argument of type '{ workspaceRoot: str
+ing; archiveRoot: string | undefined; sessionId: string; label: string; files: string[]; maxFileBytes: number | undefin
+ed; }' is not assignable to parameter of type 'CreateWorkspaceCheckpointRequest' with 'exactOptionalPropertyTypes: true
+'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/local-tools/checkpoint-tools.ts(144,59): error TS2379: Argument of type '{ workspaceRoot: st
+ring; archiveRoot: string | undefined; checkpointPath: string; }' is not assignable to parameter of type 'RestoreWorksp
+aceCheckpointRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's
+ properties.
+packages/agent-runtime/src/local-tools/fs-edit-tools/apply-edits-tool.ts(5,1): error TS6133: 'createFileSnapshot' is de
+clared but its value is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/apply-edits-tool.ts(24,3): error TS6196: 'EditOperation' is declar
+ed but never used.
+packages/agent-runtime/src/local-tools/fs-edit-tools/apply-edits-tool.ts(215,3): error TS2322: Type '{ input: JsonObjec
+t; filePath: string; relativePath: string; fullContent: string | undefined; edits: EditOperation[]; encoding: string | 
+undefined; }[]' is not assignable to type 'WorkspaceEditFileRequest[]'.
+packages/agent-runtime/src/local-tools/fs-edit-tools/apply-edits-tool.ts(343,5): error TS2322: Type '{ ok: false; error
+: string; failedPath: string | undefined; rollback: { restored: string[]; deleted: string[]; failed: Array<{ path: stri
+ng; error: string; }>; }; }' is not assignable to type 'ApplyPreparedWorkspaceEditFilesResult'.
+packages/agent-runtime/src/local-tools/fs-edit-tools/edit-tool.ts(3,10): error TS2305: Module '"@crish/shared-utils"' h
+as no exported member 'replaceViaSeekSequence'.
+packages/agent-runtime/src/local-tools/fs-edit-tools/edit-tool.ts(3,39): error TS2305: Module '"@crish/shared-utils"' h
+as no exported member 'SeekPass'.
+packages/agent-runtime/src/local-tools/fs-edit-tools/edit-tool.ts(142,49): error TS2379: Argument of type '{ workspaceR
+oot: string; filePath: string; sessionId: string; toolCallId: string; options: false | WorkspaceSnapshotOptions | undef
+ined; }' is not assignable to parameter of type 'FileSnapshotRequest' with 'exactOptionalPropertyTypes: true'. Consider
+ adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/local-tools/fs-edit-tools/types.ts(1,27): error TS6196: 'JsonValue' is declared but never us
+ed.
+packages/agent-runtime/src/local-tools/fs-edit-tools/types.ts(1,38): error TS6196: 'ToolExecutionContext' is declared b
+ut never used.
+packages/agent-runtime/src/local-tools/fs-edit-tools/types.ts(3,1): error TS6133: 'LocalToolOptions' is declared but it
+s value is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(4,28): error TS6133: 'encodeTextBuffer' is declared but i
+ts value is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(5,10): error TS6133: 'detectLineEnding' is declared but i
+ts value is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(5,28): error TS6133: 'displayPath' is declared but its va
+lue is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(5,41): error TS6133: 'errorToString' is declared but its 
+value is never read.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(158,3): error TS2375: Type '{ oldString: string | undefin
+ed; newString: string | undefined; present: boolean; }' is not assignable to type '{ oldString?: string; newString?: st
+ring; present: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+packages/agent-runtime/src/local-tools/fs-edit-tools/utils.ts(180,3): error TS2322: Type '({ op: "replace_text"; oldStr
+ing: string; newString: string; startLine?: never; endLine?: never; line?: never; content?: never; } | { op: "replace" 
+| "delete" | "insert_before" | "insert_after" | "insert_head" | "insert_tail"; ... 5 more ...; newString?: never; })[]'
+ is not assignable to type 'EditOperation[]'.
+packages/agent-runtime/src/local-tools/fs-edit-tools/write-tool.ts(65,53): error TS2379: Argument of type '{ workspaceR
+oot: string; filePath: string; sessionId: string; toolCallId: string; options: false | WorkspaceSnapshotOptions | undef
+ined; }' is not assignable to parameter of type 'FileSnapshotRequest' with 'exactOptionalPropertyTypes: true'. Consider
+ adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/local-tools/index.ts(38,34): error TS2379: Argument of type '{ workspaceRoot: string; defaul
+tTimeoutMs: number | undefined; maxOutputBytes: number | undefined; heartbeatIntervalMs: number | undefined; shell: Pro
+cessShell | undefined; guard: false | ... 1 more ... | undefined; }' is not assignable to parameter of type 'Background
+CommandManagerOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target'
+s properties.
+packages/agent-runtime/src/local-tools/pre-mutation.ts(83,53): error TS2379: Argument of type '{ cwd: string; label: st
+ring; strategy: GitCheckpointStrategy; includeUntracked: boolean; refNamespace: string | undefined; toolCall: { id: str
+ing; toolName: string; sessionId: string; targetSummary: string; }; }' is not assignable to parameter of type 'CreateGi
+tCheckpointRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's p
+roperties.
+packages/agent-runtime/src/local-tools/pre-mutation.ts(132,3): error TS2375: Type '{ text: string | undefined; artifact
+s: ToolArtifact[]; json: JsonObject; }' is not assignable to type 'ToolOutput' with 'exactOptionalPropertyTypes: true'.
+ Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/local-tools/shell-tools.ts(83,44): error TS2379: Argument of type '{ cwd: string; timeoutMs:
+ number; maxOutputBytes: number; signal: AbortSignal; shell: ProcessShell; guard: Required<ProcessGuardOptions>; preMut
+ationCheckpoint: (() => Promise<...>) | undefined; }' is not assignable to parameter of type '{ cwd: string; timeoutMs:
+ number; maxOutputBytes: number; signal: AbortSignal; shell: ProcessShell; guard: Required<ProcessGuardOptions>; preMut
+ationCheckpoint?: () => Promise<...>; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the ty
+pes of the target's properties.
+packages/agent-runtime/src/lsp-tools.ts(194,36): error TS2379: Argument of type '{ title: "definitions"; emptyText: str
+ing; request: LspPositionRequest; locations: LspLocation[]; metadata: JsonObject | undefined; }' is not assignable to p
+arameter of type '{ title: "definitions" | "references"; emptyText: string; request: LspPositionRequest; locations: Lsp
+Location[]; metadata?: JsonObject; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types
+ of the target's properties.
+packages/agent-runtime/src/lsp-tools.ts(239,44): error TS2379: Argument of type '{ title: "references"; emptyText: stri
+ng; request: LspReferencesRequest; locations: LspLocation[]; metadata: JsonObject | undefined; }' is not assignable to 
+parameter of type '{ title: "definitions" | "references"; emptyText: string; request: LspPositionRequest; locations: Ls
+pLocation[]; metadata?: JsonObject; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type
+s of the target's properties.
+packages/agent-runtime/src/mcp-lifecycle/mcp-lifecycle-manager.ts(21,3): error TS6133: 'DEFAULT_MCP_DIAGNOSTIC_LIMIT' i
+s declared but its value is never read.
+packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.test.ts(2,1): error TS6133: 'McpServerController' is dec
+lared but its value is never read.
+packages/agent-runtime/src/mcp-lifecycle/types.ts(2,26): error TS6196: 'ToolSource' is declared but never used.
+packages/agent-runtime/src/mcp-lifecycle/utils.ts(26,3): error TS2375: Type '{ name: string; label: string; description
+: string; category: "mcp"; inputSchema: JsonObject | undefined; concurrency: ToolConcurrency; isReadOnly(input: JsonObj
+ect): boolean; summarize(input: JsonObject): string; execute: (input: JsonObject, context: ToolExecutionContext) => Pro
+mise<...>; }' is not assignable to type 'AgentTool' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined
+' to the types of the target's properties.
+packages/agent-runtime/src/media/media-preprocessor.ts(21,3): error TS6133: 'mimeCategory' is declared but its value is
+ never read.
+packages/agent-runtime/src/media/media-preprocessor.ts(109,11): error TS2375: Type '{ width: number | undefined; height
+: number | undefined; type: "image"; mimeType: string; source: MediaSource; data: string; detail?: "low" | "high" | "au
+to"; sizeBytes: number; }' is not assignable to type 'ImageContent' with 'exactOptionalPropertyTypes: true'. Consider a
+dding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/media/media-preprocessor.ts(116,53): error TS2379: Argument of type '{ quality: number; widt
+h: number | undefined; height: number | undefined; }' is not assignable to parameter of type '{ quality: number; width?
+: number; height?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/memory.ts(356,44): error TS2379: Argument of type '{ content: string; scope: MemoryScope; ta
+gs: string[]; metadata: JsonObject | undefined; }' is not assignable to parameter of type 'Omit<MemoryEntry, "id" | "cr
+eatedAt" | "updatedAt">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the targe
+t's properties.
+packages/agent-runtime/src/memory.ts(389,44): error TS2379: Argument of type '{ query: string | undefined; scope: Memor
+yScope | undefined; tags: string[]; limit: number | undefined; }' is not assignable to parameter of type 'MemorySearchO
+ptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/model-routing-enhanced.ts(78,3): error TS2375: Type '{ required: ModelCapabilityTag[]; prefe
+rred: ModelCapabilityTag[]; avoid: ModelCapabilityTag[]; requiredEndpointSupport: ProviderEndpointSupport[]; requiredSt
+reamingSupport: ProviderStreamingSupport[]; minimumContextTokens: number | undefined; }' is not assignable to type 'Req
+uiredCapabilityShape' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's
+ properties.
+packages/agent-runtime/src/model-routing-roles.test.ts(89,46): error TS2322: Type 'ModelProfile | undefined' is not ass
+ignable to type 'ModelProfile'.
+packages/agent-runtime/src/model-routing-roles.ts(1,29): error TS6196: 'ModelCapabilityTag' is declared but never used.
+packages/agent-runtime/src/model-routing-roles.ts(230,5): error TS2412: Type 'ModelProfile | undefined' is not assignab
+le to type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the targe
+t.
+packages/agent-runtime/src/model-routing-roles.ts(233,5): error TS2412: Type 'ModelProfile | undefined' is not assignab
+le to type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the targe
+t.
+packages/agent-runtime/src/model-routing-roles.ts(236,5): error TS2412: Type 'ModelProfile | undefined' is not assignab
+le to type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the targe
+t.
+packages/agent-runtime/src/model-routing-roles.ts(239,5): error TS2412: Type 'ModelProfile | undefined' is not assignab
+le to type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the targe
+t.
+packages/agent-runtime/src/model-routing/matcher.ts(10,8): error TS6133: 'ProviderEndpointSupport' is declared but its 
+value is never read.
+packages/agent-runtime/src/model-routing/matcher.ts(11,8): error TS6133: 'ProviderStreamingSupport' is declared but its
+ value is never read.
+packages/agent-runtime/src/model-routing/matcher.ts(25,3): error TS6133: 'endpointSupportField' is declared but its val
+ue is never read.
+packages/agent-runtime/src/model-routing/matcher.ts(26,3): error TS6133: 'streamingSupportField' is declared but its va
+lue is never read.
+packages/agent-runtime/src/model-routing/matcher.ts(30,3): error TS6133: 'availabilityField' is declared but its value 
+is never read.
+packages/agent-runtime/src/model-routing/matcher.ts(31,3): error TS6133: 'healthField' is declared but its value is nev
+er read.
+packages/agent-runtime/src/model-routing/matcher.ts(40,3): error TS6133: 'normalizeString' is declared but its value is
+ never read.
+packages/agent-runtime/src/model-routing/matcher.ts(88,3): error TS2375: Type '{ selected: ModelProfile | undefined; ca
+ndidates: ModelRouteCandidate[]; rejections: ModelRouteRejection[]; trace: string[]; request: RequiredCapabilityShape; 
+policy: NormalizedPolicySummary; }' is not assignable to type 'ModelRouteDecision' with 'exactOptionalPropertyTypes: tr
+ue'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/model-routing/matcher.ts(465,3): error TS2375: Type '{ allowProviders: string[]; denyProvide
+rs: string[]; maxCostTier: number | ModelCostTier | undefined; preferModelIds: string[]; avoidModelIds: string[]; weigh
+ts: { requiredCapability: number; ... 10 more ...; avoidedModelPenalty: number; }; }' is not assignable to type 'Normal
+izedPolicySummary' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pr
+operties.
+packages/agent-runtime/src/model-routing/profile.ts(3,15): error TS6196: 'ModelCapabilityFlags' is declared but never u
+sed.
+packages/agent-runtime/src/model-routing/profile.ts(23,27): error TS2379: Argument of type '{ id: string; providerId: s
+tring; routeId: string; model: string; upstreamModel: string; endpointSupport: ProviderEndpointSupport | undefined; str
+eamingSupport: ProviderStreamingSupport | undefined; ... 12 more ...; metadata: JsonObject | undefined; }' is not assig
+nable to parameter of type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the t
+ypes of the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(52,27): error TS2379: Argument of type '{ id: string; providerId: s
+tring | undefined; routeId: string | undefined; model: string | undefined; upstreamModel: string | undefined; endpointS
+upport: ProviderEndpointSupport | undefined; ... 13 more ...; metadata: JsonObject | undefined; }' is not assignable to
+ parameter of type 'ModelProfile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of 
+the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(103,5): error TS2375: Type '{ supportsFunctionCalling: boolean | un
+defined; supportsVision: boolean | undefined; supportsReasoning: boolean | undefined; supportsParallelFunctionCalling: 
+boolean | undefined; supportsResponseSchema: boolean | undefined; supportsPromptCaching: boolean | undefined; }' is not
+ assignable to type 'Partial<ModelCapabilityFlags>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined
+' to the types of the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(104,5): error TS2375: Type '{ inputCostPerToken: number; outputCost
+PerToken: number; cacheReadCostPerToken: number | undefined; currency: string; }' is not assignable to type '{ inputCos
+tPerToken: number; outputCostPerToken: number; cacheReadCostPerToken?: number; reasoningTokenCost?: number; currency: s
+tring; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(110,5): error TS2375: Type '{ releaseDate: string | undefined; depr
+ecationDate: string | undefined; isDeprecated: boolean; }' is not assignable to type '{ releaseDate?: string; deprecati
+onDate?: string; isDeprecated?: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the
+ types of the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(121,3): error TS2375: Type '{ id: string; providerId: string | unde
+fined; routeId: string | undefined; model: string | undefined; upstreamModel: string | undefined; endpointSupport: Prov
+iderEndpointSupport | undefined; ... 13 more ...; metadata: JsonObject | undefined; }' is not assignable to type 'Model
+Profile' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/model-routing/profile.ts(146,3): error TS2375: Type '{ providerId: string; routeId: string; 
+model: string; upstreamModel: string; endpointSupport: ProviderEndpointSupport | undefined; streamingSupport: ProviderS
+treamingSupport | undefined; ... 4 more ...; metadata: JsonObject | undefined; }' is not assignable to type 'ModelProvi
+derRouteMetadata' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pro
+perties.
+packages/agent-runtime/src/path-handling/conex-path.ts(64,22): error TS6138: Property 'root' is declared but its value 
+is never read.
+packages/agent-runtime/src/payload-image-recovery.test.ts(11,3): error TS2459: Module '"./provider-openai-compatible"' 
+declares 'classifyHttpProviderError' locally, but it is not exported.
+packages/agent-runtime/src/plan-document/index.ts(7,3): error TS6196: 'PlanStepStatus' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(8,3): error TS6196: 'PlanQuestionStatus' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(9,3): error TS6196: 'PlanAssumptionStatus' is declared but never used
+.
+packages/agent-runtime/src/plan-document/index.ts(10,3): error TS6196: 'PlanAcceptanceStatus' is declared but never use
+d.
+packages/agent-runtime/src/plan-document/index.ts(11,3): error TS6196: 'PlanRiskStatus' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(13,3): error TS6196: 'PlanStep' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(14,3): error TS6196: 'PlanQuestion' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(15,3): error TS6196: 'PlanAssumption' is declared but never used.
+packages/agent-runtime/src/plan-document/index.ts(44,31): error TS1361: 'PLAN_STEP_STATUSES' cannot be used as a value 
+because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(50,31): error TS1361: 'PLAN_QUESTION_STATUSES' cannot be used as a va
+lue because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(57,31): error TS1361: 'PLAN_ASSUMPTION_STATUSES' cannot be used as a 
+value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(64,31): error TS1361: 'PLAN_ACCEPTANCE_STATUSES' cannot be used as a 
+value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(69,31): error TS1361: 'PLAN_RISK_STATUSES' cannot be used as a value 
+because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(78,11): error TS1361: 'PLAN_DOCUMENT_RESOURCE_KIND' cannot be used as
+ a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(79,20): error TS1361: 'PLAN_DOCUMENT_SCHEMA_VERSION' cannot be used a
+s a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(80,18): error TS1361: 'PLAN_DOCUMENT_CONTENT_TYPE' cannot be used as 
+a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(105,11): error TS1361: 'PLAN_DOCUMENT_RESOURCE_KIND' cannot be used a
+s a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(108,18): error TS1361: 'PLAN_DOCUMENT_CONTENT_TYPE' cannot be used as
+ a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/index.ts(132,37): error TS1361: 'PLAN_RISK_SEVERITIES' cannot be used as a val
+ue because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/operations.ts(1,27): error TS6196: 'JsonValue' is declared but never used.
+packages/agent-runtime/src/plan-document/operations.ts(2,1): error TS6133: 'isRecord' is declared but its value is neve
+r read.
+packages/agent-runtime/src/plan-document/operations.ts(4,1): error TS6133: 'ResourceMetadata' is declared but its value
+ is never read.
+packages/agent-runtime/src/plan-document/operations.ts(200,35): error TS2412: Type 'PlanDocumentSource | undefined' is 
+not assignable to type 'PlanDocumentSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the
+ type of the target.
+packages/agent-runtime/src/plan-document/operations.ts(212,35): error TS2412: Type 'PlanDocumentSource | undefined' is 
+not assignable to type 'PlanDocumentSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the
+ type of the target.
+packages/agent-runtime/src/plan-document/operations.ts(238,35): error TS2412: Type 'PlanDocumentSource | undefined' is 
+not assignable to type 'PlanDocumentSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the
+ type of the target.
+packages/agent-runtime/src/plan-document/operations.ts(252,35): error TS2412: Type 'PlanDocumentSource | undefined' is 
+not assignable to type 'PlanDocumentSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the
+ type of the target.
+packages/agent-runtime/src/plan-document/operations.ts(262,5): error TS2322: Type '{ source: PlanDocumentSource | undef
+ined; metadata: JsonObject | undefined; id: string; text: string; status: "deferred" | "proposed" | "confirmed" | "reje
+cted"; answer?: string; }[]' is not assignable to type 'PlanAssumption[]'.
+packages/agent-runtime/src/plan-document/operations.ts(267,5): error TS2322: Type '{ source: PlanDocumentSource | undef
+ined; metadata: JsonObject | undefined; id: string; question: string; status: "open" | "answered" | "resolved" | "defer
+red"; answer?: string; }[]' is not assignable to type 'PlanQuestion[]'.
+packages/agent-runtime/src/plan-document/operations.ts(272,5): error TS2322: Type '{ dependencies: string[]; evidenceId
+s: string[]; toolHints: string[]; metadata: JsonObject | undefined; id: string; title: string; detail?: string; status:
+ "completed" | "skipped" | "blocked" | "pending" | "in_progress"; }[]' is not assignable to type 'PlanStep[]'.
+packages/agent-runtime/src/plan-document/operations.ts(279,5): error TS2322: Type '{ evidenceIds: string[]; source: Pla
+nDocumentSource | undefined; metadata: JsonObject | undefined; id: string; text: string; status: "failed" | "pending" |
+ "met" | "waived"; }[]' is not assignable to type 'PlanAcceptanceCriterion[]'.
+packages/agent-runtime/src/plan-document/operations.ts(285,5): error TS2322: Type '{ source: PlanDocumentSource | undef
+ined; metadata: JsonObject | undefined; id: string; title: string; detail?: string; severity: "low" | "high" | "medium"
+; status: "open" | ... 1 more ... | "accepted"; mitigation?: string; }[]' is not assignable to type 'PlanRisk[]'.
+packages/agent-runtime/src/plan-document/validation.ts(8,3): error TS6196: 'PlanStepStatus' is declared but never used.
+packages/agent-runtime/src/plan-document/validation.ts(9,3): error TS6196: 'PlanAssumption' is declared but never used.
+packages/agent-runtime/src/plan-document/validation.ts(10,3): error TS6196: 'PlanAssumptionStatus' is declared but neve
+r used.
+packages/agent-runtime/src/plan-document/validation.ts(11,3): error TS6196: 'PlanQuestion' is declared but never used.
+packages/agent-runtime/src/plan-document/validation.ts(12,3): error TS6196: 'PlanQuestionStatus' is declared but never 
+used.
+packages/agent-runtime/src/plan-document/validation.ts(13,3): error TS6196: 'PlanAcceptanceCriterion' is declared but n
+ever used.
+packages/agent-runtime/src/plan-document/validation.ts(14,3): error TS6196: 'PlanAcceptanceStatus' is declared but neve
+r used.
+packages/agent-runtime/src/plan-document/validation.ts(15,3): error TS6196: 'PlanRisk' is declared but never used.
+packages/agent-runtime/src/plan-document/validation.ts(16,3): error TS6196: 'PlanRiskStatus' is declared but never used
+.
+packages/agent-runtime/src/plan-document/validation.ts(17,3): error TS6196: 'PlanRiskSeverity' is declared but never us
+ed.
+packages/agent-runtime/src/plan-document/validation.ts(34,40): error TS1361: 'PLAN_DOCUMENT_STATUSES' cannot be used as
+ a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(46,44): error TS1361: 'PLAN_ASSUMPTION_STATUSES' cannot be used 
+as a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(58,42): error TS1361: 'PLAN_QUESTION_STATUSES' cannot be used as
+ a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(71,38): error TS1361: 'PLAN_STEP_STATUSES' cannot be used as a v
+alue because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(81,44): error TS1361: 'PLAN_ACCEPTANCE_STATUSES' cannot be used 
+as a value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(91,40): error TS1361: 'PLAN_RISK_SEVERITIES' cannot be used as a
+ value because it was imported using 'import type'.
+packages/agent-runtime/src/plan-document/validation.ts(92,38): error TS1361: 'PLAN_RISK_STATUSES' cannot be used as a v
+alue because it was imported using 'import type'.
+packages/agent-runtime/src/plugin-registry.ts(448,3): error TS2322: Type '{ mediaTypes: string[] | undefined; id: strin
+g; label?: string; description?: string; category?: string; activation?: PluginContributionActivation; metadata?: JsonO
+bject; }[]' is not assignable to type 'PluginRendererContribution[]'.
+packages/agent-runtime/src/preview-queue.ts(247,5): error TS2375: Type '{ result: TResult | undefined; metadata: JsonOb
+ject; artifact: PreviewArtifactInput | undefined; }' is not assignable to type 'PreviewTransitionUpdate<TResult>' with 
+'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/preview-queue.ts(365,3): error TS2375: Type '{ kind: "link" | "file" | "diff" | "image" | "l
+og" | undefined; title: string | undefined; uri: string | undefined; text: string | undefined; metadata: JsonObject; }'
+ is not assignable to type 'PreviewArtifactInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' 
+to the types of the target's properties.
+packages/agent-runtime/src/process-lifecycle/process-manager.ts(132,7): error TS2412: Type 'number | undefined' is not 
+assignable to type 'number' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the tar
+get.
+packages/agent-runtime/src/process-lifecycle/process-manager.ts(319,7): error TS2412: Type 'undefined' is not assignabl
+e to type 'Timeout' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/process-lifecycle/process-manager.ts(323,7): error TS2412: Type 'undefined' is not assignabl
+e to type 'Timeout' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/project-progress-ledger.ts(136,11): error TS2375: Type '{ id: string; title: string; status:
+ ProjectProgressStatus; summary: string | undefined; order: number; createdAt: string; updatedAt: string; }' is not ass
+ignable to type 'GlobalProgressItemRecord' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the 
+types of the target's properties.
+packages/agent-runtime/src/project-progress-ledger.ts(158,11): error TS2375: Type '{ id: string; agentId: string; title
+: string; status: ProjectProgressStatus; summary: string | undefined; startedAt: string; updatedAt: string; }' is not a
+ssignable to type 'AgentTaskRecord' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types o
+f the target's properties.
+packages/agent-runtime/src/prompt-assembly.ts(144,9): error TS2375: Type '{ systemPrompt: string | undefined; messages:
+ AgentMessage[]; tools: AgentTool[]; }' is not assignable to type 'PromptAssemblyPayload' with 'exactOptionalPropertyTy
+pes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/prompt-assembly.ts(206,51): error TS2379: Argument of type '{ id: string; label: string | un
+defined; }' is not assignable to parameter of type '{ id?: string; role?: "system" | "user" | "assistant" | "tool" | un
+defined; label?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the ta
+rget's properties.
+packages/agent-runtime/src/prompt-assembly.ts(215,106): error TS2379: Argument of type '{ id: string; label: string | u
+ndefined; }' is not assignable to parameter of type '{ id?: string; role?: "system" | "user" | "assistant" | "tool" | u
+ndefined; label?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the t
+arget's properties.
+packages/agent-runtime/src/provider-anthropic.ts(106,45): error TS2379: Argument of type '{ model: string; systemPrompt
+: string | undefined; messages: AgentMessage[]; tools: AgentTool[]; maxTokens: number; temperature: number | undefined;
+ topP: number | undefined; stream: boolean; }' is not assignable to parameter of type 'BuildAnthropicMessagesBodyOption
+s' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-anthropic.ts(220,32): error TS2379: Argument of type '{ id: string; baseUrl: string
+; apiKey: string | undefined; model: string; maxTokens: number | undefined; temperature: number | undefined; topP: numb
+er | undefined; stream: boolean | undefined; requestTimeoutMs: number | undefined; headers: { ...; }; fetch: { ...; } |
+ undefined; anthropicVersion: string | undefined; }' is not assignable to parameter of type 'AnthropicProviderOptions' 
+with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-cache-hints.test.ts(32,36): error TS2379: Argument of type '{ providerFamily: Promp
+tProviderFamily | undefined; modelFamily: "unknown" | "gemini" | "claude-4.6-plus"; systemPrompt: string; stableContext
+: { id: string; kind: "project-profile"; content: { ...; }; }[]; messages: AgentMessage[]; tools: AgentTool[]; }' is no
+t assignable to parameter of type 'PromptAssemblyInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undef
+ined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway-edge.test.ts(3,3): error TS6133: 'DefaultProviderGateway' is declared but i
+ts value is never read.
+packages/agent-runtime/src/provider-gateway-edge.test.ts(204,59): error TS2741: Property 'policy' is missing in type '{
+ selected: null; candidates: never[]; rejections: never[]; request: { required: never[]; preferred: never[]; avoid: nev
+er[]; requiredEndpointSupport: never[]; requiredStreamingSupport: never[]; }; trace: never[]; }' but required in type '
+ModelRouteDecision'.
+packages/agent-runtime/src/provider-gateway-edge.test.ts(232,59): error TS2741: Property 'policy' is missing in type '{
+ selected: null; candidates: never[]; rejections: never[]; request: { required: never[]; preferred: never[]; avoid: nev
+er[]; requiredEndpointSupport: string[]; requiredStreamingSupport: never[]; }; trace: never[]; }' but required in type 
+'ModelRouteDecision'.
+packages/agent-runtime/src/provider-gateway.test.ts(29,7): error TS2322: Type '({ request, credentialSource }: Provider
+CredentialResolutionContext) => { id: string; source: "account"; providerId: string; accountId: string | undefined; api
+Key: string; baseUrl: string; metadata: { ...; }; }' is not assignable to type '(context: ProviderCredentialResolutionC
+ontext) => ResolvedProviderCredential | Promise<ResolvedProviderCredential | null> | null'.
+packages/agent-runtime/src/provider-gateway.test.ts(365,9): error TS2322: Type '({ route, credentialSource }: ProviderC
+redentialResolutionContext) => { id: string; source: "api-key" | "account"; providerId: string; accountId: string | und
+efined; apiKey: string; }' is not assignable to type '(context: ProviderCredentialResolutionContext) => ResolvedProvide
+rCredential | Promise<ResolvedProviderCredential | null> | null'.
+packages/agent-runtime/src/provider-gateway/credential-resolver.test.ts(104,42): error TS2379: Argument of type '{ base
+Url: undefined; }' is not assignable to parameter of type 'Partial<ResolvedProviderCredential>' with 'exactOptionalProp
+ertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/credential-resolver.ts(3,83): error TS6196: 'ProviderRouteSelection' is dec
+lared but never used.
+packages/agent-runtime/src/provider-gateway/credential-resolver.ts(4,37): error TS6133: 'ProviderGatewayPlanCode' is de
+clared but its value is never read.
+packages/agent-runtime/src/provider-gateway/credential-resolver.ts(8,5): error TS2375: Type '{ providerId: string; acco
+untId: string | undefined; type: "account"; keyClass?: "internal" | "external"; credentialId?: string; metadata?: JsonO
+bject; }' is not assignable to type 'ProviderCredentialSource' with 'exactOptionalPropertyTypes: true'. Consider adding
+ 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/credential-resolver.ts(14,3): error TS2375: Type '{ providerId: string; hea
+ders: Record<string, string> | undefined; type: "api-key"; apiKey: string; credentialId?: string; baseUrl?: string; met
+adata?: JsonObject; }' is not assignable to type 'ProviderCredentialSource' with 'exactOptionalPropertyTypes: true'. Co
+nsider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/credential-resolver.ts(26,3): error TS2375: Type '{ source: "api-key" | "ac
+count"; providerId: string; accountId: string | undefined; headers: Record<string, string> | undefined; id: string; api
+Key?: string; baseUrl?: string; metadata?: JsonObject; }' is not assignable to type 'ResolvedProviderCredential' with '
+exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/index.ts(1,1): error TS6133: 'AgentMessage' is declared but its value is ne
+ver read.
+packages/agent-runtime/src/provider-gateway/index.ts(9,37): error TS6133: 'ProviderGatewayPlanCode' is declared but its
+ value is never read.
+packages/agent-runtime/src/provider-gateway/index.ts(9,170): error TS6133: 'ProviderRouteSelection' is declared but its
+ value is never read.
+packages/agent-runtime/src/provider-gateway/index.ts(11,66): error TS6133: 'validateApiKey' is declared but its value i
+s never read.
+packages/agent-runtime/src/provider-gateway/index.ts(30,5): error TS2412: Type 'ProviderCredentialResolver | undefined'
+ is not assignable to type 'ProviderCredentialResolver' with 'exactOptionalPropertyTypes: true'. Consider adding 'undef
+ined' to the type of the target.
+packages/agent-runtime/src/provider-gateway/index.ts(31,5): error TS2412: Type 'SecretStore | undefined' is not assigna
+ble to type 'SecretStore' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the targe
+t.
+packages/agent-runtime/src/provider-gateway/index.ts(32,5): error TS2412: Type 'ModelCatalog | undefined' is not assign
+able to type 'ModelCatalog' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the tar
+get.
+packages/agent-runtime/src/provider-gateway/index.ts(33,5): error TS2412: Type 'GatewayV2Bridge | undefined' is not ass
+ignable to type 'GatewayV2Bridge' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of t
+he target.
+packages/agent-runtime/src/provider-gateway/index.ts(96,50): error TS2379: Argument of type '{ model: string; providerI
+d: string | undefined; accountId: string | undefined; }' is not assignable to parameter of type 'ProviderRouteCatalogQu
+ery' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/index.ts(105,27): error TS2379: Argument of type '{ code: "route_not_found"
+; requestedModel: string; routeDecision: string[]; candidateCount: number; availableCandidateCount: number; cooldownCan
+didateCount: number; fallbackUsed: false; capabilityRequest: TaskCapabilityRequest | undefined; modelRouteDecision: Mod
+elRouteDecision; }' is not assignable to parameter of type '{ code: ProviderGatewayPlanCode; requestedModel: string; ro
+uteDecision: string[]; candidateCount: number; availableCandidateCount: number; cooldownCandidateCount: number; fallbac
+kUsed: boolean; selectedRoute?: ProviderRouteSelection; capabilityRequest?: TaskCapabilityRequest; modelRouteDecision?:
+ ModelRouteDecision; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target
+'s properties.
+packages/agent-runtime/src/provider-gateway/index.ts(175,78): error TS2379: Argument of type 'ProviderRouteOffer' is no
+t assignable to parameter of type 'ProviderRouteOfferLike' with 'exactOptionalPropertyTypes: true'. Consider adding 'un
+defined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/index.ts(201,11): error TS2375: Type '{ kind: "provider-factory-plan"; rout
+e: ProviderRouteSelection; credential: ResolvedProviderCredential; providerOptions: JsonObject | undefined; modelProfil
+e: ModelProfile | undefined; capabilityRequest: TaskCapabilityRequest | undefined; modelRouteDecision: ModelRouteDecisi
+on | undefined; metadata: JsonObject | und...' is not assignable to type 'ProviderFactoryPlan' with 'exactOptionalPrope
+rtyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/index.ts(213,7): error TS2375: Type '{ ok: true; requestedModel: string; se
+lectedRoute: ProviderRouteSelection; credentialConfigured: true; credential: ResolvedProviderCredential; ... 7 more ...
+; routeDecision: string[]; }' is not assignable to type 'ProviderGatewayPlan' with 'exactOptionalPropertyTypes: true'. 
+Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/index.ts(249,45): error TS2379: Argument of type '{ directKey: SecretValue 
+| undefined; secretStore: SecretStore | undefined; envVarPrefix: string; }' is not assignable to parameter of type 'Cre
+dentialResolverOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target
+'s properties.
+packages/agent-runtime/src/provider-gateway/index.ts(257,11): error TS2375: Type '{ id: string; source: "api-key"; prov
+iderId: string; apiKey: SecretValue; baseUrl: string | undefined; headers: Record<string, string> | undefined; metadata
+: JsonObject | undefined; }' is not assignable to type 'ResolvedProviderCredential' with 'exactOptionalPropertyTypes: t
+rue'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.test.ts(12,3): error TS6133: 'normalizeText' is declared but
+ its value is never read.
+packages/agent-runtime/src/provider-gateway/route-selector.test.ts(15,3): error TS6133: 'DefaultProviderGateway' is dec
+lared but its value is never read.
+packages/agent-runtime/src/provider-gateway/route-selector.test.ts(19,8): error TS6133: 'ProviderRouteResult' is declar
+ed but its value is never read.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(2,10): error TS6133: 'enrichProfileFromCatalog' is declar
+ed but its value is never read.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(2,36): error TS6133: 'profileFromProviderRouteOffer' is d
+eclared but its value is never read.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(45,11): error TS2375: Type '{ status: "degraded" | "healt
+hy" | "unhealthy"; successCount: number; failureCount: number; consecutiveFailures: number; cooldownUntil: number | nul
+l; lastSuccessAt: number | null; ... 6 more ...; metadata: JsonObject | undefined; }' is not assignable to type 'Provid
+erRouteHealth' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's proper
+ties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(126,3): error TS2375: Type '{ routeId: string; providerId
+: string; requestedModel: string; model: string; upstreamModel: string; endpointType: string | undefined; endpointSuppo
+rt: ProviderEndpointSupport | undefined; ... 8 more ...; lastFailure: ProviderRouteHealthEvent | undefined; }' is not a
+ssignable to type 'ProviderRouteSelection' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the 
+types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(188,3): error TS2375: Type '{ ok: false; code: ProviderGa
+tewayPlanCode; requestedModel: string; selectedRoute: ProviderRouteSelection | undefined; credentialConfigured: false; 
+... 6 more ...; routeDecision: string[]; }' is not assignable to type 'ProviderGatewayPlan' with 'exactOptionalProperty
+Types: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(233,3): error TS2375: Type '{ aliases: string[] | undefin
+ed; credentialSource: ProviderCredentialSource; health: ProviderRouteHealth | undefined; modelProfile: ModelProfile | u
+ndefined; ... 14 more ...; providerFactory?: AgentProviderFactory; }' is not assignable to type 'ProviderRouteOffer' wi
+th 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(251,5): error TS2412: Type '{ credentialSource: JsonObjec
+t | undefined; lastSuccess: ProviderRouteHealthEvent | undefined; lastFailure: ProviderRouteHealthEvent | undefined; ..
+. 7 more ...; health?: ModelHealthStatus; } | undefined' is not assignable to type 'ModelProviderRouteMetadata | undefi
+ned' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(268,5): error TS2375: Type '{ metadata: JsonObject | unde
+fined; type: "account"; accountId?: string; providerId?: string; keyClass?: "internal" | "external"; credentialId?: str
+ing; }' is not assignable to type 'ProviderCredentialSource' with 'exactOptionalPropertyTypes: true'. Consider adding '
+undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(273,3): error TS2375: Type '{ headers: Record<string, str
+ing> | undefined; metadata: JsonObject | undefined; type: "api-key"; apiKey: string; providerId?: string; credentialId?
+: string; baseUrl?: string; }' is not assignable to type 'ProviderCredentialSource' with 'exactOptionalPropertyTypes: t
+rue'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(282,3): error TS2375: Type '{ lastSuccess: ProviderRouteH
+ealthEvent | undefined; lastFailure: ProviderRouteHealthEvent | undefined; metadata: JsonObject | undefined; ... 9 more
+ ...; updatedAt?: number; }' is not assignable to type 'ProviderRouteHealth' with 'exactOptionalPropertyTypes: true'. C
+onsider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(292,3): error TS2375: Type '{ metadata: JsonObject | unde
+fined; at?: number | null; latencyMs?: number | null; errorCode?: string | null; }' is not assignable to type 'Provider
+RouteHealthEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pro
+perties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(342,5): error TS2375: Type '{ type: "account"; accountId:
+ string | undefined; providerId: string | undefined; keyClass: "internal" | "external" | undefined; credentialId: strin
+g | undefined; metadata: JsonObject | undefined; }' is not assignable to type 'RedactedProviderCredentialSource' with '
+exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(351,3): error TS2375: Type '{ type: "api-key"; providerId
+: string | undefined; credentialId: string | undefined; baseUrl: string | undefined; headerNames: string[]; metadata: J
+sonObject | undefined; }' is not assignable to type 'RedactedProviderCredentialSource' with 'exactOptionalPropertyTypes
+: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/route-selector.ts(403,3): error TS2375: Type '{ at: number; latencyMs: numb
+er | null; errorCode: string | null; metadata: JsonObject | undefined; }' is not assignable to type 'ProviderRouteHealt
+hEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gateway/types.ts(171,6): error TS6196: 'JsonRedactionContext' is declared but never
+ used.
+packages/agent-runtime/src/provider-gemini.ts(111,49): error TS2379: Argument of type '{ systemPrompt: string | undefin
+ed; messages: AgentMessage[]; tools: AgentTool[]; maxOutputTokens: number; temperature: number | undefined; topP: numbe
+r | undefined; }' is not assignable to parameter of type 'BuildGeminiGenerateContentBodyOptions' with 'exactOptionalPro
+pertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-gemini.ts(235,29): error TS2379: Argument of type '{ id: string; baseUrl: string; a
+piKey: string | undefined; model: string; maxOutputTokens: number | undefined; temperature: number | undefined; topP: n
+umber | undefined; stream: boolean | undefined; requestTimeoutMs: number | undefined; authViaQuery: boolean | undefined
+; headers: { ...; }; fetch: { ...; } | undefine...' is not assignable to parameter of type 'GeminiProviderOptions' with
+ 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-openai-chat.ts(19,1): error TS6192: All imports in import declaration are unused.
+packages/agent-runtime/src/provider-openai-chat.ts(73,9): error TS2322: Type '{ type: "stop"; reason: "tool-call" | "le
+ngth" | "error" | "stop"; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider-openai-chat.ts(94,31): error TS2322: Type '{ type: "stop"; reason: "error"; error: 
+string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider-openai-chat.ts(105,9): error TS2322: Type '{ usage: ProviderUsage | undefined; type
+: "stop"; reason: "stop" | "tool-call" | "length" | "error"; error?: string; }' is not assignable to type 'ProviderStre
+amEvent'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(537,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(541,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(604,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(608,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(665,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(669,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(716,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(720,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(810,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(814,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(874,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(878,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(1377,9): error TS2353: Object literal may only specify kn
+own properties, and 'modelsUrl' does not exist in type '{ baseUrl: string; modelsPath?: string; fetch?: { (input: URL |
+ RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | ... 1 more ... | Request, init?: Req
+uestInit | undefined): Promise<...>; }; ... 8 more ...; rustReqwestCwd?: string; }'.
+packages/agent-runtime/src/provider-openai-compatible.test.ts(1925,67): error TS2353: Object literal may only specify k
+nown properties, and 'env' does not exist in type '{ resolveApiKey?: boolean; }'.
+packages/agent-runtime/src/provider-openai-compatible.ts(101,34): error TS2379: Argument of type '{ phase: "request-sta
+rt"; endpoint: ResolvedOpenAICompatibleEndpoint; url: string; attempt: number; maxAttempts: number; elapsedMs: number; 
+configuredModel: string; reason: string | undefined; }' is not assignable to parameter of type 'Omit<ProviderDiagnostic
+, "providerId">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prop
+erties.
+packages/agent-runtime/src/provider-openai-compatible.ts(256,11): error TS2375: Type '{ method: "POST"; headers: Record
+<string, string>; body: string; timeoutMs: number | undefined; }' is not assignable to type 'HttpRequest' with 'exactOp
+tionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-openai-compatible.ts(389,9): error TS2375: Type '{ method: "GET"; headers: { accept
+: string; }; timeoutMs: number | undefined; }' is not assignable to type 'HttpRequest' with 'exactOptionalPropertyTypes
+: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-openai-responses.ts(92,35): error TS2322: Type '{ type: "stop"; reason: "error"; er
+ror: string; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider-openai-responses.ts(141,11): error TS2322: Type '{ type: "tool-call"; id: string | 
+undefined; toolName: string; input: any; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider-request-machine.ts(327,5): error TS2379: Argument of type '{ initialContext: { sess
+ionId: string; requestId: string; endpoints: string[]; currentEndpointIndex: number; currentEndpoint: string | null; ma
+xAttempts: number; currentAttempt: number; retryBudgetMs: number; ... 7 more ...; diagnostics: never[]; }; snapshot: St
+ateMachineSnapshot<...> | undefined; }' is not assignable to parameter of type '{ initialContext?: ProviderRequestConte
+xt; snapshot?: StateMachineSnapshot<ProviderRequestState, ProviderRequestContext>; }' with 'exactOptionalPropertyTypes:
+ true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-stream-contract.test.ts(270,9): error TS2739: Type '{ toolName: string; argumentsTe
+xt: string; }' is missing the following properties from type 'ProviderStreamToolCall': id, index
+packages/agent-runtime/src/provider-stream-contract.test.ts(317,75): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider-stream-contract/error.ts(29,89): error TS2379: Argument of type '{ status: number |
+ undefined; headers: Headers; }' is not assignable to parameter of type 'ErrorClassifierOptions' with 'exactOptionalPro
+pertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider-stream-contract/json-repair.test.ts(2,1): error TS6133: 'balanceJsonContainers' is 
+declared but its value is never read.
+packages/agent-runtime/src/provider-stream-contract/json-repair.test.ts(2,10): error TS2459: Module '"./json-repair"' d
+eclares 'balanceJsonContainers' locally, but it is not exported.
+packages/agent-runtime/src/provider-stream-contract/normalizer.test.ts(2,1): error TS6133: 'legacyFinishReason' is decl
+ared but its value is never read.
+packages/agent-runtime/src/provider-stream-contract/normalizer.test.ts(2,10): error TS2459: Module '"./normalizer"' dec
+lares 'legacyFinishReason' locally, but it is not exported.
+packages/agent-runtime/src/provider-transport/connection-manager.ts(129,5): error TS2322: Type 'ProviderTransport | und
+efined' is not assignable to type 'ProviderTransport'.
+packages/agent-runtime/src/provider-transport/connection-manager.ts(149,5): error TS2322: Type 'ProviderTransport | und
+efined' is not assignable to type 'ProviderTransport | null'.
+packages/agent-runtime/src/provider-transport/connection-manager.ts(304,23): error TS2379: Argument of type '{ id: stri
+ng; kind: TransportKind; endpoint: string | undefined; avgLatency: number; successRate: number; successCount: number; f
+ailureCount: number; lastUsed: number; slidingWindow: SlidingEntry[]; }' is not assignable to parameter of type 'Transp
+ortStatsSnapshot' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pro
+perties.
+packages/agent-runtime/src/provider/__tests__/auth.test.ts(3,27): error TS6196: 'SecretValue' is declared but never use
+d.
+packages/agent-runtime/src/provider/__tests__/auth.test.ts(159,14): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider/__tests__/auth.test.ts(160,14): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider/__tests__/base-engine.test.ts(151,7): error TS2322: Type 'MockInstance<{ (input: UR
+L | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit
+ | undefined): Promise<...>; }>' is not assignable to type 'MockInstance<(this: unknown, ...args: unknown[]) => unknown
+>'.
+packages/agent-runtime/src/provider/__tests__/base-engine.test.ts(183,9): error TS2345: Argument of type '(_url: string
+, init?: RequestInit) => Promise<Response>' is not assignable to parameter of type 'NormalizedProcedure<(this: unknown,
+ ...args: unknown[]) => unknown>'.
+packages/agent-runtime/src/provider/__tests__/base-engine.test.ts(212,7): error TS2322: Type 'MockInstance<{ (input: UR
+L | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit
+ | undefined): Promise<...>; }>' is not assignable to type 'MockInstance<(this: unknown, ...args: unknown[]) => unknown
+>'.
+packages/agent-runtime/src/provider/__tests__/base-engine.test.ts(222,9): error TS2345: Argument of type '(_url: string
+, init?: RequestInit) => Promise<Response>' is not assignable to parameter of type 'NormalizedProcedure<(this: unknown,
+ ...args: unknown[]) => unknown>'.
+packages/agent-runtime/src/provider/__tests__/base-engine.test.ts(242,9): error TS2345: Argument of type '(_url: string
+, init?: RequestInit) => Promise<Response>' is not assignable to parameter of type 'NormalizedProcedure<(this: unknown,
+ ...args: unknown[]) => unknown>'.
+packages/agent-runtime/src/provider/__tests__/benchmarks/provider-lifecycle.bench.ts(26,5): error TS2375: Type '{ name:
+ string; description: string | undefined; models: string[]; capabilities: string[]; defaultBaseUrl: string; website: st
+ring | undefined; docsUrl: string | undefined; apiKeyEnv: string; endpointType: "auto" | ... 1 more ... | "chat-complet
+ions"; streamingSupport: "streaming" | ... 1 more ... | "optional"; }' is not assignable to type '{ name: string; descr
+iption?: string; models: string[]; capabilities: string[]; defaultBaseUrl: string; website?: string; docsUrl?: string; 
+apiKeyEnv: string; endpointType: string; streamingSupport: string; }' with 'exactOptionalPropertyTypes: true'. Consider
+ adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts(148,23): error TS2322: Type '"text"' 
+is not assignable to type '"tool-call" | "stop" | "text-delta" | "thought-delta" | "provider-diagnostic"'.
+packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts(175,25): error TS2353: Object literal
+ may only specify known properties, and 'strategy' does not exist in type 'FallbackConfig'.
+packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts(187,20): error TS2739: Type '{ role: 
+"user"; blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id,
+ createdAt
+packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts(254,25): error TS2353: Object literal
+ may only specify known properties, and 'strategy' does not exist in type 'FallbackConfig'.
+packages/agent-runtime/src/provider/__tests__/e2e/context-length-recovery.test.ts(262,20): error TS2739: Type '{ role: 
+"user"; blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id,
+ createdAt
+packages/agent-runtime/src/provider/__tests__/e2e/exponential-backoff-e2e.test.ts(99,11): error TS6133: 'port' is decla
+red but its value is never read.
+packages/agent-runtime/src/provider/__tests__/e2e/exponential-backoff-e2e.test.ts(113,18): error TS2739: Type '{ role: 
+"user"; blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id,
+ createdAt
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(49,17): error TS18048: 'chunk' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(51,11): error TS18048: 'chunk' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(51,44): error TS18048: 'chunk' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(52,26): error TS18048: 'chunk' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(63,11): error TS2564: Property 'port' has no initializ
+er and is not definitely assigned in the constructor.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(89,14): error TS18048: 'phase' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(92,19): error TS18048: 'phase' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(94,23): error TS18048: 'phase' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(95,16): error TS18048: 'phase' is possibly 'undefined'
+.
+packages/agent-runtime/src/provider/__tests__/e2e/mock-server.ts(116,34): error TS2379: Argument of type '{ chunks: { e
+vent?: string; data: string; }[]; delay: number | undefined; raw: boolean; abortAfter: number | undefined; }' is not as
+signable to parameter of type '{ chunks: { event?: string; data: string; }[]; delay?: number; raw?: boolean; abortAfter
+?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's propert
+ies.
+packages/agent-runtime/src/provider/__tests__/e2e/provider-factory.test.ts(63,18): error TS2739: Type '{ role: "user"; 
+blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id, created
+At
+packages/agent-runtime/src/provider/__tests__/e2e/steering-injection.test.ts(8,27): error TS6196: 'JsonObject' is decla
+red but never used.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(1,32): error TS6133: 'vi' is declared but its value is ne
+ver read.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(106,14): error TS2554: Expected 2 arguments, but got 1.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(112,7): error TS2322: Type '"custom-engine"' is not assig
+nable to type '"openai-compatible" | "anthropic-messages" | "ollama" | undefined'.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(167,18): error TS2739: Type '{ role: "user"; blocks: { ty
+pe: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id, createdAt
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(177,12): error TS18048: 'stop' is possibly 'undefined'.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(178,9): error TS18048: 'stop' is possibly 'undefined'.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(179,14): error TS18048: 'stop' is possibly 'undefined'.
+packages/agent-runtime/src/provider/__tests__/factory.test.ts(179,19): error TS2339: Property 'error' does not exist on
+ type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider/__tests__/registry.test.ts(21,5): error TS2375: Type '{ name: string; description: 
+string | undefined; models: string[]; capabilities: never[]; defaultBaseUrl: string; website: string | undefined; docsU
+rl: string | undefined; apiKeyEnv: string; endpointType: "auto" | ... 1 more ... | "chat-completions"; streamingSupport
+: "streaming" | ... 1 more ... | "optional"; }' is not assignable to type '{ name: string; description?: string; models
+: string[]; capabilities: string[]; defaultBaseUrl: string; website?: string; docsUrl?: string; apiKeyEnv: string; endp
+ointType: string; streamingSupport: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to 
+the types of the target's properties.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(1,10): error TS6133: 'createSecret' is declared but its val
+ue is never read.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(53,7): error TS2412: Type 'SecretValue | undefined' is not 
+assignable to type 'SecretValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of th
+e target.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(56,7): error TS2412: Type 'number | undefined' is not assig
+nable to type 'number' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(82,9): error TS2322: Type 'PooledCredential | undefined' is
+ not assignable to type 'PooledCredential | null'.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(86,9): error TS2322: Type 'PooledCredential | undefined' is
+ not assignable to type 'PooledCredential | null'.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(89,9): error TS2322: Type 'PooledCredential | undefined' is
+ not assignable to type 'PooledCredential | null'.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(103,5): error TS2412: Type 'undefined' is not assignable to
+ type 'string' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(104,5): error TS2412: Type 'undefined' is not assignable to
+ type 'number' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(140,5): error TS2412: Type 'undefined' is not assignable to
+ type 'string' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/credential-pool.ts(141,5): error TS2412: Type 'undefined' is not assignable to
+ type 'number' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/credential-resolver.ts(27,5): error TS2412: Type 'SecretValue | undefined' is 
+not assignable to type 'SecretValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type o
+f the target.
+packages/agent-runtime/src/provider/auth/credential-resolver.ts(28,5): error TS2412: Type 'SecretStore | undefined' is 
+not assignable to type 'SecretStore' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type o
+f the target.
+packages/agent-runtime/src/provider/auth/credential-resolver.ts(102,5): error TS2412: Type 'undefined' is not assignabl
+e to type 'SecretValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/key-rotation.ts(1,10): error TS6133: 'createSecret' is declared but its value 
+is never read.
+packages/agent-runtime/src/provider/auth/key-rotation.ts(60,9): error TS2322: Type 'KeyEntry | undefined' is not assign
+able to type 'KeyEntry | null'.
+packages/agent-runtime/src/provider/auth/key-rotation.ts(63,9): error TS2322: Type 'KeyEntry | undefined' is not assign
+able to type 'KeyEntry | null'.
+packages/agent-runtime/src/provider/auth/key-rotation.ts(73,7): error TS2412: Type 'undefined' is not assignable to typ
+e 'string' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/key-rotation.ts(74,7): error TS2412: Type 'undefined' is not assignable to typ
+e 'number' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/auth/oauth/account-store.ts(41,36): error TS2345: Argument of type 'string | undefi
+ned' is not assignable to parameter of type 'string'.
+packages/agent-runtime/src/provider/auth/oauth/account-store.ts(84,7): error TS2322: Type '({ accessToken: string; refr
+eshToken: undefined; status: "error"; id: string; label: string; email?: string; expiresAt: number; chatgptAccountId?: 
+string; lastUsedAt: number; usageScore: number; cooldownUntil?: number; errorCount: number; poolWeight: number; } | { .
+..; })[]' is not assignable to type 'ChatGPTAccount[]'.
+packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.test.ts(2,1): error TS6133: 'ChatGPTAccountPool' is declare
+d but its value is never read.
+packages/agent-runtime/src/provider/auth/oauth/cross-process-lock.ts(19,11): error TS6133: 'acquiredGeneration' is decl
+ared but its value is never read.
+packages/agent-runtime/src/provider/auth/oauth/token-guardian.ts(27,7): error TS2412: Type 'undefined' is not assignabl
+e to type 'Timeout' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/cli/main.ts(5,39): error TS6133: 'ProviderRegistryV2' is declared but its value is 
+never read.
+packages/agent-runtime/src/provider/cli/main.ts(44,39): error TS2345: Argument of type 'string | undefined' is not assi
+gnable to parameter of type 'string'.
+packages/agent-runtime/src/provider/cli/main.ts(61,46): error TS2345: Argument of type 'string | undefined' is not assi
+gnable to parameter of type 'string'.
+packages/agent-runtime/src/provider/cli/main.ts(73,57): error TS2345: Argument of type 'string | undefined' is not assi
+gnable to parameter of type 'string'.
+packages/agent-runtime/src/provider/cli/main.ts(91,45): error TS2379: Argument of type '{ filter: string | undefined; }
+' is not assignable to parameter of type '{ engine?: string; filter?: string; }' with 'exactOptionalPropertyTypes: true
+'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/cli/provider-dev.ts(18,10): error TS18048: 'arg' is possibly 'undefined'.
+packages/agent-runtime/src/provider/cli/provider-dev.ts(19,17): error TS18048: 'arg' is possibly 'undefined'.
+packages/agent-runtime/src/provider/cli/provider-dev.ts(20,33): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/provider/cli/provider-dev.ts(21,7): error TS2322: Type 'string | undefined' is not assignabl
+e to type 'string | boolean'.
+packages/agent-runtime/src/provider/cli/provider-dev.ts(28,3): error TS2375: Type '{ provider: string | undefined; mode
+l: string | undefined; prompt: string | undefined; stream: boolean; }' is not assignable to type 'DevCliArgs' with 'exa
+ctOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(12,16): error TS2739: Type '{ role: "user
+"; blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id, crea
+tedAt
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(19,5): error TS2322: Type 'string' is not
+ assignable to type 'SecretValue'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(59,42): error TS2379: Argument of type '{
+ tools: { name: string; description: string; inputSchema: { type: string; properties: {}; }; }[]; sessionId: string; cw
+d: string; systemPrompt?: string; messages: AgentMessage[]; signal: AbortSignal; promptAssembly?: PromptAssemblyMetadat
+a; }' is not assignable to parameter of type 'AgentProviderRequest' with 'exactOptionalPropertyTypes: true'. Consider a
+dding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(75,14): error TS18048: 'result.init.heade
+rs' is possibly 'undefined'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(75,14): error TS7053: Element implicitly 
+has an 'any' type because expression of type '"anthropic-beta"' can't be used to index type 'HeadersInit'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(81,14): error TS18048: 'result.init.heade
+rs' is possibly 'undefined'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(81,14): error TS7053: Element implicitly 
+has an 'any' type because expression of type '"anthropic-version"' can't be used to index type 'HeadersInit'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(107,14): error TS2532: Object is possibly
+ 'undefined'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(108,11): error TS2532: Object is possibly
+ 'undefined'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(109,16): error TS2532: Object is possibly
+ 'undefined'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.test.ts(109,26): error TS2339: Property 'reason' 
+does not exist on type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.ts(5,1): error TS6133: 'AnthropicMessage' is decl
+ared but its value is never read.
+packages/agent-runtime/src/provider/engines/anthropic-messages-engine.ts(54,15): error TS2339: Property 'maxTokens' doe
+s not exist on type 'AgentProviderRequest'.
+packages/agent-runtime/src/provider/engines/base-engine.ts(65,56): error TS2379: Argument of type '{ status: number | u
+ndefined; signal: AbortSignal | undefined; }' is not assignable to parameter of type 'ErrorClassifierOptions' with 'exa
+ctOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/ollama-engine.test.ts(12,16): error TS2739: Type '{ role: "user"; blocks: {
+ type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id, createdAt
+packages/agent-runtime/src/provider/engines/ollama-engine.test.ts(19,5): error TS2322: Type 'string' is not assignable 
+to type 'SecretValue'.
+packages/agent-runtime/src/provider/engines/ollama-engine.test.ts(59,42): error TS2379: Argument of type '{ tools: { na
+me: string; description: string; inputSchema: { type: string; properties: {}; }; }[]; sessionId: string; cwd: string; s
+ystemPrompt?: string; messages: AgentMessage[]; signal: AbortSignal; promptAssembly?: PromptAssemblyMetadata; }' is not
+ assignable to parameter of type 'AgentProviderRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undef
+ined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/ollama-engine.test.ts(70,78): error TS2353: Object literal may only specify
+ known properties, and 'temp' does not exist in type 'ToolOutput'.
+packages/agent-runtime/src/provider/engines/ollama-engine.test.ts(90,20): error TS2739: Type '{ role: "assistant"; bloc
+ks: ({ type: "text"; text: string; } | { type: "tool-call"; id: string; toolName: string; input: { city: string; }; })[
+]; }' is missing the following properties from type 'AgentMessage': id, createdAt
+packages/agent-runtime/src/provider/engines/ollama-engine.ts(59,31): error TS2339: Property 'maxTokens' does not exist 
+on type 'AgentProviderRequest'.
+packages/agent-runtime/src/provider/engines/ollama-engine.ts(201,21): error TS2322: Type '{ type: "stop"; reason: "stop
+"; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider/engines/ollama-engine.ts(242,11): error TS2322: Type '{ type: "stop"; reason: "stop
+"; usage: ProviderUsage | undefined; }' is not assignable to type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(1,32): error TS6133: 'vi' is declared but 
+its value is never read.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(12,16): error TS2739: Type '{ role: "user"
+; blocks: { type: "text"; text: string; }[]; }' is missing the following properties from type 'AgentMessage': id, creat
+edAt
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(19,5): error TS2322: Type 'string' is not 
+assignable to type 'SecretValue'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(51,14): error TS18048: 'result.init.header
+s' is possibly 'undefined'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(51,14): error TS7053: Element implicitly h
+as an 'any' type because expression of type '"Authorization"' can't be used to index type 'HeadersInit'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(97,14): error TS2532: Object is possibly '
+undefined'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(98,11): error TS2532: Object is possibly '
+undefined'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(99,16): error TS2532: Object is possibly '
+undefined'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.test.ts(99,26): error TS2339: Property 'reason' do
+es not exist on type 'ProviderStreamEvent'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(29,67): error TS6196: 'NormalizedMedia' is decl
+ared but never used.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(66,11): error TS6133: 'timeoutMs' is declared b
+ut its value is never read.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(131,11): error TS2375: Type '{ request: AgentPr
+oviderRequest; endpoint: ResolvedOpenAICompatibleEndpoint; wireMode: SystemPromptWireMode; cacheHintPlan: ProviderCache
+HintPlan | undefined; attempt: number; }' is not assignable to type 'RequestBuildContext' with 'exactOptionalPropertyTy
+pes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(135,9): error TS2379: Argument of type '{ model
+: string; stream: boolean; temperature: number | undefined; topP: number | undefined; maxTokens: any; reasoningEffort: 
+OpenAICompatibleReasoningEffort | undefined; reasoningEffortFormat: OpenAICompatibleReasoningEffortFormat | undefined; 
+toolChoice: OpenAICompatibleToolChoice | undefined; }' is not assignable to parameter of type '{ model: string; stream?
+: boolean; temperature?: number; topP?: number; maxTokens?: number; reasoningEffort?: OpenAICompatibleReasoningEffort; 
+reasoningEffortFormat?: OpenAICompatibleReasoningEffortFormat; toolChoice?: OpenAICompatibleToolChoice; }' with 'exactO
+ptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(140,30): error TS2339: Property 'maxTokens' doe
+s not exist on type 'AgentProviderRequest'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(151,7): error TS2379: Argument of type '{ model
+: string; stream: boolean; temperature: number | undefined; topP: number | undefined; maxTokens: any; maxTokensField: O
+penAICompatibleMaxTokensField; reasoningEffort: OpenAICompatibleReasoningEffort | undefined; reasoningEffortFormat: Ope
+nAICompatibleReasoningEffortFormat | undefined; reasoningContent: OpenAI...' is not assignable to parameter of type '{ 
+model: string; stream?: boolean; temperature?: number; topP?: number; maxTokens?: number; maxTokensField?: OpenAICompat
+ibleMaxTokensField; reasoningEffort?: OpenAICompatibleReasoningEffort; reasoningEffortFormat?: OpenAICompatibleReasonin
+gEffortFormat; reasoningContent?: OpenAICompatibleReasoningContentMode; toolC...' with 'exactOptionalPropertyTypes: tru
+e'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(156,28): error TS2339: Property 'maxTokens' doe
+s not exist on type 'AgentProviderRequest'.
+packages/agent-runtime/src/provider/engines/openai-compatible-engine.ts(320,5): error TS2375: Type '{ type: MediaType; 
+source: MediaSource; data: string; url: string; fileId: string; mimeType: string; bytes: Uint8Array | undefined; filePa
+th: string | undefined; filename: string | undefined; }' is not assignable to type 'BaseMediaInput' with 'exactOptional
+PropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/factory.ts(33,53): error TS2345: Argument of type '{ type: "api-key"; apiKey: strin
+g; baseUrl: string | undefined; headers: Record<string, string> | undefined; }' is not assignable to parameter of type 
+'ProviderCredentialSource | undefined'.
+packages/agent-runtime/src/provider/loader.ts(8,11): error TS6133: 'ready' is declared but its value is never read.
+packages/agent-runtime/src/provider/loader.ts(44,5): error TS2412: Type 'undefined' is not assignable to type 'FSWatche
+r' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/provider/loader.ts(56,9): error TS2375: Type '{ name: string; description: string | undefine
+d; models: string[]; capabilities: never[]; defaultBaseUrl: string; website: string | undefined; docsUrl: string | unde
+fined; apiKeyEnv: string; endpointType: "auto" | ... 1 more ... | "chat-completions"; streamingSupport: "streaming" | .
+.. 1 more ... | "optional"; }' is not assignable to type '{ name: string; description?: string; models: string[]; capab
+ilities: string[]; defaultBaseUrl: string; website?: string; docsUrl?: string; apiKeyEnv: string; endpointType: string;
+ streamingSupport: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/provider/provider-gateway-v2.ts(1,1): error TS6133: 'AgentProvider' is declared but its valu
+e is never read.
+packages/agent-runtime/src/provider/provider-gateway-v2.ts(44,5): error TS2412: Type 'SecretStore | undefined' is not a
+ssignable to type 'SecretStore' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the
+ target.
+packages/agent-runtime/src/provider/provider-gateway-v2.ts(69,57): error TS2379: Argument of type '{ directKey: SecretV
+alue | undefined; secretStore: SecretStore | undefined; }' is not assignable to parameter of type 'CredentialResolverOp
+tions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/provider/provider-gateway-v2.ts(87,55): error TS2345: Argument of type '{ type: "api-key"; a
+piKey: string; baseUrl: string | undefined; headers: Record<string, string> | undefined; }' is not assignable to parame
+ter of type 'ProviderCredentialSource | undefined'.
+packages/agent-runtime/src/provider/registry-v2.ts(4,38): error TS6196: 'EngineRequest' is declared but never used.
+packages/agent-runtime/src/provider/registry-v2.ts(86,10): error TS2554: Expected 2 arguments, but got 1.
+packages/agent-runtime/src/provider/registry-v2.ts(90,10): error TS2554: Expected 2 arguments, but got 1.
+packages/agent-runtime/src/provider/registry-v2.ts(94,10): error TS2554: Expected 2 arguments, but got 1.
+packages/agent-runtime/src/provider/registry-v2.ts(255,7): error TS2375: Type '{ name: string; description: string | un
+defined; models: string[]; capabilities: never[]; defaultBaseUrl: string; website: string | undefined; docsUrl: string 
+| undefined; apiKeyEnv: string; endpointType: "auto" | ... 1 more ... | "chat-completions"; streamingSupport: "streamin
+g" | ... 1 more ... | "optional"; }' is not assignable to type '{ name: string; description?: string; models: string[];
+ capabilities: string[]; defaultBaseUrl: string; website?: string; docsUrl?: string; apiKeyEnv: string; endpointType: s
+tring; streamingSupport: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types o
+f the target's properties.
+packages/agent-runtime/src/provider/registry-v2.ts(319,72): error TS2322: Type 'string | undefined' is not assignable t
+o type 'JsonValue'.
+packages/agent-runtime/src/recovery-pipeline.ts(103,16): error TS6133: 'tier2Fallback' is declared but its value is nev
+er read.
+packages/agent-runtime/src/recovery/stream-recovery.ts(10,1): error TS6192: All imports in import declaration are unuse
+d.
+packages/agent-runtime/src/rendering/rendering-pipeline.ts(225,24): error TS2379: Argument of type '{ type: RenderItemT
+ype; priority: RenderPriority; domain: ConexEventDomain; sourceEventId: string; data: unknown; diagnostics: ConexDiagno
+stic[] | undefined; }' is not assignable to parameter of type 'Omit<RenderItem, "id" | "createdAt" | "rendered" | "filt
+ered">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/rendering/rendering-pipeline.ts(433,24): error TS2379: Argument of type '{ stage: RenderStag
+e; timestamp: number; detail: string | undefined; }' is not assignable to parameter of type '{ stage: RenderStage; time
+stamp: number; detail?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of
+ the target's properties.
+packages/agent-runtime/src/rich-read.ts(183,11): error TS2322: Type '(request: RichReadRequest) => Promise<{ providerId
+: "workspace"; kind: "directory"; uri: string; path: string; metadata: JsonObject; entries: RichReadDirectoryEntry[]; b
+ytes?: never; mimeType?: never; } | { ...; }>' is not assignable to type '(request: RichReadRequest, context: ToolExecu
+tionContext) => RichReadProviderResource | Promise<RichReadProviderResource>'.
+packages/agent-runtime/src/rich-read.ts(259,11): error TS2322: Type '(request: RichReadRequest, context: ToolExecutionC
+ontext) => Promise<{ providerId: "artifact"; kind: "artifact"; uri: string; label: string | undefined; metadata: JsonOb
+ject | undefined; bytes: Buffer<...>; mimeType: string | undefined; }>' is not assignable to type '(request: RichReadRe
+quest, context: ToolExecutionContext) => RichReadProviderResource | Promise<RichReadProviderResource>'.
+packages/agent-runtime/src/rich-read.ts(294,3): error TS2375: Type '{ resource: string; originalResource: string; schem
+e: string | undefined; startLine: number | undefined; endLine: number | undefined; lineFormat: RichReadLineFormat; maxB
+ytes: number; directoryOffset: number; directoryLimit: number; cursor: string | undefined; }' is not assignable to type
+ 'RichReadRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pr
+operties.
+packages/agent-runtime/src/runtime-components/context-manager.ts(78,47): error TS2379: Argument of type '{ toolOutputBu
+dget: ToolOutputBudgetRuntimeOptions | undefined; enabled?: boolean; contextWindowTokens: number; thresholdRatio?: numb
+er; thresholdTokens?: number; ... 6 more ...; contextState?: ContextStateReader; }' is not assignable to parameter of t
+ype 'ContextCompressionRuntimeOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type
+s of the target's properties.
+packages/agent-runtime/src/runtime-components/context-manager.ts(139,58): error TS2379: Argument of type '{ toolOutputB
+udget: ToolOutputBudgetRuntimeOptions | undefined; }' is not assignable to parameter of type 'ContextProjectionOptions'
+ with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-components/context-manager.ts(167,7): error TS2375: Type '{ stableContext: PromptAss
+emblyContextBlock[] | undefined; volatileContext: PromptAssemblyContextBlock[] | undefined; }' is not assignable to typ
+e '{ stableContext?: PromptAssemblyContextBlock[]; volatileContext?: PromptAssemblyContextBlock[]; }' with 'exactOption
+alPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-components/context-manager.ts(177,5): error TS2375: Type '{ stableContext: PromptAss
+emblyContextBlock[] | undefined; volatileContext: PromptAssemblyContextBlock[] | undefined; }' is not assignable to typ
+e '{ stableContext?: PromptAssemblyContextBlock[]; volatileContext?: PromptAssemblyContextBlock[]; }' with 'exactOption
+alPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(86,51): error TS2345: Argument of type '{ fin
+ishReason: "stop"; text: string; }' is not assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(99,51): error TS2345: Argument of type '{ fin
+ishReason: "tool-call"; text: string; toolCalls: { id: string; toolName: string; input: { path: string; }; }[]; }' is n
+ot assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(113,36): error TS2345: Argument of type '{ fi
+nishReason: "tool-call"; toolCalls: { id: string; toolName: string; input: {}; }[]; }' is not assignable to parameter o
+f type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(117,51): error TS2345: Argument of type '{ fi
+nishReason: "tool-call"; toolCalls: { id: string; toolName: string; input: {}; }[]; }' is not assignable to parameter o
+f type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(129,36): error TS2345: Argument of type '{ fi
+nishReason: "stop"; text: string; }' is not assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(131,36): error TS2345: Argument of type '{ fi
+nishReason: "stop"; text: string; }' is not assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(138,36): error TS2345: Argument of type '{ fi
+nishReason: "stop"; text: string; }' is not assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.test.ts(140,36): error TS2345: Argument of type '{ fi
+nishReason: "stop"; text: string; }' is not assignable to parameter of type 'ProviderResponse'.
+packages/agent-runtime/src/runtime-components/conversation-engine.ts(219,5): error TS2375: Type '{ assistantMessage: Ag
+entMessage; toolCalls: ToolCallBlock[]; shouldContinue: boolean; endReason: TurnEndReason | undefined; diagnostics: Pro
+viderDiagnostic[]; }' is not assignable to type 'TurnResult' with 'exactOptionalPropertyTypes: true'. Consider adding '
+undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-components/conversation-engine.ts(281,5): error TS2375: Type '{ messages: AgentMessa
+ge[]; turnCount: number; lastTurnAt: string | undefined; }' is not assignable to type 'ConversationSnapshot' with 'exac
+tOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-components/conversation-engine.ts(294,5): error TS2412: Type 'string | undefined' is
+ not assignable to type 'string' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of th
+e target.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(46,11): error TS2741: Property 'index'
+ is missing in type '{ id: string; toolName: string; argumentsText: string; input: { path: string; }; }' but required i
+n type 'ProviderStreamToolCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(131,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; }' but required in type 'ProviderStreamToo
+lCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(141,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; }' but required in type 'ProviderStreamToo
+lCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(151,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; input: { path: string; old_string: string;
+ new_string: string; }; }' but required in type 'ProviderStreamToolCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(164,7): error TS2554: Expected 3-4 arg
+uments, but got 5.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(164,8): error TS7006: Parameter 'p' im
+plicitly has an 'any' type.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(206,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; }' but required in type 'ProviderStreamToo
+lCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(216,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; input: { path: string; }; }' but required 
+in type 'ProviderStreamToolCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(251,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; }' but required in type 'ProviderStreamToo
+lCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(261,11): error TS2741: Property 'index
+' is missing in type '{ id: string; toolName: string; argumentsText: string; input: {}; }' but required in type 'Provid
+erStreamToolCall'.
+packages/agent-runtime/src/runtime-components/provider-response-consumer.test.ts(274,7): error TS2554: Expected 3-4 arg
+uments, but got 5.
+packages/agent-runtime/src/runtime-components/tool-executor.test.ts(1,32): error TS6133: 'vi' is declared but its value
+ is never read.
+packages/agent-runtime/src/runtime-components/tool-executor.test.ts(2,39): error TS6196: 'ToolBatchResult' is declared 
+but never used.
+packages/agent-runtime/src/runtime-components/tool-executor.test.ts(2,71): error TS6196: 'ToolOutput' is declared but n
+ever used.
+packages/agent-runtime/src/runtime-metrics.test.ts(65,12): error TS18048: 'snapshot.tools.byName.shell' is possibly 'un
+defined'.
+packages/agent-runtime/src/runtime-metrics.test.ts(96,12): error TS18048: 'snapshot.tools.byName.shell' is possibly 'un
+defined'.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(6,68): error TS6133: 'RuntimeProviderUsageMetrics' is declared
+ but its value is never read.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(7,8): error TS6133: 'RuntimeDurationMetrics' is declared but i
+ts value is never read.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(9,63): error TS6133: 'MutableDurationHistogram' is declared bu
+t its value is never read.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(10,106): error TS6133: 'MAX_HISTOGRAM_BUCKETS' is declared but
+ its value is never read.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(18,83): error TS6133: 'mapToRecord' is declared but its value 
+is never read.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(78,156): error TS2379: Argument of type '{ error: RuntimeError
+Summary | undefined; }' is not assignable to parameter of type 'Partial<RuntimeSpanSummary>' with 'exactOptionalPropert
+yTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(125,53): error TS2339: Property 'outputByteSize' does not exis
+t on type 'ToolBatchResult'.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(134,71): error TS2379: Argument of type '{ output: RuntimePayl
+oadSummary; durationMs: number | undefined; error: RuntimeErrorSummary | undefined; }' is not assignable to parameter o
+f type 'Partial<RuntimeSpanSummary>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types 
+of the target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(140,28): error TS2379: Argument of type '{ sessionId: string |
+ undefined; startedAt: string | undefined; endedAt: string | undefined; eventCount: number; turnCount: number; tools: R
+untimeToolMetricsSnapshot; ... 11 more ...; toolStats: RuntimeToolNameMetricsSnapshot[]; }' is not assignable to parame
+ter of type 'RuntimeMetricsSnapshot' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types 
+of the target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(170,42): error TS2379: Argument of type '{ providerId: string 
+| undefined; configuredModel: string | undefined; actualModel: string | undefined; providerFamily?: string; modelFamily
+?: string; cacheStrategy?: string; stablePrefixHash?: string; toolSchemaHash?: string; cacheKey?: string; }' is not ass
+ignable to parameter of type 'RuntimeMetricsDimensions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undef
+ined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(222,91): error TS2379: Argument of type '{ output: RuntimePayl
+oadSummary; error: RuntimeErrorSummary | undefined; }' is not assignable to parameter of type 'Partial<RuntimeSpanSumma
+ry>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(261,28): error TS2379: Argument of type '{ spanId: string; par
+entSpanId: string | undefined; kind: "model-stream"; name: string; status: "in-progress"; sessionId: string | undefined
+; providerId: string | undefined; startedAt: string | undefined; metrics: JsonObject; }' is not assignable to parameter
+ of type 'RuntimeSpanSummary' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(264,158): error TS2379: Argument of type '{ spanId: string; pr
+oviderId: string | undefined; code: ProviderErrorKind | undefined; }' is not assignable to parameter of type 'Partial<R
+untimeErrorSummary>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's 
+properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(266,95): error TS2379: Argument of type '{ durationMs: number 
+| undefined; error: RuntimeErrorSummary | undefined; metrics: JsonObject; }' is not assignable to parameter of type 'Pa
+rtial<RuntimeSpanSummary>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the tar
+get's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(270,28): error TS2379: Argument of type '{ spanId: string; par
+entSpanId: string; kind: "checkpoint"; name: string; status: "ok"; sessionId: string | undefined; toolCallId: string; s
+tartedAt: string; endedAt: string; durationMs: number; output: RuntimePayloadSummary; }' is not assignable to parameter
+ of type 'RuntimeSpanSummary' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(282,56): error TS2339: Property 'startedAt' does not exist on 
+type 'RuntimeSpanSummary | { spanId: string; kind: "run"; name: string; status: RuntimeSpanStatus; sessionId: string | 
+undefined; }'.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(282,102): error TS2339: Property 'startedAt' does not exist on
+ type 'RuntimeSpanSummary | { spanId: string; kind: "run"; name: string; status: RuntimeSpanStatus; sessionId: string |
+ undefined; }'.
+packages/agent-runtime/src/runtime-metrics/collectors.ts(283,40): error TS2379: Argument of type '{ status: RuntimeSpan
+Status; endedAt: string | undefined; durationMs: number | undefined; error: RuntimeErrorSummary | undefined; ... 15 mor
+e ...; metrics?: JsonObject; } | { ...; }' is not assignable to parameter of type 'RuntimeSpanSummary' with 'exactOptio
+nalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(4,30): error TS2459: Module '"../types"' declares 'JsonObject' l
+ocally, but it is not exported.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(12,3): error TS6133: 'MAX_TOOL_NAME_METRICS' is declared but its
+ value is never read.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(12,26): error TS6133: 'MAX_DIMENSION_METRICS' is declared but it
+s value is never read.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(12,49): error TS6133: 'MAX_TERMINAL_REASONS' is declared but its
+ value is never read.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(13,3): error TS6133: 'MAX_TRACE_SPANS' is declared but its value
+ is never read.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(13,20): error TS6133: 'MAX_TRACE_ERRORS' is declared but its val
+ue is never read.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(111,3): error TS2375: Type '{ count: number; min: number | undef
+ined; max: number | undefined; p50: number | undefined; p95: number | undefined; p99: number | undefined; }' is not ass
+ignable to type 'RuntimeDurationMetrics' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the ty
+pes of the target's properties.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(182,40): error TS2379: Argument of type '{ providerFamily: strin
+g | undefined; providerId: string | undefined; modelFamily: string | undefined; configuredModel: string | undefined; ac
+tualModel: string | undefined; cacheStrategy: string | undefined; stablePrefixHash: string | undefined; toolSchemaHash:
+ string | undefined; cacheKey: string | undefined; }' is not assignable to parameter of type 'RuntimeMetricsDimensions'
+ with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(300,23): error TS2379: Argument of type '{ stack: string | undef
+ined; timestamp: string; layer: RuntimeErrorLayer; code?: string; message: string; traceId: string; sessionId: string; 
+runId?: string; spanId?: string; parentSpanId?: string; ... 4 more ...; requestId?: string; }' is not assignable to par
+ameter of type 'RuntimeErrorSummary' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types 
+of the target's properties.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(305,172): error TS2379: Argument of type '{ spanId: string; pare
+ntSpanId?: string; traceId: string; sessionId: string; runId?: string; messageId?: string; toolCallId?: string; provide
+rId?: string; routeId?: string; requestId?: string; ... 9 more ...; error?: RuntimeErrorSummary; }' is not assignable t
+o parameter of type 'RuntimeSpanSummary' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the ty
+pes of the target's properties.
+packages/agent-runtime/src/runtime-metrics/snapshot.ts(305,275): error TS2379: Argument of type '{ timestamp?: string; 
+layer: RuntimeErrorLayer; code?: string; message: string; stack?: string; traceId: string; sessionId: string; runId?: s
+tring; spanId?: string; parentSpanId?: string; messageId?: string; toolCallId?: string; providerId?: string; routeId?: 
+string; requestId?: string; }' is not assignable to parameter of type 'RuntimeErrorSummary' with 'exactOptionalProperty
+Types: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime-metrics/types.ts(1,27): error TS6196: 'ProviderDiagnostic' is declared but never use
+d.
+packages/agent-runtime/src/runtime.ts(47,52): error TS2379: Argument of type '{ connectionManager: ConnectionManager | 
+undefined; tokenTracker: TokenTracker; }' is not assignable to parameter of type 'ProviderCallGatewayOptions' with 'exa
+ctOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime.ts(51,46): error TS2379: Argument of type '{ compression: ContextCompressionRuntimeO
+ptions | undefined; toolOutputBudget: ToolOutputBudgetRuntimeOptions | undefined; cwd: string; sessionId: string; }' is
+ not assignable to parameter of type 'ContextManagerOptions' with 'exactOptionalPropertyTypes: true'. Consider adding '
+undefined' to the types of the target's properties.
+packages/agent-runtime/src/runtime.ts(162,7): error TS2345: Argument of type 'RuntimePermissionPolicy' is not assignabl
+e to parameter of type 'TokenLedger'.
+packages/agent-runtime/src/scoped-context-resources.ts(91,9): error TS2375: Type '{ cwd: string; workspaceRoot: string 
+| undefined; projectRoot: string | undefined; projectMarkers: string[]; projectFiles: string[]; projectTags: string[]; 
+packageNames: string[]; }' is not assignable to type 'ScopedContextResolverProject' with 'exactOptionalPropertyTypes: t
+rue'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/scoped-context-resources.ts(195,44): error TS2379: Argument of type '{ records: ScopedContex
+tRecord[]; userEnabledIds: string[] | undefined; userDisabledIds: string[] | undefined; cwd: string; workspaceRoot?: st
+ring; projectRoot?: string; projectMarkers?: string[]; projectFiles?: string[]; projectTags?: string[]; packageNames?: 
+string[]; }' is not assignable to parameter of type 'ScopedContextResolverInput' with 'exactOptionalPropertyTypes: true
+'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/scoped-context-resources.ts(225,11): error TS2375: Type '{ id: string; title: string; text: 
+string; description: string | undefined; scope: ScopedContextScope; activation: ScopedContextActivation; appliesTo: str
+ing[]; tags: string[]; source: { ...; }; order: number; }' is not assignable to type 'ScopedRuleInput' with 'exactOptio
+nalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/scoped-context.ts(112,3): error TS2375: Type '{ id: string; kind: "rule"; title: string; con
+tent: string; description: string | undefined; scope: ScopedContextScope; activation: ScopedContextActivation; appliesT
+o: string[]; tags: string[]; source: ScopedContextSource | undefined; order: number; }' is not assignable to type 'Scop
+edContextRecord' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prop
+erties.
+packages/agent-runtime/src/scoped-context.ts(134,3): error TS2375: Type '{ id: string; kind: "skill"; title: string; co
+ntent: string; description: string | undefined; scope: ScopedContextScope; activation: ScopedContextActivation; applies
+To: string[]; tags: string[]; source: ScopedContextSource; order: number; }' is not assignable to type 'ScopedContextRe
+cord' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/scoped-context.ts(335,3): error TS2375: Type '{ id: string; kind: ScopedContextKind; title: 
+string; description: string | undefined; scope: ScopedContextScope; activation: ScopedContextActivation; appliesTo: str
+ing[]; tags: string[]; source: ScopedContextSource | undefined; reason: string; }' is not assignable to type 'ScopedCon
+textCandidate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's proper
+ties.
+packages/agent-runtime/src/secrets-obfuscation.ts(692,11): error TS2375: Type '{ placeholder: string; value: string; ki
+nd: SecretKind; label: string; source: string | undefined; }' is not assignable to type 'PlaceholderRecord' with 'exact
+OptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/session-loop/index.test.ts(2,1): error TS6133: 'SessionLoop' is declared but its value is ne
+ver read.
+packages/agent-runtime/src/session-loop/index.test.ts(2,10): error TS2305: Module '"./index"' has no exported member 'S
+essionLoop'.
+packages/agent-runtime/src/session-loop/provider-call.test.ts(2,1): error TS6133: 'handleLengthFinishReason' is declare
+d but its value is never read.
+packages/agent-runtime/src/session-loop/provider-call.test.ts(2,10): error TS2305: Module '"./provider-call"' has no ex
+ported member 'handleLengthFinishReason'.
+packages/agent-runtime/src/session-store/index.ts(109,14): error TS2420: Class 'SessionStore' incorrectly implements in
+terface 'ISessionStore'.
+packages/agent-runtime/src/skills.ts(148,3): error TS2375: Type '{ tags?: string[]; appliesTo?: string[]; activation?: 
+"enabled" | "recommended" | "disabled" | undefined; scope?: "project" | "workspace" | "global" | undefined; allowedTool
+s?: string[]; invocation?: "auto" | "manual"; ... 7 more ...; disableModelInvocation: boolean; }' is not assignable to 
+type 'AgentSkill' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's pro
+perties.
+packages/agent-runtime/src/state-machine/agent-session.ts(247,5): error TS2379: Argument of type '{ initialContext: { s
+essionId: string; turnIndex: number; maxTurns: number; endReason: "stop"; toolCallCount: number; steeringCount: number;
+ }; snapshot: StateMachineSnapshot<AgentSessionState, AgentSessionContext> | undefined; }' is not assignable to paramet
+er of type '{ initialContext?: AgentSessionContext; snapshot?: StateMachineSnapshot<AgentSessionState, AgentSessionCont
+ext>; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/state-machine/core.test.ts(132,14): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/state-machine/core.ts(100,25): error TS2379: Argument of type '{ onEnter: ((context: C, even
+t: E, payload?: unknown) => SideEffect[]) | undefined; onExit: ((context: C, event: E, payload?: unknown) => SideEffect
+[]) | undefined; transitions: Map<...>; }' is not assignable to parameter of type 'StateDefinition<S, E, C>' with 'exac
+tOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/state-machine/core.ts(307,3): error TS2375: Type '{ target: S; guard: ((context: C, payload?
+: unknown) => GuardResult) | (() => { allowed: true; }); effect: ((context: C, payload?: unknown) => SideEffect[]) | un
+defined; }' is not assignable to type 'TransitionTarget<S, C>' with 'exactOptionalPropertyTypes: true'. Consider adding
+ 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/state-machine/run-lifecycle.test.ts(10,8): error TS6133: 'RunLifecycleState' is declared but
+ its value is never read.
+packages/agent-runtime/src/state-machine/run-lifecycle.test.ts(11,8): error TS6133: 'RunEndReason' is declared but its 
+value is never read.
+packages/agent-runtime/src/state-machine/run-lifecycle.ts(162,5): error TS2379: Argument of type '{ initialContext: { s
+essionId: string; approvalCount: number; turnCount: number; }; snapshot: StateMachineSnapshot<RunLifecycleState, RunLif
+ecycleContext> | undefined; }' is not assignable to parameter of type '{ initialContext?: RunLifecycleContext; snapshot
+?: StateMachineSnapshot<RunLifecycleState, RunLifecycleContext>; }' with 'exactOptionalPropertyTypes: true'. Consider a
+dding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/state-machine/session-branch.ts(61,5): error TS2322: Type 'string | undefined' is not assign
+able to type 'string'.
+packages/agent-runtime/src/state-machine/session-branch.ts(142,5): error TS2379: Argument of type '{ initialContext: { 
+sessionId: string; activeBranchId: string; activeLeafId: string; branchStack: never[]; }; snapshot: StateMachineSnapsho
+t<SessionBranchState, SessionBranchContext> | undefined; }' is not assignable to parameter of type '{ initialContext?: 
+SessionBranchContext; snapshot?: StateMachineSnapshot<SessionBranchState, SessionBranchContext>; }' with 'exactOptional
+PropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/structured-summary.ts(92,34): error TS2379: Argument of type '{ kind: StructuredSummaryKind 
+| undefined; goal: string | undefined; constraints: string[] | undefined; progress: string[] | undefined; decisions: st
+ring[] | undefined; ... 6 more ...; sourceIds: string[] | undefined; }' is not assignable to parameter of type 'Structu
+redSummaryInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's prop
+erties.
+packages/agent-runtime/src/subagent-loop.ts(1,41): error TS6196: 'JsonObject' is declared but never used.
+packages/agent-runtime/src/subagent-loop.ts(56,47): error TS2379: Argument of type '{ providerFamily: PromptProviderFam
+ily; systemPrompt: string | undefined; messages: AgentMessage[]; tools: AgentTool[]; }' is not assignable to parameter 
+of type 'PromptAssemblyInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the 
+target's properties.
+packages/agent-runtime/src/subagent-loop.ts(65,9): error TS2375: Type '{ maxTokens?: number; sessionId: string; cwd: st
+ring; systemPrompt: string | undefined; messages: AgentMessage[]; tools: AgentTool[]; signal: AbortSignal; }' is not as
+signable to type 'AgentProviderRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the typ
+es of the target's properties.
+packages/agent-runtime/src/subagent-types.ts(37,17): error TS2391: Function implementation is missing or not immediatel
+y following the declaration.
+packages/agent-runtime/src/testing.test.ts(510,11): error TS6133: 'provider' is declared but its value is never read.
+packages/agent-runtime/src/tool-discovery.ts(240,5): error TS2412: Type 'ToolSource | undefined' is not assignable to t
+ype 'ToolSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/tool-discovery.ts(241,5): error TS2412: Type 'ToolSource | undefined' is not assignable to t
+ype 'ToolSource' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/tool-output-budget.ts(56,3): error TS2375: Type '{ text: string; artifacts: ToolArtifact[] |
+ undefined; json: { contextBudget: JsonObject; }; }' is not assignable to type 'ToolOutput' with 'exactOptionalProperty
+Types: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/tool-output-guard.ts(87,3): error TS2375: Type '{ text: string; artifacts: ToolArtifact[] | 
+undefined; json: { [x: string]: JsonValue; }; }' is not assignable to type 'ToolOutput' with 'exactOptionalPropertyType
+s: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/tool-stream/tool-stream.test.ts(87,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/tool-stream/tool-stream.test.ts(88,12): error TS2532: Object is possibly 'undefined'.
+packages/agent-runtime/src/tools/tool-definition.ts(54,5): error TS2412: Type 'JsonObject | undefined' is not assignabl
+e to type 'JsonObject' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+packages/agent-runtime/src/tools/tool-definition.ts(55,5): error TS2412: Type 'Record<string, string[]> | undefined' is
+ not assignable to type 'Record<string, string[]>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined'
+ to the type of the target.
+packages/agent-runtime/src/tools/tool-definition.ts(124,24): error TS2379: Argument of type '{ name: string; descriptio
+n: string; inputSchema: JsonObject | undefined; }' is not assignable to parameter of type 'LlmToolDefinition' with 'exa
+ctOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/tools/tool-definition.ts(131,24): error TS2379: Argument of type '{ name: string; descriptio
+n: string; inputSchema: JsonObject | undefined; }' is not assignable to parameter of type 'LlmToolDefinition' with 'exa
+ctOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/tools/tool-system.test.ts(6,8): error TS6133: 'LlmToolDefinition' is declared but its value 
+is never read.
+packages/agent-runtime/src/tools/tool-system.test.ts(12,3): error TS6196: 'ToolCategory' is declared but never used.
+packages/agent-runtime/src/tools/tool-system.test.ts(13,3): error TS6196: 'ToolConcurrency' is declared but never used.
+packages/agent-runtime/src/trace/index.test.ts(2,1): error TS6192: All imports in import declaration are unused.
+packages/agent-runtime/src/trace/index.ts(210,39): error TS2379: Argument of type '{ timestamp: number; name: string; a
+ttributes: Record<string, unknown> | undefined; }' is not assignable to parameter of type 'SpanEvent' with 'exactOption
+alPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+packages/agent-runtime/src/workspace-mutation-coordinator.ts(162,13): error TS2739: Type '{ scope: NormalizedLeaseScope
+; owner: MutationLeaseOwner | undefined; ttlMs: number; resolve: (value: AcquireMutationLeaseResult | PromiseLike<...>)
+ => void; signal: AbortSignal | undefined; }' is missing the following properties from type 'WaitingMutationLeaseReques
+t': timeout, abortHandler
+
+

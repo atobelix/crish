@@ -1,0 +1,79 @@
+[
+  {
+    "check": "ST-01 nlIndex/deadline 截断路径遗漏",
+    "expected_action": "补充 nlIndex 分支 (line 183) 和 deadline 分支 (line 199) 的 surrogate 校验",
+    "actual_status": "corrected",
+    "detail": "v2_corrected_plan.md 明确列出 3 处修改点：line 183-188 nlIndex 分支、line 199-204 deadline 分支、line 228-233 原有粗分块路径。R3 指出的两处遗漏均已补上。另提供可选统一 safeUnicodeCutPosition 函数。",
+    "evidence": "v2_corrected_plan.md:258-265 — '@{file=StreamRenderBuffer.ts; line_start=183; line_end=188; action=新增; detail=在 nlIndex 截断分支...增加代理对校验}' 和 '@{file=... line_start=199; line_end=204; action=新增; detail=在 deadline 截断分支中同步增加代理对校验}'"
+  },
+  {
+    "check": "ST-09 length 处理逻辑描述",
+    "expected_action": "纠正为'实际已有完整逻辑，仅上游信号丢失'，无需修改 session-loop",
+    "actual_status": "corrected",
+    "detail": "v2_corrected_plan.md 在 ST-09 条目中明确指出'该问题是 ST-07+ST-08 的下游效应；上游修复后 handleNoToolCalls 中 stopReason === \"length\" 路径自动可达'。修改项仅为'验证'而非修改 session-loop。ledger_v2_CORRECTED.json review_note 也确认'无需修改 session-loop 本身'。",
+    "evidence": "v2_corrected_plan.md:33-40 — '该问题是 ST-07+ST-08 的下游效应；上游修复后 handleNoToolCalls 中 stopReason === length 路径自动可达'。ledger_v2_CORRECTED.json:189 — 'v2_remediation_review 确认 handleNoToolCalls 已有完整 length 处理逻辑...无需修改 session-loop 本身'"
+  },
+  {
+    "check": "ST-10 ProviderResponseConsumer 集成陈述",
+    "expected_action": "修正 ProviderResponseConsumer 集成部分，改为仅修复 balanceJsonContainers",
+    "actual_status": "corrected",
+    "detail": "v2_corrected_plan.md 明确注明'ProviderResponseConsumer 集成部分已由上游完成'，修复范围仅限 json-repair.ts 中的 balanceJsonContainers（尾随反斜杠和截断字面量），不含 provider-response-consumer.ts。ledger review_note 同样声明上游 accumulator 已处理。",
+    "evidence": "v2_corrected_plan.md:162-172 — '注意：R4 评估为 partial，但 balanceJsonContainers 的尾随反斜杠修复和截断字面量修复本身可行。ProviderResponseConsumer 集成部分已由上游完成。' ledger_v2_CORRECTED.json:208-209 — 'ProviderResponseConsumer 集成部分不必要——上游 ProviderToolCallJsonAccumulator.finalize() 已调用 repairToolCallJsonArguments'"
+  },
+  {
+    "check": "CS-07 根因方向偏差",
+    "expected_action": "修正为'实际风险路径是分类信息传递链问题，而非直接 recordFailure'",
+    "actual_status": "corrected",
+    "detail": "ledger_v2_CORRECTED.json 的 review_note 正确指出'实际风险路径并非 StreamRecoveryError 直接触发 account pool 的 recordFailure，而是底层网络错误本身能正确归类但 stream-recovery 的 surface-error 路径丢失了原始错误类型信息'。GAP-CS-07 在 v2_corrected_plan.md 中被列为排除项（partial root cause），符合预期。",
+    "evidence": "ledger_v2_CORRECTED.json:340-341 — '实际风险路径并非 StreamRecoveryError 直接触发 account pool 的 recordFailure，而是底层网络错误本身能正确归类但 stream-recovery 的 surface-error 路径丢失了原始错误类型信息'。v2_corrected_plan.md:4 — '排除项：... GAP-CS-07 (partial root cause)'"
+  },
+  {
+    "check": "PM-02 Unix 分支描述偏差",
+    "expected_action": "修正'Unix 缺乏进程组 leader'的错误描述，仅修复 Windows 分支",
+    "actual_status": "corrected",
+    "detail": "v2_corrected_plan.md 标题即明确'仅 Windows 分支'，内容注明'Unix 分支已完善无需修改'且提及'detached:true 已设进程组 leader'。ledger review_note 确认 Unix 已有两阶段 SIGTERM→5s→SIGKILL。Windows 分支仅需增加 WM_CLOSE/CTRL_BREAK_EVENT。",
+    "evidence": "v2_corrected_plan.md:82-89 — '仅 Windows 分支增加 Phase 1 soft kill (WM_CLOSE/CTRL_BREAK_EVENT)；Unix 分支已完善无需修改'。ledger_v2_CORRECTED.json:497 — 'Unix 分支描述不准确：Unix 已有两阶段 SIGTERM → 5s → SIGKILL 机制且 detached:true 已设进程组 leader'"
+  },
+  {
+    "check": "TC-03 仅 openai-request-build.ts 有 bug",
+    "expected_action": "区分两个 stringifyToolOutput 版本，仅修复 openai-request-build.ts",
+    "actual_status": "partially_corrected",
+    "detail": "v2_corrected_plan.md 正确地将修复目标定为 openai-request-build.ts（line 321-325），ledger 也确认 tool-output-budget.ts 版本使用 typeof 检查已正确。然而 2026-07-24-终极多Agent协同修复方案_v2.0_CORRECTED.md 中 R4-Agent-3 任务卡（section 9.3）的 files_write 仍为 tool-output-budget.ts，files_read 为 openai-request-build.ts——这意味着写目标指向了无 bug 版本，与核心意图矛盾。v2_corrected_plan.md 和 ledger 正确，但 终极文档任务卡分配有误导性。",
+    "evidence": "v2_corrected_plan.md:321-322 — 'packages/agent-runtime/src/openai-request-build.ts:58-63 → stringifyToolOutput 显式拦截空数组/空对象 → 导出空字符串'。ledger_v2_CORRECTED.json:441 — 'tool-output-budget.ts 的 stringifyToolOutput 使用 typeof 检查对空字符串处理正确。仅 openai-request-build.ts 版本有 truthy-check bug'。但 终极文档_CORRECTED.md:509 — 'files_write: packages/agent-runtime/src/tool-output-budget.ts'（应指向 openai-request-build.ts）"
+  },
+  {
+    "check": "UI-04 localStorage 描述偏差",
+    "expected_action": "修正'明文存入 localStorage'的说法，改为已剥除",
+    "actual_status": "partially_corrected",
+    "detail": "ledger_v2_CORRECTED.json 的 review_note 正确指出'localStorage 明文存储 apiKey 的描述与当前代码不符（已剥除）'，但 root_cause 字段仍沿用旧描述'将包含 apiKey 的 Profile 明文存入 localStorage 存在 XSS 窃取风险'（line 742）。非 Windows 加密缺位和 oauthToken 静默丢弃的修复方向正确保留。GAP-UI-04 被列入 v2_corrected_plan.md 排除项。",
+    "evidence": "ledger_v2_CORRECTED.json:742 — root_cause 仍含 '将包含 apiKey 的 Profile 明文存入 localStorage 存在 XSS 窃取风险'（未修正），但 review_note:749 — '偏差：localStorage 明文存储 apiKey 的描述与当前代码不符（已剥除）'（正确指出了偏差）"
+  },
+  {
+    "check": "G0 tsc --noEmit 运行位置",
+    "expected_action": "修正为指出 root 层无 tsconfig.json，需在工作区根目录运行",
+    "actual_status": "corrected",
+    "detail": "quality_gates_and_waves_v2_CORRECTED.md 的 G0 行添加注释'需在项目根目录运行，非 monorepo 子包'。校正汇总表明确记录'原始：tsc --noEmit（无限制）→ 校正后：需在项目根目录运行，monorepo 子包中可能无效'。主文档同步更新。",
+    "evidence": "quality_gates_and_waves_v2_CORRECTED.md:96 — 'npx tsc --noEmit（需在项目根目录运行，非 monorepo 子包）'。quality_gates_and_waves_v2_CORRECTED.md:245 — 'G0 命令 | tsc --noEmit（无限制） | 需在项目根目录运行，monorepo 子包中可能无效'"
+  },
+  {
+    "check": "Coverage 80% 与实际 50/40/50/50",
+    "expected_action": "修正覆盖率描述为实际阈值 statements≥50/branches≥40/functions≥50/lines≥50",
+    "actual_status": "corrected",
+    "detail": "quality_gates_and_waves_v2_CORRECTED.md 在 G2 行以校正注形式明确标注实际根配置阈值（statements≥50/branches≥40/functions≥50/lines≥50），说明 80% 为目标值尚未达到。校正汇总表同样记录此修正。主文档也同步附上了实际阈值。",
+    "evidence": "quality_gates_and_waves_v2_CORRECTED.md:98 — '（校正注：实际根配置阈值仅为 statements ≥ 50 / branches ≥ 40 / functions ≥ 50 / lines ≥ 50，子包略高至 70/60/65/70。80% 为目标值尚未达到。）'。quality_gates_and_waves_v2_CORRECTED.md:249 — 'Coverage 80% | 核心覆盖率 > 80% | 实际阈值：statements≥50/branches≥40/functions≥50/lines≥50'"
+  },
+  {
+    "check": "CommandGatekeeper 11条 vs 17条",
+    "expected_action": "修正为 17 条",
+    "actual_status": "corrected",
+    "detail": "quality_gates_and_waves_v2_CORRECTED.md 在 Wave 0 描述和校正汇总表中均修正为 17 条，注明'gatekeeper.rs:12 实际包含 17 条正则模式'。被拒问题清单也已记录此条目。",
+    "evidence": "quality_gates_and_waves_v2_CORRECTED.md:62 — '基于 RegexSet 的 17 条毁灭性指令拦截——原始文档误为 11 条，审查确认 crates/conex-sandbox/src/gatekeeper.rs 实际包含 17 条正则模式'。quality_gates_and_waves_v2_CORRECTED.md:250 — 'CommandGatekeeper 条数 | 11 条毁灭性指令拦截 | 实际为 17 条'"
+  },
+  {
+    "check": "Anti-overengineering 10条 vs 9条",
+    "expected_action": "修正为 9 条有效红线",
+    "actual_status": "corrected",
+    "detail": "quality_gates_and_waves_v2_CORRECTED.md 在核心原则和校正汇总表中均修正为 9 条，解释 sab_ring_buffer 文件仍存在但为空壳（待 Wave 1 移除），不计入有效红线。conex_repair_topology_v2_CORRECTED.md 第 5 节也同步修正为 9 项。",
+    "evidence": "quality_gates_and_waves_v2_CORRECTED.md:20 — '严格禁止...等 9 项红线设计（原始文档误为 10 项，审查确认 sab_ring_buffer 仍在仓库中存在为空壳...不计入有效红线项）'。quality_gates_and_waves_v2_CORRECTED.md:251 — 'Anti-overengineering 条数 | 10 项红线 | 实际为 9 项'。conex_repair_topology_v2_CORRECTED.md:514 — '9 项反过度设计硬性红线（原始文档误为 10 项）'"
+  }
+]
