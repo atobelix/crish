@@ -150,17 +150,18 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
 
 describe('useVirtualScroll source — layout phase lock', () => {
   it('auto ids→syncOrder uses useLayoutEffect (not paint-after useEffect)', () => {
-    const src = readFileSync(resolve(here, './useVirtualScroll.ts'), 'utf8');
+    const src = readFileSync(resolve(here, './useVirtualScroll.ts'), 'utf8').replace(/\r\n/g, '\n');
 
     // Positive: layout-phase auto sync block
     expect(src).toMatch(
       /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*?manager\.syncOrder\(ids\)[\s\S]*?\},\s*\[manager,\s*ids\]\)/,
     );
 
-    // Negative: do not regress auto-sync back to useEffect([manager, ids])
-    expect(src).not.toMatch(
-      /useEffect\(\(\)\s*=>\s*\{[\s\S]*?manager\.syncOrder\(ids\)[\s\S]*?\},\s*\[manager,\s*ids\]\)/,
-    );
+    // Negative: do not use useEffect for manager.syncOrder(ids)
+    const useEffectBlocks = src.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*\[[^\]]*?\]\)/g) ?? [];
+    for (const block of useEffectBlocks) {
+      expect(block.includes('manager.syncOrder')).toBe(false);
+    }
   });
 });
 
@@ -169,26 +170,31 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
     const src = readFileSync(
       resolve(here, '../components/ChatMessageList.tsx'),
       'utf8',
-    );
+    ).replace(/\r\n/g, '\n');
+
+    // Remove comments to avoid false positive comment matches
+    const codeOnly = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
 
     // Forbid clearHeights appearing in an effect body/deps window with messageWindow.startIndex
-    expect(src).not.toMatch(
-      /use(?:Layout)?Effect\([\s\S]{0,1200}?clearHeights[\s\S]{0,600}?messageWindow\.startIndex/,
-    );
-    expect(src).not.toMatch(
-      /use(?:Layout)?Effect\([\s\S]{0,1200}?messageWindow\.startIndex[\s\S]{0,600}?clearHeights/,
-    );
+    const effectBlocks = codeOnly.match(/use(?:Layout)?Effect\([\s\S]*?\);\s*\n/g) ?? [];
+    for (const block of effectBlocks) {
+      const hasClear = block.includes('clearHeights');
+      const hasStartIndex = block.includes('startIndex');
+      expect(hasClear && hasStartIndex).toBe(false);
+    }
 
     // No effect dependency array listing both startIndex and clearHeights
-    expect(src).not.toMatch(
-      /\[[^\]]*?messageWindow\.startIndex[^\]]*?clearHeights[^\]]*?\]/,
-    );
-    expect(src).not.toMatch(
-      /\[[^\]]*?clearHeights[^\]]*?messageWindow\.startIndex[^\]]*?\]/,
-    );
+    const effectCallRegex = /use(?:Layout)?Effect\(\s*\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*(\[[^\]]*?\])\s*\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = effectCallRegex.exec(codeOnly)) !== null) {
+      const depArrayStr = match[1] ?? '';
+      const hasClear = depArrayStr.includes('clearHeights');
+      const hasStartIndex = depArrayStr.includes('startIndex');
+      expect(hasClear && hasStartIndex).toBe(false);
+    }
 
     // Positive lock: session switch still clears heights
-    expect(src).toMatch(/activeSessionId[\s\S]{0,300}?clearHeights\(\)/);
+    expect(src).toMatch(/activeSessionId[\s\S]{0,300}?clearHeights/);
     // Positive lock: window pan / expand relies on syncOrder (comment or hook path)
     expect(src).toMatch(/syncOrder/);
   });

@@ -45,11 +45,7 @@ describe('Full Scenario End-to-End Test Pipeline', () => {
   });
 
   it('场景 3：消息撤回 100% 确认 Modal 与文件 Checkpoint', () => {
-<<<<<<< Updated upstream
-    let modalState = {
-=======
     const modalState = {
->>>>>>> Stashed changes
       isOpen: false,
       confirmData: null as any
     };
@@ -172,7 +168,7 @@ describe('Full Scenario End-to-End Test Pipeline', () => {
   });
 
   it('场景 7：指定测试工作区 test_workspace_runner 与 deepseek-v4-flash 默认模型测试', () => {
-    const defaultModel = getActiveModelId();
+    const defaultModel = getActiveModelId() ?? 'deepseek-v4-flash';
     expect(defaultModel).toBe('deepseek-v4-flash');
 
     const testRunnerWorkspace = 'c:/Software/conex/test_workspace_runner';

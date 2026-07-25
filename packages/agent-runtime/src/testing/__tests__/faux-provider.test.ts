@@ -39,13 +39,14 @@ describe("FauxAgentProvider", () => {
 
   describe("setLatency", () => {
     it("delays stream by the given ms", async () => {
+      vi.useFakeTimers();
       const p = new FauxAgentProvider("p1");
       p.setEvents([{ type: "text-delta", text: "x" }]);
       p.setLatency(80);
 
       const iter = p.stream(req())[Symbol.asyncIterator]();
       const nextPromise = iter.next();
-      vi.advanceTimersByTime(80);
+      await vi.advanceTimersByTimeAsync(80);
 
       const result = await nextPromise;
       expect(result.done).toBe(false);

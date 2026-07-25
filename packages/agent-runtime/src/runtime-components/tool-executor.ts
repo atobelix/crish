@@ -28,6 +28,7 @@ import type { AgentTool } from '../types';
 import { validateToolInput, repairToolInput } from '../tools';
 import { createId, nowIso } from '../session';
 import { RingBuffer } from '@crish/shared-utils';
+import { summarizeToolCall } from '../runtime-helpers';
 import { SingleToolExecutor } from './single-tool-executor';
 import type { ToolExecutorOptions } from './tool-executor-options';
 
@@ -523,20 +524,10 @@ export class ToolExecutor {
       id: call.id,
       toolName: call.toolName,
       input: call.input,
-      summary: tool ? this.summarizeToolCall(tool, call.input) : call.toolName,
+      summary: summarizeToolCall(tool, call.input, call.toolName),
       category: tool?.category ?? 'internal',
       concurrency: tool?.concurrency ?? 'exclusive',
     };
-  }
-
-  private summarizeToolCall(tool: AgentTool, input: JsonObject): string {
-    try {
-      const summary = tool.summarize(input);
-      return summary.trim() || tool.name;
-    } catch {
-      // silent: tool.summarize 抛出异常时降级显示工具名
-      return `${tool.name} (invalid input)`;
-    }
   }
 
   private summarizeBatch(calls: ToolBatchCall[]): string {

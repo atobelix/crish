@@ -155,13 +155,11 @@ export class ContextManager {
   /**
    * 投影提示词上下文块（内容内的密钥同样脱敏�?
    */
-  projectPromptContext(context: {
-    stableContext?: PromptAssemblyContextBlock[];
-    volatileContext?: PromptAssemblyContextBlock[];
-  } | undefined): {
+  projectPromptContext(input: any): {
     stableContext?: PromptAssemblyContextBlock[];
     volatileContext?: PromptAssemblyContextBlock[];
   } {
+    const context = input?.promptContext ?? input;
     if (!context) return {};
     if (!this.secretRedactor) {
       return {

@@ -838,7 +838,7 @@ describe('AgentOrchestrator', () => {
       event: {
         type: 'session-leaf-moved',
         payload: {
-          fromLeafId: null,
+          fromLeafId: undefined,
           toLeafId: 'leaf_target',
           reason: 'conversation-rewind',
           metadata: { boundaryId: 'boundary_1' },

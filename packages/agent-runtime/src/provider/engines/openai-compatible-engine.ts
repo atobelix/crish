@@ -51,7 +51,10 @@ export class OpenAICompatibleEngine extends AbstractBaseEngine {
   async buildRequest(request: AgentProviderRequest, options: EngineOptions): Promise<EngineRequest> {
     const endpoint = this.resolveEndpointType(request, options);
     const baseUrl = this.resolveBaseUrl(options);
-    const url = `${baseUrl}${endpoint === "responses" ? "/responses" : "/chat/completions"}`;
+    const paths = (options.extra?.paths ?? (options as unknown as { paths?: { chatCompletions?: string; responses?: string } }).paths) as { chatCompletions?: string; responses?: string } | undefined;
+    const rawPath = endpoint === "responses" ? (paths?.responses ?? "/responses") : (paths?.chatCompletions ?? "/chat/completions");
+    const path = (baseUrl.endsWith("/v1") && rawPath.startsWith("/v1/")) ? rawPath.slice(3) : rawPath;
+    const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
     let effectiveMessages = request.messages;
     if (this.hasMediaBlocks(request.messages)) {

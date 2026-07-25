@@ -179,6 +179,7 @@ export const AGENT_SESSION_DEFINITION = new StateMachineBuilder<
   .state('executing-tools', {
     transitions: [
       ['TOOLS_COMPLETE', transitionTo('turn-complete')],
+      ['INPUT_AVAILABLE', transitionTo('preparing-turn')],
       [
         'ABORT',
         transitionTo('turn-complete', {

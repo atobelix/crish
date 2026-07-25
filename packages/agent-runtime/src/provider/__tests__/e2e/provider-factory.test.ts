@@ -15,7 +15,7 @@ describe("E2E: ProviderFactory with mock server", () => {
   beforeAll(async () => {
     await server.start(0);
 
-    server.on("/chat/completions", Scenarios.openaiChatText());
+    server.on("/v1/chat/completions", Scenarios.openaiChatText());
 
     registry = new ProviderRegistryV2Impl();
     factory = new ProviderFactory(registry);

@@ -97,7 +97,7 @@ export class AgentSessionLoop {
       this.dispatch('INITIALIZED');
       yield* this.recordEvent({ type: 'agent-start', sessionId: this.sessionId, timestamp: nowIso() }, this.recorder);
 
-      let endReason: AgentEndReason = 'stop';
+      let endReason: AgentEndReason | undefined;
       let endError: string | undefined;
 
       while (!this.machine.is('done')) {
@@ -116,7 +116,15 @@ export class AgentSessionLoop {
           if (r.endReason) { endReason = r.endReason; endError = r.endError; }
           if (endReason) break;
         } catch (cause) {
+          if (this.abortController.signal.aborted || this.machine.is('done')) {
+            endReason = 'aborted';
+            break;
+          }
           const error = cause instanceof Error ? cause : new Error(String(cause));
+          if (/abort|cancel/i.test(error.message)) {
+            endReason = 'aborted';
+            break;
+          }
           const action = this.recovery.handleErrorWithHook(error, state, this.composedHooks, this.sessionId, this.machine.getContext().turnIndex, this.options.cwd);
           yield* this.emitEvent({ type: 'runtime-error', sessionId: this.sessionId, timestamp: nowIso(), error: error.message });
           if (action === 'retry') continue;
@@ -133,7 +141,7 @@ export class AgentSessionLoop {
       }
 
       const finalCtx = this.machine.getContext();
-      if (finalCtx.endReason !== 'stop') endReason = finalCtx.endReason as AgentEndReason;
+      if (!endReason) endReason = (finalCtx.endReason as AgentEndReason) ?? 'stop';
       const endPayload: Record<string, unknown> = { type: 'agent-end', sessionId: this.sessionId, timestamp: nowIso(), reason: endReason };
       if (endError !== undefined) endPayload.error = endError;
       yield* this.recordEvent(endPayload as AgentEvent, this.recorder);
@@ -194,7 +202,7 @@ export class AgentSessionLoop {
   }
 
   private async *handleStreaming(): AsyncGenerator<AgentEvent, HandlerResult> {
-    const callIterator = await this.providerCall.buildProviderCall(this.conversation, this.contextManager, { ...(this.options.systemPrompt !== undefined ? { systemPrompt: this.options.systemPrompt } : {}), provider: this.options.provider, cwd: this.options.cwd ?? '' }, this.tools, this.sessionId, this.abortController.signal, this.providerGateway);
+    const callIterator = await this.providerCall.buildProviderCall(this.conversation, this.contextManager, { ...(this.options.systemPrompt !== undefined ? { systemPrompt: this.options.systemPrompt } : {}), ...(this.options.promptContext !== undefined ? { promptContext: this.options.promptContext } : {}), ...(this.options.maxTokens !== undefined ? { maxTokens: this.options.maxTokens } : {}), provider: this.options.provider, cwd: this.options.cwd ?? '' }, this.tools, this.sessionId, this.abortController.signal, this.providerGateway);
 
     const deltaQueue = new RingBuffer<AgentEvent>(DELTA_QUEUE_CAPACITY);
     let deltaWaiters: Array<() => void> = [];
@@ -214,25 +222,45 @@ export class AgentSessionLoop {
     let consumeResult: ConsumeResult | undefined;
     const done = consumeImpl.then((r) => { consumeResult = r; wake(); return r; });
 
-    while (true) {
-      while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
-      if (this.inputQueue.hasPending()) {
-        const si = this.inputQueue.dequeue();
-        if (si) { yield* this.recordMessage(si, this.conversation, this.recorder); this.dispatch('INPUT_AVAILABLE' as AgentSessionEvent); return {}; }
+    try {
+      while (true) {
+        while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
+        if (this.abortController.signal.aborted) {
+          this.dispatch('ABORT');
+          return { endReason: 'aborted' };
+        }
+        if (this.inputQueue.hasPending()) {
+          const si = this.inputQueue.dequeue();
+          if (si) { yield* this.recordMessage(si, this.conversation, this.recorder); this.dispatch('INPUT_AVAILABLE' as AgentSessionEvent); return {}; }
+        }
+        if (consumeResult) break;
+        await Promise.race([done, new Promise<void>((resolve) => deltaWaiters.push(resolve))]);
       }
-      if (consumeResult) break;
-      await Promise.race([done, new Promise<void>((resolve) => deltaWaiters.push(resolve))]);
+      if (this.machine.getCurrent() !== 'streaming') return {};
+      while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
+      if (!consumeResult) consumeResult = await done;
+    } finally {
+      if (typeof (callIterator as any)?.return === 'function') {
+        await (callIterator as any).return(undefined).catch(() => undefined);
+      }
     }
-    if (this.machine.getCurrent() !== 'streaming') return {};
-    while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
-    if (!consumeResult) consumeResult = await done;
 
     for (const d of consumeResult.diagnostics) {
       yield* this.emitEvent({ type: 'provider-diagnostic', sessionId: this.sessionId, diagnostic: d, timestamp: nowIso() } as AgentEvent);
     }
 
+    if (this.abortController.signal.aborted) {
+      this.dispatch('ABORT');
+      return { endReason: 'aborted' };
+    }
     const ar = consumeResult.response;
-    if (ar.type === 'error') return yield* this.handleStreamError(ar.error ?? 'Provider stream failed');
+    if (ar.type === 'error') {
+      if (this.abortController.signal.aborted || ar.error === 'aborted') {
+        this.dispatch('ABORT');
+        return { endReason: 'aborted' };
+      }
+      return yield* this.handleStreamError(ar.error ?? 'Provider stream failed');
+    }
     this.providerCall.providerTransientRetries = 0;
     if (ar.type === 'empty-response') { this.dispatch('STEERING_NEEDED'); return {}; }
     if (ar.type !== 'message') return {};

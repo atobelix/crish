@@ -189,6 +189,7 @@ export class AsyncEventQueue {
         }
       }
     }, this.options.consumeIntervalMs);
+    this.consumeTimer.unref?.();
   }
 
   /**

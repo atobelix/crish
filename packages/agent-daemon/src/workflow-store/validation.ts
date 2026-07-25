@@ -163,7 +163,7 @@ export function validateWorkflowRunEntry(
   ) {
     issues.push(`${path}.status: Expected running, awaiting-approval, completed, failed, or cancelled`);
   }
-  if ("error" in value && typeof value.error !== "string") {
+  if ("error" in value && value.error != null && typeof value.error !== "string") {
     issues.push(`${path}.error: Expected string`);
   }
 }

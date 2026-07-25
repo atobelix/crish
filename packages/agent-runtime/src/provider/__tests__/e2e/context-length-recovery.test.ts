@@ -86,7 +86,7 @@ describe("E2E: context overflow self-healing", () => {
   });
 
   it("recovery pipeline triggers context healer and retries on context_length_exceeded", async () => {
-    server.on("/chat/completions", Scenarios.contextLengthFollowedBySuccess());
+    server.on("/v1/chat/completions", Scenarios.contextLengthFollowedBySuccess());
 
     // Build a mock provider that points to the mock server
     const mockProvider: AgentProvider = {
@@ -94,7 +94,7 @@ describe("E2E: context overflow self-healing", () => {
       async *stream(request: AgentProviderRequest): AsyncIterable<ProviderStreamEvent> {
         if (request.signal.aborted) return;
 
-        const url = `${server.getBaseUrl()}/chat/completions`;
+        const url = `${server.getBaseUrl()}/v1/chat/completions`;
         const response = await fetch(url, {
           method: "POST",
           headers: { "content-type": "application/json", authorization: "Bearer test-key" },
@@ -194,7 +194,7 @@ describe("E2E: context overflow self-healing", () => {
 
     expect(result.ok).toBe(true);
     expect(healed).toBe(true);
-    expect(server.getRequestCount("/chat/completions")).toBe(2);
+    expect(server.getRequestCount("/v1/chat/completions")).toBe(2);
 
     if (result.ok) {
       const events: ProviderStreamEvent[] = [];

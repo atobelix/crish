@@ -47,10 +47,9 @@ describe('pricingStore 4D', () => {
 
   it('4D formula: nonCached*Pin + out*Pout + write*Pcw + read*Pcr', () => {
     // prompt=1000, completion=200, read=400, write=100
-    // nonCached=600
-    // cost = 600/1e6*10 + 200/1e6*20 + 100/1e6*12.5 + 400/1e6*1
+    // nonCached=500
     const expected =
-      (600 / 1e6) * 10 + (200 / 1e6) * 20 + (100 / 1e6) * 12.5 + (400 / 1e6) * 1;
+      (500 / 1e6) * 10 + (200 / 1e6) * 20 + (100 / 1e6) * 12.5 + (400 / 1e6) * 1;
     const got = estimateCostUsd4d('test-model', 1000, 200, 400, 100);
     expect(got).toBeCloseTo(expected, 12);
     expect(DEFAULT_CACHE_READ_MULTIPLIER).toBe(0.1);

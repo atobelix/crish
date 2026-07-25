@@ -21,10 +21,12 @@ export class TelemetryMonitor {
   private logFilePath: string = 'c:/Software/conex/apps/crish-desktop/logs/telemetry_runtime.jsonl';
 
   private constructor() {
-    this.flushInterval = window.setInterval(() => this.flush(), 5000);
+    if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+      this.flushInterval = window.setInterval(() => this.flush(), 5000);
+    }
     
     // Listen for uncaught global errors
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       this.errorHandler = (e: ErrorEvent) => { this.logError(e.error); };
       this.rejectionHandler = (e: PromiseRejectionEvent) => { this.logError(e.reason); };
       window.addEventListener('error', this.errorHandler);

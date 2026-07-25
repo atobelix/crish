@@ -114,10 +114,11 @@ export function isDefaultSessionTitle(
 }
 
 /** 单条消息是否有可展示的实质内容 */
-export function messageHasSubstance(m: TitleMessage): boolean {
+export function messageHasSubstance(m: TitleMessage & { blocks?: unknown[] }): boolean {
   if ((m.text || '').trim()) return true;
   if (m.toolCalls && m.toolCalls.length > 0) return true;
   if ((m.thinking || '').trim()) return true;
+  if (Array.isArray(m.blocks) && m.blocks.length > 0) return true;
   return false;
 }
 

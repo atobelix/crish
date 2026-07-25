@@ -26,6 +26,7 @@ type Pending = {
 };
 
 type EventCb = (msg: Record<string, unknown>) => void;
+type HeartbeatCb = () => void;
 
 const DEFAULT_TIMEOUT = 30_000;
 /** 长任务期间更勤保活，避免中途掉线 */
@@ -108,6 +109,17 @@ export class DesktopDaemonClient {
   private state: DaemonConnState = 'disconnected';
   private pending = new Map<string, Pending>();
   private listeners = new Set<EventCb>();
+  /**
+   * heartbeat 事件监听器：pong 收到或 miss 增加时触发。
+   *
+   * 与 listeners（onMessage）分离的原因：
+   * - dispatch 处理 pong 后直接 return，不广播给 onMessage listeners
+   *   （pong 是 heartbeat 内部协议消息，不应泄漏给业务监听器）
+   * - 但 ConnectionManager 需要即时感知 pong 以同步 probeMissCount/latencyMs，
+   *   不能等 500ms metrics mirror 轮询
+   * - 专门暴露 onHeartbeat 让 CM 订阅，职责清晰
+   */
+  private heartbeatListeners = new Set<HeartbeatCb>();
   private stateListeners = new Set<(s: DaemonConnState, err?: Error) => void>();
   private url: string | null = null;
   private explicitClose = false;
@@ -187,6 +199,31 @@ export class DesktopDaemonClient {
   onMessage(cb: EventCb) {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
+  }
+
+  /**
+   * 订阅 heartbeat 事件（pong 收到 / miss 增加时触发）。
+   *
+   * 与 onMessage 区别：
+   * - onMessage 收不到 pong（dispatch 处理 pong 后 return，不广播）
+   * - onHeartbeat 专门用于 CM 即时同步 probeMissCount / latencyMs
+   *
+   * 回调不接收参数：CM 通过 getHeartbeatMisses / getLastLatencyMs 拉取最新值。
+   * 这样避免在事件 payload 里重复 client 内部状态，保持单一数据源。
+   */
+  onHeartbeat(cb: HeartbeatCb): () => void {
+    this.heartbeatListeners.add(cb);
+    return () => this.heartbeatListeners.delete(cb);
+  }
+
+  private notifyHeartbeatListeners(): void {
+    for (const cb of this.heartbeatListeners) {
+      try {
+        cb();
+      } catch (e) {
+        console.error('[DesktopDaemonClient] heartbeat listener error', e);
+      }
+    }
   }
 
   /**
@@ -472,6 +509,10 @@ export class DesktopDaemonClient {
         this.pendingPingId = null;
         this.pendingPingSentAt = 0;
         this.heartbeatMisses = 0;
+        // 通知 heartbeat 订阅者（ConnectionManager）即时同步 metrics。
+        // 不广播给 onMessage listeners：pong 是 heartbeat 内部协议消息，
+        // 业务监听器不应感知。
+        this.notifyHeartbeatListeners();
         return;
       }
     }
@@ -655,4 +696,40 @@ export function resetDesktopDaemonClientForTests(): void {
     try { singleton.disconnect(); } catch { /* ignore */ }
   }
   singleton = null;
+}
+
+/**
+ * 流控制传输方式标识。
+ *
+ * - 'json'  — 通过 JSON 文本帧发送（control-plane 默认通道）
+ * - 'binary' — 预留：通过 binary frame 发送（需 daemon 已协商 binary-frame 能力）
+ *
+ * 当前实现仅走 JSON 通道；返回值供调用方区分实际使用的传输层，
+ * 便于未来引入 binary 传输时做能力探测与降级决策。
+ */
+export type StreamControlTransport = 'json' | 'binary';
+
+/**
+ * 发送 stream-pause 控制消息（JSON 传输）。
+ *
+ * 由 StreamRecovery 背压模块在 render buffer 超过高水位时调用，
+ * 通知 daemon 暂停向该 runId 推送事件，避免前端缓冲区溢出。
+ *
+ * 注意：此调用是 fire-and-forget 语义——调用方不应阻塞渲染等待 daemon 确认。
+ * 失败时由调用方 catch 并记录日志，不影响渲染流程。
+ */
+export async function sendStreamPause(runId: string): Promise<StreamControlTransport> {
+  await getDesktopDaemonClient().send({ type: 'stream-pause', runId });
+  return 'json';
+}
+
+/**
+ * 发送 stream-resume 控制消息（JSON 传输）。
+ *
+ * 由 StreamRecovery 背压模块在 render buffer 降至低水位以下时调用，
+ * 通知 daemon 恢复向该 runId 推送事件。
+ */
+export async function sendStreamResume(runId: string): Promise<StreamControlTransport> {
+  await getDesktopDaemonClient().send({ type: 'stream-resume', runId });
+  return 'json';
 }

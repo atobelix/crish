@@ -197,7 +197,10 @@ export class ProviderRegistryV2Impl implements ProviderRegistryV2 {
       model,
       baseUrl,
       stream: true,
-      endpointType: def.metadata.endpointType ?? "auto",
+      paths: decl.paths,
+      endpointType: (def.metadata.endpointType && def.metadata.endpointType !== "auto")
+        ? def.metadata.endpointType
+        : (decl.paths?.chatCompletions && !decl.paths?.responses ? "chat-completions" : (def.metadata.endpointType ?? "auto")),
       authHeader: decl.engineOptions.authHeader,
       maxTokensField: decl.engineOptions.maxTokensField,
       reasoningContent: decl.engineOptions.reasoningContent,

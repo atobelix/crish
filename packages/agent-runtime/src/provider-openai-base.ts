@@ -66,6 +66,7 @@ export interface OpenAICompatibleProviderOptions {
   rustReqwestArgs?: string[];
   rustReqwestCwd?: string;
   rustReqwestFetch?: typeof fetch;
+  paths?: { chatCompletions?: string; responses?: string };
   fetch?: typeof fetch;
 }
 

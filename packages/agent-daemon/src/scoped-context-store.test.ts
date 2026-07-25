@@ -172,7 +172,7 @@ function record(overrides: Partial<ScopedContextRecord> = {}): ScopedContextReco
     kind: "rule",
     title: "Rule",
     content: "Keep scoped context stable.",
-    description: undefined,
+    description: "Test description",
     scope: "project",
     activation: "enabled",
     appliesTo: [],

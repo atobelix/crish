@@ -142,8 +142,10 @@ const _settingsData: SettingsUiStoreData = {
   manuallyTriggeredWorkers: [],
 };
 
+export const createSettingsUiSlice = (set: any) => ({
+  ..._settingsData,
 
-        syncTelemetryData: (data) => set((state) => {
+  syncTelemetryData: (data: any) => set((state: any) => {
           if (data.tokenUsage) {
             state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
           }
@@ -200,11 +202,7 @@ const _settingsData: SettingsUiStoreData = {
           if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
           if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
         }),
-      })),
-    ),
-    'SettingsUiStore',
-  ),
-);
+});
 
 export { DEFAULT_SETTINGS_TAB } from './layoutStore';
 

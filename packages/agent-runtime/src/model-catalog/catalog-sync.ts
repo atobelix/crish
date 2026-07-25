@@ -35,6 +35,7 @@ export class CatalogSyncManager {
       await this.syncFromRemote().catch(() => {});
     }
     this.timer = setInterval(() => this.syncFromRemote(), this.config.syncInterval);
+    this.timer.unref?.();
   }
 
   async syncFromRemote(): Promise<void> {

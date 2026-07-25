@@ -31,6 +31,20 @@ type Props = {
 
 type SortMode = 'name' | 'state';
 
+/**
+ * 演示模式支持的传输类型：与 SettingsSelect 选项一一对应。
+ * 用运行时守卫替代 `v as 'stdio' | 'sse'` 类型断言，杜绝字符串逃逸。
+ */
+type DemoTransport = 'stdio' | 'sse';
+const DEMO_TRANSPORTS: ReadonlySet<DemoTransport> = new Set<DemoTransport>([
+  'stdio',
+  'sse',
+]);
+
+function isDemoTransport(value: unknown): value is DemoTransport {
+  return typeof value === 'string' && DEMO_TRANSPORTS.has(value as DemoTransport);
+}
+
 const START_STOP_HINT =
   '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接';
 
@@ -558,7 +572,14 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                   { value: 'stdio', label: 'stdio', ...(transportTitle('stdio') !== undefined ? { hint: transportTitle('stdio') } : {}) },
                   { value: 'sse', label: 'sse', ...(transportTitle('sse') !== undefined ? { hint: transportTitle('sse') } : {}) },
                 ]}
-                onChange={(v) => setNewType(v as 'stdio' | 'sse')}
+                onChange={(v) => {
+                  // 运行时守卫替代 `v as 'stdio' | 'sse'`：仅接受白名单值，否则保持原值
+                  if (isDemoTransport(v)) {
+                    setNewType(v);
+                  } else {
+                    onShowToast?.('未知的传输类型');
+                  }
+                }}
               />
               {newType === 'stdio' ? (
                 <>

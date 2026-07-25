@@ -1,5 +1,15 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ResizeObserverManager } from './ResizeObserverManager';
+
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as any).ResizeObserver = MockResizeObserver;
+}
 
 describe('ResizeObserverManager', () => {
   let mgr: ResizeObserverManager;

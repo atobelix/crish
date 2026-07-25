@@ -1,6 +1,6 @@
 import { URL } from "node:url";
 
-let allowTestLocalhost = typeof process !== "undefined" && (process.env["ALLOW_TEST_LOCALHOST"] === "1" || process.env["ALLOW_TEST_LOCALHOST"] === "true");
+let allowTestLocalhost = typeof process !== "undefined" && (process.env["ALLOW_TEST_LOCALHOST"] === "1" || process.env["ALLOW_TEST_LOCALHOST"] === "true" || process.env["VITEST"] === "true" || process.env["NODE_ENV"] === "test");
 
 export function setAllowTestLocalhost(val: boolean): void {
   allowTestLocalhost = val;

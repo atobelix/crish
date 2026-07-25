@@ -92,7 +92,9 @@ export class OpenAICompatibleProvider implements AgentProvider {
 
     for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex++) {
       const endpoint = endpoints[endpointIndex]!;
-      const url = `${this.baseUrl}${this.requestPath(endpoint)}`;
+      const rawPath = this.requestPath(endpoint);
+      const path = (this.baseUrl.endsWith("/v1") && rawPath.startsWith("/v1/")) ? rawPath.slice(3) : rawPath;
+      const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
       attemptLoop: for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
         let wireMode = this.wireModeCache.get(endpoint) ?? this.defaultSystemPromptWireMode();
         let retriedSystemPromptCompatibility = false;
@@ -249,7 +251,10 @@ export class OpenAICompatibleProvider implements AgentProvider {
   }
 
   private requestPath(endpoint: ResolvedOpenAICompatibleEndpoint): string {
-    return endpoint === "responses" ? "/responses" : "/chat/completions";
+    if (endpoint === "responses") {
+      return this.options.paths?.responses ?? "/responses";
+    }
+    return this.options.paths?.chatCompletions ?? "/chat/completions";
   }
 
   private async fetchOnce(request: AgentProviderRequest, url: string, bodyString: string): Promise<FetchResult> {

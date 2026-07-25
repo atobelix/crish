@@ -32,6 +32,24 @@ function sendStreamingResponse(res: http.ServerResponse, scenario: { chunks: Arr
     connection: "keep-alive",
   });
 
+  if (!scenario.delay) {
+    for (let i = 0; i < scenario.chunks.length; i++) {
+      if (scenario.abortAfter !== undefined && i === scenario.abortAfter) {
+        res.destroy();
+        return;
+      }
+      const chunk = scenario.chunks[i]!;
+      if (scenario.raw) {
+        res.write(chunk.data + "\n");
+      } else {
+        if (chunk.event) res.write(`event: ${chunk.event}\n`);
+        res.write(`data: ${chunk.data}\n\n`);
+      }
+    }
+    res.end();
+    return;
+  }
+
   let i = 0;
   const timer = setInterval(() => {
     if (i >= scenario.chunks.length) {
@@ -52,7 +70,7 @@ function sendStreamingResponse(res: http.ServerResponse, scenario: { chunks: Arr
       res.write(`data: ${chunk.data}\n\n`);
     }
     i++;
-  }, scenario.delay ?? 1);
+  }, scenario.delay);
 }
 
 export class LlmApiMockServer {

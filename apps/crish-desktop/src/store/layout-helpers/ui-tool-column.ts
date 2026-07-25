@@ -87,11 +87,7 @@ export function collapseToolColumnToTabs(ws: WorkspaceState): boolean {
   if (!toolCol || toolCol.groups.length <= 1) return false;
   const seen = new Set<string>();
   const mergedCards: CardState[] = [];
-<<<<<<< Updated upstream
-  let preferredActive = toolCol.groups[0]?.activeCardId || '';
-=======
   const preferredActive = toolCol.groups[0]?.activeCardId || '';
->>>>>>> Stashed changes
   for (const g of toolCol.groups) {
     for (const c of g.cards) {
       const id = resolveWorkspacePanelKey(c.id);

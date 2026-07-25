@@ -376,7 +376,8 @@ export class DaemonServer {
   }
 
   private async rebuildActiveSubagentsFromEventStore(): Promise<void> {
-    const restored = (this.orchestrator as unknown as { consumeRestoredSubagentRuntimeEvents: () => Array<{ agentEvent?: unknown; runId: string }> }).consumeRestoredSubagentRuntimeEvents();
+    const fn = (this.orchestrator as unknown as { consumeRestoredSubagentRuntimeEvents?: () => Array<{ agentEvent?: unknown; runId: string }> }).consumeRestoredSubagentRuntimeEvents;
+    const restored = typeof fn === "function" ? fn.call(this.orchestrator) : [];
     for (const proj of restored) {
       if (!proj.agentEvent || typeof proj.agentEvent !== "object") continue;
       const update = readDaemonSubagentBridgeUpdateFromAgentEvent(proj.agentEvent as unknown as never);

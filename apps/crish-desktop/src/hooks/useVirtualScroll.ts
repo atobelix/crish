@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   VirtualScrollManager,
   type VisibleRange,
@@ -72,6 +72,13 @@ export function useVirtualScroll(
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const ids = options.ids;
+  useLayoutEffect(() => {
+    if (ids) {
+      manager.syncOrder(ids);
+    }
+  }, [manager, ids]);
 
   useEffect(() => {
     return () => {

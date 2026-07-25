@@ -26,7 +26,7 @@ describe('DaemonProviderGatewayController', () => {
   it('plans and materializes the direct api-key provider route', async () => {
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -53,7 +53,7 @@ describe('DaemonProviderGatewayController', () => {
         },
       },
       credential: {
-        apiKey: 'sk-direct',
+        apiKey: 'sk-direct-1234567890123456',
         baseUrl: 'https://gateway.example/v1',
       },
       providerPlan: {
@@ -70,7 +70,7 @@ describe('DaemonProviderGatewayController', () => {
     });
     expect(provider.id).toBe('crish');
     expect(JSON.stringify(controller.getStatusSnapshot())).not.toContain(
-      'sk-direct'
+      'sk-direct-1234567890123456'
     );
     expect(controller.getStatusSnapshot()).toMatchObject({
       credentialMode: 'direct',
@@ -78,7 +78,7 @@ describe('DaemonProviderGatewayController', () => {
       apiKey: {
         hasApiKey: true,
         source: 'unknown',
-        last4: 'rect',
+        last4: '3456',
       },
       hasDirectApiKey: true,
       apiKeySource: 'unknown',
@@ -126,7 +126,7 @@ describe('DaemonProviderGatewayController', () => {
     vi.stubGlobal('fetch', fetchMock);
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -187,7 +187,7 @@ describe('DaemonProviderGatewayController', () => {
     vi.stubGlobal('fetch', fetchMock);
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -238,7 +238,7 @@ describe('DaemonProviderGatewayController', () => {
     vi.stubGlobal('fetch', fetchMock);
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-5.4',
       providerId: 'openai',
@@ -306,7 +306,7 @@ describe('DaemonProviderGatewayController', () => {
     vi.stubGlobal('fetch', fetchMock);
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -369,7 +369,7 @@ describe('DaemonProviderGatewayController', () => {
     vi.stubGlobal('fetch', fetchMock);
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-direct',
+      apiKey: 'sk-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -427,7 +427,7 @@ describe('DaemonProviderGatewayController', () => {
     const controller = new DaemonProviderGatewayController(
       {
         credentialMode: 'direct',
-        apiKey: 'sk-direct',
+        apiKey: 'sk-direct-1234567890123456',
         baseUrl: 'https://fallback.example/v1',
         model: 'shared-chat',
         providerId: 'fallback',
@@ -443,7 +443,7 @@ describe('DaemonProviderGatewayController', () => {
             endpointSupport: 'chat-completions',
             streamingSupport: 'non-streaming',
             priority: 200,
-            credentialSource: { type: 'api-key', apiKey: 'chat-key' },
+            credentialSource: { type: 'api-key', apiKey: 'chat-key-1234567890123456' },
           },
           {
             id: 'responses-stream',
@@ -454,7 +454,7 @@ describe('DaemonProviderGatewayController', () => {
             priority: 100,
             credentialSource: {
               type: 'api-key',
-              apiKey: 'responses-key',
+              apiKey: 'responses-key-1234567890123456',
               metadata: { apiKey: 'metadata-secret' },
             },
           },
@@ -507,7 +507,7 @@ describe('DaemonProviderGatewayController', () => {
     const controller = new DaemonProviderGatewayController(
       {
         credentialMode: 'direct',
-        apiKey: 'sk-direct',
+        apiKey: 'sk-direct-1234567890123456',
         baseUrl: 'https://fallback.example/v1',
         model: 'shared-chat',
         providerId: 'fallback',
@@ -523,7 +523,7 @@ describe('DaemonProviderGatewayController', () => {
             endpointSupport: 'responses',
             streamingSupport: 'streaming',
             priority: 200,
-            credentialSource: { type: 'api-key', apiKey: 'responses-key' },
+            credentialSource: { type: 'api-key', apiKey: 'responses-key-1234567890123456' },
           },
           {
             id: 'chat-nonstream',
@@ -532,7 +532,7 @@ describe('DaemonProviderGatewayController', () => {
             endpointSupport: 'chat-completions',
             streamingSupport: 'non-streaming',
             priority: 100,
-            credentialSource: { type: 'api-key', apiKey: 'chat-key' },
+            credentialSource: { type: 'api-key', apiKey: 'chat-key-1234567890123456' },
           },
         ],
       }
@@ -580,7 +580,7 @@ describe('DaemonProviderGatewayController', () => {
     const controller = new DaemonProviderGatewayController(
       {
         credentialMode: 'direct',
-        apiKey: 'sk-direct',
+        apiKey: 'sk-direct-1234567890123456',
         baseUrl: 'https://fallback.example/v1',
         model: 'shared-chat',
         providerId: 'fallback',
@@ -597,7 +597,7 @@ describe('DaemonProviderGatewayController', () => {
             endpointSupport: 'responses',
             streamingSupport: 'streaming',
             priority: 100,
-            credentialSource: { type: 'api-key', apiKey: 'responses-key' },
+            credentialSource: { type: 'api-key', apiKey: 'responses-key-1234567890123456' },
           },
           {
             id: 'chat-stream',
@@ -606,7 +606,7 @@ describe('DaemonProviderGatewayController', () => {
             endpointSupport: 'chat-completions',
             streamingSupport: 'streaming',
             priority: 200,
-            credentialSource: { type: 'api-key', apiKey: 'chat-key' },
+            credentialSource: { type: 'api-key', apiKey: 'chat-key-1234567890123456' },
           },
         ],
       }
@@ -662,7 +662,7 @@ describe('DaemonProviderGatewayController', () => {
     const controller = new DaemonProviderGatewayController(
       {
         credentialMode: 'direct',
-        apiKey: 'sk-direct',
+        apiKey: 'sk-direct-1234567890123456',
         baseUrl: 'https://fallback.example/v1',
         model: 'shared-chat',
         providerId: 'fallback',
@@ -679,7 +679,7 @@ describe('DaemonProviderGatewayController', () => {
             streamingSupport: 'non-streaming',
             credentialSource: {
               type: 'api-key',
-              apiKey: 'chat-key',
+              apiKey: 'chat-key-1234567890123456',
               headers: { Authorization: 'bearer-secret', 'x-safe': 'ok' },
               metadata: { token: 'token-secret', label: 'chat' },
             },
@@ -715,8 +715,8 @@ describe('DaemonProviderGatewayController', () => {
         code: 'route_not_found',
       },
     });
-    expect(serialized).not.toContain('sk-direct');
-    expect(serialized).not.toContain('chat-key');
+    expect(serialized).not.toContain('sk-direct-1234567890123456');
+    expect(serialized).not.toContain('chat-key-1234567890123456');
     expect(serialized).not.toContain('bearer-secret');
     expect(serialized).not.toContain('token-secret');
   });
@@ -724,14 +724,14 @@ describe('DaemonProviderGatewayController', () => {
   it('updates the gateway route for later daemon runs', async () => {
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-old',
+      apiKey: 'sk-old-1234567890123456',
       baseUrl: 'https://old.example/v1',
       model: 'old-model',
       providerId: 'crish',
     });
 
     controller.update({
-      apiKey: 'sk-new',
+      apiKey: 'sk-new-1234567890123456',
       baseUrl: 'https://new.example/v1',
       model: 'new-model',
     });
@@ -741,7 +741,7 @@ describe('DaemonProviderGatewayController', () => {
       ok: true,
       requestedModel: 'new-model',
       credential: {
-        apiKey: 'sk-new',
+        apiKey: 'sk-new-1234567890123456',
         baseUrl: 'https://new.example/v1',
       },
       selectedRoute: {
@@ -754,7 +754,7 @@ describe('DaemonProviderGatewayController', () => {
       apiKey: {
         hasApiKey: true,
         source: 'runtime-update',
-        last4: '-new',
+        last4: '3456',
       },
       apiKeySource: 'runtime-update',
       model: 'new-model',
@@ -764,7 +764,7 @@ describe('DaemonProviderGatewayController', () => {
   it('normalizes environment configuration into the product provider path', () => {
     const config = createDaemonProviderRuntimeConfigFromEnv(
       {
-        FLOWBIT_API_KEY: ' flowbit-key ',
+        FLOWBIT_API_KEY: ' flowbit-key-1234567890123456 ',
         FLOWBIT_ACCOUNT_ID: ' acct_1 ',
         FLOWBIT_API_BASE_URL: ' https://flowbit.example ',
         FLOWBIT_MODEL: ' mimo-v2.5-pro ',
@@ -778,7 +778,7 @@ describe('DaemonProviderGatewayController', () => {
 
     expect(config).toMatchObject({
       credentialMode: 'auto',
-      apiKey: 'flowbit-key',
+      apiKey: 'flowbit-key-1234567890123456',
       apiKeySource: 'env',
       accountId: 'acct_1',
       baseUrl: 'https://flowbit.example',
@@ -789,7 +789,7 @@ describe('DaemonProviderGatewayController', () => {
   it('uses auto mode to fall back to environment api keys', async () => {
     const config = createDaemonProviderRuntimeConfigFromEnv(
       {
-        FLOWBIT_API_KEY: ' env-key-1234 ',
+        FLOWBIT_API_KEY: ' env-key-1234567890123456 ',
       },
       {
         baseUrl: 'https://default.example',
@@ -807,7 +807,7 @@ describe('DaemonProviderGatewayController', () => {
         credentialSourceType: 'api-key',
       },
       credential: {
-        apiKey: 'env-key-1234',
+        apiKey: 'env-key-1234567890123456',
       },
     });
     expect(controller.getStatusSnapshot()).toMatchObject({
@@ -816,7 +816,7 @@ describe('DaemonProviderGatewayController', () => {
       apiKey: {
         hasApiKey: true,
         source: 'env',
-        last4: '1234',
+        last4: '3456',
       },
     });
   });
@@ -824,7 +824,7 @@ describe('DaemonProviderGatewayController', () => {
   it('treats an empty runtime api key update as an explicit clear', async () => {
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-old-direct',
+      apiKey: 'sk-old-direct-1234567890123456',
       baseUrl: 'https://gateway.example/v1',
       model: 'mimo-v2.5',
       providerId: 'crish',
@@ -933,7 +933,7 @@ describe('DaemonProviderGatewayController', () => {
 
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'sk-ant-test',
+      apiKey: 'sk-ant-test-1234567890123456',
       baseUrl: 'https://api.anthropic.com/v1',
       model: 'claude-sonnet-4-20250514',
       providerId: 'anthropic',
@@ -956,7 +956,7 @@ describe('DaemonProviderGatewayController', () => {
     );
 
     expect(urls).toEqual(['https://api.anthropic.com/v1/messages']);
-    expect(requestHeaders[0]?.['x-api-key']).toBe('sk-ant-test');
+    expect(requestHeaders[0]?.['x-api-key']).toBe('sk-ant-test-1234567890123456');
     expect(requestHeaders[0]?.['anthropic-version']).toBe('2023-06-01');
     expect(bodies[0]).toMatchObject({
       model: 'claude-sonnet-4-20250514',
@@ -1000,7 +1000,7 @@ describe('DaemonProviderGatewayController', () => {
 
     const controller = new DaemonProviderGatewayController({
       credentialMode: 'direct',
-      apiKey: 'g-test-key',
+      apiKey: 'g-test-key-1234567890123456',
       baseUrl: 'https://generativelanguage.googleapis.com',
       model: 'gemini-2.0-flash',
       providerId: 'gemini',
@@ -1025,7 +1025,7 @@ describe('DaemonProviderGatewayController', () => {
     expect(urls).toEqual([
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
     ]);
-    expect(requestHeaders[0]?.['x-goog-api-key']).toBe('g-test-key');
+    expect(requestHeaders[0]?.['x-goog-api-key']).toBe('g-test-key-1234567890123456');
     expect(bodies[0]).toMatchObject({
       contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
       generationConfig: { maxOutputTokens: expect.any(Number) },

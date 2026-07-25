@@ -26,7 +26,10 @@ export interface ApprovalPipelineRequest {
 export class ApprovalPipeline {
   constructor(private readonly options: ApprovalPipelineOptions) {}
 
-  async decide(request: ApprovalPipelineRequest): Promise<PermissionDecision> {
+  async decide(
+    request: ApprovalPipelineRequest,
+    onApprovalRequested?: (permissionRequest: PermissionRequest, decision: PermissionDecision) => Promise<void> | void
+  ): Promise<PermissionDecision> {
     const permissionRequest = request.permissionRequest;
     const runtimeRequest: RuntimePermissionRequest = {
       id: permissionRequest.id,
@@ -55,9 +58,22 @@ export class ApprovalPipeline {
         if (cached) return cached;
       }
 
+      const enrichedRequest: PermissionRequest = {
+        ...permissionRequest,
+        metadata: {
+          ...(permissionRequest.metadata ?? {}),
+          ...(decision.reason ? { reason: decision.reason } : {}),
+          ...(decision.metadata ?? {}),
+        },
+      };
+
+      if (onApprovalRequested) {
+        await onApprovalRequested(enrichedRequest, decision);
+      }
+
       const handler = this.options.approvalHandler;
       if (handler) {
-        const userDecision = await handler.requestApproval(permissionRequest);
+        const userDecision = await handler.requestApproval(enrichedRequest);
         if (intentKey && this.options.cache) {
           this.options.cache.set(intentKey, userDecision, undefined, sessionId);
         }

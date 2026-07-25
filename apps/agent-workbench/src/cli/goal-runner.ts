@@ -211,7 +211,7 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
     });
 
     const goalDecision = strategy.assessRound({
-      run: { id: "", sessionId: "", turnIndex: 0, status: "running", createdAt: "", updatedAt: "" },
+      run: { id: "", sessionId: "", cwd: options.cwd, status: "running", createdAt: "", updatedAt: "" },
       session: { id: "", cwd: options.cwd, createdAt: "", updatedAt: "", status: "open" },
       roundIndex: index,
       prompt: currentPrompt,

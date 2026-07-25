@@ -81,6 +81,7 @@ export class HealthChecker {
   start(): void {
     if (this.timerId !== null) return;
     this.timerId = setInterval(() => this.checkAll(), this.intervalMs);
+    this.timerId.unref?.();
   }
 
   stop(): void {

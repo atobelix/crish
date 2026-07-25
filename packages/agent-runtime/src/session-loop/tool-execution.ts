@@ -10,8 +10,8 @@ import { ToolExecutor, SingleToolExecutor, ProgressEventQueue, type ToolExecuteH
 import type { ConversationEngine } from '../runtime-components';
 import type { SessionRecorder } from '../session';
 import { createId } from '../session';
-import { validateToolInput } from '../tools';
-import { withSessionEntryMetadata, checkpointRecordsFromToolResult, checkpointRestoreRecordFromToolResult, buildPermissionDenyToolOutput, summarizeToolCall, isToolTimeoutCause, abortReason } from '../runtime-helpers';
+import { validateToolInput, repairToolInput } from '../tools';
+import { withSessionEntryMetadata, checkpointRecordsFromToolResult, checkpointRestoreRecordFromToolResult, buildPermissionDenyToolOutput, summarizeToolCall, isToolTimeoutCause, abortReason, validationAdviceForToolInput } from '../runtime-helpers';
 import type { HookContext, AgentHooks as AgentHooksType, ToolHook, ToolResult } from '../hooks';
 import { ApprovalPipeline } from '../approval/approval-pipeline';
 import { findFatalToolError } from './types';
@@ -111,9 +111,23 @@ export class ToolExecutionCoordinator {
       }
     }
 
-    const { effectiveInput, blocked } = yield* this.handleBeforeHook(toolCall, tool, batchId, startedAt, call, ctx);
+    const { effectiveInput: hookInput, blocked } = yield* this.handleBeforeHook(toolCall, tool, batchId, startedAt, call, ctx);
     if (blocked) return blocked;
 
+    let effectiveInput = ctx.contextManager.restoreProviderToolInput(hookInput);
+    const repaired = repairToolInput(tool, effectiveInput);
+    if (repaired.notes.length > 0) {
+      effectiveInput = repaired.input;
+      yield {
+        type: 'tool-input-repaired',
+        sessionId: ctx.sessionId,
+        batchId,
+        toolCallId: toolCall.id,
+        toolName: toolCall.toolName,
+        notes: repaired.notes,
+        timestamp: new Date().toISOString(),
+      } as AgentEvent;
+    }
     const effectiveToolCall: ToolCallBlock = { ...toolCall, input: effectiveInput };
 
     const valError = yield* this.handleValidation(tool, effectiveInput, call, startedAt, batchId, ctx);
@@ -180,7 +194,9 @@ export class ToolExecutionCoordinator {
   private async *handleValidation(tool: AgentTool, input: JsonObject, call: ToolBatchCall, startedAt: number, batchId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, ToolBatchResult | null> {
     const errors = validateToolInput(tool, input);
     if (errors.length === 0) return null;
-    const r = this.toResult(call, startedAt, { text: [`Tool input validation failed:`, ...errors.map((e) => `- ${e}`)].join('\n') }, true);
+    const advice = validationAdviceForToolInput(tool, input, errors);
+    const textLines = ['Tool input validation failed:', ...errors.map((e) => `- ${e}`), ...advice];
+    const r = this.toResult(call, startedAt, { text: textLines.join('\n') }, true);
     yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
     return r;
   }
@@ -245,8 +261,14 @@ export class ToolExecutionCoordinator {
   private async *resolvePermission(tool: AgentTool, input: JsonObject, toolCallId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, PermissionDecision> {
     const sReq: PermissionRequest = { id: toolCallId, sessionId: ctx.sessionId, cwd: ctx.cwd ?? '', toolCallId, toolName: tool.name, parameters: input, summary: tool.summarize(input), toolMetadata: { category: tool.category, isReadOnly: tool.isReadOnly(input), fatalOnError: tool.fatalOnError ?? false, concurrency: tool.concurrency } } as PermissionRequest;
 
-    const decision = await ctx.approvalPipeline.decide({ tool, input, permissionRequest: sReq });
+    const eventsToEmit: AgentEvent[] = [];
+    const decision = await ctx.approvalPipeline.decide({ tool, input, permissionRequest: sReq }, async (req, dec) => {
+      eventsToEmit.push({ type: 'approval-requested', sessionId: ctx.sessionId, request: req, decision: dec, timestamp: new Date().toISOString() } as AgentEvent);
+    });
 
+    for (const ev of eventsToEmit) {
+      yield ev;
+    }
     if (decision.behavior !== 'allow') {
       yield { type: 'approval-resolved', sessionId: ctx.sessionId, requestId: toolCallId, decision, timestamp: new Date().toISOString() } as AgentEvent;
     }

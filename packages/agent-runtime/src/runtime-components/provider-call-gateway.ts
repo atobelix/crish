@@ -98,9 +98,11 @@ export class ProviderCallGateway {
     let usage: ProviderResponse["usage"];
     let error: string | undefined;
 
+    let rawStream: AsyncIterable<ProviderStreamEvent> | undefined;
+    let contractStream: AsyncGenerator<ProviderStreamContractEvent> | undefined;
     try {
-      const rawStream = await this.selectStreamSource(provider, request);
-      const contractStream = normalizeAndCoalesceProviderStreamEvents(rawStream, { coalescing: {} });
+      rawStream = await this.selectStreamSource(provider, request);
+      contractStream = normalizeAndCoalesceProviderStreamEvents(rawStream, { coalescing: {} });
 
       for await (const event of contractStream) {
         streamEvents.push(event);
@@ -137,6 +139,21 @@ export class ProviderCallGateway {
         if (t !== undefined) text = t;
         if (th !== undefined) thought = th;
       });
+      const errorMsg = error ?? (err instanceof Error ? err.message : String(err));
+      const errorEvent: ProviderStreamContractEvent = {
+        type: "end",
+        finishReason: "error",
+        error: { kind: "unknown", message: errorMsg, retryable: false },
+      } as unknown as ProviderStreamContractEvent;
+      streamEvents.push(errorEvent);
+      yield errorEvent;
+    } finally {
+      if (contractStream && typeof (contractStream as any).return === "function") {
+        await (contractStream as any).return(undefined).catch(() => undefined);
+      }
+      if (rawStream && typeof (rawStream as any).return === "function") {
+        await (rawStream as any).return(undefined).catch(() => undefined);
+      }
     }
 
     const response: ProviderResponse = {

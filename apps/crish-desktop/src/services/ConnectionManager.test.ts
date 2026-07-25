@@ -37,8 +37,12 @@ class FakeWebSocket {
   }
 
   addEventListener(type: string, cb: Listener) {
-    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
-    this.listeners.get(type)!.add(cb);
+    let set = this.listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(type, set);
+    }
+    set.add(cb);
   }
 
   removeEventListener(type: string, cb: Listener) {

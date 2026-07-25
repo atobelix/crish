@@ -13,7 +13,7 @@ describe("E2E: Steering injection during streaming tool calls", () => {
   describe("mock-server steeringInjectionScenario", () => {
     const server = new LlmApiMockServer();
     beforeAll(async () => {
-      server.on("/v1/chat/completions", Scenarios.steeringInjectionScenario(10));
+      server.on("/v1/chat/completions", Scenarios.steeringInjectionScenario(0));
       await server.start(0);
     });
     afterAll(async () => { await server.stop(); });
@@ -89,7 +89,7 @@ describe("E2E: Steering injection during streaming tool calls", () => {
     for await (const event of runtime.run("find information")) {
       events.push(event);
 
-      if (event.type === "message-delta" && !steeringInjected) {
+      if ((event.type === "tool-start" || event.type === "tool-batch-start") && !steeringInjected) {
         steeringInjected = true;
         runtime.enqueueSteerInput(
           createTextMessage("user", "Actually, search for world instead")
@@ -100,8 +100,8 @@ describe("E2E: Steering injection during streaming tool calls", () => {
     }
 
     // Tool events should be present (tool execution completed, not interrupted)
-    const toolStartEvents = events.filter((e) => e.type === "tool-start");
-    const toolEndEvents = events.filter((e) => e.type === "tool-end" || (e.type === "tool-batch-end"));
+    const toolStartEvents = events.filter((e) => e.type === "tool-start" || e.type === "tool-batch-start");
+    const toolEndEvents = events.filter((e) => e.type === "tool-end" || e.type === "tool-batch-end");
     expect(toolStartEvents.length).toBeGreaterThanOrEqual(1);
     expect(toolEndEvents.length).toBeGreaterThanOrEqual(1);
 
@@ -166,7 +166,7 @@ describe("E2E: Steering injection during streaming tool calls", () => {
     for await (const event of runtime.run("do search")) {
       events.push(event);
 
-      if (event.type === "tool-start" && !steeringInjected) {
+      if ((event.type === "tool-start" || event.type === "tool-batch-start") && !steeringInjected) {
         steeringInjected = true;
         runtime.enqueueSteerInput(
           createTextMessage("user", "Change direction, search for world")
@@ -177,7 +177,7 @@ describe("E2E: Steering injection during streaming tool calls", () => {
     }
 
     // Tool completed
-    const toolEnds = events.filter((e) => e.type === "tool-end");
+    const toolEnds = events.filter((e) => e.type === "tool-end" || e.type === "tool-batch-end");
     expect(toolEnds.length).toBeGreaterThanOrEqual(1);
 
     // Steering message recorded

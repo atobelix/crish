@@ -1,15 +1,13 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import styles from '../Workspace.module.css';
-import type { WorkspaceState } from '../store/layoutStore';
+import type { WorkspaceState } from '../../store/layoutStore';
 import { CardPanel } from '../CardPanel';
-import type { ShowToastFn } from '../hooks/useToastQueue';
+import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { WorkspaceResizer } from './WorkspaceResizer';
 import { useWorkspaceResize } from './useWorkspaceResize';
-import { useColumnResize } from '../hooks/useColumnResize';
-
-type RenderedGroup = import('../Workspace').RenderedGroup;
-type RenderedColumn = import('../Workspace').RenderedColumn;
+import { useColumnResize } from '../../hooks/useColumnResize';
+import type { RenderedColumn } from '../Workspace';
 
 interface WorkspaceCanvasProps {
   ws: WorkspaceState;
@@ -28,11 +26,130 @@ function ratioToPercent(ratio: number): number {
   return Math.max(0, Math.min(100, Math.round(ratio * 100)));
 }
 
+/**
+ * 累加前 untilIdx 项的 widthRatio（百分比）。下标越界跳过。
+ * 抽到模块级纯函数：
+ * - 消除 `renderedColumns[i]!.widthRatio` 非空断言
+ * - 治理防线 #3（noUncheckedIndexedAccess）：下标访问返回 T | undefined 显式守卫
+ */
+function sumWidthRatios(
+  ratios: ReadonlyArray<{ widthRatio: number }>,
+  untilIdx: number,
+): number {
+  if (untilIdx <= 0) return 0;
+  let acc = 0;
+  for (let i = 0; i < untilIdx; i++) {
+    const item = ratios[i];
+    if (!item) continue;
+    acc += item.widthRatio * 100;
+  }
+  return acc;
+}
+
+/** 同上，针对组高度比 */
+function sumHeightRatios(
+  groups: ReadonlyArray<{ heightRatio: number }>,
+  untilIdx: number,
+): number {
+  if (untilIdx <= 0) return 0;
+  let acc = 0;
+  for (let i = 0; i < untilIdx; i++) {
+    const g = groups[i];
+    if (!g) continue;
+    acc += g.heightRatio * 100;
+  }
+  return acc;
+}
+
 export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
-  ({ ws, renderedColumns, containerRef, focusThisWorkspace, resizeColumns, resizeGroups, regionLabel, colCountLabel, onShowToast }) => {
-    const { handleColResizerPointerDown, handleGroupResizerPointerDown } = useColumnResize(ws.id);
+  ({
+    ws,
+    renderedColumns,
+    containerRef,
+    focusThisWorkspace,
+    resizeColumns,
+    resizeGroups,
+    regionLabel,
+    colCountLabel,
+    onShowToast,
+  }) => {
+    const { handleColResizerPointerDown, handleGroupResizerPointerDown } =
+      useColumnResize(ws.id);
     const { nudgeColumnByKey, nudgeGroupByKey } = useWorkspaceResize(
-      ws, containerRef, focusThisWorkspace, resizeColumns, resizeGroups
+      ws,
+      containerRef,
+      focusThisWorkspace,
+      resizeColumns,
+      resizeGroups,
+    );
+
+    /**
+     * 列分割器键盘交互：ArrowLeft/Right 微调；Home/End 极化到 13%/87%。
+     * 提取到 useCallback 以稳定 identity，避免每次渲染创建新函数导致
+     * React.memo(WorkspaceResizer) 失效（onKeyDown 引用变化触发不必要重渲染）。
+     *
+     * 直接使用 containerRef.current 作为画布元素，不再 `querySelector('.workspace-canvas')`：
+     * - 父级传入的 containerRef 即画布外层容器，clientWidth 即所需
+     * - querySelector 返回 Element | null，强转 HTMLElement 是类型逃逸
+     */
+    const handleColSplitterKeyDown = useCallback(
+      (splitterLeftIdx: number) => (e: React.KeyboardEvent) => {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          focusThisWorkspace();
+          nudgeColumnByKey(splitterLeftIdx, -1);
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          focusThisWorkspace();
+          nudgeColumnByKey(splitterLeftIdx, 1);
+          return;
+        }
+        if (e.key !== 'Home' && e.key !== 'End') return;
+        e.preventDefault();
+        focusThisWorkspace();
+        const canvasEl = containerRef.current;
+        if (!(canvasEl instanceof HTMLElement)) return;
+        const w = canvasEl.clientWidth || 1;
+        const left = ws.columns[splitterLeftIdx];
+        const right = ws.columns[splitterLeftIdx + 1];
+        if (!left || !right) return;
+        const pair = left.widthRatio + right.widthRatio;
+        const minR = 0.13;
+        const targetLeft =
+          e.key === 'Home' ? minR : Math.max(minR, pair - minR);
+        const dx = (targetLeft - left.widthRatio) * w;
+        if (Math.abs(dx) > 0.5) {
+          resizeColumns(ws.id, splitterLeftIdx, dx, w);
+        }
+      },
+      [
+        containerRef,
+        focusThisWorkspace,
+        nudgeColumnByKey,
+        resizeColumns,
+        ws.columns,
+        ws.id,
+      ],
+    );
+
+    /** 组分割器键盘交互：ArrowUp/Down 微调。同样提取到 useCallback 稳定 identity。 */
+    const handleGroupSplitterKeyDown = useCallback(
+      (colIdx: number, topGroupIdx: number) => (e: React.KeyboardEvent) => {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          focusThisWorkspace();
+          nudgeGroupByKey(colIdx, topGroupIdx, -1);
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          focusThisWorkspace();
+          nudgeGroupByKey(colIdx, topGroupIdx, 1);
+        }
+      },
+      [focusThisWorkspace, nudgeGroupByKey],
     );
 
     return (
@@ -42,10 +159,7 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
         aria-label={`${regionLabel}画布，${colCountLabel}`}
       >
         {renderedColumns.map((col, colIdx) => {
-          let leftOffsetPercent = 0;
-          for (let i = 0; i < colIdx; i++) {
-            leftOffsetPercent += renderedColumns[i].widthRatio * 100;
-          }
+          const leftOffsetPercent = sumWidthRatios(renderedColumns, colIdx);
 
           const isPlaceholderCol = col.origColIdx === -1;
           const leftRealCol = renderedColumns[colIdx - 1];
@@ -78,38 +192,7 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
                   onPointerDown={(e) =>
                     handleColResizerPointerDown(e, splitterLeftIdx)
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowLeft') {
-                      e.preventDefault();
-                      focusThisWorkspace();
-                      nudgeColumnByKey(splitterLeftIdx, -1);
-                    } else if (e.key === 'ArrowRight') {
-                      e.preventDefault();
-                      focusThisWorkspace();
-                      nudgeColumnByKey(splitterLeftIdx, 1);
-                    } else if (e.key === 'Home' || e.key === 'End') {
-                      e.preventDefault();
-                      focusThisWorkspace();
-                      const canvasEl =
-                        containerRef.current?.querySelector(
-                          '.workspace-canvas',
-                        ) as HTMLElement | null;
-                      const w = canvasEl?.clientWidth || 1;
-                      const left = ws.columns[splitterLeftIdx];
-                      const right = ws.columns[splitterLeftIdx + 1];
-                      if (!left || !right) return;
-                      const pair = left.widthRatio + right.widthRatio;
-                      const minR = 0.13;
-                      const targetLeft =
-                        e.key === 'Home'
-                          ? minR
-                          : Math.max(minR, pair - minR);
-                      const dx = (targetLeft - left.widthRatio) * w;
-                      if (Math.abs(dx) > 0.5) {
-                        resizeColumns(ws.id, splitterLeftIdx, dx, w);
-                      }
-                    }
-                  }}
+                  onKeyDown={handleColSplitterKeyDown(splitterLeftIdx)}
                   style={{
                     left: `calc(${leftOffsetPercent}% - 3px)`,
                   }}
@@ -140,10 +223,10 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
                 }
               >
                 {col.groups.map((group, groupIdx) => {
-                  let topOffsetPercent = 0;
-                  for (let i = 0; i < groupIdx; i++) {
-                    topOffsetPercent += col.groups[i].heightRatio * 100;
-                  }
+                  const topOffsetPercent = sumHeightRatios(
+                    col.groups,
+                    groupIdx,
+                  );
 
                   const isPlaceholderGroup = group.origGroupIdx === -1;
                   const prevGroup = col.groups[groupIdx - 1];
@@ -168,6 +251,10 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
                         ]?.heightRatio ?? 0.5)
                       : 0.5;
 
+                  // 治理防线 #3（noUncheckedIndexedAccess）：cards[0] 可能 undefined
+                  const placeholderCard = group.cards[0];
+                  const placeholderTitle = placeholderCard?.title ?? '释放以拆分';
+
                   return (
                     <React.Fragment key={group.id}>
                       {showGroupSplitter && (
@@ -186,25 +273,10 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
                               topGroupIdx,
                             )
                           }
-                          onKeyDown={(e) => {
-                            if (e.key === 'ArrowUp') {
-                              e.preventDefault();
-                              focusThisWorkspace();
-                              nudgeGroupByKey(
-                                col.origColIdx,
-                                topGroupIdx,
-                                -1,
-                              );
-                            } else if (e.key === 'ArrowDown') {
-                              e.preventDefault();
-                              focusThisWorkspace();
-                              nudgeGroupByKey(
-                                col.origColIdx,
-                                topGroupIdx,
-                                1,
-                              );
-                            }
-                          }}
+                          onKeyDown={handleGroupSplitterKeyDown(
+                            col.origColIdx,
+                            topGroupIdx,
+                          )}
                           style={{
                             top: `calc(${topOffsetPercent}% - 3px)`,
                           }}
@@ -216,17 +288,13 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
                           className={`${styles.placeholderCardGroup} workspace-card placeholder-card-group`}
                           role="status"
                           aria-live="polite"
-                          aria-label={group.cards[0]?.title || '释放以拆分'}
+                          aria-label={placeholderTitle}
                           style={{
                             height: `${group.heightRatio * 100}%`,
                           }}
                         >
-                          <Plus
-                            size={16}
-                            strokeWidth={1.75}
-                            aria-hidden
-                          />
-                          <span>{group.cards[0].title}</span>
+                          <Plus size={16} strokeWidth={1.75} aria-hidden />
+                          <span>{placeholderTitle}</span>
                         </div>
                       ) : (
                         <CardPanel

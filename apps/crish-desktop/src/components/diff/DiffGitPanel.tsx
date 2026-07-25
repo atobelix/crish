@@ -10,6 +10,59 @@ import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 
 type SourceMode = DiffSourceMode;
 
+/**
+ * 把 GitStatusFile 上的可选字段（staged/unstaged/untracked）通过条件展开注入 FileDiff，
+ * 避免在 `exactOptionalPropertyTypes: true` 下因 `undefined` 漂移污染目标类型。
+ *
+ * 同时把 gitStatus 字段一并补齐，保证列表项可被后续 stage/unstage 逻辑正确识别。
+ *
+ * 此函数返回的是「占位 FileDiff」——additions/deletions 为 0、changes 仅含一行提示文案。
+ * 真正的行级 diff 由后续 `fetchGitDiff` 异步拉取并替换。
+ */
+function buildPlaceholderFileDiff(
+  gf: { path: string; status: string; staged?: boolean; unstaged?: boolean; untracked?: boolean },
+): FileDiff {
+  const changes: FileDiff['changes'] = [
+    { type: 'normal', content: `（${gf.status}）加载 diff…` },
+  ];
+  return {
+    filePath: gf.path,
+    additions: 0,
+    deletions: 0,
+    changes,
+    ...(gf.staged !== undefined ? { staged: gf.staged } : {}),
+    ...(gf.unstaged !== undefined ? { unstaged: gf.unstaged } : {}),
+    ...(gf.untracked !== undefined ? { untracked: gf.untracked } : {}),
+    gitStatus: gf.status,
+  };
+}
+
+/**
+ * 用 GitStatusFile 信息丰富已抓回的 FileDiff（行级 diff 已就绪）。
+ * - 命中状态：补齐 staged/unstaged/untracked/gitStatus
+ * - 未命中：默认 staged=false / unstaged=true / untracked=false / gitStatus='M'
+ *
+ * 通过条件展开构造对象，避免 `as FileDiff` 类型逃逸。
+ */
+function enrichFileDiff(
+  f: FileDiff,
+  statusMap: Map<string, { staged?: boolean; unstaged?: boolean; untracked?: boolean; status: string }>,
+): FileDiff {
+  const key = f.filePath.replace(/\\/g, '/');
+  const gf = statusMap.get(key);
+  const staged = gf ? gf.staged : false;
+  const unstaged = gf ? gf.unstaged : true;
+  const untracked = gf ? gf.untracked : false;
+  const gitStatus = gf ? gf.status : 'M';
+  return {
+    ...f,
+    ...(staged !== undefined ? { staged } : {}),
+    ...(unstaged !== undefined ? { unstaged } : {}),
+    ...(untracked !== undefined ? { untracked } : {}),
+    gitStatus,
+  };
+}
+
 export function useDiffGitPanel(opts: {
   sourceMode: SourceMode;
   fileList: FileDiff[];
@@ -19,7 +72,7 @@ export function useDiffGitPanel(opts: {
   setDiffFiles: (updater: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
   setActiveDiffSource: (source: FileDiff | null) => void;
 }) {
-  const { sourceMode, fileList, onApplyFiles, onShowSoftHint, onToastFail, setDiffFiles, setActiveDiffSource } = opts;
+  const { sourceMode, fileList, onShowSoftHint, onToastFail, setDiffFiles, setActiveDiffSource } = opts;
 
   const [branches, setBranches] = useState<string[]>(['main']);
   const [currentBranch, setCurrentBranch] = useState<string>('main');
@@ -38,12 +91,85 @@ export function useDiffGitPanel(opts: {
       const res = await fetchGitBranches(cwd);
       setBranches(res.list);
       setCurrentBranch(res.current);
-    } catch { /* silent */ }
+    } catch {
+      // 分支拉取失败属可恢复错误：UI 仍能展示当前假定的 'main'，后续操作触发重试
+      console.debug('[DiffGitPanel] loadBranches failed');
+    }
   }, []);
 
   useEffect(() => {
     if (sourceMode === 'git') void loadBranches();
   }, [sourceMode, loadBranches]);
+
+  /**
+   * 从 Git 拉取 status + diff，写回 setDiffFiles。
+   * 用 gitLoadSeqRef 做请求序号保护：后发起的请求若先返回，前序返回时序号不匹配则丢弃。
+   *
+   * 注意：必须先声明此函数，再被 handleSwitchBranch / handleCommit 等回调引用，
+   * 避免「Block-scoped variable used before declaration」以及 useCallback 依赖缺失导致的 stale closure。
+   */
+  const loadFromGit = useCallback(async (silent = false) => {
+    const seq = ++gitLoadSeqRef.current;
+    if (!silent) { setGitLoading(true); }
+    try {
+      const status = await fetchGitStatus();
+      if (seq !== gitLoadSeqRef.current) return;
+      if (!status.found) { onToastFail(gitStatusUserMessage(status).title); return; }
+      if (status.files.length === 0) {
+        onShowSoftHint('工作区无未提交变更');
+        setDiffFiles([]);
+        setActiveDiffSource(null);
+        return;
+      }
+      const statusMap = new Map(
+        status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]),
+      );
+      const placeholders: FileDiff[] = status.files
+        .slice(0, 45)
+        .map((gf) => buildPlaceholderFileDiff(gf));
+      if (!silent) { setActiveDiffSource(null); setDiffFiles(placeholders); }
+      const batch = await fetchGitDiff({});
+      if (seq !== gitLoadSeqRef.current) return;
+      const enrich = (files: FileDiff[]): FileDiff[] =>
+        files.map((f) => enrichFileDiff(f, statusMap));
+      if (batch.files.length > 0) { setDiffFiles(enrich(batch.files)); return; }
+      const slice = status.files.slice(0, 8);
+      const settled = await Promise.all(
+        slice.map(async (gf) => {
+          try {
+            const one = await fetchGitDiff({ path: gf.path });
+            return one.files;
+          } catch {
+            return [] as FileDiff[];
+          }
+        }),
+      );
+      if (seq !== gitLoadSeqRef.current) return;
+      const collected = settled.flat();
+      if (collected.length > 0) {
+        const enrichedCollected = enrich(collected);
+        const byPath = new Map(
+          enrichedCollected.map((f) => [f.filePath.replace(/\\/g, '/'), f]),
+        );
+        const fallbackChanges: FileDiff['changes'] = [
+          { type: 'normal', content: '（已变更）暂无行级 diff' },
+        ];
+        setDiffFiles(
+          placeholders.map((p) => {
+            const found = byPath.get(p.filePath.replace(/\\/g, '/'));
+            if (found) return found;
+            return { ...p, changes: fallbackChanges };
+          }),
+        );
+      } else {
+        setDiffFiles(placeholders);
+      }
+    } catch {
+      if (seq === gitLoadSeqRef.current) onToastFail('从 Git 载入失败');
+    } finally {
+      if (seq === gitLoadSeqRef.current) setGitLoading(false);
+    }
+  }, [onToastFail, onShowSoftHint, setDiffFiles, setActiveDiffSource]);
 
   const handleSwitchBranch = useCallback(async (branch: string) => {
     const cwd = getWorkspacePath();
@@ -58,7 +184,7 @@ export function useDiffGitPanel(opts: {
       onToastFail(err instanceof Error ? err.message : '切换分支失败');
       await loadBranches();
     } finally { setGitLoading(false); }
-  }, [loadBranches, onToastFail]);
+  }, [loadBranches, loadFromGit, onToastFail]);
 
   const handleCommit = useCallback(async () => {
     const cwd = getWorkspacePath();
@@ -76,7 +202,7 @@ export function useDiffGitPanel(opts: {
     } catch (err) {
       onToastFail(err instanceof Error ? err.message : '提交失败');
     } finally { setCommitLoading(false); }
-  }, [commitMsg, fileList, onToastFail, onShowSoftHint]);
+  }, [commitMsg, fileList, loadFromGit, onToastFail, onShowSoftHint]);
 
   const handlePush = useCallback(async () => {
     const cwd = getWorkspacePath();
@@ -90,49 +216,6 @@ export function useDiffGitPanel(opts: {
       onToastFail(err instanceof Error ? err.message : '推送失败');
     } finally { setPushLoading(false); }
   }, [onToastFail, onShowSoftHint]);
-
-  const loadFromGit = useCallback(async (silent = false) => {
-    const seq = ++gitLoadSeqRef.current;
-    if (!silent) { setGitLoading(true); }
-    try {
-      const status = await fetchGitStatus();
-      if (seq !== gitLoadSeqRef.current) return;
-      if (!status.found) { onToastFail(gitStatusUserMessage(status).title); return; }
-      if (status.files.length === 0) {
-        onShowSoftHint('工作区无未提交变更');
-        setDiffFiles([]);
-        setActiveDiffSource(null);
-        return;
-      }
-      const statusMap = new Map(status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]));
-      const placeholders = status.files.slice(0, 45).map((gf) => ({
-        filePath: gf.path, additions: 0, deletions: 0,
-        changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
-        staged: gf.staged, unstaged: gf.unstaged, untracked: gf.untracked, gitStatus: gf.status,
-      }));
-      if (!silent) { setActiveDiffSource(null); setDiffFiles(placeholders); }
-      const batch = await fetchGitDiff({});
-      if (seq !== gitLoadSeqRef.current) return;
-      const enrich = (files: FileDiff[]) => files.map((f) => {
-        const key = f.filePath.replace(/\\/g, '/');
-        const gf = statusMap.get(key);
-        return { ...f, staged: gf ? gf.staged : false, unstaged: gf ? gf.unstaged : true, untracked: gf ? gf.untracked : false, gitStatus: gf ? gf.status : 'M' };
-      });
-      if (batch.files.length > 0) { setDiffFiles(enrich(batch.files)); return; }
-      const slice = status.files.slice(0, 8);
-      const settled = await Promise.all(slice.map(async (gf) => {
-        try { const one = await fetchGitDiff({ path: gf.path }); return one.files; } catch { return [] as FileDiff[]; }
-      }));
-      if (seq !== gitLoadSeqRef.current) return;
-      const collected = settled.flat();
-      if (collected.length > 0) {
-        const enrichedCollected = enrich(collected);
-        const byPath = new Map(enrichedCollected.map((f) => [f.filePath.replace(/\\/g, '/'), f]));
-        setDiffFiles(placeholders.map((p) => byPath.get(p.filePath.replace(/\\/g, '/')) || { ...p, changes: [{ type: 'normal' as const, content: `（已变更）暂无行级 diff` }] }));
-      } else { setDiffFiles(placeholders); }
-    } catch { if (seq === gitLoadSeqRef.current) onToastFail('从 Git 载入失败'); }
-    finally { if (seq === gitLoadSeqRef.current) setGitLoading(false); }
-  }, [onToastFail, onShowSoftHint, setDiffFiles, setActiveDiffSource]);
 
   const handleStageFile = useCallback(async (filePath: string) => {
     const cwd = getWorkspacePath();

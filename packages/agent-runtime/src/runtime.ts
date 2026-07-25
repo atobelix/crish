@@ -184,13 +184,13 @@ export class AgentRuntime implements IAgentRuntime {
 
     // 注册 options.tools 中的工具（向后兼容 AgentTool[]）
     for (const tool of this.options.tools ?? []) {
-      registry.registerAgentTool(tool);
+      registry.register(tool);
     }
 
     // 注册 toolSources 提供的工具
     const fromSources = await Promise.all((this.options.toolSources ?? []).map((source) => source.listTools()));
     for (const tool of fromSources.flat()) {
-      registry.registerAgentTool(tool);
+      registry.register(tool);
     }
 
     // 注册 extensionRegistry 提供的 ToolDefinition

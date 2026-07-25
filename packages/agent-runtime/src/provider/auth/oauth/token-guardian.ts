@@ -18,6 +18,7 @@ export class TokenGuardian {
     this.sweep();
 
     this.timer = setInterval(() => this.sweep(), this.intervalMs);
+    this.timer.unref?.();
   }
 
   stop(): void {

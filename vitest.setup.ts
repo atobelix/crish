@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 /**
  * Node vitest 环境补齐 browser 全局，避免 seed layoutStore 时 localStorage 缺失。
@@ -50,10 +50,6 @@ if (typeof globalThis.CustomEvent === 'undefined') {
     }
   };
 }
-
-beforeEach(() => {
-  vi.useFakeTimers();
-});
 
 afterEach(() => {
   vi.restoreAllMocks();

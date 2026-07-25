@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WindowResizeBridge } from './WindowResizeBridge';
 import * as layoutAnimationStore from '../store/layoutAnimationStore';

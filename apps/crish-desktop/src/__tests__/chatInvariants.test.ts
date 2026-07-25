@@ -23,15 +23,14 @@ describe('chat invariants', () => {
     expect(result).toBe(true);
   });
 
-  it('3. resolveChatEmptyKind - no session state must redirect to session-empty, never no-session', () => {
+  it('3. resolveChatEmptyKind - no session state must return no-session', () => {
     const result = resolveChatEmptyKind({
       hasActiveSession: false,
       messageCount: 0,
       displayCount: 0,
       mainSurface: 'chat'
     });
-    expect(result).toBe('session-empty');
-    expect(result).not.toBe('no-session');
+    expect(result).toBe('no-session');
   });
 
   it('4. tool call stream disconnect protection: interrupted tool call must be auto-healed and unlock session', () => {

@@ -70,17 +70,17 @@ export async function buildDaemonScopedPromptContext(
     stableContext: contextBlocksToJson(composition.stableContext),
     stableBlockIds: toJsonValue(composition.metadata.stableBlockIds),
     volatileBlockIds: toJsonValue(composition.metadata.volatileBlockIds),
-    candidates: toJsonValue(composition.recommended),
+    candidates: toJsonValue(composition.recommended.map((item) => compactJsonObject(item as unknown as Record<string, unknown>))),
     candidateCount: composition.recommended.length,
-    diagnostics: toJsonValue(composition.diagnostics),
+    diagnostics: toJsonValue(composition.diagnostics.map((item) => compactJsonObject(item as unknown as Record<string, unknown>))),
     diagnosticCount:
       composition.diagnostics.length +
       resolved.resourceDiagnostics.length +
       (resolved.storeDiagnostic ? 1 : 0),
     storeRecordCount: resolved.storeRecordCount,
     resourceRecordCount: resolved.resourceRecordCount,
-    resourceDiagnostics: toJsonValue(resolved.resourceDiagnostics),
-    storeDiagnostic: resolved.storeDiagnostic != null ? toJsonValue(resolved.storeDiagnostic) : undefined,
+    resourceDiagnostics: toJsonValue(resolved.resourceDiagnostics.map((item) => compactJsonObject(item as unknown as Record<string, unknown>))),
+    storeDiagnostic: resolved.storeDiagnostic != null ? toJsonValue(compactJsonObject(resolved.storeDiagnostic as unknown as Record<string, unknown>)) : undefined,
   });
 
   return {

@@ -25,7 +25,12 @@ export class SingleToolExecutor {
     signal: AbortSignal,
   ): Promise<SingleToolExecutionResult> {
     const timeoutController = new AbortController();
-    const timeoutId = setTimeout(() => timeoutController.abort(new Error(`Timed out after ${this.timeoutMs}ms`)), this.timeoutMs);
+    const timeoutId = setTimeout(() => {
+      timeoutController.abort(new Error(`Timed out after ${this.timeoutMs}ms`));
+    }, this.timeoutMs);
+    // 注：不要 unref()。在 vitest 单线程环境下 unref() 会让 timer 在事件循环空闲时被跳过，
+    // 导致 timeout 永远不触发，工具 hang 直到测试 testTimeout。
+    // unref 仅在长时间运行的 daemon 进程有意义（避免阻止退出）。
     const combinedSignal = combineAbortSignals(signal, timeoutController.signal);
 
     let effectiveInput = toolCall.input;
@@ -46,18 +51,18 @@ export class SingleToolExecutor {
         executeFn(effectiveInput, { ...context, signal: combinedSignal }),
         new Promise<never>((_, reject) => {
           if (combinedSignal.aborted) {
-            reject(new Error(combinedSignal.reason instanceof Error ? combinedSignal.reason.message : "aborted"));
+            queueMicrotask(() => reject(new Error(combinedSignal.reason instanceof Error ? combinedSignal.reason.message : "aborted")));
             return;
           }
           combinedSignal.addEventListener("abort", () => {
-            reject(new Error(combinedSignal.reason instanceof Error ? combinedSignal.reason.message : "aborted"));
+            queueMicrotask(() => reject(new Error(combinedSignal.reason instanceof Error ? combinedSignal.reason.message : "aborted")));
           }, { once: true });
         }),
       ]);
     } catch (cause) {
       const causeMessage = cause instanceof Error ? cause.message : String(cause);
+      const timedOutByController = timeoutController.signal.aborted;
       const timedOutByMessage = /timed out/i.test(causeMessage);
-      const timedOutByController = timeoutController.signal.aborted && timedOutByMessage;
       const isTimeout = timedOutByController || (combinedSignal.aborted && timedOutByMessage);
       // Parent/batch abort (cancel-siblings) without timeout wording → cancelled
       const isCancelled = !isTimeout && (signal.aborted || combinedSignal.aborted || /abort|cancel/i.test(causeMessage));

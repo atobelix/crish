@@ -134,7 +134,15 @@ export async function* coalesceProviderStreamContractEventStream(
         continue;
       }
 
-      const result = await raceProviderStreamNextOrFlushDelay(next, delay);
+      if (delay <= 0) {
+        const expired = coalescer.flushExpired();
+        if (expired.length > 0) {
+          for (const event of expired) yield event;
+          continue;
+        }
+      }
+
+      const result = await raceProviderStreamNextOrFlushDelay(next, Math.max(1, delay));
       if (result.type === "flush") {
         for (const event of coalescer.flushExpired()) yield event;
         continue;
@@ -284,13 +292,9 @@ function raceProviderStreamNextOrFlushDelay<T>(
   next: Promise<IteratorResult<T>>,
   delayMs: number
 ): Promise<{ type: "next"; result: IteratorResult<T> } | { type: "flush" }> {
-  if (delayMs <= 0) {
-    return Promise.race([next.then((result) => ({ type: "next" as const, result })), Promise.resolve({ type: "flush" as const })]);
-  }
-
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const flushDelay = new Promise<{ type: "flush" }>((resolve) => {
-    timeout = setTimeout(() => resolve({ type: "flush" }), delayMs);
+    timeout = setTimeout(() => resolve({ type: "flush" }), Math.max(1, delayMs));
   });
   return Promise.race([next.then((result) => ({ type: "next" as const, result })), flushDelay]).finally(() => {
     if (timeout !== undefined) clearTimeout(timeout);

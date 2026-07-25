@@ -46,19 +46,20 @@ export class RegisteredTool {
   readonly execute: (input: JsonObject, context: ToolExecutionContext) => Promise<ToolOutput>;
 
   constructor(definition: SchemaToolDefinition, options?: ToolRegistrationOptions) {
+    const raw = definition as Partial<RegisteredTool>;
     this.definition = definition;
     this.name = definition.name;
-    this.label = options?.label ?? definition.name;
+    this.label = options?.label ?? raw.label ?? definition.name;
     this.description = definition.description;
-    this.category = options?.category ?? inferCategory(definition.name, definition.description);
+    this.category = options?.category ?? raw.category ?? inferCategory(definition.name, definition.description);
     if (definition.inputSchema !== undefined) this.inputSchema = definition.inputSchema;
-    if (options?.inputAliases !== undefined) this.inputAliases = options.inputAliases;
-    this.concurrency = options?.concurrency ?? "parallel";
-    this.allowParallel = options?.allowParallel ?? true;
-    this.fatalOnError = options?.fatalOnError ?? false;
-    this.isReadOnly = options?.isReadOnly ?? (() => false);
-    this.summarize = options?.summarize ?? defaultSummarize;
-    this.execute = definition.execute;
+    if (options?.inputAliases !== undefined || raw.inputAliases !== undefined) this.inputAliases = options?.inputAliases ?? raw.inputAliases;
+    this.concurrency = options?.concurrency ?? raw.concurrency ?? "parallel";
+    this.allowParallel = options?.allowParallel ?? raw.allowParallel ?? true;
+    this.fatalOnError = options?.fatalOnError ?? raw.fatalOnError ?? false;
+    this.isReadOnly = options?.isReadOnly ?? raw.isReadOnly ?? (() => false);
+    this.summarize = options?.summarize ?? raw.summarize ?? defaultSummarize;
+    this.execute = (input, context) => definition.execute(input, context);
   }
 }
 

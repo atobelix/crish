@@ -7,6 +7,15 @@ import {
   useLayoutAnimationStore,
 } from './layoutAnimationStore';
 
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as unknown as Record<string, unknown>).ResizeObserver = MockResizeObserver;
+}
+
 function resetStore() {
   const s = useLayoutAnimationStore.getState();
   for (const type of [...s.activeAnimations]) {

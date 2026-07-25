@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage } from "@crish/shared-types";
+import type { AgentEvent, AgentMessage, JsonObject } from "@crish/shared-types";
 import type {
   GoalContinuationDecision,
   GoalLoopStrategy,
@@ -299,7 +299,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
       return {
         action: "complete",
         reason: decision.reason,
-        detail: { completionPercent: snapshot.completionPercent } as unknown as Record<string, unknown>
+        detail: { completionPercent: snapshot.completionPercent } as unknown as JsonObject
       };
     }
 
