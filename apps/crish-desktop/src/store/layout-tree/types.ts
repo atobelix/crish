@@ -1,0 +1,119 @@
+/**
+ * 二叉树布局模型 — 类型定义。
+ *
+ * 参考 VS Code SerializableGrid：每个节点要么是 leaf（面板），
+ * 要么是 branch（严格二叉分割）。支持任意深度的水平/垂直嵌套。
+ */
+
+/** 叶子节点：一个面板（可含多个 tab） */
+export interface LayoutLeaf {
+  type: 'leaf';
+  id: string;
+  /** 面板类型标识：'chat' | 'diff' | 'terminal' | 'files' | 'agent' | ... */
+  panelId: string;
+  /** 该面板内的 tab id 列表 */
+  tabs: string[];
+  /** 当前激活的 tab id */
+  activeTab: string;
+  /** 相对尺寸（兄弟间比例，branch 的 splitRatio 优先） */
+  size: number;
+}
+
+/** 分支节点：严格二叉分割 */
+export interface LayoutBranch {
+  type: 'branch';
+  id: string;
+  /** 分割方向：horizontal = 左右排列，vertical = 上下排列 */
+  direction: 'horizontal' | 'vertical';
+  /** 严格两个子节点 */
+  children: [LayoutNode, LayoutNode];
+  /** 第一个 child 占比（0-1），第二个为 1 - splitRatio */
+  splitRatio: number;
+}
+
+/** 布局节点联合类型 */
+export type LayoutNode = LayoutLeaf | LayoutBranch;
+
+/** 完整布局树 */
+export interface LayoutTree {
+  root: LayoutNode;
+  version: number;
+}
+
+/** 渲染用平坦面板描述（flattenToRenderList 输出） */
+export interface FlatPanel {
+  leafId: string;
+  panelId: string;
+  tabs: string[];
+  activeTab: string;
+  /** 相对于整个工作区的 rect（0-1 百分比） */
+  rect: { x: number; y: number; width: number; height: number };
+  /** 从根到该 leaf 的路径（用于定位 branch 做 resize） */
+  path: string[];
+}
+
+/** 分割方向 */
+export type SplitDirection = 'horizontal' | 'vertical';
+
+/** 拖拽放置方向 */
+export type DropDirection = 'left' | 'right' | 'top' | 'bottom';
+
+// ── 工厂函数 ──────────────────────────────────────────────────────────
+
+let idCounter = 0;
+
+/** 生成唯一节点 id */
+export function generateNodeId(prefix = 'node'): string {
+  return `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
+}
+
+/** 创建叶子节点 */
+export function createLeaf(
+  panelId: string,
+  tabs?: string[],
+  activeTab?: string
+): LayoutLeaf {
+  const tabList = tabs ?? [panelId];
+  return {
+    type: 'leaf',
+    id: generateNodeId('leaf'),
+    panelId,
+    tabs: tabList,
+    activeTab: activeTab ?? tabList[0] ?? panelId,
+    size: 1,
+  };
+}
+
+/** 创建分支节点 */
+export function createBranch(
+  direction: SplitDirection,
+  first: LayoutNode,
+  second: LayoutNode,
+  splitRatio = 0.5
+): LayoutBranch {
+  return {
+    type: 'branch',
+    id: generateNodeId('branch'),
+    direction,
+    children: [first, second],
+    splitRatio: Math.max(0.1, Math.min(0.9, splitRatio)),
+  };
+}
+
+/** 创建单面板默认布局 */
+export function createDefaultTree(panelId = 'chat'): LayoutTree {
+  return {
+    root: createLeaf(panelId),
+    version: 2,
+  };
+}
+
+// ── 类型守卫 ──────────────────────────────────────────────────────────
+
+export function isLeaf(node: LayoutNode): node is LayoutLeaf {
+  return node.type === 'leaf';
+}
+
+export function isBranch(node: LayoutNode): node is LayoutBranch {
+  return node.type === 'branch';
+}

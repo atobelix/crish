@@ -1,0 +1,386 @@
+/**
+ * 二叉树工作区样式。
+ *
+ * 布局策略：
+ * - canvas 为 position: relative，所有 leaf 绝对定位（百分比 rect）
+ * - sash 绝对定位在 branch 的 splitRatio 位置
+ * - drop overlay 绝对定位，pointer-events: none
+ *
+ * 视觉风格：与现有 Workspace.module.css 保持一致（hairline sash、accent drop 指示）
+ */
+
+.section {
+  position: relative;
+  height: 100%;
+  flex: 1;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary, #fff);
+}
+
+.canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary, #fff);
+  /* container query 边界，便于 leaf 内部响应式 */
+  container-type: size;
+  container-name: tree-canvas;
+}
+
+.leaf {
+  position: absolute;
+  /* rect 由 inline style 写入（top/left/width/height 百分比） */
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary, #fff);
+  /* 拖拽时禁用过渡，避免跟手延迟 */
+  transition:
+    top var(--transition-fast),
+    left var(--transition-fast),
+    width var(--transition-fast),
+    height var(--transition-fast);
+}
+
+:global(.tree-resizing) .leaf,
+:global(.tree-dragging) .leaf {
+  transition: none !important;
+}
+
+/* 焦点 leaf 高亮（与现有 split 工作区一致） */
+.leaf[data-active='true'] {
+  outline: 1px solid
+    color-mix(in srgb, var(--text-primary, #111) 8%, transparent);
+  outline-offset: -1px;
+}
+
+.leaf[data-active='false'] {
+  opacity: 0.96;
+}
+
+/* 拖拽中的源 leaf 隐藏（ghost 浮层接管） */
+.leaf[data-dragging-source='true'] {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+/* ── Sash（分割线） ──────────────────────────────────────────── */
+
+.sash {
+  position: absolute;
+  z-index: var(--z-splitter, 5);
+  background: transparent;
+  transition:
+    top var(--transition-fast),
+    left var(--transition-fast);
+}
+
+:global(.tree-resizing) .sash,
+:global(.tree-dragging) .sash {
+  transition: none !important;
+}
+
+.sashHorizontal {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  transform: translateX(-3px);
+}
+
+.sashVertical {
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  transform: translateY(-3px);
+}
+
+.sash::after {
+  content: '';
+  position: absolute;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  transition:
+    opacity var(--transition-fast),
+    width var(--transition-fast);
+  pointer-events: none;
+}
+
+.sashHorizontal::after {
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.sashVertical::after {
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
+    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    transparent 100%
+  );
+}
+
+.sash:hover::after,
+.sash[data-active='true']::after {
+  opacity: 1;
+}
+
+.sashHorizontal:hover::after,
+.sashHorizontal[data-active='true']::after {
+  width: 1.5px;
+}
+
+.sashVertical:hover::after,
+.sashVertical[data-active='true']::after {
+  height: 1.5px;
+}
+
+/* ── Drop zone overlay ──────────────────────────────────────── */
+
+.dropOverlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: var(--z-drag-highlight, 100);
+  border-radius: var(--radius-md, 8px);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-color, #1a73e8) 12%,
+    transparent
+  );
+  border: 1.5px solid var(--accent-color, #1a73e8);
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--accent-color, #1a73e8) 25%, transparent);
+  transition:
+    top var(--transition-fast),
+    left var(--transition-fast),
+    width var(--transition-fast),
+    height var(--transition-fast);
+}
+
+.dropOverlayFull {
+  /* merge-tab：覆盖整个目标 leaf */
+}
+
+.dropOverlaySplitLeft,
+.dropOverlaySplitRight,
+.dropOverlaySplitTop,
+.dropOverlaySplitBottom {
+  /* split 方向：覆盖目标 leaf 的一半 */
+}
+
+/* ── Ghost 浮层 ─────────────────────────────────────────────── */
+
+.ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--z-drag-overlay-max, 99999);
+  opacity: 0.85;
+  transform: rotate(1.5deg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e5e5e5);
+  min-width: 120px;
+  max-width: 280px;
+  padding: var(--space-2, 6px) var(--space-3, 12px);
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-primary, #111);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+}
+
+.ghostLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* ── Tab 条 ─────────────────────────────────────────────────── */
+
+.tabBar {
+  display: flex;
+  align-items: stretch;
+  height: var(--control-height-sm, 28px);
+  background: var(--bg-secondary, #f7f7f7);
+  border-bottom: var(--hairline-width, 1px) solid var(--border-color, #e5e5e5);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.tabBar::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3, 12px);
+  height: 100%;
+  cursor: pointer;
+  border-right: var(--hairline-width, 1px) solid var(--border-color, #e5e5e5);
+  color: var(--text-secondary, #666);
+  font-size: var(--font-size-xs, 11px);
+  white-space: nowrap;
+  user-select: none;
+  position: relative;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.tab:hover {
+  background: var(--bg-tertiary, #efefef);
+  color: var(--text-primary, #111);
+}
+
+.tab[data-active='true'] {
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #111);
+}
+
+.tab[data-active='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: var(--accent-color, #1a73e8);
+}
+
+.tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: var(--space-1, 4px);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  opacity: 0.6;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.tabClose:hover {
+  opacity: 1;
+  background: var(--bg-tertiary, #efefef);
+}
+
+/* ── Leaf body ──────────────────────────────────────────────── */
+
+.leafBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 控制条（顶部关闭/分屏按钮） ───────────────────────────── */
+
+.controlBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding: var(--space-1, 4px) var(--space-2, 6px);
+  height: var(--control-height-sm, 28px);
+  background: var(--bg-secondary, #f7f7f7);
+  border-bottom: var(--hairline-width, 1px) solid var(--border-color, #e5e5e5);
+  flex-shrink: 0;
+}
+
+.controlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary, #666);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.controlBtn:hover {
+  background: var(--bg-tertiary, #efefef);
+  color: var(--text-primary, #111);
+}
+
+.controlSpacer {
+  flex: 1;
+}
+
+.leafTitle {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-secondary, #666);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 空状态 ─────────────────────────────────────────────────── */
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary, #999);
+  font-size: var(--font-size-sm, 12px);
+  background: var(--bg-secondary, #f7f7f7);
+}
+
+/* ── 窄屏自适应 ─────────────────────────────────────────────── */
+
+:global(.is-narrow) .canvas {
+  overflow-y: auto;
+}
+
+:global(.is-narrow) .leaf {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 300px;
+  top: auto !important;
+  left: auto !important;
+}
+
+:global(.is-narrow) .sash {
+  display: none !important;
+}

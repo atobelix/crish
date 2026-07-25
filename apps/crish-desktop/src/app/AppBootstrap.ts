@@ -366,4 +366,21 @@ export function useAppBootstrap({
       void pickWorkspaceFolder();
     });
   }, []);
+
+  // 13. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
+  // 触发条件：新 store 处于默认状态 + localStorage 存在旧布局数据
+  // 幂等：本次会话仅执行一次；新 store 已有自定义布局则跳过
+  // 安全：任何步骤失败都静默回退（不阻断启动），结果可 undo
+  useEffect(() => {
+    let cancelled = false;
+    void import('../store/layout-tree/migration').then(
+      ({ migrateLayoutIfNeeded }) => {
+        if (cancelled) return;
+        migrateLayoutIfNeeded();
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 }
