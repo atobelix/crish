@@ -2,7 +2,7 @@ import React from 'react';
 import { Paperclip, X } from 'lucide-react';
 import styles from '../ChatComposer.module.css';
 import { Tooltip } from '../settings/SettingsUI';
-import type { ChatAttachment } from '../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 
 interface ComposerAttachmentsBarProps {
   attachments: ChatAttachment[];

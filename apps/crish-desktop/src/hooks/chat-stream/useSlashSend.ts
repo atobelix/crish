@@ -4,11 +4,9 @@ import { isPendingDraft } from '../../store/draftSession';
 import {
   commitDraftIfNeeded,
   createSession as createSessionCmd,
-  getActiveSessionId,
   openSettings,
   patchSession,
   setPermissionMode,
-  updateMessageText,
 } from '../../api/storeAccess';
 import type { ChatContentPart, StreamRequestOptions } from '../../api/chatApi';
 import { clientApi } from '../../api/clientApi';
@@ -46,7 +44,7 @@ export function useSlashSend(
   handleSendChat: (isInsert?: boolean, textOverride?: string) => Promise<void>;
 } {
   const {
-    wsId,
+    wsId: _wsId,
     onShowToast,
     handleGlobalTabClick,
     chatInput,
@@ -174,7 +172,7 @@ export function useSlashSend(
         let learnSid = '';
         if (isPendingDraft(activeSessionId)) {
           learnSid = commitDraftIfNeeded({
-            title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+            title: (rawInput ? deriveSessionTitle(rawInput) : undefined) as string | undefined,
           }) || '';
         } else {
           learnSid = resolveStreamSessionId(null, activeSessionId) || '';
@@ -217,7 +215,7 @@ export function useSlashSend(
     let sessionId = '';
     if (isPendingDraft(activeSessionId)) {
       sessionId = commitDraftIfNeeded({
-        title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+        title: (rawInput ? deriveSessionTitle(rawInput) : undefined) as string | undefined,
       }) || '';
     } else {
       sessionId = resolveStreamSessionId(null, activeSessionId) || '';
@@ -292,7 +290,7 @@ export function useSlashSend(
       return;
     }
     const sessMsgs = Array.isArray(sessLookup.messages) ? sessLookup.messages : [];
-    const isAiBusy = streamManagerRef.current?.has(sessionId) ?? false;
+    const isAiBusy = streamManagerRef.current?.hasStream(sessionId) ?? false;
 
     {
       const sess = sessLookup;

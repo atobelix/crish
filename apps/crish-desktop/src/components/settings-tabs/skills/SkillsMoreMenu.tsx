@@ -9,14 +9,14 @@ import { useLayoutStore } from '../../../store/layoutStore';
 import { Tooltip } from '../../Tooltip';
 import styles from '../../SkillsSettingsTab.module.css';
 import { errText } from './useSkillsSettings';
-import type { SkillItem } from '../../../api/skillsApi';
+import type { DesktopSkill } from '../../../api/skillsApi';
 
 interface SkillsMoreMenuProps {
   moreOpen: boolean;
   setMoreOpen: React.Dispatch<React.SetStateAction<boolean>>;
   moreMenuId: string;
-  skills: SkillItem[];
-  filtered: SkillItem[];
+  skills: DesktopSkill[];
+  filtered: DesktopSkill[];
   syncBusy: boolean;
   loading: boolean;
   discoverBusy: boolean;

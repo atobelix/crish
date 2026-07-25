@@ -26,9 +26,9 @@ export function toolResultBodyId(toolId: string): string {
 
 export function findAgentForTool(
   tc: { id?: string; name?: string; explanation?: string },
-  agents: SessionAgent[]
+  agents?: SessionAgent[]
 ): SessionAgent | null {
-  if (!agents.length) return null;
+  if (!agents || !agents.length) return null;
   const byTool = agents.find(
     (a) => a.parentToolCallId && a.parentToolCallId === tc.id
   );

@@ -9,9 +9,10 @@ export default defineWorkspace([
       retry: 2,
       testTimeout: 10000,
       include: [
-        'packages/*/src/**/*.test.ts',
-        'apps/crish-desktop/src/**/*.test.ts',
-        'apps/agent-workbench/src/**/*.test.ts',
+        'packages/*/src/**/*.test.{ts,tsx}',
+        'apps/crish-desktop/src/**/*.test.{ts,tsx}',
+        'apps/crish-desktop/src/__tests__/**/*.{ts,tsx}',
+        'apps/agent-workbench/src/**/*.test.{ts,tsx}',
       ],
       exclude: [
         '**/__tests__/e2e/**',
@@ -65,7 +66,7 @@ export default defineWorkspace([
       setupFiles: ['./vitest.setup.ts'],
       retry: 2,
       testTimeout: 30000,
-      include: ['**/__tests__/e2e/**/*.test.ts'],
+      include: ['**/__tests__/e2e/**/*.test.ts', 'tests/e2e/**/*.spec.ts', 'tests/e2e/**/*.test.ts'],
       exclude: ['**/node_modules/**', '**/dist/**'],
       coverage: {
         provider: 'v8',

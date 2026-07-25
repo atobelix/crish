@@ -211,6 +211,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           ref={btnRef}
           type="button"
           className={`${styles.sidebarFooterSettings}${open ? ` ${styles.isOpen}` : ''}`}
+          data-testid="settings-button"
           aria-label={triggerLabel}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -293,6 +294,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
               <button
                 type="button"
                 className={`${styles.sbQuickItem} sb-quick-item`}
+                data-testid={`quick-settings-${entry.id}`}
                 role="menuitem"
                 tabIndex={-1}
                 aria-label={entry.ariaLabel}

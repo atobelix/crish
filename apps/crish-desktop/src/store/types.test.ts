@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest';
-import { FileDiff } from './types';
+import type { FileDiff } from './types';
 
 describe('FileDiff / store types', () => {
   it.todo('should support provisional field');

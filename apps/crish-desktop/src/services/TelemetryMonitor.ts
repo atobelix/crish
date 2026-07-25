@@ -3,18 +3,18 @@ import { invokeResult } from '../api/tauriInvoke';
 export interface TelemetryLog {
   timestamp: number;
   type: 'action' | 'error';
-  actionName?: string;
-  durationMs?: number;
-  sessionId?: string;
-  errorStack?: string;
+  actionName?: string | undefined;
+  durationMs?: number | undefined;
+  sessionId?: string | undefined;
+  errorStack?: string | undefined;
   context?: any;
 }
 
 export class TelemetryMonitor {
   private static instance: TelemetryMonitor;
   private buffer: string[] = [];
-  private flushInterval: ReturnType<typeof setInterval> | null = null;
-  private disposed = false;
+  private flushInterval: any = null;
+  private _disposed = false;
   private errorHandler: ((e: ErrorEvent) => void) | null = null;
   private rejectionHandler: ((e: PromiseRejectionEvent) => void) | null = null;
   // Use absolute path for local disk storage mapped to workspace
@@ -35,7 +35,7 @@ export class TelemetryMonitor {
   }
 
   dispose(): void {
-    this.disposed = true;
+    this._disposed = true;
     if (this.flushInterval !== null) {
       clearInterval(this.flushInterval);
       this.flushInterval = null;

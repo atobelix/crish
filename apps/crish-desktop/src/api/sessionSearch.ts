@@ -168,14 +168,17 @@ export function textMatchesSearch(
 
 // ── 码点安全截断 / 摘录 ──────────────────────────────────────────────
 
-/** 按 Unicode 码点截断并可选追加 …（CJK / emoji 安全） */
+/** 按 Unicode 码点截断并可选追加 …（CJK / emoji 安全）。
+ *  结果码点数恒 ≤ maxCp（maxCp=1 时返回 "…"，maxCp=0/负/NaN/Infinity 回落到默认 72）。
+ */
 export function ellipsizeCodepoints(text: string, maxCp: number): string {
   const limit =
     Number.isFinite(maxCp) && maxCp > 0 ? Math.floor(maxCp) : SNIPPET_MAX_CP;
   const chars = Array.from(text);
   if (chars.length <= limit) return text;
-  const keep = Math.max(1, limit - 1);
-  return `${chars.slice(0, keep).join('')}…`;
+  // keep = limit - 1（为 …预留 1 码点）；limit=1 时 keep=0 → 仅返回 "…"
+  const keep = Math.max(0, limit - 1);
+  return keep > 0 ? `${chars.slice(0, keep).join('')}…` : '…';
 }
 
 /**
@@ -293,6 +296,7 @@ function matchToolCalls(
   let score = 0;
   let snippet: string | undefined;
   for (const tc of toolCalls || []) {
+    if (!tc) continue;
     const fields = [
       tc.name || '',
       trunc(tc.arguments),
@@ -310,7 +314,8 @@ function matchToolCalls(
 }
 
 /** 单条消息是否匹配（供消息列表高亮） */
-export function messageMatchesSearch(msg: SessionMessage, query: string): boolean {
+export function messageMatchesSearch(msg: SessionMessage | null | undefined, query: string): boolean {
+  if (!msg) return false;
   const tokens = tokenizeSearchQuery(query);
   if (!tokens.length) return false;
   if (textMatchesTokens(msg.text, tokens)) return true;
@@ -319,16 +324,17 @@ export function messageMatchesSearch(msg: SessionMessage, query: string): boolea
     return true;
   }
   for (const b of msg.blocks || []) {
-    if (b.type === 'text' && textMatchesTokens(b.content, tokens)) return true;
+    if (b && b.type === 'text' && textMatchesTokens(b.content, tokens)) return true;
   }
   return false;
 }
 
 function matchMessage(
-  msg: SessionMessage,
+  msg: SessionMessage | null | undefined,
   tokens: readonly string[],
   queryForSnippet: string,
 ): FieldHit {
+  if (!msg) return { hits: 0, score: 0 };
   let hits = 0;
   let score = 0;
   let snippet: string | undefined;
@@ -342,7 +348,7 @@ function matchMessage(
   take(hitField(msg.text, tokens, SEARCH_SCORE.messageText, queryForSnippet));
   take(hitField(msg.thinking, tokens, SEARCH_SCORE.thinking, queryForSnippet));
   for (const b of msg.blocks || []) {
-    if (b.type === 'text') {
+    if (b && b.type === 'text') {
       take(hitField(b.content, tokens, SEARCH_SCORE.messageBlock, queryForSnippet));
     }
   }

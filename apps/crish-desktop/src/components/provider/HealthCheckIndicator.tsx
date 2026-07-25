@@ -11,6 +11,8 @@ const STATUS_LABELS: Record<ProviderHealth["status"], string> = {
   degraded: "降级",
   down: "不可用",
   unknown: "未知",
+  ok: "健康",
+  error: "异常",
 };
 
 export function HealthCheckIndicator({ health }: HealthCheckIndicatorProps) {

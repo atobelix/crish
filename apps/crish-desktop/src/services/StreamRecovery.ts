@@ -490,7 +490,7 @@ export class StreamRecovery {
     } catch (e) {
       // 恢复失败：标记为 paused（下次扫描可重试）
       if (this.isTerminal(s)) {
-        return s.status === 'completed';
+        return (s.status as string) === 'completed';
       }
       s.status = 'paused';
       eventBus.emit(

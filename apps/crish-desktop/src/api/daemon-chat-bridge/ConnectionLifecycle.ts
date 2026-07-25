@@ -6,7 +6,7 @@ import { logInternalError, networkUserMessage } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { streamRecovery } from '../../services/StreamRecovery';
 import { normalizeStreamSessionId } from './handlers/eventUtils';
-import { StreamState, cleanupStreamState } from './handlers/streamState';
+import { type StreamState, cleanupStreamState } from './handlers/streamState';
 import { EventRouter } from './EventRouter';
 
 export async function ensureDaemonConnected(): Promise<{

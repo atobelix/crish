@@ -34,7 +34,7 @@ import {
   toolResultFields,
 } from './handlers/toolUtils';
 import { surfaceStreamFailure } from './BridgeErrorPolicy';
-import { StreamState } from './handlers/streamState';
+import type { StreamState } from './handlers/streamState';
 
 
 export class EventRouter {

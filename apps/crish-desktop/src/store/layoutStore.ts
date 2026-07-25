@@ -39,22 +39,9 @@ import type {
 } from './layout-helpers/store-types';
 import {
   DEFAULT_SETTINGS_TAB,
-  DEFAULT_UI_SIZE,
-  DEFAULT_WORKSPACE_ID,
-  UI_SIZE_IDS,
-  DEFAULT_SHELL_CHROME,
-  SHELL_CHROME_IDS,
-  SHELL_CHROME_STORAGE_KEY,
-  DEFAULT_TOKEN_USAGE,
-  DEMO_TOKEN_USAGE,
-  UI_SIZE_STORAGE_KEY,
-  TAB_MODE_STORAGE_KEY,
-  SETTINGS_TAB_IDS,
 } from './layout-helpers/store-types';
 import {
-  deserializeWorkspaceLayout,
   initStorePersistence,
-  serializeWorkspaceLayout,
   waitForStoreHydration,
 } from './layout-helpers/store-persistence';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
@@ -95,6 +82,8 @@ export {
 export {
   serializeWorkspaceLayout,
   deserializeWorkspaceLayout,
+  initStorePersistence,
+  waitForStoreHydration,
 } from './layout-helpers/store-persistence';
 
 export type {
@@ -288,6 +277,14 @@ export const useLayoutStore = create<LayoutStore>()(
   )
 );
 
+if (typeof window !== 'undefined') {
+  (window as any).useLayoutStore = useLayoutStore;
+  (window as any).__storeUpdateCount = 0;
+  useLayoutStore.subscribe(() => {
+    (window as any).__storeUpdateCount = ((window as any).__storeUpdateCount || 0) + 1;
+  });
+}
+
 // ── Layout state shape (state-only, excludes actions) ─────────────────────────
 
 export type LayoutStoreState = Pick<
@@ -343,3 +340,5 @@ export function waitForHydration(): Promise<void> {
 export function initLayoutStorePersistence(): () => void {
   return initStorePersistence(useLayoutStore as any);
 }
+
+export type { GroupState, AppSettings } from './types';

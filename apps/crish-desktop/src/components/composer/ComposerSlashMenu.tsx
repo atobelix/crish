@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import styles from '../ChatComposer.module.css';
-import { slashMenuPick } from '../api/resolveSlashCommand';
+import { slashMenuPick } from '../../api/resolveSlashCommand';
 import type { SlashCommandItem } from '../ChatComposer';
 
 export interface ComposerSlashMenuHandle {
@@ -19,17 +19,18 @@ interface ComposerSlashMenuProps {
   focusComposerTextarea: () => void;
 }
 
-export const ComposerSlashMenu = React.forwardRef<ComposerSlashMenuHandle, ComposerSlashMenuProps>(({
-  listboxId,
-  setChatInput,
-  slashMenuOpen,
-  setSlashMenuOpen,
-  slashSelectedIndex,
-  setSlashSelectedIndex,
-  filteredCommands,
-  onOpenSchedule,
-  focusComposerTextarea,
-}) => {
+export const ComposerSlashMenu = React.forwardRef<ComposerSlashMenuHandle, ComposerSlashMenuProps>((props, ref) => {
+  const {
+    listboxId,
+    setChatInput,
+    slashMenuOpen,
+    setSlashMenuOpen,
+    slashSelectedIndex,
+    setSlashSelectedIndex,
+    filteredCommands,
+    onOpenSchedule,
+    focusComposerTextarea,
+  } = props;
   const slashRootRef = useRef<HTMLDivElement>(null);
   const activeItemRef = useRef<HTMLDivElement | null>(null);
 
@@ -65,6 +66,22 @@ export const ComposerSlashMenu = React.forwardRef<ComposerSlashMenuHandle, Compo
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [slashMenuOpen, setSlashMenuOpen]);
+
+  const applySlashSelection = useCallback(
+    (cmd: string) => {
+      setSlashMenuOpen(false);
+      const result = slashMenuPick(cmd);
+      if (result.action === 'open-schedule') {
+        setChatInput('');
+        onOpenSchedule();
+        requestAnimationFrame(focusComposerTextarea);
+        return;
+      }
+      setChatInput(result.text);
+      requestAnimationFrame(focusComposerTextarea);
+    },
+    [focusComposerTextarea, onOpenSchedule, setChatInput, setSlashMenuOpen],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, chatInput: string): boolean | void => {
@@ -133,22 +150,6 @@ export const ComposerSlashMenu = React.forwardRef<ComposerSlashMenuHandle, Compo
     ref,
     () => ({ handleKeyDown }),
     [handleKeyDown],
-  );
-
-  const applySlashSelection = useCallback(
-    (cmd: string) => {
-      setSlashMenuOpen(false);
-      const result = slashMenuPick(cmd);
-      if (result.action === 'open-schedule') {
-        setChatInput('');
-        onOpenSchedule();
-        requestAnimationFrame(focusComposerTextarea);
-        return;
-      }
-      setChatInput(result.text);
-      requestAnimationFrame(focusComposerTextarea);
-    },
-    [focusComposerTextarea, onOpenSchedule, setChatInput, setSlashMenuOpen],
   );
 
   const optionId = (i: number) => `${listboxId}-opt-${i}`;

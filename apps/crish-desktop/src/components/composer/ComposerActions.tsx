@@ -4,7 +4,7 @@ import styles from '../ChatComposer.module.css';
 import { ComposePlusMenu } from '../ComposePlusMenu';
 import { PermissionModeMenu } from '../PermissionModeMenu';
 import { Tooltip } from '../settings/SettingsUI';
-import type { PermissionMode } from '../api/permissionModes';
+import type { PermissionMode } from '../../api/permissionModes';
 
 interface ComposerActionsProps {
   showPlusMenu: boolean;

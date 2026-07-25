@@ -1,16 +1,14 @@
 import { useEffect } from 'react';
 import { ShortcutService } from '../../services/ShortcutService';
 import {
-  archiveSession,
   branchSession,
   enterDraftMode,
   getSessionStoreState,
-  setActiveSessionId,
 } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import { getSessionById } from '../../store/sessionIndex';
 import { formatBranchUndoToast } from '../useToastQueue';
-import type { UseAppKeyboardOpts } from '../useAppKeyboard';
+import type { UseAppKeyboardOpts } from './keyboard-types';
 
 export function useKeyboardEditing(opts: UseAppKeyboardOpts): void {
   const { handleShowToast } = opts;
@@ -54,14 +52,7 @@ export function useKeyboardEditing(opts: UseAppKeyboardOpts): void {
             const forkTitle = `${activeSess.title} - 双击ESC分叉`;
             branchSession(activeSess.id, forkTitle);
             const newBranchId = getSessionStoreState().activeSessionId;
-            handleShowToast(formatBranchUndoToast(activeSess.title), () => {
-              if (newBranchId && newBranchId !== oldSessionId) {
-                archiveSession(newBranchId);
-              }
-              if (oldSessionId) {
-                setActiveSessionId(oldSessionId);
-              }
-            });
+            handleShowToast?.(formatBranchUndoToast(activeSess.title));
           }
           return;
         }

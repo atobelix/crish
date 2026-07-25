@@ -2,7 +2,6 @@ import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
-  MessageToolCallApprovalDecision,
 } from './types';
 import { getSessionById } from './sessionIndex';
 import { validateStatusTransition } from '../utils/StatusTransitionGuard';

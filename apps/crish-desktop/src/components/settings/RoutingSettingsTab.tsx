@@ -3,7 +3,7 @@ import { Plus, Trash2, GripVertical } from "lucide-react";
 import type { ModelRoute, TaskType, ModelRole } from "../../store/provider/types";
 import styles from "./RoutingSettingsTab.module.css";
 
-const DEFAULT_ROLES: ModelRole[] = ["primary", "fast", "editor", "embedding", "summarizer"];
+const DEFAULT_ROLES: ModelRole[] = ["primary", "fast", "editor", "embedding"];
 const DEFAULT_TASKS: TaskType[] = ["chat", "code", "planning", "vision", "embedding", "tool_use"];
 
 export function RoutingSettingsTab() {

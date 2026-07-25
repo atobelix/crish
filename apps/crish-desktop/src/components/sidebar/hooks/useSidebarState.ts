@@ -196,7 +196,7 @@ export function useSidebarState(
     switch (action) {
       case 'open-current': setActiveSessionId(sessionId); break;
       case 'open-split': setActiveSessionId(sessionId); clearAgentPanelFocus(); splitScreenWorkspace(sessionId); break;
-      case 'open-new': openSessionInNewWindow(targetSession); break;
+      case 'open-new': openSessionInNewWindow(targetSession as any); break;
       case 'rename': setRenamingSessionId(sessionId); break;
       case 'pin': pinSession(sessionId); break;
       case 'unpin': unpinSession(sessionId); break;

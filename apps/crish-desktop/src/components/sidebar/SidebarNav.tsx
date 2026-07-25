@@ -6,7 +6,7 @@ export interface SidebarNavProps {
   activeNav: string;
   onNewSession: () => void;
   onOpenScheduled: () => void;
-  searchInput?: string;
+  searchInput?: string | undefined;
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
@@ -23,6 +23,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       <button
         type="button"
         className={styles.navItem}
+        data-testid="new-session-button"
         onClick={onNewSession}
       >
         {/* 自定义新建对话图标：匹配顶部侧边栏按钮的软圆角 (rx=4.5)，且右上角留出缺口避免与画笔重合 */}
@@ -47,6 +48,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       <button
         type="button"
         className={`${styles.navItem} ${activeNav === 'scheduled' ? styles.isActive : ''}`}
+        data-testid="sidebar-nav-scheduled"
         onClick={onOpenScheduled}
       >
         <Lucide.Clock size={16} strokeWidth={1.75} />

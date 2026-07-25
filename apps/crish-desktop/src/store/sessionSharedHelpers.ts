@@ -1,4 +1,3 @@
-import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import {
   isDefaultSessionTitle,
   isEmptyShellSession,

@@ -79,14 +79,15 @@ export function handleDenyTool(
   transport: ApprovalHandlerTransport,
   ws?: WebSocket
 ): void {
-  const resolved = approvalQueue.resolve(msg.toolCallId, "denied");
+  const reason = msg.reason?.trim() || "user-denied";
+  const resolved = approvalQueue.resolve(msg.toolCallId, "denied", undefined, reason);
   if (resolved) {
-    getDaemonLogger().info('Tool denied', { module: 'approval-handlers', toolCallId: msg.toolCallId });
+    getDaemonLogger().info('Tool denied', { module: 'approval-handlers', toolCallId: msg.toolCallId, reason });
     transport.broadcast({
       type: "approval-resolved",
       toolCallId: msg.toolCallId,
       decision: "denied",
-      reason: "user-denied",
+      reason,
     });
     return;
   }

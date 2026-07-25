@@ -62,7 +62,7 @@ export const McpServerList: React.FC<McpServerListProps> = React.memo(({
 
   const filteredServers = React.useMemo(() => {
     const q = filter.trim().toLowerCase();
-    let list = isDemo ? demoServers : servers;
+    let list: any[] = isDemo ? demoServers : servers;
     if (q) {
       list = list.filter((s: any) =>
         s.name?.toLowerCase().includes(q) || s.id?.toLowerCase().includes(q));

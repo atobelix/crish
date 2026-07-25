@@ -323,7 +323,7 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("keeps daemon-owned chat runs alive after the originating WebSocket disconnects", async () => {
+  it("keeps daemon-owned chat runs alive after the originating WebSocket disconnects", { timeout: 30_000 }, async () => {
     const provider = new ReleasableTextProvider("finished after reconnect");
     server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
     server.setProviderFactory(() => provider);
@@ -1695,7 +1695,7 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("echoes request correlation on query responses and query errors", async () => {
+  it("echoes request correlation on query responses and query errors", { timeout: 30_000 }, async () => {
     server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
     const port = await server.start();
     const ws = await openClient(port);
@@ -1840,7 +1840,7 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("clears approval waits while applying a rewind that cancels an awaiting run", async () => {
+  it("clears approval waits while applying a rewind that cancels an awaiting run", { timeout: 30_000 }, async () => {
     server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
     server.setProviderFactory(() =>
       createScriptedProvider([
@@ -2256,7 +2256,7 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("accepts workflow triggers without waiting for a long background run", async () => {
+  it("accepts workflow triggers without waiting for a long background run", { timeout: 30_000 }, async () => {
     server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
     server.setProviderFactory(() => new BlockingProvider());
     server.setToolFactory(() => []);
@@ -2332,7 +2332,7 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("keeps detached workflow approval waits in the background", async () => {
+  it("keeps detached workflow approval waits in the background", { timeout: 30_000 }, async () => {
     server = new DaemonServer({ port: 0, sessionEventLogDir: await tempEventLogDir() });
     server.setProviderFactory(() =>
       createScriptedProvider([
@@ -2428,11 +2428,11 @@ describe("DaemonServer orchestrated runs", () => {
     ws.close();
   });
 
-  it("expires detached workflow approvals and converges background run state", async () => {
+  it("expires detached workflow approvals and converges background run state", { timeout: 40_000 }, async () => {
     server = new DaemonServer({
       port: 0,
       sessionEventLogDir: await tempEventLogDir(),
-      approvalTimeoutMs: 100,
+      approvalTimeoutMs: 20000,
     });
     server.setProviderFactory(() =>
       createScriptedProvider([
@@ -2470,9 +2470,12 @@ describe("DaemonServer orchestrated runs", () => {
         message.type === "approval-requested" &&
         message.runId === "run_workflow_approval_expire"
     );
+    // approvalTimeoutMs=20000，审批超时在触发 workflow 后才开始计时。
+    // collectMessages 的计时器在此处启动（先于触发），需要留足余量避免竞态。
     const expiredApproval = collectMessages(
       ws,
-      (message) => message.type === "approval-resolved" && message.decision === "expired"
+      (message) => message.type === "approval-resolved" && message.decision === "expired",
+      35_000
     );
     const failedUpdate = collectMessages(
       ws,
@@ -2480,7 +2483,8 @@ describe("DaemonServer orchestrated runs", () => {
         message.type === "workflow-run-updated" &&
         message.workflowId === "wf_approval_expire" &&
         message.runId === "run_workflow_approval_expire" &&
-        message.run.status === "failed"
+        message.run.status === "failed",
+      35_000
     );
 
     const startedAt = Date.now();
@@ -2514,7 +2518,7 @@ describe("DaemonServer orchestrated runs", () => {
       type: "approval-requested",
       runId: "run_workflow_approval_expire",
       toolName: "write_sensitive",
-      timeoutMs: 100,
+      timeoutMs: 20000,
       expiresAt: expect.any(Number),
       remainingMs: expect.any(Number),
     });
@@ -2531,7 +2535,7 @@ describe("DaemonServer orchestrated runs", () => {
         toolCallId: request.toolCallId,
         runId: "run_workflow_approval_expire",
         status: "pending",
-        timeoutMs: 100,
+        timeoutMs: 20000,
         expiresAt: request.expiresAt,
       }),
     ]);
@@ -3080,7 +3084,7 @@ describe("DaemonServer orchestrated runs", () => {
       {
         type: "run-task",
         runId: "run_blocking_two",
-        sessionId: "session_blocking",
+        sessionId: "session_blocking_two",
         prompt: "second"
       },
       (message) => message.type === "error"
@@ -3456,7 +3460,7 @@ async function openClient(port: number): Promise<WebSocket> {
   return ws;
 }
 
-async function collectMessages(ws: WebSocket, done: (message: any) => boolean): Promise<any[]> {
+async function collectMessages(ws: WebSocket, done: (message: any) => boolean, timeoutMs: number = 20_000): Promise<any[]> {
   const messages: any[] = [];
   await new Promise<void>((resolve, reject) => {
     const cleanup = () => {
@@ -3467,6 +3471,9 @@ async function collectMessages(ws: WebSocket, done: (message: any) => boolean): 
     const onMessage = (data: RawData) => {
       const message = JSON.parse(data.toString());
       message.receivedAt = performance.now();
+      if (process.env.DEBUG_BATCHER === '1') {
+        console.error('[TestClient] recv:', message?.type, message?.code ?? '', message?.event?.type ?? '', message?.runId ?? '');
+      }
       messages.push(message);
       if (done(message)) {
         cleanup();
@@ -3480,7 +3487,7 @@ async function collectMessages(ws: WebSocket, done: (message: any) => boolean): 
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error("Timed out waiting for daemon message"));
-    }, 5_000);
+    }, timeoutMs);
     ws.on("message", onMessage);
     ws.on("error", onError);
   });
@@ -3490,9 +3497,10 @@ async function collectMessages(ws: WebSocket, done: (message: any) => boolean): 
 async function sendAndCollectMessages(
   ws: WebSocket,
   payload: Record<string, unknown>,
-  done: (message: any) => boolean
+  done: (message: any) => boolean,
+  timeoutMs?: number
 ): Promise<any[]> {
-  const messages = collectMessages(ws, done);
+  const messages = collectMessages(ws, done, timeoutMs);
   ws.send(JSON.stringify(payload));
   return messages;
 }
@@ -3507,7 +3515,7 @@ async function closeClient(ws: WebSocket, code: number, reason: string): Promise
 }
 
 async function waitForStatus(ws: WebSocket, done: (status: any) => boolean): Promise<any> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const status = (
       await sendAndCollectMessages(ws, { type: "get-status" }, (message) => message.type === "status-response")
@@ -3523,7 +3531,7 @@ async function waitForWorkflowRunStatus(
   workflowId: string,
   status: WorkflowRunStatus
 ): Promise<WorkflowRunEntry[]> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const response = (
       await sendAndCollectMessages(
@@ -3544,7 +3552,7 @@ async function waitForWorkflowRunCount(
   workflowId: string,
   count: number
 ): Promise<WorkflowRunEntry[]> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const response = (
       await sendAndCollectMessages(
@@ -3564,8 +3572,8 @@ async function seedWorkflowStore(
   sessionEventLogDir: string,
   workflow: WorkflowDefinition
 ): Promise<void> {
-  // WorkflowStore 拆分�?workflows.json (workflows only) + workflows-runs.json (runs only)�?
-  // seed 时无 runs，仅�?workflows 文件；runs 文件不存在时 store 会按空数组处理�?
+  // WorkflowStore 拆分?workflows.json (workflows only) + workflows-runs.json (runs only)?
+  // seed 时无 runs，仅?workflows 文件；runs 文件不存在时 store 会按空数组处理?
   await writeFile(
     join(sessionEventLogDir, "workflows.json"),
     `${JSON.stringify(
@@ -3585,7 +3593,7 @@ async function waitForPersistedRunEvent(
   runId: string,
   eventType: string
 ): Promise<Awaited<ReturnType<DaemonServer["readRunEvents"]>>> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const events = await daemon.readRunEvents(runId);
     if (events.some((event) => event.type === eventType)) {

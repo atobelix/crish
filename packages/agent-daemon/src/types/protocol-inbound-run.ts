@@ -53,6 +53,7 @@ export interface ApproveToolMessage {
 export interface DenyToolMessage {
   type: "deny-tool";
   toolCallId: string;
+  reason?: string;
 }
 
 export interface CancelRunMessage {

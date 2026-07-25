@@ -169,7 +169,9 @@ async function main(): Promise<void> {
   await runDev(args);
 }
 
-if (require.main === module) {
+import { fileURLToPath } from "node:url";
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch(err => {
     console.error("Fatal:", (err as Error).message);
     process.exit(1);

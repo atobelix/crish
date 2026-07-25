@@ -50,6 +50,7 @@ export const DENY_TOOL_FIELDS = [
   'type',
   ...CORRELATION_FIELDS,
   'toolCallId',
+  'reason',
 ] as const;
 export const CANCEL_RUN_FIELDS = [
   'type',

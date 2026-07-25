@@ -21,24 +21,24 @@
  * 这是「读取侧更宽容」的合法设计。
  */
 type TitleMessage = {
-  sender?: string;
-  text?: string;
+  sender?: string | undefined;
+  text?: string | undefined;
   /** 有工具调用亦视为实质内容（空 text 的 tool 回合） */
-  toolCalls?: unknown[] | null;
+  toolCalls?: unknown[] | null | undefined;
   /** 仅有思考内容亦视为实质（水合半成品勿当空壳剪掉） */
-  thinking?: string | null;
+  thinking?: string | null | undefined;
 };
-type TitleSession = { title?: string | null; messages?: TitleMessage[] | null };
+type TitleSession = { title?: string | null | undefined; messages?: TitleMessage[] | null | undefined };
 
 /** 空壳判定所需的最小会话形状 */
 export type ShellSessionLike = {
-  id?: string;
-  title?: string | null;
-  folder?: string;
-  messages?: TitleMessage[] | null;
-  agents?: unknown[] | null;
-  isPinned?: boolean;
-  isArchived?: boolean;
+  id?: string | undefined;
+  title?: string | null | undefined;
+  folder?: string | undefined;
+  messages?: TitleMessage[] | null | undefined;
+  agents?: unknown[] | null | undefined;
+  isPinned?: boolean | undefined;
+  isArchived?: boolean | undefined;
 };
 
 /**

@@ -59,7 +59,7 @@ pub async fn core_search_files(
         let matcher = FuzzyMatcher::new(false);
         let files = std::sync::Arc::new(files);
         if files.len() >= SEARCH_PARALLEL_THRESHOLD {
-            search_files_parallel(&query, files, limit, &matcher)
+            search_files_parallel(&query, &files, limit, &matcher)
         } else {
             search_files(&query, &files, limit, &matcher)
         }
@@ -99,6 +99,7 @@ pub async fn core_compact_messages(
         let mut msgs = messages;
         engine.compact(&mut msgs);
         CompactionResult {
+            compacted: false,
             messages: msgs,
             tokens_consumed: 0,
             cache_hit_rate_optimized: false,
@@ -133,7 +134,7 @@ pub async fn core_compute_diff(
     old_text: String,
     new_text: String,
 ) -> Result<DiffResult, String> {
-    let result = tokio::task::spawn_blocking(move || DiffEngine.diff(&old_text, &new_text))
+    let result = tokio::task::spawn_blocking(move || DiffEngine::diff(&old_text, &new_text))
         .await
         .map_err(|e| format!("diff task failed: {e}"))?;
     Ok(result)

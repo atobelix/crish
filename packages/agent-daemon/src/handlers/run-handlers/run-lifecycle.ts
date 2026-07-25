@@ -559,7 +559,30 @@ export class RunHandler {
           continue;
         }
 
-        await boundaryContext.observe(orchestratorEvent, event);
+        // Boundary emission 是观察者：其失败（如 manifest 文件操作异常）绝不应该
+        // 中断被观察的主 run 流程，否则会导致 run-terminal 事件丢失、客户端超时。
+        // 此处捕获并记录所有异常，主流程继续推进。
+        try {
+          await boundaryContext.observe(orchestratorEvent, event);
+        } catch (boundaryError) {
+          getDaemonLogger().warn('Boundary emission failed; run continues', {
+            module: 'RunHandler',
+            runId: input.runId,
+            sessionId: input.sessionId,
+            eventType: event.type,
+            err: toLogErr(boundaryError),
+          });
+          this.options.recordDiagnostic?.({
+            code: 'BOUNDARY_EMISSION_FAILED',
+            message: errorMessage(boundaryError),
+            source: 'daemon',
+            severity: 'warning',
+            ...(boundaryError instanceof Error && boundaryError.stack !== undefined
+              ? { detail: boundaryError.stack }
+              : {}),
+            metadata: { runId: input.runId, sessionId: input.sessionId, eventType: event.type },
+          });
+        }
 
         this.options.subagentBridge.processAgentEvent(event, input.runId);
 
@@ -1041,6 +1064,10 @@ class ConversationBoundaryEmissionContext {
   async dispose(): Promise<void> {
     await this.runtimeStore?.close();
     this.runtimeStore = undefined;
+    // 显式关闭 manifest 服务的 JsonlAppendBatcher 句柄，避免
+    // FileHandle 被 GC 回收时触发 DEP0137 警告及潜在的资源泄漏。
+    await this.boundaryManifest.close();
+    await this.checkpointManifest.close();
   }
 
   private getRuntimeStore(): JsonlSessionStore {

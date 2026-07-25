@@ -20,21 +20,11 @@ type WorkspaceStoreData = WorkspaceStoreSlice & {
   activeDiffSource: FileDiff | null;
 };
 
-type WorkspaceStore = WorkspaceStoreData & WorkspaceActions & {
+export type WorkspaceStore = WorkspaceStoreData & WorkspaceActions & {
   setActiveDiffSource: (diff: FileDiff | null) => void;
   setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
   pushDiffFile: (diff: FileDiff) => void;
   removeDiffFile: (filePath: string) => void;
-};
-
-const _workspaceData: WorkspaceStoreData = {
-  workspaces: _initialWorkspaces,
-  activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
-  tabModeEnabled: true,
-  draggedTab: null,
-  dropPreview: null,
-  diffFiles: [],
-  activeDiffSource: null,
 };
 
 export const useWorkspaceStore = useLayoutStore;

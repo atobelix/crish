@@ -162,10 +162,15 @@ export class ShortcutService {
     );
   }
 
+  private isSequenceBinding(binding: string): boolean {
+    return !binding.includes('+') && binding.trim().includes(' ');
+  }
+
   /** 尝试匹配序列键绑定 */
   private matchSequenceBinding(): { actionId: string; meta: ShortcutMeta } | null {
     const bufferStr = this.sequenceBuffer.map(b => b.key).join(' ');
     for (const [actionId, { binding, meta }] of this.actions) {
+      if (!this.isSequenceBinding(binding)) continue;
       if (binding === bufferStr) {
         this.sequenceBuffer = [];
         return { actionId, meta };
@@ -178,6 +183,7 @@ export class ShortcutService {
   private isSequencePrefix(): boolean {
     const bufferStr = this.sequenceBuffer.map(b => b.key).join(' ');
     for (const { binding } of this.actions.values()) {
+      if (!this.isSequenceBinding(binding)) continue;
       const parts = binding.split(/\s+/);
       if (parts.length <= 1) continue;
       const prefix = parts.slice(0, this.sequenceBuffer.length).join(' ');
@@ -193,7 +199,7 @@ export class ShortcutService {
   private matchSingleKeyBinding(e: KeyboardEvent): { actionId: string; meta: ShortcutMeta } | null {
     const matches: Array<{ actionId: string; meta: ShortcutMeta }> = [];
     for (const [actionId, { binding, meta }] of this.actions) {
-      if (binding.includes(' ')) continue;
+      if (this.isSequenceBinding(binding)) continue;
       if (!this.isInContext(meta.context ?? 'global')) continue;
       if (this.matchSingleKey(e, binding)) {
         matches.push({ actionId, meta });

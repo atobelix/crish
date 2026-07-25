@@ -45,6 +45,14 @@ export const EMPTY_INSTALL_HINT =
 export const EMPTY_FILTER_HINT = '当前筛选无匹配技能，可清除筛选或调整条件';
 
 export type ScopeFilter = string;
+export type SkillScope = string;
+export type CreateMode = 'global' | 'project';
+export type BatchConfirm = { action: 'enable' | 'disable' | 'delete'; count: number } | null;
+export type DiscoverPick = { dir: string; name: string } | null;
+export { formatEngineDegradeToast } from '../../hooks/useToastQueue';
+export function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 export const SCOPE_ALL = 'all';
 export const SCOPE_GLOBAL = 'global';
 
@@ -64,9 +72,6 @@ export function skillSlashCmd(name: string): string {
   return `/skill:${slug || name.trim()}`;
 }
 
-export function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   const [skills, setSkills] = useState<DesktopSkill[]>([]);

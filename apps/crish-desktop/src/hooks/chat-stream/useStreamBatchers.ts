@@ -76,8 +76,7 @@ export function useStreamBatchers(): StreamBatcherRefs {
         const existing = getSessionById(sessionId)
           ?.messages?.find((m) => m.id === messageId)
           ?.toolCalls?.find((t) => t.id === toolId);
-        const updates = { ...patch };
-        delete updates.id;
+        const { id: _id, ...updates } = patch;
         if (existing) {
           live.updateMessageToolCall(sessionId, messageId, toolId, updates);
         } else {

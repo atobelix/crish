@@ -4,7 +4,6 @@ import {
 } from '@crish/shared-utils/browser';
 import type { Settings, CronJob, McpServer, ProviderInfo } from '../../api/clientApi';
 import {
-  loadCommandPermissions,
   addCommandPermission as persistAddCommandPermission,
   removeCommandPermission as persistRemoveCommandPermission,
   saveCommandPermissions,
@@ -16,15 +15,14 @@ import {
   type PermissionMode,
 } from '../../api/permissionModes';
 import {
-  DEFAULT_SHELL_CHROME,
   SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
+  type ShellChromeMode,
 } from '../../api/shellChrome';
 import type { FileDiff, SettingsTabType } from '../types';
 import { appendTerminalLine, upsertDiffFile } from './diff-selectors';
 import { collapseToolColumnToTabs } from './ui-selectors';
 import {
-  finiteNumber,
   isSettingsTabType,
   parseSettingsTab,
   parseUiSize,
@@ -32,7 +30,6 @@ import {
   sanitizeTokenUsage,
 } from './store-initializers';
 import {
-  DEFAULT_SETTINGS_TAB,
   TAB_MODE_STORAGE_KEY,
   UI_SIZE_STORAGE_KEY,
   type ActiveWorkerState,
@@ -69,7 +66,7 @@ export function createLayoutCoreActions(
     removeDiffFile: (filePath: string) =>
       set((state) => {
         const path = filePath || '';
-        state.diffFiles = state.diffFiles.filter((f) => f.filePath !== path);
+        state.diffFiles = state.diffFiles.filter((f: FileDiff) => f.filePath !== path);
         if (state.activeDiffSource?.filePath === path) {
           state.activeDiffSource = state.diffFiles[0] || null;
         }
@@ -144,7 +141,7 @@ export function createLayoutCoreActions(
         }
 
         state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map(
-          (w) => ({
+          (w: ActiveWorkerState) => ({
             id: w.id,
             taskName: w.taskName,
             elapsedSeconds: Math.max(
@@ -156,7 +153,7 @@ export function createLayoutCoreActions(
 
         if (data.activeWorkers) {
           const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-            (w) => !state.killedWorkerIds.includes(w.id)
+            (w: ActiveWorkerState) => !state.killedWorkerIds.includes(w.id)
           );
           state.activeWorkers = [
             ...live,
@@ -221,8 +218,8 @@ export function createLayoutCoreActions(
         void _taskName;
         if (!id) return;
         state.manuallyTriggeredWorkers =
-          state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
-        state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
+          state.manuallyTriggeredWorkers.filter((w: ActiveWorkerState) => w.id !== id);
+        state.activeWorkers = state.activeWorkers.filter((w: ActiveWorkerState) => w.id !== id);
         if (
           !state.killedWorkerIds.includes(id) &&
           state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4

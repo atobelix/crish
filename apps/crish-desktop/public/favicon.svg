@@ -1,14 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
-    <rect width="200" height="200" rx="44" fill="#0D0D10"/>
-    <!-- 优化版星芒六粗线条：增强小尺寸/任务栏辨识度 -->
-    <g fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M 100 120 L 26 120" />
-        <path d="M 100 120 L 174 120" />
-        <path d="M 100 120 L 54 44" />
-        <path d="M 100 120 L 146 44" />
-        <path d="M 100 120 L 78 176" />
-        <path d="M 100 120 L 122 176" />
-    </g>
-    <!-- 能量绿点：放大半径以确保在16px超小分辨率下清晰可见 -->
-    <circle cx="100" cy="34" r="20" fill="#10B981" />
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="100" cy="34" rx="22" ry="22" fill="#10B981" />
+  <g fill="none" stroke="#F4F4F5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 100 120 L 20 120" />
+    <path d="M 100 120 L 180 120" />
+    <path d="M 100 120 L 52 34" />
+    <path d="M 100 120 L 148 34" />
+    <path d="M 100 120 L 76 178" />
+    <path d="M 100 120 L 124 178" />
+  </g>
 </svg>

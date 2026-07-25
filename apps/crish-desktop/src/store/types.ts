@@ -14,6 +14,10 @@
  * 设置侧栏 tab id — store / openSettings / SettingsPanel 共用，
  * 避免 App 侧 `as SettingsTabType` 与 string 漂移。
  */
+import type { Settings } from '../api/clientApi';
+export type AppSettings = Settings;
+export type GroupState = { id: string; cards: any[]; activeCardId: string | null };
+
 export type SettingsTabType =
   | 'profile'
   | 'appearance'
@@ -222,26 +226,28 @@ export interface MessageToolCall {
   id: string;
   name: string;
   /** JSON 或原始参数串（以引擎/工具上报为准） */
-  arguments: string;
+  arguments?: string | undefined;
   status: MessageToolCallStatus;
-  output?: string;
-  diffs?: FileDiff[];
-  explanation?: string;
+  output?: string | undefined;
+  diffs?: FileDiff[] | undefined;
+  explanation?: string | undefined;
   /** approval-requested 带来的后端风险元数据 */
-  approvalMeta?: MessageToolApprovalMeta;
+  approvalMeta?: MessageToolApprovalMeta | undefined;
   /**
    * 用户审批决定（与 status 解耦）。
    * 仅在 status === 'pending_approval' 后用户已响应时存在；
    * undefined 表示未走过审批路径或用户尚未响应。
    * 调用方据此区分「拒绝」与「执行失败」两种语义。
    */
-  approvalDecision?: MessageToolCallApprovalDecision;
+  approvalDecision?: MessageToolCallApprovalDecision | undefined;
   /** 开始执行时刻（epoch ms） */
-  startedAt?: number;
+  startedAt?: number | undefined;
+  finishedAt?: number | undefined;
+  durationMs?: number | undefined;
   /** 完成时刻（epoch ms） */
-  completedAt?: number;
+  completedAt?: number | undefined;
   /** 同一轮并行调用的 turn 标识 */
-  turnId?: string;
+  turnId?: string | undefined;
 }
 
 /**
@@ -336,29 +342,29 @@ export interface SessionMessageInput {
 export interface SessionMessage {
   id: string;
   sender: MessageSender;
-  text?: string;
+  text?: string | undefined;
   /** 流式思考过程，与正式正文分离，避免互相覆盖 */
-  thinking?: string;
+  thinking?: string | undefined;
   /** epoch ms */
   timestamp: number;
-  toolCalls?: MessageToolCall[];
-  status?: SessionMessageStatus;
+  toolCalls?: MessageToolCall[] | undefined;
+  status?: SessionMessageStatus | undefined;
   /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */
-  precomputedHtml?: string;
+  precomputedHtml?: string | undefined;
   /**
    * 工具调用结果回执：本消息作为某些 toolCall 的结果时，
    * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。
    */
-  toolCallResults?: SessionMessageToolCallResult[];
+  toolCallResults?: SessionMessageToolCallResult[] | undefined;
   /**
    * 时间线：按发生顺序交错 text / tool_call。
    * 流式累计正文用 streamTextOffset 切分到当前 text 段。
    */
-  blocks?: MessageTimelineBlock[];
+  blocks?: MessageTimelineBlock[] | undefined;
   /** 上一工具插入时 text 的长度，用于把累计正文切成段 */
-  streamTextOffset?: number;
+  streamTextOffset?: number | undefined;
   /** 思考耗时（秒或 ms，由 setSessionMessageStatus 写入侧约定） */
-  thinkingTime?: number;
+  thinkingTime?: number | undefined;
 }
 
 /**
@@ -389,11 +395,11 @@ export interface SessionAgent {
   /** 启动时刻 epoch ms */
   startedAt: number;
   /** 结束时刻 epoch ms；运行中缺省 */
-  endedAt?: number;
+  endedAt?: number | undefined;
   /** 嵌套深度：0=主会话直接子 agent，n=第 n+1 级嵌套子 agent */
-  depth: number;
+  depth?: number | undefined;
   /** 从根 agent 到当前 agent 的 id 路径链（含自身），用于树结构追踪 */
-  subagentPath: string[];
+  subagentPath?: string[] | undefined;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   type AuthFlowState,
 } from "../../api/providerAuth";
 import { AccountCard } from "../accounts/AccountCard";
+import { Tooltip } from "./SettingsUI";
 import styles from "./AccountSettingsTab.module.css";
 
 const CHECK_INTERVAL = 60000;
@@ -25,12 +26,12 @@ export function AccountSettingsTab() {
   const [authFlow, setAuthFlow] = React.useState<AuthFlowState>({ stage: "idle" });
   const [manualCode, setManualCode] = React.useState("");
   const [exchangeError, setExchangeError] = React.useState("");
-  const [flowStartTime, setFlowStartTime] = React.useState(0);
+
+  const flowStartTime = (authFlow.stage === "opening-browser" || authFlow.stage === "exchanging-code") ? Date.now() : 0;
 
   const handleAddChatGPT = () => {
     setManualCode("");
     setExchangeError("");
-    setFlowStartTime(Date.now());
     setAuthFlow({ stage: "preparing" });
     startOAuthFlow({ onStateChange: setAuthFlow }).then(result => {
       if (result) {
@@ -102,12 +103,15 @@ export function AccountSettingsTab() {
     if (!account || account.provider !== "chatgpt") return;
     const result = await refreshChatGPTToken(account);
     if (result) {
-      updateAccount(id, {
+      const patch: Partial<Account> = {
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
         status: "active",
-      });
+      };
+      if (result.refreshToken) {
+        patch.refreshToken = result.refreshToken;
+      }
+      updateAccount(id, patch);
     }
   };
 
@@ -137,9 +141,9 @@ export function AccountSettingsTab() {
       };
       const frame = requestAnimationFrame(tick);
       return () => cancelAnimationFrame(frame);
-    } else {
-      setTimeLeft(0);
     }
+    setTimeLeft(0);
+    return undefined;
   }, [flowStartTime, authFlow.stage]);
 
   React.useEffect(() => {

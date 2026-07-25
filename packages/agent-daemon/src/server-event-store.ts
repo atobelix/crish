@@ -43,6 +43,7 @@ export class DaemonEventStore implements OrchestratorEventStore {
 
   async close(): Promise<void> {
     await this.delegate.close();
+    if (this._failure) throw this._failure;
   }
 
   installSignalHandlers(): () => void {

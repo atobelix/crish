@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { emitUiEvent, onUiEvent } from '../api/uiEvents';
+import { onUiEvent } from '../api/uiEvents';
 
 export type PopoverPlacement =
   | 'bottom-start'

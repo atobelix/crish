@@ -28,6 +28,18 @@ interface SkillCardListProps {
   handlePickExtra: () => Promise<void>;
   clearFilters: () => void;
   setCreateMode: React.Dispatch<React.SetStateAction<'none' | 'paths' | 'manual'>>;
+  syncBusy?: boolean | undefined;
+  discoverBusy?: boolean | undefined;
+  enableCommands?: boolean | undefined;
+  setEnableCommands?: ((v: boolean) => void) | undefined;
+  batchConfirm?: 'none' | 'enabled' | 'disabled' | null | undefined;
+  batchBusy?: boolean | undefined;
+  batchEnableCount?: number | undefined;
+  batchDisableCount?: number | undefined;
+  onShowToast?: ((msg: string) => void) | undefined;
+  handleSyncAll?: (() => void) | undefined;
+  refresh?: (() => void) | undefined;
+  runBatchActivation?: ((confirm: 'enabled' | 'disabled') => Promise<void>) | undefined;
 }
 
 export const SkillCardList: React.FC<SkillCardListProps> = ({

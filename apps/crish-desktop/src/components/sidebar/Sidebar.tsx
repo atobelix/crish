@@ -1,7 +1,6 @@
 import React, { memo } from 'react';
 import { Menu } from 'lucide-react';
 import styles from '../Sidebar.module.css';
-import { Tooltip } from '../settings/SettingsUI';
 import { SidebarNav } from './SidebarNav';
 import { SidebarSessionList } from './SidebarSessionList';
 import { SidebarFooter } from './SidebarFooter';

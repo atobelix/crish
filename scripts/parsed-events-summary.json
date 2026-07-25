@@ -1,0 +1,5118 @@
+[
+  {
+    "file": "apps\\crish-desktop\\src\\components\\accounts\\AccountCard.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 63,
+        "snippet": "onClick={handleRefresh}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 72,
+        "snippet": "onClick={() => onRemove(account.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\accounts\\AccountStatusIndicator.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 75,
+        "snippet": "onClick={handleClick}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 78,
+        "snippet": "onKeyDown={handleClick ? (e) => { if (e.key === \"Enter\") handleClick(); } : undefined}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\AgentCard.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 190,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 251,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 469,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 521,
+        "snippet": "onClick={() => hookHandleStop(agent.summary)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 533,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 629,
+        "snippet": "onChange={setInput}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\AgentTeamBoard.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onKeyDown",
+        "lineNum": 383,
+        "snippet": "onKeyDown={onListKeyDown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 447,
+        "snippet": "onClick={() => select(a.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\AppErrorBoundary.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 238,
+        "snippet": "onClick={this.reload}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 281,
+        "snippet": "onClick={this.dismiss}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 289,
+        "snippet": "onClick={this.handleClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 297,
+        "snippet": "onClick={this.reload}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 321,
+        "snippet": "onClick={this.dismiss}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 328,
+        "snippet": "onClick={this.reload}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ApprovalAskCard.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 512,
+        "snippet": "onChange={(e) => setNote(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 530,
+        "snippet": "onClick={disarm}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 543,
+        "snippet": "onClick={() => fireAllow(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 559,
+        "snippet": "onClick={handleDeny}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 570,
+        "snippet": "onClick={() => fireAllow(false)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\card-panel\\CardPanelHeader.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 261,
+        "snippet": "onClick={() => handleTabClick(c.id)}"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 262,
+        "snippet": "onPointerDown={(e) => handleTabPointerDown(e, c.id)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 263,
+        "snippet": "onKeyDown={(e) => onTabKeyDown(e, c.id, index)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 285,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 289,
+        "snippet": "onPointerDown={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 290,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 313,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 348,
+        "snippet": "onKeyDown={onAddMenuKeyDown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 358,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\card-panel\\CardPanelLayout.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 101,
+        "snippet": "onClick={onOpenOverview}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\CardPanel.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChangeOverviewCard.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onKeyDown",
+        "lineNum": 290,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 301,
+        "snippet": "onClick={() => setOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 347,
+        "snippet": "onClick={(e) => void acceptAll(e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 359,
+        "snippet": "onClick={(e) => rejectAll(e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 371,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 392,
+        "snippet": "onClick={dismissErr}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 424,
+        "snippet": "onClick={() => onOpenDiff(f)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 452,
+        "snippet": "onClick={(e) => void acceptOne(f, e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 463,
+        "snippet": "onClick={(e) => rejectOne(f, e)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-card\\ChatComposerWrapper.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-card\\ChatHeader.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-card\\ChatHeaderControls.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onMouseDown",
+        "lineNum": 144,
+        "snippet": "onMouseDown={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-composer\\ComposerAttachmentBar.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 41,
+        "snippet": "onClick={() => onRemoveAttachment(a.name)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-composer\\ComposerField.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 187,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 195,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 221,
+        "snippet": "onClick={trySend}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 233,
+        "snippet": "onClick={onStop}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 246,
+        "snippet": "onClick={trySend}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-composer\\ComposerSlashMenu.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 53,
+        "snippet": "onClick={() => onSelect(c.cmd)}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 54,
+        "snippet": "onMouseEnter={() => onMouseEnterIndex(i)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message\\MessageActions.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message\\MessageAvatar.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message\\MessageContent.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message\\MessageThinkingBlock.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-list\\MessageVirtualizer.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 287,
+        "snippet": "onClick={handleMarkdownClick}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 301,
+        "snippet": "onClick={expandOlderStep}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 318,
+        "snippet": "onClick={expandOlderAll}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 344,
+        "snippet": "onClick={() => setPinsOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 371,
+        "snippet": "onClick={() => jumpToPinned(item.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 383,
+        "snippet": "onClick={() => togglePin(item.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\AsyncMarkdownBlock.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\ChatAssistantMessageRow.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\ChatUserMessageRow.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 149,
+        "snippet": "onClick={toggleExpand}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 150,
+        "snippet": "onKeyDown={onBubbleKeyDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\MessageActionsBar.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 45,
+        "snippet": "onClick={onCopy}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 57,
+        "snippet": "onClick={onTogglePin}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 100,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 143,
+        "snippet": "onClick={onCopy}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 154,
+        "snippet": "onClick={onRegenerate}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 167,
+        "snippet": "onClick={onTogglePin}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 236,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 250,
+        "snippet": "onClick={() => onSendFollowUp(s.prompt)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 265,
+        "snippet": "onClick={() => onDismissFollowUp(msg.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\MessageThinkingSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 44,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-message-row\\MessageToolCallsSection.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-tool-call\\CompactToolRow.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-tool-call\\ToolCallDiffPreview.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 19,
+        "snippet": "onClick={() => onOpenDiff?.(diff)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 50,
+        "snippet": "onClick={() => onOpenDiff?.(diff)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-tool-call\\ToolCallHeader.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 55,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 62,
+        "snippet": "onClick={() => onOpenPath?.(filePath)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 72,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 109,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 190,
+        "snippet": "onClick={() => canToggle && onToggleTool(tc.id, isOpen)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 191,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 225,
+        "snippet": "onClick={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\chat-tool-call\\ToolCallOutput.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 183,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 197,
+        "snippet": "onClick={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatCard.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 60,
+        "snippet": "onPermissionChange={(m) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatComposer.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 172,
+        "snippet": "onChange={(val) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 242,
+        "snippet": "onChange={async (e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 262,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 293,
+        "snippet": "onChange={(m) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatDemoChrome.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 39,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 53,
+        "snippet": "onClick={() => handleGlobalTabClick('terminal')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 64,
+        "snippet": "onClick={() => setActivePill((p) => (p === 'goal' ? null : 'goal'))}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 89,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 101,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 109,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost\" aria-label=\"关闭\" onClick={() => setActivePill(null)}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 120,
+        "snippet": "onChange={(e) => setGoalText((e.target as HTMLTextAreaElement).value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 129,
+        "snippet": "onClick={() => setGoalEditMode(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 136,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 146,
+        "snippet": "onClick={() => setGoalEditMode(true)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatEmptyState.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 262,
+        "snippet": "onClick={() => onShowProjectPicker((v) => !v)}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 263,
+        "snippet": "onMouseEnter={() => onShowProjectPicker(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 302,
+        "snippet": "onClick={actionFn}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 333,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatHeaderMore.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 162,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 185,
+        "snippet": "onKeyDown={onMenuKeyDown}"
+      },
+      {
+        "event": "onMouseDown",
+        "lineNum": 186,
+        "snippet": "onMouseDown={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 196,
+        "snippet": "onClick={runSearch}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 212,
+        "snippet": "onClick={runExport}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 228,
+        "snippet": "onClick={runRewind}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatMessageList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatMessageRow.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatMsgFilterBar.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 95,
+        "snippet": "onChange={(e) => setLocalMsgFilter(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 96,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 131,
+        "snippet": "onClick={clearQuery}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 142,
+        "snippet": "onClick={closeBar}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatStatusRibbons.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 593,
+        "snippet": "onClick={onOpenTerminal}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 607,
+        "snippet": "onClick={() => setShowPlanDrawer((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 627,
+        "snippet": "onClick={onOpenDiff}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 645,
+        "snippet": "onClick={() => setShowPlanDrawer(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 691,
+        "snippet": "onClick={onOpenModelSettings}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 716,
+        "snippet": "onClick={onOpenModelSettings}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 741,
+        "snippet": "onClick={onOpenModelDropdown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 766,
+        "snippet": "onClick={onOpenModelDropdown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 790,
+        "snippet": "onClick={onApprovePlan}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 833,
+        "snippet": "onClick={onStopGoal}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 848,
+        "snippet": "onClick={onScrollToBottom}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 879,
+        "snippet": "onClick={onDismissRunNotice}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 894,
+        "snippet": "onClick={handleApprovalDockClick}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ChatToolCallBlock.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 87,
+        "snippet": "onClick={() => onApprove(msgIds, toolIds)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 97,
+        "snippet": "onClick={() => onDeny(msgIds, toolIds)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\CheatsheetModal.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 57,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 64,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 80,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 96,
+        "snippet": "onChange={(e) => setSearchQuery(e.target.value)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ComposePlusMenu.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 216,
+        "snippet": "onClick={item.onPick}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\composer\\ComposerActions.tsx",
+    "eventsCount": 3,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 52,
+        "snippet": "onChange={async (e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 79,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 108,
+        "snippet": "onChange={(m) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\composer\\ComposerAttachmentsBar.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 49,
+        "snippet": "onClick={() =>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\composer\\ComposerSlashMenu.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 185,
+        "snippet": "onClick={() => applySlashSelection(c.cmd)}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 186,
+        "snippet": "onMouseEnter={() => setSlashSelectedIndex(i)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\diff\\DiffCodeViewer.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\diff\\DiffGitPanel.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\diff\\DiffHeaderControls.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 67,
+        "snippet": "onClick={() => onSourceModeChange('session')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 78,
+        "snippet": "onClick={() => onSourceModeChange('git')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 91,
+        "snippet": "onClick={onViewModeChange}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 107,
+        "snippet": "onClick={onCommitPanelToggle}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 121,
+        "snippet": "onClick={() => onSearchOpenChange(!searchOpen)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 134,
+        "snippet": "onClick={onClear}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 150,
+        "snippet": "onChange={onTurnSelect}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 160,
+        "snippet": "onChange={(val) => onBranchChange(val)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\diff\\DiffToolbar.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 47,
+        "snippet": "onClick={() => onSourceModeChange('session')}>AI 改动</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 52,
+        "snippet": "onClick={() => onSourceModeChange('git')}>{gitLoading ? 'Git…' : 'Git'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 59,
+        "snippet": "onClick={onViewModeChange}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 66,
+        "snippet": "aria-label=\"切换提交面板\" onClick={onCommitPanelToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 74,
+        "snippet": "disabled={!current} onClick={() => onSearchOpenChange(!searchOpen)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 81,
+        "snippet": "disabled={applyBusy} onClick={onClear}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 91,
+        "snippet": "value={turnKey} options={turnOptions} onChange={onTurnSelect} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 97,
+        "snippet": "onChange={(val) => onBranchChange(val)} />"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\diff\\VirtualPlainCodeViewer.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DiffCard.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 165,
+        "snippet": "<input type=\"search\" className={styles.searchInput} placeholder=\"搜索/筛选行…\" value={rawDiffSearchQuery} disabled={!activeDiffSource} onChange={(e) => setDiffSearchQuery(e.target.value)} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 174,
+        "snippet": "<button type=\"button\" className={styles.panelErrDismiss} aria-label=\"关闭错误\" onClick={() => setPanelErr('')}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 185,
+        "snippet": "<button type=\"button\" className=\"files-action-hint-dismiss\" aria-label=\"关闭提示\" onClick={dismissSoftHint}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 206,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!hasAiTurns || applyBusy} onClick={() => switchSource('session')}>AI 改动</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 207,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" disabled={gitLoading || applyBusy} onClick={() => switchSource('git')}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DiffCardFileList.tsx",
+    "eventsCount": 14,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 113,
+        "snippet": "onClick={() => onSetActiveDiffSource(active ? null : f)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 120,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 124,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 151,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 165,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 177,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 205,
+        "snippet": "onChange={(val) => onChangeCompareMode(f.filePath, val as any)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 215,
+        "snippet": "onClick={() => void openPathDefault(absolutePath)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 226,
+        "snippet": "onClick={() => void onCopyCode(f.filePath)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 237,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 260,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 274,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 300,
+        "snippet": "<button type=\"button\" className={styles.groupActionBtn} onClick={onUnstageAll}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 318,
+        "snippet": "<button type=\"button\" className={styles.groupActionBtn} onClick={onStageAll}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DiffCardGitActions.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 46,
+        "snippet": "<div className={styles.commitTriggerBar} onClick={onToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 60,
+        "snippet": "<button type=\"button\" className={styles.commitCloseBtn} aria-label=\"关闭提交面板\" onClick={onToggle}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 73,
+        "snippet": "onChange={(e) => onCommitMsgChange(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 74,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 87,
+        "snippet": "onClick={onCommit}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 98,
+        "snippet": "onClick={onPush}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DiffCardSplitView.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 67,
+        "snippet": "onClick={() => onExpandBlock(f.filePath, item.startIndex)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DiffCardUnifiedView.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 69,
+        "snippet": "onClick={() => onExpandBlock(f.filePath, item.startIndex)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\drag\\GlobalDragOverlay.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\DropIndicatorLayer.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FileActions.tsx",
+    "eventsCount": 16,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 67,
+        "snippet": "<Tooltip content=\"渲染预览\"><button type=\"button\" className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`} aria-pressed={mdMode === 'render'} onClick={() => onMdModeChange('render')}>渲染</button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 68,
+        "snippet": "<Tooltip content=\"源码\"><button type=\"button\" className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`} aria-pressed={mdMode === 'source'} onClick={() => onMdModeChange('source')}>源码</button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 71,
+        "snippet": "{canEdit && !editing ? <button type=\"button\" className={styles.filesSoftBtn} onClick={onEdit}><Pencil size={13} />编辑</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 72,
+        "snippet": "{editing ? <><button type=\"button\" className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`} disabled={!dirty} onClick={onSave}><Save size={13} />保存</button><button type=\"button\" className={styles.filesSoftBtn} onClick={onCancel}>取消</button></> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 72,
+        "snippet": "{editing ? <><button type=\"button\" className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`} disabled={!dirty} onClick={onSave}><Save size={13} />保存</button><button type=\"button\" className={styles.filesSoftBtn} onClick={onCancel}>取消</button></> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 75,
+        "snippet": "<Tooltip content={`${openDefaultLabel}（系统默认）`}><button type=\"button\" className={styles.filesOpenMain} onClick={handleOpenDefault}><AppWindow size={13} aria-hidden />{openDefaultLabel}</button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 76,
+        "snippet": "<Tooltip content=\"选择打开方式\"><button ref={openMenuTriggerRef} type=\"button\" className={styles.filesOpenChev} aria-haspopup=\"menu\" aria-expanded={openMenuOpen} onClick={() => { setOpenMenuOpen((v) => !v); setOpenMenuMore(false); setMoreOpen(false); }}><ChevronDown size={14} aria-hidden /></button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 79,
+        "snippet": "<button type=\"button\" className={`${styles.filesOpenItem} files-open-item`} role=\"menuitem\" onClick={() => { onCopyPath('abs'); setOpenMenuOpen(false); }}><Copy size={14} aria-hidden />复制路径</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 80,
+        "snippet": "<button type=\"button\" className={`${styles.filesOpenItem} files-open-item`} role=\"menuitem\" onClick={() => { handleReveal(); setOpenMenuOpen(false); }}><FolderOpen size={14} aria-hidden />在文件管理器中显示</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 83,
+        "snippet": "<button key={op.id} type=\"button\" className={`${styles.filesOpenItem} files-open-item`} role=\"menuitem\" onClick={() => { handleOpenWith(op); setOpenMenuOpen(false); }}>{getOpenerIcon(op, 14)}{op.displayName}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 85,
+        "snippet": "{fileOpeners.length > 6 ? <button type=\"button\" className={`${styles.filesOpenItem} files-open-item ${styles.filesOpenItemMore}`} role=\"menuitem\" onClick={() => setOpenMenuMore((v) => !v)}><ChevronsUpDown size={14} aria-hidden />{openMenuMore ? '收起' : `更多应用（${fileOpeners.length - 6}）`}</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 96,
+        "snippet": "<button ref={moreTriggerRef} type=\"button\" className={styles.filesNavBtn} aria-haspopup=\"menu\" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setOpenMenuOpen(false); }}><MoreHorizontal size={15} /></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 100,
+        "snippet": "<button type=\"button\" className={`${styles.filesMoreItem} files-more-item`} role=\"menuitem\" onClick={() => { onCopyPath('rel'); setMoreOpen(false); }}>复制相对路径</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 101,
+        "snippet": "<button type=\"button\" className={`${styles.filesMoreItem} files-more-item`} role=\"menuitem\" onClick={() => { onCopyPath('abs'); setMoreOpen(false); }}>复制绝对路径</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 102,
+        "snippet": "<button type=\"button\" className={styles.filesMoreItem} role=\"menuitem\" onClick={() => { handleReveal(); setMoreOpen(false); }}>在资源管理器中显示</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 103,
+        "snippet": "{view === 'detail' && canEdit && !editing ? <button type=\"button\" className={styles.filesMoreItem} onClick={() => { onEdit(); setMoreOpen(false); }}>编辑文件</button> : null}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FileBreadcrumb.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 137,
+        "snippet": "onClick={(e) => { bcTriggerRef.current = e.currentTarget; void openBcFlyout(b.path, b.label); }}"
+      },
+      {
+        "event": "onDoubleClick",
+        "lineNum": 138,
+        "snippet": "onDoubleClick={() => { setBcFlyout(null); requestAnimationFrame(() => bcTriggerRef.current?.focus()); onNavigate(b.path); }}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 148,
+        "snippet": "onChange={(e) => setBcFlyout((prev) => prev ? { ...prev, filter: e.target.value } : prev)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 149,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Escape') { setBcFlyout(null); requestAnimationFrame(() => bcTriggerRef.current?.focus()); } }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 158,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 169,
+        "snippet": "onClick={() => { setBcFlyout(null); requestAnimationFrame(() => bcTriggerRef.current?.focus()); onNavigate(bcFlyout.path); }}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FileEditor.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 17,
+        "snippet": "onChange={(e) => onChange(e.target.value, e.target.value !== content)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FilePreview.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 101,
+        "snippet": "<button type=\"button\" className={styles.filesInlineErrDismiss} aria-label=\"关闭错误\" onClick={() => onError('')}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 131,
+        "snippet": "<button type=\"button\" className={styles.filesLoadMore} disabled={loadingMore} onClick={onLoadMore}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 138,
+        "snippet": "<FileEditor editBuf={editBuf} content={content} dirty={dirty} onChange={onEditBufChange} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 145,
+        "snippet": "<button type=\"button\" className={styles.filesLoadMore} disabled={loadingMore} onClick={onLoadMore}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 159,
+        "snippet": "<button type=\"button\" className={styles.filesLoadMore} disabled={loadingMore} onClick={onLoadMore}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 170,
+        "snippet": "onClick={onOpenFile}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 185,
+        "snippet": "<input value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 187,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 193,
+        "snippet": "disabled={!commentDraft.trim()} onClick={submitSelectionComment}>添加</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 195,
+        "snippet": "onClick={() => { setSelText(''); setCommentDraft(''); setSelAnchor(null); }}>取消</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FilesCard.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 147,
+        "snippet": "<button type=\"button\" className={styles.filesNavBtn} disabled={!nav.cwd || nav.cwd === nav.root} onClick={handleGoUp}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 152,
+        "snippet": "<button type=\"button\" className={styles.filesNavBtn} onClick={handleRefreshBtn}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 171,
+        "snippet": "autoFocus onChange={(e) => nav.setFilter(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 172,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Escape') { nav.setFilter(''); nav.setFilterMode(false); } }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 179,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 216,
+        "snippet": "<button type=\"button\" className={styles.filesActionHintDismiss} aria-label=\"关闭提示\" onClick={() => preview.clearActionHint()}>"
+      },
+      {
+        "event": "onDoubleClick",
+        "lineNum": 241,
+        "snippet": "onDoubleClick={handleFileDoubleClick}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FileTree.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\files\\FileTreeView.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 96,
+        "snippet": "<button type=\"button\" className={styles.filesInlineErrDismiss} aria-label=\"关闭错误\" onClick={onErrorDismiss}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 120,
+        "snippet": "onClick={() => onSelect(e.path, e.isDir)}"
+      },
+      {
+        "event": "onDoubleClick",
+        "lineNum": 121,
+        "snippet": "onDoubleClick={() => onDoubleClick(e.path, e.isDir)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 124,
+        "snippet": "onKeyDown={(ev) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 131,
+        "snippet": "onClick={(ev) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\FilesCard.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\FirstRunWizard.tsx",
+    "eventsCount": 17,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 532,
+        "snippet": "onChange={(id) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 558,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 562,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 591,
+        "snippet": "onChange={(v) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 609,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 613,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 632,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 636,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 671,
+        "snippet": "onClick={async () => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 703,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 707,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 739,
+        "snippet": "onClick={finish}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 749,
+        "snippet": "onClick={goPrev}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 760,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 770,
+        "snippet": "onClick={finish}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 784,
+        "snippet": "onClick={skipModelStep}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 793,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\FocusTrap.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\FontSettingsSection.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 211,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onFocus",
+        "lineNum": 235,
+        "snippet": "onFocus={() => setCustomTarget(target)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 236,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 241,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 253,
+        "snippet": "onClick={() => applyCustom(target)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 266,
+        "snippet": "onClick={() => void scanLocal()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 277,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 315,
+        "snippet": "onChange={(v) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 339,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 351,
+        "snippet": "onChange={(v) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\InlineAgentPanel.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 234,
+        "snippet": "onClick={() => setOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 297,
+        "snippet": "onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleStop(live.summary); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 310,
+        "snippet": "onClick={openInSideOnly}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 329,
+        "snippet": "onClick={() => handleStop(live.summary)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 431,
+        "snippet": "onChange={setInput}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\McpSettingsTab.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ModelBadgePickerMenu.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 116,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 134,
+        "snippet": "onMouseEnter={() => handleRowEnter(p.id)}"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 135,
+        "snippet": "onMouseLeave={handleRowLeave}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 160,
+        "snippet": "onClick={async () => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 181,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ModelPicker.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 196,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 202,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 223,
+        "snippet": "onClick={() => void setThinking(opt.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 242,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 263,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 289,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ModelsSettingsTab.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 76,
+        "snippet": "onClick={() => setAddOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 100,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 110,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 124,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 149,
+        "snippet": "onChange={(pId, mId) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\ActiveTasksSection.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 28,
+        "snippet": "<button type=\"button\" id=\"overview-sec-active\" className={styles.secH} aria-expanded={open} onClick={onToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 43,
+        "snippet": "<button type=\"button\" className={styles.itemBtn} onClick={() => onApprovalClick(a)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 50,
+        "snippet": "<div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 51,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-primary ui-btn-xs\" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalAllow(a, e)}>{busy ? '…' : '允许'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 52,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-xs\" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalDeny(a, e)}>拒绝</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 59,
+        "snippet": "<button type=\"button\" className={styles.itemBtn} onClick={() => { if (wk.sessionId) onLiveTaskClick(wk); }}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\AgentSection.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 32,
+        "snippet": "aria-expanded={open} aria-controls=\"overview-sec-agents-b\" onClick={onToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 52,
+        "snippet": "onClick={() => { openAgentInSidePanel(a.id, { sessionId: activeSessionId || undefined }); }}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\BackgroundSection.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 21,
+        "snippet": "aria-expanded={open} onClick={onToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 38,
+        "snippet": "<button type=\"button\" className={styles.itemBtn} onClick={() => onOpenTask(t)}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\ChangesSection.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 56,
+        "snippet": "aria-expanded={open} aria-controls=\"overview-sec-files-b\" onClick={onToggle}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 65,
+        "snippet": "disabled={gitLoading} onClick={() => onRefreshGit({ force: true })}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 77,
+        "snippet": "{gitHelp.action === 'download-git' ? <button type=\"button\" className={styles.link} onClick={() => void openGitDownloadPage()}>下载 Git</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 78,
+        "snippet": "{gitHelp.action === 'init-repo' ? <Tooltip content=\"打开终端，在工作区执行 git init\"><button type=\"button\" className={styles.link} onClick={() => onOpenPanel('terminal')}>打开终端（git init）</button></Tooltip> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 79,
+        "snippet": "{gitHelp.action === 'retry' || gitHelp.action === 'download-git' || gitHelp.action === 'init-repo' ? <button type=\"button\" className={styles.link} onClick={() => onRefreshGit({ force: true })}>重试</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 101,
+        "snippet": "onClick={() => onOpenGitFile(f)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 119,
+        "snippet": "onClick={() => onSetShowAllFiles(!showAllFiles)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 133,
+        "snippet": "onClick={() => { onOpenDiffSource(f); onOpenPanel('diff'); }}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 149,
+        "snippet": "onClick={() => onSetShowAllFiles(!showAllFiles)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 163,
+        "snippet": "<button type=\"button\" className={styles.link} onClick={() => onOpenPanel('diff')}>查看变更</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewCard.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewHeader.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewMetrics.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewQuickActions.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 58,
+        "snippet": "onClick={item.action}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewQuickPrompts.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\OverviewStats.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\ProgressSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 27,
+        "snippet": "onClick={onGoalClick}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\ScheduleSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 21,
+        "snippet": "aria-expanded={open} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\overview\\UsageSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 18,
+        "snippet": "<button type=\"button\" id=\"overview-sec-usage\" className={styles.secH} aria-expanded={open} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\OverviewCard.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\panels\\base\\PanelPortal.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\PermissionModeMenu.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 209,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 246,
+        "snippet": "onKeyDown={onMenuKeyDown}"
+      },
+      {
+        "event": "onMouseDown",
+        "lineNum": 247,
+        "snippet": "onMouseDown={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 265,
+        "snippet": "onClick={() => selectMode(m.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\PreviewCard.tsx",
+    "eventsCount": 19,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 301,
+        "snippet": "onClick={goBack}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 312,
+        "snippet": "onClick={goForward}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 322,
+        "snippet": "onClick={goHome}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 333,
+        "snippet": "onClick={reload}"
+      },
+      {
+        "event": "onSubmit",
+        "lineNum": 351,
+        "snippet": "onSubmit={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 367,
+        "snippet": "onChange={(e) => setUrlInput(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 379,
+        "snippet": "onClick={() => setUrlInput('')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 399,
+        "snippet": "onClick={onBookmark}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 416,
+        "snippet": "onClick={() => setShowHist((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 429,
+        "snippet": "onClick={openExternal}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 463,
+        "snippet": "onClick={() => pickHistory(b.url)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 476,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 501,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 523,
+        "snippet": "onClick={() => pickHistory(u)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 534,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 577,
+        "snippet": "onClick={() => navigate(u)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 590,
+        "snippet": "onClick={openExternal}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 619,
+        "snippet": "onClick={reload}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 628,
+        "snippet": "onClick={openExternal}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ProjectPickerMenu.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 158,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 163,
+        "snippet": "onMouseEnter={() => setShowAddCascade(false)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 170,
+        "snippet": "onChange={(e) => setQ(e.target.value)}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 180,
+        "snippet": "onMouseEnter={() => setShowAddCascade(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 190,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 220,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 260,
+        "snippet": "onMouseEnter={() => setShowAddCascade(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 271,
+        "snippet": "onClick={() => setShowAddCascade(!showAddCascade)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 299,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 305,
+        "snippet": "onClick={handleCreateEmptyProject}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 318,
+        "snippet": "onClick={handlePickFolder}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 334,
+        "snippet": "onMouseEnter={() => setShowAddCascade(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 340,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\AuthConfigSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 15,
+        "snippet": "<div className={styles.sectionHeader} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\FallbackConfigSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 15,
+        "snippet": "<div className={styles.sectionHeader} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\HealthCheckIndicator.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\ModelDetailPanel.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\ModelListSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 15,
+        "snippet": "<div className={styles.sectionHeader} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\ProviderDetail.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 34,
+        "snippet": "<div className={styles.sectionHeader} onClick={() => toggleSection('basic')}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\ProviderRail.tsx",
+    "eventsCount": 3,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 31,
+        "snippet": "onChange={e => onSearchChange(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 35,
+        "snippet": "<button className={styles.addBtn} onClick={onAdd}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 46,
+        "snippet": "onClick={() => onSelect(p.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\provider\\RateLimitConfig.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 15,
+        "snippet": "<div className={styles.sectionHeader} onClick={onToggle}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\QuickOpen.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onMouseDown",
+        "lineNum": 186,
+        "snippet": "onMouseDown={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 204,
+        "snippet": "onChange={(e) => setQuery(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 205,
+        "snippet": "onKeyDown={onInputKeyDown}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 237,
+        "snippet": "onMouseEnter={() => setActiveIndex(i)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 238,
+        "snippet": "onClick={() => openHit(hit)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\RuntimePanel.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 438,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 441,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 504,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 507,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 558,
+        "snippet": "onClick={() => handleApprovalClick(a)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 559,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 579,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 588,
+        "snippet": "onClick={(e) => handleApprovalAllow(a, e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 599,
+        "snippet": "onClick={(e) => handleApprovalDeny(a, e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 627,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ScheduledTasksPanel.tsx",
+    "eventsCount": 15,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 356,
+        "snippet": "onClick={onBackToChat}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 373,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 396,
+        "snippet": "onClick={() => applyPreset(p.id)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 432,
+        "snippet": "onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 433,
+        "snippet": "onBlur={() => maybeWatchHint(draft.name)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 445,
+        "snippet": "onChange={(e) => setDraft((d) => ({ ...d, prompt: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 460,
+        "snippet": "onChange={(v) =>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 476,
+        "snippet": "onChange={(e) => setDraft((d) => ({ ...d, dailyTime: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 493,
+        "snippet": "onChange={(e) =>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 506,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 516,
+        "snippet": "onClick={closeForm}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 558,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 572,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 589,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 636,
+        "snippet": "onClick={() => openRunSession(r)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\AccountSettingsTab.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 193,
+        "snippet": "onClick={handleRefreshAll}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 206,
+        "snippet": "onClick={handleAddChatGPT}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 245,
+        "snippet": "<button className=\"settings-btn-ghost\" onClick={handleCancelTimeout}>关闭</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 253,
+        "snippet": "<button className=\"settings-btn-ghost\" onClick={handleCancelFlow}>关闭</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 265,
+        "snippet": "<button className=\"settings-btn-ghost\" onClick={() => copyToClipboard(authFlow.url)}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 285,
+        "snippet": "onChange={e => { setManualCode(e.target.value); setExchangeError(\"\"); }}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 286,
+        "snippet": "onKeyDown={e => e.key === \"Enter\" && handleManualCodeSubmit()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 288,
+        "snippet": "<button className=\"settings-btn-primary\" onClick={handleManualCodeSubmit} disabled={!manualCode.trim()}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 297,
+        "snippet": "<button className=\"settings-btn-ghost\" onClick={handleCancelFlow}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\extensions\\ExtensionExpandBody.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 33,
+        "snippet": "<div className=\"ext-detail-actions\"><button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" onClick={() => onManage('skill')}>高级管理</button></div>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 54,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" onClick={() => onToggleMcpServer?.(installedItem.mcpId!, true)}>启动服务</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 55,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect\" onClick={() => onToggleMcpServer?.(installedItem.mcpId!, false)}>停止服务</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 56,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect\" onClick={() => onManage('mcp')}>高级管理</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\extensions\\ExtensionList.tsx",
+    "eventsCount": 11,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 63,
+        "snippet": "aria-pressed={view === 'installed'} onClick={() => onViewChange('installed')}>已安装</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 65,
+        "snippet": "aria-pressed={view === 'discover'} onClick={() => onViewChange('discover')}>发现</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 70,
+        "snippet": "aria-pressed={kindFilter === f.id} onClick={() => onKindFilterChange(f.id)}>{f.label}</button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 74,
+        "snippet": "value={query} onChange={(e) => onQueryChange(e.target.value)} aria-label=\"搜索扩展\" />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 84,
+        "snippet": "{!(query || kindFilter !== 'all') ? <button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" onClick={() => onViewChange('discover')}>去发现</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 102,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect\" aria-expanded={detailOpen} onClick={() => onToggleExpand('installed', item.id, 'detail')}>{detailOpen ? '收起' : '详情'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 103,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" aria-expanded={configOpen} onClick={() => onToggleExpand('installed', item.id, 'config')}>{configOpen ? '收起' : '配置'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 104,
+        "snippet": "{canUninstall ? <button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect danger\" onClick={() => onRemove(item)}>卸载</button> : null}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 132,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect\" aria-expanded={detailOpen} onClick={() => onToggleExpand('catalog', entry.id, 'detail')}>{detailOpen ? '收起' : '详情'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 134,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" onClick={() => onSetViewInstalled({ scope: 'installed', id: entry.id, mode: 'config' })}>去配置</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 136,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect\" disabled={busyId === entry.id} onClick={() => onInstall(entry)}>{busyId === entry.id ? '安装中…' : '安装'}</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\mcp\\McpServerList.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 100,
+        "snippet": "aria-label={`复制标识 ${srv.name}`} onClick={() => onCopy(srv.id)}>{srv.name}</button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 111,
+        "snippet": "onChange={() => onToggleDemo(srv.id)} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 114,
+        "snippet": "onClick={() => onDeleteDemo(srv.id)}><Trash2 size={14} aria-hidden /></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 132,
+        "snippet": "aria-label={`复制标识 ${srv.name}`} onClick={() => onCopy(srv.id)}>{srv.name}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 145,
+        "snippet": "aria-expanded={isOpen} onClick={() => onToggleExpanded(srv.id)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 154,
+        "snippet": "onClick={() => onToggleServer(srv.id, 'stop')}><Square size={14} aria-hidden /></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 160,
+        "snippet": "onClick={() => onToggleServer(srv.id, 'start')}><Play size={14} aria-hidden /></button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\mcp\\McpServerTools.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 32,
+        "snippet": "aria-label={`复制工具名 ${t}`} onClick={() => onCopy(t)}><code>{t}</code></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 40,
+        "snippet": "aria-label={`复制标识 ${serverId}`} onClick={() => onCopy(serverId)}><code>{serverId}</code></button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\models\\ModelProviderDetail.tsx",
+    "eventsCount": 34,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 144,
+        "snippet": "<input className=\"mrd-title\" value={nameDraft} autoFocus onChange={(e) => setNameDraft(e.target.value)}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 145,
+        "snippet": "onBlur={() => { if (nameDraft.trim() && nameDraft.trim() !== selected.name) { upsertProfile({ ...selected, name: nameDraft.trim() }); onRefresh(); } setEditingName(false); }}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 146,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } else if (e.key === 'Escape') setEditingName(false); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 149,
+        "snippet": "<h3 className=\"mrd-title\" onClick={selected.id.startsWith('custom-') ? () => { setEditingName(true); setNameDraft(selected.name); } : undefined}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 157,
+        "snippet": "onClick={() => { setProfileEnabled(selected.id, selected.enabled === false); onRefresh(); }}>{selected.enabled !== false ? '已启用' : '已停用'}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 164,
+        "snippet": "onClick={() => { const next = removeProfile(selected.id); onRefresh(); onSelect(next[0]?.id || null); setConfirmDeleteId(null); }}>确认</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 166,
+        "snippet": "onClick={() => setConfirmDeleteId(null)}>取消</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 171,
+        "snippet": "onClick={() => setConfirmDeleteId(selected.id)}><Trash2 size={14} /></button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 184,
+        "snippet": "onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); }}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 185,
+        "snippet": "onBlur={() => { if (!selected) return; void saveProfileBaseUrl(selected.id, selected.baseUrl).then((r) => { if (!r.ok) onNotify(false, `地址保存失败：${r.error || '未知错误'}`); onRefresh(); }); }} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 191,
+        "snippet": "onChange={(e) => setKeyDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }} />"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 191,
+        "snippet": "onChange={(e) => setKeyDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 192,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!keyDraft.trim()} onClick={() => void saveKey()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 203,
+        "snippet": "onClick={runCheck} style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 206,
+        "snippet": "onClick={runScan} style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 210,
+        "snippet": "<input type=\"text\" placeholder=\"搜索...\" value={modelFilter} onChange={(e) => setModelFilter(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 214,
+        "snippet": "onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 223,
+        "snippet": "<label className={`${styles.mrdAddLabel} mrd-add-label`}><span>模型 ID *</span><input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"如 deepseek-chat\" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} /></label>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 224,
+        "snippet": "<label className={`${styles.mrdAddLabel} mrd-add-label`}><span>展示名称</span><input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"可选\" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} /></label>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 225,
+        "snippet": "<label className={`${styles.mrdAddLabel} mrd-add-label`}><span>上下文长度</span><input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"128000\" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} /></label>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 230,
+        "snippet": "return (<label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}><input type=\"checkbox\" style={{ display: 'none' }} checked={on} onChange={(e) => setAddDraft((d) => ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }))} />{opt.label}</label>);"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 232,
+        "snippet": "<div style={{ display: 'flex', gap: '6px' }}><button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => setManualOpen(false)}>取消</button><button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!addDraft.modelId.trim()} onClick={handleManualAdd}>添加</button></div>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 232,
+        "snippet": "<div style={{ display: 'flex', gap: '6px' }}><button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => setManualOpen(false)}>取消</button><button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!addDraft.modelId.trim()} onClick={handleManualAdd}>添加</button></div>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 251,
+        "snippet": "onClick={(e) => { const target = e.target as HTMLElement; if (target.closest('.models-switch') || target.closest('.mrd-delete-btn')) return; if (expanded) setConfigOpenId(null); else openConfigFor(m); }} style={{ cursor: 'pointer' }}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 259,
+        "snippet": "onClick={(e) => { e.stopPropagation(); setModelEnabled(selected.id, m, off); onRefresh(); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 262,
+        "snippet": "<Tooltip content=\"配置\"><button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" style={{ padding: '0 5px', height: '26px', color: expanded ? 'var(--accent-primary)' : 'var(--text-tertiary)' }} onClick={(e) => { e.stopPropagation(); if (expanded) setConfigOpenId(null); else openConfigFor(m); }}><SlidersHorizontal size={13} /></button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 263,
+        "snippet": "<Tooltip content=\"删除\"><button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn\" style={{ padding: '0 5px', height: '26px', color: 'var(--text-tertiary)' }} onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) setConfigOpenId(null); onRefresh(); }}><Trash2 size={13} /></button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 266,
+        "snippet": "<div className={`${styles.modelConfigPanel} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 268,
+        "snippet": "<label className={`${styles.mrdCfgLabel} mrd-cfg-label`}><span>展示名称</span><input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} /></label>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 269,
+        "snippet": "<label className={`${styles.mrdCfgLabel} mrd-cfg-label`}><span>上下文长度</span><input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.contextLength} placeholder=\"如 1000000\" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} /></label>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 274,
+        "snippet": "return (<label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}><input type=\"checkbox\" style={{ display: 'none' }} checked={on} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }) : null)} />{opt.label}</label>);"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 278,
+        "snippet": "<Tooltip content=\"测试连通性\"><button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" disabled={testBusy === tKey} onClick={() => void runTest(m)}>{testBusy === tKey ? <Loader2 size={13} className={styles.loadingSpinner} /> : <Wifi size={13} />}</button></Tooltip>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 279,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => setConfigOpenId(null)}>收起</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 280,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" onClick={saveConfig}>保存</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\models\\ModelProviderList.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 29,
+        "snippet": "aria-current={isActive ? 'true' : undefined} onClick={() => onSelect(p.id)}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\models\\ModelsCascadeSelect.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onMouseDown",
+        "lineNum": 31,
+        "snippet": "const onMouseDown = (e: MouseEvent) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 36,
+        "snippet": "const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setFlyProfileId(null); } };"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 45,
+        "snippet": "onClick={() => setOpen((prev) => !prev)} style={{ minWidth: '220px', justifyContent: 'space-between' }}>"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 50,
+        "snippet": "<div ref={menuRef} className=\"sort-filter-menu open\" style={{ position: 'fixed', top: (triggerRef.current?.getBoundingClientRect().bottom ?? 0) + 4, left: triggerRef.current?.getBoundingClientRect().left, minWidth: '220px', zIndex: 'var(--z-model-flyout)' }} onMouseLeave={() => setFlyProfileId(null)}>"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 60,
+        "snippet": "onMouseEnter={() => setFlyProfileId(p.id)} style={{ position: 'relative', cursor: 'pointer' }}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 69,
+        "snippet": "onClick={() => { onChange(p.id, m); setOpen(false); setFlyProfileId(null); }}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\ProviderSettingsTab.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\RoutingSettingsTab.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 30,
+        "snippet": "<button className=\"settings-btn-primary\" onClick={addRoute}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 50,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 61,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 72,
+        "snippet": "onChange={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 89,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 94,
+        "snippet": "<button className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => setRoutes(routes.filter(r => r.id !== route.id))}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\SettingsSchemaRenderer.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 84,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 95,
+        "snippet": "onChange={(v) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 111,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 138,
+        "snippet": "onChange={(e) => void onSave({ [prop.key]: Number(e.target.value) })}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 155,
+        "snippet": "onChange={(e) => void onSave({ [prop.key]: e.target.value })}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 169,
+        "snippet": "onClick={() => void onSave({ [prop.key]: preset.id })}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 196,
+        "snippet": "onChange={(v) => void onSave({ [prop.key]: v })}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 213,
+        "snippet": "onClick={() => void onSave({ [prop.key]: opt.value })}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\SettingsUI.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 48,
+        "snippet": "onClick={onClick}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 59,
+        "snippet": "onClick={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\skills\\SkillDetail.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 69,
+        "snippet": "onClick={() => onCopySlash(selected.name)}><Copy size={14} aria-hidden /></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 74,
+        "snippet": "onClick={() => { void revealSkillPath(selected.filePath).then((ok) => { if (!ok) onShowToast?.('无法打开路径（需桌面壳）'); }); }}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 88,
+        "snippet": "onClick={() => onActivationChange(selected, opt.id)}>{opt.label}</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 93,
+        "snippet": "onClick={onShowRawToggle} aria-pressed={showRaw}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\skills\\SkillEditor.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 29,
+        "snippet": "<button type=\"button\" className=\"settings-create-path\" onClick={onImportBrowse}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 33,
+        "snippet": "<button type=\"button\" className=\"settings-create-path\" onClick={onAiCreate}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 38,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => onModeChange('manual')}>高级：手填空白技能…</button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 45,
+        "snippet": "onChange={(e) => onNameChange(e.target.value)} aria-label=\"技能名称\" disabled={createBusy}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 46,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Enter' && createName.trim()) { e.preventDefault(); onCreate(); } }} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 49,
+        "snippet": "onChange={(e) => onDescChange(e.target.value)} aria-label=\"技能描述（可选）\" disabled={createBusy}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 50,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Enter' && createName.trim()) { e.preventDefault(); onCreate(); } }} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 52,
+        "snippet": "aria-busy={createBusy || undefined} onClick={onCreate} aria-label={createBusy ? '创建中' : '创建技能'}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 54,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => onModeChange('paths')}>返回</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\skills\\SkillImportExport.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 44,
+        "snippet": "onClick={onNewClick}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 52,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={onMoreToggle}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 60,
+        "snippet": "onClick={() => { onSyncAll(); }} disabled={syncBusy || skills.length === 0}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 64,
+        "snippet": "onClick={() => onRefresh({ promptNew: true })} disabled={loading || discoverBusy}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 68,
+        "snippet": "onClick={() => onRefresh()} disabled={loading}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 72,
+        "snippet": "onClick={() => onEnableCommandsChange(!enableCommands)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 77,
+        "snippet": "onClick={() => onBatchActivation('enabled')} disabled={batchBusy || filtered.length === 0}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 82,
+        "snippet": "onClick={() => onBatchActivation('disabled')} disabled={batchBusy || filtered.length === 0}>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings\\skills\\SkillsList.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 62,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={onClearFilters} aria-label=\"清除筛选\">清除筛选</button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 72,
+        "snippet": "options={scopeSelectOptions} onChange={onScopeFilterChange} disabled={loading} placeholder=\"作用域…\" />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 74,
+        "snippet": "placeholder=\"搜索技能…\" value={filter} onChange={(e) => onFilterChange(e.target.value)} aria-label=\"搜索技能\" />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 94,
+        "snippet": "onClick={() => onSelect(s.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 122,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" aria-label={`移除目录 ${d}`} onClick={() => onRemoveExtra(d)}><X size={14} aria-hidden /></button>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 131,
+        "snippet": "onChange={(e) => onExtraDirChange(e.target.value)} aria-label=\"额外技能目录绝对路径\""
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 132,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Enter' && extraDir.trim()) { e.preventDefault(); onExtraDirCommit(); } }} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 135,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" aria-label=\"浏览文件夹\" onClick={onPickExtra}><FolderOpen size={14} aria-hidden /></button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 137,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!extraDir.trim()} aria-label=\"添加额外目录\" onClick={onExtraDirCommit}>添加</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-extensions\\ExtensionCard.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 96,
+        "snippet": "onClick={() => onSetManage?.('skill')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 155,
+        "snippet": "onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 177,
+        "snippet": "onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 185,
+        "snippet": "onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 192,
+        "snippet": "onClick={() => onSetManage?.('mcp')}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 228,
+        "snippet": "onChange={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 242,
+        "snippet": "onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 328,
+        "snippet": "onClick={() => toggleExpand('installed', installedItem.id, 'detail')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 336,
+        "snippet": "onClick={() => toggleExpand('installed', installedItem.id, 'config')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 344,
+        "snippet": "onClick={() => void onRemovePackage?.(installedItem)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 387,
+        "snippet": "onClick={() => toggleExpand('catalog', entry.id, 'detail')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 395,
+        "snippet": "onClick={() => onGoToConfig?.(entry.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 404,
+        "snippet": "onClick={() => void onInstallCatalog?.(entry)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-extensions\\ExtensionList.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 79,
+        "snippet": "onClick={() => onSetView('discover')}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-extensions\\useExtensionMarket.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-mcp\\McpServerForm.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 44,
+        "snippet": "onChange={(e) => setNewName(e.target.value)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 57,
+        "snippet": "onChange={(v) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 71,
+        "snippet": "onChange={(e) => setNewCmd(e.target.value)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 80,
+        "snippet": "onChange={(e) => setNewArgs(e.target.value)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 91,
+        "snippet": "onChange={(e) => setNewUrl(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 100,
+        "snippet": "onClick={() => setShowAdd(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 110,
+        "snippet": "onClick={() => void onAddDemo()}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-mcp\\McpServerList.tsx",
+    "eventsCount": 19,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 106,
+        "snippet": "onClick={() => onCopy(t)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 122,
+        "snippet": "onClick={() => onCopy(srv.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 149,
+        "snippet": "onClick={onClearFilter}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 165,
+        "snippet": "onClick={onRefresh}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 178,
+        "snippet": "onClick={() => onSetSort('name')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 188,
+        "snippet": "onClick={() => onSetSort('state')}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 200,
+        "snippet": "onChange={(e) => onSetFilter(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 201,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 215,
+        "snippet": "onClick={() => onSetShowAdd((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 272,
+        "snippet": "onClick={() => onSetShowAdd(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 282,
+        "snippet": "onClick={() => void refreshDemo()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 307,
+        "snippet": "onClick={() => onCopy(srv.id)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 327,
+        "snippet": "onChange={() => onToggleDemoEnabled(srv.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 334,
+        "snippet": "onClick={() => void onDeleteDemo(srv.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 365,
+        "snippet": "onClick={() => void refreshLive()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 402,
+        "snippet": "onClick={() => onCopy(srv.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 428,
+        "snippet": "onClick={() => onToggleExpanded(srv.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 446,
+        "snippet": "onClick={() => void onToggleServer(srv.id, 'stop')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 459,
+        "snippet": "onClick={() => void onToggleServer(srv.id, 'start')}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-models\\ModelConfigEditor.tsx",
+    "eventsCount": 36,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 124,
+        "snippet": "onChange={(e) => setNameDraft(e.target.value)}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 125,
+        "snippet": "onBlur={() => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 132,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 160,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 169,
+        "snippet": "onMouseEnter={(e) => {"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 172,
+        "snippet": "onMouseLeave={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 199,
+        "snippet": "onClick={() => { setProfileEnabled(selected.id, selected.enabled === false); refresh(); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 225,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 238,
+        "snippet": "onClick={() => setConfirmDeleteId(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 249,
+        "snippet": "onClick={() => setConfirmDeleteId(selected.id)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 270,
+        "snippet": "onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); refresh(); }}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 271,
+        "snippet": "onBlur={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 288,
+        "snippet": "onChange={(e) => setKeyDraft(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 289,
+        "snippet": "onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 295,
+        "snippet": "onClick={() => void saveKey()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 314,
+        "snippet": "onClick={() => void runCheck()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 326,
+        "snippet": "onClick={() => void runScan()}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 339,
+        "snippet": "onChange={(e) => setModelFilter(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 348,
+        "snippet": "onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 364,
+        "snippet": "<input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"如 deepseek-chat\" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 368,
+        "snippet": "<input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"可选\" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 372,
+        "snippet": "<input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder=\"128000\" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 381,
+        "snippet": "<input type=\"checkbox\" style={{ display: 'none' }} checked={on} onChange={(e) => setAddDraft((d) => ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }))} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 388,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={() => setManualOpen(false)}>取消</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 389,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" disabled={!addDraft.modelId.trim()} onClick={handleManualAdd}>添加</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 416,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 440,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 455,
+        "snippet": "onClick={(e) => { e.stopPropagation(); if (expanded) closeConfig(); else openConfigFor(m); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 465,
+        "snippet": "onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) closeConfig(); refresh(); }}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 474,
+        "snippet": "<div className={`${styles.modelConfigPanel} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 478,
+        "snippet": "<input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 482,
+        "snippet": "<input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.contextLength} placeholder=\"如 1000000\" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} />"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 491,
+        "snippet": "<input type=\"checkbox\" style={{ display: 'none' }} checked={on} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }) : null)} />"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 523,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" disabled={testBusy === tKey} onClick={() => void runTest(m)}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 527,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-ghost ui-btn-sm\" onClick={closeConfig}>收起</button>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 528,
+        "snippet": "<button type=\"button\" className=\"ui-btn ui-btn-secondary ui-btn-sm\" onClick={saveConfig}>保存</button>"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-models\\ModelProfileList.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onMouseDown",
+        "lineNum": 51,
+        "snippet": "const onMouseDown = (e: MouseEvent) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 62,
+        "snippet": "const onKeyDown = (e: KeyboardEvent) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 115,
+        "snippet": "onClick={() => setOpen((prev) => !prev)}"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 139,
+        "snippet": "onMouseLeave={() => setFlyProfileId(null)}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 157,
+        "snippet": "onMouseEnter={() => setFlyProfileId(p.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 191,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 260,
+        "snippet": "onClick={() => onSelectProfile(p.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-skills\\SkillCardList.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 95,
+        "snippet": "onClick={() => setCreateMode('paths')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 119,
+        "snippet": "onClick={clearFilters}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 176,
+        "snippet": "onClick={() => setSelectedId(s.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 229,
+        "snippet": "onClick={() => handleRemoveExtra(d)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 245,
+        "snippet": "onChange={(e) => setExtraDir(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 247,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 260,
+        "snippet": "onClick={() => void handlePickExtra()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 270,
+        "snippet": "onClick={() => commitExtraDir(extraDir)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-skills\\SkillDetailPreview.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 80,
+        "snippet": "onClick={() => void copySlashCommand(selected.name)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 93,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 120,
+        "snippet": "onClick={() => void setActivation(selected, opt.id as SkillActivation)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 130,
+        "snippet": "onClick={() => setShowRaw((v) => !v)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-skills\\SkillEditorModal.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 73,
+        "snippet": "onChange={(e) =>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 88,
+        "snippet": "onClick={() => void applyDiscoverImport('skip')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 97,
+        "snippet": "onClick={() => void applyDiscoverImport('all')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 107,
+        "snippet": "onClick={() => void applyDiscoverImport('selected')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 126,
+        "snippet": "onClick={() => void handleImportBrowse()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 136,
+        "snippet": "onClick={handleAiCreateSkill}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 147,
+        "snippet": "onClick={() => setCreateMode('manual')}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 167,
+        "snippet": "onChange={(e) => setCreateName(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 170,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 183,
+        "snippet": "onChange={(e) => setCreateDesc(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 186,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 198,
+        "snippet": "onClick={() => void handleCreate()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 206,
+        "snippet": "onClick={() => setCreateMode('paths')}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-tabs\\models\\ModelFormDialog.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-tabs\\models\\ModelList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-tabs\\skills\\SkillDetailPanel.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-tabs\\skills\\SkillList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\settings-tabs\\skills\\SkillsMoreMenu.tsx",
+    "eventsCount": 7,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 61,
+        "snippet": "onClick={() => setMoreOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 81,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 93,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 105,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 117,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 144,
+        "snippet": "onClick={() => void runBatchActivation('enabled')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 155,
+        "snippet": "onClick={() => void runBatchActivation('disabled')}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsAppearanceTab.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 305,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 395,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsArchiveTab.tsx",
+    "eventsCount": 12,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 102,
+        "snippet": "onClick={() => setPreviewSession(session)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 114,
+        "snippet": "onClick={() => handleRestore(session)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 126,
+        "snippet": "onClick={() => setDeleteConfirmSession(session)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 154,
+        "snippet": "onClick={() => setPreviewSession(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 168,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 198,
+        "snippet": "onClick={() => setPreviewSession(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 251,
+        "snippet": "onClick={() => setPreviewSession(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 258,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 285,
+        "snippet": "onClick={() => setDeleteConfirmSession(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 296,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 308,
+        "snippet": "onClick={() => setDeleteConfirmSession(null)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 316,
+        "snippet": "onClick={handleConfirmPermanentDelete}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsExtensionsTab.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 73,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 110,
+        "snippet": "onClick={() => void refresh()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 133,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 144,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 159,
+        "snippet": "onClick={() => setKindFilter(f.id)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 170,
+        "snippet": "onChange={(e) => setQuery(e.target.value)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsPanel.tsx",
+    "eventsCount": 9,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 461,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 481,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 503,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 521,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 544,
+        "snippet": "onChange={(e) => setNavQuery(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 545,
+        "snippet": "onKeyDown={onSearchKeyDown}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 562,
+        "snippet": "onKeyDown={onTablistKeyDown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 588,
+        "snippet": "onClick={() => selectTab(tab.id)}"
+      },
+      {
+        "event": "onFocus",
+        "lineNum": 589,
+        "snippet": "onFocus={() => setNavFocusId(tab.id)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsPersonalizeTab.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 180,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsProfileTab.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 286,
+        "snippet": "onClick={() => handleExportSettings()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 296,
+        "snippet": "onClick={() => handleImportSettings()}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 321,
+        "snippet": "onChange={(e) => setDaemonWsDraft(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 327,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 342,
+        "snippet": "onClick={handleSaveDaemonWs}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 350,
+        "snippet": "onClick={handleTestDaemon}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsQuickMenu.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 218,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 248,
+        "snippet": "onKeyDown={onMenuKeyDown}"
+      },
+      {
+        "event": "onMouseDown",
+        "lineNum": 249,
+        "snippet": "onMouseDown={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 268,
+        "snippet": "onClick={() => applyTheme('default')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 281,
+        "snippet": "onClick={() => applyTheme('dark')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 299,
+        "snippet": "onClick={() => go(entry.tab)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsRulesTab.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 435,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 471,
+        "snippet": "onChange={setScopeKey}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 480,
+        "snippet": "onClick={openFullEditor}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 509,
+        "snippet": "onClick={() => handleDeleteCustomRule(idx)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 541,
+        "snippet": "onClick={() => handleAddPreset(preset)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 567,
+        "snippet": "onChange={(e) => setNewRuleText(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 573,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 583,
+        "snippet": "onClick={handleAddCustomRule}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 600,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 619,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 638,
+        "snippet": "onChange={(e) => setEditorText(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 650,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 660,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsScheduleTab.tsx",
+    "eventsCount": 17,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 411,
+        "snippet": "onClick={() => setFilter(opt.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 424,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 463,
+        "snippet": "onClick={handleAiCreateSchedule}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 473,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 501,
+        "snippet": "onClick={() => applyPreset(p.id)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 513,
+        "snippet": "onChange={(e) => setWfDraft((d) => ({ ...d, name: e.target.value }))}"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 514,
+        "snippet": "onBlur={() => maybeWatchHint(wfDraft.name)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 523,
+        "snippet": "onChange={(e) => setWfDraft((d) => ({ ...d, prompt: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 538,
+        "snippet": "onChange={(v) =>"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 551,
+        "snippet": "onChange={(e) => setWfDraft((d) => ({ ...d, dailyTime: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 566,
+        "snippet": "onChange={(e) =>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 576,
+        "snippet": "onClick={closeForm}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 585,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 639,
+        "snippet": "onChange={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 650,
+        "snippet": "onClick={() => handleEditClick(w)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 661,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 674,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsSecurityTab.tsx",
+    "eventsCount": 12,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 172,
+        "snippet": "const onPermissionChange = (v: string) => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 208,
+        "snippet": "onChange={onPermissionChange}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 234,
+        "snippet": "onClick={() => setShowAllPaths(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 245,
+        "snippet": "onClick={() => setShowAllPaths(false)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 274,
+        "snippet": "onChange={(e) => setNewWhitelistCmd(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 283,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 305,
+        "snippet": "onClick={() => addWhitelist()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 316,
+        "snippet": "onClick={() => setShowClearConfirm(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 330,
+        "snippet": "onClick={doClearWhitelist}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 337,
+        "snippet": "onClick={() => setShowClearConfirm(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 364,
+        "snippet": "onClick={() => addWhitelist(cmd)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 397,
+        "snippet": "onClick={() => removeWhitelist(cmd)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsSelect.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onKeyDown",
+        "lineNum": 227,
+        "snippet": "onKeyDown={handleMenuKeyDown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 260,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 302,
+        "snippet": "onClick={toggle}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 303,
+        "snippet": "onKeyDown={handleTriggerKeyDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsShortcutsTab.tsx",
+    "eventsCount": 8,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 325,
+        "snippet": "onChange={(e) => setQuery(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 335,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 354,
+        "snippet": "onClick={clearQuery}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 392,
+        "snippet": "onClick={clearQuery}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 404,
+        "snippet": "<div id={listId} aria-labelledby={`${listId}-title`} onKeyDown={onListKeyDown}>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 435,
+        "snippet": "onClick={() => restoreDefault(sh.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 452,
+        "snippet": "onClick={() =>"
+      },
+      {
+        "event": "onFocus",
+        "lineNum": 455,
+        "snippet": "onFocus={() => setFocusIndex(rowIndex)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SettingsUsageTab.tsx",
+    "eventsCount": 18,
+    "events": [
+      {
+        "event": "onChange",
+        "lineNum": 72,
+        "snippet": "onChange={(e) => setInputVal(e.target.value)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 78,
+        "snippet": "onChange={(e) => setOutputVal(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 86,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 95,
+        "snippet": "onClick={onDelete}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 136,
+        "snippet": "const onKeyDown = (e: KeyboardEvent) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 203,
+        "snippet": "onClick={() => setPricesModalOpen(true)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 214,
+        "snippet": "onClick={() => setPricesModalOpen(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 218,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 228,
+        "snippet": "onChange={(e) => setPriceFilter(e.target.value)}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 267,
+        "snippet": "onChange={(e) => setPriceDraft((d) => ({ ...d, model: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 274,
+        "snippet": "onChange={(e) => setPriceDraft((d) => ({ ...d, input: e.target.value }))}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 280,
+        "snippet": "onChange={(e) => setPriceDraft((d) => ({ ...d, output: e.target.value }))}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 287,
+        "snippet": "onClick={handleSavePrice}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 297,
+        "snippet": "onClick={() => setPricesModalOpen(false)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 352,
+        "snippet": "onClick={() => setChartDays(7)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 359,
+        "snippet": "onClick={() => setChartDays(14)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 455,
+        "snippet": "onClick={() => setHistory(loadUsageSnapshot())}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 463,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\DragReorderSection.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\GeneralSection.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 48,
+        "snippet": "onClick={onToggleGeneral}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 55,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 74,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 89,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 175,
+        "snippet": "onClick={onToggleShowAllGeneralSessions}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\PinnedSection.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 38,
+        "snippet": "onClick={onTogglePinned}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\ProjectsSection.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 48,
+        "snippet": "onClick={onToggleProjectsSection}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 55,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 77,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 107,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 127,
+        "snippet": "onClick={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 200,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\SessionRow.tsx",
+    "eventsCount": 10,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 207,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onContextMenu",
+        "lineNum": 211,
+        "snippet": "onContextMenu={(e) => {"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 215,
+        "snippet": "onPointerDown={"
+      },
+      {
+        "event": "onDoubleClick",
+        "lineNum": 220,
+        "snippet": "onDoubleClick={(e) => {"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 225,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 266,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 267,
+        "snippet": "onChange={(e) => onRenameDraftChange(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 268,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onBlur",
+        "lineNum": 277,
+        "snippet": "onBlur={() => onCommitRename(s.id)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 316,
+        "snippet": "onClick={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\useSidebarSessionList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\session-list\\WindowedSessionUl.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\Sidebar.tsx",
+    "eventsCount": 6,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 40,
+        "snippet": "onClick={s.handleHamburgerClick}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 46,
+        "snippet": "<div className={styles.overlayBackdrop} aria-hidden=\"true\" onClick={s.handleOverlayClose} />"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 58,
+        "snippet": "onMouseEnter={s.onHoverEnter}"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 59,
+        "snippet": "onMouseLeave={s.onHoverLeave}"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 110,
+        "snippet": "tabIndex={0} onPointerDown={s.handleSidebarResizeStart} onKeyDown={s.handleSidebarResizeKeyDown} style={{ touchAction: 'none' }}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 110,
+        "snippet": "tabIndex={0} onPointerDown={s.handleSidebarResizeStart} onKeyDown={s.handleSidebarResizeKeyDown} style={{ touchAction: 'none' }}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\SidebarContextMenus.tsx",
+    "eventsCount": 20,
+    "events": [
+      {
+        "event": "onKeyDown",
+        "lineNum": 350,
+        "snippet": "onKeyDown={onMenuKeyDown}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 357,
+        "snippet": "onClick={() => onSessionAction('open-current')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 367,
+        "snippet": "onClick={() => onSessionAction('open-split')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 377,
+        "snippet": "onClick={() => onSessionAction('open-new')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 390,
+        "snippet": "onClick={() => onSessionAction('rename')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 400,
+        "snippet": "onClick={() => onSessionAction(isPinned ? 'unpin' : 'pin')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 415,
+        "snippet": "onClick={() => onSessionAction('archive')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 425,
+        "snippet": "onClick={() => onSessionAction('branch')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 439,
+        "snippet": "onClick={() => onSessionAction('export')}"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 463,
+        "snippet": "onMouseLeave={handleFlyLeave}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 464,
+        "snippet": "onKeyDown={onMenuKeyDown}"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 472,
+        "snippet": "onMouseEnter={() => handleFlyEnter('sort')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 492,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 512,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 533,
+        "snippet": "onMouseEnter={() => handleFlyEnter('group')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 553,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 573,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onMouseEnter",
+        "lineNum": 594,
+        "snippet": "onMouseEnter={() => handleFlyEnter('filter')}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 614,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 634,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\SidebarFooter.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 42,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 59,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\SidebarHeader.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 48,
+        "snippet": "onClick={onHamburgerClick}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 58,
+        "snippet": "onClick={onOverlayClose}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\SidebarNav.tsx",
+    "eventsCount": 3,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 26,
+        "snippet": "onClick={onNewSession}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 50,
+        "snippet": "onClick={onOpenScheduled}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 70,
+        "snippet": "onChange={(e) => onSearchChange(e.target.value)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\sidebar\\SidebarSessionList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\Sidebar.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onMouseEnter",
+        "lineNum": 168,
+        "snippet": "onMouseEnter={onHoverEnter}"
+      },
+      {
+        "event": "onMouseLeave",
+        "lineNum": 169,
+        "snippet": "onMouseLeave={onHoverLeave}"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 242,
+        "snippet": "onPointerDown={handleSidebarResizeStart}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 243,
+        "snippet": "onKeyDown={handleSidebarResizeKeyDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SidebarToggleIcons.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\SkillsSettingsTab.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 104,
+        "snippet": "onClick={() =>"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 144,
+        "snippet": "onClick={() => void refresh()}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 176,
+        "snippet": "onChange={handleScopeFilterChange}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 185,
+        "snippet": "onChange={(e) => setFilter(e.target.value)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\TelemetryDialog.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 78,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 85,
+        "snippet": "onClick={(e) => e.stopPropagation()}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 117,
+        "snippet": "onClick={handleClear}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 124,
+        "snippet": "onClick={onClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 131,
+        "snippet": "onClick={handleDownload}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\TerminalCard.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 326,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 341,
+        "snippet": "onChange={(e) => setSearchQuery(e.target.value)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 356,
+        "snippet": "onClick={() => setSearchQuery('')}"
+      },
+      {
+        "event": "onChange",
+        "lineNum": 423,
+        "snippet": "onChange={(e) => setTerminalInput(e.target.value)}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 424,
+        "snippet": "onKeyDown={handleTerminalKeyDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\TerminalCard.xterm.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\ToastStack.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 53,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 65,
+        "snippet": "onClick={() => handleDismiss(toast)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\Tooltip\\Tooltip.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\VirtualList.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\WindowIcons.tsx",
+    "eventsCount": 0,
+    "events": []
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\workspace\\ColumnResizeHandle.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onPointerDown",
+        "lineNum": 17,
+        "snippet": "onPointerDown={onPointerDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\workspace\\WorkspaceCanvas.tsx",
+    "eventsCount": 4,
+    "events": [
+      {
+        "event": "onPointerDown",
+        "lineNum": 192,
+        "snippet": "onPointerDown={(e) =>"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 195,
+        "snippet": "onKeyDown={handleColSplitterKeyDown(splitterLeftIdx)}"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 269,
+        "snippet": "onPointerDown={(e) =>"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 276,
+        "snippet": "onKeyDown={handleGroupSplitterKeyDown("
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\workspace\\WorkspaceEmptyState.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onPointerDown",
+        "lineNum": 18,
+        "snippet": "onPointerDown={onActivate}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\workspace\\WorkspaceResizer.tsx",
+    "eventsCount": 2,
+    "events": [
+      {
+        "event": "onPointerDown",
+        "lineNum": 39,
+        "snippet": "onPointerDown={onPointerDown}"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 40,
+        "snippet": "onKeyDown={onKeyDown}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\workspace\\WorkspaceSplitChrome.tsx",
+    "eventsCount": 1,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 40,
+        "snippet": "onClick={() => onClose(wsId)}"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\Workspace.tsx",
+    "eventsCount": 5,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 534,
+        "snippet": "onClick={() => closeWorkspace(ws.id)}"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 594,
+        "snippet": "onPointerDown={(e) =>"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 597,
+        "snippet": "onKeyDown={(e) => {"
+      },
+      {
+        "event": "onPointerDown",
+        "lineNum": 703,
+        "snippet": "onPointerDown={(e) =>"
+      },
+      {
+        "event": "onKeyDown",
+        "lineNum": 710,
+        "snippet": "onKeyDown={(e) => {"
+      }
+    ]
+  },
+  {
+    "file": "apps\\crish-desktop\\src\\components\\WorkspaceChromeBars.tsx",
+    "eventsCount": 13,
+    "events": [
+      {
+        "event": "onClick",
+        "lineNum": 372,
+        "snippet": "onClick={() => s.selectWorkspace(tab)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 400,
+        "snippet": "onClick={() => add.setOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 416,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 432,
+        "snippet": "onClick={() => {"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 465,
+        "snippet": "onClick={toggleRightSidebar}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 477,
+        "snippet": "onClick={onOpenHelp}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 489,
+        "snippet": "onClick={onWinMinimize}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 501,
+        "snippet": "onClick={onWinMaximize}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 513,
+        "snippet": "onClick={onWinClose}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 550,
+        "snippet": "onClick={() => s.selectSession(tab.sessionId)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 572,
+        "snippet": "onClick={(e) => s.onCloseSession(tab.sessionId, e)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 592,
+        "snippet": "onClick={() => add.setOpen((v) => !v)}"
+      },
+      {
+        "event": "onClick",
+        "lineNum": 608,
+        "snippet": "onClick={() => {"
+      }
+    ]
+  }
+]

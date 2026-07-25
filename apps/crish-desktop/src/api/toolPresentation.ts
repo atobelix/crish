@@ -31,6 +31,7 @@ export {
   isInspectTool,
   isInterruptedTool,
   isPlaceholderToolOutput,
+  isShellToolName,
   isToolRowDefaultOpen,
   isTrivialToolOutput,
   normalizeToolDiffStat,

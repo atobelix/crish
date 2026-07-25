@@ -12,7 +12,7 @@ interface SkillDetailPreviewProps {
   activeScopeProjectName: string;
   selectedSlash: string;
   copySlashCommand: (name: string) => Promise<void>;
-  onShowToast?: (msg: string) => void;
+  onShowToast?: ((msg: string) => void) | undefined;
   busyId: string | null;
   batchBusy: boolean;
   setActivation: (skill: DesktopSkill, activation: SkillActivation) => Promise<void>;

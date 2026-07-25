@@ -843,16 +843,18 @@ export const clientApi = {
     try {
       const client = getDesktopDaemonClient();
       const res = (await client.request(
-        { type: 'cron.list_tasks' },
+        { type: 'list-workflows' },
         [
+          'list-workflows',
+          'workflows-listed',
           'cron.list_tasks_response',
           'cron.list_tasks',
           'cron.tasks_listed',
           'cron.tasks',
         ],
         10_000
-      )) as { tasks?: unknown[]; jobs?: unknown[] };
-      const rawList = res.tasks || res.jobs || [];
+      )) as { tasks?: unknown[]; jobs?: unknown[]; workflows?: unknown[] };
+      const rawList = res.workflows || res.tasks || res.jobs || [];
       return Array.isArray(rawList) ? rawList.filter(isCronJob) : [];
     } catch (e) {
       console.error('getScheduledTasks daemon RPC error:', e);
@@ -865,8 +867,8 @@ export const clientApi = {
     try {
       const client = getDesktopDaemonClient();
       await client.request(
-        { type: 'cron.upsert_task', task },
-        ['cron.upsert_task_response', 'cron.upsert_task', 'cron.task_upserted'],
+        { type: 'create-workflow', task },
+        ['create-workflow', 'workflow-created', 'cron.upsert_task_response', 'cron.upsert_task', 'cron.task_upserted'],
         10_000
       );
       return clientApi.getScheduledTasks();
@@ -881,8 +883,8 @@ export const clientApi = {
     try {
       const client = getDesktopDaemonClient();
       await client.request(
-        { type: 'cron.delete_task', id },
-        ['cron.delete_task_response', 'cron.delete_task', 'cron.task_deleted'],
+        { type: 'delete-workflow', id },
+        ['delete-workflow', 'workflow-deleted', 'cron.delete_task_response', 'cron.delete_task', 'cron.task_deleted'],
         10_000
       );
       return clientApi.getScheduledTasks();
@@ -892,15 +894,17 @@ export const clientApi = {
     }
   },
 
-  // ── MCP — Daemon RPC 通信链路 (`mcp.list_servers`, `mcp.upsert_server`, `mcp.delete_server`) ────
+  // ── MCP — Daemon RPC 通信链路 ────
 
   getMcpServers: async (): Promise<McpServer[]> => {
     if (isDemoMode()) return clientApiDemo.getMcpServers();
     try {
       const client = getDesktopDaemonClient();
       const res = (await client.request(
-        { type: 'mcp.list_servers' },
+        { type: 'list-mcp-servers' },
         [
+          'list-mcp-servers',
+          'mcp-servers-listed',
           'mcp.list_servers_response',
           'mcp.list_servers',
           'mcp.servers_listed',
@@ -921,8 +925,10 @@ export const clientApi = {
     try {
       const client = getDesktopDaemonClient();
       await client.request(
-        { type: 'mcp.upsert_server', server },
+        { type: 'start-mcp-server', server },
         [
+          'start-mcp-server',
+          'mcp-server-started',
           'mcp.upsert_server_response',
           'mcp.upsert_server',
           'mcp.server_upserted',
@@ -941,8 +947,10 @@ export const clientApi = {
     try {
       const client = getDesktopDaemonClient();
       await client.request(
-        { type: 'mcp.delete_server', id },
+        { type: 'stop-mcp-server', id },
         [
+          'stop-mcp-server',
+          'mcp-server-stopped',
           'mcp.delete_server_response',
           'mcp.delete_server',
           'mcp.server_deleted',

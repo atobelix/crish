@@ -21,6 +21,9 @@ export type OAuth2Config = {
 
 export type SigV4Config = { region: string; service: string; accessKeyId: string; secretAccessKey: string; sessionToken?: string; };
 
+export type ProviderHealth = { status: 'healthy' | 'degraded' | 'down' | 'unknown' | 'ok' | 'error'; latencyMs?: number; lastCheckedAt?: number };
+export type ProviderModel = ModelMeta & { name?: string };
+
 export type ModelCap = 'tool_call' | 'vision' | 'reasoning' | 'streaming' | 'structured_output' | 'function_calling' | 'parallel_tool_call' | 'thinking' | 'multimodal' | 'audio' | 'image_generation' | 'code_execution';
 
 export type ThinkingConfig = { enabled: boolean; budgetToken?: number; temperature?: number; effort?: 'low' | 'medium' | 'high'; displayThinking?: boolean; };
@@ -39,14 +42,14 @@ export type ModelPricing = { currency: 'CNY' | 'USD' | 'EUR'; inputPricePer1K: n
 
 export type EngineType = 'openai-compatible' | 'anthropic-native' | 'gemini-native' | 'azure-openai' | 'aws-bedrock' | 'gcp-vertex' | 'ollama' | 'custom';
 
-export type RateLimitConfig = { rpm: number; tpm: number; rpmBurst?: number; coolDownMs: number; maxConcurrency: number; };
+export type RateLimitConfig = { rpm: number; tpm: number; rpmBurst?: number; coolDownMs: number; maxConcurrency: number; maxRequestsPerMinute?: number; maxTokensPerMinute?: number; maxConcurrentRequests?: number; };
 
 export type HealthStatus = { providerId: string; status: 'unknown' | 'healthy' | 'degraded' | 'unhealthy'; latencyMs?: number; lastCheckedAt?: string; error?: string; };
 
 export type FallbackErrorType = 'rate_limit' | 'timeout' | 'auth_error' | 'server_error' | 'context_overflow';
 export type FallbackRule = { errorType: FallbackErrorType; fallbackProviderId: string; fallbackModelId?: string; retryCount?: number; };
 
-export type FallbackConfig = { errorTypes: FallbackRule[]; };
+export type FallbackConfig = { errorTypes: FallbackRule[]; enabled?: boolean; fallbackProviderId?: string; fallbackModels?: string[]; onTimeout?: boolean; onRateLimit?: boolean; onError?: boolean; };
 
 export type ProviderConfig = {
   id: string; name: string; engineType: EngineType; baseUrl: string;
@@ -61,6 +64,7 @@ export type ProviderConfig = {
 };
 
 export type RoutingRole = 'primary' | 'fast' | 'editor' | 'embedding';
+export type ModelRole = RoutingRole;
 export type TaskType = 'chat' | 'code' | 'planning' | 'vision' | 'audio' | 'embedding' | 'tool_use';
 
 export type ModelRoute = {

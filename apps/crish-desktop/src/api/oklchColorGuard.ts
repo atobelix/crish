@@ -16,6 +16,9 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
 
   if (str.startsWith('#')) {
     const rawHex = str.slice(1);
+    if (rawHex.length !== 3 && rawHex.length !== 6) {
+      return { l: NaN, c: NaN, h: NaN };
+    }
     const parsedHex = rawHex.length === 3 
       ? rawHex.split('').map(char => char + char).join('') 
       : rawHex;

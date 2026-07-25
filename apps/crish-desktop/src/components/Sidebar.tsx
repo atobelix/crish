@@ -10,14 +10,12 @@ import { SidebarContextMenus } from './sidebar/SidebarContextMenus';
 import type { ShowToastFn } from '../hooks/useToastQueue';
 import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import {
-  FilterType,
-  GroupType,
   loadSidebarListPrefs,
   SIDEBAR_LIST_PREFS_KEY,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
-  SortType,
 } from './sidebar/sidebarHelpers';
+import type { FilterType, GroupType, SortType } from './sidebar/sidebarHelpers';
 import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarFooter } from './sidebar/SidebarFooter';
 import { useSidebarResize } from './sidebar/useSidebarResize';
@@ -71,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
 
     const {
       contextMenu,
+      setContextMenu,
       renamingSessionId,
       setRenamingSessionId,
       menuRef,
@@ -161,6 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
         className={`${styles.sidebar} crish-sidebar ${sidebarCollapsed ? styles.collapsed : ''} ${hoverExpanded ? styles.tempExpanded : ''} ${isOverlayActive ? styles.overlay : ''} ${sidebarBehavior === 'icon-collapse' && !isOverlayActive ? styles.iconCollapse : ''}`}
         role="navigation"
         aria-label="侧栏导航"
+        data-testid="sidebar"
         data-sidebar-filter={filterType}
         data-sidebar-density={densityHint}
         data-searching={isSearching ? '1' : '0'}

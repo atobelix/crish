@@ -2,7 +2,7 @@ import { useLayoutStore } from './layoutStore';
 import { useSessionStore } from './sessionStore';
 import { useWorkspaceStore } from './workspaceStore';
 import { useSettingsUiStore } from './settingsUiStore';
-import { initStoreAccess, type StoreLike } from '../api/storeAccess';
+import { initStoreAccess } from '../api/storeAccess';
 
 const activeSyncs = new Set<string>();
 
@@ -126,75 +126,17 @@ export function bootstrapStores(): () => void {
   const unsubs: (() => void)[] = [];
   _setupFrequencyLogging();
 
+  // Note: Stores share the same underlying LayoutStore instance in Phase 0/1,
+  // so no inter-store subscribe sync is required. Single listener for frequency metrics:
   unsubs.push(useLayoutStore.subscribe(() => {
     _counters.set('layoutStore', (_counters.get('layoutStore') ?? 0) + 1);
-    if (batchRollback) return;
-    const path = 'layout→all';
-    if (activeSyncs.has(path)) return;
-    activeSyncs.add(path);
-    try {
-      syncLayoutToWorkspace();
-      syncLayoutToSettingsUi();
-      syncLayoutToSession();
-    } finally {
-      activeSyncs.delete(path);
-    }
-  }));
-
-  unsubs.push(useWorkspaceStore.subscribe(() => {
-    _counters.set('workspaceStore', (_counters.get('workspaceStore') ?? 0) + 1);
-    if (batchRollback) return;
-    const path = 'workspace→layout';
-    if (activeSyncs.has(path)) return;
-    activeSyncs.add(path);
-    try {
-      syncWorkspaceToLayout();
-    } finally {
-      activeSyncs.delete(path);
-    }
-  }));
-
-  unsubs.push(useSettingsUiStore.subscribe(() => {
-    _counters.set('settingsUiStore', (_counters.get('settingsUiStore') ?? 0) + 1);
-    if (batchRollback) return;
-    const path = 'settingsUi→layout';
-    if (activeSyncs.has(path)) return;
-    activeSyncs.add(path);
-    try {
-      syncSettingsUiToLayout();
-    } finally {
-      activeSyncs.delete(path);
-    }
-  }));
-
-  unsubs.push(useSessionStore.subscribe(() => {
-    _counters.set('sessionStore', (_counters.get('sessionStore') ?? 0) + 1);
-    if (batchRollback) return;
-    const path = 'session→layout';
-    if (activeSyncs.has(path)) return;
-    activeSyncs.add(path);
-    try {
-      syncSessionToLayout();
-    } finally {
-      activeSyncs.delete(path);
-    }
   }));
 
   initStoreAccess(
-    useSessionStore,
-    useWorkspaceStore,
-    useSettingsUiStore,
+    useSessionStore as any,
+    useWorkspaceStore as any,
+    useSettingsUiStore as any,
   );
-
-  if (process.env.NODE_ENV === 'development') {
-    const invariantInterval = setInterval(() => {
-      const session = useSessionStore.getState();
-      if ('permissionMode' in session) {
-        console.error('[Invariant] permissionMode should not be in sessionStore');
-      }
-    }, 30000);
-    unsubs.push(() => clearInterval(invariantInterval));
-  }
 
   return () => {
     _teardownFrequencyLogging();

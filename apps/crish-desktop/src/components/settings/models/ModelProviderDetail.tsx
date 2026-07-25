@@ -53,7 +53,7 @@ export const ModelProviderDetail: React.FC<ModelProviderDetailProps> = React.mem
     const list = normalizeModelIds(selected.models);
     const q = modelFilter.trim().toLowerCase();
     if (!q) return list;
-    return list.filter((m) => { const meta = getModelMeta(selected.id, m); const name = (meta.displayName || '').toLowerCase(); return m.toLowerCase().includes(q) || name.includes(q); });
+    return list.filter((m: string) => { const meta = getModelMeta(selected.id, m); const name = (meta.displayName || '').toLowerCase(); return m.toLowerCase().includes(q) || name.includes(q); });
   }, [selected, modelFilter]);
 
   const saveKey = async () => {
@@ -235,7 +235,7 @@ export const ModelProviderDetail: React.FC<ModelProviderDetailProps> = React.mem
       ) : null}
 
       <div className={`${styles.mrdModelList} mrd-model-list`}>
-        {modelsList.map((m) => {
+        {modelsList.map((m: string) => {
           const meta = getModelMeta(selected.id, m);
           const off = meta.enabled === false;
           const tKey = `${selected.id}::${m}`;

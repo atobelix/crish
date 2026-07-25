@@ -13,7 +13,8 @@
     "test:snapshots": "vitest run tests/snapshots/ --coverage.enabled=false",
     "test:snapshots:update": "vitest run tests/snapshots/ --update --coverage.enabled=false",
     "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots"
+    "test:visual:update": "playwright test --update-snapshots",
+    "test:e2e": "playwright test tests/e2e/ui-store-invariants.spec.ts"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",
@@ -22,10 +23,12 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@radix-ui/react-popover": "^1.1.23",
     "@tauri-apps/api": "^2.8.0",
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.4.12",
     "highlight.js": "^11.11.1",
+    "idb-keyval": "^6.2.1",
     "immer": "^11.1.8",
     "lucide-react": "^0.525.0",
     "react": "^19.1.1",

@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown } from 'lucide-react';
 import styles from '../ChatCard.module.css';
 import { Tooltip } from '../settings/SettingsUI';
@@ -13,11 +14,7 @@ import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
 import type { AppSettings } from '../../store/layoutStore';
 
-const ModelBadgePickerMenu = lazy(() =>
-  import('../ModelBadgePickerMenu').then((m) => ({
-    default: m.ModelBadgePickerMenu,
-  }))
-);
+import { ModelBadgePickerMenu } from '../ModelBadgePickerMenu';
 
 export interface ChatHeaderControlsProps {
   appSettings: AppSettings | undefined;
@@ -89,37 +86,18 @@ export function useModelSelection(appSettings: AppSettings | undefined, projectT
   };
 }
 
-export const ModelBadgePicker: React.FC<{
+interface ModelBadgePickerProps {
   engineModel: string;
-  activeProfileId: string | null;
   needsModelSetup: boolean;
-  showModelDropdown: boolean;
-  setShowModelDropdown: React.Dispatch<React.SetStateAction<boolean>>;
-}> = ({
-  engineModel,
-  activeProfileId,
-  needsModelSetup,
-  showModelDropdown,
-  setShowModelDropdown,
-}) => {
-  const modelSelectorRef = useRef<HTMLDivElement>(null);
+  activeProfileId?: string | null;
+}
 
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (
-        modelSelectorRef.current &&
-        !modelSelectorRef.current.contains(e.target as Node)
-      ) {
-        setShowModelDropdown(false);
-      }
-    };
-    if (showModelDropdown) {
-      document.addEventListener('mousedown', handleOutsideClick);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [showModelDropdown, setShowModelDropdown]);
+export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
+  engineModel,
+  needsModelSetup,
+  activeProfileId,
+}) => {
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   const getModelDisplayName = (modelId: string) => {
     if (!modelId) return '选择模型';
@@ -131,51 +109,51 @@ export const ModelBadgePicker: React.FC<{
   };
 
   return (
-    <Tooltip
-      content={
-        getActiveProfile()
-          ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
-          : '服务商与模型（可在设置中更改）'
-      }
-    >
-      <div
-        ref={modelSelectorRef}
-        className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          setShowModelDropdown((v) => !v);
-        }}
-        style={{ cursor: 'pointer', position: 'relative' }}
+    <Popover.Root open={showModelDropdown} onOpenChange={setShowModelDropdown}>
+      <Tooltip
+        content={
+          getActiveProfile()
+            ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
+            : '服务商与模型（可在设置中更改）'
+        }
       >
-        <span
-          className={styles.modelText}
-          style={{
-            textOverflow: 'ellipsis',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            textAlign: 'left',
-          }}
-        >
-          {getModelDisplayName(
-            resolveDisplayModelId(engineModel) ||
-              engineModel ||
-              (needsModelSetup ? '填写模型' : '无可用模型')
-          )}
-        </span>
-        <ChevronDown
-          size={14}
-          style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }}
-        />
-        {showModelDropdown && (
-          <Suspense fallback={null}>
-            <ModelBadgePickerMenu
-              activeModel={engineModel}
-              onClose={() => setShowModelDropdown(false)}
+        <Popover.Trigger asChild>
+          <div
+            className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
+            data-testid="model-selector-button"
+            style={{ cursor: 'pointer', position: 'relative' }}
+          >
+            <span
+              className={styles.modelText}
+              style={{
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                flex: 1,
+                textAlign: 'left',
+              }}
+            >
+              {getModelDisplayName(
+                resolveDisplayModelId(engineModel) ||
+                  engineModel ||
+                  (needsModelSetup ? '填写模型' : '无可用模型')
+              )}
+            </span>
+            <ChevronDown
+              size={14}
+              style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }}
             />
-          </Suspense>
-        )}
-      </div>
-    </Tooltip>
+          </div>
+        </Popover.Trigger>
+      </Tooltip>
+      {showModelDropdown && (
+        <Suspense fallback={null}>
+          <ModelBadgePickerMenu
+            activeModel={engineModel}
+            onClose={() => setShowModelDropdown(false)}
+          />
+        </Suspense>
+      )}
+    </Popover.Root>
   );
 };

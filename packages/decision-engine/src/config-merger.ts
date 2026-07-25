@@ -56,28 +56,36 @@ export class ConfigMerger {
     const conflicts: ConflictReportEntry[] = [];
     let result: Record<string, unknown> = {};
 
+    // 标记哪些 key 来自默认值（用于 conflicts 报告区分"默认值"与"前一个 source"）
+    const defaultKeys = new Set<string>();
     for (const [field, policy] of Object.entries(this.schema.fields)) {
       if (policy.defaultValue !== undefined) {
         result[field] = policy.defaultValue;
+        defaultKeys.add(field);
       }
     }
 
     for (const source of sorted) {
+      // 防御：source.value 为 null/undefined/非对象时跳过，避免 Object.entries 崩溃
+      if (source.value === null || source.value === undefined) continue;
+      if (typeof source.value !== "object" || Array.isArray(source.value)) continue;
       const sourceConfig = source.value as Record<string, unknown>;
       for (const [key, value] of Object.entries(sourceConfig)) {
         if (value === undefined) continue;
-        if (key in result && result[key] !== undefined) {
-          const policy = this.schema.fields[key];
-          if (!policy || policy.mergeStrategy === "override") {
-            conflicts.push({
-              key, winner: source.name, loser: "previous",
-              winnerValue: value, loserValue: result[key],
-            });
-          }
-        }
         const policy = this.schema.fields[key];
         const strategy = policy?.mergeStrategy ?? "override";
+        const hadPrevious = key in result && result[key] !== undefined;
+        const hadDefault = defaultKeys.has(key);
+        // 仅在 override 策略下报告冲突；默认值不算"冲突前驱"
+        if (hadPrevious && !hadDefault && (!policy || strategy === "override")) {
+          conflicts.push({
+            key, winner: source.name, loser: "previous",
+            winnerValue: value, loserValue: result[key],
+          });
+        }
         result = { ...result, [key]: applyMerge(result[key], value, strategy) };
+        // 一旦被真实 source 设置，就不再算默认值
+        defaultKeys.delete(key);
       }
     }
 
@@ -95,14 +103,29 @@ export class ConfigMerger {
         errors.push({ path: field, message: `Required field "${field}" is missing`, received: value });
         continue;
       }
-      if (value === undefined || value === null) continue;
-      if (policy.validate && !policy.validate(value)) {
-        errors.push({ path: field, message: policy.validateMessage ?? `Field "${field}" failed validation`, received: value });
+      // value === undefined 时跳过 validate（无值可校验）
+      // value === null 时仍调用 validate 函数，让策略自行决定是否接受 null
+      if (value === undefined) continue;
+      if (policy.validate) {
+        try {
+          if (!policy.validate(value)) {
+            errors.push({ path: field, message: policy.validateMessage ?? `Field "${field}" failed validation`, received: value });
+          }
+        } catch (err) {
+          // validate 函数抛异常时转为 error，而非向上传播
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ path: field, message: `Field "${field}" validate threw: ${msg}`, received: value });
+        }
       }
     }
 
     if (this.schema.validate) {
-      errors.push(...this.schema.validate(config));
+      try {
+        errors.push(...this.schema.validate(config));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push({ path: "_schema", message: `Schema validate threw: ${msg}` });
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings };
@@ -128,8 +151,11 @@ function applyMerge(base: unknown, overlay: unknown, strategy: MergeStrategy): u
 }
 
 function deepMerge(base: unknown, overlay: unknown): unknown {
+  // overlay 为 undefined 时保留 base（不覆盖）
+  // overlay 为 null 时覆盖 base（用户显式置空）
+  if (overlay === undefined) return base;
+  if (overlay === null) return null;
   if (base === null || base === undefined) return overlay;
-  if (overlay === null || overlay === undefined) return base;
   if (typeof base !== "object" || typeof overlay !== "object") return overlay;
   if (Array.isArray(base) || Array.isArray(overlay)) return overlay;
   const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };

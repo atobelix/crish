@@ -261,14 +261,38 @@ export class ToolExecutionCoordinator {
   private async *resolvePermission(tool: AgentTool, input: JsonObject, toolCallId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, PermissionDecision> {
     const sReq: PermissionRequest = { id: toolCallId, sessionId: ctx.sessionId, cwd: ctx.cwd ?? '', toolCallId, toolName: tool.name, parameters: input, summary: tool.summarize(input), toolMetadata: { category: tool.category, isReadOnly: tool.isReadOnly(input), fatalOnError: tool.fatalOnError ?? false, concurrency: tool.concurrency } } as PermissionRequest;
 
-    const eventsToEmit: AgentEvent[] = [];
-    const decision = await ctx.approvalPipeline.decide({ tool, input, permissionRequest: sReq }, async (req, dec) => {
-      eventsToEmit.push({ type: 'approval-requested', sessionId: ctx.sessionId, request: req, decision: dec, timestamp: new Date().toISOString() } as AgentEvent);
+    // approval-requested 事件必须在 handler.requestApproval 等待用户审批期间发出。
+    // 否则形成死锁：runtime 等 handler.requestApproval() 返回 → 客户端等 approval-requested 事件 → 互相等待。
+    //
+    // 原实现的 bug：onApprovalRequested 回调只把事件 push 到数组，而 yield 要等 decide() 返回后才执行。
+    // decide() 内部会 await handler.requestApproval()，该 await 直到用户审批才完成 → 事件永远发不出 → 死锁。
+    //
+    // 修复：用 deferred 让回调把事件立即交给 generator。
+    // generator 用 Promise.race 同时等待「事件就绪」和「decide 完成」：
+    //   - ask 路径：回调先 resolve deferred → generator yield 事件 → 再 await decide（等用户审批）
+    //   - allow/deny 路径：decide 先完成，不触发回调 → generator 跳过 yield，直接返回决策
+    const deferred: { resolve: ((event: AgentEvent) => void) | null } = { resolve: null };
+    const approvalRequestedPromise = new Promise<AgentEvent>((resolve) => {
+      deferred.resolve = resolve;
     });
 
-    for (const ev of eventsToEmit) {
-      yield ev;
+    const decidePromise = ctx.approvalPipeline.decide(
+      { tool, input, permissionRequest: sReq },
+      async (req, dec) => {
+        deferred.resolve?.({ type: 'approval-requested', sessionId: ctx.sessionId, request: req, decision: dec, timestamp: new Date().toISOString() } as AgentEvent);
+      }
+    );
+
+    const raceWinner = await Promise.race([
+      decidePromise.then((decision) => ({ type: 'decision' as const, decision })),
+      approvalRequestedPromise.then((event) => ({ type: 'event' as const, event })),
+    ]);
+
+    if (raceWinner.type === 'event') {
+      yield raceWinner.event;
     }
+
+    const decision = await decidePromise;
     if (decision.behavior !== 'allow') {
       yield { type: 'approval-resolved', sessionId: ctx.sessionId, requestId: toolCallId, decision, timestamp: new Date().toISOString() } as AgentEvent;
     }

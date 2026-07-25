@@ -114,7 +114,9 @@ export function stopAssistantPlaceholderText(
 
 export function buildTerminalToolPatches(
   toolCalls:
-    Array<{ id: string; status?: string; output?: string }> | null | undefined,
+    | Array<{ id: string; status?: string | undefined; output?: string | undefined }>
+    | null
+    | undefined,
   reason: TerminalToolReason
 ): TerminalToolPatch[] {
   if (!toolCalls?.length) return [];

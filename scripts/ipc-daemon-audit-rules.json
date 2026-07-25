@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "generatedAt": "2026-07-26T03:12:00+08:00",
+  "description": "IPC Directive and Daemon Protocol Audit Rules & Detection Logic for Conex Desktop Engine",
+  "meta": {
+    "targetApps": [
+      "apps/crish-desktop",
+      "apps/agent-workbench",
+      "packages/agent-daemon"
+    ],
+    "author": "Antigravity Code Auditor"
+  },
+  "daemonProtocolAudit": {
+    "summary": {
+      "totalRegisteredInboundTypes": 62,
+      "totalFrontendInitiatedTypes": 39,
+      "supportedTypesCount": 30,
+      "unsupportedTypesCount": 9
+    },
+    "unsupportedOrUnregisteredTypes": [
+      {
+        "type": "authenticate",
+        "sourceFile": "apps/crish-desktop/src/services/ConnectionManager.ts",
+        "lineNumber": 380,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: authenticate",
+        "rootCause": "Frontend ConnectionManager sends 'authenticate' on connection open, but Daemon protocol registry does not declare an 'authenticate' inbound type.",
+        "recommendedFix": "Add 'authenticate' to Daemon protocol registry or update ConnectionManager to rely on Daemon initial 'welcome' / 'daemon-ready' handshake."
+      },
+      {
+        "type": "cron.list_tasks",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 846,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: cron.list_tasks",
+        "rootCause": "Frontend clientApi and schedule.ts use dot-separated legacy names ('cron.list_tasks'), whereas Daemon defines 'list-workflows'.",
+        "recommendedFix": "Migrate clientApi.getScheduledTasks to send type 'list-workflows'."
+      },
+      {
+        "type": "cron.upsert_task",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 868,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: cron.upsert_task",
+        "rootCause": "Frontend clientApi uses 'cron.upsert_task', whereas Daemon expects 'create-workflow' or 'update-workflow'.",
+        "recommendedFix": "Migrate clientApi.saveScheduledTask to send type 'create-workflow' / 'update-workflow'."
+      },
+      {
+        "type": "cron.delete_task",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 884,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: cron.delete_task",
+        "rootCause": "Frontend clientApi uses 'cron.delete_task', whereas Daemon expects 'delete-workflow'.",
+        "recommendedFix": "Migrate clientApi.deleteScheduledTask to send type 'delete-workflow'."
+      },
+      {
+        "type": "mcp.list_servers",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 902,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: mcp.list_servers",
+        "rootCause": "Frontend clientApi uses 'mcp.list_servers', whereas Daemon protocol defines 'list-mcp-servers'.",
+        "recommendedFix": "Update clientApi.getMcpServers to use 'list-mcp-servers' (matching mcpApi.ts)."
+      },
+      {
+        "type": "mcp.upsert_server",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 924,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: mcp.upsert_server",
+        "rootCause": "Frontend clientApi uses 'mcp.upsert_server', which is not implemented in Daemon.",
+        "recommendedFix": "Use 'start-mcp-server' or implement 'upsert-mcp-server' in Daemon protocol registry."
+      },
+      {
+        "type": "mcp.delete_server",
+        "sourceFile": "apps/crish-desktop/src/api/clientApi.ts",
+        "lineNumber": 944,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: mcp.delete_server",
+        "rootCause": "Frontend clientApi uses 'mcp.delete_server', whereas Daemon defines 'stop-mcp-server'.",
+        "recommendedFix": "Update clientApi.deleteMcpServer to send 'stop-mcp-server' or implement 'delete-mcp-server'."
+      },
+      {
+        "type": "oauth-start",
+        "sourceFile": "apps/crish-desktop/src/api/providerAuth.ts",
+        "lineNumber": 141,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: oauth-start",
+        "rootCause": "Frontend providerAuth requests 'oauth-start', which has no handler registered in Daemon.",
+        "recommendedFix": "Fall back to local PKCE flow or register 'oauth-start' handler in Daemon config-handlers."
+      },
+      {
+        "type": "oauth-refresh",
+        "sourceFile": "apps/crish-desktop/src/api/providerAuth.ts",
+        "lineNumber": 297,
+        "errorTrigger": "UNKNOWN_MESSAGE_TYPE",
+        "errorMessage": "Unsupported message type: oauth-refresh",
+        "rootCause": "Frontend providerAuth requests 'oauth-refresh', which has no handler registered in Daemon.",
+        "recommendedFix": "Fall back to local token refresh or implement 'oauth-refresh' in Daemon."
+      }
+    ],
+    "registeredInboundTypes": [
+      "run-task",
+      "approve-tool",
+      "deny-tool",
+      "cancel-run",
+      "stream-pause",
+      "stream-resume",
+      "hello",
+      "ping",
+      "get-status",
+      "list-capabilities",
+      "update-config",
+      "list-sessions",
+      "list-runs",
+      "read-session-events",
+      "read-run-events",
+      "get-run-snapshot",
+      "enqueue-pending-input",
+      "cancel-pending-input",
+      "dispatch-pending-input",
+      "list-pending-inputs",
+      "list-workflows",
+      "create-workflow",
+      "update-workflow",
+      "delete-workflow",
+      "trigger-workflow",
+      "list-workflow-runs",
+      "git-status",
+      "git-diff",
+      "list-plan-documents",
+      "create-plan-document",
+      "create-requirements-alignment-plan",
+      "get-plan-document",
+      "patch-plan-document",
+      "delete-plan-document",
+      "list-mutation-leases",
+      "list-background-tasks",
+      "start-background-task",
+      "cancel-background-task",
+      "get-background-task-history",
+      "list-artifacts",
+      "get-artifact-content",
+      "list-memories",
+      "delete-memory",
+      "list-checkpoints",
+      "restore-checkpoint",
+      "get-checkpoint-diff",
+      "resolve-conversation-rewind-boundary",
+      "preview-conversation-rewind",
+      "preview-conversation-rewind-by-boundary",
+      "apply-conversation-rewind",
+      "apply-session-action",
+      "send-to-subagent",
+      "get-subagent-status",
+      "start-mcp-server",
+      "stop-mcp-server",
+      "list-mcp-servers",
+      "get-scoped-context",
+      "upsert-scoped-context",
+      "delete-scoped-context",
+      "resolve-scoped-context",
+      "probe-provider-models",
+      "probe-provider-chat"
+    ],
+    "detectionRules": [
+      {
+        "ruleId": "RULE-WS-001",
+        "name": "Unregistered Inbound Message Type Detection",
+        "target": "Frontend WS client send/request payloads",
+        "pattern": "type:\\s*['\"`]([a-zA-Z0-9_\\.\\-]+)['\"`]",
+        "assertion": "Captured message type MUST exist in DAEMON_INBOUND_MESSAGE_TYPES registry.",
+        "actionOnViolation": "Flag as unsupported WS message type and raise CI warning/error."
+      },
+      {
+        "ruleId": "RULE-WS-002",
+        "name": "Legacy Namespace Convention Warning",
+        "target": "Frontend WS client requests",
+        "pattern": "type:\\s*['\"`](cron\\.|mcp\\.)",
+        "assertion": "Frontend SHOULD NOT use dot-separated legacy RPC names when kebab-case equivalents exist in Daemon.",
+        "actionOnViolation": "Migrate dot-separated message types to Daemon canonical kebab-case names."
+      }
+    ]
+  },
+  "tauriIpcAudit": {
+    "summary": {
+      "totalRegisteredRustCommands": 55,
+      "totalFrontendInvokedCommands": 22,
+      "missingCommandsCount": 1
+    },
+    "missingCommands": [
+      {
+        "command": "open_url",
+        "sourceFile": "apps/crish-desktop/src/api/providerAuth.ts",
+        "lineNumber": 53,
+        "errorTrigger": "Command missing (command open_url not found)",
+        "rootCause": "Frontend calls invokeCmd('open_url', { url }), but 'open_url' is not registered in main.rs generate_handler!.",
+        "recommendedFix": "Use host_openers::workbench_open_host_target or register open_url command in main.rs."
+      }
+    ],
+    "callbackIdInvalidationPaths": [
+      {
+        "pathId": "CB-PATH-001",
+        "name": "HMR / Webview Reload During Long-Running Invoke",
+        "scenario": "A long-running command (e.g. core_search_files or workbench_git_status) is invoked. The webview reloads before Rust finishes execution.",
+        "symptom": "Console error: 'Callback ID xxx is not registered' or IPC response lost.",
+        "mitigation": "Wrap invoke calls with tauriInvoke.ts helper to handle unexpected webview tear-down gracefully."
+      },
+      {
+        "pathId": "CB-PATH-002",
+        "name": "Sidecar Event Emission to Destroyed Webview Window",
+        "scenario": "Sidecar process emits 'workbench-run-event' via AppHandle after the main window is closed or reloaded.",
+        "symptom": "Event dispatch failure in Rust / dropped window events.",
+        "mitigation": "Check window.is_visible() / window presence in Rust sidecar event router before emitting."
+      },
+      {
+        "pathId": "CB-PATH-003",
+        "name": "Unwrapped Direct Invoke Promise Rejection",
+        "scenario": "Direct window.__TAURI__.invoke without try/catch wrapper encountering missing command or serialization error.",
+        "symptom": "Unhandled promise rejection in window global scope.",
+        "mitigation": "Enforce all frontend IPC calls to go through apps/crish-desktop/src/api/tauriInvoke.ts."
+      }
+    ],
+    "detectionRules": [
+      {
+        "ruleId": "RULE-TAURI-001",
+        "name": "Unregistered Tauri Invoke Command Detection",
+        "target": "Frontend invokeCmd / tryInvokeTauri / invoke calls",
+        "pattern": "invoke(?:Cmd|Result|Tauri)?\\s*<.*?>?\\s*\\(\\s*['\"`]([a-zA-Z0-9_\\-]+)['\"`]",
+        "assertion": "Invoked command MUST exist in main.rs register_handlers! macro.",
+        "actionOnViolation": "Flag as missing Tauri Rust command."
+      },
+      {
+        "ruleId": "RULE-TAURI-002",
+        "name": "Safe Invoke Wrapper Enforcement",
+        "target": "Frontend code importing @tauri-apps/api/core directly",
+        "pattern": "import\\s*\\{.*invoke.*\\}\\s*from\\s*['\"`]@tauri-apps/api/core['\"`]",
+        "assertion": "Frontend SHOULD use tauriInvoke.ts instead of importing raw invoke directly.",
+        "actionOnViolation": "Warn developer to convert direct invoke calls to invokeResult/invokeCmd."
+      }
+    ]
+  },
+  "selfTestAutomation": {
+    "scriptPath": "scripts/ipc-daemon-audit-rules.json",
+    "ciValidationCommand": "python scripts/scan_all_ws.py && python scripts/scan_tauri_invokes_v2.py",
+    "status": "active"
+  }
+}

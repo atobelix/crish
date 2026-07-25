@@ -90,7 +90,7 @@ export function useSidebarContextMenu({
         splitScreenWorkspace(sessionId);
         break;
       case 'open-new': {
-        openSessionInNewWindow(targetSession);
+        openSessionInNewWindow(targetSession as any);
         break;
       }
       case 'rename':

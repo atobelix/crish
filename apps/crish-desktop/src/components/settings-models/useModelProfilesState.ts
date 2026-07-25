@@ -433,7 +433,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     });
   }, [selected, modelFilter, profiles]);
 
-  const modelsCount = normalizeModelIds(selected?.models).length;
+  const modelsCount = selected?.models ? (normalizeModelIds(selected.models) || []).length : 0;
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';
   const hasKeySelected = selected ? profileHasKey(selected) : false;
   const activeProfileId = getActiveProfileId();

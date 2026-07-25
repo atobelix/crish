@@ -1,6 +1,8 @@
 import type {
   SettingsTabType,
+  ColumnState,
 } from '../types';
+import type { McpServer, CronJob } from '../../api/clientApi';
 import {
   DEFAULT_SHELL_CHROME,
   SHELL_CHROME_IDS,

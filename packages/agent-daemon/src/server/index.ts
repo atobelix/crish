@@ -285,13 +285,13 @@ export class DaemonServer {
       "get-scoped-context", "upsert-scoped-context", "delete-scoped-context",
       "resolve-scoped-context", "start-mcp-server", "stop-mcp-server",
       "list-mcp-servers", "send-to-subagent", "get-subagent-status",
-      "probe-provider-models", "probe-provider-chat", "get-background-tasks",
+      "probe-provider-models", "probe-provider-chat", "list-background-tasks",
       "start-background-task", "cancel-background-task", "get-background-task-history",
       "list-artifacts", "get-artifact-content", "list-memories", "delete-memory",
       "list-checkpoints", "restore-checkpoint", "get-checkpoint-diff", "git-status",
       "git-diff", "preview-conversation-rewind", "apply-conversation-rewind",
       "preview-conversation-rewind-by-boundary", "resolve-conversation-rewind-boundary",
-      "apply-session-action", "git-list-branches", "git-list-commits",
+      "apply-session-action", "list-mutation-leases",
     ];
     for (const type of fallbackTypes) {
       this.messageRouter.register(type, async (msg, ws, client) => { await dh.handleInboundMessage(ws, client, msg); });

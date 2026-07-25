@@ -202,6 +202,13 @@ macro_rules! register_handlers {
             cli_bridge::workbench_dev_cli_background_demo,
             cli_bridge::workbench_dev_cli_run_task,
             cli_bridge::workbench_dev_cli_run_goal,
+            core_commands::core_check_command,
+            core_commands::core_search_files,
+            core_commands::core_rebuild_search_index,
+            core_commands::core_compact_messages,
+            core_commands::core_count_tokens,
+            core_commands::core_compute_diff,
+            core_commands::core_get_status,
             power::workbench_set_keep_awake,
         ]
     };

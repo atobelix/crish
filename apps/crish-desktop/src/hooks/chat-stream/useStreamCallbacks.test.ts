@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useStreamCallbacks } from './useStreamCallbacks';
 import type { UseChatStreamOptions } from './types';
-import type { StreamBatcherRefs } from './useStreamBatchers';
+import type { StreamBatcherRefs, StreamToolCallPatch } from './useStreamBatchers';
 import { SessionStreamManager } from '../../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { StreamTextBatcher, StreamValueBatcher } from '../../api/streamTextBatcher';
@@ -32,7 +32,7 @@ describe('useStreamCallbacks', () => {
       current: new StreamTextBatcher(() => {}, { intervalMs: 1000 }),
     };
     const toolBatcherRef = {
-      current: new StreamValueBatcher(() => {}, { intervalMs: 1000 }),
+      current: new StreamValueBatcher<StreamToolCallPatch>(() => {}, { intervalMs: 1000 }),
     };
     const renderBufferRef = { current: new StreamRenderBuffer() };
     const openSidePanelOnceRef = { current: { terminal: false, diff: false } };

@@ -98,12 +98,8 @@ impl WorkspaceFsGuard {
     }
 
     pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
-        let root = safe_canonicalize(root.as_ref(), 40).map_err(|e| {
-            FileCommandError::new(
-                ERR_INTERNAL,
-                format!("Failed to resolve workspace root: {e}"),
-            )
-        })?;
+        let p = root.as_ref();
+        let root = p.canonicalize().unwrap_or_else(|_| safe_canonicalize(p, 40).unwrap_or_else(|_| p.to_path_buf()));
         Ok(Self { root })
     }
 
@@ -147,9 +143,7 @@ impl WorkspaceFsGuard {
         };
 
         if candidate.exists() {
-        let canonical = safe_canonicalize(&candidate, 40).map_err(|e| {
-                FileCommandError::new(ERR_WRITE_FILE, format!("Failed to resolve path: {e}"))
-            })?;
+            let canonical = candidate.canonicalize().unwrap_or_else(|_| candidate.clone());
             if !path_is_same_or_child(&canonical, &self.root) {
                 return Err(FileCommandError::new(
                     ERR_OUTSIDE_WORKSPACE,
@@ -176,9 +170,7 @@ impl WorkspaceFsGuard {
                 ));
             }
         }
-        let ancestor_canon = safe_canonicalize(&ancestor, 40).map_err(|e| {
-            FileCommandError::new(ERR_WRITE_FILE, format!("Failed to resolve parent: {e}"))
-        })?;
+        let ancestor_canon = ancestor.canonicalize().unwrap_or_else(|_| ancestor.clone());
         if !path_is_same_or_child(&ancestor_canon, &self.root) {
             return Err(FileCommandError::new(
                 ERR_OUTSIDE_WORKSPACE,
@@ -209,11 +201,15 @@ fn path_is_same_or_child(path: &Path, root: &Path) -> bool {
     #[cfg(windows)]
     {
         let normalize = |value: &Path| {
-            value
-                .to_string_lossy()
-                .replace('/', "\\")
-                .trim_end_matches('\\')
-                .to_ascii_lowercase()
+            let s = value.to_string_lossy().replace('/', "\\");
+            let s = if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                stripped.to_string()
+            } else if let Some(stripped) = s.strip_prefix(r"\\.\") {
+                stripped.to_string()
+            } else {
+                s
+            };
+            s.trim_end_matches('\\').to_ascii_lowercase()
         };
         let path = normalize(path);
         let root = normalize(root);

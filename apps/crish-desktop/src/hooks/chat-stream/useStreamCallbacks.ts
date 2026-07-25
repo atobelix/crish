@@ -557,7 +557,7 @@ export function useStreamCallbacks(
 
     const stillMine = streamManagerRef.current!.get(sid);
     if (stillMine?.assistantMsgId === assistantMsgId) {
-      stillMine.cancel = () => cancelFn();
+      stillMine.cancel = () => cancelRef.current?.();
       if (localRunId) stillMine.runId = localRunId;
     }
   };

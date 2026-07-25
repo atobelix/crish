@@ -7,10 +7,10 @@ import { RefreshCw } from 'lucide-react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
 export interface SidebarFooterProps {
-  chromeHidden: boolean;
-  updateAvailable: boolean;
+  chromeHidden?: boolean | undefined;
+  updateAvailable?: boolean | undefined;
   onShowToast: ShowToastFn;
-  setUpdateAvailableState: React.Dispatch<React.SetStateAction<boolean>>;
+  setUpdateAvailableState?: React.Dispatch<React.SetStateAction<boolean>> | undefined;
 }
 
 export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
@@ -62,7 +62,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                       await import('../../api/updateStore');
                     const r = await applyUpdateWhenIdle();
                     onShowToast?.(r.message);
-                    if (r.ok) setUpdateAvailableState(false);
+                    if (r.ok) setUpdateAvailableState?.(false);
                   })();
                 }}
               >

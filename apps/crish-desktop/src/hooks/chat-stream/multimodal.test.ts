@@ -24,7 +24,7 @@ describe('buildMultimodalFromAttachments', () => {
     expect(res.streamOptions).toBeDefined();
     expect(res.streamOptions?.hasImages).toBe(true);
     expect(res.streamOptions?.attachments).toHaveLength(1);
-    expect(res.streamOptions?.attachments[0]).toEqual({
+    expect(res.streamOptions!.attachments![0]).toEqual({
       name: 'screenshot.png',
       mime: 'image/png',
       kind: 'image',
@@ -44,11 +44,11 @@ describe('buildMultimodalFromAttachments', () => {
     const res = buildMultimodalFromAttachments('Check log', attachments);
 
     expect(res.streamOptions?.hasImages).toBe(false);
-    expect(res.streamOptions?.attachments[0]).toEqual({
+    expect(res.streamOptions!.attachments![0]).toEqual({
       name: 'log.txt',
       kind: 'text',
     });
-    const contentText = res.streamOptions?.content[1];
+    const contentText = res.streamOptions!.content![1];
     expect(contentText?.type).toBe('text');
     if (contentText?.type === 'text') {
       expect(contentText.text).toContain('…(截断)');
@@ -66,7 +66,7 @@ describe('buildMultimodalFromAttachments', () => {
     const res = buildMultimodalFromAttachments('', attachments);
 
     expect(res.promptAttachBlock).toContain('- archive.zip');
-    expect(res.streamOptions?.attachments[0]).toEqual({
+    expect(res.streamOptions!.attachments![0]).toEqual({
       name: 'archive.zip',
       kind: 'file',
     });

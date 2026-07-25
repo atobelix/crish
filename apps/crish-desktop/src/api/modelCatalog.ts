@@ -82,6 +82,23 @@ export function normalizeModelIdText(raw: unknown): string {
   return s.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
 }
 
+export function normalizeModelIds(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(normalizeModelIdText).filter(Boolean);
+  if (typeof raw === 'string') return raw.split(',').map(normalizeModelIdText).filter(Boolean);
+  return [];
+}
+
+export function mergeModelIds(...lists: unknown[]): string[] {
+  const set = new Set<string>();
+  for (const list of lists) {
+    for (const id of normalizeModelIds(list)) {
+      set.add(id);
+    }
+  }
+  return Array.from(set);
+}
+
 /** 目录项去重键：profileId::model（与 meta 存储键同形） */
 export function catalogEntryKey(
   entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined,

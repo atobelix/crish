@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { ShortcutService } from '../../services/ShortcutService';
 import { openSettings, toggleSettingsOverlay } from '../../api/storeAccess';
-import type { UseAppKeyboardOpts } from '../useAppKeyboard';
+import type { UseAppKeyboardOpts } from './keyboard-types';
 import type { SettingsTabType } from '../../store/types';
 
 export function useKeyboardNavigation(opts: UseAppKeyboardOpts): void {
@@ -105,7 +105,7 @@ export function useKeyboardNavigation(opts: UseAppKeyboardOpts): void {
         }
         case 'cheatsheet':
           e.preventDefault();
-          setShowCheatsheet((v) => !v);
+          setShowCheatsheet((v: boolean) => !v);
           return;
         case 'export_logs':
           e.preventDefault();

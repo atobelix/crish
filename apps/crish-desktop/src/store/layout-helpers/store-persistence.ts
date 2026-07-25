@@ -146,7 +146,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
           if (cur.sessions.length > 0) return;
 
           let applied = false;
-          store.setState((state) => {
+          store.setState((state: PersistableStoreState) => {
             // 二次检查：recipe 内仍空才写入
             if (state.sessions.length > 0) return;
 
@@ -189,13 +189,13 @@ export function initStorePersistence<S extends PersistableStoreState>(
       })
       .finally(() => {
         if (!abortController.signal.aborted) {
-          store.setState((state) => {
+          store.setState((state: PersistableStoreState) => {
             state.hydrationComplete = true;
           });
         }
       });
   } else {
-    store.setState((state) => {
+    store.setState((state: PersistableStoreState) => {
       state.hydrationComplete = true;
     });
   }

@@ -200,6 +200,8 @@ export const SessionRow = memo(function SessionRow({
       <div
         ref={rowRef}
         role="treeitem"
+        data-testid="sidebar-session-item"
+        data-testid-session-id={s.id}
         aria-selected={sessionActive}
         aria-label={isRunning ? `${displayText}，处理中` : displayText}
         tabIndex={sessionActive ? 0 : -1}

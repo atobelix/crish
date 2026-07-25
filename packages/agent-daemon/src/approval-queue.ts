@@ -173,7 +173,7 @@ export class ApprovalQueue {
     return this.pendingSnapshot(pending);
   }
 
-  resolve(toolCallId: string, decision: ApprovalUserDecision, scope?: ApprovalScope): boolean {
+  resolve(toolCallId: string, decision: ApprovalUserDecision, scope?: ApprovalScope, customReason?: string): boolean {
     const pending = this.pending.get(toolCallId);
     if (!pending) {
       getDaemonLogger().warn('No pending approval found', { module: 'ApprovalQueue', toolCallId });
@@ -184,12 +184,15 @@ export class ApprovalQueue {
       this.scopes.set(toolCallId, scope);
     }
 
+    const defaultReason = decision === "approved" ? "user-approved" : "user-denied";
+    const finalReason = customReason?.trim() || defaultReason;
+
     this.settle(pending, {
       decision,
-      reason: decision === "approved" ? "user-approved" : "user-denied",
+      reason: finalReason,
       resolvedAt: this.now(),
     });
-    getDaemonLogger().info('Approval resolved', { module: 'ApprovalQueue', toolCallId, decision, scope: scope || 'project' });
+    getDaemonLogger().info('Approval resolved', { module: 'ApprovalQueue', toolCallId, decision, scope: scope || 'project', reason: finalReason });
     return true;
   }
 

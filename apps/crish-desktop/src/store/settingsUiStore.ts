@@ -76,7 +76,7 @@ type SettingsUiStoreData = SettingsUiSlice & {
   manuallyTriggeredWorkers: ActiveWorkerState[];
 };
 
-type SettingsUiStore = SettingsUiStoreData & SettingsUiActions & {
+export type SettingsUiStore = SettingsUiStoreData & SettingsUiActions & {
   setUiSize: (size: UiSize) => void;
   setShellChromeMode: (mode: ShellChromeMode) => void;
   setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
@@ -183,7 +183,7 @@ export const createSettingsUiSlice = (set: any) => ({
           state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
         }),
 
-        triggerCronJobNow: (prompt: string) => set((state) => {
+        triggerCronJobNow: (prompt: string) => set((state: any) => {
           const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
           const newWorker: ActiveWorkerState = {
             id: `worker-manual-${Date.now()}`,

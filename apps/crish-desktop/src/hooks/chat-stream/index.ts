@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
-import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import type { UseChatStreamOptions, UseChatStreamResult, RunNotice } from './types';
 import { useStreamBatchers } from './useStreamBatchers';
 import { useStreamCallbacks } from './useStreamCallbacks';
@@ -11,7 +10,7 @@ export function useChatStream(
   options: UseChatStreamOptions
 ): UseChatStreamResult {
   const refs = useStreamBatchers();
-  const { streamManagerRef, renderBufferRef } = refs;
+  const { renderBufferRef } = refs;
 
   const wsId = options.wsId;
   const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
@@ -59,7 +58,7 @@ export function useChatStream(
     options,
     refs,
     { pushRunNotice, dismissRunNotice },
-    { wsId, setActiveDiffSource, upsertSessionAgent },
+    { wsId, setActiveDiffSource: setActiveDiffSource as (source: any) => void, upsertSessionAgent },
   );
 
   const { handleSendChat } = useSlashSend(options, refs, runStreamingAssistant);

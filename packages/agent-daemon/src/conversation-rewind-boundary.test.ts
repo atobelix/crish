@@ -25,17 +25,19 @@ import {
 } from "./persistence.js";
 
 const tempDirs: string[] = [];
+const manifestServices: Array<{ close(): Promise<void> }> = [];
 
 afterEach(async () => {
+  await Promise.all(manifestServices.splice(0).map((service) => service.close().catch(() => undefined)));
   await removeTempDirs(tempDirs);
 });
 
 describe("conversation rewind boundary daemon resolver", () => {
   it("reports typed missing facts when a boundary lacks leaves and checkpoint facts", async () => {
     const sessionEventLogDir = await tempDir();
-    const boundaries = new ConversationBoundaryManifestService({
+    const boundaries = trackManifest(new ConversationBoundaryManifestService({
       manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-    });
+    }));
     await boundaries.append({
       sessionId: "session_missing",
       runId: "run_missing",
@@ -67,12 +69,12 @@ describe("conversation rewind boundary daemon resolver", () => {
 
   it("selects the latest boundary for a session and matches checkpoint manifest facts", async () => {
     const sessionEventLogDir = await tempDir();
-    const boundaries = new ConversationBoundaryManifestService({
+    const boundaries = trackManifest(new ConversationBoundaryManifestService({
       manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-    });
-    const checkpoints = new CheckpointManifestService({
+    }));
+    const checkpoints = trackManifest(new CheckpointManifestService({
       manifestPath: resolveDaemonCheckpointManifestPath({ sessionEventLogDir }),
-    });
+    }));
 
     await boundaries.append(boundaryInput(sessionEventLogDir, "session_latest", "run_old", "user_old", "leaf_old", "runtime_old", "2026-06-08T00:00:00.000Z"));
     await boundaries.append(boundaryInput(sessionEventLogDir, "session_latest", "run_new", "user_new", "leaf_new", "runtime_new", "2026-06-08T00:01:00.000Z"));
@@ -141,12 +143,12 @@ describe("conversation rewind boundary daemon resolver", () => {
       const firstAssistantEntryId = messageEntries[1]!.id;
       const runtimeCurrentLeafId = messageEntries.at(-1)!.id;
 
-      const boundaries = new ConversationBoundaryManifestService({
+      const boundaries = trackManifest(new ConversationBoundaryManifestService({
         manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-      });
-      const checkpoints = new CheckpointManifestService({
+      }));
+      const checkpoints = trackManifest(new CheckpointManifestService({
         manifestPath: resolveDaemonCheckpointManifestPath({ sessionEventLogDir }),
-      });
+      }));
       await boundaries.append({
         sessionId: "session_preview",
         runId: "run_preview_target",
@@ -231,9 +233,9 @@ describe("conversation rewind boundary daemon resolver", () => {
         prompt: "second",
       });
 
-      const boundaries = new ConversationBoundaryManifestService({
+      const boundaries = trackManifest(new ConversationBoundaryManifestService({
         manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-      });
+      }));
       const records = await boundaries.list({ sessionId: "session_auto_boundary" });
       const messageEntries = (await readRuntimeSessionEntries(sessionEventLogDir)).filter((entry) => entry.type === "message");
       expect(records.map((record) => record.runId)).toEqual([
@@ -332,9 +334,9 @@ describe("conversation rewind boundary daemon resolver", () => {
         permissionMode: "full-access",
       });
 
-      const boundaries = new ConversationBoundaryManifestService({
+      const boundaries = trackManifest(new ConversationBoundaryManifestService({
         manifestPath: resolveDaemonConversationBoundaryManifestPath({ sessionEventLogDir }),
-      });
+      }));
       const boundary = await boundaries.findLatest({ sessionId: "session_auto_checkpoint" });
       expect(boundary).toBeDefined();
       // Runtime synthesis nudges are role=user but must not become the latest product boundary.
@@ -343,9 +345,9 @@ describe("conversation rewind boundary daemon resolver", () => {
         ...new Set((await boundaries.list({ sessionId: "session_auto_checkpoint" })).map((r) => r.userMessageId)),
       ];
       expect(uniqueUserIds).toEqual([boundary!.userMessageId]);
-      const checkpoint = await new CheckpointManifestService({
+      const checkpoint = await trackManifest(new CheckpointManifestService({
         manifestPath: resolveDaemonCheckpointManifestPath({ sessionEventLogDir }),
-      }).findLatestForRewindBoundary({
+      })).findLatestForRewindBoundary({
         sessionId: "session_auto_checkpoint",
         userMessageId: boundary!.userMessageId,
       });
@@ -472,6 +474,11 @@ async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "daemon-rewind-boundary-"));
   tempDirs.push(dir);
   return dir;
+}
+
+function trackManifest<T extends { close(): Promise<void> }>(service: T): T {
+  manifestServices.push(service);
+  return service;
 }
 
 async function openClient(port: number): Promise<WebSocket> {

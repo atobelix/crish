@@ -10,8 +10,8 @@ export type ChatAttachment = {
 
 export type RunNotice = {
   text: string;
-  kind?: string;
-  detail?: string;
+  kind?: string | undefined;
+  detail?: string | undefined;
 };
 
 export interface UseChatStreamOptions {

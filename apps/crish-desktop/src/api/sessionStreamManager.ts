@@ -39,6 +39,14 @@ export class SessionStreamManager {
     return this.streams.get(sessionId);
   }
 
+  has(sessionId: string): boolean {
+    return this.streams.has(sessionId);
+  }
+
+  hasStream(sessionId: string): boolean {
+    return this.streams.has(sessionId);
+  }
+
   set(sessionId: string, handle: SessionStreamHandle): void {
     this.streams.set(sessionId, handle);
   }

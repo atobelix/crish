@@ -202,6 +202,7 @@ export default defineConfig({
   optimizeDeps: {
     // 避免 dev prebundle 把 Node-only stdio transport 打进浏览器 deps
     exclude: ['@modelcontextprotocol/sdk'],
+    include: ['react', 'react-dom', 'react-dom/client', '@radix-ui/react-popover', '@tauri-apps/api/window', 'dompurify', 'lucide-react', 'zustand', 'immer', 'highlight.js'],
   },
   server: {
     port: 5174,

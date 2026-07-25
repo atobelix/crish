@@ -80,12 +80,39 @@ export function parseStoredTimestampMs(stored: string | undefined | null): numbe
   if (!t || isBadTimestampLiteral(t)) return 0;
   // 老数据 '远程' 字面量视为无效时间
   if (t === REMOTE_TIMESTAMP_LITERAL) return 0;
-  const parsed = Date.parse(t);
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  // 纯数字秒/毫秒
-  if (/^\d{10,13}$/.test(t)) {
+  // 纯数字串：必须严格匹配 10-13 位（秒/毫秒）。
+  // 防止 V8 Date.parse 把 "0" / "0123456789012" / "0000000000123456" 等
+  // 纯数字串错误解释为日期（V8 会把 "0" 当作 2000-01-01，把带前导零的串当扩展年）。
+  if (/^\d+$/.test(t)) {
+    if (!/^\d{10,13}$/.test(t)) return 0;
     const n = Number(t);
     if (Number.isFinite(n) && n > 0) return n < 1e12 ? n * 1000 : n;
+    return 0;
+  }
+  const parsed = Date.parse(t);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    // 防止 V8 静默接受 "2024-02-30" 等无效 ISO 日期（自动 overflow 到 3 月）。
+    // 通过 re-parse 验证日期组件一致性：解析后的年/月/日必须与输入串一致。
+    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+    if (m) {
+      const d = new Date(parsed);
+      const y = parseInt(m[1]!, 10);
+      const mo = parseInt(m[2]!, 10);
+      const day = parseInt(m[3]!, 10);
+      const rest = m[4] || '';
+      // V8：日期串带 Z / 时区偏移 / 纯日期（无时间）→ UTC；带时间无 Z → 本地时区
+      const isUtc = rest === '' || /Z$|[+-]\d{2}:?\d{2}$/.test(rest);
+      if (isUtc) {
+        if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== mo || d.getUTCDate() !== day) {
+          return 0;
+        }
+      } else {
+        if (d.getFullYear() !== y || d.getMonth() + 1 !== mo || d.getDate() !== day) {
+          return 0;
+        }
+      }
+    }
+    return parsed;
   }
   return 0;
 }
@@ -117,6 +144,7 @@ export function coerceSessionTimestamp(
   if (messages?.length) {
     let max = 0;
     for (const m of messages) {
+      if (!m) continue; // null / undefined 条目跳过
       const ts = finitePositiveMs(m.timestamp);
       if (ts > max) max = ts;
     }
@@ -141,7 +169,9 @@ export function formatAbsoluteCalendarDate(ms: number, now = Date.now()): string
   const y = date.getFullYear();
   const m = date.getMonth() + 1;
   const day = date.getDate();
-  const cy = new Date(now).getFullYear();
+  // now 非有限时回落到当前时间，避免 NaN 比较导致同年日期误判为跨年
+  const safeNow = Number.isFinite(now) ? now : Date.now();
+  const cy = new Date(safeNow).getFullYear();
   if (y === cy) return `${m}/${day}`;
   return `${y}/${m}/${day}`;
 }
@@ -154,15 +184,18 @@ export function formatAbsoluteCalendarDate(ms: number, now = Date.now()): string
 export function sessionLastActivityMs(s: SessionState): number {
   let max = 0;
   for (const m of s.messages || []) {
+    if (!m) continue; // null / undefined 条目跳过
     const ts = finitePositiveMs(m.timestamp);
     if (ts > max) max = ts;
   }
   for (const a of s.agents || []) {
+    if (!a) continue; // null / undefined 条目跳过
     const started = finitePositiveMs(a.startedAt);
     if (started > max) max = started;
     const ended = finitePositiveMs(a.endedAt);
     if (ended > max) max = ended;
     for (const m of a.messages || []) {
+      if (!m) continue; // null / undefined 条目跳过
       const ts = finitePositiveMs(m.timestamp);
       if (ts > max) max = ts;
     }
@@ -327,6 +360,7 @@ export function hasRecentSessionActivity(
   windowMs = SESSION_LIST_RECENT_ACTIVITY_MS,
 ): boolean {
   for (const s of sessions) {
+    if (!s) continue; // null / undefined 条目跳过
     const ms = sessionActivityShellMs(s);
     if (ms <= 0) continue;
     const age = now - ms;
@@ -352,6 +386,7 @@ export function sessionListTimeTickMs(
     : SESSION_LIST_TICK_SLOW_MS;
 
   for (const s of sessions) {
+    if (!s) continue; // null / undefined 条目跳过
     const act = sessionActivityShellMs(s);
     if (act <= 0) continue;
     // 远未来：绝对日期，无需贴边

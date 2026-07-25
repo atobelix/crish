@@ -66,6 +66,7 @@ import {
   invalid,
   isRecord,
   ok,
+  optionalArray,
   optionalBoolean,
   optionalEnum,
   optionalEventCursorDiagnostic,
@@ -822,9 +823,12 @@ export function validateTaskMessage(
   requiredString(value, "createdAt", `${path}.createdAt`, issues, {
     nonEmpty: true,
   });
-  if ("toolCalls" in value) {
-    const toolCalls = requiredArray(value, "toolCalls", `${path}.toolCalls`, issues);
-    toolCalls?.forEach((toolCall, index) =>
+  // DaemonTaskMessageSnapshot.toolCalls 的类型是 `DaemonTaskSnapshotToolCall[] | undefined`：
+  // 字段始终存在，但值可以是 undefined（表示无 tool call）。
+  // 使用 optionalArray 语义：undefined/null 时跳过，存在则必须是数组。
+  const toolCalls = optionalArray(value, "toolCalls", `${path}.toolCalls`, issues);
+  if (toolCalls) {
+    toolCalls.forEach((toolCall, index) =>
       validateTaskToolCall(toolCall, `${path}.toolCalls[${index}]`, issues)
     );
   }

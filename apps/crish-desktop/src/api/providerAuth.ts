@@ -50,7 +50,8 @@ async function tryOpenUrl(url: string): Promise<boolean> {
       /* ignore */
     }
     try {
-      const ok = await invokeCmd<boolean>("open_url", { url });
+      const ok = await invokeCmd<boolean>("workbench_open_host_target", { target: url })
+        .catch(() => invokeCmd<boolean>("open_url", { url }));
       if (ok) return true;
     } catch {
       /* ignore */

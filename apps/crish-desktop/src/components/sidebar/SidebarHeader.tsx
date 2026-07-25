@@ -12,12 +12,12 @@ export interface SidebarHeaderProps {
   isSearching: boolean;
   filterLabel: string;
   activeNav: string;
-  searchInput?: string;
+  searchInput?: string | undefined;
   onHamburgerClick: () => void;
   onOverlayClose: () => void;
   onNewSession: () => void;
   onOpenScheduled: () => void;
-  onSearchChange?: (val: string) => void;
+  onSearchChange?: ((val: string) => void) | undefined;
 }
 
 export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(

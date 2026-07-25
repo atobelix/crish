@@ -437,6 +437,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     <div
       ref={rootRef}
       className={`${styles.settingsPanel} ${styles.settingsCover} is-${state}`}
+      data-testid="settings-panel"
       data-density="compact"
       role="dialog"
       aria-modal="true"
@@ -499,6 +500,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <button
                 type="button"
                 className="win-btn close no-drag"
+                data-testid="settings-close-button"
                 data-tauri-drag-region="false"
                 onClick={onClose}
                 aria-label="关闭设置"
@@ -580,6 +582,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       type="button"
                       id={tabBtnId}
                       role="tab"
+                      data-testid={`settings-tab-${tab.id}`}
                       data-settings-tab-id={tab.id}
                       aria-selected={isTabActive}
                       aria-controls={isTabActive ? panelId : undefined}

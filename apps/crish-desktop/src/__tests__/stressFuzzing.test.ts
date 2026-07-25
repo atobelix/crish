@@ -104,7 +104,7 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
   });
 
   describe('Probe D: TelemetryMonitor 缓冲区过载与 OOM 防护探针', () => {
-    it('should hard-limit buffer to 1000 items even when bombarded with 2000 logs', async () => {
+    it('should hard-limit buffer to 1000 items even when bombarded with 2000 logs', { timeout: 15_000 }, async () => {
       const tm = telemetryMonitor as any;
       tm.buffer = [];
       

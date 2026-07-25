@@ -5,6 +5,7 @@
 
 import { getWorkspacePath } from './projectStore';
 export { getWorkspacePath };
+export { openPathDefault } from './hostOpenersApi';
 import { invokeResult } from './tauriInvoke';
 
 export type FsDirEntry = {

@@ -9,6 +9,7 @@ import {
   looksLikeDirectoryListing,
   sanitizeToolDisplayOutput,
 } from '../toolFeedback';
+export { isShellToolName } from '../toolFeedback';
 import type { ToolRowTone } from './toolPresentationTypes';
 
 /** 仅真正会话中断才隐藏，勿匹配「工具未完成」等收口文案 */

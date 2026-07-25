@@ -5,7 +5,7 @@
  * 后续应将键盘微调迁移至 useColumnResize 后移除此文件。
  */
 import React from 'react';
-import type { WorkspaceState } from '../store/layoutStore';
+import type { WorkspaceState } from '../../store/layoutStore';
 
 export function useWorkspaceResize(
   ws: WorkspaceState,

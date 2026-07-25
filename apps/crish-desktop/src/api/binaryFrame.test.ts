@@ -109,7 +109,7 @@ describe('encode/decode roundtrip', () => {
       if (!decoded.ok) return;
       expect(decoded.frame.version).toBe(1);
       expect(decoded.frame.type).toBe(c.type);
-      expect(decoded.frame.payload).toEqual(c.payload);
+      expect(new Uint8Array(decoded.frame.payload)).toEqual(new Uint8Array(c.payload));
     });
   }
 

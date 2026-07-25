@@ -325,9 +325,15 @@ export function validateDenyToolMessage(
     { nonEmpty: true }
   );
 
+  const reason = optionalString(input, 'reason', '$.reason', issues);
+
   if (issues.length > 0) return invalid('Invalid deny-tool message', issues);
 
-  return ok({ type: 'deny-tool', toolCallId: toolCallId as string });
+  return ok({
+    type: 'deny-tool',
+    toolCallId: toolCallId as string,
+    ...(reason !== undefined ? { reason } : {}),
+  });
 }
 
 export function validateCancelRunMessage(

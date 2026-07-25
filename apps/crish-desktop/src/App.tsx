@@ -224,6 +224,7 @@ function App() {
                 <button
                   type="button"
                   className="header-btn no-drag"
+                  data-testid="sidebar-toggle"
                   aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
                   aria-expanded={!sidebarCollapsed}
                   aria-controls="crish-sidebar"
