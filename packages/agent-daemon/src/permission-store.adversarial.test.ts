@@ -29,61 +29,59 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-describe('PermissionStore — matchPattern 正则元字符未转义', () => {
-  it('字面量 . 在 pattern 中被解释为"任意字符"', () => {
+describe('PermissionStore — matchPattern 通配符语义（元字符已转义）', () => {
+  it('字面量 . 在 pattern 中作为字面量匹配（非"任意字符"）', () => {
     const store = new PermissionStore(tempDir);
     store.addRule('global', 'git status.', 'allow');
-    // pattern "git status." → regex "^git status.$" → . 匹配任意字符
-    // 所以 "git statusX" 也匹配
-    expect(store.evaluate('git statusX')).toBe('allow');
-    // 但用户意图是只匹配 "git status." 字面量
+    // 修复后 . 是字面量，只匹配 "git status."，不匹配 "git statusX"
+    expect(store.evaluate('git status.')).toBe('allow');
+    expect(store.evaluate('git statusX')).toBe(null);
   });
 
-  it('字面量 + 在 pattern 中被解释为"一次或多次"', () => {
+  it('字面量 + 在 pattern 中作为字面量匹配（非"一次或多次"）', () => {
     const store = new PermissionStore(tempDir);
     store.addRule('global', 'git commit+', 'allow');
-    // "git commit+" → "^git commit+$" → + 表示一个或多个 t
-    expect(store.evaluate('git committttt')).toBe('allow');
-    expect(store.evaluate('git commi')).toBe(null); // 不匹配（无 t）
+    // 修复后 + 是字面量，只匹配 "git commit+"
+    expect(store.evaluate('git commit+')).toBe('allow');
+    expect(store.evaluate('git committttt')).toBe(null);
+    expect(store.evaluate('git commi')).toBe(null);
   });
 
-  it('字面量 ( ) 在 pattern 中被解释为分组', () => {
+  it('字面量 ( ) 在 pattern 中作为字面量匹配（非分组）', () => {
     const store = new PermissionStore(tempDir);
-    // 含括号的 pattern 会触发 regex 语法错误，被 catch 后返回 false
     store.addRule('global', 'foo(bar)', 'allow');
-    // "(bar)" 是合法分组，所以 regex "^foo(bar)$" 匹配 "foobar"
-    expect(store.evaluate('foobar')).toBe('allow');
-    // 用户可能期望只匹配字面 "foo(bar)"
-  });
-
-  it('未闭合括号触发 regex 语法错误，规则静默失效', () => {
-    const store = new PermissionStore(tempDir);
-    store.addRule('global', 'foo(bar', 'allow');
-    // pattern "foo(bar" → "^foo(bar$" — 未闭合分组，regex 抛错
-    // catch 后返回 false，规则永远不会匹配
-    expect(store.evaluate('foo(bar')).toBe(null);
+    // 修复后 ( ) 是字面量，只匹配 "foo(bar)"，不匹配 "foobar"
+    expect(store.evaluate('foo(bar)')).toBe('allow');
     expect(store.evaluate('foobar')).toBe(null);
   });
 
-  it('方括号 [ ] 被解释为字符类', () => {
+  it('未闭合括号现在作为字面量匹配（不再触发 regex 语法错误）', () => {
     const store = new PermissionStore(tempDir);
-    store.addRule('global', 'file[abc]', 'allow');
-    // "file[abc]" → "^file[abc]$" → 匹配 "filea", "fileb", "filec"
-    expect(store.evaluate('filea')).toBe('allow');
-    expect(store.evaluate('fileb')).toBe('allow');
-    expect(store.evaluate('filed')).toBe(null);
+    store.addRule('global', 'foo(bar', 'allow');
+    // 修复后 ( 被转义为 \(，regex 有效，匹配字面量 "foo(bar"
+    expect(store.evaluate('foo(bar')).toBe('allow');
+    expect(store.evaluate('foobar')).toBe(null);
   });
 
-  it('反斜杠 \ 在 pattern 中可能引发意外行为', () => {
+  it('方括号 [ ] 作为字面量匹配（非字符类）', () => {
+    const store = new PermissionStore(tempDir);
+    store.addRule('global', 'file[abc]', 'allow');
+    // 修复后 [ ] 是字面量，只匹配 "file[abc]"，不匹配 "filea"
+    expect(store.evaluate('file[abc]')).toBe('allow');
+    expect(store.evaluate('filea')).toBe(null);
+    expect(store.evaluate('fileb')).toBe(null);
+  });
+
+  it('反斜杠 \ 在 pattern 中作为字面量匹配', () => {
     const store = new PermissionStore(tempDir);
     store.addRule('global', 'foo\\d+', 'allow');
-    // "foo\d+" → "^foo\\d+$" → \d 匹配数字
-    expect(store.evaluate('foo123')).toBe('allow');
+    // 修复后 \ 和 + 都是字面量，只匹配 "foo\d+"
+    expect(store.evaluate('foo\\d+')).toBe('allow');
+    expect(store.evaluate('foo123')).toBe(null);
     expect(store.evaluate('fooabc')).toBe(null);
   });
 
-  it('属性测试: 不含 * ? 的字面量 pattern 应精确匹配', () => {
-    // 这个测试会失败 —— 当前实现把 . + 等解释为 regex 元字符
+  it('属性测试: 不含 * ? 的字面量 pattern 应精确匹配自身', () => {
     const store = new PermissionStore();
     fc.assert(
       fc.property(
@@ -92,8 +90,6 @@ describe('PermissionStore — matchPattern 正则元字符未转义', () => {
           store.addRule('global', s, 'allow');
           // 字面量 pattern 应只匹配自身
           const result = store.evaluate(s);
-          // 当前实现：如果 s 含 . 或 +，可能匹配其他字符串
-          // 但至少应匹配自身
           expect(result).toBe('allow');
         },
       ),
@@ -199,28 +195,30 @@ describe('PermissionStore — 持久化与损坏恢复', () => {
     expect(store2.evaluate('git status')).toBe('allow');
   });
 
-  it('暴露 bug: JSON 文件包含 null 时，rules 被设为 null，后续操作崩溃', () => {
+  it('修复验证: JSON 文件包含 null 时，rules 重置为空数组，不崩溃', () => {
     const file = join(tempDir, 'permissions.json');
     writeFileSync(file, 'null', 'utf-8');
     const store = new PermissionStore(tempDir);
-    // load 后 this.rules = null
-    expect(() => store.addRule('global', 'x', 'allow')).toThrow();
-    // 因为 this.rules.push 在 null 上调用
+    // 修复后 load 验证 Array.isArray，null 被重置为 []
+    expect(store.getRules()).toEqual([]);
+    expect(() => store.addRule('global', 'x', 'allow')).not.toThrow();
   });
 
-  it('暴露 bug: JSON 文件包含非数组对象时，rules 被设为对象，push 失败', () => {
+  it('修复验证: JSON 文件包含非数组对象时，rules 重置为空数组', () => {
     const file = join(tempDir, 'permissions.json');
     writeFileSync(file, '{"foo":"bar"}', 'utf-8');
     const store = new PermissionStore(tempDir);
-    expect(() => store.addRule('global', 'x', 'allow')).toThrow();
+    expect(store.getRules()).toEqual([]);
+    expect(() => store.addRule('global', 'x', 'allow')).not.toThrow();
   });
 
-  it('暴露 bug: JSON 文件包含数组但元素结构错误时，evaluate 行为未定义', () => {
+  it('修复验证: JSON 文件含数组但元素结构错误时，evaluate 不崩溃', () => {
     const file = join(tempDir, 'permissions.json');
     writeFileSync(file, '[{"foo":"bar"}]', 'utf-8');
     const store = new PermissionStore(tempDir);
-    // rule.targetPattern 是 undefined，matchPattern 调用 undefined.trim() 抛错
-    expect(() => store.evaluate('test')).toThrow();
+    // 修复后 matchPattern 防御 undefined targetPattern，返回 false 而非抛错
+    expect(() => store.evaluate('test')).not.toThrow();
+    expect(store.evaluate('test')).toBe(null);
   });
 
   it('损坏的 JSON（语法错误）静默重置为空规则', () => {

@@ -192,19 +192,34 @@ describe('escapeShellArg — 属性测试：剥离字符集的不一致性', () 
     );
   });
 
-  it('暴露 bug: 转义后的双引号数量不一定是偶数（翻倍逻辑）', () => {
-    // 输入 a"b → 输出 "a""b"，内部有 2 个 "（偶数）
-    // 输入 a""b → 输出 "a""""b"，内部有 4 个 "（偶数）
-    // 但 bash 解析这些时行为不一致
+  it('cmd 翻倍逻辑的数学正确性：每个 " 翻倍为 ""，再加外层一对', () => {
+    // 输入 N 个 " → 内部 2N 个 " → 加外层 2 个 → 总共 2N+2 个
     const cases = [
-      { input: 'a"b', expected: '"a""b"' },
-      { input: 'a""b', expected: '"a""""b"' },
-      { input: '"', expected: '"""' },
-      { input: '""', expected: '""""' },
+      { input: 'a"b', expected: '"a""b"', internalQuotes: 2 },
+      { input: 'a""b', expected: '"a""""b"', internalQuotes: 4 },
+      { input: '"', expected: '""""', internalQuotes: 2 },
+      { input: '""', expected: '""""""', internalQuotes: 4 },
     ];
-    for (const { input, expected } of cases) {
-      expect(escapeShellArg(input)).toBe(expected);
+    for (const { input, expected, internalQuotes } of cases) {
+      const result = escapeShellArg(input);
+      expect(result).toBe(expected);
+      // 内部引号数（去掉外层一对）应为偶数
+      const inner = result.slice(1, -1);
+      const count = (inner.match(/"/g) || []).length;
+      expect(count).toBe(internalQuotes);
+      expect(count % 2).toBe(0);
     }
+  });
+
+  it('bash 解析下 cmd 翻倍逻辑会导致字面量被截断（跨平台风险）', () => {
+    // cmd 下 "a""b" 表示字面量 a"b，正确
+    // 但 bash 下 "a""b" 被解析为相邻字符串拼接 → "a" + "b" = ab（" 被吞掉）
+    const input = 'a"b';
+    const escaped = escapeShellArg(input);
+    const bashParsed = simulateBashDoubleQuoteParse(escaped);
+    // bash 解析后丢失了中间的 "
+    expect(bashParsed).toBe('ab');
+    expect(bashParsed).not.toBe(input);
   });
 });
 

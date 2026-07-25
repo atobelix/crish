@@ -34,7 +34,9 @@ export class PermissionStore {
     if (!this.filePath || !existsSync(this.filePath)) return;
     try {
       const raw = readFileSync(this.filePath, 'utf-8');
-      this.rules = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // 防御非数组 JSON（如 null、对象、字符串）导致后续 push 崩溃
+      this.rules = Array.isArray(parsed) ? parsed : [];
     } catch {
       // silent: JSON.parse 降级，损坏或空文件时重置为空规则列表
       this.rules = [];
@@ -80,8 +82,13 @@ export class PermissionStore {
 
   /** 通配符匹配 (如 `git *` 匹配 `git status`) */
   private matchPattern(target: string, pattern: string): boolean {
-    if (pattern === '*' || pattern === target) return true;
-    const regexPattern = '^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$';
+    // 防御从损坏 JSON 加载的非法规则（targetPattern 可能是 undefined/非字符串）
+    if (typeof pattern !== 'string') return false;
+    if (pattern === '*') return true;
+    // 通配符语义：仅 * 和 ? 是通配符，其他 regex 元字符（. + ( ) [ ] \ ^ $ | { }）均为字面量。
+    // 先转义所有 regex 元字符，再替换 * → .* 和 ? → . ，避免用户输入的 pattern 被当作 regex。
+    const escaped = pattern.replace(/[\\^$.|+(){}[\]]/g, '\\$&');
+    const regexPattern = '^' + escaped.replace(/\*/g, '.*').replace(/\?/g, '.') + '$';
     try {
       return new RegExp(regexPattern, 'i').test(target);
     } catch {

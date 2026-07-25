@@ -271,8 +271,9 @@ describe('analyzeSearchReplace — 状态分析', () => {
   });
 
   it('冲突检测: newStr 含换行时识别冲突', () => {
-    const body = 'foo old bar\nnew content here';
-    const r = analyzeSearchReplace(body, 'old', 'new content here');
+    // newStr 必须真的含换行，且在 body 中存在，才触发 conflict
+    const body = 'foo old bar\nnew content\nhere';
+    const r = analyzeSearchReplace(body, 'old', 'new content\nhere');
     // old 出现 1 次，new 含换行且在 body 中
     expect(r.status).toBe('conflict');
   });
