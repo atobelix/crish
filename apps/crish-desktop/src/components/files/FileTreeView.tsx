@@ -1,0 +1,179 @@
+import React, { useMemo } from 'react';
+import styles from '../FilesCard.module.css';
+import { Tooltip } from '../Tooltip';
+import { ChevronDown, ChevronRight, File, FileCode2, FileText, Folder, Image, Table, X } from 'lucide-react';
+import { detectFileKind } from '../../api/workspaceFsApi';
+import { fileExtColor } from '../../api/codeHighlight';
+import { useVirtualScroll } from '../../hooks/useVirtualScroll';
+import type { TreeNode } from './FileSearchFilter';
+
+function TreeFileIcon({ name }: { name: string }) {
+  const k = detectFileKind(name);
+  const color = fileExtColor(name);
+  const sz = 14;
+  if (k === 'image') return <Image size={sz} className={styles.filesRowIco} style={{ color }} aria-hidden />;
+  if (k === 'pdf') return <FileText size={sz} className={styles.filesRowIco} style={{ color }} aria-hidden />;
+  if (k === 'table') return <Table size={sz} className={styles.filesRowIco} style={{ color }} aria-hidden />;
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
+    return <FileCode2 size={sz} className={styles.filesRowIco} style={{ color }} aria-hidden />;
+  }
+  return <File size={sz} className={styles.filesRowIco} style={{ color }} aria-hidden />;
+}
+
+function formatSize(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}K`;
+  return `${(n / 1024 / 1024).toFixed(1)}M`;
+}
+
+export interface FileTreeViewProps {
+  flatTree: TreeNode[];
+  selected: string | null;
+  expanded: Record<string, unknown>;
+  loading: boolean;
+  error: string;
+  filter: string;
+  filterMode: boolean;
+  gitStatusMap: Record<string, string>;
+  onSelect: (path: string, isDir: boolean) => void;
+  onToggleExpand: (path: string, e: React.MouseEvent) => void;
+  onDoubleClick: (path: string, isDir: boolean) => void;
+  onFilterChange: (v: string) => void;
+  onFilterModeToggle: () => void;
+  onErrorDismiss: () => void;
+}
+
+const ITEM_HEIGHT = 28;
+
+export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(function FileTreeView({
+  flatTree,
+  selected,
+  expanded,
+  loading,
+  error,
+  filter,
+  gitStatusMap,
+  onSelect,
+  onToggleExpand,
+  onDoubleClick,
+  onErrorDismiss,
+}) {
+  const { visibleRange, containerRef, onScroll, totalHeight } = useVirtualScroll({
+    itemCount: flatTree.length,
+    fallbackHeight: ITEM_HEIGHT,
+  });
+
+  const { startIndex, endIndex } = visibleRange;
+
+  const visibleItems = useMemo(() => {
+    return flatTree.slice(startIndex, endIndex + 1);
+  }, [flatTree, startIndex, endIndex]);
+
+  return (
+    <div
+      className={`${styles.filesList} ${styles.filesListPane}`}
+      ref={containerRef}
+      onScroll={onScroll}
+      style={{ overflowY: 'auto', position: 'relative' }}
+    >
+      {loading ? (
+        <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>加载中…</div>
+      ) : error && !flatTree.length ? (
+        <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact} ${styles.filesEmptyErr}`} role="alert">
+          <div className={styles.filesEmptyTitle}>无法读取目录</div>
+          <div className={styles.filesEmptySub}>{error}</div>
+        </div>
+      ) : flatTree.length === 0 ? (
+        <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
+          {filter.trim() ? '无匹配项' : '空目录'}
+        </div>
+      ) : (
+        <>
+          {error ? (
+            <div className={styles.filesInlineErr} role="alert" aria-live="polite" style={{ position: 'sticky', top: 0, zIndex: 'var(--z-pinned-bar)' }}>
+              <span className={styles.filesInlineErrText}>{error}</span>
+              <Tooltip content="关闭">
+                <button type="button" className={styles.filesInlineErrDismiss} aria-label="关闭错误" onClick={onErrorDismiss}>
+                  <X size={11} />
+                </button>
+              </Tooltip>
+            </div>
+          ) : null}
+          <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+            {visibleItems.map((e, index) => {
+              const globalIdx = startIndex + index;
+              const top = globalIdx * ITEM_HEIGHT;
+              return (
+                <div
+                  key={e.path}
+                  className={`${styles.filesRow} ${selected === e.path ? styles.isSelected : ''}`}
+                  style={{
+                    position: 'absolute',
+                    top: `${top}px`,
+                    left: 0,
+                    width: '100%',
+                    height: `${ITEM_HEIGHT}px`,
+                    paddingLeft: 4 + e.depth * 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  onClick={() => onSelect(e.path, e.isDir)}
+                  onDoubleClick={() => onDoubleClick(e.path, e.isDir)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter') onSelect(e.path, e.isDir);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`${styles.filesRowTwist} ${e.isDir ? '' : styles.isLeaf}`}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (e.isDir) onToggleExpand(e.path, ev);
+                    }}
+                    tabIndex={-1}
+                  >
+                    {e.isDir ? (
+                      expanded[e.path] ? <ChevronDown size={13} /> : <ChevronRight size={13} />
+                    ) : null}
+                  </button>
+                  {e.isDir ? (
+                    <Folder size={14} className={`${styles.filesRowIco} ${styles.dir}`} />
+                  ) : (
+                    <TreeFileIcon name={e.name} />
+                  )}
+                  <Tooltip content={e.name}>
+                    <span className={styles.filesRowName}>{e.name}</span>
+                  </Tooltip>
+                  {!e.isDir && gitStatusMap[e.path] ? (
+                    <span
+                      className={styles.filesGitStatus}
+                      style={{
+                        color:
+                          gitStatusMap[e.path] === 'M'
+                            ? '#eab308'
+                            : gitStatusMap[e.path] === 'A'
+                            ? '#22c55e'
+                            : gitStatusMap[e.path] === 'D'
+                            ? '#ef4444'
+                            : gitStatusMap[e.path] === '?'
+                            ? '#9ca3af'
+                            : undefined,
+                      }}
+                    >
+                      {gitStatusMap[e.path]}
+                    </span>
+                  ) : null}
+                  {!e.isDir && e.size != null ? (
+                    <span className={styles.filesRowMeta}>{formatSize(e.size)}</span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+});

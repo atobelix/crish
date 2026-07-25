@@ -31,4 +31,9 @@ export {
   TERMINAL_HARD_MAX, TERMINAL_TRIM_TO, appendTerminalLine,
 } from './diff-selectors';
 
+export * from './store-types';
+export * from './store-initializers';
+export * from './store-persistence';
+
+
 
