@@ -20,7 +20,11 @@ function utf8Bytes(text: string): Uint8Array {
   }
   const out: number[] = [];
   for (let i = 0; i < text.length; i++) {
+<<<<<<< Updated upstream
     let c = text.charCodeAt(i);
+=======
+    const c = text.charCodeAt(i);
+>>>>>>> Stashed changes
     if (c < 0x80) {
       out.push(c);
     } else if (c < 0x800) {
