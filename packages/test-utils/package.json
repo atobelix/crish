@@ -13,6 +13,10 @@
       "default": "./src/index.ts"
     }
   },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
   "dependencies": {
     "@crish/shared-types": "*"
   },

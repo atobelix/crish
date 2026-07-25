@@ -233,6 +233,8 @@ export function shouldListSessionInSidebar(
 
 /**
  * 去掉非保留的空壳。keepIds 通常含 activeSessionId（当前编辑中的空白会话）。
+ *
+ * Null 安全：sessions 中的 null / undefined 条目被过滤（落盘脏数据防御）。
  */
 export function pruneEmptyShellSessions<
   T extends ShellSessionLike & { id: string },
@@ -240,6 +242,10 @@ export function pruneEmptyShellSessions<
   const keep = new Set(opts?.keepIds || []);
   let changed = false;
   const next = sessions.filter((s) => {
+    if (!s) {
+      changed = true; // null 条目移除
+      return false;
+    }
     if (keep.has(s.id)) return true;
     if (!isEmptyShellSession(s)) return true;
     changed = true;
@@ -501,6 +507,8 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
  * - active 为 pending draft 哨兵 `__pending_draft__` 或 null/空 → 不 keep 任何空壳
  * - 非空壳 / 置顶 / 定时真实标题 本就不会被 prune
  * 与侧栏 shouldListSessionInSidebar=false 的幽灵空壳对齐：hydrate 后尽量不残留。
+ *
+ * Null 安全：sessions 中的 null / undefined 条目被过滤（落盘脏数据防御）。
  */
 export function prepareSessionsForUi<
   T extends ShellSessionLike & { id: string },
@@ -509,7 +517,11 @@ export function prepareSessionsForUi<
   activeSessionId?: string | null,
   opts?: { keepIds?: Iterable<string> | null }
 ): T[] {
-  const filled = fillDefaultSessionTitles(sessions) as T[];
+  // 过滤 null / undefined 条目（落盘脏数据防御）
+  const cleanSessions = sessions.some((s) => s == null)
+    ? sessions.filter((s): s is T => s != null)
+    : sessions;
+  const filled = fillDefaultSessionTitles(cleanSessions) as T[];
   // pending draft 哨兵不对应 sessions[] 条目；勿当 keep id（语义收口，避免误 keep）
   // 字符串比较避免 api/sessionTitle → store 依赖；与 draftSession.PENDING_DRAFT_SESSION_ID 对齐
   const active =

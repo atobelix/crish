@@ -52,7 +52,7 @@ export function getAppMode(): AppMode {
 }
 
 export function isDemoMode(): boolean {
-  return getAppMode() === 'demo';
+  return false;
 }
 
 export function isNormalMode(): boolean {

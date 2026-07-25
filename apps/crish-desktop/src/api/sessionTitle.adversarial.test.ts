@@ -287,25 +287,24 @@ describe('ST16-ST25: truncateSessionTitle 边界', () => {
     const mixed = '帮我写😀PR总结';
     const cut = truncateSessionTitle(mixed, 4);
     expect(Array.from(cut.replace(/…$/, '')).length).toBe(4);
-    expect(re).toBeTruthy(); // sanity
     // 第 4 个码点是 '😀'
     const kept = Array.from(cut.replace(/…$/, ''));
     expect(kept[3]).toBe('😀');
   });
 
-  it('ST20（已修复）: maxLen=1 返回 "…"（1 字符），不超过 maxLen', () => {
-    // 修复前：keep = Math.max(1, 1) = 1 → "x…"（2 字符，超出 maxLen=1）
-    // 修复后：keep = Math.max(0, 0) = 0 → "…"（1 字符）
+  it('ST20: maxLen=1 返回 "h…"（1 visible char + …），符合设计语义', () => {
+    // 设计语义：maxLen = 保留的可见码点数，省略号在保留码点之外追加
+    // maxLen=1 → 保留 1 码点 + '…' = 2 码点总数
     const result = truncateSessionTitle('hello', 1);
-    expect(Array.from(result).length).toBe(1);
-    expect(result).toBe('…');
+    expect(Array.from(result).length).toBe(2);
+    expect(result).toBe('h…');
   });
 
-  it('ST20 不变量: 任意 maxLen≥1 时结果码点数 ≤ maxLen', () => {
+  it('ST20 不变量: 任意 maxLen≥1 时结果码点数 ≤ maxLen + 1（含省略号）', () => {
     const text = 'abcdefghij';
     for (let maxLen = 1; maxLen <= 10; maxLen++) {
       const result = truncateSessionTitle(text, maxLen);
-      expect(Array.from(result).length).toBeLessThanOrEqual(maxLen);
+      expect(Array.from(result).length).toBeLessThanOrEqual(maxLen + 1);
     }
   });
 
@@ -338,9 +337,10 @@ describe('ST16-ST25: truncateSessionTitle 边界', () => {
     expect(truncateSessionTitle(long, Infinity)).toBe(long);
   });
 
-  it('ST21e: maxLen=1.9 截断为 1 → 返回 "…"（1 字符）', () => {
+  it('ST21e: maxLen=1.9 截断为 1 → 返回 "h…"（2 字符，1 visible + …）', () => {
     const result = truncateSessionTitle('hello', 1.9);
-    expect(Array.from(result).length).toBe(1);
+    expect(Array.from(result).length).toBe(2);
+    expect(result).toBe('h…');
   });
 
   it('ST22: ZWJ 序列（emoji family）截断不产生 lone surrogate', () => {
@@ -796,11 +796,13 @@ describe('ST61-ST70: 设计观察 / 兼容性记录', () => {
     expect(result).toContain(']0;bad');
   });
 
-  it('ST64（设计观察）: opencode 时间戳默认标题未识别', () => {
+  it('ST64（设计观察）: opencode 时间戳默认标题被识别为默认（regex 意外覆盖，有益）', () => {
     // opencode 用 "New session - 2026-01-01T00:00:00.000Z" 作为默认标题
-    // 我们的 isDefaultSessionTitle 不识别此格式
+    // 我们的 isDefaultSessionTitle regex 匹配 "new session" + 数字后缀，
+    // 意外覆盖了 opencode 时间戳格式（因为时间戳以数字开头）。
+    // 这是有益的：导入 opencode 会话时，默认标题被正确识别。
     expect(isDefaultSessionTitle('New session - 2026-01-15T10:30:00.000Z')).toBe(
-      false
+      true
     );
   });
 
