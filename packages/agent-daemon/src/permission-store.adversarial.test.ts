@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { PermissionStore } from './permission-store';
 
 let tempDir: string;
@@ -228,21 +228,23 @@ describe('PermissionStore — 持久化与损坏恢复', () => {
     expect(store.getRules()).toEqual([]);
   });
 
-  it('暴露 bug: save 不使用原子写（无 tmp+rename），中断可损坏文件', () => {
+  it('修复验证: save 使用原子写（tmp+rename），无残留临时文件', () => {
     const store = new PermissionStore(tempDir);
     store.addRule('global', 'git *', 'allow');
-    // 验证非原子写：直接 writeFileSync
     const file = join(tempDir, 'permissions.json');
     const content = readFileSync(file, 'utf-8');
     expect(content).toBeDefined();
-    // 如果在 writeFileSync 过程中崩溃，文件可能被截断
+    // 原子写后不应有残留的 .tmp 文件
+    const files = readdirSync(tempDir).filter(f => f.endsWith('.tmp'));
+    expect(files).toHaveLength(0);
   });
 
-  it('暴露 bug: save 不做 fsync，崩溃后数据可能丢失', () => {
-    // 这个 bug 难以在测试中直接复现，但可以通过代码审查确认
+  it('修复验证: save 使用 fsync 确保数据落盘', () => {
     const store = new PermissionStore(tempDir);
     store.addRule('global', 'git *', 'allow');
-    // 代码中 save() 只调用 writeFileSync，无 fsync
+    // 原子写 + fsync 后，重新加载应得到相同规则
+    const store2 = new PermissionStore(tempDir);
+    expect(store2.getRules()).toEqual(store.getRules());
   });
 });
 

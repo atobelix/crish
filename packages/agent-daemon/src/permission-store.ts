@@ -7,8 +7,9 @@
  * - 支持通配符匹配 (如 `git *`, `npm test`, `read_file:*`)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 export interface PersistentPermissionRule {
   id: string;
@@ -43,13 +44,29 @@ export class PermissionStore {
     }
   }
 
-  /** 保存权限规则到本地 */
+  /** 保存权限规则到本地（原子写：tmp + fsync + rename） */
   private save(): void {
     if (!this.filePath) return;
+    const dir = dirname(this.filePath);
     try {
-      const dir = dirname(this.filePath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(this.filePath, JSON.stringify(this.rules, null, 2), 'utf-8');
+      // 原子写：先写到临时文件，fsync 确保落盘，再 rename 到目标路径
+      // 避免写入过程中崩溃导致文件截断/损坏
+      const tmpPath = `${this.filePath}.${randomBytes(6).toString('hex')}.tmp`;
+      writeFileSync(tmpPath, JSON.stringify(this.rules, null, 2), 'utf-8');
+      // best-effort fsync：确保数据写入磁盘（而非仅 OS 缓存）
+      // 失败不阻止 rename（fsync 在某些平台/模式下可能不可用）
+      try {
+        const fd = openSync(tmpPath, 'r');
+        try {
+          fsyncSync(fd);
+        } finally {
+          closeSync(fd);
+        }
+      } catch {
+        // fsync 不可用或失败，忽略——rename 仍可保证原子性
+      }
+      renameSync(tmpPath, this.filePath);
     } catch {
       /* ignore write failure */
     }
