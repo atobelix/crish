@@ -10,7 +10,7 @@ import type { TerminalToolReason, TerminalToolPatch } from './types';
 
 type PublishToolDiffsFn = typeof import('../../api/publishToolDiffs').publishToolDiffs;
 let _publishToolDiffs: PublishToolDiffsFn | null = null;
-let _publishToolDiffsLoading: Promise<PublishToolDiffsFn> | null = null;
+let _publishToolDiffsLoading: Promise<PublishToolDiffsFn | null> | null = null;
 
 function preloadPublishToolDiffs(): void {
   if (_publishToolDiffs || _publishToolDiffsLoading) return;
@@ -21,7 +21,7 @@ function preloadPublishToolDiffs(): void {
     })
     .catch(() => {
       _publishToolDiffsLoading = null;
-      return null as unknown as PublishToolDiffsFn;
+      return null;
     });
 }
 

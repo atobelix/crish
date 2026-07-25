@@ -21,22 +21,21 @@ import {
   suffixDelta,
   type ReplayEvent,
   type ReplayPayload,
-} from '../services/StreamRecovery';
+} from '../../services/StreamRecovery';
 import {
   blockText,
   mergeAssistantTextPiece,
   messageBelongsToRun,
 } from './handlers/eventUtils';
 import { resolveEventType } from './handlers/eventType';
-import { parseApprovalResolvedFields } from './handlers/approval';
+import { parseApprovalResolvedFields } from './ApprovalHandler';
 import {
   toolCallFieldsFromEvent,
   toolResultFields,
 } from './handlers/toolUtils';
-import {
-  StreamState,
-  surfaceStreamFailure,
-} from './handlers/streamState';
+import { surfaceStreamFailure } from './BridgeErrorPolicy';
+import { StreamState } from './handlers/streamState';
+
 
 export class EventRouter {
   private state: StreamState;
