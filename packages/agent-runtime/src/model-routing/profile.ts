@@ -201,7 +201,8 @@ function capabilitiesField(value: unknown): Partial<Record<ModelCapabilityTag, n
 }
 
 function costTierField(value: unknown): ModelCostTier | number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return clamp(Math.trunc(value), 0, 5);
+  // 负数 costTier 不合法：clamp(-1, 0, 5) = 0 会误映射为 "free"
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return clamp(Math.trunc(value), 0, 5);
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().toLowerCase();
   return KNOWN_COST_TIERS.includes(normalized as ModelCostTier) ? (normalized as ModelCostTier) : undefined;
@@ -359,15 +360,19 @@ function normalizeOptionalNonNegativeInteger(value: unknown, fallback: undefined
 function normalizeOptionalNonNegativeInteger(value: unknown, fallback: number | undefined): number | undefined {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.max(0, Math.trunc(number));
+  // 上限 MAX_SAFE_INTEGER：防止极大值在后续算术运算中溢出为 Infinity 或丢失精度
+  return Math.min(Math.max(0, Math.trunc(number)), Number.MAX_SAFE_INTEGER);
 }
 
 function normalizeOptionalPositiveInteger(value: unknown, fallback: number): number;
 function normalizeOptionalPositiveInteger(value: unknown, fallback: undefined): number | undefined;
 function normalizeOptionalPositiveInteger(value: unknown, fallback: number | undefined): number | undefined {
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) return fallback;
-  return Math.trunc(number);
+  if (!Number.isFinite(number)) return fallback;
+  // 先截断再校验：避免 0.5 通过 > 0 检查后被截断为 0，违反 positive 契约
+  const truncated = Math.trunc(number);
+  if (truncated <= 0) return fallback;
+  return truncated;
 }
 
 function nullableNumberToUndefined(value: number | null | undefined): number | undefined {

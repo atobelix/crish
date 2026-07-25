@@ -1,4 +1,5 @@
-import type { JsonObject } from "@crish/shared-types";
+import type { JsonObject, JsonValue } from "@crish/shared-types";
+import { isRecord } from "@crish/shared-utils";
 import {
   type ModelCapabilityTag,
   type ModelProfile,
@@ -198,11 +199,35 @@ export function mergeModelRoutePolicies(base: ModelRoutePolicy = {}, override: M
     },
     preferModelIds: uniqueStrings([...(base.preferModelIds ?? []), ...(override.preferModelIds ?? [])]),
     avoidModelIds: uniqueStrings([...(base.avoidModelIds ?? []), ...(override.avoidModelIds ?? [])]),
-    metadata: compactJson({
-      ...(base.metadata ?? {}),
-      ...(override.metadata ?? {})
-    })
+    metadata: deepMergeJsonObjects(base.metadata, override.metadata)
   }) as unknown as ModelRoutePolicy;
+}
+
+/**
+ * 递归深合并两个 JsonObject：对同为 record 的键递归合并，其余键 override 胜出。
+ * 避免浅展开导致嵌套 metadata 被整体覆盖。
+ */
+function deepMergeJsonObjects(base: JsonObject | undefined, override: JsonObject | undefined): JsonObject | undefined {
+  if (!base && !override) return undefined;
+  if (!base) return override;
+  if (!override) return base;
+  const result: JsonObject = {};
+  const keys = new Set([...Object.keys(base), ...Object.keys(override)]);
+  for (const key of keys) {
+    const baseValue = base[key] as JsonValue | undefined;
+    const overrideValue = override[key] as JsonValue | undefined;
+    if (overrideValue === undefined) {
+      if (baseValue !== undefined) result[key] = baseValue;
+    } else if (baseValue === undefined) {
+      result[key] = overrideValue;
+    } else if (isRecord(baseValue) && isRecord(overrideValue)) {
+      const merged = deepMergeJsonObjects(baseValue as JsonObject, overrideValue as JsonObject);
+      if (merged !== undefined) result[key] = merged;
+    } else {
+      result[key] = overrideValue;
+    }
+  }
+  return result;
 }
 
 export function modelRouteDecisionToMetadata(decision: ModelRouteDecision): JsonObject {
@@ -404,10 +429,13 @@ function normalizeCapabilityRequest(request: TaskCapabilityRequest, policy: Mode
   const estimatedInputTokens = normalizeOptionalNonNegativeInteger(request.estimatedInputTokens, 0);
   const estimatedOutputTokens = normalizeOptionalNonNegativeInteger(request.estimatedOutputTokens, 0);
   const estimatedTokens = estimatedInputTokens + estimatedOutputTokens;
+  // 防护 estimatedTokens 溢出或过大：两个 MAX_SAFE_INTEGER 相加会超出安全整数范围
   const minimumContextTokens =
     normalizeOptionalPositiveInteger(policy.minimumContextTokens, undefined) ??
     normalizeOptionalPositiveInteger(request.minimumContextTokens, undefined) ??
-    (estimatedTokens > 0 ? estimatedTokens : undefined);
+    (Number.isFinite(estimatedTokens) && estimatedTokens > 0 && estimatedTokens <= Number.MAX_SAFE_INTEGER
+      ? estimatedTokens
+      : undefined);
   return compactJson({
     required: uniqueTags([...(request.required ?? []), ...(policy.required ?? [])]),
     preferred: uniqueTags([...(request.preferred ?? []), ...(policy.preferred ?? [])]),

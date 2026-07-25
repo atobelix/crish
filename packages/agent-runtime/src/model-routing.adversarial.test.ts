@@ -111,14 +111,13 @@ describe('MR1: normalizeOptionalPositiveInteger 分数截断', () => {
       [profile('any-ctx', { capabilities: { code: 1 } })], // contextWindowTokens 未设置
       { required: ['code'], minimumContextTokens: 0.5 as unknown as number }
     );
-    // 0.5 被截断为 0 → minimumContextTokens=0 → profile.contextWindowTokens < 0 永远为 false
-    // 任何 profile 都通过 context 检查，即使没有 contextWindowTokens
-    // 正确行为：0.5 不是合法正整数，应被丢弃为 undefined，然后 profile 因 context:unknown 被拒绝
+    // 0.5 修复后被丢弃为 undefined → 无 context 要求 → profile 不应因 context 被拒绝
+    // profile 应被选为 candidate（虽然没有 contextWindowTokens，但没有 minimumContextTokens 约束）
     const rejection = decision.rejections.find(
       (r) => r.profile.id === 'any-ctx'
     );
-    expect(rejection).toBeDefined();
-    expect(rejection!.reasons).toContain('context:unknown');
+    expect(rejection).toBeUndefined();
+    expect(decision.selected?.id).toBe('any-ctx');
   });
 
   it('MR1c: contextWindowTokens=1.9 应被截断为 1 而非 0', () => {
@@ -787,9 +786,11 @@ describe('MR18: capabilityRequestFromTask 边界', () => {
     expect(request.minimumContextTokens).toBeUndefined();
   });
 
-  it('MR18e: estimatedInputTokens=NaN 应被丢弃', () => {
+  it("MR18e: estimatedInputTokens=NaN 应被丢弃", () => {
     const request = capabilityRequestFromTask({ estimatedInputTokens: NaN });
-    expect(request.estimatedInputTokens).toBe(0);
+    // normalizeOptionalNonNegativeInteger(NaN, undefined) → undefined（NaN 不 finite）
+    // compactJson 随后剥离 undefined 键
+    expect(request.estimatedInputTokens).toBeUndefined();
   });
 });
 
