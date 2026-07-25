@@ -28,8 +28,8 @@ export function formatElapsed(sec: number): string {
 
 export function formatBgTaskMeta(opts: {
   state: unknown;
-  command?: string;
-  opening?: boolean;
+  command?: string | undefined;
+  opening?: boolean | undefined;
 }): string {
   if (opts.opening) return '打开中…';
   const label = backgroundTaskStateLabel(opts.state);

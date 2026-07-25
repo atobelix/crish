@@ -38,13 +38,12 @@ interface ChangesSectionProps {
   onSetShowAllFiles: (v: boolean) => void;
   onOpenPanel: (id: string) => void;
   onOpenDiffSource: (f: DiffFileInfo) => void;
-  onOpenPanel: (id: string) => void;
 }
 
 export const ChangesSection = React.memo(function ChangesSection({
   open, git, gitLoading, gitErr, convoFiles, openingPath, actionErr,
   showAllFiles, branch, gitHelp,
-  onToggle, onRefreshGit, onOpenGitFile, onSetShowAllFiles, onOpenPanel,   onOpenDiffSource, onOpenPanel,
+  onToggle, onRefreshGit, onOpenGitFile, onSetShowAllFiles, onOpenPanel, onOpenDiffSource,
 }: ChangesSectionProps) {
   const gitFiles = git?.found ? git.files : [];
   const fileCount = Math.max(gitFiles.length, convoFiles.length);

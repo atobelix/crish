@@ -6,8 +6,8 @@ import { computeChecklistProgress, findCurrentLiveTool, resolveSessionProgressIt
 import { agentOneLineLabel } from './helpers';
 
 interface ProgressSectionProps {
-  session: any;
-  onGoalClick: () => void;
+  session?: any;
+  onGoalClick?: (() => void) | undefined;
 }
 
 export const ProgressSection = React.memo(function ProgressSection({ session, onGoalClick }: ProgressSectionProps) {
