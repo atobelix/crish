@@ -207,7 +207,7 @@ export interface ConversationRewindBoundaryDiagnostic {
   fact: ConversationRewindBoundaryMissingFact;
   message: string;
   blocked: boolean;
-  metadata: JsonObject | undefined;
+  metadata?: JsonObject;
 }
 
 export type ConversationRewindPlanSnapshot = ConversationRewindPlan;
@@ -222,10 +222,10 @@ export type ConversationRewindApplyStepStatus =
 export interface ConversationRewindApplyStepResult {
   type: ConversationRewindPlanSnapshot["steps"][number]["type"];
   status: ConversationRewindApplyStepStatus;
-  code: string | undefined;
-  message: string | undefined;
-  affectedIds: string[] | undefined;
-  metadata: JsonObject | undefined;
+  code?: string;
+  message?: string;
+  affectedIds?: string[];
+  metadata?: JsonObject;
 }
 
 export interface ScopedContextRuntimeConfig {
@@ -275,8 +275,8 @@ export interface DaemonScopedContextDiagnostic {
   code: string;
   message: string;
   updatedAt: string;
-  path: string | undefined;
-  detail: string | undefined;
+  path?: string | undefined;
+  detail?: string | undefined;
 }
 
 export interface DaemonScopedContextResourceDiagnostic {

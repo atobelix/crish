@@ -1,8 +1,4 @@
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
 import { useShallow } from './useShallowSelector';
-import { withDevtools } from './middleware/withDevtools';
-import { withLogger } from './middleware/withLogger';
 
 import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex, useLayoutStore } from './layoutStore';
 import type {
@@ -15,8 +11,7 @@ import type {
   WorkspaceActions,
   WorkspaceStoreSlice,
 } from './workspaceActions';
-import { createWorkspaceActions } from './workspaceActions';
-import { expandToolColumnIfCollapsed, upsertDiffFile } from './layoutHelpers';
+import { expandToolColumnIfCollapsed } from './layoutHelpers';
 
 const _initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
 

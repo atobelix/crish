@@ -151,8 +151,7 @@ process.on("uncaughtException", (error: Error) => {
       message: error.message,
       severity: "error",
       source: "daemon",
-      detail: undefined,
-      metadata: undefined,
+      ...(error.stack !== undefined ? { detail: error.stack } : {}),
     });
   }
   process.exitCode = 1;
@@ -173,8 +172,7 @@ process.on("unhandledRejection", (reason: unknown) => {
       message: error.message,
       severity: "error",
       source: "daemon",
-      detail: undefined,
-      metadata: undefined,
+      ...(error.stack !== undefined ? { detail: error.stack } : {}),
     });
   }
 });

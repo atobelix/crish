@@ -22,11 +22,11 @@ export interface AgentTool {
   label: string;
   description: string;
   category: ToolCategory;
-  inputSchema?: JsonObject;
-  inputAliases?: Record<string, string[]>;
+  inputSchema?: JsonObject | undefined;
+  inputAliases?: Record<string, string[]> | undefined;
   concurrency: ToolConcurrency;
-  allowParallel?: boolean;
-  fatalOnError?: boolean;
+  allowParallel?: boolean | undefined;
+  fatalOnError?: boolean | undefined;
   isReadOnly(input: JsonObject): boolean;
   summarize(input: JsonObject): string;
   execute(input: JsonObject, context: ToolExecutionContext): Promise<ToolOutput>;
@@ -122,6 +122,7 @@ export interface AgentRuntimeOptions {
   sessionMessageStore?: SessionMessageStoreOptions;
   resumeSession?: boolean;
   maxTurns?: number;
+  maxTokens?: number | undefined;
   contextCompression?: ContextCompressionRuntimeOptions;
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
   recovery?: AgentRecoveryRuntimeOptions;
@@ -223,6 +224,7 @@ export interface ContextCompressionRuntimeOptions {
   summarizer: ContextSummarizer;
   contextState?: ContextStateReader;
   toolOutputBudget?: ToolOutputBudgetRuntimeOptions;
+  includeThought?: boolean | undefined;
 }
 
 export interface ToolOutputBudgetRuntimeOptions {

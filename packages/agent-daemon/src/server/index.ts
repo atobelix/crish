@@ -207,7 +207,12 @@ export class DaemonServer {
       this.stores.workflowStore,
       (due, now) => { this.assertEventStoreAvailableForNewRun(undefined, "scheduled-workflow"); return this.requestHandlers.triggerDueWorkflow(due, now); },
       this.config.workflowSchedulerIntervalMs,
-      (error) => this.lifecycle.recordError({ code: "WORKFLOW_SCHEDULER_TICK_FAILED", message: `Workflow scheduler tick failed: ${errorMessage(error)}`, source: "daemon", severity: undefined, detail: error instanceof Error ? error.stack : undefined, metadata: undefined })
+      (error) => this.lifecycle.recordError({
+        code: "WORKFLOW_SCHEDULER_TICK_FAILED",
+        message: `Workflow scheduler tick failed: ${errorMessage(error)}`,
+        source: "daemon",
+        ...(error instanceof Error && error.stack !== undefined ? { detail: error.stack } : {}),
+      })
     );
     this.registerMessageHandlers();
   }
@@ -301,7 +306,12 @@ export class DaemonServer {
       await this.orchestrator.restoreFromEventStore();
       await this.rebuildActiveSubagentsFromEventStore();
     } catch (error) {
-      this.lifecycle.recordError({ code: "EVENT_STORE_RESTORE_FAILED", message: `Failed to restore daemon event store: ${errorMessage(error)}`, source: "event-store", severity: undefined, detail: error instanceof Error ? error.stack : undefined, metadata: undefined });
+      this.lifecycle.recordError({
+        code: "EVENT_STORE_RESTORE_FAILED",
+        message: `Failed to restore daemon event store: ${errorMessage(error)}`,
+        source: "event-store",
+        ...(error instanceof Error && error.stack !== undefined ? { detail: error.stack } : {}),
+      });
       this.lifecycle.markStopped();
       throw error;
     }
@@ -467,7 +477,12 @@ export class DaemonServer {
 
   private async runStopStep(code: string, message: string, operation: () => Promise<void>, failures: unknown[]): Promise<void> {
     try { await operation(); } catch (error) {
-      this.lifecycle.recordError({ code, message: `${message}: ${errorMessage(error)}`, source: code === "EVENT_STORE_CLOSE_FAILED" ? "event-store" : "daemon", severity: undefined, detail: error instanceof Error ? error.stack : undefined, metadata: undefined });
+      this.lifecycle.recordError({
+        code,
+        message: `${message}: ${errorMessage(error)}`,
+        source: code === "EVENT_STORE_CLOSE_FAILED" ? "event-store" : "daemon",
+        ...(error instanceof Error && error.stack !== undefined ? { detail: error.stack } : {}),
+      });
       failures.push(error);
     }
   }

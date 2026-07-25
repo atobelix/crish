@@ -30,9 +30,9 @@ export interface DaemonLifecycleErrorInput {
   code: string;
   message: string;
   source: DaemonLifecycleDiagnosticSource;
-  severity: DaemonLifecycleDiagnosticSeverity | undefined;
-  detail: string | undefined;
-  metadata: JsonObject | undefined;
+  severity?: DaemonLifecycleDiagnosticSeverity | undefined;
+  detail?: string | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export class DaemonLifecycleTracker {
@@ -67,7 +67,7 @@ export class DaemonLifecycleTracker {
     this.stoppedAtMs ??= now;
   }
 
-  recordClientConnected(_client: ConnectedClient): void {
+  recordClientConnected(_client?: ConnectedClient): void {
     this.totalClientConnectionCount += 1;
   }
 
@@ -95,8 +95,8 @@ export class DaemonLifecycleTracker {
       updatedAt: toIso(now),
       source: input.source,
       severity: input.severity ?? "error",
-      detail: input.detail ?? undefined,
-      metadata: input.metadata ?? undefined,
+      ...(input.detail !== undefined ? { detail: input.detail } : {}),
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
     };
     this.recentErrors.pushOverwritingOldest(error);
   }
@@ -115,9 +115,9 @@ export class DaemonLifecycleTracker {
       state,
       startedAt: toIso(this.startedAtMs),
       updatedAt: toIso(now),
-      ...(this.readyAtMs !== undefined ? { readyAt: toIso(this.readyAtMs) } : {}),
-      ...(this.stoppingAtMs !== undefined ? { stoppingAt: toIso(this.stoppingAtMs) } : {}),
-      ...(this.stoppedAtMs !== undefined ? { stoppedAt: toIso(this.stoppedAtMs) } : {}),
+      readyAt: this.readyAtMs !== undefined ? toIso(this.readyAtMs) : undefined,
+      stoppingAt: this.stoppingAtMs !== undefined ? toIso(this.stoppingAtMs) : undefined,
+      stoppedAt: this.stoppedAtMs !== undefined ? toIso(this.stoppedAtMs) : undefined,
       uptimeMs: Math.max(0, (this.stoppedAtMs ?? now) - this.startedAtMs),
       currentPort: this.currentPortValue,
       connectedClientCount: input.connectedClientCount,
@@ -190,7 +190,7 @@ function eventStoreFailureDiagnostic(
     updatedAt: toIso(now),
     source: "event-store",
     severity: "error",
-    detail: failure.stack ?? undefined,
+    ...(failure.stack !== undefined ? { detail: failure.stack } : {}),
     metadata,
   };
 }

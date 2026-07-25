@@ -69,8 +69,8 @@ describe('deserializeLayout', () => {
     const result = deserializeLayout(data, 'ws-0');
     expect(result.id).toBe('ws-0');
     expect(result.columns).toHaveLength(1);
-    expect(result.columns![0].groups[0].activeCardId).toBe('card-1');
-    expect(result.columns![0].groups[0].cards).toHaveLength(1);
+    expect(result.columns?.[0]?.groups[0]?.activeCardId).toBe('card-1');
+    expect(result.columns?.[0]?.groups[0]?.cards).toHaveLength(1);
   });
 
   it('序列化再反序列化保持结构', () => {
@@ -112,13 +112,13 @@ describe('deserializeLayout', () => {
     const restored = deserializeLayout(serialized, 'ws-0');
     expect(restored.id).toBe('ws-0');
     expect(restored.columns).toHaveLength(2);
-    expect(restored.columns![0].groups).toHaveLength(2);
-    expect(restored.columns![0].widthRatio).toBe(0.6);
-    expect(restored.columns![0].groups[0].activeCardId).toBe('chat');
-    expect(restored.columns![0].groups[0].cards.map((c) => c.id)).toEqual(['chat', 'agent']);
-    expect(restored.columns![0].groups[1].activeCardId).toBe('terminal');
-    expect(restored.columns![1].widthRatio).toBe(0.4);
-    expect(restored.columns![1].groups[0].cards.map((c) => c.id)).toEqual(['files', 'preview']);
+    expect(restored.columns?.[0]?.groups).toHaveLength(2);
+    expect(restored.columns?.[0]?.widthRatio).toBe(0.6);
+    expect(restored.columns?.[0]?.groups[0]?.activeCardId).toBe('chat');
+    expect(restored.columns?.[0]?.groups[0]?.cards.map((c) => c.id)).toEqual(['chat', 'agent']);
+    expect(restored.columns?.[0]?.groups[1]?.activeCardId).toBe('terminal');
+    expect(restored.columns?.[1]?.widthRatio).toBe(0.4);
+    expect(restored.columns?.[1]?.groups[0]?.cards.map((c) => c.id)).toEqual(['files', 'preview']);
   });
 });
 

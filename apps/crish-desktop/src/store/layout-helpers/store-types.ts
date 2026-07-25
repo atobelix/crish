@@ -1,7 +1,5 @@
 import type {
   SettingsTabType,
-  WorkspaceState,
-  ColumnState,
 } from '../types';
 import {
   DEFAULT_SHELL_CHROME,
@@ -10,7 +8,6 @@ import {
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
-import type { Settings, CronJob, McpServer } from '../../api/clientApi';
 
 /** UI 密度三档 — 与 tokens `[data-ui-size]` / 设置外观一致 */
 export type UiSize = 'small' | 'medium' | 'large';

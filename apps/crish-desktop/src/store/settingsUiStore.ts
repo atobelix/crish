@@ -1,12 +1,5 @@
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
-import { withDevtools } from './middleware/withDevtools';
-import { withLogger } from './middleware/withLogger';
-
 import {
   loadStoredPermissionMode,
-  permissionModeAfterPlanToggle,
-  persistPermissionMode,
   planModeEnabledFor,
   type PermissionMode,
 } from '../api/permissionModes';
@@ -32,8 +25,6 @@ import {
   DEFAULT_UI_SIZE,
   DEFAULT_SETTINGS_TAB,
   finiteNumber,
-  isSettingsTabType,
-  parseSettingsTab,
   parseUiSize,
   sanitizeActiveWorkers,
   sanitizeTokenUsage,
@@ -149,14 +140,14 @@ export const createSettingsUiSlice = (set: any) => ({
           if (data.tokenUsage) {
             state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
           }
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w) => ({
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w: any) => ({
             id: w.id,
             taskName: w.taskName,
             elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
           }));
           if (data.activeWorkers) {
             const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-              (w) => !state.killedWorkerIds.includes(w.id),
+              (w: any) => !state.killedWorkerIds.includes(w.id),
             );
             state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
           }
@@ -168,22 +159,22 @@ export const createSettingsUiSlice = (set: any) => ({
           }
         }),
 
-        addCommandPermission: (cmd) => set((state) => {
+        addCommandPermission: (cmd: string) => set((state: any) => {
           state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
         }),
-        removeCommandPermission: (cmd) => set((state) => {
+        removeCommandPermission: (cmd: string) => set((state: any) => {
           state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
         }),
-        setCommandPermissions: (list) => set((state) => {
-          const next = Array.isArray(list) ? list.filter((c) => typeof c === 'string') : [];
+        setCommandPermissions: (list: string[]) => set((state: any) => {
+          const next = Array.isArray(list) ? list.filter((c: any) => typeof c === 'string') : [];
           state.commandPermissions = next;
           saveCommandPermissions(next);
         }),
 
-        killWorker: (id: string, _taskName: string) => set((state) => {
+        killWorker: (id: string, _taskName: string) => set((state: any) => {
           if (!id) return;
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
-          state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w: any) => w.id !== id);
+          state.activeWorkers = state.activeWorkers.filter((w: any) => w.id !== id);
           if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
             state.killedWorkerIds.push(id);
           }

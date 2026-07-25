@@ -32,10 +32,7 @@ export interface PersistableStoreState {
 
 export interface StoreApiLike<S extends PersistableStoreState> {
   getState: () => S;
-  setState: (
-    partial: S | Partial<S> | ((state: S) => void | S),
-    replace?: boolean
-  ) => void;
+  setState: (partial: any, replace?: any) => void;
   subscribe: (listener: (state: S) => void) => () => void;
 }
 

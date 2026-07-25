@@ -1,17 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   isPointerInRect,
-  rectIntersection,
-  closestCenter,
   fiveZoneDetection,
-  edgeDetection,
   nestedCollisionDetection,
   computeDropIndicatorRect,
 } from './collisionDetection';
-import type { CardRect, PointerPosition, FiveZone } from './collisionDetection';
+import type { CardRect } from './collisionDetection';
 
 const mockRect: CardRect = { left: 0, top: 0, right: 200, bottom: 100, width: 200, height: 100 };
-const rectCenter: CardRect = { left: 100, top: 50, right: 300, bottom: 150, width: 200, height: 100 };
 
 describe('isPointerInRect', () => {
   it('指针在矩形内返回 true', () => {

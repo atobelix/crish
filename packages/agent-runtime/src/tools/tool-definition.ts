@@ -37,7 +37,7 @@ export class RegisteredTool {
   readonly description: string;
   readonly category: ToolCategory;
   readonly inputSchema?: JsonObject;
-  readonly inputAliases?: Record<string, string[]>;
+  readonly inputAliases?: Record<string, string[]> | undefined;
   readonly concurrency: ToolConcurrency;
   readonly allowParallel: boolean;
   readonly fatalOnError: boolean;
@@ -53,7 +53,8 @@ export class RegisteredTool {
     this.description = definition.description;
     this.category = options?.category ?? raw.category ?? inferCategory(definition.name, definition.description);
     if (definition.inputSchema !== undefined) this.inputSchema = definition.inputSchema;
-    if (options?.inputAliases !== undefined || raw.inputAliases !== undefined) this.inputAliases = options?.inputAliases ?? raw.inputAliases;
+    const aliases = options?.inputAliases ?? raw.inputAliases;
+    if (aliases !== undefined) this.inputAliases = aliases;
     this.concurrency = options?.concurrency ?? raw.concurrency ?? "parallel";
     this.allowParallel = options?.allowParallel ?? raw.allowParallel ?? true;
     this.fatalOnError = options?.fatalOnError ?? raw.fatalOnError ?? false;

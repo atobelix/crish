@@ -378,8 +378,6 @@ function applyRuntimeState(
       message: reason,
       severity: 'warning',
       updatedAt: input.providerStatus.updatedAt,
-      detail: undefined,
-      metadata: undefined,
     });
   }
 
@@ -396,7 +394,6 @@ function applyRuntimeState(
         message: reason,
         severity: 'warning',
         updatedAt: input.mcpStatus.updatedAt,
-        detail: undefined,
         metadata: { mcp: toJsonObject(input.mcpStatus) },
       });
     }
@@ -423,8 +420,6 @@ function applyRuntimeState(
         message: reason,
         severity: 'warning',
         updatedAt: generatedAt,
-        detail: undefined,
-        metadata: undefined,
       });
     } else {
       state = productStatus.state;
@@ -446,8 +441,6 @@ function applyRuntimeState(
         message: input.lifecycle.eventStore.failure.message,
         severity: input.lifecycle.eventStore.failure.severity,
         updatedAt: input.lifecycle.eventStore.failure.updatedAt,
-        detail: undefined,
-        metadata: undefined,
       });
     }
   }

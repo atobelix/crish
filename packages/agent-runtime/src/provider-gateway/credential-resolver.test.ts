@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { setAllowTestLocalhost } from "../provider/auth/base-url-validator";
 import {
   validateApiKey,

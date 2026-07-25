@@ -3,8 +3,6 @@ import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
   MessageToolCallApprovalDecision,
-  SessionMessage,
-  SessionMessageStatus,
 } from './types';
 import { getSessionById } from './sessionIndex';
 import { validateStatusTransition } from '../utils/StatusTransitionGuard';

@@ -19,7 +19,7 @@ import { defineTool } from "./tools";
 import type { JsonObject, ToolOutput } from "@crish/shared-types";
 import { CrishError } from "@crish/shared-types";
 import type { AgentTool } from "./types";
-import { BoundedMap, toJsonObject, toJsonValue } from "@crish/shared-utils";
+import { BoundedMap, toJsonObject } from "@crish/shared-utils";
 import {
   formatDuration,
   getSharedScriptWaitPolicy,

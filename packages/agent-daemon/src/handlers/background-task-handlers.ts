@@ -98,15 +98,15 @@ export async function handleStartBackgroundTask(
   }
 }
 
-export function handleCancelBackgroundTask(
+export async function handleCancelBackgroundTask(
   ws: WebSocket,
   msg: CancelBackgroundTaskMessage & DaemonCorrelationFields,
   backgroundTasks: DaemonBackgroundTaskManager,
   transport: BackgroundTaskTransport,
   correlateResponse: <T extends DaemonOutboundMessage>(response: T, msg: DaemonCorrelationFields) => T
-): void {
+): Promise<void> {
   try {
-    const task = backgroundTasks.cancel(msg.taskId);
+    const task = await backgroundTasks.cancel(msg.taskId);
     transport.send(
       ws,
       correlateResponse(

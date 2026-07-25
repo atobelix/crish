@@ -29,7 +29,7 @@ export function isTransientProviderError(message: string): boolean {
 
 export function findFatalToolError(
   results: { isError: boolean; toolName: string; output?: { text?: string; json?: unknown } }[],
-  tools: { name: string; fatalOnError?: boolean }[]
+  tools: { name: string; fatalOnError?: boolean | undefined }[]
 ): string | undefined {
   for (const block of results) {
     if (!block.isError) continue;

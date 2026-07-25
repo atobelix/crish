@@ -248,8 +248,6 @@ function productStatus(
         message: `${surface} adapter state`,
         severity: "info" as const,
         updatedAt: timestamp(),
-        detail: undefined,
-        metadata: undefined,
       },
     ],
   };

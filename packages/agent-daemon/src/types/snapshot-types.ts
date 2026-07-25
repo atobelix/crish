@@ -60,8 +60,8 @@ export interface DaemonBackgroundTaskDiagnostic {
   message: string;
   severity: "info" | "warning" | "error";
   updatedAt: string;
-  detail: string | undefined;
-  metadata: JsonObject | undefined;
+  detail?: string;
+  metadata?: JsonObject;
 }
 
 export interface DaemonBackgroundTaskSnapshot {
@@ -163,8 +163,8 @@ export interface DaemonLifecycleDiagnostic {
   updatedAt: string;
   source: DaemonLifecycleDiagnosticSource;
   severity: DaemonLifecycleDiagnosticSeverity;
-  detail: string | undefined;
-  metadata: JsonObject | undefined;
+  detail?: string;
+  metadata?: JsonObject;
 }
 
 export interface DaemonClientDisconnectSnapshot {
@@ -199,18 +199,18 @@ export interface DaemonLifecycleSnapshot {
   state: DaemonLifecycleState;
   startedAt: string;
   updatedAt: string;
-  readyAt: string | undefined;
-  stoppingAt: string | undefined;
-  stoppedAt: string | undefined;
+  readyAt?: string | undefined;
+  stoppingAt?: string | undefined;
+  stoppedAt?: string | undefined;
   uptimeMs: number;
   currentPort: number | null;
   connectedClientCount: number;
   totalClientConnectionCount: number;
   totalClientDisconnectCount: number;
   activeRunCount: number;
-  recentDisconnect: DaemonClientDisconnectSnapshot | undefined;
-  recentError: DaemonLifecycleDiagnostic | undefined;
-  recentErrors: DaemonLifecycleDiagnostic[] | undefined;
+  recentDisconnect?: DaemonClientDisconnectSnapshot | undefined;
+  recentError?: DaemonLifecycleDiagnostic | undefined;
+  recentErrors?: DaemonLifecycleDiagnostic[] | undefined;
   eventStore: DaemonEventStoreStatusSnapshot;
   providerReadiness: DaemonProviderReadiness;
   mcpReadiness: DaemonMcpReadiness;
@@ -280,8 +280,8 @@ export interface DaemonCapabilityDiagnostic {
   message: string;
   severity: "info" | "warning" | "error";
   updatedAt: string;
-  detail: string | undefined;
-  metadata: JsonObject | undefined;
+  detail?: string | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export interface DaemonCapabilityRecord {

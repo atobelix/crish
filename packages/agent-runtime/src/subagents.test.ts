@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState, ProjectProgressLedger, resetSubagentActiveCount } from ".";
 import type { AgentProviderRequest } from "./types";
 import type { ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";

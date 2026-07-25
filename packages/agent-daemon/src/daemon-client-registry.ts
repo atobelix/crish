@@ -25,9 +25,9 @@ export interface DaemonClientTransportDiagnostic {
   message: string;
   source: "daemon" | "client" | "websocket";
   severity: "warning" | "error";
-  clientId: string | undefined;
-  detail: string | undefined;
-  metadata: Record<string, unknown> | undefined;
+  clientId?: string | undefined;
+  detail?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface DaemonClientRegistryOptions {
@@ -158,9 +158,7 @@ export class DaemonClientRegistry {
         message: "Refusing invalid outbound message",
         source: "daemon",
         severity: "error",
-        clientId: undefined,
         detail,
-        metadata: undefined,
       });
       return undefined;
     }
@@ -182,7 +180,6 @@ export class DaemonClientRegistry {
         source: "client",
         severity: "warning",
         clientId: client.id,
-        detail: undefined,
         metadata: {
           clientId: client.id,
           operation,
@@ -203,7 +200,6 @@ export class DaemonClientRegistry {
         source: "client",
         severity: "warning",
         clientId: client.id,
-        detail: undefined,
         metadata: {
           clientId: client.id,
           operation,
@@ -242,13 +238,14 @@ export class DaemonClientRegistry {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
       this.reportTransportFailure(ws, {
         code: "CLIENT_SEND_FAILED",
         message: `Failed to send daemon message to ${client.id}: ${message}`,
         source: "websocket",
         severity: "error",
         clientId: client.id,
-        detail: error instanceof Error ? error.stack : undefined,
+        ...(stack !== undefined ? { detail: stack } : {}),
         metadata: {
           clientId: client.id,
           operation,

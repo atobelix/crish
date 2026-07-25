@@ -1,36 +1,21 @@
-import {
-  MAX_MESSAGES_PER_SESSION,
-  MAX_MESSAGES_PER_AGENT,
-  MAX_FOLDERS,
-} from '@crish/shared-utils/browser';
-import { isDemoMode } from '../api/appMode';
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import {
-  EMPTY_SESSION_TITLE,
   isDefaultSessionTitle,
   isEmptyShellSession,
   maybeAutoTitleFromMessages,
-  prepareSessionsForUi,
   pruneEmptyShellSessions,
   sanitizeSessionTitleText,
-  shellPruneKeepIds,
   truncateSessionTitle,
 } from '../api/sessionTitle';
-import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
-  MessageToolCallApprovalDecision,
   SessionAgent,
   SessionAgentPatch,
-  SessionGoalMode,
   SessionMessage,
-  SessionMessageStatus,
   SessionState,
 } from './types';
 import {
-  deleteSessionFromIndexed,
   getSessionById,
-  getSessionIndex,
   reindexSessionsById,
   type SessionsIndexed,
 } from './sessionIndex';

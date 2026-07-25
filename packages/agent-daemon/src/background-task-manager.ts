@@ -111,13 +111,14 @@ export class DaemonBackgroundTaskManager {
     return limitTasks(tasks, query.limit);
   }
 
-  cancel(taskId: string): DaemonBackgroundTaskSnapshot {
+  async cancel(taskId: string): Promise<DaemonBackgroundTaskSnapshot> {
     const found = this.findRuntimeTask(taskId);
     if (!found) {
       throw new DaemonBackgroundTaskError("BACKGROUND_TASK_NOT_FOUND", `Background task not found: ${taskId}`);
     }
     try {
-      return daemonTaskFromRuntimeTask(found.manager.cancel(taskId));
+      const task = await found.manager.cancel(taskId);
+      return daemonTaskFromRuntimeTask(task);
     } catch (error) {
       throw new DaemonBackgroundTaskError(
         "BACKGROUND_TASK_CANCEL_FAILED",
@@ -165,7 +166,6 @@ export function daemonBackgroundDiagnostics(tasks: DaemonBackgroundTaskSnapshot[
       message: "Daemon background task snapshot is backed by the shared background command manager.",
       severity: "info",
       updatedAt: now,
-      detail: undefined,
       metadata: {
         taskCount: tasks.length,
         runningCount: tasks.filter((task) => task.state === "running").length,
@@ -180,7 +180,6 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
     message: diagnostic.message ?? `${diagnostic.strategy} ${diagnostic.ok ? "succeeded" : "failed"}`,
     severity: diagnostic.ok ? "info" : "warning",
     updatedAt: task.updatedAt,
-    detail: undefined,
     metadata: {
       platform: diagnostic.platform,
       strategy: diagnostic.strategy,
@@ -195,8 +194,6 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
       message: task.error,
       severity: "error",
       updatedAt: task.updatedAt,
-      detail: undefined,
-      metadata: undefined,
     });
   }
   if (task.timedOut) {
@@ -205,7 +202,6 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
       message: `Background task timed out after ${task.timeoutMs}ms.`,
       severity: "warning",
       updatedAt: task.updatedAt,
-      detail: undefined,
       metadata: { timeoutMs: task.timeoutMs },
     });
   }

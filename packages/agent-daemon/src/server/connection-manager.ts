@@ -72,9 +72,7 @@ export class DaemonConnectionManager {
           code: "WEBSOCKET_SERVER_ERROR",
           message: `WebSocket server error: ${error.message}`,
           source: "websocket",
-          severity: undefined,
-          detail: error.stack,
-          metadata: undefined,
+          ...(error.stack !== undefined ? { detail: error.stack } : {}),
         });
         if (!settled) {
           settled = true;
@@ -169,9 +167,7 @@ export class DaemonConnectionManager {
         code: "CLIENT_PARSE_ERROR",
         message: parsed.message,
         source: "client",
-        severity: undefined,
-        detail: undefined,
-        metadata: client ? { clientId: client.id } : undefined,
+        ...(client ? { metadata: { clientId: client.id } } : {}),
       });
       this.clients.sendError(ws, "PARSE_ERROR", parsed.message);
       return;
@@ -243,9 +239,7 @@ export class DaemonConnectionManager {
         code: "CLIENT_BINARY_FRAME_ERROR",
         message: decoded.error,
         source: "client",
-        severity: undefined,
-        detail: undefined,
-        metadata: client ? { clientId: client.id } : undefined,
+        ...(client ? { metadata: { clientId: client.id } } : {}),
       });
       this.clients.sendError(ws, "BINARY_FRAME_ERROR", decoded.error);
       return;
@@ -377,13 +371,18 @@ export class DaemonConnectionManager {
   }
 
   private handleDiagnostic(diagnostic: DaemonClientTransportDiagnostic): void {
+    const metadata = diagnostic.metadata !== undefined
+      ? diagnosticMetadata(diagnostic.metadata)
+      : diagnostic.clientId !== undefined
+        ? { clientId: diagnostic.clientId }
+        : undefined;
     this.recordError({
       code: diagnostic.code,
       message: diagnostic.message,
       source: diagnostic.source,
       severity: diagnostic.severity,
-      detail: diagnostic.detail ?? undefined,
-      metadata: diagnostic.metadata !== undefined ? diagnosticMetadata(diagnostic.metadata) : diagnostic.clientId !== undefined ? { clientId: diagnostic.clientId } : undefined,
+      ...(diagnostic.detail !== undefined ? { detail: diagnostic.detail } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
     });
   }
 

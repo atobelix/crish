@@ -6,7 +6,7 @@ export type ToolConcurrency = "parallel" | "sequential" | "exclusive";
 export interface ToolDefinition {
   name: string;
   description: string;
-  inputSchema?: JsonObject;
+  inputSchema?: JsonObject | undefined;
   execute(input: JsonObject, ctx: ToolExecutionContext): Promise<ToolOutput>;
 }
 

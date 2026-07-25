@@ -78,16 +78,14 @@ export function createUnsupportedProductSurfaceStatus(
     state: "unsupported",
     reason: unsupportedReason(surface),
     operations: [],
-      diagnostics: [
-        {
-          code: `${surface.toUpperCase()}_ADAPTER_UNWIRED`,
-          message: unsupportedReason(surface),
-          severity: "info",
-          updatedAt: now.toISOString(),
-          detail: undefined,
-          metadata: undefined,
-        },
-      ],
+    diagnostics: [
+      {
+        code: `${surface.toUpperCase()}_ADAPTER_UNWIRED`,
+        message: unsupportedReason(surface),
+        severity: "info",
+        updatedAt: now.toISOString(),
+      },
+    ],
   };
 }
 
@@ -110,7 +108,6 @@ export class DaemonBlobArtifactAdapter implements DaemonArtifactAdapter {
           message: "Daemon blob artifact adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
-          detail: undefined,
           metadata: {
             rootDir: this.options.rootDir,
             operations: ["list", "read"],
@@ -157,7 +154,6 @@ export class DaemonCheckpointManifestAdapter implements DaemonCheckpointAdapter 
           message: "Daemon checkpoint manifest adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
-          detail: undefined,
           metadata: {
             manifestPath: this.options.manifestPath,
             operations: ["list", "diff"],
@@ -207,7 +203,6 @@ export class DaemonJsonlMemoryAdapter implements DaemonMemoryAdapter {
           message: "Daemon JSONL memory adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
-          detail: undefined,
           metadata: {
             storePath: this.options.storePath,
             operations: ["list", "delete"],

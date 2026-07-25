@@ -168,10 +168,10 @@ export function useSessionAgentById(
       if (!agentId) return undefined;
       const parentId = sessionId || s.activeSessionId;
       const parentSess = parentId ? s.sessionsById[parentId] : undefined;
-      const agentInParent = parentSess?.agents?.find((a) => a.id === agentId);
+      const agentInParent = parentSess?.agents?.find((a: SessionAgent) => a.id === agentId);
       if (agentInParent) return agentInParent;
       for (const sess of Object.values(s.sessionsById)) {
-        const a = sess.agents?.find((item) => item.id === agentId);
+        const a = sess.agents?.find((item: SessionAgent) => item.id === agentId);
         if (a) return a;
       }
       return undefined;

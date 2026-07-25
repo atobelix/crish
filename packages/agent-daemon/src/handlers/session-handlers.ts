@@ -449,8 +449,7 @@ async function applyConversationRewindPlan(
         status: affectedIds.length > 0 ? "applied" : "skipped",
         code: affectedIds.length > 0 ? "active-runs-cancelled" : "no-active-runs",
         affectedIds,
-        message: affectedIds.length === 0 ? "No active runs were cancelled." : undefined,
-        metadata: undefined,
+        ...(affectedIds.length === 0 ? { message: "No active runs were cancelled." } : {}),
       });
       continue;
     }
@@ -464,8 +463,6 @@ async function applyConversationRewindPlan(
         status: step.approvals.length > 0 ? "applied" : "skipped",
         code: step.approvals.length > 0 ? "pending-approvals-cleared" : "no-pending-approvals",
         affectedIds: step.approvals.map((approval) => approval.toolCallId),
-        message: undefined,
-        metadata: undefined,
       });
       continue;
     }
@@ -477,8 +474,7 @@ async function applyConversationRewindPlan(
         status: "applied",
         code: "workspace-restored",
         affectedIds: restored.affectedIds,
-        message: undefined,
-        metadata: restored.metadata,
+        ...(restored.metadata !== undefined ? { metadata: restored.metadata } : {}),
       });
       continue;
     }
@@ -489,8 +485,8 @@ async function applyConversationRewindPlan(
       status: result.changed ? "applied" : "skipped",
       code: result.changed ? "session-leaf-moved" : "session-leaf-unchanged",
       affectedIds: step.toLeafId === null ? [] : [step.toLeafId],
-      message: result.changed ? undefined : "Session leaf already points at the rewind target.",
-      ...(result.runtimePointerId !== undefined ? { metadata: { runtimePointerId: result.runtimePointerId } } : { metadata: undefined }),
+      ...(result.changed ? {} : { message: "Session leaf already points at the rewind target." }),
+      ...(result.runtimePointerId !== undefined ? { metadata: { runtimePointerId: result.runtimePointerId } } : {}),
     });
   }
   await recordConversationRewindAudit(resolution, results, deps);

@@ -13,11 +13,9 @@ import type {
 import { loadCommandPermissions } from '../api/commandPermissions';
 import { planModeEnabledFor, type PermissionMode } from '../api/permissionModes';
 import type {
-  CardGroupState,
-  CardState,
-  ColumnState,
   DropPreviewState,
   FileDiff,
+  SessionState,
   SettingsTabType,
   WorkspaceState,
 } from './types';
@@ -30,14 +28,15 @@ import {
 import {
   clampActiveWorkspaceIndex,
   createInitialLayoutDefaults,
-  DEFAULT_SETTINGS_TAB,
-  isSettingsTabType,
-  type ActiveWorkerState,
-  type ShellChromeMode,
-  type TelemetrySyncPayload,
-  type TokenUsageState,
-  type UiSize,
 } from './layout-helpers/store-initializers';
+import type {
+  UiSize,
+  ShellChromeMode,
+  TokenUsageState,
+  ActiveWorkerState,
+  TelemetrySyncPayload,
+  WorkspaceLayoutSnapshot,
+} from './layout-helpers/store-types';
 import {
   DEFAULT_SETTINGS_TAB,
   DEFAULT_UI_SIZE,
@@ -57,7 +56,6 @@ import {
   initStorePersistence,
   serializeWorkspaceLayout,
   waitForStoreHydration,
-  type WorkspaceLayoutSnapshot,
 } from './layout-helpers/store-persistence';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
 
@@ -333,7 +331,7 @@ export type LayoutStoreState = Pick<
 
 /** 等待 store 会话回灌完成 */
 export function waitForHydration(): Promise<void> {
-  return waitForStoreHydration(useLayoutStore);
+  return waitForStoreHydration(useLayoutStore as any);
 }
 
 /**
@@ -343,5 +341,5 @@ export function waitForHydration(): Promise<void> {
  * （window.useLayoutStore 由 App.tsx 以 CrishWindow 类型挂载，此处不再重复 attach）
  */
 export function initLayoutStorePersistence(): () => void {
-  return initStorePersistence(useLayoutStore);
+  return initStorePersistence(useLayoutStore as any);
 }

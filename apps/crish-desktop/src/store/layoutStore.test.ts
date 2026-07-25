@@ -23,6 +23,8 @@ import {
   useLayoutStore,
   type UiSize,
 } from './layoutStore';
+import type { SettingsTabType } from './types';
+import type { McpServer } from '../api/clientApi';
 import type { CronJob, ProviderInfo } from '../api/clientApi';
 import type { WorkspaceState } from './types';
 

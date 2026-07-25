@@ -40,9 +40,9 @@ import {
   type UiSize,
 } from './store-types';
 
-export function createLayoutCoreActions<S extends Record<string, any>>(
-  set: (updater: (state: S) => void) => void,
-  get: () => S
+export function createLayoutCoreActions(
+  set: (updater: (state: any) => void) => void,
+  get: () => any
 ) {
   return {
     setActiveDiffSource: (diff: FileDiff | null) =>

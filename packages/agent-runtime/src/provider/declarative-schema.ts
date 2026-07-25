@@ -48,6 +48,7 @@ export interface DeclarativeProviderDef {
 
   paths?: {
     chatCompletions?: string;
+    responses?: string;
     models?: string;
   };
 
@@ -97,7 +98,7 @@ export interface NormalizedDeclarativeDef {
     costPer1kInput: number;
     costPer1kOutput: number;
   }>;
-  paths: { chatCompletions: string; models: string };
+  paths: { chatCompletions: string; responses?: string | undefined; models: string };
   capabilities: {
     toolUse: boolean; vision: boolean; reasoning: boolean;
     streaming: boolean; systemPrompt: boolean; jsonMode: boolean; parallelToolCalls: boolean;
@@ -148,6 +149,7 @@ export function normalizeDeclarativeDef(raw: DeclarativeProviderDef): Normalized
     })),
     paths: {
       chatCompletions: raw.paths?.chatCompletions ?? "/v1/chat/completions",
+      responses: raw.paths?.responses,
       models: raw.paths?.models ?? "/v1/models",
     },
     capabilities: {

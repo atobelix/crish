@@ -143,7 +143,7 @@ function scopedContextDiagnostic(
   code: string,
   message: string
 ): DaemonScopedContextDiagnostic {
-  return { code, message, updatedAt: new Date().toISOString(), path: undefined, detail: undefined };
+  return { code, message, updatedAt: new Date().toISOString() };
 }
 
 function sortRecordsForPrompt<T extends { id: string; kind: string; scope: ScopedContextRecord["scope"]; order: number }>(

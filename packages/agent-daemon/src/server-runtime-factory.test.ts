@@ -834,7 +834,7 @@ function createTestTool(name: string): AgentTool {
     name,
     label: name,
     description: `${name} test tool`,
-    parametersSchema: { type: 'object', properties: {} },
+    inputSchema: { type: 'object', properties: {} },
     category: 'mcp',
     concurrency: 'parallel',
     isReadOnly: () => true,
