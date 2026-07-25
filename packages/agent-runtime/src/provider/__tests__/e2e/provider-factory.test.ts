@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { setAllowTestLocalhost } from "../../auth/base-url-validator";
 import { LlmApiMockServer, Scenarios } from "./mock-server";
 import { ProviderRegistryV2Impl } from "../../registry-v2";
 import { ProviderFactory } from "../../factory";
@@ -13,6 +14,7 @@ describe("E2E: ProviderFactory with mock server", () => {
   let factory: ProviderFactory;
 
   beforeAll(async () => {
+    setAllowTestLocalhost(true);
     await server.start(0);
 
     server.on("/v1/chat/completions", Scenarios.openaiChatText());

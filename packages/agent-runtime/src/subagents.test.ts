@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState, ProjectProgressLedger } from ".";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState, ProjectProgressLedger, resetSubagentActiveCount } from ".";
 import type { AgentProviderRequest } from "./types";
 import type { ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";
 
 describe("subagent tool", () => {
+  beforeEach(() => {
+    resetSubagentActiveCount();
+  });
+
   it("runs a child runtime and emits progress", async () => {
     const updates: ToolProgressUpdate[] = [];
     const tool = createSubagentTool({
@@ -302,7 +306,7 @@ describe("subagent tool", () => {
 
     const running = blockingTool.execute({ prompt: "hold", description: "holder" }, context);
     // 让 holder 先占住全局并发配额
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 10));
     const denied = await deniedTool.execute({ prompt: "overflow", description: "denied child" }, context);
     release();
     await running;

@@ -67,6 +67,11 @@ export function detectRecentToolErrorLoop(
 }
 
 function isToolResultFailure(block: ToolResultBlock): boolean {
+  const json = block.output.json;
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    const record = json as Record<string, unknown>;
+    if (record.softDeny === true) return false;
+  }
   if (block.isError) return true;
   const exitCode = exitCodeFromToolOutput(block.output);
   return exitCode !== undefined && exitCode !== 0;
@@ -332,7 +337,7 @@ const APPROVAL_EXPIRED_DENY_TEXT =
   '审批超时，工具未执行；请重试审批或改用其他方案。Approval timed out — tool was not executed; retry approval or choose another approach.';
 
 const USER_DENIED_DENY_TEXT =
-  '用户拒绝了该工具调用，工具未执行；请勿假设已执行成功。User denied this tool call — do not assume it succeeded.';
+  '用户拒绝了该工具调用，工具未执行；请勿假设已执行成功。User denied this tool call — choose an alternative or do not re-request this action.';
 
 /**
  * Human-readable permission deny text for tool-result feedback.
@@ -382,11 +387,13 @@ export function buildPermissionDenyToolOutput(
         ? decision.metadata.code
         : 'permission_denied';
 
+  const isUserDeniedCode = code === 'user_denied' || bareUserDenied;
   const json: JsonObject = {
     ...(decision.metadata ?? {}),
     softDeny,
     code,
     reason: text,
+    ...(expired ? { retryable: true } : isUserDeniedCode ? { retryable: false } : {}),
   };
 
   return { text, json };

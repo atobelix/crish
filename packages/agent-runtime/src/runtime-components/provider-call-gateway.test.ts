@@ -242,17 +242,13 @@ describe("ProviderCallGateway", () => {
       const gateway = new ProviderCallGateway();
       const request = createRequest();
 
-      // Start the async generator call
-      const iterator = gateway.call(failingProvider, request);
-      // Start execution - this enters retryProviderStream
-      const nextPromise = iterator.next();
-      // Advance past first backoff (1000ms) + second backoff (2000ms) + completion
-      await vi.advanceTimersByTimeAsync(10000);
-      const result = await nextPromise;
-      expect(result.done).toBe(true);
-      if (result.done && result.value) {
-        expect(result.value.response.finishReason).toBe("error");
-      }
+      const callPromise = collectCall(gateway, failingProvider, request);
+      await vi.runAllTimersAsync();
+      const { result } = await callPromise;
+      vi.useRealTimers();
+
+      expect(callCount).toBeGreaterThan(1);
+      expect(result.response.finishReason).toBe("error");
     }, 15000);
 
     it("streaming error from provider during iteration returns error response", async () => {

@@ -53,6 +53,11 @@ export const DEFAULT_SUBAGENT_DEPTH_GUARD: SubagentDepthGuard = {
 
 /** AsyncSemaphore 实例（跨工具实例共享），最大并发 6 */
 const subagentSemaphore = new AsyncSemaphore(6);
+let currentActiveSubagents = 0;
+
+export function resetSubagentActiveCount(): void {
+  currentActiveSubagents = 0;
+}
 
 /**
  * 递归深度上下文
@@ -183,8 +188,21 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         };
       }
 
-      // ─── 全局并发上限（AsyncSemaphore 限流，等待直到有空闲槽位） ───────────────────────────────
+      // ─── 全局并发上限（超过即刻拒绝） ───────────────────────────────
+      const maxConcurrent = guard.maxConcurrent ?? DEFAULT_SUBAGENT_DEPTH_GUARD.maxConcurrent ?? 6;
+      if (currentActiveSubagents >= maxConcurrent) {
+        return {
+          text: `Sub-agent creation denied: maximum concurrent sub-agents (${maxConcurrent}) exceeded.`,
+          json: {
+            error: "max-concurrent-exceeded",
+            maxConcurrent,
+            description
+          }
+        };
+      }
+
       const releaseSubagentSlot = await subagentSemaphore.acquire();
+      currentActiveSubagents++;
 
       const subagentId = createId("agent");
       const parentSessionId = context.sessionId;

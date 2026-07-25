@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { setAllowTestLocalhost } from "../provider/auth/base-url-validator";
 import {
   validateApiKey,
   validateCredential,
@@ -68,23 +69,32 @@ describe("validateCredential", () => {
     expect(() => validateCredential(cred())).not.toThrow();
   });
 
-  it("throws ProviderGatewayError with ssrf_rejected for localhost baseUrl", () => {
-    expect(() => validateCredential(cred({ baseUrl: "http://localhost:8080" }))).toThrow(ProviderGatewayError);
-    try {
-      validateCredential(cred({ baseUrl: "http://localhost:8080" }));
-    } catch (e) {
-      expect((e as ProviderGatewayError).code).toBe("ssrf_rejected");
-    }
-  });
+  describe("validateCredential SSRF checks", () => {
+    beforeEach(() => {
+      setAllowTestLocalhost(false);
+    });
+    afterEach(() => {
+      setAllowTestLocalhost(true);
+    });
 
-  it("throws ssrf_rejected for private IP baseUrl", () => {
-    expect(() => validateCredential(cred({ baseUrl: "http://192.168.1.1" }))).toThrow(ProviderGatewayError);
-    expect(() => validateCredential(cred({ baseUrl: "http://10.0.0.1/api" }))).toThrow(ProviderGatewayError);
-    expect(() => validateCredential(cred({ baseUrl: "http://127.0.0.1" }))).toThrow(ProviderGatewayError);
-  });
+    it("throws ProviderGatewayError with ssrf_rejected for localhost baseUrl", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://localhost:8080" }))).toThrow(ProviderGatewayError);
+      try {
+        validateCredential(cred({ baseUrl: "http://localhost:8080" }));
+      } catch (e) {
+        expect((e as ProviderGatewayError).code).toBe("ssrf_rejected");
+      }
+    });
 
-  it("throws ssrf_rejected for metadata service hostname", () => {
-    expect(() => validateCredential(cred({ baseUrl: "http://169.254.169.254/latest" }))).toThrow(ProviderGatewayError);
+    it("throws ssrf_rejected for private IP baseUrl", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://192.168.1.1" }))).toThrow(ProviderGatewayError);
+      expect(() => validateCredential(cred({ baseUrl: "http://10.0.0.1/api" }))).toThrow(ProviderGatewayError);
+      expect(() => validateCredential(cred({ baseUrl: "http://127.0.0.1" }))).toThrow(ProviderGatewayError);
+    });
+
+    it("throws ssrf_rejected for metadata service hostname", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://169.254.169.254/latest" }))).toThrow(ProviderGatewayError);
+    });
   });
 
   it("throws provider_credential_missing for invalid apiKey", () => {

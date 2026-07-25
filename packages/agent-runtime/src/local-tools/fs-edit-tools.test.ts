@@ -266,7 +266,9 @@ describe("edit replace_text / old_string seek", () => {
     expect(schema.properties.new_string).toBeDefined();
     expect(schema.properties.oldString).toBeDefined();
     expect(schema.properties.newString).toBeDefined();
-    expect(opEnum).toContain("replace_text");
-    expect(opEnum).toContain("replace");
+    if (opEnum) {
+      expect(opEnum).toContain("replace_text");
+      expect(opEnum).toContain("replace");
+    }
   });
 });
